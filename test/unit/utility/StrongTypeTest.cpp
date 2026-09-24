@@ -69,6 +69,7 @@ namespace ao::utility::test
     auto set = std::unordered_set<StringId>{};
     set.insert(id2);
     CHECK(set.contains(id2));
+    CHECK(set.contains(id1));
 
     // formatter
     auto const formatted = std::format("{}", id2);
@@ -95,6 +96,7 @@ namespace ao::utility::test
     auto set = std::unordered_set<IntId>{};
     set.insert(id1);
     CHECK(set.contains(id1));
+    CHECK(set.contains(id2));
 
     // formatter
     auto const formatted = std::format("{}", id1);

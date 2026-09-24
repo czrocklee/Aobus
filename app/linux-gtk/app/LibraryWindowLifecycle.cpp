@@ -25,7 +25,7 @@
 
 namespace ao::gtk
 {
-  Result<Glib::RefPtr<MainWindow>> prepareLibraryWindow(
+  Result<std::unique_ptr<MainWindow>> prepareLibraryWindow(
     LibraryWindowPaths paths,
     std::shared_ptr<AppConfigStore> appConfigStorePtr,
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
@@ -71,12 +71,12 @@ namespace ao::gtk
       appRuntimePtr->addAudioProvider(std::move(providerPtr));
     }
 
-    auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(
-      new MainWindow{*appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, textCatalog, componentStateStorePtr});
+    auto windowPtr = std::make_unique<MainWindow>(
+      *appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, textCatalog, componentStateStorePtr);
 
-    // Frontend observers are members of MainWindow, while the runtime is attached
-    // to its GObject. Finalization therefore releases the observers before the
-    // runtime storage borrowed by those observers.
+    // The unmanaged C++ window has an explicit owner. Its destructor releases
+    // frontend observers before GTK base teardown releases the attached runtime.
+    // A GObject-only RefPtr would leave the C++ window and its observers alive.
     windowPtr->set_data(
       "app-runtime", appRuntimePtr.release(), [](void* data) { delete static_cast<rt::AppRuntime*>(data); });
 
@@ -89,7 +89,7 @@ namespace ao::gtk
   }
 
   Result<> activateLibraryWindow(Gtk::Application& app,
-                                 Glib::RefPtr<MainWindow> const& windowPtr,
+                                 std::unique_ptr<MainWindow> const& windowPtr,
                                  MainWindow::PlaybackRestoreMode const restoreMode)
   {
     app.add_window(*windowPtr);

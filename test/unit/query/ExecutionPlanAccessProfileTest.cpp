@@ -6,6 +6,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -193,6 +194,8 @@ namespace ao::query::test
                      "$trackTotal",
                      "$discNumber",
                      "$discTotal",
+                     "$movementNumber",
+                     "$movementTotal",
                      "$coverArt",
                      "%isrc",
                      "@duration",
@@ -206,10 +209,17 @@ namespace ao::query::test
         CHECK(plan.accessProfile == AccessProfile::ColdOnly);
       }
 
-      // $work is a dictionary field (cold), so reference it with equality rather
-      // than an ordered comparison, which is rejected for dictionary fields.
+      // Cold dictionary fields accept equality and string-valued ordering,
+      // but not the numeric ordered comparison used above.
       auto workPlan = compileOk(parseOk("$work = w"));
       CHECK(workPlan.accessProfile == AccessProfile::ColdOnly);
+
+      for (auto const* field : {"$conductor", "$ensemble", "$soloist", "$movement"})
+      {
+        CAPTURE(field);
+        auto const plan = compileOk(parseOk(std::string{field} + " = Bach"));
+        CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+      }
     }
 
     SECTION("HotAndCold")

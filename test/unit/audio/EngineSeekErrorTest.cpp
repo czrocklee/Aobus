@@ -30,7 +30,7 @@
 namespace ao::audio::test
 {
   TEST_CASE("Engine - Error rejects seek before and after source failure delivery",
-            "[audio][regression][engine][concurrency]")
+            "[audio][unit][engine][concurrency]")
   {
     auto const guarded = GENERATE(false, true);
     auto const initiallyPaused = GENERATE(false, true);

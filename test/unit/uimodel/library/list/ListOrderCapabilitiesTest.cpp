@@ -15,12 +15,23 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::uimodel::test
 {
   namespace
   {
+    void checkDisabled(ListOrderCapabilityState const& state)
+    {
+      CHECK_FALSE(state.canAuthorOrder);
+      CHECK_FALSE(state.canGapMove);
+      CHECK_FALSE(state.canRelativeMove);
+      CHECK_FALSE(state.canAbsoluteMove);
+      CHECK_FALSE(state.canResetOrder);
+      CHECK_FALSE(state.canForgetHiddenPositions);
+    }
+
     ListOrderCapabilityInput eligibleInput()
     {
       return ListOrderCapabilityInput{
@@ -60,8 +71,7 @@ namespace ao::uimodel::test
     input.presentation.id = std::string{rt::kListOrderTrackPresentationId};
     input.presentation.sortBy = {rt::TrackSortTerm{.field = rt::TrackSortField::Title, .ascending = true}};
     auto const sorted = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
-    CHECK_FALSE(sorted.canAuthorOrder);
-    CHECK_FALSE(sorted.canAbsoluteMove);
+    checkDisabled(sorted);
   }
 
   TEST_CASE("ListOrder - quick filter keeps only absolute moves", "[uimodel][unit][list][list-order]")
@@ -80,14 +90,15 @@ namespace ao::uimodel::test
     CHECK(state.disabledReason.contains("Clear the quick filter"));
   }
 
-  TEST_CASE("ListOrder - disabled reasons come from the injected locale", "[uimodel][unit][list-order][localization]")
+  TEST_CASE("ListOrder - disabled reasons come from the injected locale",
+            "[uimodel][unit][list][list-order][localization]")
   {
     auto input = eligibleInput();
     input.authoring.state = rt::LibraryAuthoringState::Maintenance;
 
     auto const state = describeListOrderCapabilities(ao::test::messageCatalog("de-AT"), input);
 
-    CHECK_FALSE(state.canAuthorOrder);
+    checkDisabled(state);
     CHECK(state.disabledReason ==
           "Die Bibliothek ist beschäftigt. Die manuelle Reihenfolge ist nach Abschluss der Wartung wieder verfügbar.");
   }
@@ -96,46 +107,70 @@ namespace ao::uimodel::test
             "[uimodel][unit][list][list-order]")
   {
     auto input = eligibleInput();
+    auto expectedReason = std::string_view{};
 
     SECTION("All Tracks")
     {
       input.listId = rt::kAllTracksListId;
-      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
-      CHECK_FALSE(state.canAuthorOrder);
-      CHECK(state.disabledReason.contains("saved Lists"));
+      expectedReason = "saved Lists";
     }
 
     SECTION("grouped")
     {
       input.presentation.groupBy = rt::TrackGroupKey::Album;
-      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
-      CHECK_FALSE(state.canAuthorOrder);
-      CHECK(state.disabledReason.contains("flat unsorted"));
+      expectedReason = "flat unsorted";
     }
 
     SECTION("maintenance")
     {
       input.authoring.state = rt::LibraryAuthoringState::Maintenance;
-      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
-      CHECK_FALSE(state.canAuthorOrder);
-      CHECK(state.disabledReason.contains("Library is busy"));
+      expectedReason = "Library is busy";
     }
 
     SECTION("source gone")
     {
       input.sourceLive = false;
-      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
-      CHECK_FALSE(state.canAuthorOrder);
-      CHECK(state.disabledReason.contains("no longer available"));
+      expectedReason = "no longer available";
     }
 
     SECTION("filter error")
     {
       input.sourceHasError = true;
-      auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
-      CHECK_FALSE(state.canAuthorOrder);
-      CHECK(state.disabledReason.contains("Fix the List or quick-filter expression"));
+      expectedReason = "Fix the List or quick-filter expression";
     }
+
+    SECTION("virtual source takes precedence over maintenance")
+    {
+      input.listId = rt::kAllTracksListId;
+      input.authoring.state = rt::LibraryAuthoringState::Maintenance;
+      expectedReason = "saved Lists";
+    }
+
+    SECTION("maintenance takes precedence over unavailable source")
+    {
+      input.authoring.state = rt::LibraryAuthoringState::Maintenance;
+      input.sourceLive = false;
+      expectedReason = "Library is busy";
+    }
+
+    SECTION("source error takes precedence over grouped presentation")
+    {
+      input.sourceHasError = true;
+      input.presentation.groupBy = rt::TrackGroupKey::Album;
+      expectedReason = "Fix the List or quick-filter expression";
+    }
+
+    SECTION("grouped presentation takes precedence over quick filter")
+    {
+      input.presentation.groupBy = rt::TrackGroupKey::Album;
+      input.quickFilterExpression = "$year >= 2020";
+      expectedReason = "flat unsorted";
+    }
+
+    auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
+    checkDisabled(state);
+    REQUIRE_FALSE(expectedReason.empty());
+    CHECK(state.disabledReason.contains(expectedReason));
   }
 
   TEST_CASE("ListOrder - drag selection follows effective order", "[uimodel][unit][list][list-order]")
@@ -175,7 +210,7 @@ namespace ao::uimodel::test
     CHECK(outsideRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("listOrderAnchorForGap rejects invalid track identities", "[uimodel][unit][list-order]")
+  TEST_CASE("listOrderAnchorForGap rejects invalid track identities", "[uimodel][unit][list][list-order]")
   {
     SECTION("effective sequence")
     {

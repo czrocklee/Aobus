@@ -15,7 +15,8 @@ namespace ao::query::test
   TEST_CASE("throwQueryError - preserves the original error's source location", "[query][unit][error]")
   {
     auto const origin = std::source_location::current();
-    auto const error = Error{.code = Error::Code::FormatRejected, .message = "propagated failure", .location = origin};
+    auto const error =
+      Error{.code = Error::Code::ResourceExhausted, .message = "propagated failure", .location = origin};
 
     try
     {
@@ -23,9 +24,10 @@ namespace ao::query::test
     }
     catch (detail::QueryException const& ex)
     {
-      CHECK(ex.error().code == Error::Code::FormatRejected);
+      CHECK(ex.error().code == Error::Code::ResourceExhausted);
       CHECK(std::string_view{ex.error().message} == "propagated failure");
       CHECK(ex.error().location.line() == origin.line());
+      CHECK(std::string_view{ex.error().location.file_name()} == std::string_view{origin.file_name()});
       CHECK(std::string_view{ex.error().location.function_name()} == std::string_view{origin.function_name()});
     }
   }

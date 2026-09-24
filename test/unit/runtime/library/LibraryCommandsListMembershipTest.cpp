@@ -358,7 +358,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryCommands List deletion - optional visible-tag cleanup is previewed and committed atomically",
-            "[runtime][unit][list-membership][list-delete]")
+            "[runtime][unit][library][list-membership][list-delete]")
   {
     auto fixture = ListMembershipFixture{};
     auto const first = fixture.addTrack("First");
@@ -399,7 +399,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryCommands - List subtree deletion cleans only the root writable tag",
-            "[runtime][regression][list-membership][list-delete]")
+            "[runtime][unit][library][list-membership][list-delete]")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Nested");

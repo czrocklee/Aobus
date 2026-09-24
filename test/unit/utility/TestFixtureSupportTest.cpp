@@ -16,15 +16,14 @@
 
 namespace ao::test
 {
-  TEST_CASE("TestFixtureSupport - temporary directories expose canonical paths",
-            "[utility][unit][test-fixture-support]")
+  TEST_CASE("TestFixtureSupport - temporary directories expose canonical paths", "[utility][unit][test-support]")
   {
     auto const temp = TempDir{};
 
     CHECK(temp.path() == std::filesystem::canonical(temp.path()));
   }
 
-  TEST_CASE("TestFixtureSupport - temporary files use isolated directories", "[utility][unit][test-fixture-support]")
+  TEST_CASE("TestFixtureSupport - temporary files use isolated directories", "[utility][unit][test-support]")
   {
     constexpr auto kFirstData = std::to_array<std::uint8_t>({'a'});
     constexpr auto kSecondData = std::to_array<std::uint8_t>({'b'});
@@ -48,7 +47,7 @@ namespace ao::test
   }
 
   TEST_CASE("TestFixtureSupport - moving temporary directories preserves cleanup ownership",
-            "[utility][unit][test-fixture-support]")
+            "[utility][unit][test-support]")
   {
     auto firstPath = std::filesystem::path{};
     auto secondPath = std::filesystem::path{};

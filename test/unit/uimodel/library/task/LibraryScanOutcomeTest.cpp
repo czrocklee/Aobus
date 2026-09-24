@@ -61,8 +61,7 @@ namespace ao::uimodel::test
     CHECK(messageFor(applied(result)) == "Library scan complete");
   }
 
-  TEST_CASE("LibraryScanOutcome - stale items left for a later scan are not errors",
-            "[uimodel][regression][library][scan]")
+  TEST_CASE("LibraryScanOutcome - stale items left for a later scan are not errors", "[uimodel][unit][library][scan]")
   {
     auto result = rt::ScanApplyResult{};
     result.staleCount = 2;

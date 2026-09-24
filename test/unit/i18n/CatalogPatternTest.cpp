@@ -61,18 +61,14 @@ namespace ao::i18n::detail::test
   {
     auto pseudoRes = pseudoLocalizePattern("Open {application}: {count, plural, one {# track} other {# tracks}}");
     REQUIRE(pseudoRes);
-    CHECK(pseudoRes->starts_with("[!! "));
-    CHECK(pseudoRes->ends_with(" !!]"));
-    CHECK(pseudoRes->contains("{application}"));
-    CHECK(pseudoRes->contains("{count, plural, one {"));
-    CHECK(pseudoRes->contains(" other {"));
-    CHECK(pseudoRes->contains('#'));
-    CHECK(pseudoRes->contains("ÖÖ"));
+    CHECK(*pseudoRes == "[!! ÖÖpëëñ {application}: {count, plural, one {# trààçk} other {# trààçks}} !!]");
 
-    REQUIRE(messageArgumentSignature(*pseudoRes));
-    CHECK(*messageArgumentSignature(*pseudoRes) ==
-          *messageArgumentSignature("Open {application}: "
-                                    "{count, plural, one {# track} other {# tracks}}"));
+    auto const signatureRes = messageArgumentSignature(*pseudoRes);
+    REQUIRE(signatureRes);
+    CHECK(*signatureRes == std::vector<MessageArgumentSignature>{
+                             {.name = "application", .kind = MessageArgumentKind::Value},
+                             {.name = "count", .kind = MessageArgumentKind::Plural},
+                           });
 
     auto const root = std::array{CatalogMessage{
       .id = "message", .pattern = "Open {application}: {count, plural, one {# track} other {# tracks}}"}};
@@ -108,26 +104,20 @@ namespace ao::i18n::detail::test
     auto projectedRes = projectWinUiResources(translated, MissingWinUiMessagePolicy::Omit);
     REQUIRE(projectedRes);
 
-    auto const findMessage = [&projectedRes](std::string_view const id)
-    { return std::ranges::find(*projectedRes, id, &CatalogMessage::id); };
-
-    auto const positional = findMessage("winui_error");
-    REQUIRE(positional != projectedRes->end());
-    CHECK(positional->pattern == "Fehler: {0}");
-
-    auto const alias = findMessage("winui_track_move_column_left_button.Text");
-    REQUIRE(alias != projectedRes->end());
-    CHECK(alias->pattern == "Nach links");
-
-    CHECK(findMessage("winui_save_settings_failed") == projectedRes->end());
-    CHECK(findMessage("winui_track_move_column_right_button.Text") == projectedRes->end());
+    // Compare the complete inventory without imposing an output-order contract.
+    std::ranges::sort(*projectedRes, {}, &CatalogMessage::id);
+    CHECK(*projectedRes == std::vector<CatalogMessage>{
+                             {.id = "winui_error", .pattern = "Fehler: {0}"},
+                             {.id = "winui_track_move_column_left", .pattern = "Nach links"},
+                             {.id = "winui_track_move_column_left_button.Text", .pattern = "Nach links"},
+                           });
 
     auto completeProjectionRes = projectWinUiResources(translated, MissingWinUiMessagePolicy::Reject);
     REQUIRE_FALSE(completeProjectionRes);
     CHECK(completeProjectionRes.error().message.contains("references unknown message id"));
   }
 
-  TEST_CASE("CatalogPattern - native resource output is stable, sorted, and escaped", "[core][unit][catalog]")
+  TEST_CASE("CatalogPattern - RESW output is stable, sorted, and escaped", "[core][unit][catalog]")
   {
     auto const messages = std::array{
       CatalogMessage{.id = "z_last", .pattern = "A & B"},
@@ -137,12 +127,34 @@ namespace ao::i18n::detail::test
     auto const first = renderResw(messages);
     auto const second = renderResw(messages);
     CHECK(first == second);
-    CHECK(first.find("a_first") < first.find("z_last"));
-    CHECK(first.contains("Use &lt;value&gt; and &quot;quotes&quot;"));
-    CHECK(first.contains("A &amp; B"));
+    CHECK(
+      first ==
+      "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+      "<root>\n"
+      "  <resheader name=\"resmimetype\"><value>text/microsoft-resx</value></resheader>\n"
+      "  <resheader name=\"version\"><value>2.0</value></resheader>\n"
+      "  <resheader name=\"reader\"><value>System.Resources.ResXResourceReader, "
+      "System.Windows.Forms</value></resheader>\n"
+      "  <resheader name=\"writer\"><value>System.Resources.ResXResourceWriter, "
+      "System.Windows.Forms</value></resheader>\n"
+      "  <data name=\"a_first\" xml:space=\"preserve\"><value>Use &lt;value&gt; and &quot;quotes&quot;</value></data>\n"
+      "  <data name=\"z_last\" xml:space=\"preserve\"><value>A &amp; B</value></data>\n"
+      "</root>\n");
+  }
+
+  TEST_CASE("CatalogPattern - ICU resource output is sorted and escaped", "[core][unit][catalog]")
+  {
+    auto const messages = std::array{
+      CatalogMessage{.id = "z_last", .pattern = "A & B"},
+      CatalogMessage{.id = "a_first", .pattern = "Use <value> and \"quotes\""},
+    };
 
     auto const resource = renderIcuResource("qps_Ploc", messages);
-    CHECK(resource.find("a_first") < resource.find("z_last"));
-    CHECK(resource.contains("\\\"quotes\\\""));
+    CHECK(resource == "qps_Ploc:table {\n"
+                      "  messages:table {\n"
+                      "    a_first { \"Use <value> and \\\"quotes\\\"\" }\n"
+                      "    z_last { \"A & B\" }\n"
+                      "  }\n"
+                      "}\n");
   }
 } // namespace ao::i18n::detail::test

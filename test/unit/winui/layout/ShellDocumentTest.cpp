@@ -14,6 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <format>
@@ -84,6 +85,24 @@ namespace ao::winui::test
     bool contains(std::vector<std::string> const& ids, std::string_view const id)
     {
       return std::ranges::contains(ids, id);
+    }
+
+    LayoutNode const* findById(LayoutNode const& node, std::string_view const id)
+    {
+      if (node.id == id)
+      {
+        return &node;
+      }
+
+      for (auto const& child : node.children)
+      {
+        if (auto const* found = findById(child, id); found != nullptr)
+        {
+          return found;
+        }
+      }
+
+      return nullptr;
     }
 
     /// Whether @p node is a pane that sizes itself from the persisted Windows settings.
@@ -201,12 +220,11 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("shellPresetResource - the WinUI build packages every preset where the shell reads them",
+  TEST_CASE("shellPresetResource - project declarations pair both preset files with shell paths",
             "[winui][unit][layout]")
   {
-    // A preset that is not packaged leaves the shell with nothing to build, and
-    // one packaged under another name is the same failure wearing a disguise.
-    // Neither shows up until the app is started, so the pairing is checked here.
+    // Source-level CMake/reader-name pairing only. MSBuild deployment and the
+    // executable's files must still be checked on native Windows.
     auto stream = std::ifstream{std::filesystem::path{AOBUS_WINDOWS_WINUI_CMAKE}, std::ios::binary};
     REQUIRE(stream.is_open());
     auto const project = std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
@@ -218,22 +236,36 @@ namespace ao::winui::test
     REQUIRE(separator != std::string::npos);
     folder.replace(separator, 1, "\\\\");
 
+    CHECK(shellPresetId(ShellPreset::Modern) == "windows.modern");
+    CHECK(shellPresetId(ShellPreset::Classic) == "windows.classic");
+    CHECK(shellPresetResource(ShellPreset::Modern) == "windows_modern_layout.yaml");
+    CHECK(shellPresetResource(ShellPreset::Classic) == "windows_classic_layout.yaml");
+
     for (auto const preset : {ShellPreset::Modern, ShellPreset::Classic})
     {
       auto const resource = shellPresetResource(preset);
       INFO("preset " << resource);
+      CHECK(project.contains(std::format("layout/{}", resource)));
       CHECK(project.contains(std::format("Link={}\\\\{}\"", folder, resource)));
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - the shell registers every action the shipped presets bind",
+  TEST_CASE("prepareShellPresetDocument - shipped action ids have shell registration source paths",
             "[winui][unit][layout]")
   {
-    // An action a preset binds but the shell never registers rejects the whole
-    // candidate, which on the shipped path means a window with no shell in it.
-    // Nothing but starting the app would otherwise say so.
+    // Lexical guards at identifier level: each shipped action id and the
+    // callback that serves it appear in the shell source. They tolerate
+    // formatting and local refactoring, and cannot prove native invocation.
     auto const builder = readShellBuilderSource();
     auto const schema = layoutSchema();
+
+    constexpr auto kCommandCallbacks = std::to_array<std::pair<std::string_view, std::string_view>>({
+      {"library.open", "commands.openLibrary"},
+      {"library.rescan", "commands.rescanLibrary"},
+      {"shell.toggleInspector", "commands.toggleInspector"},
+      {"shell.showSoul", "commands.showSoul"},
+      {"shell.showSystemMenu", "commands.showSystemMenu"},
+    });
 
     for (auto const preset : {ShellPreset::Modern, ShellPreset::Classic})
     {
@@ -251,11 +283,29 @@ namespace ao::winui::test
       {
         INFO("action " << action);
         CHECK(builder.contains(std::format("\"{}\"", action)));
+
+        if (action == "playback.showOutputDeviceSelector")
+        {
+          CHECK(builder.contains("showSelector"));
+        }
+        else if (action.starts_with("playback."))
+        {
+          CHECK(builder.contains("playbackCommandActionId"));
+          CHECK(builder.contains("tryExecute"));
+        }
+        else
+        {
+          decltype(kCommandCallbacks)::const_iterator const it =
+            std::ranges::find_if(kCommandCallbacks, [&action](auto const& entry) { return entry.first == action; });
+          REQUIRE(it != kCommandCallbacks.end());
+          CHECK(builder.contains(it->second));
+        }
       }
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - every shell can ask for the inspector it hides", "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - modern toggle and classic menu name the inspector command",
+            "[winui][unit][layout]")
   {
     /*
      * Below the wide tier the inspector is an overlay, which shows nothing
@@ -321,6 +371,19 @@ namespace ao::winui::test
         INFO("surface " << toString(surface));
         CHECK(std::ranges::find(painted, surface) != painted.end());
       }
+
+      // Classic repeats surface on the playback strip/table and classic.tree on navigation/inspector.
+      auto exactExpected = expected;
+
+      if (preset == ShellPreset::Classic)
+      {
+        exactExpected.push_back(ThemeSurface::Surface);
+        exactExpected.push_back(ThemeSurface::ClassicTree);
+      }
+
+      std::ranges::sort(painted);
+      std::ranges::sort(exactExpected);
+      CHECK(painted == exactExpected);
     }
   }
 
@@ -342,6 +405,24 @@ namespace ao::winui::test
       CHECK(contains(ids, "modern-navigation"));
       CHECK(contains(ids, "modern-inspector"));
       CHECK(contains(ids, "modern-title-bar"));
+
+      for (auto const& [id, type] : std::to_array<std::pair<std::string_view, std::string_view>>({
+             {"modern-track-table", "track.table"},
+             {"modern-track-detail", "track.detail"},
+             {"modern-inspector-cover", "track.coverArt"},
+             {"modern-navigation", "windows.navigationPane"},
+             {"modern-inspector", "windows.inspectorPane"},
+             {"modern-title-bar", "windows.titleBar"},
+           }))
+      {
+        INFO("role " << id);
+        auto const* node = findById(preparedRes->effectiveRoot(), id);
+        REQUIRE(node != nullptr);
+        CHECK(node->type == type);
+        auto found = std::vector<LayoutNode const*>{};
+        collectByType(preparedRes->effectiveRoot(), type, found);
+        CHECK(found.size() == 1);
+      }
     }
 
     SECTION("classic")
@@ -360,6 +441,25 @@ namespace ao::winui::test
       CHECK(contains(ids, "classic-inspector"));
       CHECK(contains(ids, "classic-menu-bar"));
       CHECK(contains(ids, "classic-status-bar"));
+
+      for (auto const& [id, type] : std::to_array<std::pair<std::string_view, std::string_view>>({
+             {"classic-track-table", "track.table"},
+             {"classic-track-detail", "track.detail"},
+             {"classic-inspector-cover", "track.coverArt"},
+             {"classic-navigation", "windows.navigationPane"},
+             {"classic-inspector", "windows.inspectorPane"},
+             {"classic-menu-bar", "app.menuBar"},
+             {"classic-status-bar", "windows.statusBar"},
+           }))
+      {
+        INFO("role " << id);
+        auto const* node = findById(preparedRes->effectiveRoot(), id);
+        REQUIRE(node != nullptr);
+        CHECK(node->type == type);
+        auto found = std::vector<LayoutNode const*>{};
+        collectByType(preparedRes->effectiveRoot(), type, found);
+        CHECK(found.size() == 1);
+      }
     }
   }
 
@@ -388,6 +488,7 @@ namespace ao::winui::test
         CHECK(parentType != "split");
         CHECK(parentType != "collapsibleSplit");
         CHECK_FALSE(node->layoutOr<bool>("hexpand", false));
+        CHECK_FALSE(node->layout.contains("widthRequest"));
       }
     }
   }
@@ -411,6 +512,10 @@ namespace ao::winui::test
     auto readings = std::vector<LayoutNode const*>{};
     collectStatusReadings(modernRes->effectiveRoot(), readings);
     CHECK(readings.size() == 2);
+    CHECK(std::ranges::count_if(readings, [](LayoutNode const* node) { return node->type == "status.trackCount"; }) ==
+          1);
+    CHECK(std::ranges::count_if(
+            readings, [](LayoutNode const* node) { return node->type == "status.selectionInfo"; }) == 1);
 
     for (auto const* const node : readings)
     {
@@ -420,7 +525,8 @@ namespace ao::winui::test
 
     readings.clear();
     collectStatusReadings(classicRes->effectiveRoot(), readings);
-    CHECK_FALSE(readings.empty());
+    REQUIRE(readings.size() == 1);
+    CHECK(readings.front()->type == "status.trackCount");
 
     for (auto const* const node : readings)
     {
@@ -451,9 +557,30 @@ namespace ao::winui::test
       auto souls = std::vector<LayoutNode const*>{};
       collectByType(preparedRes->effectiveRoot(), "playback.soulButton", souls);
       CHECK_FALSE(souls.empty());
+      REQUIRE(souls.size() == 1);
+      CHECK(souls.front()->id == (preset == ShellPreset::Modern ? "modern-soul" : "classic-soul"));
 
       auto const optComponent = schema.component("playback.soulButton");
       REQUIRE(optComponent);
+
+      auto const optPrimary = optComponent->actionId(*souls.front(), uimodel::ActionSlot::PrimaryClick);
+
+      if (preset == ShellPreset::Modern)
+      {
+        CHECK_FALSE(optPrimary);
+      }
+      else
+      {
+        REQUIRE(optPrimary);
+        CHECK(*optPrimary == "playback.showOutputDeviceSelector");
+      }
+
+      auto transports = std::vector<LayoutNode const*>{};
+      collectByType(preparedRes->effectiveRoot(), "playback.transportButton", transports);
+      auto const playPauseButtons = std::ranges::count_if(
+        transports,
+        [](LayoutNode const* node) { return node->propertyOr<std::string>("command", "playPause") == "playPause"; });
+      CHECK(playPauseButtons == (preset == ShellPreset::Classic ? 1 : 0));
 
       for (auto const* const soul : souls)
       {

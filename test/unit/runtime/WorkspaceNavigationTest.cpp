@@ -84,15 +84,25 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime();
 
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
+    auto const before = runtime.workspace().snapshot();
+    auto revealRequests = std::vector<PlaybackRevealTrackRequest>{};
+    auto const sub = runtime.playback().events().onRevealTrackRequested(
+      [&](PlaybackRevealTrackRequest const& request) noexcept { revealRequests.push_back(request); });
+
     auto const res = runtime.jumpToAlbum(kInvalidTrackId);
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::InvalidInput);
+    settleRuntimeCallbacks(runtime);
+    CHECK(runtime.workspace().snapshot() == before);
+    CHECK_FALSE(runtime.workspace().canGoBack());
+    CHECK_FALSE(runtime.workspace().canGoForward());
+    CHECK(revealRequests.empty());
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - onChanged includes the committed focus", "[runtime][unit][workspace][focus]")
+  TEST_CASE("WorkspaceService - onChanged includes the committed focus", "[runtime][unit][workspace]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -107,7 +117,7 @@ namespace ao::rt::test
     CHECK(focusedViewId == activeViewId);
   }
 
-  TEST_CASE("WorkspaceService - deleting a list closes its open views", "[runtime][unit][workspace][lifecycle]")
+  TEST_CASE("WorkspaceService - deleting a list closes its open views", "[runtime][unit][workspace]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -124,8 +134,7 @@ namespace ao::rt::test
     CHECK(!std::ranges::contains(layout.openViews, activeViewId));
   }
 
-  TEST_CASE("WorkspaceService - deleting a list closes all matching views in one commit",
-            "[runtime][unit][workspace][lifecycle]")
+  TEST_CASE("WorkspaceService - deleting a list closes all matching views in one commit", "[runtime][unit][workspace]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -164,19 +173,17 @@ namespace ao::rt::test
         },
     }));
 
-    bool revealCalled = false;
+    auto revealRequests = std::vector<PlaybackRevealTrackRequest>{};
     auto const sub = runtime.playback().events().onRevealTrackRequested(
-      [&](PlaybackRevealTrackRequest const& req) noexcept
-      {
-        if (req.trackId == trackId)
-        {
-          revealCalled = true;
-        }
-      });
+      [&](PlaybackRevealTrackRequest const& request) noexcept { revealRequests.push_back(request); });
 
     auto const res = runtime.jumpToAlbum(trackId);
     REQUIRE(res);
-    CHECK(revealCalled == true);
+    settleRuntimeCallbacks(runtime);
+    REQUIRE(revealRequests.size() == 1);
+    CHECK(revealRequests[0].trackId == trackId);
+    CHECK(revealRequests[0].preferredViewId == existingViewId);
+    CHECK(revealRequests[0].preferredListId == kInvalidListId);
 
     auto state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(runtime.workspace().snapshot().activeViewId == existingViewId);
@@ -216,6 +223,8 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
+    requireNavigation(runtime, fixture.secondListId);
+    requireBackNavigation(runtime);
     auto const beforeLayout = runtime.workspace().snapshot();
 
     auto const res = runtime.workspace().navigate({.target = ListId{999999}});
@@ -227,6 +236,12 @@ namespace ao::rt::test
     CHECK(afterLayout.openViews == beforeLayout.openViews);
     CHECK(afterLayout.revision == beforeLayout.revision);
     CHECK(afterLayout.openViews.size() == beforeLayout.openViews.size());
+    CHECK_FALSE(runtime.workspace().canGoBack());
+    REQUIRE(runtime.workspace().canGoForward());
+    requireForwardNavigation(runtime);
+    CHECK(runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).listId == fixture.secondListId);
+    requireBackNavigation(runtime);
+    CHECK(runtime.workspace().snapshot().activeViewId == beforeLayout.activeViewId);
   }
 
   TEST_CASE("WorkspaceService - focus rejects ids outside the open live aggregate",
@@ -241,6 +256,7 @@ namespace ao::rt::test
     {
       auto const res = runtime.workspace().focusView(viewId);
       REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
     }
 
     CHECK(runtime.workspace().snapshot() == before);
@@ -261,6 +277,7 @@ namespace ao::rt::test
     REQUIRE(workspace.closeView(ViewId{999999}));
 
     CHECK(workspace.snapshot() == before);
+    settleRuntimeCallbacks(fixture.runtime());
     CHECK(changeCount == 0);
   }
 
@@ -285,7 +302,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("WorkspaceService - changed observations are deferred to contract-fulfilling observers",
-            "[runtime][unit][workspace][observation]")
+            "[runtime][unit][workspace][observation][async]")
   {
     // The owning Signal emission boundary accepts ordinary handlers so it can
     // diagnose an escaping exception before aborting. Contract-fulfilling
@@ -301,22 +318,28 @@ namespace ao::rt::test
     auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
     auto received = std::vector<WorkspaceChanged>{};
     bool leadingObserverEntered = false;
+    bool receivedAfterLeadingObserver = false;
     auto const leadingSub =
       runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { leadingObserverEntered = true; });
-    auto const receivingSub =
-      runtimePtr->workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { received.push_back(changed); });
+    auto const receivingSub = runtimePtr->workspace().onChanged(
+      [&](WorkspaceChanged const& changed) noexcept
+      {
+        receivedAfterLeadingObserver = leadingObserverEntered;
+        received.push_back(changed);
+      });
 
     REQUIRE(runtimePtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     CHECK(received.empty());
     CHECK_NOTHROW(executor->drain());
     CHECK(leadingObserverEntered);
+    CHECK(receivedAfterLeadingObserver);
     REQUIRE(received.size() == 1);
     CHECK(received.front().snapshot == runtimePtr->workspace().snapshot());
   }
 
   TEST_CASE("WorkspaceService - reentrant changes cannot mutate the observation being delivered",
-            "[runtime][unit][workspace][observation]")
+            "[runtime][unit][workspace][observation][async]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
@@ -330,6 +353,7 @@ namespace ao::rt::test
     executor->drain();
     auto received = std::vector<WorkspaceChanged>{};
     bool reentrantNavigateSucceeded = false;
+    auto observationAfterReentry = WorkspaceSnapshot{};
     auto const sub = runtimePtr->workspace().onChanged(
       [&](WorkspaceChanged const& changed) noexcept
       {
@@ -338,16 +362,20 @@ namespace ao::rt::test
         if (received.size() == 1)
         {
           reentrantNavigateSucceeded = static_cast<bool>(runtimePtr->workspace().navigate({.target = secondListId}));
+          observationAfterReentry = changed.snapshot;
         }
       });
 
     REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
-    auto const firstRevision = runtimePtr->workspace().snapshot().revision;
+    auto const firstSnapshot = runtimePtr->workspace().snapshot();
+    auto const firstRevision = firstSnapshot.revision;
     REQUIRE(executor->tryDrainUntil([&] { return received.size() == 1; }));
 
     REQUIRE(received.size() == 1);
     CHECK(reentrantNavigateSucceeded);
     auto const firstObservation = received.front();
+    CHECK(firstObservation.snapshot == firstSnapshot);
+    CHECK(observationAfterReentry == firstSnapshot);
     CHECK(firstObservation.snapshot.revision == firstRevision);
     CHECK(runtimePtr->workspace().snapshot().revision == firstRevision + 1);
     CHECK(received.front() == firstObservation);

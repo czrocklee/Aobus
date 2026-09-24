@@ -163,8 +163,7 @@ namespace ao::gtk
     _modifiedTime = modifiedTime;
     _status = status;
 
-    // Fresh metadata: drop any computed strings memoized from a prior populate
-    // (rows are re-materialized in place after an invalidate).
+    // Drop computed strings whenever row data is populated.
     invalidateComputedCache();
   }
 

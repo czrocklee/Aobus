@@ -121,7 +121,7 @@ Frontends cannot invent additional query fields or operators that the core compl
 
 ## Test map
 
-- Completion tests under [`test/unit/query/`](../../../test/unit/query) prove cursor contexts, lexical agreement, operator families, logical boundaries, aliases, values, and latency baseline.
+- Completion tests under [`test/unit/query/`](../../../test/unit/query) prove cursor contexts, lexical agreement, operator families, logical boundaries, aliases, values, and correctness of representative repeated-analysis inputs. Their diagnostic timing is not optimized performance evidence.
 - Runtime completion tests under [`test/unit/runtime/completion/`](../../../test/unit/runtime/completion) prove live composition and replacement output.
 - [`EntryCompletionControllerTest.cpp`](../../../test/unit/linux-gtk/completion/EntryCompletionControllerTest.cpp) and TUI command-completion tests protect adapters.
 - [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the mode boundary around this expression completer.

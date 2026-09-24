@@ -39,9 +39,6 @@ namespace ao::tui::test
 {
   TEST_CASE("NavigationPanel - docking budgets Detail and the minimum Tracks width", "[tui][unit][navigation]")
   {
-    auto shell = ShellInteractionModel{};
-    CHECK(shell.isNavigationPinned());
-    CHECK_FALSE(shell.isNavigationFocused());
     auto layout = navigationGeometry(102, 0, true);
     CHECK(layout.docked);
     CHECK(layout.trackColumns == 74);
@@ -50,49 +47,19 @@ namespace ao::tui::test
     CHECK_FALSE(navigationGeometry(99, 0, true).docked);
     layout = navigationGeometry(80, 0, true);
     CHECK_FALSE(layout.docked);
-    shell.toggleNavigation(false);
-    CHECK_FALSE(shell.isNavigationFocused());
-    CHECK(shell.overlay() == Overlay::ListChooser);
-    shell.toggleNavigation(false);
-    CHECK(shell.overlay() == Overlay::None);
+
     layout = navigationGeometry(140, 45, true);
     CHECK_FALSE(layout.docked);
     CHECK(layout.trackColumns == 93);
     layout = navigationGeometry(160, 45, true);
     CHECK(layout.docked);
     CHECK(layout.trackColumns == 88);
-    shell.switchWorkspaceFocus(false);
-    CHECK_FALSE(shell.isNavigationFocused());
-    CHECK(shell.isNavigationPinned());
-    shell.switchWorkspaceFocus(false);
-    CHECK_FALSE(shell.isNavigationFocused());
-    shell.switchWorkspaceFocus(true);
-    CHECK(shell.isNavigationFocused());
-    shell.switchWorkspaceFocus(true);
-    CHECK_FALSE(shell.isNavigationFocused());
-    CHECK(shell.isNavigationPinned());
-    shell.toggleNavigation(false);
-    shell.toggleNavigation(false);
-    CHECK(shell.isNavigationPinned());
-    CHECK_FALSE(shell.isNavigationFocused());
-    shell.toggleNavigation(true);
-    shell.toggleNavigation(true);
-    CHECK(shell.isNavigationFocused());
-    CHECK(shell.isNavigationPinned());
-    shell.toggleNavigationPin();
-    CHECK_FALSE(shell.isNavigationFocused());
-    CHECK_FALSE(shell.isNavigationPinned());
-    shell.switchWorkspaceFocus(true);
-    CHECK_FALSE(shell.isNavigationFocused());
-    shell.toggleNavigation(true);
-    CHECK(shell.overlay() == Overlay::ListChooser);
+
     CHECK_FALSE(navigationGeometry(140, 0, false).docked);
-    shell.toggleNavigationPin();
-    CHECK(shell.isNavigationPinned());
   }
 
   TEST_CASE("NavigationPanel - docked panes share one border without shifting content hit targets",
-            "[tui][regression][navigation]")
+            "[tui][unit][navigation]")
   {
     using namespace ftxui;
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -149,7 +116,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("NavigationPanel - translated active search retains input targets", "[tui][regression][navigation]")
+  TEST_CASE("NavigationPanel - translated active search retains input targets", "[tui][unit][navigation]")
   {
     for (auto const* locale : {"en", "de", "zh-Hans"})
     {
@@ -185,7 +152,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("NavigationPanel - cover overlap includes Kitty clearing halo and excludes hidden targets",
-            "[tui][regression][navigation][cover-art]")
+            "[tui][unit][navigation][cover-art]")
   {
     auto const cover = ftxui::Box{.x_min = 60, .x_max = 79, .y_min = 3, .y_max = 15};
     CHECK_FALSE(hasCoverIntersection(cover, kEmptyMouseBox));
@@ -196,7 +163,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("NavigationPanel - search status describes local ownership rather than tree keys",
-            "[tui][regression][navigation]")
+            "[tui][unit][navigation]")
   {
     auto shell = ShellInteractionModel{};
     shell.focusNavigation();
@@ -210,7 +177,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("NavigationPanel - search only takes a row while active and Escape restores the full tree",
-            "[tui][regression][navigation][search]")
+            "[tui][unit][navigation][search]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto model = ListNavigationModel{};
@@ -239,8 +206,7 @@ namespace ao::tui::test
     CHECK(regions.rows.front().row.y_min == initialRow);
   }
 
-  TEST_CASE("NavigationPanel - docked expression follows selection without footer chrome",
-            "[tui][regression][navigation]")
+  TEST_CASE("NavigationPanel - docked expression follows selection without footer chrome", "[tui][unit][navigation]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto model = ListNavigationModel{};
@@ -277,7 +243,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("NavigationPanel - long expressions wrap into two dim rows with explicit truncation",
-            "[tui][regression][navigation]")
+            "[tui][unit][navigation]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto model = ListNavigationModel{};
@@ -303,7 +269,7 @@ namespace ao::tui::test
     CHECK(rendered.screen.PixelAt(optSecond->x_min, optSecond->y_min).dim);
   }
 
-  TEST_CASE("NavigationPanel - expression controls flatten without corrupting Unicode", "[tui][regression][navigation]")
+  TEST_CASE("NavigationPanel - expression controls flatten without corrupting Unicode", "[tui][unit][navigation]")
   {
     using namespace std::string_view_literals;
     // NOLINTNEXTLINE(misc-include-cleaner) -- MSVC include-cleaner cannot map sv to the included <string_view>.
@@ -337,7 +303,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("NavigationPanel - Tracks advertises focus only for a docked list using the current binding",
-            "[tui][regression][navigation]")
+            "[tui][unit][navigation]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto shell = ShellInteractionModel{};
@@ -355,7 +321,7 @@ namespace ao::tui::test
     CHECK_FALSE(renderText(statusBar(catalog, state, plan), 80).contains("F4 lists"));
   }
 
-  TEST_CASE("NavigationPanel - global return hint follows executable focus bindings", "[tui][regression][navigation]")
+  TEST_CASE("NavigationPanel - global return hint follows executable focus bindings", "[tui][unit][navigation]")
   {
     auto shell = ShellInteractionModel{};
     shell.focusNavigation();

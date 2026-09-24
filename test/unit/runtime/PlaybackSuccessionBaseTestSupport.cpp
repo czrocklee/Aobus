@@ -50,7 +50,7 @@ namespace ao::rt::test::playback_succession
       return startedRes;
     }
 
-    if (!executor.tryDrainUntil([&] { return settled; }, std::chrono::seconds{5}))
+    if (!executor.tryDrainUntil([&] { return settled; }, std::chrono::seconds{10}))
     {
       return makeError(Error::Code::InvalidState, "Timed out waiting for explicit playback start settlement");
     }

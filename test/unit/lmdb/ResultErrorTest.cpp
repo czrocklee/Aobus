@@ -28,6 +28,7 @@ namespace ao::lmdb::test
 
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotFound);
+      CHECK(res.error().message.starts_with("mdb_get: "));
       CHECK(res.error().location.line() == expectedLine);
       CHECK(std::string_view{res.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
 
@@ -43,6 +44,7 @@ namespace ao::lmdb::test
 
       REQUIRE_FALSE(errorRes);
       CHECK(errorRes.error().code == Error::Code::Conflict);
+      CHECK(errorRes.error().message.starts_with("mdb_put: "));
       CHECK(errorRes.error().location.line() == expectedLine);
       CHECK(std::string_view{errorRes.error().location.file_name()}.ends_with("ResultErrorTest.cpp"));
     }
@@ -51,20 +53,35 @@ namespace ao::lmdb::test
     {
       // A caller may answer this one by reopening with a larger map, so it must
       // not arrive wearing the code of a failure that repeating would not fix.
-      CHECK(resultFromCode("mdb_put", MDB_MAP_FULL).error().code == Error::Code::StorageFull);
-      CHECK(resultFromCode("mdb_put", ENOSPC).error().code == Error::Code::IoError);
-      CHECK(resultFromCode("mdb_cursor_put", MDB_TXN_FULL).error().code == Error::Code::IoError);
+      auto const mapFullRes = resultFromCode("mdb_put", MDB_MAP_FULL);
+      REQUIRE_FALSE(mapFullRes);
+      CHECK(mapFullRes.error().code == Error::Code::StorageFull);
+
+      auto const diskFullRes = resultFromCode("mdb_put", ENOSPC);
+      REQUIRE_FALSE(diskFullRes);
+      CHECK(diskFullRes.error().code == Error::Code::IoError);
+
+      auto const transactionFullRes = resultFromCode("mdb_cursor_put", MDB_TXN_FULL);
+      REQUIRE_FALSE(transactionFullRes);
+      CHECK(transactionFullRes.error().code == Error::Code::IoError);
     }
 
     SECTION("A map another process outgrew reports stale state")
     {
-      CHECK(resultFromCode("mdb_txn_begin", MDB_MAP_RESIZED).error().code == Error::Code::InvalidState);
+      auto const resizedRes = resultFromCode("mdb_txn_begin", MDB_MAP_RESIZED);
+      REQUIRE_FALSE(resizedRes);
+      CHECK(resizedRes.error().code == Error::Code::InvalidState);
     }
 
     SECTION("Unmapped failures collapse to IoError")
     {
-      CHECK(resultFromCode("mdb_get", MDB_CORRUPTED).error().code == Error::Code::IoError);
-      CHECK(resultFromCode("mdb_txn_begin", MDB_READERS_FULL).error().code == Error::Code::IoError);
+      auto const corruptedRes = resultFromCode("mdb_get", MDB_CORRUPTED);
+      REQUIRE_FALSE(corruptedRes);
+      CHECK(corruptedRes.error().code == Error::Code::IoError);
+
+      auto const readersFullRes = resultFromCode("mdb_txn_begin", MDB_READERS_FULL);
+      REQUIRE_FALSE(readersFullRes);
+      CHECK(readersFullRes.error().code == Error::Code::IoError);
     }
   }
 } // namespace ao::lmdb::test

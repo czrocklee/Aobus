@@ -23,7 +23,7 @@
 namespace ao::rt::test
 {
   TEST_CASE("LibraryCommands - track Properties commits metadata and tags in one revision",
-            "[runtime][regression][library-authoring]")
+            "[runtime][unit][library-authoring]")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Before");
@@ -33,6 +33,7 @@ namespace ao::rt::test
     [[maybe_unused]] auto subscription = changes.onChanged([&publications](LibraryChangeSet const& changeSet) noexcept
                                                            { publications.push_back(changeSet); });
     auto targets = commandsFixture.bind(std::array{trackId});
+    auto const revisionBefore = targets.revision();
 
     auto const res = commandsFixture.runTask(commandsFixture.commands().updatePropertiesAsync(
       std::move(targets),
@@ -46,8 +47,10 @@ namespace ao::rt::test
     CHECK(res->reply.tags.changes[0].trackId == trackId);
     REQUIRE(publications.size() == 1);
     CHECK(publications[0].tracksMutated == std::vector<TrackId>{trackId});
+    CHECK(publications[0].libraryRevision == revisionBefore + 1);
 
     auto transaction = storage.library().readTransaction();
+    CHECK(storage.library().libraryRevision(transaction) == revisionBefore + 1);
     auto const optTrack =
       storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrack);
@@ -56,8 +59,8 @@ namespace ao::rt::test
     CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}));
   }
 
-  TEST_CASE("LibraryCommands - invalid tags roll back an earlier staged Properties metadata edit",
-            "[runtime][regression][library-authoring]")
+  TEST_CASE("LibraryCommands - invalid tags reject Properties before metadata mutation",
+            "[runtime][unit][library-authoring]")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Before");
@@ -67,6 +70,7 @@ namespace ao::rt::test
     [[maybe_unused]] auto subscription =
       changes.onChanged([&publicationCount](LibraryChangeSet const&) noexcept { ++publicationCount; });
     auto targets = commandsFixture.bind(std::array{trackId});
+    auto const revisionBefore = targets.revision();
     auto invalidTag = std::string(1, static_cast<char>(0xff));
 
     auto const res = commandsFixture.runTask(
@@ -81,6 +85,7 @@ namespace ao::rt::test
     CHECK(publicationCount == 0);
 
     auto transaction = storage.library().readTransaction();
+    CHECK(storage.library().libraryRevision(transaction) == revisionBefore);
     auto const optTrack =
       storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrack);
@@ -89,7 +94,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryCommands - conflicting Properties tag edits reject the whole patch",
-            "[runtime][regression][library-authoring]")
+            "[runtime][unit][library-authoring]")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Before");

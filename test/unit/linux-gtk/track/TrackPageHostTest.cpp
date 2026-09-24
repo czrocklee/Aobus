@@ -7,12 +7,14 @@
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
@@ -20,6 +22,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
@@ -34,7 +37,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TrackPageHost - binds runtime pages to the GTK stack", "[gtk][unit][track][host]")
+  TEST_CASE("TrackPageHost - binds runtime pages to the GTK stack", "[gtk][integration][track]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -79,13 +82,17 @@ namespace ao::gtk::test
 
     SECTION("rebuild creating pages")
     {
-      REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       drainGtkEvents();
 
       host.rebuild(cache);
       drainGtkEvents();
 
-      // Should have created a page for All Tracks
+      auto const* const current = host.currentVisible();
+      REQUIRE(current != nullptr);
+      REQUIRE(current->pagePtr != nullptr);
+      CHECK(current->viewId == viewId);
+      CHECK(current->pagePtr->listId() == rt::kAllTracksListId);
       CHECK(host.activeListId() == rt::kAllTracksListId);
     }
 
@@ -103,6 +110,35 @@ namespace ao::gtk::test
 
       host.setGroupCoverPlaceholderStyle(uimodel::CoverArtPlaceholderStyle::Soul);
       CHECK(context->pagePtr->groupCoverPlaceholderStyle() == uimodel::CoverArtPlaceholderStyle::Soul);
+    }
+
+    SECTION("focus and close retire the exact page generation")
+    {
+      auto const listId = ao::test::requireValue(
+        runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Second page"})));
+      auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
+      REQUIRE(firstViewId != secondViewId);
+
+      host.rebuild(cache);
+      drainGtkEvents();
+      REQUIRE(host.find(firstViewId) != nullptr);
+      REQUIRE(host.find(secondViewId) != nullptr);
+      REQUIRE(host.currentVisible() != nullptr);
+      CHECK(host.currentVisible()->viewId == secondViewId);
+
+      REQUIRE(runtime.workspace().focusView(firstViewId));
+      drainGtkEvents();
+      REQUIRE(host.currentVisible() != nullptr);
+      CHECK(host.currentVisible()->viewId == firstViewId);
+
+      REQUIRE(runtime.workspace().closeView(firstViewId));
+      drainGtkEvents();
+      CHECK(host.find(firstViewId) == nullptr);
+      REQUIRE(host.find(secondViewId) != nullptr);
+      REQUIRE(host.currentVisible() != nullptr);
+      CHECK(host.currentVisible()->viewId == secondViewId);
+      CHECK(runtime.workspace().snapshot().activeViewId == secondViewId);
     }
 
     SECTION("track activation starts from the owning view identity")

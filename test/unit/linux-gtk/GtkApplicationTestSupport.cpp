@@ -3,7 +3,8 @@
 
 #include "GtkApplicationTestSupport.h"
 
-#include <gio/gio.h>
+#include <catch2/catch_test_macros.hpp>
+#include <giomm/application.h>
 #include <glib.h>
 #include <glibmm/main.h>
 #include <gtkmm/application.h>
@@ -11,7 +12,6 @@
 #include <gtkmm/window.h>
 
 #include <chrono>
-#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string_view>
@@ -19,59 +19,22 @@
 
 namespace ao::gtk::test
 {
-  namespace
+  bool isOwnedGtkSessionBus(char const* const address, char const* const ownershipAddress) noexcept
   {
-    void installGtkTestLogHandler()
+    return address != nullptr && ownershipAddress != nullptr && std::string_view{address}.starts_with("unix:") &&
+           std::string_view{address}.size() > 5 && std::string_view{address} == ownershipAddress;
+  }
+
+  void requireOwnedGtkSessionBus()
+  {
+    if (!isOwnedGtkSessionBus(::g_getenv("DBUS_SESSION_BUS_ADDRESS"), ::g_getenv("AOBUS_OWNED_GTK_BUS")))
     {
-      static bool installed = false;
-
-      if (installed)
-      {
-        return;
-      }
-
-      ::g_log_set_writer_func(
-        [](GLogLevelFlags logLevel, GLogField const* fields, gsize nFields, gpointer) -> GLogWriterOutput
-        {
-          for (gsize i = 0; i < nFields; ++i)
-          {
-            if (std::string_view{fields[i].key} != "MESSAGE")
-            {
-              continue;
-            }
-
-            auto message = std::string_view{};
-
-            if (fields[i].length < 0)
-            {
-              message = static_cast<char const*>(fields[i].value);
-            }
-            else
-            {
-              message =
-                std::string_view{static_cast<char const*>(fields[i].value), static_cast<std::size_t>(fields[i].length)};
-            }
-
-            if ((message.contains("Finalizing ") && message.contains("has children left")) ||
-                message.contains(
-                  "New application windows must be added after the GApplication::startup signal has been emitted"))
-            {
-              return G_LOG_WRITER_HANDLED;
-            }
-          }
-
-          return ::g_log_writer_default(logLevel, fields, nFields, nullptr);
-        },
-        nullptr,
-        nullptr);
-      installed = true;
+      SKIP("This test requires a portal-owned session bus; run ./ao test --gtk");
     }
-  } // namespace
+  }
 
   Glib::RefPtr<Gtk::Application> ensureGtkApplication()
   {
-    installGtkTestLogHandler();
-
     if (auto gioAppPtr = Gio::Application::get_default(); gioAppPtr)
     {
       if (auto gtkAppPtr = std::dynamic_pointer_cast<Gtk::Application>(gioAppPtr); gtkAppPtr)
@@ -81,6 +44,18 @@ namespace ao::gtk::test
     }
 
     return Gtk::Application::create("io.github.aobus.test", Gio::Application::Flags::NON_UNIQUE);
+  }
+
+  Glib::RefPtr<Gtk::Application> ensureRegisteredGtkApplication()
+  {
+    auto const appPtr = ensureGtkApplication();
+
+    if (!appPtr->is_registered())
+    {
+      REQUIRE(appPtr->register_application());
+    }
+
+    return appPtr;
   }
 
   void drainGtkEvents()

@@ -191,7 +191,7 @@ namespace ao::library::test
     CHECK(view.isHotValid() == true);
   }
 
-  TEST_CASE("TrackView - validation rejects duplicate persisted tag IDs", "[library][unit][track][unicode]")
+  TEST_CASE("TrackView - validation rejects duplicate persisted tag IDs", "[library][unit][track][validation]")
   {
     auto const tagIds = std::array{DictionaryId{7}, DictionaryId{7}};
     auto const data = makeHotRecord(tagIds);
@@ -520,12 +520,15 @@ namespace ao::library::test
       auto* entry = utility::layout::viewMutable<CoverArtEntry>(
         std::span{data}.subspan(header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)]));
       REQUIRE(entry != nullptr);
-      entry->type = static_cast<std::uint8_t>(PictureType::PublisherLogo) + 1;
+      auto const invalidPictureType =
+        static_cast<PictureType>(static_cast<std::uint8_t>(PictureType::PublisherLogo) + 1U);
+      entry->type = static_cast<std::uint8_t>(invalidPictureType);
       entry->reserved[0] = 1;
 
       auto const view = checkColdGateTolerates(data);
       CHECK(view.coverArt().count() == 1);
       CHECK(view.coverArt().at(0).resourceId == ResourceId{42});
+      CHECK(view.coverArt().at(0).type == invalidPictureType);
     }
 
     SECTION("small unsorted custom tables stay readable through the linear-search path")
@@ -568,20 +571,19 @@ namespace ao::library::test
         makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CustomMetadata, .payload = std::move(payload)}});
 
       auto const view = checkColdGateTolerates(data);
-      CHECK(view.customMetadata().count() == kEntryCount);
+      REQUIRE(view.customMetadata().count() == kEntryCount);
 
       std::size_t iterated = 0;
-      bool sawFirstStoredKey = false;
 
       for (auto const& [keyId, value] : view.customMetadata())
       {
-        ++iterated;
-        sawFirstStoredKey = sawFirstStoredKey || keyId == DictionaryId{kEntryCount};
+        auto const expectedKeyId = DictionaryId{static_cast<std::uint32_t>(kEntryCount - iterated)};
+        CHECK(keyId == expectedKeyId);
         CHECK(value.empty());
+        ++iterated;
       }
 
       CHECK(iterated == kEntryCount);
-      CHECK(sawFirstStoredKey);
 
       std::ignore = view.customMetadata().contains(DictionaryId{kEntryCount});
       std::ignore = view.customMetadata().get(DictionaryId{1});

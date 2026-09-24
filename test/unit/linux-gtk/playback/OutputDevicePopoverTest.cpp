@@ -16,12 +16,14 @@
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/box.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/menubutton.h>
 #include <gtkmm/scrolledwindow.h>
 
-#include <optional>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -47,66 +49,84 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("OutputDevicePopover - renders devices and routes selected output changes", "[gtk][unit][playback][output]")
+  TEST_CASE("OutputDevicePopover - constructs the configured scrolled list", "[gtk][unit][playback][output]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
 
-    SECTION("constructor wires up the popover with a scrolled list box")
-    {
-      auto selector = OutputDevicePopover{playback,
-                                          ao::test::englishMessageCatalog(),
-                                          uimodel::OutputDeviceIntent::discarded(),
-                                          Gtk::PositionType::BOTTOM};
-      drainGtkEvents();
+    auto selector = OutputDevicePopover{
+      playback, ao::test::englishMessageCatalog(), uimodel::OutputDeviceIntent::discarded(), Gtk::PositionType::BOTTOM};
+    drainGtkEvents();
 
-      CHECK(selector.get_autohide());
-      CHECK(selector.get_position() == Gtk::PositionType::BOTTOM);
+    CHECK(selector.get_autohide());
+    CHECK(selector.get_position() == Gtk::PositionType::BOTTOM);
 
-      auto* const scrolled = dynamic_cast<Gtk::ScrolledWindow*>(selector.get_child());
-      REQUIRE(scrolled != nullptr);
+    auto* const listBox = listBoxFor(selector);
+    REQUIRE(listBox != nullptr);
+    CHECK(listBox->get_selection_mode() == Gtk::SelectionMode::NONE);
+    CHECK(hasCssClass(*listBox, "ao-rich-list"));
+  }
 
-      auto* const viewport = scrolled->get_child();
-      REQUIRE(viewport != nullptr);
-      auto* const listBox = dynamic_cast<Gtk::ListBox*>(viewport->get_first_child());
-      REQUIRE(listBox != nullptr);
-      CHECK(listBox->get_selection_mode() == Gtk::SelectionMode::NONE);
-      CHECK(hasCssClass(*listBox, "ao-rich-list"));
-    }
+  TEST_CASE("OutputDevicePopover - activates the rendered exclusive profile and records its selection",
+            "[gtk][integration][playback][output]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& playback = fixture.runtime().playback();
+    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+    drainGtkEvents();
+    auto const initial = playback.snapshot().transport.output.selectedDevice;
+    REQUIRE(initial.backendId == audio::BackendId{"pipewire"});
+    REQUIRE(initial.deviceId == audio::DeviceId{"device1"});
+    REQUIRE(initial.profileId == audio::kProfileShared);
 
-    SECTION("row activation reports the requested selection")
-    {
-      rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+    auto selections = std::vector<audio::OutputDeviceSelection>{};
+    auto selector = OutputDevicePopover{
+      playback,
+      ao::test::englishMessageCatalog(),
+      uimodel::OutputDeviceIntent::recordedBy([&](auto const& selection) { selections.push_back(selection); }),
+      Gtk::PositionType::BOTTOM};
+    auto host = GtkWindowFixture{};
+    auto button = Gtk::MenuButton{};
+    button.set_popover(selector);
+    host.mount(button);
+    host.present();
 
-      auto optSelected = std::optional<audio::OutputDeviceSelection>{};
-      auto selector = OutputDevicePopover{
-        playback,
-        ao::test::englishMessageCatalog(),
-        uimodel::OutputDeviceIntent::recordedBy([&optSelected](auto const& selection) { optSelected = selection; }),
-        Gtk::PositionType::BOTTOM};
-      auto host = GtkWindowFixture{};
-      auto button = Gtk::MenuButton{};
-      button.set_popover(selector);
-      host.mount(button);
-      host.present();
+    emitShow(selector);
+    drainGtkEvents();
 
-      emitShow(selector);
-      drainGtkEvents();
+    auto* const listBox = listBoxFor(selector);
+    REQUIRE(listBox != nullptr);
+    auto* const headerRow = listBox->get_row_at_index(0);
+    REQUIRE(headerRow != nullptr);
+    auto* const header = dynamic_cast<Gtk::Label*>(headerRow->get_child());
+    REQUIRE(header != nullptr);
+    CHECK(header->get_text() == "PipeWire");
+    CHECK(header->has_css_class("ao-menu-header"));
+    auto* const sharedRow = listBox->get_row_at_index(1);
+    REQUIRE(sharedRow != nullptr);
+    REQUIRE(sharedRow->get_child() != nullptr);
+    CHECK(sharedRow->get_child()->has_css_class("ao-output-device-selected-row"));
+    auto* const exclusiveRow = listBox->get_row_at_index(2);
+    REQUIRE(exclusiveRow != nullptr);
+    auto* const exclusive = dynamic_cast<Gtk::Box*>(exclusiveRow->get_child());
+    REQUIRE(exclusive != nullptr);
+    CHECK_FALSE(exclusive->has_css_class("ao-output-device-selected-row"));
+    auto const labels = collectAll<Gtk::Label>(*exclusive);
+    REQUIRE(labels.size() == 3);
+    CHECK(labels[0]->get_text() == "Built-in Audio");
+    CHECK(labels[1]->get_text() == "Built-in analog stereo");
+    CHECK(labels[2]->get_text() == "[E]");
+    REQUIRE(selections.empty());
 
-      auto* const listBox = listBoxFor(selector);
-      REQUIRE(listBox != nullptr);
-      auto* const exclusiveRow = listBox->get_row_at_index(2);
-      REQUIRE(exclusiveRow != nullptr);
+    emitRowActivated(*listBox, *exclusiveRow);
 
-      emitRowActivated(*listBox, *exclusiveRow);
-
-      auto const selected = playback.snapshot().transport.output.selectedDevice;
-      CHECK(selected.backendId == audio::BackendId{"pipewire"});
-      CHECK(selected.deviceId == audio::DeviceId{"device1"});
-      CHECK(selected.profileId == audio::kProfileExclusive);
-      REQUIRE(optSelected);
-      CHECK(*optSelected == selected);
-    }
+    auto const selected = playback.snapshot().transport.output.selectedDevice;
+    CHECK(selected.backendId == audio::BackendId{"pipewire"});
+    CHECK(selected.deviceId == audio::DeviceId{"device1"});
+    CHECK(selected.profileId == audio::kProfileExclusive);
+    REQUIRE(selections.size() == 1);
+    CHECK(selections.front() == selected);
   }
 } // namespace ao::gtk::test

@@ -221,7 +221,16 @@ namespace ao::uimodel
       return result;
     }
 
-    Result<LayoutNode> makeTemplateDiagnostic(std::string message, TreeBudgetMeter& meter, std::string_view id = {})
+    struct ExpandedNode final
+    {
+      LayoutNode node;
+      std::size_t resolvedRootDepth = 0;
+    };
+
+    Result<ExpandedNode> makeTemplateDiagnostic(std::string message,
+                                                TreeBudgetMeter& meter,
+                                                std::size_t const depth,
+                                                std::string_view const id = {})
     {
       auto node = LayoutNode{.id = std::string{id}, .type = boundedTemplateDiagnostic(std::move(message))};
 
@@ -230,7 +239,7 @@ namespace ao::uimodel
         return std::unexpected{res.error()};
       }
 
-      return node;
+      return ExpandedNode{.node = std::move(node), .resolvedRootDepth = depth};
     }
 
     Result<> consumeOverride(LayoutValueMap const& values, TreeBudgetMeter& meter)
@@ -240,11 +249,11 @@ namespace ao::uimodel
 
     // Template and concrete nodes share one recursive traversal so every produced value uses the same budget meter.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    Result<LayoutNode> expandNode(LayoutNode const& node,
-                                  std::map<std::string, LayoutNode, std::less<>> const& templates,
-                                  std::vector<std::string_view>& visited,
-                                  TreeBudgetMeter& meter,
-                                  std::size_t depth)
+    Result<ExpandedNode> expandNode(LayoutNode const& node,
+                                    std::map<std::string, LayoutNode, std::less<>> const& templates,
+                                    std::vector<std::string_view>& visited,
+                                    TreeBudgetMeter& meter,
+                                    std::size_t depth)
     {
       if (auto res = meter.consumeDepth(depth); !res)
       {
@@ -258,7 +267,7 @@ namespace ao::uimodel
 
         if (templateId == nullptr || templateId->empty())
         {
-          return makeTemplateDiagnostic("[TemplateError] Missing templateId", meter, node.id);
+          return makeTemplateDiagnostic("[TemplateError] Missing templateId", meter, depth, node.id);
         }
 
         if (std::ranges::contains(visited, std::string_view{*templateId}))
@@ -272,14 +281,14 @@ namespace ao::uimodel
           }
 
           chain += *templateId;
-          return makeTemplateDiagnostic(std::move(chain), meter);
+          return makeTemplateDiagnostic(std::move(chain), meter, depth, node.id);
         }
 
         auto const it = templates.find(*templateId);
 
         if (it == templates.end())
         {
-          return makeTemplateDiagnostic("[TemplateError] Unknown template: " + *templateId, meter);
+          return makeTemplateDiagnostic("[TemplateError] Unknown template: " + *templateId, meter, depth, node.id);
         }
 
         visited.push_back(*templateId);
@@ -298,7 +307,7 @@ namespace ao::uimodel
             return std::unexpected{res.error()};
           }
 
-          expandedRes->id = node.id;
+          expandedRes->node.id = node.id;
         }
 
         if (auto res = consumeOverride(node.layout, meter); !res)
@@ -308,7 +317,7 @@ namespace ao::uimodel
 
         for (auto const& [key, value] : node.layout)
         {
-          expandedRes->layout[key] = value;
+          expandedRes->node.layout[key] = value;
         }
 
         for (auto const& [key, value] : node.props)
@@ -333,31 +342,33 @@ namespace ao::uimodel
             return std::unexpected{res.error()};
           }
 
-          expandedRes->props[key] = value;
+          expandedRes->node.props[key] = value;
         }
+
+        auto const useSiteChildDepth = expandedRes->resolvedRootDepth + 1;
 
         for (auto const& child : node.children)
         {
-          auto expandedChildRes = expandNode(child, templates, visited, meter, depth + 1);
+          auto expandedChildRes = expandNode(child, templates, visited, meter, useSiteChildDepth);
 
           if (!expandedChildRes)
           {
             return std::unexpected{expandedChildRes.error()};
           }
 
-          expandedRes->children.push_back(std::move(*expandedChildRes));
+          expandedRes->node.children.push_back(std::move(expandedChildRes->node));
         }
 
         if (node.optTooltip && node.optTooltip->nodePtr)
         {
-          auto expandedTooltipRes = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, depth + 1);
+          auto expandedTooltipRes = expandNode(*node.optTooltip->nodePtr, templates, visited, meter, useSiteChildDepth);
 
           if (!expandedTooltipRes)
           {
             return std::unexpected{expandedTooltipRes.error()};
           }
 
-          expandedRes->optTooltip = BoxedLayoutNode{std::move(*expandedTooltipRes)};
+          expandedRes->node.optTooltip = BoxedLayoutNode{std::move(expandedTooltipRes->node)};
         }
 
         return expandedRes;
@@ -380,7 +391,7 @@ namespace ao::uimodel
           return std::unexpected{expandedChildRes.error()};
         }
 
-        result.children.push_back(std::move(*expandedChildRes));
+        result.children.push_back(std::move(expandedChildRes->node));
       }
 
       if (node.optTooltip && node.optTooltip->nodePtr)
@@ -392,10 +403,10 @@ namespace ao::uimodel
           return std::unexpected{expandedTooltipRes.error()};
         }
 
-        result.optTooltip = BoxedLayoutNode{std::move(*expandedTooltipRes)};
+        result.optTooltip = BoxedLayoutNode{std::move(expandedTooltipRes->node)};
       }
 
-      return result;
+      return ExpandedNode{.node = std::move(result), .resolvedRootDepth = depth};
     }
   } // namespace
 
@@ -423,6 +434,6 @@ namespace ao::uimodel
       return std::unexpected{effectiveRootRes.error()};
     }
 
-    return PreparedLayout{std::move(*effectiveRootRes)};
+    return PreparedLayout{std::move(effectiveRootRes->node)};
   }
 } // namespace ao::uimodel

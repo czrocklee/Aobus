@@ -115,7 +115,7 @@ namespace ao::lmdb::test
     CHECK(byteAsIntegerRes.error().message == "Named database 'byte' has flags 0x0 (expected 0x8)");
   }
 
-  TEST_CASE("ByteKeyDatabase - main rejects integer-key storage", "[lmdb][regression][database]")
+  TEST_CASE("ByteKeyDatabase - main rejects integer-key storage", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
     createIntegerKeyMain(temp.path());
@@ -131,7 +131,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("Typed databases - create-capable open rejects an existing database with different key flags",
-            "[lmdb][regression][database]")
+            "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -170,8 +170,7 @@ namespace ao::lmdb::test
     CHECK(ordinaryRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("Typed databases - failed write open unwinds and rolls back database creation",
-            "[lmdb][regression][database]")
+  TEST_CASE("Typed databases - failed write open unwinds and rolls back database creation", "[lmdb][unit][database]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 1});

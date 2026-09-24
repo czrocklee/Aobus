@@ -25,6 +25,10 @@ namespace ao::query::test
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 256000};
     result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
+
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 384000};
+    result = evaluator.matchesFullPlan(plan, track3.view());
+    CHECK(result == true);
   }
 
   TEST_CASE("PlanEvaluator - matches sample-rate comparisons", "[query][unit][plan-evaluator]")
@@ -40,6 +44,10 @@ namespace ao::query::test
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100};
     result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
+
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 96000};
+    result = evaluator.matchesFullPlan(plan, track3.view());
+    CHECK(result == true);
   }
 
   TEST_CASE("PlanEvaluator - evaluates duration bitrate and sample-rate unit constants",
@@ -60,6 +68,10 @@ namespace ao::query::test
     auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 32000};
     result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
+
+    auto track4 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 179999, 320000, 44100};
+    result = evaluator.matchesFullPlan(plan, track4.view());
+    CHECK(result == false);
   }
 
   TEST_CASE("PlanEvaluator - scales duration and bitrate units before comparison", "[query][unit][plan-evaluator]")
@@ -74,7 +86,15 @@ namespace ao::query::test
 
     CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@duration > 3m")), track.view()) == true);
     CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@duration > 4m")), track.view()) == false);
-    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@bitrate = 320k")), track.view()) == true);
+    CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@duration > 3m5s")), track.view()) == false);
+
+    auto bitratePlan = compileOk(parseOk("@bitrate = 320k"));
+    CHECK(evaluator.matchesFullPlan(bitratePlan, track.view()) == true);
+
+    auto mismatchingBitrateSpec = spec;
+    mismatchingBitrateSpec.bitrate = 256000;
+    auto mismatchingBitrateTrack = TrackFixture{mismatchingBitrateSpec};
+    CHECK(evaluator.matchesFullPlan(bitratePlan, mismatchingBitrateTrack.view()) == false);
   }
 
   TEST_CASE("PlanEvaluator - matches AAC codec expressions", "[query][unit][plan-evaluator]")
@@ -87,5 +107,10 @@ namespace ao::query::test
     auto plan = compileOk(parseOk("@codec = AAC"));
 
     CHECK(evaluator.matchesFullPlan(plan, track.view()) == true);
+
+    auto nonAacSpec = TrackSpec{};
+    nonAacSpec.codec = AudioCodec::Flac;
+    auto nonAacTrack = TestTrack{nonAacSpec};
+    CHECK(evaluator.matchesFullPlan(plan, nonAacTrack.view()) == false);
   }
 } // namespace ao::query::test

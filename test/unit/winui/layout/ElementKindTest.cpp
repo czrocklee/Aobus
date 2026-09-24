@@ -5,6 +5,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <string_view>
+#include <utility>
+
 namespace ao::winui::test
 {
   TEST_CASE("ElementKind - a style applies to its target kind and everything below it", "[winui][unit][layout]")
@@ -30,6 +34,32 @@ namespace ao::winui::test
 
   TEST_CASE("ElementKind - target type names round trip", "[winui][unit][layout]")
   {
+    constexpr auto kExpected = std::to_array<std::pair<ElementKind, std::string_view>>({
+      {ElementKind::FrameworkElement, "FrameworkElement"},
+      {ElementKind::Panel, "Panel"},
+      {ElementKind::Grid, "Grid"},
+      {ElementKind::Border, "Border"},
+      {ElementKind::TextBlock, "TextBlock"},
+      {ElementKind::Control, "Control"},
+      {ElementKind::ContentControl, "ContentControl"},
+      {ElementKind::ButtonBase, "ButtonBase"},
+      {ElementKind::Button, "Button"},
+      {ElementKind::ItemsControl, "ItemsControl"},
+      {ElementKind::ListView, "ListView"},
+      {ElementKind::ScrollViewer, "ScrollViewer"},
+      {ElementKind::Slider, "Slider"},
+      {ElementKind::AutoSuggestBox, "AutoSuggestBox"},
+      {ElementKind::NavigationView, "NavigationView"},
+      {ElementKind::TreeView, "TreeView"},
+      {ElementKind::MenuBar, "MenuBar"},
+    });
+
+    for (auto const& [kind, name] : kExpected)
+    {
+      CHECK(toString(kind) == name);
+      CHECK(elementKindFromString(name) == kind);
+    }
+
     CHECK(toString(ElementKind::NavigationView) == "NavigationView");
     CHECK(elementKindFromString("ListView") == ElementKind::ListView);
     CHECK(elementKindFromString(toString(ElementKind::ScrollViewer)) == ElementKind::ScrollViewer);

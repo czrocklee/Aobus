@@ -13,6 +13,7 @@
 #include <gtkmm/window.h>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace ao::gtk::test
@@ -85,7 +86,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("AppDialog - response tolerates managed dialog finalization from its handler",
-            "[gtk][regression][app][dialog]")
+            "[gtk][unit][app][dialog][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -109,6 +110,35 @@ namespace ao::gtk::test
     {
       ::g_object_weak_unref(G_OBJECT(dialog->gobj()), markFinalized, &finalized);
     }
+  }
+
+  TEST_CASE("AppDialog - response tolerates C++ retirement with a retained native object",
+            "[gtk][unit][app][dialog][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    bool destroyed = false;
+    auto dialogPtr = std::shared_ptr<AppDialog>{new AppDialog{},
+                                                [&destroyed](AppDialog* dialog)
+                                                {
+                                                  delete dialog;
+                                                  destroyed = true;
+                                                }};
+    auto nativePtr = std::unique_ptr<GObject, decltype(&::g_object_unref)>{
+      G_OBJECT(g_object_ref(dialogPtr->gobj())), &::g_object_unref};
+    auto responses = std::vector<std::int32_t>{};
+    dialogPtr->signal_response().connect(
+      [&](std::int32_t id)
+      {
+        responses.push_back(id);
+        dialogPtr.reset();
+      });
+
+    dialogPtr->response(-5);
+
+    CHECK(destroyed);
+    CHECK_FALSE(dialogPtr);
+    CHECK(responses == std::vector<std::int32_t>{-5});
+    CHECK(G_IS_OBJECT(nativePtr.get()));
   }
 
   TEST_CASE("AppDialog - content replacement detaches previous widget", "[gtk][unit][app][dialog]")

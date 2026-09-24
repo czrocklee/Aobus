@@ -10,7 +10,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+import xml.etree.ElementTree as ElementTree
+from concurrent.futures import Future
 from pathlib import Path
 from unittest import mock
 
@@ -482,6 +485,7 @@ class CliParseTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 perf_command.run_command(args)
 
+    @mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": ""})
     def test_perf_builds_and_runs_the_standalone_target(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "review.json"
@@ -523,7 +527,16 @@ class CliParseTest(unittest.TestCase):
                                 "compiler": "gcc",
                                 "icu_version": "78.3",
                             },
-                            "measurements": [],
+                            "measurements": [
+                                {
+                                    "capability": "ordering",
+                                    "scenario": "construction",
+                                    "dataset": "none",
+                                    "input_count": 0,
+                                    "median_ns": 1,
+                                    "p95_ns": 2,
+                                }
+                            ],
                         }
                     ),
                     encoding="utf-8",
@@ -547,6 +560,7 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(environment["AOBUS_PERF_LIBRARY_ROOT"], temp_dir)
         self.assertEqual(environment["AOBUS_PERF_LIBRARY_LOCALE"], "de-DE")
 
+    @mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": ""})
     @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
     def test_perf_rejects_a_stale_report_when_the_workload_writes_nothing(self, _validate_build_tree):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1291,10 +1305,32 @@ class CliParseTest(unittest.TestCase):
             tsan=False,
         )
 
+    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
+    @mock.patch.object(Path, "is_dir", return_value=True)
+    def test_test_all_with_filter_excludes_non_catch2_suites_before_dispatch(self, _is_dir, _validate_build_tree):
+        args = self.parse(["test", "--all", "-n", "-p", "/tmp/aobus-test-build", "[focused]"])
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(test_command.run_command(args), 0)
+
+        run_suites.assert_called_once_with(
+            ("core", "tui", "cli", "gtk", "integration"),
+            Path("/tmp/aobus-test-build"),
+            test_filter="[focused]",
+            list_only=False,
+            repeat=1,
+            asan=False,
+            tsan=False,
+        )
+
     def test_suite_group_dispatches_registered_runner_kinds_in_order(self):
         build_dir = Path("/tmp/aobus-test-build")
 
-        with mock.patch.object(test_command, "run_suite", return_value=0) as run_suite:
+        with mock.patch.object(
+            test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0)
+        ) as run_suite:
             with mock.patch.object(test_command, "run_non_catch2_suite", return_value=0) as run_non_catch2:
                 self.assertEqual(test_command.run_suites(builddir.LINUX_PROFILE.all_suites, build_dir), 0)
 
@@ -1314,8 +1350,13 @@ class CliParseTest(unittest.TestCase):
             server = mock.Mock()
             server.stdout = io.StringIO("42\n")
             server.wait.return_value = 0
+            bus = mock.Mock(stdout=io.StringIO("unix:path=/private-bus\n"), wait=mock.Mock(return_value=0))
 
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                mock.patch.object(test_command, "_start_gtk_bus", return_value=bus),
+                mock.patch.dict(os.environ, {"G_DEBUG": ""}),
+            ):
                 with mock.patch.object(test_command.subprocess, "Popen", return_value=server) as popen:
                     with mock.patch.object(test_command, "run", return_value=0) as run:
                         self.assertEqual(test_command.run_suite("gtk", build_dir, test_filter="[layout]"), 0)
@@ -1336,12 +1377,18 @@ class CliParseTest(unittest.TestCase):
                 "GDK_BACKEND": "x11",
                 "GDK_DISABLE": "gl,vulkan",
                 "GSK_RENDERER": "cairo",
+                "G_DEBUG": "fatal-warnings",
+                "DBUS_SESSION_BUS_ADDRESS": "unix:path=/private-bus",
+                "AOBUS_OWNED_GTK_BUS": "unix:path=/private-bus",
             },
             log=None,
             append=False,
         )
         server.terminate.assert_called_once()
         server.wait.assert_called_once_with(timeout=5)
+        bus.terminate.assert_called_once()
+        bus.wait.assert_called_once_with(timeout=5)
+        self.assertTrue(bus.stdout.closed)
 
     def test_macos_catch2_execution_runs_directly(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1679,7 +1726,7 @@ class CliParseTest(unittest.TestCase):
         run_suites.assert_called_once_with(
             ("core", "tui", "cli", "gtk", "integration"),
             Path("/tmp/aobus-test-build"),
-            test_filter="[concurrency]",
+            test_filter="[concurrency]~[.]",
             list_only=False,
             allow_no_tests=True,
             concurrency=True,
@@ -1700,7 +1747,7 @@ class CliParseTest(unittest.TestCase):
         run_suites.assert_called_once_with(
             ("core", "gtk"),
             Path("/tmp/aobus-test-build"),
-            test_filter="[concurrency]",
+            test_filter="[concurrency]~[.]",
             list_only=False,
             allow_no_tests=True,
             concurrency=True,
@@ -1708,6 +1755,40 @@ class CliParseTest(unittest.TestCase):
             asan=False,
             tsan=True,
         )
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="gcc")
+    @mock.patch.object(Path, "is_dir", return_value=True)
+    def test_concurrency_listing_excludes_hidden_but_explicit_filters_can_opt_in(self, _is_dir, _validate_build_tree):
+        for selection, expected in (
+            (["--concurrency"], "[concurrency]~[.]"),
+            (["--integration", "[concurrency][.manual]"], "[concurrency][.manual]"),
+        ):
+            with self.subTest(selection=selection):
+                args = self.parse(["test", "--list", "-n", "-p", "/tmp/aobus-test-build", *selection])
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                    mock.patch.object(test_command, "run_suites", return_value=0) as run_suites,
+                ):
+                    self.assertEqual(test_command.run_command(args), 0)
+                self.assertEqual(run_suites.call_args.kwargs["test_filter"], expected)
+                self.assertTrue(run_suites.call_args.kwargs["list_only"])
+
+    def test_concurrency_rejects_an_additional_filter_before_build_or_run(self):
+        args = self.parse(["test", "--concurrency", "[manual]", "-p", "/tmp/aobus-test-build"])
+        stderr = io.StringIO()
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+            mock.patch.object(build_command, "validate_build_tree") as validate_build_tree,
+            mock.patch.object(test_command, "run") as run,
+            mock.patch.object(test_command, "run_suites") as run_suites,
+            contextlib.redirect_stderr(stderr),
+        ):
+            with self.assertRaisesRegex(SystemExit, "1"):
+                test_command.run_command(args)
+        self.assertIn("--concurrency supplies [concurrency]~[.]", stderr.getvalue())
+        validate_build_tree.assert_not_called()
+        run.assert_not_called()
+        run_suites.assert_not_called()
 
     def test_cross_suite_filter_allows_suites_without_matching_cases(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1733,6 +1814,118 @@ class CliParseTest(unittest.TestCase):
             log=None,
             append=False,
         )
+
+    def test_filtered_suite_group_requires_a_match_globally_not_per_suite(self):
+        outcomes = [test_command._SuiteOutcome(0, 0), test_command._SuiteOutcome(0, 2)]
+        with mock.patch.object(test_command, "suite_shards", return_value=1):
+            with mock.patch.object(test_command, "_run_catch2_suite", side_effect=outcomes) as run_suite:
+                self.assertEqual(
+                    test_command.run_suites(("core", "tui"), Path("/tmp/aobus-test-build"), test_filter="[focused]"),
+                    0,
+                )
+
+        self.assertEqual([call.args[0] for call in run_suite.call_args_list], ["core", "tui"])
+        for call in run_suite.call_args_list:
+            self.assertTrue(call.kwargs["allow_no_tests"])
+            self.assertTrue(call.kwargs["report_matches"])
+
+    def test_filtered_suite_group_fails_when_no_suite_matches(self):
+        with mock.patch.object(test_command, "suite_shards", return_value=1):
+            with mock.patch.object(
+                test_command,
+                "_run_catch2_suite",
+                side_effect=(test_command._SuiteOutcome(0, 0), test_command._SuiteOutcome(0, 0)),
+            ):
+                with self.assertRaisesRegex(SystemExit, "1"):
+                    test_command.run_suites(("core", "tui"), Path("/tmp/aobus-test-build"), test_filter="[missing]")
+
+    def test_filtered_single_suite_with_no_match_fails(self):
+        with mock.patch.object(test_command, "suite_shards", return_value=1):
+            with mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0, 0)):
+                with self.assertRaisesRegex(SystemExit, "1"):
+                    test_command.run_suites(("core",), Path("/tmp/aobus-test-build"), test_filter="[missing]")
+
+    def test_filtered_suite_group_never_turns_a_real_failure_into_an_empty_suite(self):
+        with mock.patch.object(test_command, "suite_shards", return_value=1):
+            with mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(7, 0)):
+                self.assertEqual(
+                    test_command.run_suites(("core", "tui"), Path("/tmp/aobus-test-build"), test_filter="[focused]"),
+                    7,
+                )
+
+    def test_filtered_repeat_requires_matches_on_every_iteration(self):
+        outcomes = (
+            test_command._SuiteOutcome(0, 0),
+            test_command._SuiteOutcome(0, 1),
+            test_command._SuiteOutcome(0, 1),
+            test_command._SuiteOutcome(0, 0),
+        )
+        with mock.patch.object(test_command, "suite_shards", return_value=1):
+            with mock.patch.object(test_command, "_run_catch2_suite", side_effect=outcomes) as run_suite:
+                self.assertEqual(
+                    test_command.run_suites(
+                        ("core", "tui"),
+                        Path("/tmp/aobus-test-build"),
+                        test_filter="[focused]",
+                        repeat=2,
+                    ),
+                    0,
+                )
+
+        self.assertEqual(run_suite.call_count, 4)
+
+    def test_filtered_list_uses_reported_matches_for_the_global_contract(self):
+        with mock.patch.object(test_command, "suite_shards", return_value=1):
+            with mock.patch.object(
+                test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0, 1)
+            ) as run_suite:
+                self.assertEqual(
+                    test_command.run_suites(
+                        ("core",),
+                        Path("/tmp/aobus-test-build"),
+                        test_filter="[focused]",
+                        list_only=True,
+                    ),
+                    0,
+                )
+
+        self.assertTrue(run_suite.call_args.kwargs["list_only"])
+        self.assertTrue(run_suite.call_args.kwargs["report_matches"])
+
+    def test_explicit_filter_excludes_non_catch2_suites(self):
+        output = io.StringIO()
+        with mock.patch.object(test_command, "suite_shards", return_value=1):
+            with mock.patch.object(
+                test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0, 1)
+            ) as run_suite:
+                with mock.patch.object(test_command, "run_non_catch2_suite") as run_non_catch2:
+                    with contextlib.redirect_stdout(output):
+                        self.assertEqual(
+                            test_command.run_suites(
+                                ("core", "tooling", "lint"),
+                                Path("/tmp/aobus-test-build"),
+                                test_filter="[focused]",
+                            ),
+                            0,
+                        )
+
+        run_suite.assert_called_once()
+        run_non_catch2.assert_not_called()
+        self.assertIn("Skipping Tooling Tests, Lint Integration", output.getvalue())
+
+    def test_explicit_filter_requires_at_least_one_catch2_suite(self):
+        with self.assertRaisesRegex(SystemExit, "1"):
+            test_command.run_suites(("tooling",), Path("/tmp/aobus-test-build"), test_filter="[focused]")
+
+    def test_skipped_cases_count_as_matching_tests(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = Path(temp_dir) / "report.xml"
+            report.write_text(
+                '<Catch2TestRun><OverallResultsCases successes="0" failures="0" '
+                'expectedFailures="0" skips="3"/></Catch2TestRun>',
+                encoding="utf-8",
+            )
+            self.assertEqual(test_command._read_matching_tests(report, list_only=False), 3)
 
     def test_tsan_suite_enforces_fail_fast_runtime_options(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1883,6 +2076,7 @@ class CliParseTest(unittest.TestCase):
                 "called_from_lib:libgvfsdbus.so",
                 "called_from_lib:libgtk-4.so",
                 "called_from_lib:libgdk_pixbuf-2.0.so",
+                "called_from_lib:libxml2.so",
                 "called_from_lib:libcairo.so",
                 "called_from_lib:libpango-1.0.so",
                 "called_from_lib:libpangoft2-1.0.so",
@@ -2440,20 +2634,124 @@ class CliParseTest(unittest.TestCase):
             self.assertIn("--allow-running-no-tests", command)
 
     @staticmethod
+    def _write_catch2_process_stub(
+        build_dir: Path,
+        suite: str,
+        *,
+        successes: int = 0,
+        skips: int = 0,
+        status: int = 0,
+        malformed: bool = False,
+    ) -> None:
+        """Write a process fixture that emits the Catch2 XML shape requested by the runner."""
+        target = test_command.SUITES[suite].target
+        assert target is not None
+        binary = builddir.executable(build_dir / "test" / target)
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_text(
+            "#!/usr/bin/env python3\n"
+            "import pathlib\n"
+            "import sys\n"
+            f"successes = {successes}\n"
+            f"skips = {skips}\n"
+            f"status = {status}\n"
+            "report_arg = next(arg for arg in sys.argv if arg.startswith('xml::out='))\n"
+            "report = pathlib.Path(report_arg.removeprefix('xml::out='))\n"
+            + (
+                "report.write_text('<not-xml', encoding='utf-8')\n"
+                if malformed
+                else "if '--list-tests' in sys.argv:\n"
+                "    cases = ''.join('<TestCase><Name>stub</Name></TestCase>' for _ in range(successes + skips))\n"
+                "    report.write_text(f'<MatchingTests>{cases}</MatchingTests>', encoding='utf-8')\n"
+                "else:\n"
+                "    report.write_text(\n"
+                '        f\'<Catch2TestRun><OverallResultsCases successes="{successes}" failures="0" \''
+                '        f\'expectedFailures="0" skips="{skips}"/></Catch2TestRun>\',\n'
+                "        encoding='utf-8',\n"
+                "    )\n"
+            )
+            + "print('catch2 process fixture')\n"
+            "raise SystemExit(status)\n",
+            encoding="utf-8",
+        )
+        binary.chmod(0o755)
+
+    @unittest.skipIf(os.name == "nt", "POSIX executable process fixture")
+    def test_filtered_process_group_accepts_an_empty_suite_when_another_suite_skips_a_match(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            self._write_catch2_process_stub(build_dir, "core")
+            self._write_catch2_process_stub(build_dir, "tui", skips=1)
+
+            with mock.patch.object(test_command, "shard_count", return_value=1):
+                with self._captured_stdout():
+                    status = test_command.run_suites(("core", "tui"), build_dir, test_filter="[focused]")
+
+        self.assertEqual(status, 0)
+
+    @unittest.skipIf(os.name == "nt", "POSIX executable process fixture")
+    def test_filtered_process_single_suite_fails_when_xml_reports_no_match(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            self._write_catch2_process_stub(build_dir, "core")
+
+            with mock.patch.object(test_command, "shard_count", return_value=1):
+                with self._captured_stdout(), contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaisesRegex(SystemExit, "1"):
+                        test_command.run_suites(("core",), build_dir, test_filter="[missing]")
+
+    @unittest.skipIf(os.name == "nt", "POSIX executable process fixture")
+    def test_filtered_process_list_uses_matching_tests_xml(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            self._write_catch2_process_stub(build_dir, "core")
+            self._write_catch2_process_stub(build_dir, "tui", successes=1)
+
+            with self._captured_stdout():
+                status = test_command.run_suites(("core", "tui"), build_dir, test_filter="[focused]", list_only=True)
+
+        self.assertEqual(status, 0)
+
+    @unittest.skipIf(os.name == "nt", "POSIX executable process fixture")
+    def test_filtered_process_propagates_failure_and_rejects_malformed_report(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            self._write_catch2_process_stub(build_dir, "core", status=7)
+            with mock.patch.object(test_command, "shard_count", return_value=1):
+                with self._captured_stdout():
+                    self.assertEqual(
+                        test_command.run_suites(("core",), build_dir, test_filter="[focused]"),
+                        7,
+                    )
+
+            self._write_catch2_process_stub(build_dir, "core", successes=1, malformed=True)
+            with mock.patch.object(test_command, "shard_count", return_value=1):
+                with self._captured_stdout() as raw:
+                    self.assertEqual(
+                        test_command.run_suites(("core",), build_dir, test_filter="[focused]"),
+                        1,
+                    )
+            output = raw.getvalue().decode("utf-8")
+
+        self.assertIn("no readable Catch2 XML report", output)
+
+    @staticmethod
     def _catch2_shard_stub(results):
         """Return a Popen stand-in that writes what a real Catch2 shard would."""
 
         def spawn(argv, *, cwd=None, env=None, stdout=None, stderr=None):
             index = int(argv[argv.index("--shard-index") + 1])
-            assertions, cases, failures = results[index]
+            result = results[index]
+            assertions, cases, failures = result[:3]
+            skips = result[3] if len(result) == 4 else 0
             report = next(Path(arg[len("xml::out=") :]) for arg in argv if arg.startswith("xml::out="))
             report.write_text(
                 '<?xml version="1.0" encoding="UTF-8"?>\n'
                 '<Catch2TestRun name="stub">\n'
                 f'  <OverallResults successes="{assertions}" failures="{failures}"'
-                ' expectedFailures="0" skips="0"/>\n'
+                f' expectedFailures="0" skips="{skips}"/>\n'
                 f'  <OverallResultsCases successes="{cases}" failures="{failures}"'
-                ' expectedFailures="0" skips="0"/>\n'
+                f' expectedFailures="0" skips="{skips}"/>\n'
                 "</Catch2TestRun>\n",
                 encoding="utf-8",
             )
@@ -2494,6 +2792,41 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("Core: 3 test cases, 17 assertions, 0 failed across 2 shards", output)
         # A passing shard's console output belongs in the log, not on the terminal.
         self.assertNotIn("shard 0 console output", output)
+
+    def test_sharded_filtered_run_counts_skipped_cases_as_global_matches(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = builddir.executable(build_dir / "test" / "ao_core_test")
+            binary.parent.mkdir()
+            binary.touch()
+
+            spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0, 1)])
+            with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
+                with self._captured_stdout():
+                    outcome = test_command._run_catch2_suite(
+                        "core",
+                        build_dir,
+                        test_filter="[focused]",
+                        allow_no_tests=True,
+                        shards=2,
+                        report_matches=True,
+                    )
+
+        self.assertEqual(outcome, test_command._SuiteOutcome(0, 1))
+
+    def test_sharded_filtered_run_fails_when_the_aggregate_has_no_matches(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            binary = builddir.executable(build_dir / "test" / "ao_core_test")
+            binary.parent.mkdir()
+            binary.touch()
+
+            spawn = self._catch2_shard_stub([(0, 0, 0), (0, 0, 0)])
+            with mock.patch.object(test_command, "shard_count", return_value=2):
+                with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
+                    with self._captured_stdout(), contextlib.redirect_stderr(io.StringIO()):
+                        with self.assertRaisesRegex(SystemExit, "1"):
+                            test_command.run_suites(("core",), build_dir, test_filter="[missing]")
 
     def test_sharded_run_surfaces_the_failing_shard_and_its_exit_code(self):
         status, output = self._run_sharded_core(self._catch2_shard_stub([(10, 2, 0), (7, 1, 1)]), shards=2)
@@ -2546,6 +2879,213 @@ class CliParseTest(unittest.TestCase):
         for server in started:
             server.terminate.assert_called_once()
 
+    def test_gtk_processes_get_distinct_private_buses_without_host_activation(self):
+        started = []
+        configs = []
+
+        def spawn(argv, **kwargs):
+            if argv[0] == "Xvfb":
+                output = f"{40 + len(started)}\n"
+            else:
+                self.assertEqual(argv[0], "dbus-daemon")
+                self.assertIsNone(kwargs["stderr"])
+                config = Path(
+                    next(arg.removeprefix("--config-file=") for arg in argv if arg.startswith("--config-file="))
+                )
+                configs.append(config)
+                root = ElementTree.fromstring(config.read_text(encoding="utf-8"))
+                self.assertEqual([child.tag for child in root], ["type", "listen", "policy"])
+                self.assertEqual(root.findtext("type"), "session")
+                self.assertRegex(root.findtext("listen") or "", r"^unix:tmpdir=")
+                output = f"unix:path=/private/bus-{len(started)}\n"
+            server = mock.Mock(stdout=io.StringIO(output), wait=mock.Mock(return_value=0))
+            started.append(server)
+            return server
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "DBUS_SESSION_BUS_ADDRESS": "unix:path=/host/bus",
+                "AOBUS_OWNED_GTK_BUS": "unix:path=/inherited-marker",
+                "G_DEBUG": "gc-friendly",
+            },
+        ):
+            with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    with test_command.virtual_gtk_displays(2) as environments:
+                        self.assertEqual([env["DISPLAY"] for env in environments], [":40", ":41"])
+                        self.assertEqual(
+                            [env["DBUS_SESSION_BUS_ADDRESS"] for env in environments],
+                            ["unix:path=/private/bus-2", "unix:path=/private/bus-3"],
+                        )
+                        self.assertEqual(os.environ["DBUS_SESSION_BUS_ADDRESS"], "unix:path=/host/bus")
+                        self.assertTrue(
+                            all(env["AOBUS_OWNED_GTK_BUS"] == env["DBUS_SESSION_BUS_ADDRESS"] for env in environments)
+                        )
+                        self.assertEqual(os.environ["AOBUS_OWNED_GTK_BUS"], "unix:path=/inherited-marker")
+                        self.assertTrue(all(env["G_DEBUG"] == "gc-friendly,fatal-warnings" for env in environments))
+                        self.assertEqual(os.environ["G_DEBUG"], "gc-friendly")
+        self.assertEqual(len(started), 4)
+        for server in started:
+            server.terminate.assert_called_once()
+            server.wait.assert_called_once_with(timeout=5)
+            self.assertTrue(server.stdout.closed)
+        self.assertTrue(configs)
+        self.assertTrue(all(not config.exists() for config in configs))
+
+    @unittest.skipUnless(sys.platform == "linux", "GTK Unix socket path limit")
+    def test_gtk_bus_socket_directory_does_not_inherit_a_long_tmpdir(self):
+        with tempfile.TemporaryDirectory() as parent:
+            inherited = Path(parent) / ("nested-nix-shell-" + "x" * 100)
+            inherited.mkdir()
+            display = mock.Mock(stdout=io.StringIO("40\n"), wait=mock.Mock(return_value=0))
+            bus = mock.Mock(stdout=io.StringIO("unix:path=/private/bus\n"), wait=mock.Mock(return_value=0))
+
+            def start_bus(config):
+                self.assertEqual(config.parent.parent, Path("/tmp"))
+                root = ElementTree.fromstring(config.read_text(encoding="utf-8"))
+                self.assertEqual(root.findtext("listen"), f"unix:tmpdir={config.parent.as_posix()}")
+                return bus
+
+            with (
+                mock.patch.object(tempfile, "tempdir", str(inherited)),
+                mock.patch.dict(os.environ, {"TMPDIR": str(inherited)}),
+                mock.patch.object(test_command, "_start_xvfb", return_value=display),
+                mock.patch.object(test_command, "_start_gtk_bus", side_effect=start_bus),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                with test_command.virtual_gtk_displays():
+                    self.assertEqual(os.environ["TMPDIR"], str(inherited))
+                    self.assertEqual(tempfile.gettempdir(), str(inherited))
+            bus.terminate.assert_called_once()
+            bus.wait.assert_called_once_with(timeout=5)
+
+    def test_failed_private_bus_start_retires_displays_and_prior_buses(self):
+        for failure in ("missing-executable", "invalid-address"):
+            with self.subTest(failure=failure):
+                started = []
+
+                def spawn(argv, *, started=started, failure=failure, **kwargs):
+                    if len(started) == 3 and failure == "missing-executable":
+                        raise FileNotFoundError("dbus-daemon")
+                    output = f"{40 + len(started)}\n" if argv[0] == "Xvfb" else "unix:path=/private/bus\n"
+                    if len(started) == 3:
+                        output = "failed to bind the session socket\n"
+                    server = mock.Mock(stdout=io.StringIO(output), wait=mock.Mock(return_value=0))
+                    started.append(server)
+                    return server
+
+                with mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn):
+                    with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+                        with test_command.virtual_gtk_displays(2):
+                            self.fail("an incomplete session must not run tests")
+                self.assertEqual(len(started), 3 if failure == "missing-executable" else 4)
+                for server in started:
+                    server.terminate.assert_called_once()
+                    server.wait.assert_called_once_with(timeout=5)
+                    self.assertTrue(server.stdout.closed)
+
+    def test_silent_gtk_daemon_start_is_bounded_and_retires_prior_daemons(self):
+        def check_timeout(silent_daemon):
+            released = threading.Event()
+            finished = threading.Event()
+
+            def read_until_killed():
+                released.wait()
+                finished.set()
+                return ""
+
+            silent = mock.Mock(
+                stdout=mock.Mock(readline=mock.Mock(side_effect=read_until_killed)),
+                kill=mock.Mock(side_effect=released.set),
+                wait=mock.Mock(return_value=0),
+            )
+            started = []
+
+            def spawn(argv, **kwargs):
+                if (silent_daemon == "Xvfb" and not started) or (silent_daemon == "dbus-daemon" and len(started) == 3):
+                    server = silent
+                else:
+                    output = "40\n" if argv[0] == "Xvfb" else "unix:path=/private/bus\n"
+                    server = mock.Mock(stdout=io.StringIO(output), wait=mock.Mock(return_value=0))
+                started.append(server)
+                return server
+
+            read_ready = test_command._gtk_daemon_ready
+
+            def readiness(server, label):
+                return read_ready(server, label, timeout=0 if server is silent else 5)
+
+            with (
+                mock.patch.object(test_command.subprocess, "Popen", side_effect=spawn),
+                mock.patch.object(test_command, "_gtk_daemon_ready", side_effect=readiness),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()) as errors,
+                self.assertRaises(SystemExit),
+            ):
+                with test_command.virtual_gtk_displays(2):
+                    self.fail("a daemon without readiness must not admit tests")
+            self.assertIn("did not report readiness", errors.getvalue())
+            self.assertTrue(finished.is_set(), "the startup reader must be joined before returning")
+            silent.kill.assert_called_once()
+            self.assertEqual(len(started), 2 if silent_daemon == "Xvfb" else 4)
+            for server in started:
+                server.terminate.assert_called_once()
+                self.assertIn(mock.call(timeout=5), server.wait.call_args_list)
+                if server is silent:
+                    server.stdout.close.assert_called()
+                else:
+                    self.assertTrue(server.stdout.closed)
+
+        for daemon in ("Xvfb", "dbus-daemon"):
+            with self.subTest(daemon=daemon):
+                check_timeout(daemon)
+
+    def test_interrupted_gtk_readiness_retires_the_writer_before_closing_and_joining(self):
+        released = threading.Event()
+        finished = threading.Event()
+
+        def read_until_killed():
+            released.wait()
+            finished.set()
+            return ""
+
+        def close():
+            killed = released.is_set()
+            # Keep the test's own reader join safe even if the implementation
+            # regresses to closing the pipe before retiring its writer.
+            released.set()
+            self.assertTrue(killed, "close must not wait on a still-blocked reader")
+
+        daemon = mock.Mock(
+            stdout=mock.Mock(readline=mock.Mock(side_effect=read_until_killed), close=mock.Mock(side_effect=close)),
+            kill=mock.Mock(side_effect=released.set),
+            wait=mock.Mock(return_value=0),
+        )
+        with mock.patch.object(Future, "result", side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
+            test_command._gtk_daemon_ready(daemon, "interrupted daemon")
+        daemon.kill.assert_called_once()
+        daemon.wait.assert_called_once_with()
+        daemon.stdout.close.assert_called_once()
+        self.assertTrue(finished.is_set(), "the reader must be joined on interruption")
+
+    def test_gtk_session_body_failure_still_forces_a_stalled_bus_to_exit(self):
+        display = mock.Mock(stdout=io.StringIO("40\n"), wait=mock.Mock(return_value=0))
+        bus = mock.Mock(
+            stdout=io.StringIO("unix:path=/private/bus\n"),
+            wait=mock.Mock(side_effect=[subprocess.TimeoutExpired("dbus-daemon", 5), 0]),
+        )
+        with mock.patch.object(test_command.subprocess, "Popen", side_effect=[display, bus]):
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError, "body failed"):
+                with test_command.virtual_gtk_displays():
+                    raise RuntimeError("body failed")
+        display.terminate.assert_called_once()
+        bus.terminate.assert_called_once()
+        bus.kill.assert_called_once()
+        self.assertEqual(bus.wait.call_args_list, [mock.call(timeout=5), mock.call()])
+        self.assertTrue(display.stdout.closed)
+        self.assertTrue(bus.stdout.closed)
+
     def test_a_failing_shard_prints_the_command_that_reruns_it(self):
         status, output = self._run_sharded_core(self._catch2_shard_stub([(1, 1, 0), (1, 1, 1)]), shards=2)
 
@@ -2587,6 +3127,9 @@ class CliParseTest(unittest.TestCase):
             environment={
                 "DISPLAY": ":9",
                 "AOBUS_OWNED_GTK_DISPLAY": "1",
+                "DBUS_SESSION_BUS_ADDRESS": "unix:path=/retired/private-bus",
+                "AOBUS_OWNED_GTK_BUS": "unix:path=/retired/private-bus",
+                "G_DEBUG": "fatal-warnings",
                 "GDK_BACKEND": "x11",
                 "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
             },
@@ -2604,10 +3147,22 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1", command)
         self.assertIn("GDK_BACKEND=x11", command)
         self.assertTrue(command.startswith("env "), command)
-        # DISPLAY names an Xvfb the run has already torn down. Its marker must
-        # not authorize native injection against the caller's inherited display.
-        self.assertNotIn("DISPLAY", command)
-        self.assertNotIn("AOBUS_OWNED_GTK_DISPLAY", command)
+        # A direct command must neither reuse retired services nor fall back to
+        # the caller's desktop (including GIO's XDG_RUNTIME_DIR bus discovery).
+        arguments = shlex.split(command)
+        self.assertEqual(arguments[:5], ["env", "-u", "AOBUS_OWNED_GTK_DISPLAY", "-u", "AOBUS_OWNED_GTK_BUS"])
+        self.assertIn("DISPLAY=", arguments)
+        self.assertIn("DBUS_SESSION_BUS_ADDRESS=disabled:", arguments)
+        self.assertIn("G_DEBUG=fatal-warnings", arguments)
+        self.assertNotIn("DISPLAY=:9", arguments)
+        self.assertNotIn("unix:path=/retired/private-bus", command)
+
+        # Bus admission alone must also be scrubbed, not exported as reusable ownership.
+        shard.environment = {key: value for key, value in shard.environment.items() if key != "AOBUS_OWNED_GTK_DISPLAY"}
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            bus_only = shlex.split(test_command._repro_command(shard))
+        self.assertEqual(bus_only[:5], ["env", "-u", "AOBUS_OWNED_GTK_DISPLAY", "-u", "AOBUS_OWNED_GTK_BUS"])
+        self.assertIn("DBUS_SESSION_BUS_ADDRESS=disabled:", bus_only)
 
     def test_a_failed_shard_launch_closes_the_outputs_already_opened(self):
         opened = []
@@ -2642,12 +3197,20 @@ class CliParseTest(unittest.TestCase):
 
             displays = iter(("40\n", "41\n", "42\n", "43\n"))
             servers = []
+            buses = []
 
             def spawn(argv, **kwargs):
                 if argv[0] == "Xvfb":
                     server = mock.Mock(stdout=io.StringIO(next(displays)), wait=mock.Mock(return_value=0))
                     servers.append(server)
                     return server
+                if argv[0] == "dbus-daemon":
+                    bus = mock.Mock(
+                        stdout=io.StringIO(f"unix:path=/private-bus-{len(buses)}\n"),
+                        wait=mock.Mock(return_value=0),
+                    )
+                    buses.append(bus)
+                    return bus
                 return self._catch2_shard_stub([(1, 1, 0)] * 4)(argv, **kwargs)
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -2655,12 +3218,30 @@ class CliParseTest(unittest.TestCase):
                     with self._captured_stdout():
                         self.assertEqual(test_command.run_suite("gtk", build_dir, shards=4), 0)
 
-        shard_environments = [
-            call.kwargs["env"]["DISPLAY"] for call in popen.call_args_list if call.args[0][0] != "Xvfb"
-        ]
-        self.assertEqual(shard_environments, [":40", ":41", ":42", ":43"])
-        for server in servers:
+        shard_environments = [call.kwargs["env"] for call in popen.call_args_list if call.args[0][0] == str(binary)]
+        self.assertEqual([env["DISPLAY"] for env in shard_environments], [":40", ":41", ":42", ":43"])
+        self.assertEqual(
+            [env["DBUS_SESSION_BUS_ADDRESS"] for env in shard_environments],
+            [f"unix:path=/private-bus-{index}" for index in range(4)],
+        )
+        self.assertTrue(
+            all(env["AOBUS_OWNED_GTK_BUS"] == env["DBUS_SESSION_BUS_ADDRESS"] for env in shard_environments)
+        )
+        for server in (*servers, *buses):
             server.terminate.assert_called_once()
+            server.wait.assert_called_once_with(timeout=5)
+            self.assertTrue(server.stdout.closed)
+
+    def test_test_help_explains_filtered_group_and_non_catch2_semantics(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as caught:
+            make_parser().parse_args(["test", "--help"])
+
+        self.assertEqual(caught.exception.code, 0)
+        help_text = " ".join(output.getvalue().split())
+        self.assertIn("explicit filter applies only to Catch2 suites", help_text)
+        self.assertIn("at least one test must match globally", help_text)
+        self.assertIn("match and then skip still count", help_text)
 
     def test_help_exits_zero(self):
         for argv in (["--help"], ["build", "--help"], ["tidy", "--help"], ["run", "--help"]):

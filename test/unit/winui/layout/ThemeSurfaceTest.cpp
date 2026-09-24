@@ -12,6 +12,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::winui::test
@@ -37,6 +38,24 @@ namespace ao::winui::test
 
   TEST_CASE("themeSurfaceFromString - every slot round-trips through its authored spelling", "[winui][unit][layout]")
   {
+    constexpr auto kAuthoredSpellings = std::to_array<std::pair<ThemeSurface, std::string_view>>({
+      {ThemeSurface::Window, "window"},
+      {ThemeSurface::Surface, "surface"},
+      {ThemeSurface::ModernNavigation, "modern.navigation"},
+      {ThemeSurface::ModernInspector, "modern.inspector"},
+      {ThemeSurface::ModernNowPlaying, "modern.nowPlaying"},
+      {ThemeSurface::ClassicToolbar, "classic.toolbar"},
+      {ThemeSurface::ClassicTree, "classic.tree"},
+      {ThemeSurface::ClassicStatusBar, "classic.statusBar"},
+    });
+    REQUIRE(kAuthoredSpellings.size() == kAllSurfaces.size());
+
+    for (auto const& [surface, spelling] : kAuthoredSpellings)
+    {
+      CHECK(toString(surface) == spelling);
+      CHECK(themeSurfaceFromString(spelling) == surface);
+    }
+
     for (auto const surface : kAllSurfaces)
     {
       auto const optParsed = themeSurfaceFromString(toString(surface));
@@ -97,6 +116,31 @@ namespace ao::winui::test
     // FrameworkElement draws nothing at all.
     CHECK_FALSE(acceptsSurfaceForElementKind(ElementKind::TextBlock));
     CHECK_FALSE(acceptsSurfaceForElementKind(ElementKind::FrameworkElement));
+
+    constexpr auto kExpected = std::to_array<std::pair<ElementKind, bool>>({
+      {ElementKind::FrameworkElement, false},
+      {ElementKind::Panel, true},
+      {ElementKind::Grid, true},
+      {ElementKind::Border, true},
+      {ElementKind::TextBlock, false},
+      {ElementKind::Control, true},
+      {ElementKind::ContentControl, true},
+      {ElementKind::ButtonBase, true},
+      {ElementKind::Button, true},
+      {ElementKind::ItemsControl, true},
+      {ElementKind::ListView, true},
+      {ElementKind::ScrollViewer, true},
+      {ElementKind::Slider, true},
+      {ElementKind::AutoSuggestBox, true},
+      {ElementKind::NavigationView, true},
+      {ElementKind::TreeView, true},
+      {ElementKind::MenuBar, true},
+    });
+
+    for (auto const& [kind, accepts] : kExpected)
+    {
+      CHECK(acceptsSurfaceForElementKind(kind) == accepts);
+    }
   }
 
   TEST_CASE("planThemeSurface - an authored slot plans the surface it names", "[winui][unit][layout]")

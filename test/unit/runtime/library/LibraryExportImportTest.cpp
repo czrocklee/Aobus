@@ -11,17 +11,22 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/utility/Sha256.h>
+#include <ao/utility/Uuid.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -114,7 +119,8 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - round trip preserves tracks, covers, and lists", "[runtime][workflow][import-export][yaml]")
+  TEST_CASE("LibraryYaml - round trip preserves tracks, covers, and lists",
+            "[runtime][integration][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -123,16 +129,18 @@ namespace ao::rt::test
     auto const orderedListName = std::string{"Ordered List "} + std::string(256, 'M');
     auto const orderedListDescription = std::string{"Ordered Description "} + std::string(256, 'D');
     auto const orderedListExpression = std::string{"#favorite"};
+    auto const coverData = lmdb::test::createTestData(100);
+    auto unusedResourceId = kInvalidResourceId;
 
     // 1. Setup initial library
     {
       auto transaction = library::test::writeTransaction(ml1);
 
       auto resWriter = library::test::physicalWriter(ml1.resources(), transaction);
-      auto resIdRes = resWriter.create(lmdb::test::createTestData(100));
+      auto resIdRes = resWriter.create(coverData);
       REQUIRE(resIdRes);
       auto const resId = *resIdRes;
-      REQUIRE(resWriter.create(lmdb::test::createTestData(64)));
+      unusedResourceId = ao::test::requireValue(resWriter.create(lmdb::test::createTestData(64)));
       REQUIRE(transaction.commit());
       auto const trackId =
         library::test::addTrackWithUniqueFixtureUri(ml1,
@@ -215,6 +223,15 @@ namespace ao::rt::test
       CHECK(view.property().codec() == AudioCodec::Flac);
       CHECK(view.metadata().title() == "Test Title");
       CHECK(dictionary.get(view.metadata().artistId()) == "Test Artist");
+      auto const optCover = view.coverArt().primary();
+      REQUIRE(optCover);
+      CHECK(view.coverArt().count() == 1);
+      auto const resourceReader = ml2.resources().reader(transaction);
+      auto const optResource = resourceReader.get(optCover->resourceId);
+      REQUIRE(optResource);
+      CHECK(optResource->digest == utility::computeSha256(coverData));
+      CHECK(optResource->byteLength == coverData.size());
+      CHECK_FALSE(resourceReader.get(unusedResourceId));
 
       // Check tags
       auto const tags = view.tags();
@@ -275,7 +292,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - round trip preserves hidden List ranks", "[runtime][regression][import-export][list-order]")
+  TEST_CASE("LibraryYaml - round trip preserves hidden List ranks", "[runtime][integration][import-export][list-order]")
   {
     auto const sourceTemp = ao::test::TempDir{};
     auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
@@ -325,7 +342,7 @@ namespace ao::rt::test
     CHECK(iterator == reader.end());
   }
 
-  TEST_CASE("LibraryYaml - restore preserves classical metadata fields", "[runtime][workflow][import-export][yaml]")
+  TEST_CASE("LibraryYaml - restore preserves classical metadata fields", "[runtime][integration][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -409,8 +426,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - merge updates existing tracks and adds new tracks",
-            "[runtime][workflow][import-export][merge]")
+  TEST_CASE("LibraryYaml - merge updates existing tracks and adds new tracks", "[runtime][integration][import-export]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -481,7 +497,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - merge distinguishes omitted and empty tag collections",
-            "[runtime][workflow][import-export][overlay]")
+            "[runtime][integration][import-export]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -512,8 +528,13 @@ library:
       auto transaction = ml.readTransaction();
       auto const optView = ml.tracks().reader(transaction).get(trackId, TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
-      CHECK(optView->tags().count() == 1);
-      CHECK(std::ranges::distance(optView->customMetadata()) == 1);
+      CHECK(optView->metadata().title() == "Updated");
+      REQUIRE(optView->tags().count() == 1);
+      CHECK(ml.dictionary().get(*optView->tags().begin()) == "favorite");
+      REQUIRE(std::ranges::distance(optView->customMetadata()) == 1);
+      auto const [key, value] = *optView->customMetadata().begin();
+      CHECK(ml.dictionary().get(key) == "mood");
+      CHECK(value == "focused");
     }
 
     SECTION("present empty collections clear the merge baseline")
@@ -542,7 +563,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - import reports counts and dry-run leaves target unchanged",
-            "[runtime][workflow][import-export][dry-run]")
+            "[runtime][integration][import-export][dry-run]")
   {
     SECTION("restore into empty target")
     {
@@ -626,7 +647,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - import canonicalizes track URIs and recovers file sizes",
-            "[runtime][workflow][import-export][uri]")
+            "[runtime][integration][import-export][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -670,6 +691,7 @@ library:
     auto const manifestReader = ml.manifest().reader(transaction);
 
     std::int32_t count = 0;
+    auto idsByUri = std::unordered_map<std::string, TrackId>{};
 
     for (auto const& [id, view] : trackReader)
     {
@@ -677,10 +699,15 @@ library:
       CHECK_FALSE(builder.property().uri().contains("./"));
       CHECK_FALSE(builder.property().uri().contains('\\'));
       CHECK_FALSE(builder.property().uri().contains(".."));
+      idsByUri.emplace(builder.property().uri(), id);
       count++;
     }
 
     CHECK(count == 3);
+    CHECK(idsByUri.size() == 3);
+    REQUIRE(idsByUri.contains("song.flac"));
+    REQUIRE(idsByUri.contains("song2.flac"));
+    REQUIRE(idsByUri.contains("song3.flac"));
 
     auto optManifest = manifestReader.get("song.flac");
     REQUIRE(optManifest);
@@ -699,17 +726,20 @@ library:
     auto optList = listReader.get(ListId{1});
     REQUIRE(optList);
     REQUIRE(optList->orderTrackIds().size() == 3);
+    CHECK(
+      std::ranges::equal(optList->orderTrackIds(),
+                         std::array{idsByUri.at("song.flac"), idsByUri.at("song2.flac"), idsByUri.at("song3.flac")}));
   }
 
-  TEST_CASE("LibraryYaml - import accepts metadata and delta-mode YAML examples",
-            "[runtime][workflow][import-export][yaml]")
+  TEST_CASE("LibraryYaml - metadata restore and delta merge report unmapped track references",
+            "[runtime][integration][import-export][yaml]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "coverage.yaml";
 
-    // Create symlink to valid flac
+    // Copy a real tagged FLAC input.
     auto const songPath = std::filesystem::path{temp.path()} / "A.flac";
     std::filesystem::copy_file(std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac", songPath);
 
@@ -725,7 +755,6 @@ library:
       yaml << "      track-number: 1\n";
       yaml << "      disc-number: 1\n";
 
-      // Test hex decode
       std::filesystem::copy_file(songPath, std::filesystem::path{temp.path()} / "J.flac");
       yaml << "    - uri: \"J.flac\"\n";
       yaml << "  lists:\n";
@@ -744,8 +773,43 @@ library:
     }
 
     REQUIRE(res);
+    CHECK(*res == ImportReport{.payloadVersion = 5,
+                               .payloadMode = ExportMode::Metadata,
+                               .tracksCreated = 2,
+                               .listsCreated = 1,
+                               .danglingReferencesIgnored = 2});
+    auto const aId = trackIdForUri(ml, "A.flac");
+    auto const jId = trackIdForUri(ml, "J.flac");
+    REQUIRE(aId != kInvalidTrackId);
+    REQUIRE(jId != kInvalidTrackId);
+    auto initialListId = kInvalidListId;
+    {
+      auto transaction = ml.readTransaction();
+      CHECK(utility::formatUuid(ml.metadataHeader(transaction).libraryId) == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+      auto const reader = ml.tracks().reader(transaction);
+      CHECK(reader.entryCount() == 2);
+      auto const optA = reader.get(aId);
+      auto const optJ = reader.get(jId);
+      REQUIRE(optA);
+      REQUIRE(optJ);
+      CHECK(optA->property().uri() == "A.flac");
+      CHECK(optA->metadata().year() == 2024);
+      CHECK(optA->metadata().trackNumber() == 1);
+      CHECK(optA->metadata().discNumber() == 1);
+      CHECK(optJ->property().uri() == "J.flac");
+      CHECK(optJ->metadata().year() == 0);
+      auto const listReader = ml.lists().reader(transaction);
+      auto iterator = listReader.begin();
+      REQUIRE(iterator != listReader.end());
+      auto const [id, list] = *iterator;
+      initialListId = id;
+      CHECK(list.name() == "Coverage List");
+      CHECK(list.orderTrackIds().empty());
+      ++iterator;
+      CHECK(iterator == listReader.end());
+    }
 
-    // Delta mode coverage
+    // Merge into the same metadata-imported library, preserving its existing records.
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
     {
       auto yaml = std::ofstream{yamlPathDelta};
@@ -767,10 +831,45 @@ library:
 
     auto resultDeltaRes = importer.importFromYamlOffline(yamlPathDelta, ImportMode::Merge);
     REQUIRE(resultDeltaRes);
+    CHECK(*resultDeltaRes == ImportReport{.payloadVersion = 5,
+                                          .payloadMode = ExportMode::Delta,
+                                          .tracksUpdated = 1,
+                                          .listsCreated = 1,
+                                          .danglingReferencesIgnored = 1});
+    auto transaction = ml.readTransaction();
+    auto const reader = ml.tracks().reader(transaction);
+    CHECK(reader.entryCount() == 2);
+    auto const optA = reader.get(aId);
+    auto const optJ = reader.get(jId);
+    REQUIRE(optA);
+    REQUIRE(optJ);
+    CHECK(optA->property().uri() == "A.flac");
+    CHECK(optA->metadata().year() == 2024);
+    CHECK(optA->metadata().trackNumber() == 1);
+    CHECK(optA->metadata().discNumber() == 1);
+    CHECK(optJ->property().uri() == "J.flac");
+    CHECK(optJ->metadata().year() == 0);
+    auto const listReader = ml.lists().reader(transaction);
+    auto const optInitialList = listReader.get(initialListId);
+    REQUIRE(optInitialList);
+    CHECK(optInitialList->name() == "Coverage List");
+    CHECK(optInitialList->orderTrackIds().empty());
+    std::size_t addedLists = 0;
+
+    for (auto const& [id, list] : listReader)
+    {
+      if (id != initialListId)
+      {
+        ++addedLists;
+        CHECK(list.name() == "Coverage List");
+        CHECK(list.orderTrackIds().empty());
+      }
+    }
+
+    CHECK(addedLists == 1);
   }
 
-  TEST_CASE("LibraryYaml - version 3 rejects aliases and extension fields",
-            "[runtime][workflow][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 5 rejects aliases and extension fields", "[runtime][unit][import-export][schema]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -813,7 +912,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - metadata import clears absent classical fields from file tags",
-            "[runtime][regression][import-export][yaml]")
+            "[runtime][integration][import-export][yaml]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());

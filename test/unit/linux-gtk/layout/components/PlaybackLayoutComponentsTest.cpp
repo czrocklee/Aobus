@@ -13,6 +13,8 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
@@ -22,8 +24,10 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/popover.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
+#include <gtkmm/window.h>
 
 #include <array>
 #include <cstdint>
@@ -35,7 +39,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("PlaybackLayoutComponents - render idle GTK widgets", "[gtk][unit][layout-component][playback]")
+  TEST_CASE("PlaybackLayoutComponents - render idle GTK widgets", "[gtk][unit][layout-component][playback][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -167,8 +171,9 @@ namespace ao::gtk::layout::test
       auto& widget = compPtr->widget();
       CHECK(widget.has_css_class("ao-soul"));
 
-      std::int32_t widgetWidth = -1;
-      std::int32_t widgetHeight = -1;
+      // The adapter must leave size requests to the authored layout.
+      std::int32_t widgetWidth = 0;
+      std::int32_t widgetHeight = 0;
       widget.get_size_request(widgetWidth, widgetHeight);
       CHECK(widgetWidth == -1);
       CHECK(widgetHeight == -1);
@@ -194,35 +199,16 @@ namespace ao::gtk::layout::test
       REQUIRE(soul != nullptr);
       CHECK(soul->has_css_class("ao-soul"));
 
-      std::int32_t soulWidth = -1;
-      std::int32_t soulHeight = -1;
+      // The glyph fills the button's allocation without claiming space itself.
+      std::int32_t soulWidth = 0;
+      std::int32_t soulHeight = 0;
       soul->get_size_request(soulWidth, soulHeight);
       CHECK(soulWidth == -1);
       CHECK(soulHeight == -1);
-
-      CHECK(soul->get_hexpand() == false);
-      CHECK(soul->get_vexpand() == false);
+      CHECK_FALSE(soul->get_hexpand());
+      CHECK_FALSE(soul->get_vexpand());
       CHECK(soul->get_halign() == Gtk::Align::FILL);
       CHECK(soul->get_valign() == Gtk::Align::FILL);
-    }
-
-    SECTION("Soul components apply custom stroke and glyph scale properties")
-    {
-      for (auto const* const type : {"playback.soulButton", "playback.soulPlayPauseButton"})
-      {
-        auto node = LayoutNode{.type = type};
-        node.props["strokeWidth"] = LayoutValue{5.0};
-        node.props["glyphScale"] = LayoutValue{0.85};
-        auto const compPtr = fixture.create(node);
-
-        REQUIRE(compPtr != nullptr);
-        auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
-        REQUIRE(button != nullptr);
-        auto* const soul = dynamic_cast<AobusSoul*>(button->get_child());
-        REQUIRE(soul != nullptr);
-        CHECK(soul->baseStrokeWidth() == 5.0F);
-        CHECK(soul->innerGlyphScale() == 0.85F);
-      }
     }
 
     SECTION("outputDeviceSelector creates Gtk::Button with Label")
@@ -241,68 +227,135 @@ namespace ao::gtk::layout::test
       REQUIRE(label != nullptr);
       CHECK(label->get_text() == "--"); // Default backend summary
     }
+  }
 
-    SECTION("outputDeviceSelector reports the exact route selected from its popover")
+  TEST_CASE("PlaybackLayoutComponents - authored orientation keeps the vertical scale and initial service volume",
+            "[gtk][integration][layout-component][playback]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime());
+    ao::gtk::test::drainGtkEvents();
+    fixture.runtime().playback().commands().setVolume(0.5F);
+    REQUIRE(fixture.runtime().playback().snapshot().transport.volume.level == 0.5F);
+
+    for (auto const& orientation : {std::string{"horizontal"}, std::string{"vertical"}})
     {
-      rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
-      auto optRequested = std::optional<audio::OutputDeviceSelection>{};
-      registerOutputDeviceSelectorComponent(
-        fixture.components(),
-        fixture.runtime().playback(),
-        ao::test::messageCatalog("en"),
-        uimodel::OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
-                                                { optRequested = selection; }));
-      auto const node = LayoutNode{.type = "playback.outputDeviceSelector"};
+      INFO("authored orientation=" << orientation);
+      auto node = LayoutNode{.type = "playback.volumeControl"};
+      node.props["orientation"] = LayoutValue{orientation};
       auto const compPtr = fixture.create(node);
+      REQUIRE(compPtr != nullptr);
+      REQUIRE_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
+
+      auto host = ao::gtk::test::GtkWindowFixture{};
+      host.window().set_default_size(200, 100);
+      host.mount(compPtr->widget());
+      host.present();
+      REQUIRE(compPtr->widget().get_visible());
+
+      auto* const popover = ao::gtk::test::findWidgetByClass<Gtk::Popover>(compPtr->widget(), "ao-volume-popover");
+      REQUIRE(popover != nullptr);
+      auto* const scale = ao::gtk::test::findWidget<Gtk::Scale>(*popover);
+      REQUIRE(scale != nullptr);
+      popover->popup();
+      REQUIRE(ao::gtk::test::tryPumpGtkEventsUntil([&] { return popover->get_mapped(); }));
+
+      CHECK(scale->get_orientation() == Gtk::Orientation::VERTICAL);
+      CHECK(scale->get_value() == 0.5);
+      CHECK(fixture.runtime().playback().snapshot().transport.volume.level == 0.5F);
+      popover->popdown();
+    }
+  }
+
+  TEST_CASE("PlaybackLayoutComponents - Soul components apply custom stroke and glyph scale properties",
+            "[gtk][unit][layout-component][playback]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+
+    for (auto const* const type : {"playback.soulButton", "playback.soulPlayPauseButton"})
+    {
+      auto node = LayoutNode{.type = type};
+      node.props["strokeWidth"] = LayoutValue{5.0};
+      node.props["glyphScale"] = LayoutValue{0.85};
+      auto const compPtr = fixture.create(node);
+
       REQUIRE(compPtr != nullptr);
       auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(button != nullptr);
-      auto host = ao::gtk::test::GtkWindowFixture{};
-      host.mount(*button);
-      host.present();
-
-      ao::gtk::test::emitClicked(*button);
-      ao::gtk::test::drainGtkEvents();
-      auto* const popover = ao::gtk::test::findWidget<OutputDevicePopover>(*button);
-      REQUIRE(popover != nullptr);
-      ao::gtk::test::emitShow(*popover);
-      ao::gtk::test::drainGtkEvents();
-      auto* const listBox = ao::gtk::test::findWidget<Gtk::ListBox>(*popover);
-      REQUIRE(listBox != nullptr);
-      auto* const exclusiveRow = listBox->get_row_at_index(2);
-      REQUIRE(exclusiveRow != nullptr);
-
-      ao::gtk::test::emitRowActivated(*listBox, *exclusiveRow);
-
-      REQUIRE(optRequested);
-      CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
-      CHECK(optRequested->deviceId == audio::DeviceId{"device1"});
-      CHECK(optRequested->profileId == audio::kProfileExclusive);
+      auto* const soul = dynamic_cast<AobusSoul*>(button->get_child());
+      REQUIRE(soul != nullptr);
+      CHECK(soul->baseStrokeWidth() == 5.0F);
+      CHECK(soul->innerGlyphScale() == 0.85F);
     }
+  }
 
-    SECTION("all 10 playback types register and instantiate")
+  TEST_CASE("PlaybackLayoutComponents - outputDeviceSelector reports the exact route selected from its popover",
+            "[gtk][unit][layout-component][playback]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+    auto optRequested = std::optional<audio::OutputDeviceSelection>{};
+    registerOutputDeviceSelectorComponent(
+      fixture.components(),
+      fixture.runtime().playback(),
+      ao::test::messageCatalog("en"),
+      uimodel::OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
+                                              { optRequested = selection; }));
+    auto const node = LayoutNode{.type = "playback.outputDeviceSelector"};
+    auto const compPtr = fixture.create(node);
+    REQUIRE(compPtr != nullptr);
+    auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+    REQUIRE(button != nullptr);
+    auto host = ao::gtk::test::GtkWindowFixture{};
+    // Leave room for backend-summary updates; this case tests route dispatch,
+    // not minimum-width negotiation of a placeholder-sized window.
+    host.window().set_default_size(320, 120);
+    host.mount(*button);
+    host.present();
+
+    ao::gtk::test::emitClicked(*button);
+    ao::gtk::test::drainGtkEvents();
+    auto* const popover = ao::gtk::test::findWidget<OutputDevicePopover>(*button);
+    REQUIRE(popover != nullptr);
+    ao::gtk::test::emitShow(*popover);
+    ao::gtk::test::drainGtkEvents();
+    auto* const listBox = ao::gtk::test::findWidget<Gtk::ListBox>(*popover);
+    REQUIRE(listBox != nullptr);
+    auto* const exclusiveRow = listBox->get_row_at_index(2);
+    REQUIRE(exclusiveRow != nullptr);
+
+    ao::gtk::test::emitRowActivated(*listBox, *exclusiveRow);
+
+    REQUIRE(optRequested);
+    CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
+    CHECK(optRequested->deviceId == audio::DeviceId{"device1"});
+    CHECK(optRequested->profileId == audio::kProfileExclusive);
+  }
+
+  TEST_CASE("PlaybackLayoutComponents - selected playback adapter types register and instantiate",
+            "[gtk][unit][layout-component][playback][registry]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto const types = std::to_array<std::string_view>({"playback.transportButton",
+                                                        "playback.volumeControl",
+                                                        "playback.currentTitleLabel",
+                                                        "playback.currentArtistLabel",
+                                                        "playback.seekSlider",
+                                                        "playback.timeLabel",
+                                                        "playback.qualityIndicator",
+                                                        "playback.soulPlayPauseButton",
+                                                        "playback.soulButton",
+                                                        "playback.outputDeviceSelector"});
+
+    for (auto const type : types)
     {
-      auto const types = std::to_array<std::string_view>({"playback.transportButton",
-                                                          "playback.volumeControl",
-                                                          "playback.currentTitleLabel",
-                                                          "playback.currentArtistLabel",
-                                                          "playback.seekSlider",
-                                                          "playback.timeLabel",
-                                                          "playback.qualityIndicator",
-                                                          "playback.soulPlayPauseButton",
-                                                          "playback.soulButton",
-                                                          "playback.outputDeviceSelector"});
-
-      for (auto const type : types)
-      {
-        INFO(type);
-        auto const node = LayoutNode{.type = std::string{type}};
-        auto const compPtr = fixture.create(node);
-        REQUIRE(compPtr != nullptr);
-        // A registry answers an unknown type with a placeholder rather than
-        // nullptr, so a non-null component alone does not mean it registered.
-        CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
-      }
+      INFO(type);
+      auto const node = LayoutNode{.type = std::string{type}};
+      auto const compPtr = fixture.create(node);
+      REQUIRE(compPtr != nullptr);
+      // A registry answers an unknown type with a placeholder rather than
+      // nullptr, so a non-null component alone does not mean it registered.
+      CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
     }
   }
 } // namespace ao::gtk::layout::test

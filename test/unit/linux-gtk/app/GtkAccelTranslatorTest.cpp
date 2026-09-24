@@ -11,7 +11,10 @@
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
 
+#include <array>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace ao::gtk::test
 {
@@ -55,6 +58,29 @@ namespace ao::gtk::test
     {
       CHECK(toGtkAccel(chord("NotARealKey")).has_value() == false);
     }
+
+    SECTION("every exceptional neutral spelling maps to its GTK name")
+    {
+      constexpr auto kAliases = std::to_array<std::pair<std::string_view, std::string_view>>({
+        {"Space", "space"},
+        {"Enter", "Return"},
+        {"Backspace", "BackSpace"},
+        {"PageUp", "Page_Up"},
+        {"PageDown", "Page_Down"},
+        {"Media:Play", "AudioPlay"},
+        {"Media:Pause", "AudioPause"},
+        {"Media:Stop", "AudioStop"},
+        {"Media:Next", "AudioNext"},
+        {"Media:Prev", "AudioPrev"},
+      });
+
+      for (auto const& [token, gtkName] : kAliases)
+      {
+        auto const optAccel = toGtkAccel(chord(std::string{token}));
+        REQUIRE(optAccel);
+        CHECK(*optAccel == gtkName);
+      }
+    }
   }
 
   TEST_CASE("GtkAccelTranslator - parses GTK accelerators back to neutral chords", "[gtk][unit][app][accel]")
@@ -65,6 +91,24 @@ namespace ao::gtk::test
     CHECK(fromGtkAccel("<Control>Right") == chord("Ctrl+Right"));
     CHECK(fromGtkAccel("AudioNext") == chord("Media:Next"));
     CHECK(fromGtkAccel("not-an-accel").has_value() == false);
+
+    constexpr auto kAliases = std::to_array<std::pair<std::string_view, std::string_view>>({
+      {"space", "Space"},
+      {"Return", "Enter"},
+      {"BackSpace", "Backspace"},
+      {"Page_Up", "PageUp"},
+      {"Page_Down", "PageDown"},
+      {"AudioPlay", "Media:Play"},
+      {"AudioPause", "Media:Pause"},
+      {"AudioStop", "Media:Stop"},
+      {"AudioNext", "Media:Next"},
+      {"AudioPrev", "Media:Prev"},
+    });
+
+    for (auto const& [gtkName, token] : kAliases)
+    {
+      CHECK(fromGtkAccel(std::string{gtkName}) == chord(std::string{token}));
+    }
   }
 
   TEST_CASE("GtkAccelTranslator - converts live key presses to chords", "[gtk][unit][app][accel]")
@@ -94,9 +138,29 @@ namespace ao::gtk::test
 
     SECTION("standalone modifier keys are rejected so capture keeps waiting")
     {
-      CHECK(fromGtkKeyval(GDK_KEY_Control_L, Gdk::ModifierType::CONTROL_MASK).has_value() == false);
-      CHECK(fromGtkKeyval(GDK_KEY_Shift_R, Gdk::ModifierType::SHIFT_MASK).has_value() == false);
-      CHECK(fromGtkKeyval(GDK_KEY_Alt_L, Gdk::ModifierType::ALT_MASK).has_value() == false);
+      constexpr auto kModifierKeys = std::to_array<std::pair<guint, Gdk::ModifierType>>({
+        {GDK_KEY_Control_L, Gdk::ModifierType::CONTROL_MASK},
+        {GDK_KEY_Control_R, Gdk::ModifierType::CONTROL_MASK},
+        {GDK_KEY_Shift_L, Gdk::ModifierType::SHIFT_MASK},
+        {GDK_KEY_Shift_R, Gdk::ModifierType::SHIFT_MASK},
+        {GDK_KEY_Shift_Lock, Gdk::ModifierType::LOCK_MASK},
+        {GDK_KEY_Caps_Lock, Gdk::ModifierType::LOCK_MASK},
+        {GDK_KEY_Alt_L, Gdk::ModifierType::ALT_MASK},
+        {GDK_KEY_Alt_R, Gdk::ModifierType::ALT_MASK},
+        {GDK_KEY_Meta_L, Gdk::ModifierType::META_MASK},
+        {GDK_KEY_Meta_R, Gdk::ModifierType::META_MASK},
+        {GDK_KEY_Super_L, Gdk::ModifierType::SUPER_MASK},
+        {GDK_KEY_Super_R, Gdk::ModifierType::SUPER_MASK},
+        {GDK_KEY_Hyper_L, Gdk::ModifierType::HYPER_MASK},
+        {GDK_KEY_Hyper_R, Gdk::ModifierType::HYPER_MASK},
+        {GDK_KEY_ISO_Level3_Shift, Gdk::ModifierType{}},
+        {GDK_KEY_Num_Lock, Gdk::ModifierType{}},
+      });
+
+      for (auto const& [keyval, state] : kModifierKeys)
+      {
+        CHECK_FALSE(fromGtkKeyval(keyval, state).has_value());
+      }
     }
   }
 

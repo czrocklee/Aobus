@@ -90,7 +90,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackListProjection - non-locale artist order is stable across flat and grouped presentations",
-            "[runtime][regression][projection]")
+            "[runtime][unit][projection]")
   {
     auto env = TrackListProjectionFixture{};
     auto const elan = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Élan"});
@@ -412,34 +412,8 @@ namespace ao::rt::test
     CHECK(orderedMovements == std::vector<std::uint16_t>{1, 2, 3, 1, 2, 3});
   }
 
-  TEST_CASE("TrackListProjection - sort 10 identical tracks preserves stability", "[runtime][unit][projection]")
-  {
-    auto env = TrackListProjectionFixture{};
-    auto ids = std::vector<TrackId>{};
-    ids.reserve(10);
-
-    for (std::int32_t i = 0; i < 10; ++i)
-    {
-      ids.push_back(env.libraryFixture.addTrack(library::test::makeTrackSpec("Same", 2020)));
-    }
-
-    env.setupFiltered(ids);
-
-    auto proj = env.createProjection(ViewId{1});
-    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
-
-    proj.setPresentation(
-      TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year}}});
-
-    REQUIRE(proj.size() == 10);
-
-    for (std::size_t i = 0; i < 10; ++i)
-    {
-      CHECK(proj.trackIdAt(i) != kInvalidTrackId);
-    }
-  }
-
-  TEST_CASE("TrackListProjection - sort reversal 10 tracks avoids IO", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - year sort direction changes produce the exact ascending and descending orders",
+            "[runtime][unit][projection]")
   {
     auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
@@ -459,43 +433,31 @@ namespace ao::rt::test
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
 
-    auto checkMonotonic = [&](bool ascending)
+    auto checkOrder = [&](bool ascending)
     {
-      for (std::size_t i = 0; i < 9; ++i)
-      {
-        auto transaction = env.libraryFixture.library().readTransaction();
-        auto reader = env.libraryFixture.library().tracks().reader(transaction);
-        auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
-        auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
-        REQUIRE(optA);
-        REQUIRE(optB);
-        auto ay = optA->metadata().year();
+      REQUIRE(proj.size() == ids.size());
 
-        if (auto by = optB->metadata().year(); ascending)
-        {
-          CHECK(ay <= by);
-        }
-        else
-        {
-          CHECK(ay >= by);
-        }
+      for (std::size_t i = 0; i < ids.size(); ++i)
+      {
+        auto const expectedIndex = ascending ? ids.size() - 1 - i : i;
+        CHECK(proj.trackIdAt(i) == ids[expectedIndex]);
       }
     };
 
     REQUIRE(proj.size() == 10);
-    checkMonotonic(true);
+    checkOrder(true);
 
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
-    checkMonotonic(true);
+    checkOrder(true);
 
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = false}}});
-    checkMonotonic(false);
+    checkOrder(false);
 
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
-    checkMonotonic(true);
+    checkOrder(true);
   }
 
   TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks", "[runtime][unit][projection]")

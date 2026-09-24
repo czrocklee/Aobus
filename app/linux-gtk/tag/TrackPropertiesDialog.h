@@ -118,13 +118,13 @@ namespace ao::gtk
     InteractionState _interactionState = InteractionState::Editing;
 
     Gtk::Box _contentBox{Gtk::Orientation::VERTICAL};
-    Gtk::Label _sessionErrorLabel;
-    Gtk::Notebook _notebook;
+    Gtk::Label _sessionErrorLabel{};
+    Gtk::Notebook _notebook{};
 
-    Gtk::ScrolledWindow _metadataScroll;
+    Gtk::ScrolledWindow _metadataScroll{};
     Gtk::Box _metadataBox{Gtk::Orientation::VERTICAL};
 
-    Gtk::ScrolledWindow _propertiesScroll;
+    Gtk::ScrolledWindow _propertiesScroll{};
     Gtk::Box _propertiesBox{Gtk::Orientation::VERTICAL};
 
     std::vector<FieldEditor> _editors;

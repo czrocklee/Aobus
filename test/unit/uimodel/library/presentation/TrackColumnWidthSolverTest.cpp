@@ -40,12 +40,12 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("TrackColumnWidthSolver - empty input produces no widths", "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnWidthSolver - empty input produces no widths", "[uimodel][unit][presentation]")
   {
     CHECK(solveTrackColumnWidths({}, 120).empty());
   }
 
-  TEST_CASE("TrackColumnWidthSolver - distributes flexible columns by weight", "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnWidthSolver - distributes flexible columns by weight", "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 80),
@@ -62,8 +62,7 @@ namespace ao::uimodel::test
     CHECK(totalWidth(widths) == 480);
   }
 
-  TEST_CASE("TrackColumnWidthSolver - normalizes finite weights without overflowing",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnWidthSolver - normalizes finite weights without overflowing", "[uimodel][unit][presentation]")
   {
     auto const maximumWeight = std::numeric_limits<double>::max();
 
@@ -97,7 +96,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - aggregates extreme dimensions without signed overflow",
-            "[uimodel][regression][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const maximumWidth = std::numeric_limits<std::int32_t>::max();
 
@@ -114,7 +113,27 @@ namespace ao::uimodel::test
       CHECK(widths == std::vector{maximumWidth, maximumWidth, 20});
       auto const resized = resizeTrackColumnSpecs(specs, rt::TrackField::Title, 100, 300);
       REQUIRE(resized.size() == specs.size());
-      CHECK(canonicalTrackColumnState(resized[2]).weight > 0.0);
+      CHECK(resized[0].fixedWidth == maximumWidth);
+      CHECK(resized[1].fixedWidth == maximumWidth);
+      CHECK(canonicalTrackColumnState(resized[2]).weight == 1.0);
+    }
+
+    SECTION("Fixed totals constrain resizing between flexible columns")
+    {
+      auto const specs = std::vector{
+        fixed(rt::TrackField::Year, maximumWidth),
+        fixed(rt::TrackField::Duration, maximumWidth),
+        flexible(rt::TrackField::Title),
+        flexible(rt::TrackField::Artist, 3.0),
+      };
+      CHECK(solveTrackColumnWidths(specs, 300) == std::vector{maximumWidth, maximumWidth, 20, 20});
+
+      auto const resized = resizeTrackColumnSpecs(specs, rt::TrackField::Title, 100, 300);
+      REQUIRE(resized.size() == specs.size());
+      CHECK(resized[0].fixedWidth == maximumWidth);
+      CHECK(resized[1].fixedWidth == maximumWidth);
+      CHECK(resized[2].weight == 1.0);
+      CHECK(resized[3].weight == 1.0);
     }
 
     SECTION("Flexible minimums and canonical width totals")
@@ -133,7 +152,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - canonical weights stay inside the persisted finite-positive domain",
-            "[uimodel][regression][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const maximum = canonicalTrackColumnState(flexible(rt::TrackField::Title, std::numeric_limits<double>::max()));
     auto const minimum =
@@ -146,7 +165,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - pins minimum columns and redistributes remaining width",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 50),
@@ -166,7 +185,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - returns minimum flexible widths when the viewport overflows",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 100),
@@ -183,8 +202,7 @@ namespace ao::uimodel::test
     CHECK(totalWidth(widths) == 260);
   }
 
-  TEST_CASE("TrackColumnWidthSolver - leaves space when every visible column is fixed",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnWidthSolver - leaves space when every visible column is fixed", "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 80),
@@ -199,8 +217,7 @@ namespace ao::uimodel::test
     CHECK(totalWidth(widths) == 140);
   }
 
-  TEST_CASE("TrackColumnWidthSolver - derives stable weights from solved widths",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnWidthSolver - derives stable weights from solved widths", "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 80),
@@ -219,7 +236,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - round-trips coarse non-dividing widths by sum and convergence",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     // A coarse viewport that does not divide evenly across the weights exposes the
     // limit of weight-based round-tripping: re-deriving weights from solved widths
@@ -253,7 +270,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - resizes a flexible column by absorbing width on the right",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       flexible(rt::TrackField::Title),
@@ -272,7 +289,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - moves to left flexible columns only after right columns hit minimum",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       flexible(rt::TrackField::Artist, 1.0, 100, 80),
@@ -291,7 +308,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - lets fixed resizing create overflow instead of rebounding",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 80, 40),
@@ -308,7 +325,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - clamps flexible resizing to the representable width",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 100),
@@ -326,8 +343,7 @@ namespace ao::uimodel::test
     CHECK(totalWidth(widths) == 400);
   }
 
-  TEST_CASE("TrackColumnWidthSolver - builds pixel specs and canonical layout states",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE("TrackColumnWidthSolver - builds pixel specs and canonical layout states", "[uimodel][unit][presentation]")
   {
     auto const fields = std::vector{rt::TrackField::Title, rt::TrackField::Duration};
     auto const stored = std::vector{
@@ -357,7 +373,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackColumnWidthSolver - falls back to preferred widths before a viewport exists",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto const specs = std::vector{
       fixed(rt::TrackField::Duration, 80),

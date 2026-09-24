@@ -602,7 +602,7 @@ namespace ao::library::test
     CHECK(library.libraryRevision(read) == kMaximumValidRevision);
   }
 
-  TEST_CASE("MusicLibrary - Track and manifest admission work grows linearly", "[library][unit][music-library][cost]")
+  TEST_CASE("MusicLibrary - Track and manifest admission work grows linearly", "[library][unit][music-library]")
   {
     auto const measure = [](std::size_t const trackCount)
     {
@@ -648,7 +648,7 @@ namespace ao::library::test
     CHECK(atTwoN.manifestPointReads == 2U * atN.manifestPointReads);
   }
 
-  TEST_CASE("MusicLibrary - open reports a storage fault as a Result", "[library][regression][music-library]")
+  TEST_CASE("MusicLibrary - open reports a storage fault as a Result", "[library][unit][music-library]")
   {
     // open() is the sole public recoverable constructor. Storage mutations
     // inside it raise TransactionFailure to leave the initialization
@@ -664,7 +664,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("MusicLibrary - injected validation read fault remains a recoverable open result",
-            "[library][regression][music-library][integrity]")
+            "[library][unit][music-library][integrity]")
   {
     auto const temp = ao::test::TempDir{};
     auto injection = lmdb::detail::ReadFaultInjection{MDB_PANIC};
@@ -892,7 +892,7 @@ namespace ao::library::test
     CHECK(optList->orderTrackIds()[0] == TrackId{999});
   }
 
-  TEST_CASE("MusicLibrary - validates Resource rows while accepting opaque orphan data",
+  TEST_CASE("MusicLibrary - rejects malformed or unreachable Resource descriptors",
             "[library][unit][music-library][integrity]")
   {
     auto const temp = ao::test::TempDir{};
@@ -950,6 +950,12 @@ namespace ao::library::test
       createRawIntegerRow(temp.path(), "resources", 44, resourceDescriptorRow(42, 0));
       requireCorruptLibrary(temp.path());
     }
+  }
+
+  TEST_CASE("MusicLibrary - accepts reachable Resource collision clusters", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
 
     SECTION("a long collision cluster is accepted")
     {
@@ -980,22 +986,26 @@ namespace ao::library::test
       auto read = library.readTransaction();
       CHECK(library.resources().reader(read).get(ResourceId{2}));
     }
+  }
 
-    SECTION("orphan Dictionary and unreferenced Resource rows are accepted")
-    {
-      // An unreferenced descriptor is the expected steady state of a rescanned
-      // library, not a fault: rows are append-only and nothing sweeps them.
-      auto const row = resourceDescriptorRow(1, 0);
-      createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("unused"));
-      createRawIntegerRow(temp.path(), "resources", 1, row);
+  TEST_CASE("MusicLibrary - accepts orphan Dictionary and unreferenced Resource rows",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
 
-      auto library = makeTestMusicLibrary(temp.path(), temp.path());
-      CHECK(library.dictionary().getOrDefault(DictionaryId{1}) == "unused");
-      auto read = library.readTransaction();
-      auto const optResource = library.resources().reader(read).get(ResourceId{1});
-      REQUIRE(optResource);
-      CHECK(deriveResourceId(optResource->digest) == ResourceId{1});
-    }
+    // An unreferenced descriptor is the expected steady state of a rescanned
+    // library, not a fault: rows are append-only and nothing sweeps them.
+    auto const row = resourceDescriptorRow(1, 0);
+    createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("unused"));
+    createRawIntegerRow(temp.path(), "resources", 1, row);
+
+    auto library = makeTestMusicLibrary(temp.path(), temp.path());
+    CHECK(library.dictionary().getOrDefault(DictionaryId{1}) == "unused");
+    auto read = library.readTransaction();
+    auto const optResource = library.resources().reader(read).get(ResourceId{1});
+    REQUIRE(optResource);
+    CHECK(deriveResourceId(optResource->digest) == ResourceId{1});
   }
 
   TEST_CASE("MusicLibrary - rejects invalid persisted manifest state", "[library][unit][music-library][integrity]")
@@ -1041,19 +1051,7 @@ namespace ao::library::test
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().metadataHeader()), MetadataHeader>);
   }
 
-  TEST_CASE("MusicLibrary - read and write transactions work", "[library][unit][music-library]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto ml = makeTestMusicLibrary(temp.path(), temp.path());
-
-    auto wtxn = writeTransaction(ml);
-    CHECK_NOTHROW(wtxn.commit());
-
-    auto rtxn = ml.readTransaction(); // validates read access to the database
-  }
-
-  TEST_CASE("WritableMusicLibrary - excludes another writer session until release",
-            "[library][unit][music-library][concurrency]")
+  TEST_CASE("WritableMusicLibrary - excludes another writer session until release", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -1092,8 +1090,7 @@ namespace ao::library::test
     CHECK(result.standardError.empty());
   }
 
-  TEST_CASE("WritableMusicLibrary - active transaction retains the writer session",
-            "[library][unit][music-library][concurrency]")
+  TEST_CASE("WritableMusicLibrary - active transaction retains the writer session", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -1115,7 +1112,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("WritableMusicLibrary - terminal transaction paths release the retained writer session",
-            "[library][unit][music-library][concurrency]")
+            "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -1162,38 +1159,40 @@ namespace ao::library::test
       CHECK(commitRes.error().code == Error::Code::IoError);
       REQUIRE(WritableMusicLibrary::acquire(library));
     }
+  }
 
-    SECTION("storage mutation failure unwinds and rolls back")
+  TEST_CASE("WritableMusicLibrary - storage mutation failure releases the writer session",
+            "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+    constexpr std::size_t kMapSize = std::size_t{256} * 1024;
+    auto smallLibrary = ao::test::requireValue(
+      MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
     {
-      constexpr std::size_t kMapSize = std::size_t{256} * 1024;
-      auto smallLibrary = ao::test::requireValue(
-        MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.pinnedMapBytes = kMapSize}));
-      {
-        auto writerRes = WritableMusicLibrary::acquire(smallLibrary);
-        REQUIRE(writerRes);
-        auto transaction = writerRes->writeTransaction();
-        // A resource row is a fixed 36 bytes now, so a dictionary entry is what
-        // still carries enough content to exhaust the whole map in one write.
-        auto const oversizedText = std::string(kMapSize * 4, 'x');
-        auto failureRes = transaction.apply(
-          [&transaction, &oversizedText](LibraryWrite& /*write*/) -> Result<>
+      auto writerRes = WritableMusicLibrary::acquire(smallLibrary);
+      REQUIRE(writerRes);
+      auto transaction = writerRes->writeTransaction();
+      // A resource row is a fixed 36 bytes now, so a dictionary entry is what
+      // still carries enough content to exhaust the whole map in one write.
+      auto const oversizedText = std::string(kMapSize * 4, 'x');
+      auto failureRes = transaction.apply(
+        [&transaction, &oversizedText](LibraryWrite& /*write*/) -> Result<>
+        {
+          auto idRes = physicalDictionary(transaction).intern(oversizedText);
+
+          if (!idRes)
           {
-            auto idRes = physicalDictionary(transaction).intern(oversizedText);
+            return std::unexpected{idRes.error()};
+          }
 
-            if (!idRes)
-            {
-              return std::unexpected{idRes.error()};
-            }
-
-            return {};
-          });
-        REQUIRE_FALSE(failureRes);
-        // A pinned map admits no growth, so a value larger than the whole map
-        // exhausts it, and that arrives as capacity rather than as plain IO.
-        CHECK(failureRes.error().code == Error::Code::StorageFull);
-      }
-
-      REQUIRE(WritableMusicLibrary::acquire(smallLibrary));
+          return {};
+        });
+      REQUIRE_FALSE(failureRes);
+      // A pinned map admits no growth, so a value larger than the whole map
+      // exhausts it, and that arrives as capacity rather than as plain IO.
+      CHECK(failureRes.error().code == Error::Code::StorageFull);
     }
+
+    REQUIRE(WritableMusicLibrary::acquire(smallLibrary));
   }
 } // namespace ao::library::test

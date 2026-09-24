@@ -100,9 +100,19 @@ namespace ao::uimodel::test
       auto tree4 = ryml::Tree{};
       REQUIRE(writeLayoutValue(tree4.rootref(), v4));
       auto const n4 = tree4.rootref();
-      CHECK(n4.is_seq());
-      CHECK(n4.num_children() == 2);
+      REQUIRE(n4.is_seq());
+      REQUIRE(n4.num_children() == 2);
       CHECK(yaml::scalarView(n4[0]) == "a");
+      CHECK(yaml::scalarView(n4[1]) == "b");
+
+      auto const emitted = ryml::emitrs_yaml<std::string>(tree4);
+      auto parsed = ryml::Tree{};
+      ryml::parse_in_arena(ryml::to_csubstr(emitted), &parsed);
+      auto decodedRes = readLayoutValue(parsed.rootref(), "test string list");
+      REQUIRE(decodedRes);
+      auto const* values = decodedRes->getIf<std::vector<std::string>>();
+      REQUIRE(values != nullptr);
+      CHECK(*values == std::vector<std::string>{"a", "b"});
     }
   }
 
@@ -126,7 +136,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->type == "box");
     CHECK(decodedRes->id == "main");
     CHECK(decodedRes->props.at("spacing").asInt() == 10);
-    CHECK(decodedRes->children.size() == 1);
+    REQUIRE(decodedRes->children.size() == 1);
     CHECK(decodedRes->children[0].type == "spacer");
   }
 
@@ -326,7 +336,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->asDouble() == 3.14);
   }
 
-  TEST_CASE("LayoutValue - coercion returns typed optional values", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - formats scalar alternatives as strings", "[uimodel][unit][layout][document]")
   {
     SECTION("asString coerces bool")
     {
@@ -348,7 +358,10 @@ namespace ao::uimodel::test
       auto const v = LayoutValue{3.14};
       CHECK(v.asString() == "3.14");
     }
+  }
 
+  TEST_CASE("LayoutValue - integer coercion requires complete numeric strings", "[uimodel][unit][layout][document]")
+  {
     SECTION("asInt coerces string")
     {
       auto const v = LayoutValue{std::string{"99"}};
@@ -367,7 +380,10 @@ namespace ao::uimodel::test
       auto const v = LayoutValue{std::string{"99px"}};
       CHECK(v.asInt(7) == 7);
     }
+  }
 
+  TEST_CASE("LayoutValue - boolean coercion handles text and integer alternatives", "[uimodel][unit][layout][document]")
+  {
     SECTION("asBool coerces string true/false")
     {
       auto const vt = LayoutValue{std::string{"true"}};
@@ -390,21 +406,26 @@ namespace ao::uimodel::test
       auto const v0 = LayoutValue{static_cast<std::int64_t>(0)};
       CHECK(v0.asBool() == false);
     }
+  }
 
-    SECTION("as bool preserves exact alternatives rather than coercing")
-    {
-      auto const storedFalse = LayoutValue{false};
-      auto const storedTrue = LayoutValue{true};
-      auto const numeric = LayoutValue{std::int64_t{1}};
-      auto const text = LayoutValue{std::string{"false"}};
-      CHECK_FALSE(storedFalse.as<bool>(true));
-      CHECK(storedTrue.as<bool>(false));
-      CHECK_FALSE(numeric.as<bool>(false));
-      CHECK(numeric.asBool(false));
-      CHECK(text.as<bool>(true));
-      CHECK_FALSE(text.asBool(true));
-    }
+  TEST_CASE("LayoutValue - typed boolean access does not coerce other alternatives",
+            "[uimodel][unit][layout][document]")
+  {
+    auto const storedFalse = LayoutValue{false};
+    auto const storedTrue = LayoutValue{true};
+    auto const numeric = LayoutValue{std::int64_t{1}};
+    auto const text = LayoutValue{std::string{"false"}};
+    CHECK_FALSE(storedFalse.as<bool>(true));
+    CHECK(storedTrue.as<bool>(false));
+    CHECK_FALSE(numeric.as<bool>(false));
+    CHECK(numeric.asBool(false));
+    CHECK(text.as<bool>(true));
+    CHECK_FALSE(text.asBool(true));
+  }
 
+  TEST_CASE("LayoutValue - double coercion handles numbers and complete numeric strings",
+            "[uimodel][unit][layout][document]")
+  {
     SECTION("asDouble coerces string")
     {
       auto const v = LayoutValue{std::string{"3.14"}};
@@ -429,27 +450,26 @@ namespace ao::uimodel::test
       auto const v = LayoutValue{static_cast<std::int64_t>(7)};
       CHECK(v.asDouble() == 7.0);
     }
+  }
 
-    SECTION("monostate returns defaults")
-    {
-      auto const v = LayoutValue{};
-      CHECK(v.asString("fallback") == "fallback");
-      CHECK(v.asInt(42) == 42);
-      CHECK(v.asBool(true) == true);
-      CHECK(v.asDouble(1.5) == 1.5);
-    }
+  TEST_CASE("LayoutValue - monostate returns defaults", "[uimodel][unit][layout][document]")
+  {
+    auto const v = LayoutValue{};
+    CHECK(v.asString("fallback") == "fallback");
+    CHECK(v.asInt(42) == 42);
+    CHECK(v.asBool(true) == true);
+    CHECK(v.asDouble(1.5) == 1.5);
+  }
 
-    SECTION("vector string unwrapped via getIf")
-    {
-      auto const v = LayoutValue{std::vector<std::string>{"a", "b", "c"}};
-      auto const* const vec = v.getIf<std::vector<std::string>>();
-      REQUIRE(vec != nullptr);
-      CHECK(vec->size() == 3);
-      CHECK((*vec)[0] == "a");
+  TEST_CASE("LayoutValue - getIf exposes only the stored vector alternative", "[uimodel][unit][layout][document]")
+  {
+    auto const v = LayoutValue{std::vector<std::string>{"a", "b", "c"}};
+    auto const* const vec = v.getIf<std::vector<std::string>>();
+    REQUIRE(vec != nullptr);
+    CHECK(*vec == std::vector<std::string>{"a", "b", "c"});
 
-      CHECK(v.getIf<bool>() == nullptr);
-      CHECK(v.getIf<std::string>() == nullptr);
-    }
+    CHECK(v.getIf<bool>() == nullptr);
+    CHECK(v.getIf<std::string>() == nullptr);
   }
 
   TEST_CASE("LayoutNode - property lookups distinguish props from layout props", "[uimodel][unit][layout][document]")
@@ -504,7 +524,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutModel - layout stateful node ids reject ambiguous runtime keys", "[uimodel][unit][regression]")
+  TEST_CASE("LayoutModel - layout stateful node ids reject ambiguous runtime keys", "[uimodel][unit][layout][document]")
   {
     SECTION("duplicate stateful ids are errors")
     {

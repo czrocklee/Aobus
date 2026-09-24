@@ -72,29 +72,44 @@ class TestAuditTest(unittest.TestCase):
 
         self.assertEqual(testaudit._audit_case(case), [])
 
-    def test_audit_accepts_five_tags_only_for_concurrency_stress(self):
+    def test_audit_accepts_independent_metadata_without_count_or_order_limits(self):
         case = testaudit.TestCase(
             path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
             line=12,
             name="AsyncRuntime - cancellation races safely with timer expiry",
-            tags=("runtime", "regression", "async", "concurrency", "stress"),
+            tags=("runtime", "unit", "async", "stress", "concurrency", "timer"),
         )
 
         self.assertEqual(testaudit._audit_case(case), [])
 
-    def test_audit_requires_stress_to_follow_concurrency(self):
+    def test_audit_requires_stress_to_include_concurrency(self):
         case = testaudit.TestCase(
             path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
             line=12,
             name="AsyncRuntime - cancellation races safely with timer expiry",
-            tags=("runtime", "regression", "async", "stress"),
+            tags=("runtime", "unit", "async", "stress"),
         )
 
         issues = testaudit._audit_case(case)
 
         self.assertEqual(
             [(issue.kind, issue.message) for issue in issues],
-            [("tag-order", "[stress] must be the final tag and immediately follow [concurrency]")],
+            [("tag-relation", "[stress] requires [concurrency]")],
+        )
+
+    def test_audit_rejects_retired_regression_tag(self):
+        case = testaudit.TestCase(
+            path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
+            line=12,
+            name="AsyncRuntime - cancellation races safely with timer expiry",
+            tags=("runtime", "unit", "async", "regression"),
+        )
+
+        issues = testaudit._audit_case(case)
+
+        self.assertEqual(
+            [(issue.kind, issue.message) for issue in issues],
+            [("tag-retired", "tag [regression] is retired")],
         )
 
     def test_audit_reports_legacy_name_and_tag_drift(self):
@@ -115,13 +130,41 @@ class TestAuditTest(unittest.TestCase):
                     'test name should use "Component - behavior" or the documented function-level form',
                 ),
                 ("tag-order", "first tag should be a known layer tag, got [playback]"),
-                ("tag-order", "second tag should be a known test type tag, got [audio]"),
-                (
-                    "tag-count",
-                    "prefer three or four tags; five are reserved for a final [concurrency][stress] pair",
-                ),
+                ("tag-order", "second tag must be [unit] or [integration]"),
+                ("tag-scope", "include exactly one [unit] or [integration] scope"),
             ],
         )
+
+    def test_scope_and_component_cannot_be_replaced_by_metadata(self):
+        for tags, expected in (
+            (("tui", "regression", "text"), {"tag-order", "tag-scope", "tag-retired"}),
+            (("tui", "workflow", "text"), {"tag-order", "tag-scope", "tag-retired"}),
+            (("tui", "smoke", "text"), {"tag-order", "tag-scope", "tag-retired"}),
+            (("tui", "unit", "text", "integration"), {"tag-scope"}),
+            (("tui", "unit", "regression"), {"tag-component", "tag-retired"}),
+            (("tui", "unit", ".manual"), {"tag-component"}),
+            (("tui", "unit"), {"tag-component"}),
+            (("tui", "unit", "text", "text"), {"tag-duplicate"}),
+        ):
+            with self.subTest(tags=tags):
+                case = testaudit.TestCase(Path("/repo/TextTest.cpp"), 1, "Text - preserves line breaks", tags)
+                self.assertEqual({issue.kind for issue in testaudit._audit_case(case)}, expected)
+
+    def test_parse_template_test_cases_preserves_scope(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "ScalarTest.cpp"
+            path.write_text(
+                'TEMPLATE_TEST_CASE("Scalar - round trips", "[utility][unit][scalar][round-trip]", float, double) {}',
+                encoding="utf-8",
+            )
+            cases = testaudit.parse_test_cases(path)
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0].tags, ("utility", "unit", "scalar", "round-trip"))
+        self.assertEqual(testaudit._audit_case(cases[0]), [])
+
+    def test_repository_test_tags_follow_the_current_contract(self):
+        issues = testaudit.audit_files(testaudit.discover_test_files())
+        self.assertEqual(issues, [], "\n".join(issue.format() for issue in issues))
 
     def test_resolve_files_ignores_lint_fixtures(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -140,7 +183,7 @@ class TestAuditTest(unittest.TestCase):
             self.assertEqual(testaudit.resolve_files([str(objective_cpp)], root), [objective_cpp])
             self.assertEqual(testaudit.resolve_files([str(root / "test")], root), [real, objective_cpp])
             issues = testaudit.audit_paths([str(objective_cpp)], root)
-            self.assertEqual({issue.kind for issue in issues}, {"name", "tag-order"})
+            self.assertEqual({issue.kind for issue in issues}, {"name", "tag-order", "tag-scope", "tag-component"})
             self.assertEqual({issue.path for issue in issues}, {objective_cpp})
 
         self.assertEqual(files, [real, objective_cpp])

@@ -891,6 +891,8 @@ namespace ao::rt::test
     auto const germanPolicyPtr = requireIcuPolicy("de-DE");
     auto const japanesePolicyPtr = requireIcuPolicy("ja-JP");
 
+    // Existing first-use rows retain their report identities; with warm-ups or
+    // prior ICU use in this process, they do not measure process-cold latency.
     measurements.push_back(measureCompletionAlias("icu-transliteration",
                                                   "first-kana-use",
                                                   "kana-single",
@@ -1144,6 +1146,34 @@ namespace ao::rt::test
     REQUIRE(measurements.size() == expectedMeasurementCount);
   }
 
+  // Run this case alone in a fresh process with --samples 1 --warmups 0.
+  // Select kana/han in separate invocations; ICU has no reset between samples.
+  TEST_CASE("PerformanceReview - first completion alias transform in an isolated process",
+            "[perf][unit][completion-alias][audit-cold-alias]")
+  {
+    auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 1, 1);
+    auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", 0, 0);
+    REQUIRE(samples == 1);
+    REQUIRE(warmups == 0);
+    auto const input = environmentText("AOBUS_PERF_COLD_ALIAS_INPUT", "kana");
+    REQUIRE((input == "kana" || input == "han"));
+    auto const text = input == "kana" ? std::string_view{"宇多田ヒカル"} : std::string_view{"周杰倫"};
+    auto const* const dataset = input == "kana" ? "kana-single" : "han-single";
+    auto const measurements = std::vector{measureCompletionAlias("icu-transliteration",
+                                                                 std::format("process-cold-{}-use", input),
+                                                                 dataset,
+                                                                 1,
+                                                                 warmups,
+                                                                 samples,
+                                                                 [text]
+                                                                 {
+                                                                   auto policyPtr =
+                                                                     i18n::createIcuCompletionAliasPolicy();
+                                                                   return deriveCompletionAliases(*policyPtr, text);
+                                                                 })};
+    writeReport(measurements, warmups, samples);
+  }
+
   TEST_CASE("PerformanceReview - query expression admission and recursive phases", "[perf][unit][audit-query]")
   {
     auto const count = configuredCount("AOBUS_AUDIT_QUERY_ATOMS", 128, 1);
@@ -1300,7 +1330,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PerformanceReview - graph bursts retain one latest payload until owner delivery",
-            "[perf][unit][audit-observation]")
+            "[perf][unit][audit-observation][concurrency]")
   {
     auto const count = configuredCount("AOBUS_AUDIT_OBSERVATIONS", 1000, 1);
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", kDefaultSamples, 1);

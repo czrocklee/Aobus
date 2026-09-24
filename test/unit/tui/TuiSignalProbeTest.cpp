@@ -15,7 +15,7 @@
 namespace ao::tui::test
 {
   TEST_CASE("TUI signal probe - watcher routes handleable signals outside the unit-test process",
-            "[tui][integration][signal-exit][concurrency]")
+            "[tui][integration][signal-exit]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_tui_signal_probe");

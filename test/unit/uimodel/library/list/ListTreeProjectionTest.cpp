@@ -14,7 +14,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("buildListTreeProjection projects nested list rows", "[uimodel][unit][library][list]")
+  TEST_CASE("buildListTreeProjection projects nested list rows", "[uimodel][unit][list]")
   {
     auto const parentId = ListId{2};
     auto const childId = ListId{3};
@@ -25,16 +25,26 @@ namespace ao::uimodel::test
 
     CHECK(projection.rootIds == std::vector{rt::kAllTracksListId, parentId});
 
+    REQUIRE(projection.rowsById.size() == 3);
     auto const& allTracks = projection.rowsById.at(rt::kAllTracksListId);
+    CHECK(allTracks.id == rt::kAllTracksListId);
+    CHECK(allTracks.isSystem);
+    CHECK(allTracks.parentId == kInvalidListId);
+    CHECK(allTracks.localExpression.empty());
     CHECK(allTracks.name == "All Tracks");
     CHECK(allTracks.childIds.empty());
 
     auto const& parent = projection.rowsById.at(parentId);
+    CHECK(parent.id == parentId);
+    CHECK_FALSE(parent.isSystem);
+    CHECK(parent.localExpression.empty());
     CHECK(parent.parentId == kInvalidListId);
     CHECK(parent.name == "Parent");
     CHECK(parent.childIds == std::vector{childId});
 
     auto const& child = projection.rowsById.at(childId);
+    CHECK(child.id == childId);
+    CHECK_FALSE(child.isSystem);
     CHECK(child.parentId == parentId);
     CHECK(child.name == "Smart Child");
     CHECK(child.localExpression == "genre:rock");
@@ -50,7 +60,7 @@ namespace ao::uimodel::test
     CHECK(projection.rowsById.at(rt::kAllTracksListId).name == "Alle Titel");
   }
 
-  TEST_CASE("buildListTreeProjection places invalid parents beside All Tracks", "[uimodel][unit][library][list]")
+  TEST_CASE("buildListTreeProjection places invalid parents beside All Tracks", "[uimodel][unit][list]")
   {
     auto const orphanId = ListId{4};
     auto const selfParentId = ListId{5};
@@ -66,7 +76,7 @@ namespace ao::uimodel::test
     CHECK(projection.rowsById.at(selfParentId).parentId == kInvalidListId);
   }
 
-  TEST_CASE("buildListTreeProjection breaks parent cycles at the lowest cycle id", "[uimodel][unit][library][list]")
+  TEST_CASE("buildListTreeProjection breaks parent cycles at the lowest cycle id", "[uimodel][unit][list]")
   {
     auto const descendantId = ListId{2};
     auto const lowerCycleId = ListId{4};
@@ -88,7 +98,7 @@ namespace ao::uimodel::test
     CHECK(projection.rowsById.at(descendantId).parentId == higherCycleId);
   }
 
-  TEST_CASE("buildListTreeProjection orders children by list id", "[uimodel][unit][library][list]")
+  TEST_CASE("buildListTreeProjection orders children by list id", "[uimodel][unit][list]")
   {
     auto const parentId = ListId{2};
     auto const projection =

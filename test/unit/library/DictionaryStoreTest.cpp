@@ -14,16 +14,17 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <barrier>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <latch>
 #include <span>
 #include <string>
 #include <string_view>
@@ -104,6 +105,13 @@ namespace ao::library::test
     CHECK(res.error().message.contains("Dictionary text"));
     REQUIRE(transaction.commit());
     CHECK(library.dictionary().size() == 0);
+
+    auto validTransaction = writeTransaction(library);
+    auto const validId = requireIntern(validTransaction, "valid");
+    REQUIRE(validId == DictionaryId{1});
+    REQUIRE(validTransaction.commit());
+    CHECK(library.dictionary().get(validId) == "valid");
+    CHECK(library.dictionary().findId("valid") == validId);
   }
 
   TEST_CASE("DictionaryStore - discards an uncommitted overlay and reuses its ID", "[library][unit][dictionary]")
@@ -270,7 +278,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("DictionaryStore - readers observe complete committed publications",
-            "[library][unit][dictionary][concurrency]")
+            "[library][unit][dictionary][concurrency][stress]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
@@ -278,44 +286,16 @@ namespace ao::library::test
     auto const stableId = requireIntern(seed, "stable");
     REQUIRE(seed.commit());
 
-    auto start = std::barrier{4};
+    constexpr std::ptrdiff_t kWorkerCount = 4;
+    auto ready = std::latch{kWorkerCount};
+    auto start = std::latch{1};
     auto failed = std::atomic{false};
     auto writerDone = std::atomic{false};
 
-    auto writer = std::jthread{
-      [&]
-      {
-        start.arrive_and_wait();
-
-        for (std::int32_t batch = 0; batch < 128; ++batch)
-        {
-          auto transaction = writeTransaction(library);
-
-          for (std::int32_t index = 0; index < 8; ++index)
-          {
-            auto const res =
-              physicalDictionary(transaction).intern("batch_" + std::to_string(batch) + "_" + std::to_string(index));
-
-            if (!res)
-            {
-              failed.store(true, std::memory_order_relaxed);
-              break;
-            }
-          }
-
-          if (failed.load(std::memory_order_relaxed) || !transaction.commit())
-          {
-            failed.store(true, std::memory_order_relaxed);
-            break;
-          }
-        }
-
-        writerDone.store(true, std::memory_order_release);
-      }};
-
     auto reader = [&]
     {
-      start.arrive_and_wait();
+      ready.count_down();
+      start.wait();
       auto context = DictionaryReadContext{library.dictionary()};
       std::int32_t probeBatch = 0;
 
@@ -359,10 +339,51 @@ namespace ao::library::test
       }
     };
 
-    auto reader1 = std::jthread{reader};
-    auto reader2 = std::jthread{reader};
-    auto reader3 = std::jthread{reader};
+    auto writer = std::jthread{};
+    auto reader1 = std::jthread{};
+    auto reader2 = std::jthread{};
+    auto reader3 = std::jthread{};
+    // Release already-created workers before their destructors join if a later
+    // thread construction throws.
+    auto releaseWorkers = utility::ScopedRegistration{[&start] { start.count_down(); }};
 
+    writer = std::jthread{
+      [&]
+      {
+        ready.count_down();
+        start.wait();
+
+        for (std::int32_t batch = 0; batch < 128; ++batch)
+        {
+          auto transaction = writeTransaction(library);
+
+          for (std::int32_t index = 0; index < 8; ++index)
+          {
+            auto const res =
+              physicalDictionary(transaction).intern("batch_" + std::to_string(batch) + "_" + std::to_string(index));
+
+            if (!res)
+            {
+              failed.store(true, std::memory_order_relaxed);
+              break;
+            }
+          }
+
+          if (failed.load(std::memory_order_relaxed) || !transaction.commit())
+          {
+            failed.store(true, std::memory_order_relaxed);
+            break;
+          }
+        }
+
+        writerDone.store(true, std::memory_order_release);
+      }};
+    reader1 = std::jthread{reader};
+    reader2 = std::jthread{reader};
+    reader3 = std::jthread{reader};
+
+    ready.wait();
+    releaseWorkers.reset();
     writer.join();
     reader1.join();
     reader2.join();

@@ -60,7 +60,8 @@ namespace ao::query::test
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
       plan.instructions.push_back({.op = OpCode::Like, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 1});
-      return evaluator.matchesFullPlan(plan, track.view());
+      plan.accessProfile = AccessProfile::ColdOnly;
+      return evaluator.matchesFullPlan(plan, track.coldOnlyView());
     };
 
     CHECK(matches("Cafe\u0301"));
@@ -100,6 +101,10 @@ namespace ao::query::test
     auto track2 = TestTrack{"Hello"};
     result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
+
+    auto track3 = TestTrack{"Goodbye"};
+    result = evaluator.matchesFullPlan(plan, track3.view());
+    CHECK(result == true);
   }
 
   TEST_CASE("PlanEvaluator - compares titles below a string bound", "[query][unit][plan-evaluator]")

@@ -8,7 +8,7 @@
 namespace ao::gtk::test
 {
   TEST_CASE("recordWindowGeometry - maximized checkpoint retains current-session normal geometry",
-            "[gtk][regression][app][geometry]")
+            "[gtk][unit][app][geometry]")
   {
     auto state = WindowState{.width = 720, .height = 540, .maximized = false};
 

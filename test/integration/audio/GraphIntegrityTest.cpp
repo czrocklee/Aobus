@@ -73,11 +73,8 @@ namespace ao::audio::test
   {
     auto const testFile = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "basic_metadata.flac";
 
-    if (!std::filesystem::exists(testFile))
-    {
-      WARN("Test file not found, skipping Graph Integrity test");
-      return;
-    }
+    INFO("Required audio fixture: " << testFile);
+    REQUIRE(std::filesystem::is_regular_file(testFile));
 
     auto backendPtr = std::make_unique<NullBackend>();
     auto const device = Device{.id = DeviceId{"null"},

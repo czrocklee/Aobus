@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <span>
@@ -25,9 +26,9 @@ namespace ao::audio::backend::detail::test
     CHECK(prepared.positionFrames == 1);
     CHECK(prepared.underrun);
     CHECK_FALSE(prepared.drained);
-    CHECK(buffer[7] == std::byte{0x7F});
-    CHECK(buffer[8] == std::byte{0});
-    CHECK(buffer[15] == std::byte{0});
+    auto expected = std::array<std::byte, 16>{};
+    std::fill_n(expected.begin(), 8, std::byte{0x7F});
+    CHECK(buffer == expected);
   }
 
   TEST_CASE("prepareAudioBackendRenderBuffer silences a drained suffix without reporting underrun",
@@ -44,15 +45,17 @@ namespace ao::audio::backend::detail::test
     CHECK(prepared.positionFrames == 1);
     CHECK_FALSE(prepared.underrun);
     CHECK(prepared.drained);
-    CHECK(buffer[3] == std::byte{0x3A});
-    CHECK(buffer[4] == std::byte{0});
-    CHECK(buffer[11] == std::byte{0});
+    auto expected = std::array<std::byte, 12>{};
+    std::fill_n(expected.begin(), 4, std::byte{0x3A});
+    CHECK(buffer == expected);
   }
 
   TEST_CASE("prepareAudioBackendRenderBuffer clips an overreported result to the native buffer",
             "[audio][unit][render-buffer]")
   {
     auto buffer = std::array<std::byte, 8>{};
+    buffer.fill(std::byte{0x6C});
+    auto const original = buffer;
 
     auto const prepared = prepareAudioBackendRenderBuffer(
       buffer, 4, {.bytesWritten = 40, .positionFrameOffset = 0, .positionFrames = 9, .drained = false});
@@ -61,6 +64,8 @@ namespace ao::audio::backend::detail::test
     CHECK(prepared.framesProvided == 2);
     CHECK(prepared.positionFrames == 2);
     CHECK_FALSE(prepared.underrun);
+    CHECK_FALSE(prepared.drained);
+    CHECK(buffer == original);
   }
 
   TEST_CASE("prepareAudioBackendRenderBuffer rejects a zero frame size without touching storage",
@@ -68,6 +73,7 @@ namespace ao::audio::backend::detail::test
   {
     auto buffer = std::array<std::byte, 4>{};
     buffer.fill(std::byte{0x55});
+    auto const original = buffer;
 
     auto const prepared = prepareAudioBackendRenderBuffer(buffer, 0, {.bytesWritten = 4, .drained = true});
 
@@ -76,7 +82,6 @@ namespace ao::audio::backend::detail::test
     CHECK(prepared.positionFrames == 0);
     CHECK_FALSE(prepared.underrun);
     CHECK(prepared.drained);
-    CHECK(buffer.front() == std::byte{0x55});
-    CHECK(buffer.back() == std::byte{0x55});
+    CHECK(buffer == original);
   }
 } // namespace ao::audio::backend::detail::test

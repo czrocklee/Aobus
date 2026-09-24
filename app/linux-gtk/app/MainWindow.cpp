@@ -201,8 +201,9 @@ namespace ao::gtk
         return;
       }
 
-      std::ignore = navigateToList(restoredRes->sourceListId, runtime);
-      runtime.playback().commands().revealTrack(restoredRes->trackId, rt::kInvalidViewId, restoredRes->sourceListId);
+      auto const navigationRes = navigateToList(restoredRes->sourceListId, runtime);
+      runtime.playback().commands().revealTrack(
+        restoredRes->trackId, navigationRes.value_or(rt::kInvalidViewId), restoredRes->sourceListId);
     }
 
     GtkLayoutStateStore layoutStateStore;

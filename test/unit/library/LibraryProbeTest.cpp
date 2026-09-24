@@ -20,8 +20,10 @@ namespace ao::library::test
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
     REQUIRE_FALSE(executablePath.empty());
+    auto const expectations = libraryFatalProbeExpectations();
+    REQUIRE(expectations.size() == 31);
 
-    for (auto const& expectation : libraryFatalProbeExpectations())
+    for (auto const& expectation : expectations)
     {
       INFO("probe: " << expectation.scenario);
       auto optScratch = std::optional<ao::test::TempDir>{};
@@ -60,8 +62,10 @@ namespace ao::library::test
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
     REQUIRE_FALSE(executablePath.empty());
+    auto const expectations = libraryProbeObservationExpectations();
+    REQUIRE(expectations.size() == 2);
 
-    for (auto const& expectation : libraryProbeObservationExpectations())
+    for (auto const& expectation : expectations)
     {
       INFO("probe: " << expectation.scenario);
       auto optScratch = std::optional<ao::test::TempDir>{};

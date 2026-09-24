@@ -82,13 +82,25 @@ namespace ao::rt::test
     auto const tempDir = ao::test::TempDir{};
     auto store = ConfigStore{tempDir.path() / "config.yaml"};
 
-    auto prefs = AppPrefsState{.lastLayoutPreset = "", .lastThemePreset = "seeded"};
+    auto prefs = AppPrefsState{
+      .preferredOutputSelection = makeSelection("seeded-preference-device"),
+      .lastLayoutPreset = "seeded-layout",
+      .lastThemePreset = "seeded-theme",
+    };
+    auto const prefsBefore = prefs;
     loadAppPrefs(store, prefs);
-    CHECK(prefs.lastThemePreset == "seeded");
+    CHECK(prefs.preferredOutputSelection == prefsBefore.preferredOutputSelection);
+    CHECK(prefs.lastLayoutPreset == prefsBefore.lastLayoutPreset);
+    CHECK(prefs.lastThemePreset == prefsBefore.lastThemePreset);
 
-    auto session = AppSessionState{.lastLibraryPath = "/seeded"};
+    auto session = AppSessionState{
+      .lastLibraryPath = "/seeded/library",
+      .lastOutputSelection = makeSelection("seeded-session-device"),
+    };
+    auto const sessionBefore = session;
     loadAppSession(store, session);
-    CHECK(session.lastLibraryPath == "/seeded");
+    CHECK(session.lastLibraryPath == sessionBefore.lastLibraryPath);
+    CHECK(session.lastOutputSelection == sessionBefore.lastOutputSelection);
   }
 
   TEST_CASE("AppState - a document written by another build stays readable", "[runtime][unit][config]")
@@ -138,12 +150,24 @@ session:
 )");
     auto store = ConfigStore{configPath};
 
-    auto prefs = AppPrefsState{.lastLayoutPreset = "", .lastThemePreset = "seeded"};
+    auto prefs = AppPrefsState{
+      .preferredOutputSelection = makeSelection("seeded-preference-device"),
+      .lastLayoutPreset = "seeded-layout",
+      .lastThemePreset = "seeded-theme",
+    };
+    auto const prefsBefore = prefs;
     loadAppPrefs(store, prefs);
-    CHECK(prefs.lastThemePreset == "seeded");
+    CHECK(prefs.preferredOutputSelection == prefsBefore.preferredOutputSelection);
+    CHECK(prefs.lastLayoutPreset == prefsBefore.lastLayoutPreset);
+    CHECK(prefs.lastThemePreset == prefsBefore.lastThemePreset);
 
-    auto session = AppSessionState{};
+    auto session = AppSessionState{
+      .lastLibraryPath = "/seeded/library",
+      .lastOutputSelection = makeSelection("seeded-session-device"),
+    };
+    auto const sessionOutputBefore = session.lastOutputSelection;
     loadAppSession(store, session);
     CHECK(session.lastLibraryPath == "/music");
+    CHECK(session.lastOutputSelection == sessionOutputBefore);
   }
 } // namespace ao::rt::test

@@ -8,9 +8,11 @@
 #include <ao/uimodel/input/KeymapModel.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <glibmm/ustring.h>
 #include <gtkmm/application.h>
 
 #include <string>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -29,10 +31,12 @@ namespace ao::gtk::test
     auto const appPtr = ensureGtkApplication();
     Gtk::Application& application = *appPtr;
 
-    auto model = uimodel::KeymapModel{uimodel::KeymapBindings{{"applicator.install", {chord("Ctrl+P")}}}};
+    auto model =
+      uimodel::KeymapModel{uimodel::KeymapBindings{{"applicator.install", {chord("Ctrl+P"), chord("Media:Next")}}}};
     applyKeymapAccelerators(application, model);
 
-    CHECK_FALSE(application.get_accels_for_action("win.applicator.install").empty());
+    auto const expected = std::vector<Glib::ustring>{"<Control>p", "AudioNext"};
+    CHECK(application.get_accels_for_action("win.applicator.install") == expected);
   }
 
   TEST_CASE("applyKeymapAccelerators clears accelerators dropped from the keymap", "[gtk][unit][app][accel]")

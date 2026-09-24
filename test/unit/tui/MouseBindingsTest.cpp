@@ -41,7 +41,7 @@ namespace ao::tui::test
     CHECK_FALSE(bindings.eventAt(mouse));
   }
 
-  TEST_CASE("MouseBindings - scroll frames retire off-screen row targets", "[tui][regression][mouse][render]")
+  TEST_CASE("MouseBindings - scroll frames retire off-screen row targets", "[tui][unit][mouse][render]")
   {
     using namespace ftxui;
     auto boxes = std::array<Box, 20>{};
@@ -67,7 +67,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("MouseBindings - fitting scroll panel keeps all four border corners", "[tui][regression][mouse][render]")
+  TEST_CASE("MouseBindings - fitting scroll panel keeps all four border corners", "[tui][unit][mouse][render]")
   {
     using namespace ftxui;
     auto regions = PanelMouseRegions{};
@@ -94,7 +94,13 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(mousePanel(vbox(std::move(rows)) | border, regions, 29), 20, 5);
     CHECK(rendered.text.contains("29"));
-    CHECK_FALSE(rendered.text.contains("×"));
+    auto const optFirstVisible = findTextCells(rendered.screen, "26");
+    auto const optLastVisible = findTextCells(rendered.screen, "29");
+    REQUIRE(optFirstVisible);
+    REQUIRE(optLastVisible);
+    CHECK(optFirstVisible->y_min == 0);
+    CHECK(optLastVisible->y_min == 3);
+    CHECK_FALSE(findTextCells(rendered.screen, "25"));
     CHECK(regions.box.y_min == 0);
     CHECK(regions.box.y_max == 4);
     CHECK(regions.contentBox.y_max - regions.contentBox.y_min > 5);

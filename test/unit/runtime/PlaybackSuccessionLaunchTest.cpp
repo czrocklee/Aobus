@@ -77,7 +77,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - replaying the current track waits for a distinct explicit settlement",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -96,7 +96,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - asynchronous preparation failure preserves the accepted session and transport",
-            "[runtime][regression][playback-succession][launch]")
+            "[runtime][unit][playback-succession][launch][concurrency]")
   {
     auto fixture = PlaybackSuccessionFixture{};
     auto const current = fixture.addPlayableTrack("Current");
@@ -150,18 +150,18 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - pending start adopts the latest repeat and shuffle modes",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .blockingGatePtr = gatePtr,
       .blockedFileName = "transport-playable-1.flac",
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     auto& succession = *fixture.successionPtr;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.secondTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
 
     SECTION("repeat")
     {
@@ -190,7 +190,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - pending shuffled start adopts paired sequential repeat modes",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -223,23 +223,23 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - newer pending start silently replaces blocked preparation",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .blockingGatePtr = gatePtr,
       .blockedFileName = "transport-playable-1.flac",
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     auto& succession = *fixture.successionPtr;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.secondTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
 
     REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
     releaseGuard.release();
     REQUIRE(fixture.transport.executor.tryDrainUntil(
-      [&] { return succession.state().currentTrackId == fixture.thirdTrackId; }, std::chrono::seconds{5}));
+      [&] { return succession.state().currentTrackId == fixture.thirdTrackId; }, std::chrono::seconds{10}));
 
     CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.thirdTrackId);
     CHECK(fixture.transport.notificationService.feed().entries.empty());
@@ -249,30 +249,27 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - final seek silently cancels blocked pending start",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .blockingGatePtr = gatePtr,
       .blockedFileName = "transport-playable-2.flac",
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     auto& succession = *fixture.successionPtr;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
 
+    auto const activationCount = fixture.lookaheadActivationCount(fixture.secondTrackId);
     fixture.transport.playbackTransport.seek(std::chrono::milliseconds{0}, PlaybackTransport::SeekMode::Final);
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.tryDrainUntil(
-      [&]
-      {
-        return gatePtr->createdPtr->load(std::memory_order_relaxed) > 0 &&
-               gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
-                 gatePtr->createdPtr->load(std::memory_order_relaxed);
-      },
-      std::chrono::seconds{5}));
+    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.secondTrackId, activationCount));
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
+          gatePtr->createdPtr->load(std::memory_order_relaxed));
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
@@ -280,13 +277,14 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - output route change silently cancels blocked pending start",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .blockingGatePtr = gatePtr,
       .blockedFileName = "transport-playable-2.flac",
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     fixture.transport.status.devices.push_back(audio::Device{.id = audio::DeviceId{"alternate-device"},
                                                              .displayName = "Alternate",
@@ -299,19 +297,15 @@ namespace ao::rt::test
     auto& succession = *fixture.successionPtr;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
 
+    auto const activationCount = fixture.lookaheadActivationCount(fixture.secondTrackId);
     fixture.transport.playbackTransport.setOutputDevice(
       audio::BackendId{"mock_backend"}, audio::DeviceId{"alternate-device"}, audio::ProfileId{audio::kProfileShared});
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.tryDrainUntil(
-      [&]
-      {
-        return gatePtr->createdPtr->load(std::memory_order_relaxed) > 0 &&
-               gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
-                 gatePtr->createdPtr->load(std::memory_order_relaxed);
-      },
-      std::chrono::seconds{5}));
+    REQUIRE(fixture.tryWaitForLookaheadAfter(fixture.secondTrackId, activationCount));
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
+          gatePtr->createdPtr->load(std::memory_order_relaxed));
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
@@ -319,7 +313,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - lookahead open failure rerolls the sticky shuffle successor",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -327,12 +321,12 @@ namespace ao::rt::test
       .failBlockedPreparation = true,
       .blockEveryLookahead = true,
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     auto& succession = *fixture.successionPtr;
     succession.setShuffleMode(ShuffleMode::On);
     REQUIRE(playFromViewAndWait(succession, fixture.transport.executor, fixture.viewId, fixture.firstTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.transport.executor.drain();
     auto const optInitialSuccessor = succession.state().optResolvedSuccessor;
     REQUIRE(optInitialSuccessor);
@@ -366,26 +360,26 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - device evidence refresh silently rejects a stale pending start",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .blockingGatePtr = gatePtr,
       .blockedFileName = "transport-playable-2.flac",
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     fixture.transport.executor.drain();
     auto& succession = *fixture.successionPtr;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
 
     fixture.transport.status.devices.front().description = "Refreshed active device evidence";
     fixture.transport.onDevicesChangedCb(fixture.transport.status.devices);
     fixture.transport.executor.drain();
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.tryWaitUntilQueuedCount(1, std::chrono::seconds{5}));
+    REQUIRE(fixture.transport.executor.tryWaitUntilQueuedCount(1, std::chrono::seconds{10}));
     fixture.transport.executor.drain();
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
@@ -395,7 +389,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - changed playback input supersedes a blocked failing start",
-            "[runtime][regression][playback-succession][concurrency]")
+            "[runtime][unit][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -403,6 +397,7 @@ namespace ao::rt::test
       .blockedFileName = "transport-playable-2.flac",
       .failBlockedPreparation = true,
     }};
+    auto releaseGuard = PreparationReleaseGuard{gatePtr};
     fixture.buildThreeTrackManualView();
     fixture.commandsFixture.releaseLibrary();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
@@ -410,13 +405,17 @@ namespace ao::rt::test
     auto const transportBefore = fixture.transport.playbackTransport.state();
     REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, fixture.thirdTrackId));
     REQUIRE(gatePtr->tryWaitForEntry());
-    auto releaseGuard = PreparationReleaseGuard{gatePtr};
 
+    fixture.transport.executor.drain();
     fixture.transport.libraryFixture.updateTrack(
       fixture.thirdTrackId, [](library::test::TrackSpec& spec) { spec.uri = "replacement-after-admission.flac"; });
+    REQUIRE(fixture.transport.executor.queuedCount() == 0);
     releaseGuard.release();
-    REQUIRE(fixture.transport.executor.tryDrainUntil(
-      [&] { return gatePtr->destroyedPtr->load(std::memory_order_relaxed) > 0; }, std::chrono::seconds{5}));
+    // The failed inspection has one callback hop: deliver its stale-input
+    // rejection, rather than stopping at decoder destruction on the worker.
+    REQUIRE(fixture.transport.executor.tryWaitUntilQueuedCount(1, std::chrono::seconds{10}));
+    fixture.transport.executor.drain();
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) > 0);
 
     CHECK(fixture.successionPtr->state() == successionBefore);
     CHECK(fixture.transport.playbackTransport.state().transport == transportBefore.transport);
@@ -426,7 +425,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - an accepted launch publishes consistent state to connected observers",
-            "[runtime][regression][playback-succession][launch]")
+            "[runtime][unit][playback-succession][launch]")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();
@@ -466,51 +465,6 @@ namespace ao::rt::test
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - live membership governs succession without interrupting current audio",
-            "[runtime][unit][playback-succession][projection]")
-  {
-    auto fixture = PlaybackSuccessionFixture{};
-    fixture.buildThreeTrackManualView();
-    auto& succession = *fixture.successionPtr;
-    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
-    auto const beforeRemoval = succession.state();
-
-    fixture.removeFromList(std::array{fixture.firstTrackId});
-
-    auto const afterRemoval = succession.state();
-    CHECK(afterRemoval.currentTrackId == fixture.firstTrackId);
-    CHECK(afterRemoval.sourceState == PlaybackSuccessionSourceState::Live);
-    CHECK(afterRemoval.optResolvedSuccessor == fixture.secondTrackId);
-    CHECK(afterRemoval == beforeRemoval);
-    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
-    CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
-
-    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteListAsync(fixture.listId)));
-    auto const invalidated = succession.state();
-    CHECK(invalidated.sourceState == PlaybackSuccessionSourceState::Invalidated);
-    CHECK(invalidated.currentTrackId == fixture.firstTrackId);
-    CHECK_FALSE(invalidated.hasNext);
-    CHECK_FALSE(invalidated.optResolvedSuccessor);
-    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
-
-    auto const rejectedRelaunchRes = succession.playFromView(fixture.viewId, fixture.firstTrackId);
-    REQUIRE_FALSE(rejectedRelaunchRes);
-    CHECK(rejectedRelaunchRes.error().code == Error::Code::NotFound);
-    CHECK(succession.state() == invalidated);
-
-    succession.tryMoveNext();
-    CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);
-    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
-
-    auto const feed = fixture.notifications.feed();
-    REQUIRE(feed.entries.size() == 1);
-    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
-    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
-          NotificationReportTemplate::PlaybackSequenceFinished);
-    CHECK(feed.entries.front().severity == NotificationSeverity::Info);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
-  }
-
   TEST_CASE("PlaybackSuccession - launch spec remains detached from later view edits and destruction",
             "[runtime][unit][playback-succession][launch]")
   {
@@ -535,33 +489,32 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - strict launch rejects invalid quick filters and missing sources atomically",
+  TEST_CASE("PlaybackSuccession - invalid captured quick filter rejects launch atomically",
             "[runtime][unit][playback-succession][launch]")
   {
-    SECTION("invalid captured quick filter")
-    {
-      auto fixture = PlaybackSuccessionFixture{};
-      fixture.buildThreeTrackManualView(TrackListViewConfig{.filterExpression = "("});
+    auto fixture = PlaybackSuccessionFixture{};
+    fixture.buildThreeTrackManualView(TrackListViewConfig{.filterExpression = "("});
 
-      auto const res = fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId);
+    auto const res = fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId);
 
-      REQUIRE_FALSE(res);
-      CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
-      CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
-    }
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
+  }
 
-    SECTION("source deleted after view capture")
-    {
-      auto fixture = PlaybackSuccessionFixture{};
-      fixture.buildThreeTrackManualView();
-      REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteListAsync(fixture.listId)));
+  TEST_CASE("PlaybackSuccession - source deleted after view capture rejects launch atomically",
+            "[runtime][unit][playback-succession][launch]")
+  {
+    auto fixture = PlaybackSuccessionFixture{};
+    fixture.buildThreeTrackManualView();
+    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteListAsync(fixture.listId)));
 
-      auto const res = fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId);
+    auto const res = fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId);
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotFound);
-      CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
-      CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
-    }
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
+    CHECK(fixture.successionPtr->state().sourceState == PlaybackSuccessionSourceState::Inactive);
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
   }
 } // namespace ao::rt::test

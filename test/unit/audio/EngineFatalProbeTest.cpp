@@ -11,8 +11,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Audio fatal invariants - subprocess probes abort with owned diagnostics",
-            "[audio][integration][engine][concurrency]")
+  TEST_CASE("Audio fatal invariants - subprocess probes abort with owned diagnostics", "[audio][integration][engine]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_audio_fatal_probe");

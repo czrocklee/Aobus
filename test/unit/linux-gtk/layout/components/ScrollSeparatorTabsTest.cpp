@@ -13,6 +13,7 @@
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/separator.h>
 #include <gtkmm/stack.h>
+#include <gtkmm/stackpage.h>
 
 #include <cstdint>
 #include <string>
@@ -21,8 +22,8 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("ScrollSeparatorTabs - scroll, separator, and tabs components render container geometry",
-            "[gtk][unit][geometry]")
+  TEST_CASE("ScrollSeparatorTabs - scroll maps explicit and default policies",
+            "[gtk][unit][layout-component][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -79,19 +80,30 @@ namespace ao::gtk::layout::test
       CHECK(hpolicy == Gtk::PolicyType::AUTOMATIC);
       CHECK(vpolicy == Gtk::PolicyType::AUTOMATIC);
     }
+  }
 
-    SECTION("separator builds Gtk::Separator")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "separator";
-      doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
+  TEST_CASE("ScrollSeparatorTabs - separator applies authored orientation", "[gtk][unit][layout-component]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
-      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
-      auto* const sep = dynamic_cast<Gtk::Separator*>(&compPtr->widget());
+    auto doc = LayoutDocument{};
+    doc.root.type = "separator";
+    doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
 
-      REQUIRE(sep != nullptr);
-      CHECK(sep->get_orientation() == Gtk::Orientation::VERTICAL);
-    }
+    auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+    auto* const sep = dynamic_cast<Gtk::Separator*>(&compPtr->widget());
+
+    REQUIRE(sep != nullptr);
+    CHECK(sep->get_orientation() == Gtk::Orientation::VERTICAL);
+  }
+
+  TEST_CASE("ScrollSeparatorTabs - tabs preserve authored identity title and order", "[gtk][unit][layout-component]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto& ctx = fixture.context();
+    auto& layoutRuntime = fixture.layoutRuntime();
 
     SECTION("tabs with children builds Gtk::Stack")
     {
@@ -124,8 +136,23 @@ namespace ao::gtk::layout::test
       auto* const stack = dynamic_cast<Gtk::Stack*>(stackWidget);
       REQUIRE(stack != nullptr);
 
-      auto* const stackChild = stack->get_first_child();
-      CHECK(stackChild != nullptr);
+      auto* const firstStackChild = stack->get_first_child();
+      REQUIRE(firstStackChild != nullptr);
+      auto* const secondStackChild = firstStackChild->get_next_sibling();
+      REQUIRE(secondStackChild != nullptr);
+      CHECK(secondStackChild->get_next_sibling() == nullptr);
+      CHECK(stack->get_child_by_name("tab1") == firstStackChild);
+      CHECK(stack->get_child_by_name("tab2") == secondStackChild);
+
+      auto const firstPagePtr = stack->get_page(*firstStackChild);
+      REQUIRE(firstPagePtr);
+      CHECK(firstPagePtr->get_name() == "tab1");
+      CHECK(firstPagePtr->get_title() == "First Tab");
+
+      auto const secondPagePtr = stack->get_page(*secondStackChild);
+      REQUIRE(secondPagePtr);
+      CHECK(secondPagePtr->get_name() == "tab2");
+      CHECK(secondPagePtr->get_title() == "Second Tab");
     }
 
     SECTION("tabs child without id uses type as tab name")
@@ -143,7 +170,20 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
 
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
-      CHECK(box != nullptr);
+      REQUIRE(box != nullptr);
+      auto* const switcher = box->get_first_child();
+      REQUIRE(switcher != nullptr);
+      auto* const stack = dynamic_cast<Gtk::Stack*>(switcher->get_next_sibling());
+      REQUIRE(stack != nullptr);
+      auto* const stackChild = stack->get_first_child();
+      REQUIRE(stackChild != nullptr);
+      CHECK(stackChild->get_next_sibling() == nullptr);
+      CHECK(stack->get_child_by_name("spacer") == stackChild);
+
+      auto const pagePtr = stack->get_page(*stackChild);
+      REQUIRE(pagePtr);
+      CHECK(pagePtr->get_name() == "spacer");
+      CHECK(pagePtr->get_title() == "Spacer Tab");
     }
   }
 } // namespace ao::gtk::layout::test

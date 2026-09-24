@@ -35,7 +35,17 @@ namespace ao::media::file
                                                       std::size_t& offset,
                                                       boost::endian::order order) noexcept;
 
+  /**
+   * @brief Decodes a complete unsigned decimal field. Empty, signed, trailing, or
+   * out-of-range text yields nullopt.
+   */
   std::optional<std::uint16_t> decodeUint16(std::string_view text);
+
+  /**
+   * @brief Decodes the leading decimal year of a date field such as "2024-05-17";
+   * text after the digits is ignored.
+   */
+  std::optional<std::uint16_t> decodeYear(std::string_view text);
 
   /**
    * @brief Average bitrate (bits/sec) implied by spreading @p byteCount over

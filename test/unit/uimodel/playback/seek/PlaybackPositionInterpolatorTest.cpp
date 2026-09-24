@@ -16,6 +16,7 @@ namespace ao::uimodel::test
 
     SECTION("Initial state is zero and not playing")
     {
+      CHECK(interpolator.lastDuration() == std::chrono::milliseconds{0});
       CHECK(interpolator.isPlaying() == false);
       CHECK(interpolator.interpolateElapsed(FrameClock::fromMicros(1000)) == std::chrono::milliseconds{0});
     }
@@ -65,7 +66,10 @@ namespace ao::uimodel::test
     SECTION("Reset clears state")
     {
       interpolator.updateState(std::chrono::seconds{1}, std::chrono::seconds{5}, true);
+      REQUIRE(interpolator.lastDuration() == std::chrono::seconds{5});
+      REQUIRE(interpolator.isPlaying());
       interpolator.reset();
+      CHECK(interpolator.lastDuration() == std::chrono::milliseconds{0});
       CHECK(interpolator.isPlaying() == false);
       CHECK(interpolator.interpolateElapsed(FrameClock::fromMicros(1'000'000)) == std::chrono::milliseconds{0});
     }

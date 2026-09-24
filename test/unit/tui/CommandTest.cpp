@@ -37,9 +37,12 @@ namespace ao::tui::test
     CHECK(requiredCommand(":pipeline").action == CommandAction::OpenQuality);
     CHECK(requiredCommand(":output").action == CommandAction::OpenOutputDevices);
     CHECK(requiredCommand(":devices").action == CommandAction::OpenOutputDevices);
+    CHECK(requiredCommand("outputs").action == CommandAction::OpenOutputDevices);
+    CHECK(requiredCommand("device").action == CommandAction::OpenOutputDevices);
     CHECK(requiredCommand(":views").action == CommandAction::OpenPresentationPanel);
 
     CHECK(requiredCommand(":notifications").action == CommandAction::OpenNotifications);
+    CHECK(requiredCommand("notification").action == CommandAction::OpenNotifications);
 
     CHECK(requiredCommand("help").action == CommandAction::ShowHelp);
     CHECK(requiredCommand(":current").action == CommandAction::RevealCurrentTrack);
@@ -72,6 +75,8 @@ namespace ao::tui::test
     CHECK(requiredCommand("properties").action == CommandAction::EditProperties);
     CHECK(requiredCommand("play").action == CommandAction::Play);
     CHECK(requiredCommand("pause").action == CommandAction::TogglePlayback);
+    CHECK(requiredCommand("toggle").action == CommandAction::TogglePlayback);
+    CHECK(requiredCommand("space").action == CommandAction::TogglePlayback);
     CHECK(requiredCommand("stop").action == CommandAction::Stop);
     CHECK(requiredCommand("quit").action == CommandAction::Quit);
     CHECK(requiredCommand("close").action == CommandAction::CloseOverlay);
@@ -86,9 +91,10 @@ namespace ao::tui::test
     CHECK_FALSE(parseCommand(":r"));
     CHECK(requiredCommand("hide").action == CommandAction::CloseOverlay);
     CHECK(requiredCommand("esc").action == CommandAction::CloseOverlay);
+    CHECK(requiredCommand("  :DeViCe  ").action == CommandAction::OpenOutputDevices);
   }
 
-  TEST_CASE("Command - command and root key actions share one relation", "[tui][unit][keymap]")
+  TEST_CASE("Command - command and root key actions share one relation", "[tui][unit][shell][keymap]")
   {
     constexpr auto kRelations = std::to_array<std::pair<CommandAction, KeyAction>>({
       {CommandAction::OpenLists, KeyAction::ToggleLists},
@@ -159,5 +165,13 @@ namespace ao::tui::test
 
     CHECK(command.action == CommandAction::QuickFilter);
     CHECK(command.argument == "spaced query");
+
+    command = requiredCommand(":filter  artist  album");
+    CHECK(command.action == CommandAction::QuickFilter);
+    CHECK(command.argument == "artist  album");
+
+    command = requiredCommand("  :view   my  presentation   ");
+    CHECK(command.action == CommandAction::SetPresentation);
+    CHECK(command.argument == "my  presentation");
   }
 } // namespace ao::tui::test

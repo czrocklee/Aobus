@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <ranges>
@@ -81,7 +82,7 @@ namespace ao::library::test
       result.emplace_back(k, v);
     }
 
-    CHECK(result.size() == 3);
+    REQUIRE(result.size() == 3);
     CHECK(result[0].first == id0);
     CHECK(result[0].second == "-6.5");
     CHECK(result[1].first == id1);
@@ -131,11 +132,16 @@ namespace ao::library::test
     auto const data = makeColdTrackViewData({}, pairs, "");
     auto const view = makeColdTrackView(data);
 
+    std::size_t count = 0;
+
     for (auto const& [key, value] : view.customMetadata())
     {
       CHECK(key == DictionaryId{1});
       CHECK(value == "Hello, World! 你好");
+      ++count;
     }
+
+    CHECK(count == 1);
   }
 
   TEST_CASE("TrackView - iterates multiple custom metadata pairs", "[library][unit][track][custom-metadata]")
@@ -157,7 +163,7 @@ namespace ao::library::test
       result.emplace_back(key, value);
     }
 
-    CHECK(result.size() == 3);
+    REQUIRE(result.size() == 3);
     CHECK(result[0].first == DictionaryId{1});
     CHECK(result[0].second == "-6.5");
     CHECK(result[1].first == DictionaryId{2});
@@ -211,15 +217,19 @@ namespace ao::library::test
 
   TEST_CASE("TrackView - finds custom metadata keys case sensitively", "[library][unit][track][custom-metadata]")
   {
-    auto const pairs = std::vector{std::pair<std::string, std::string>{"ISRC", "USSM19999999"}};
+    auto const pairs = std::vector{std::pair<std::string, std::string>{"ISRC", "USSM19999999"},
+                                   std::pair<std::string, std::string>{"isrc", "GBAYE6800011"}};
 
     auto const data = makeColdTrackViewData({}, pairs, "");
     auto const view = makeColdTrackView(data);
 
-    // "ISRC" is stored at ID 1, looking up by ID 1 returns the value
-    auto const optValue = view.customMetadata().get(DictionaryId{1});
-    REQUIRE(optValue);
-    CHECK(*optValue == "USSM19999999");
+    REQUIRE(view.customMetadata().count() == 2);
+    auto const optUppercaseValue = view.customMetadata().get(DictionaryId{1});
+    REQUIRE(optUppercaseValue);
+    CHECK(*optUppercaseValue == "USSM19999999");
+    auto const optLowercaseValue = view.customMetadata().get(DictionaryId{2});
+    REQUIRE(optLowercaseValue);
+    CHECK(*optLowercaseValue == "GBAYE6800011");
   }
 
   TEST_CASE("TrackView - finds custom metadata through binary search", "[library][unit][track][custom-metadata]")
@@ -279,10 +289,15 @@ namespace ao::library::test
     auto const data = makeColdTrackViewData({}, pairs, "");
     auto const view = makeColdTrackView(data);
 
+    std::size_t count = 0;
+
     for (auto const& [k, v] : view.customMetadata())
     {
       CHECK(k == DictionaryId{1});
       CHECK(v == "Hello, World! 你好");
+      ++count;
     }
+
+    CHECK(count == 1);
   }
 } // namespace ao::library::test

@@ -30,8 +30,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ListMembershipAuthoringSession - discovers only direct tag targets",
-            "[uimodel][unit][track-authoring][list-membership]")
+  TEST_CASE("ListMembershipAuthoringSession - discovers only direct tag targets", "[uimodel][unit][list-membership]")
   {
     auto const lists = std::array{
       rt::ListNode{.id = ListId{1}, .name = "Zulu", .expression = "#zulu"},
@@ -112,10 +111,27 @@ namespace ao::uimodel::test
                                                                         .changedTrackCount = 2,
                                                                         .forgottenPositionCount = 1}) ==
           "Removed #road from 2 tracks and forgot 1 saved position in Road.");
+
+    auto const& german = ao::test::messageCatalog("de-DE");
+    CHECK(formatListMembershipEditNotification(german,
+                                               ListMembershipEditResult{.status = rt::AuthoringStatus::Applied,
+                                                                        .operation = ListMembershipOperation::Remove,
+                                                                        .listName = "Road Trip",
+                                                                        .tag = "road-trip",
+                                                                        .changedTrackCount = 1,
+                                                                        .forgottenPositionCount = 1}) ==
+          R"(#"road-trip" wurde von 1 Titel entfernt und 1 gespeicherte Position wurde in Road Trip verworfen.)");
+    CHECK(formatListMembershipEditNotification(german,
+                                               ListMembershipEditResult{.status = rt::AuthoringStatus::Applied,
+                                                                        .operation = ListMembershipOperation::Add,
+                                                                        .listName = "Road Trip",
+                                                                        .tag = "road-trip",
+                                                                        .changedTrackCount = 1}) ==
+          R"(#"road-trip" wurde für 1 Titel in Road Trip hinzugefügt.)");
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - Remove notification uses the injected locale",
-            "[uimodel][unit][list-membership][localization]")
+  TEST_CASE("ListMembershipAuthoringSession - Remove maps the reply and removes tags and saved positions",
+            "[uimodel][integration][list-membership]")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Road Song");
@@ -128,8 +144,9 @@ namespace ao::uimodel::test
     auto const listId = *createRes;
     REQUIRE(transaction.commit());
 
-    auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
-    auto commandsFixture = rt::test::LibraryCommandsFixture{storage.library(), changes};
+    auto executor = rt::test::ManualExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor, storage.library());
+    auto commandsFixture = rt::test::LibraryCommandsFixture{storage.library(), changes, executor};
     auto const tag = std::array{std::string{"road-trip"}};
     REQUIRE(commandsFixture.editTags(std::array{trackId}, tag, {}));
     auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
@@ -139,13 +156,22 @@ namespace ao::uimodel::test
 
     REQUIRE(res);
     CHECK(res->status == rt::AuthoringStatus::Applied);
+    CHECK(res->operation == ListMembershipOperation::Remove);
+    CHECK(res->listId == listId);
+    CHECK(res->listName == "Road Trip");
+    CHECK(res->tag == "road-trip");
+    CHECK(res->targetTrackCount == 1);
+    CHECK(res->changedTrackCount == 1);
     CHECK(res->forgottenPositionCount == 1);
-    CHECK(formatListMembershipEditNotification(ao::test::messageCatalog("de-DE"), *res) ==
-          R"(#"road-trip" wurde von 1 Titel entfernt und 1 gespeicherte Position wurde in Road Trip verworfen.)");
+    CHECK(commandsFixture.library().snapshot().selectionTags(std::array{trackId}).empty());
+    auto read = storage.library().readTransaction();
+    auto const optList = storage.library().lists().reader(read).get(listId);
+    REQUIRE(optList);
+    CHECK(optList->orderTrackIds().empty());
   }
 
-  TEST_CASE("ListMembershipAuthoringSession - Add updates membership and uses the injected locale",
-            "[uimodel][unit][list-membership][localization]")
+  TEST_CASE("ListMembershipAuthoringSession - Add maps the reply and updates membership",
+            "[uimodel][integration][list-membership]")
   {
     auto storage = rt::test::MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Road Song");
@@ -157,8 +183,9 @@ namespace ao::uimodel::test
     auto const listId = *createRes;
     REQUIRE(transaction.commit());
 
-    auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
-    auto commandsFixture = rt::test::LibraryCommandsFixture{storage.library(), changes};
+    auto executor = rt::test::ManualExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor, storage.library());
+    auto commandsFixture = rt::test::LibraryCommandsFixture{storage.library(), changes, executor};
     auto sessionRes = ListMembershipAuthoringSession::begin(commandsFixture.library(), std::array{trackId});
     REQUIRE(sessionRes);
 
@@ -168,15 +195,18 @@ namespace ao::uimodel::test
     CHECK(res->status == rt::AuthoringStatus::Applied);
     CHECK(res->targetTrackCount == 1);
     CHECK(res->changedTrackCount == 1);
-    CHECK(formatListMembershipEditNotification(ao::test::messageCatalog("de-DE"), *res) ==
-          R"(#"road-trip" wurde für 1 Titel in Road Trip hinzugefügt.)");
+    CHECK(res->operation == ListMembershipOperation::Add);
+    CHECK(res->listId == listId);
+    CHECK(res->listName == "Road Trip");
+    CHECK(res->tag == "road-trip");
+    CHECK(res->forgottenPositionCount == 0);
 
     auto scope = commandsFixture.library().snapshot();
     CHECK(scope.selectionTags(std::array{trackId}) == std::vector<std::string>{"road-trip"});
   }
 
   TEST_CASE("ListMembershipAuthoringSession - pending edit outlives moved and destroyed facades",
-            "[uimodel][regression][list-membership][concurrency]")
+            "[uimodel][integration][list-membership][concurrency]")
   {
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<ListMembershipAuthoringSession>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ListMembershipAuthoringSession>);

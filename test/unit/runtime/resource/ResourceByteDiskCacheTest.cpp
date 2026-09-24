@@ -5,10 +5,12 @@
 
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -84,15 +86,12 @@ namespace ao::rt::test
     REQUIRE(optRead);
     CHECK(*optRead == bytes);
 
-    SECTION("an entry is named by its digest, sharded by the leading byte")
-    {
-      auto const hex = utility::sha256Hex(digest);
-      auto const path = cache.entryPath(digest);
+    auto const hex = utility::sha256Hex(digest);
+    auto const path = cache.entryPath(digest);
 
-      CHECK(path.filename().string() == hex);
-      CHECK(path.parent_path().filename().string() == hex.substr(0, 2));
-      CHECK(std::filesystem::exists(path));
-    }
+    CHECK(path.filename().string() == hex);
+    CHECK(path.parent_path().filename().string() == hex.substr(0, 2));
+    CHECK(std::filesystem::exists(path));
   }
 
   TEST_CASE("ResourceByteDiskCache - an entry whose content does not match its key is discarded, not served",
@@ -110,14 +109,12 @@ namespace ao::rt::test
     CHECK_FALSE(cache.read(digest));
     CHECK_FALSE(std::filesystem::exists(cache.entryPath(digest)));
 
-    SECTION("an empty entry is the same refusal, which is what a killed writer leaves")
-    {
-      writeRaw(cache.entryPath(digest), {});
-      REQUIRE(std::filesystem::exists(cache.entryPath(digest)));
+    // An empty entry is the same refusal, which is what a killed writer leaves.
+    writeRaw(cache.entryPath(digest), {});
+    REQUIRE(std::filesystem::exists(cache.entryPath(digest)));
 
-      CHECK_FALSE(cache.read(digest));
-      CHECK_FALSE(std::filesystem::exists(cache.entryPath(digest)));
-    }
+    CHECK_FALSE(cache.read(digest));
+    CHECK_FALSE(std::filesystem::exists(cache.entryPath(digest)));
   }
 
   TEST_CASE("ResourceByteDiskCache - concurrent stores, reads, and evictions never serve the wrong content",
@@ -133,14 +130,20 @@ namespace ao::rt::test
     // writers and readers rather than after them.
     auto const cache = makeCache(temp.path(), kBudgetEntries * kEntryBytes);
     auto wrongContent = std::atomic{std::size_t{0}};
-    auto threads = std::vector<std::thread>{};
+    auto started = AsyncTestState<std::size_t>::create(0);
+    auto release = AsyncBarrier{};
+    auto threads = std::vector<std::jthread>{};
+    auto cleanup = gsl_lite::finally([&release] { release.release(); });
     threads.reserve(kThreadCount);
 
     for (std::size_t threadIndex = 0; threadIndex < kThreadCount; ++threadIndex)
     {
       threads.emplace_back(
-        [&cache, &wrongContent, threadIndex]
+        [&cache, &wrongContent, started, &release, threadIndex]
         {
+          started.increment();
+          release.wait();
+
           for (std::size_t step = 0; step < kPerThread; ++step)
           {
             auto const bytes = filled(kEntryBytes, static_cast<std::byte>((threadIndex * kPerThread) + step));
@@ -157,6 +160,9 @@ namespace ao::rt::test
         });
     }
 
+    REQUIRE(started.tryWaitUntil(kThreadCount));
+    release.release();
+
     for (auto& thread : threads)
     {
       thread.join();
@@ -168,6 +174,15 @@ namespace ao::rt::test
     // its census, so the settled count is the budget plus at most one entry per
     // writer that was still in flight.
     CHECK(entryCount(temp.path()) <= kBudgetEntries + kThreadCount);
+
+    // A settled same-cache control prevents an implementation that always misses
+    // or never stores from satisfying only the permissive concurrent observations.
+    auto const retainedBytes = filled(kEntryBytes, std::byte{0xFE});
+    auto const retainedDigest = utility::computeSha256(retainedBytes);
+    cache.store(retainedDigest, retainedBytes);
+    auto const optRetained = cache.read(retainedDigest);
+    REQUIRE(optRetained);
+    CHECK(*optRetained == retainedBytes);
   }
 
   TEST_CASE("ResourceByteDiskCache - two libraries holding one cover share one entry",

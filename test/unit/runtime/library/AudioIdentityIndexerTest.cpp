@@ -268,7 +268,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows",
-            "[runtime][unit][audio-identity][concurrency]")
+            "[runtime][unit][library][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -297,7 +297,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AudioIdentityIndexer - processes pending rows across range-cursor batch boundaries",
-            "[runtime][regression][audio-identity][pagination]")
+            "[runtime][unit][library][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -329,7 +329,8 @@ namespace ao::rt::test
     CHECK(hasManifestIdentity(ml, "song-0256.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently", "[runtime][unit][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently",
+            "[runtime][unit][library][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -369,7 +370,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AudioIdentityIndexer - mutation lock is free while fingerprinting",
-            "[runtime][unit][audio-identity][concurrency]")
+            "[runtime][unit][library][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -531,7 +532,8 @@ namespace ao::rt::test
     CHECK(afterIdentity.audioSignature == originalIdentity.audioSignature);
   }
 
-  TEST_CASE("AudioIdentityIndexer - cancellation preserves pending rows", "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - cancellation preserves pending rows",
+            "[runtime][unit][library][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -597,7 +599,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AudioIdentityIndexer - cancellation preserves committed work and the next run resumes",
-            "[runtime][unit][library][audio-identity]")
+            "[runtime][unit][library][audio-identity][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";

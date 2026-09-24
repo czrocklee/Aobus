@@ -39,15 +39,14 @@ namespace ao::tui::test
       return ownerPtr;
     }
 
-    /// FTXUI delivers Ctrl-chords as their C0 control characters.
     ftxui::Event applyEvent()
     {
-      return ftxui::Event::Character(static_cast<char>(0x13));
+      return ftxui::Event::CtrlS;
     }
 
     ftxui::Event reloadEvent()
     {
-      return ftxui::Event::Character(static_cast<char>(0x12));
+      return ftxui::Event::CtrlR;
     }
 
     struct EditFixture final
@@ -105,7 +104,7 @@ namespace ao::tui::test
     void focusRowInput(TrackEditController& controller, std::string_view const label)
     {
       auto const spec = uimodel::buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
-      std::size_t targetIndex = 0;
+      auto targetIndex = spec.metadataRows.size();
 
       for (std::size_t i = 0; i < spec.metadataRows.size(); ++i)
       {
@@ -115,6 +114,8 @@ namespace ao::tui::test
           break;
         }
       }
+
+      REQUIRE(targetIndex < spec.metadataRows.size());
 
       for (std::size_t step = 0; step < 50; ++step)
       {
@@ -178,7 +179,7 @@ namespace ao::tui::test
     CHECK(fixture.refreshCount > 0);
   }
 
-  TEST_CASE("TrackEditController - refuses to open without targets", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - refuses to open without targets", "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto controller = fixture.makeController();
@@ -191,7 +192,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackEditController - refuses a selection it cannot open completely", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - refuses a selection it cannot open completely", "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Present", .uri = "present.flac"});
@@ -215,7 +216,7 @@ namespace ao::tui::test
     CHECK(controller.activeEditor() == editor);
   }
 
-  TEST_CASE("TrackEditController - open is refused after retirement", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - open is refused after retirement", "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .uri = "only.flac"});
@@ -242,7 +243,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Escape));
   }
 
-  TEST_CASE("TrackEditController - Apply writes one patch to every captured target", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - Apply writes one patch to every captured target", "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .album = "Old", .uri = "first.flac"});
@@ -270,7 +271,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackEditController - submission starts on the callback executor before writing",
-            "[tui][regression][editor][concurrency]")
+            "[tui][integration][editor][concurrency]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -294,7 +295,8 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isActive());
   }
 
-  TEST_CASE("TrackEditController - an included value every target already has reports no change", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - an included value every target already has reports no change",
+            "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "", .uri = "only.flac"});
@@ -312,7 +314,8 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(trackId).album.empty());
   }
 
-  TEST_CASE("TrackEditController - an invalidated session goes stale and refuses to submit", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - an invalidated session goes stale and refuses to submit",
+            "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -333,7 +336,7 @@ namespace ao::tui::test
     CHECK(fixture.trackSpec(trackId).album == "Old");
   }
 
-  TEST_CASE("TrackEditController - reload rebinds a stale editor and resets its draft", "[tui][unit][editor]")
+  TEST_CASE("TrackEditController - reload rebinds a stale editor and resets its draft", "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -365,7 +368,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackEditController - a submitted write outlives the editor it came from",
-            "[tui][unit][editor][concurrency]")
+            "[tui][integration][editor][concurrency]")
   {
     auto fixture = EditFixture{};
     auto const trackId = fixture.addTrack({.title = "Only", .album = "Old", .uri = "only.flac"});
@@ -391,7 +394,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackEditController - unified submission writes metadata and tags, deduplicating changed tracks",
-            "[tui][unit][editor]")
+            "[tui][integration][editor]")
   {
     auto fixture = EditFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .album = "Old", .uri = "first.flac", .tags = {"rock"}});
@@ -431,7 +434,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackEditController - quick tags reload preserves mode and writes only captured targets",
-            "[tui][unit][editor]")
+            "[tui][integration][editor][concurrency]")
   {
     auto fixture = EditFixture{};
     auto const firstId = fixture.addTrack({.title = "First", .album = "Old", .uri = "first.flac", .tags = {"rock"}});

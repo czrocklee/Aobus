@@ -133,18 +133,26 @@ namespace ao::gtk::test
   TEST_CASE("ThemeCoordinator - loads and saves app prefs", "[gtk][unit][app][theme]")
   {
     auto const tempDir = ao::test::TempDir{};
-    auto configStore = AppConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
+    auto const configPath = tempDir.path() / "config.yaml";
+    {
+      auto configStore = AppConfigStore{configPath};
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "classic";
+      configStore.saveAppPrefs(prefs);
 
-    auto coordinator = ThemeCoordinator{};
-    coordinator.setTheme(uimodel::ThemePreset::Modern);
-    coordinator.save(configStore);
+      auto coordinator = ThemeCoordinator{};
+      coordinator.setTheme(uimodel::ThemePreset::Modern);
+      coordinator.save(configStore);
+    }
 
+    auto const reopenedStore = AppConfigStore{configPath};
     auto loaded = rt::AppPrefsState{};
-    configStore.loadAppPrefs(loaded);
+    reopenedStore.loadAppPrefs(loaded);
     CHECK(loaded.lastThemePreset == "modern");
+    CHECK(loaded.lastLayoutPreset == "classic");
 
     auto restored = ThemeCoordinator{};
-    restored.load(configStore);
+    restored.load(reopenedStore);
     CHECK(restored.activeTheme() == uimodel::ThemePreset::Modern);
   }
 } // namespace ao::gtk::test

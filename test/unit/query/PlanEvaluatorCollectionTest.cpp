@@ -40,6 +40,48 @@ namespace ao::query::test
       CHECK(evaluator.matchesFullPlan(plan, present.view()));
     }
 
+    SECTION("OtherDictionaryMetadataExistsWhenIdIsValid")
+    {
+      auto missingSpec = TrackSpec{};
+      missingSpec.album.clear();
+      missingSpec.albumArtist.clear();
+      missingSpec.composer.clear();
+      missingSpec.conductor.clear();
+      missingSpec.ensemble.clear();
+      missingSpec.work.clear();
+      missingSpec.movement.clear();
+      missingSpec.soloist.clear();
+      missingSpec.genre.clear();
+      auto missing = TrackFixture{missingSpec};
+
+      auto presentSpec = TrackSpec{};
+      presentSpec.album = "Album";
+      presentSpec.albumArtist = "Album Artist";
+      presentSpec.composer = "Composer";
+      presentSpec.conductor = "Conductor";
+      presentSpec.ensemble = "Ensemble";
+      presentSpec.work = "Work";
+      presentSpec.movement = "Movement";
+      presentSpec.soloist = "Soloist";
+      presentSpec.genre = "Genre";
+      auto present = TrackFixture{presentSpec};
+
+      for (auto const* field : {"$album?",
+                                "$albumArtist?",
+                                "$composer?",
+                                "$conductor?",
+                                "$ensemble?",
+                                "$work?",
+                                "$movement?",
+                                "$soloist?",
+                                "$genre?"})
+      {
+        auto plan = compileOk(parseOk(field));
+        CHECK_FALSE(evaluator.matchesFullPlan(plan, missing.view()));
+        CHECK(evaluator.matchesFullPlan(plan, present.view()));
+      }
+    }
+
     SECTION("NumericMetadataExistsWhenPositive")
     {
       auto missingSpec = TrackSpec{};
@@ -62,6 +104,25 @@ namespace ao::query::test
       CHECK(evaluator.matchesFullPlan(compileOk(parseOk("$trackTotal?")), present.view()));
     }
 
+    SECTION("OtherNumericMetadataExistsWhenPositive")
+    {
+      auto missing = TrackFixture{TrackSpec{}};
+
+      auto presentSpec = TrackSpec{};
+      presentSpec.discNumber = 1;
+      presentSpec.discTotal = 2;
+      presentSpec.movementNumber = 3;
+      presentSpec.movementTotal = 4;
+      auto present = TrackFixture{presentSpec};
+
+      for (auto const* field : {"$discNumber?", "$discTotal?", "$movementNumber?", "$movementTotal?"})
+      {
+        auto plan = compileOk(parseOk(field));
+        CHECK_FALSE(evaluator.matchesFullPlan(plan, missing.view()));
+        CHECK(evaluator.matchesFullPlan(plan, present.view()));
+      }
+    }
+
     SECTION("PropertiesExistWhenPositiveOrKnown")
     {
       auto missingSpec = TrackSpec{};
@@ -80,6 +141,24 @@ namespace ao::query::test
       CHECK(evaluator.matchesFullPlan(compileOk(parseOk("@codec?")), present.view()));
     }
 
+    SECTION("OtherNumericPropertiesExistWhenPositive")
+    {
+      auto missingSpec = TrackSpec{};
+      missingSpec.bitrate = 0;
+      missingSpec.sampleRate = 0;
+      missingSpec.channels = 0;
+      missingSpec.bitDepth = 0;
+      auto missing = TrackFixture{missingSpec};
+      auto present = TrackFixture{TrackSpec{}};
+
+      for (auto const* field : {"@bitrate?", "@sampleRate?", "@channels?", "@bitDepth?"})
+      {
+        auto plan = compileOk(parseOk(field));
+        CHECK_FALSE(evaluator.matchesFullPlan(plan, missing.view()));
+        CHECK(evaluator.matchesFullPlan(plan, present.view()));
+      }
+    }
+
     SECTION("CoverArtExistsWhenPrimaryResourceIsValid")
     {
       auto missing = TrackFixture{TrackSpec{}};
@@ -95,6 +174,9 @@ namespace ao::query::test
     SECTION("CustomMetadataExistsEvenWhenValueIsEmpty")
     {
       auto absent = TrackFixture{TrackSpec{}};
+      auto boundAbsentSpec = TrackSpec{};
+      boundAbsentSpec.artist = "rating";
+      auto boundAbsent = TrackFixture{boundAbsentSpec};
       auto emptyValueSpec = TrackSpec{};
       emptyValueSpec.customPairs.emplace_back("rating", "");
       auto emptyValue = TrackFixture{emptyValueSpec};
@@ -105,6 +187,7 @@ namespace ao::query::test
       auto plan = compileOk(parseOk("%rating?"));
 
       CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
+      CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, plan, boundAbsent.view(), boundAbsent.dictionary()));
       CHECK(matchesFullPlanWithDictionary(evaluator, plan, emptyValue.view(), emptyValue.dictionary()));
       CHECK(matchesFullPlanWithDictionary(evaluator, plan, nonEmptyValue.view(), nonEmptyValue.dictionary()));
     }
@@ -112,12 +195,16 @@ namespace ao::query::test
     SECTION("TagExistenceMatchesMembership")
     {
       auto absent = TrackFixture{TrackSpec{}};
+      auto boundAbsentSpec = TrackSpec{};
+      boundAbsentSpec.artist = "favorite";
+      auto boundAbsent = TrackFixture{boundAbsentSpec};
       auto presentSpec = TrackSpec{};
       presentSpec.tags.emplace_back("favorite");
       auto present = TrackFixture{presentSpec};
       auto plan = compileOk(parseOk("#favorite?"));
 
       CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, plan, absent.view(), absent.dictionary()));
+      CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, plan, boundAbsent.view(), boundAbsent.dictionary()));
       CHECK(matchesFullPlanWithDictionary(evaluator, plan, present.view(), present.dictionary()));
     }
 
@@ -218,12 +305,32 @@ namespace ao::query::test
     {
       auto plan = compileOk(parseOk("$year in 1990..1999"));
       CHECK(evaluator.matchesFullPlan(plan, track.view()));
+
+      auto lowerSpec = spec;
+      lowerSpec.year = 1990;
+      auto lower = TrackFixture{lowerSpec};
+      CHECK(evaluator.matchesFullPlan(plan, lower.view()));
+
+      auto upperSpec = spec;
+      upperSpec.year = 1999;
+      auto upper = TrackFixture{upperSpec};
+      CHECK(evaluator.matchesFullPlan(plan, upper.view()));
     }
 
     SECTION("UnitRangeMatch")
     {
       auto plan = compileOk(parseOk("@duration in 2m30s..5m"));
       CHECK(evaluator.matchesFullPlan(plan, track.view()));
+
+      auto lowerSpec = spec;
+      lowerSpec.duration = std::chrono::minutes{2} + std::chrono::seconds{30};
+      auto lower = TrackFixture{lowerSpec};
+      CHECK(evaluator.matchesFullPlan(plan, lower.view()));
+
+      auto upperSpec = spec;
+      upperSpec.duration = std::chrono::minutes{5};
+      auto upper = TrackFixture{upperSpec};
+      CHECK(evaluator.matchesFullPlan(plan, upper.view()));
     }
 
     SECTION("OutOfRangeDoesNotMatch")
@@ -262,6 +369,29 @@ namespace ao::query::test
     {
       auto plan = compileOk(parseOk("%nonexistent = 'val'"));
       CHECK(matchesFullPlanWithDictionary(evaluator, plan, track.view(), track.dictionary()) == false);
+    }
+
+    SECTION("Bound Custom Field Missing")
+    {
+      auto boundMissingSpec = spec;
+      boundMissingSpec.artist = "nonexistent";
+      auto boundMissing = TrackFixture{boundMissingSpec};
+      auto nonEmptyPlan = compileOk(parseOk("%nonexistent = 'val'"));
+
+      CHECK(matchesFullPlanWithDictionary(evaluator, nonEmptyPlan, boundMissing.view(), boundMissing.dictionary()) ==
+            false);
+    }
+
+    SECTION("Present Empty Custom Field Compares As Empty")
+    {
+      auto emptySpec = spec;
+      emptySpec.customPairs.emplace_back("empty", "");
+      auto empty = TrackFixture{emptySpec};
+      auto emptyPlan = compileOk(parseOk("%empty = ''"));
+      auto nonEmptyPlan = compileOk(parseOk("%empty = 'val'"));
+
+      CHECK(matchesFullPlanWithDictionary(evaluator, emptyPlan, empty.view(), empty.dictionary()) == true);
+      CHECK(matchesFullPlanWithDictionary(evaluator, nonEmptyPlan, empty.view(), empty.dictionary()) == false);
     }
   }
 } // namespace ao::query::test

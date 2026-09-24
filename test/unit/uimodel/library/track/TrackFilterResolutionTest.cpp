@@ -14,7 +14,7 @@ using namespace ao::uimodel;
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackFilterResolution - resolves quick search terms", "[uimodel][unit][filter]")
+  TEST_CASE("TrackFilterResolution - resolves quick search terms", "[uimodel][unit][track-filter]")
   {
     SECTION("Empty filter")
     {
@@ -37,7 +37,13 @@ namespace ao::uimodel::test
     {
       auto const resolved = resolveTrackFilter("beatles help");
       CHECK(resolved.mode == TrackFilterMode::Quick);
-      CHECK(resolved.expression.contains(") and ("));
+      CHECK(resolved.expression ==
+            "(($title ~ \"beatles\" or $artist ~ \"beatles\" or $album ~ \"beatles\" or $albumArtist ~ "
+            "\"beatles\" or $genre ~ \"beatles\" or $composer ~ \"beatles\" or $work ~ \"beatles\" or "
+            "#beatles)) and "
+            "(($title ~ \"help\" or $artist ~ \"help\" or $album ~ \"help\" or $albumArtist ~ \"help\" or "
+            "$genre ~ \"help\" or $composer ~ \"help\" or $work ~ \"help\" or #help))");
+      CHECK(query::parse(resolved.expression).has_value());
     }
 
     SECTION("Quoted terms")
@@ -56,7 +62,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackFilterResolution - resolves complex expressions", "[uimodel][unit][filter]")
+  TEST_CASE("TrackFilterResolution - resolves complex expressions", "[uimodel][unit][track-filter]")
   {
     SECTION("Expression starting with $")
     {
@@ -82,7 +88,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterResolution - punctuation inside plain text remains a Quick filter",
-            "[uimodel][unit][filter][regression]")
+            "[uimodel][unit][track-filter]")
   {
     for (auto const* const filter : {"P!nk", "Live (1999)", "A+B", "rock $year"})
     {
@@ -92,7 +98,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterResolution - decodes serialized Quick-filter terms without losing escapes",
-            "[uimodel][unit][filter][escaping]")
+            "[uimodel][unit][track-filter][escaping]")
   {
     auto const value = std::string{R"(C:\Music "Live")"};
     auto const serialized = query::serialize(query::ConstantExpression{value});
@@ -104,7 +110,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackFilterResolution - preserves quick terms containing both quote styles",
-            "[uimodel][regression][filter]")
+            "[uimodel][unit][track-filter]")
   {
     auto const resolved = resolveTrackFilter(R"FILTER("a'b"'"')FILTER");
 

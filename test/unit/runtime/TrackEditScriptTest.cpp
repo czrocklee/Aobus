@@ -144,18 +144,19 @@ namespace ao::rt::delta::test
     REQUIRE(res);
     CHECK(*res == to);
 
-    std::size_t updateCount = 0;
+    auto updates = std::vector<UpdateRange>{};
 
     for (auto const& edit : script.edits)
     {
       if (auto const* update = std::get_if<UpdateRange>(&edit); update != nullptr)
       {
-        updateCount += update->trackIds.size();
-        CHECK_FALSE(std::ranges::contains(update->trackIds, TrackId{2}));
+        updates.push_back(*update);
       }
     }
 
-    CHECK(updateCount == 3);
+    REQUIRE(updates.size() == 1);
+    CHECK(updates.front().start == 0);
+    CHECK(updates.front().trackIds == std::vector{TrackId{1}, TrackId{3}, TrackId{4}});
   }
 
   TEST_CASE("TrackEditScript - apply rejects removal and update identity mismatches", "[runtime][unit][delta]")
@@ -168,8 +169,7 @@ namespace ao::rt::delta::test
     CHECK_FALSE(apply(initial, badUpdate));
   }
 
-  TEST_CASE("TrackEditScript - apply rejects edits that return to an earlier canonical stage",
-            "[runtime][regression][delta]")
+  TEST_CASE("TrackEditScript - apply rejects edits that return to an earlier canonical stage", "[runtime][unit][delta]")
   {
     auto const initial = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
     auto const updateThenRemove = RegularTrackEditScript{

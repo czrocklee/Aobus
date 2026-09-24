@@ -62,16 +62,43 @@ namespace ao::audio::test
     {
       auto const testFile = requireAudioFixture("hires.m4a");
 
-      auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
-      auto& decoder = *decoderPtr;
+      auto packedDecoderPtr =
+        ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
+      auto& packedDecoder = *packedDecoderPtr;
+      auto const packedInfo = packedDecoder.streamInfo();
+      CHECK(packedInfo.sourceFormat.precisionBits == 24);
+      CHECK(packedInfo.outputFormat.encoding == SampleEncoding::Signed24PackedLe);
 
-      auto const info = decoder.streamInfo();
-      CHECK(info.sourceFormat.precisionBits == 24);
-      CHECK(encodingContainerBits(info.outputFormat.encoding) == 32);
+      auto const packedBlockRes = packedDecoder.readNextBlock();
+      REQUIRE(packedBlockRes);
+      REQUIRE(packedBlockRes->frames > 0);
+      REQUIRE(packedBlockRes->bytes.size() ==
+              static_cast<std::size_t>(packedBlockRes->frames) * packedInfo.outputFormat.channels * 3U);
 
-      auto const blockRes = decoder.readNextBlock();
-      REQUIRE(blockRes);
-      CHECK(!blockRes->bytes.empty());
+      auto paddedDecoderPtr = ao::test::requireValue(AlacDecoderSession::open(testFile, SampleEncoding::Signed32Le));
+      auto& paddedDecoder = *paddedDecoderPtr;
+      auto const paddedInfo = paddedDecoder.streamInfo();
+      CHECK(paddedInfo.sourceFormat.precisionBits == 24);
+      CHECK(paddedInfo.outputFormat.encoding == SampleEncoding::Signed32Le);
+
+      auto const paddedBlockRes = paddedDecoder.readNextBlock();
+      REQUIRE(paddedBlockRes);
+      REQUIRE(paddedBlockRes->frames == packedBlockRes->frames);
+      REQUIRE(paddedBlockRes->firstFrameIndex == packedBlockRes->firstFrameIndex);
+      REQUIRE(paddedBlockRes->bytes.size() == static_cast<std::size_t>(paddedBlockRes->frames) *
+                                                paddedInfo.outputFormat.channels * sizeof(std::int32_t));
+
+      auto const packedSamples = packedBlockRes->bytes.size() / 3U;
+      auto const paddedSamples = paddedBlockRes->bytes.size() / sizeof(std::int32_t);
+      auto const samplesToCheck = std::min({packedSamples, paddedSamples, std::size_t{128}});
+      REQUIRE(samplesToCheck > 0);
+
+      for (std::size_t index = 0; index < samplesToCheck; ++index)
+      {
+        auto const packedSample = readSigned24PackedLePcmSample(packedBlockRes->bytes, index);
+        auto const paddedSample = readSigned32LePcmSample(paddedBlockRes->bytes, index);
+        CHECK(paddedSample == packedSample * 256);
+      }
     }
 
     SECTION("Pads 16-bit ALAC samples into 32-bit output")
@@ -106,12 +133,11 @@ namespace ao::audio::test
 
       REQUIRE(samplesToCheck > 0);
 
-      auto const* source = reinterpret_cast<std::int16_t const*>(sourceBlockRes->bytes.data());
-      auto const* target = reinterpret_cast<std::int32_t const*>(targetBlockRes->bytes.data());
-
       for (std::size_t index = 0; index < samplesToCheck; ++index)
       {
-        CHECK(target[index] == static_cast<std::int32_t>(source[index]) << 16U);
+        auto const sourceSample = readSigned16LePcmSample(sourceBlockRes->bytes, index);
+        auto const targetSample = readSigned32LePcmSample(targetBlockRes->bytes, index);
+        CHECK(targetSample == static_cast<std::int32_t>(sourceSample) * 65536);
       }
     }
   }

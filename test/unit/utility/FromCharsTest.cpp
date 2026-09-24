@@ -144,7 +144,7 @@ namespace ao::utility::test
     CHECK(ptr == text.data() + 1);
   }
 
-  TEST_CASE("FromChars - accepts representable subnormal values", "[utility][regression][from-chars]")
+  TEST_CASE("FromChars - accepts representable subnormal values", "[utility][unit][from-chars]")
   {
     double value = 1.0;
     REQUIRE(isFullyParseable("5e-324", value));
@@ -155,7 +155,7 @@ namespace ao::utility::test
     CHECK(floatValue == std::numeric_limits<float>::denorm_min());
   }
 
-  TEST_CASE("FromChars - reports true range errors without changing the output", "[utility][regression][from-chars]")
+  TEST_CASE("FromChars - reports true range errors without changing the output", "[utility][unit][from-chars]")
   {
     double value = 42.0;
     auto const underflow = std::string_view{"1e-9999"};

@@ -3,10 +3,15 @@
 
 #include "layout/runtime/ComponentRegistry.h"
 #include <ao/uimodel/layout/component/LayoutSchema.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
+#include <string>
+#include <string_view>
+#include <utility>
 
 namespace ao::gtk::layout::test
 {
@@ -27,11 +32,25 @@ namespace ao::gtk::layout::test
     auto const optComponentSchema = registry.schema().component("test.secondary");
     REQUIRE(optComponentSchema);
 
-    auto const it = std::find_if(optComponentSchema->properties.begin(),
-                                 optComponentSchema->properties.end(),
-                                 [](auto const& p) { return p.name == uimodel::kSecondaryActionProp; });
-    REQUIRE(it != optComponentSchema->properties.end());
-    REQUIRE(it->optActionSlot);
-    CHECK(*it->optActionSlot == uimodel::ActionSlot::SecondaryClick);
+    auto const expectations =
+      std::to_array({std::pair{uimodel::kSecondaryActionProp, ActionSlot::SecondaryClick},
+                     std::pair{uimodel::kSecondaryLongPressActionProp, ActionSlot::SecondaryLongPress}});
+
+    for (auto const& [propertyName, expectedSlot] : expectations)
+    {
+      auto const it = std::ranges::find(optComponentSchema->properties, propertyName, &PropertySchema::name);
+      REQUIRE(it != optComponentSchema->properties.end());
+      CHECK(it->kind == PropertyKind::Enum);
+      CHECK(it->defaultValue.asString().empty());
+      CHECK(it->enumValues.empty());
+      REQUIRE(it->optActionSlot);
+      CHECK(*it->optActionSlot == expectedSlot);
+
+      auto node = LayoutNode{.type = "test.secondary"};
+      node.props[std::string{propertyName}] = LayoutValue{std::string{"shell.dynamicAction"}};
+      auto const optActionId = optComponentSchema->actionId(node, expectedSlot);
+      REQUIRE(optActionId);
+      CHECK(*optActionId == "shell.dynamicAction");
+    }
   }
 } // namespace ao::gtk::layout::test

@@ -15,11 +15,10 @@
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstddef>
 #include <expected>
 #include <memory>
-#include <mutex>
+#include <semaphore>
 #include <utility>
 #include <vector>
 
@@ -71,6 +70,7 @@ namespace ao::audio::test
     REQUIRE(sourcePtr->prepare());
     CHECK(sourcePtr->bufferedDuration() >= std::chrono::milliseconds{100});
     sourcePtr->activate(onError);
+    sourcePtr.reset(); // Join the producer before asserting callback silence.
     CHECK(errorCount.load() == 0);
   }
 
@@ -94,6 +94,7 @@ namespace ao::audio::test
     auto out = std::vector<std::byte>(20);
     CHECK(sourcePtr->read(out) == 20);
     CHECK(sourcePtr->isDrained());
+    sourcePtr.reset();
     CHECK(errorCount.load() == 0);
   }
 
@@ -171,6 +172,7 @@ namespace ao::audio::test
     auto output = std::vector<std::byte>(afterSeekBlock.size());
     REQUIRE(sourcePtr->read(output) == output.size());
     CHECK(output == afterSeekBlock);
+    sourcePtr.reset();
     CHECK(errorCount.load() == 0);
   }
 
@@ -190,8 +192,10 @@ namespace ao::audio::test
     REQUIRE(sourcePtr->prepare());
     sourcePtr->activate(onError);
 
-    auto res = sourcePtr->seek(std::chrono::milliseconds{50});
-    CHECK_FALSE(res);
+    auto const res = sourcePtr->seek(std::chrono::milliseconds{50});
+    REQUIRE_FALSE(res);
+    CHECK(res.error().message == "seek fail");
+    sourcePtr.reset();
     CHECK(errorCount.load() == 1);
   }
 
@@ -199,13 +203,12 @@ namespace ao::audio::test
             "[audio][unit][streaming-source][concurrency]")
   {
     auto const info = testStreamInfo();
-    auto errorCount = std::atomic{0};
-    auto errorMutex = std::mutex{};
-    auto errorCv = std::condition_variable{};
-    auto onError = [&](Error const&)
+    auto errors = std::vector<Error>{};
+    auto errorReady = std::counting_semaphore{0};
+    auto onError = [&](Error const& error)
     {
-      errorCount.fetch_add(1);
-      errorCv.notify_one();
+      errors.push_back(error);
+      errorReady.release();
     };
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
@@ -220,9 +223,10 @@ namespace ao::audio::test
     REQUIRE(sourcePtr->prepare());
     sourcePtr->activate(onError);
 
-    auto lock = std::unique_lock{errorMutex};
-    REQUIRE(errorCv.wait_for(lock, std::chrono::seconds{5}, [&] { return errorCount.load() == 1; }));
-    CHECK(errorCount.load() == 1);
+    REQUIRE(errorReady.try_acquire_for(std::chrono::seconds{5}));
+    sourcePtr.reset();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors.front().message == "async fail");
   }
 
   TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming-source]")
@@ -246,6 +250,7 @@ namespace ao::audio::test
 
     CHECK(sourcePtr->isDrained());
     CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{0});
+    sourcePtr.reset();
     CHECK(errorCount.load() == 0);
   }
 } // namespace ao::audio::test

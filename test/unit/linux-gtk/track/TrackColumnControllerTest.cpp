@@ -8,7 +8,9 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/adjustment.h>
@@ -70,7 +72,7 @@ namespace ao::gtk::test
   } // namespace
 
   TEST_CASE("TrackColumnController - teardown cancels queued updates while the column view survives",
-            "[gtk][regression][track][column]")
+            "[gtk][unit][track-column][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -102,7 +104,8 @@ namespace ao::gtk::test
     CHECK(columnLayouts.snapshot().empty());
   }
 
-  TEST_CASE("TrackColumnController - builds and updates visible track columns", "[gtk][unit][track][column]")
+  TEST_CASE("TrackColumnController - configures registered fields with their titles and factories",
+            "[gtk][unit][track-column]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -113,13 +116,59 @@ namespace ao::gtk::test
     auto controller =
       TrackColumnController{columnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
 
-    SECTION("configureColumns creates all supported columns")
-    {
-      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+    auto configuredFields = std::vector<rt::TrackField>{};
+    auto factories = std::vector<Glib::RefPtr<Gtk::SignalListItemFactory>>{};
+    controller.configureColumns(
+      [&configuredFields, &factories](rt::TrackField field)
+      {
+        configuredFields.push_back(field);
+        factories.push_back(Gtk::SignalListItemFactory::create());
+        return factories.back();
+      });
+    auto expectedFields = std::vector<rt::TrackField>{};
 
-      auto const columnsPtr = columnView.get_columns();
-      CHECK(columnsPtr->get_n_items() > 0);
+    for (auto const& definition : rt::trackFieldDefinitions())
+    {
+      if (definition.presentable)
+      {
+        expectedFields.push_back(definition.field);
+      }
     }
+
+    REQUIRE(configuredFields == expectedFields);
+    REQUIRE(factories.size() == expectedFields.size());
+    auto const columnsPtr = columnView.get_columns();
+    REQUIRE(columnsPtr);
+    REQUIRE(columnsPtr->get_n_items() == expectedFields.size());
+
+    for (::guint index = 0; index < columnsPtr->get_n_items(); ++index)
+    {
+      auto const columnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(index));
+      REQUIRE(columnPtr);
+      auto const field = expectedFields[index];
+      CHECK(fieldForColumn(columnPtr) == field);
+      CHECK(columnPtr->get_factory() == factories[index]);
+      CHECK(columnPtr->get_id().raw() == rt::trackFieldId(field));
+      CHECK(columnPtr->get_title().raw() == uimodel::trackFieldLabel(ao::test::englishMessageCatalog(), field));
+      CHECK(columnPtr->get_resizable());
+      CHECK(columnPtr->get_fixed_width() == uimodel::trackColumnDefaults(field).width);
+    }
+
+    auto const titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
+    REQUIRE(titleColumnPtr);
+    CHECK(titleColumnPtr->get_title() == "Title");
+  }
+
+  TEST_CASE("TrackColumnController - applies and persists field layouts", "[gtk][unit][track-column]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto columnLayouts = uimodel::TrackColumnLayouts{changes};
+
+    auto columnView = Gtk::ColumnView{};
+    auto controller =
+      TrackColumnController{columnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
 
     SECTION("applyColumnLayout updates visibility")
     {
@@ -198,90 +247,119 @@ namespace ao::gtk::test
       REQUIRE(albumState != nullptr);
       CHECK_FALSE(albumState->visible);
     }
-
-    SECTION("column layout writes do not bounce between open views")
-    {
-      auto events = std::vector<ListId>{};
-      auto sub = columnLayouts.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
-
-      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
-
-      auto secondColumnView = Gtk::ColumnView{};
-      auto secondController =
-        TrackColumnController{secondColumnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
-      secondController.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
-
-      auto firstVisible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
-      auto secondVisible = std::vector{rt::TrackField::Title, rt::TrackField::Album};
-      controller.syncLayout(firstVisible);
-      secondController.syncLayout(secondVisible);
-      drainGtkEvents();
-
-      CHECK(events.empty());
-
-      auto const titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
-      REQUIRE(titleColumnPtr);
-
-      titleColumnPtr->set_fixed_width(333);
-      drainGtkEvents();
-
-      REQUIRE(events.size() == 1);
-      CHECK(events[0] == rt::kAllTracksListId);
-
-      auto const& stored = columnLayouts.layoutForList(rt::kAllTracksListId);
-      CHECK(std::ranges::contains(stored, rt::TrackField::Artist, &uimodel::TrackColumnState::field));
-      CHECK_FALSE(std::ranges::contains(stored, rt::TrackField::Album, &uimodel::TrackColumnState::field));
-      auto const* titleState = stateForField(stored, rt::TrackField::Title);
-      REQUIRE(titleState != nullptr);
-      CHECK(titleState->width == -1);
-      CHECK(titleState->weight > 0.0);
-
-      drainGtkEvents();
-      CHECK(events.size() == 1);
-    }
-
-    SECTION("title position CSS updates are coalesced through idle")
-    {
-      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
-
-      auto visible = std::vector{rt::TrackField::Artist, rt::TrackField::Title};
-      controller.syncLayout(visible);
-      auto const initialCss = controller.titlePositionCss();
-      REQUIRE_FALSE(initialCss.empty());
-
-      auto const artistColumnPtr = columnForField(columnView, rt::TrackField::Artist);
-      REQUIRE(artistColumnPtr);
-
-      artistColumnPtr->set_fixed_width(320);
-      artistColumnPtr->set_fixed_width(420);
-
-      CHECK(controller.isTitlePositionUpdateQueued());
-
-      drainGtkEvents();
-
-      CHECK_FALSE(controller.isTitlePositionUpdateQueued());
-      CHECK(controller.titlePositionCss() != initialCss);
-    }
-
-    SECTION("allocated column view exposes the viewport as horizontal page size")
-    {
-      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
-
-      auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration};
-      controller.syncLayout(visible);
-      auto host = GtkWindowFixture{};
-      host.window().set_default_size(640, 240);
-      host.mount(columnView);
-      host.present();
-
-      auto const adjPtr = columnView.get_hadjustment();
-      REQUIRE(adjPtr);
-      CHECK(static_cast<std::int32_t>(std::lround(adjPtr->get_page_size())) == columnView.get_width());
-    }
   }
 
-  TEST_CASE("TrackColumnController - follows the active horizontal adjustment",
-            "[gtk][regression][track-column][geometry]")
+  TEST_CASE("TrackColumnController - publishes one layout change across open views", "[gtk][unit][track-column]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto columnLayouts = uimodel::TrackColumnLayouts{changes};
+
+    auto columnView = Gtk::ColumnView{};
+    auto controller =
+      TrackColumnController{columnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
+
+    auto events = std::vector<ListId>{};
+    auto sub = columnLayouts.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
+
+    controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+    auto secondColumnView = Gtk::ColumnView{};
+    auto secondController =
+      TrackColumnController{secondColumnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
+    secondController.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+    auto firstVisible = std::vector{rt::TrackField::Title, rt::TrackField::Artist};
+    auto secondVisible = std::vector{rt::TrackField::Title, rt::TrackField::Album};
+    controller.syncLayout(firstVisible);
+    secondController.syncLayout(secondVisible);
+    drainGtkEvents();
+
+    CHECK(events.empty());
+
+    auto const titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
+    REQUIRE(titleColumnPtr);
+
+    titleColumnPtr->set_fixed_width(333);
+    drainGtkEvents();
+
+    REQUIRE(events.size() == 1);
+    CHECK(events[0] == rt::kAllTracksListId);
+
+    auto const& stored = columnLayouts.layoutForList(rt::kAllTracksListId);
+    CHECK(std::ranges::contains(stored, rt::TrackField::Artist, &uimodel::TrackColumnState::field));
+    CHECK_FALSE(std::ranges::contains(stored, rt::TrackField::Album, &uimodel::TrackColumnState::field));
+    auto const* titleState = stateForField(stored, rt::TrackField::Title);
+    REQUIRE(titleState != nullptr);
+    CHECK(titleState->width == -1);
+    CHECK(titleState->weight > 0.0);
+
+    drainGtkEvents();
+    CHECK(events.size() == 1);
+  }
+
+  TEST_CASE("TrackColumnController - coalesces title position CSS updates through idle",
+            "[gtk][unit][track-column][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto columnLayouts = uimodel::TrackColumnLayouts{changes};
+
+    auto columnView = Gtk::ColumnView{};
+    auto controller =
+      TrackColumnController{columnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
+
+    controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+    auto visible = std::vector{rt::TrackField::Artist, rt::TrackField::Title};
+    controller.syncLayout(visible);
+    auto const initialCss = controller.titlePositionCss();
+    REQUIRE_FALSE(initialCss.empty());
+
+    auto const artistColumnPtr = columnForField(columnView, rt::TrackField::Artist);
+    REQUIRE(artistColumnPtr);
+
+    artistColumnPtr->set_fixed_width(320);
+    artistColumnPtr->set_fixed_width(420);
+
+    CHECK(controller.isTitlePositionUpdateQueued());
+
+    drainGtkEvents();
+
+    CHECK_FALSE(controller.isTitlePositionUpdateQueued());
+    CHECK(controller.titlePositionCss() != initialCss);
+    CHECK(controller.titlePositionCss() == "columnview { --ao-title-x: 420.0px; }");
+  }
+
+  TEST_CASE("TrackColumnController - exposes the realized viewport as horizontal page size",
+            "[gtk][unit][track-column][geometry]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto executor = rt::test::QueuedExecutor{};
+    auto changes = rt::test::makeLibraryChanges(executor);
+    auto columnLayouts = uimodel::TrackColumnLayouts{changes};
+
+    auto columnView = Gtk::ColumnView{};
+    auto controller =
+      TrackColumnController{columnView, columnLayouts, ao::test::englishMessageCatalog(), rt::kAllTracksListId};
+
+    controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+
+    auto visible = std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration};
+    controller.syncLayout(visible);
+    auto host = GtkWindowFixture{};
+    host.window().set_default_size(640, 240);
+    host.mount(columnView);
+    host.present();
+
+    auto const adjPtr = columnView.get_hadjustment();
+    REQUIRE(adjPtr);
+    CHECK(static_cast<std::int32_t>(std::lround(adjPtr->get_page_size())) == columnView.get_width());
+  }
+
+  TEST_CASE("TrackColumnController - follows the active horizontal adjustment", "[gtk][unit][track-column][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};

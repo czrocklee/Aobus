@@ -39,7 +39,7 @@ namespace ao::uimodel::test
     CHECK(combineSmartListEffectiveExpression("$year > 1970", "") == "$year > 1970");
   }
 
-  TEST_CASE("SmartListEditorModel - distinguishes complete and partial filtered results", "[uimodel][regression][list]")
+  TEST_CASE("SmartListEditorModel - distinguishes complete and partial filtered results", "[uimodel][unit][list]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
 
@@ -50,7 +50,7 @@ namespace ao::uimodel::test
     CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, true, false) == "Showing 10 of 11 matches");
   }
 
-  TEST_CASE("SmartListEditorModel - unfiltered previews describe the complete source", "[uimodel][regression][list]")
+  TEST_CASE("SmartListEditorModel - unfiltered previews describe the complete source", "[uimodel][unit][list]")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, true) == "Showing all tracks: 1");

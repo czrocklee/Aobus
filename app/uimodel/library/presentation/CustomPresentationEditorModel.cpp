@@ -153,6 +153,7 @@ namespace ao::uimodel
     state.spec.groupBy = _groupKey;
     state.spec.sortBy = _sortTerms;
     state.spec.visibleFields = _visibleFields;
+    state.spec = rt::normalizeTrackPresentationSpec(state.spec);
     return state;
   }
 

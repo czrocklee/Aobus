@@ -52,6 +52,15 @@ namespace ao::winui
     friend bool operator==(DesktopSettings const&, DesktopSettings const&) = default;
   };
 
+  /**
+   * @brief Remember captured normal/restore bounds without invalidating desktop settings.
+   *
+   * Floors width and height independently to the persisted minimum. Position,
+   * maximized state and unrelated preferences are preserved. This changes only
+   * the live settings; it neither resizes the native window nor writes a file.
+   */
+  void rememberDesktopWindowPlacement(DesktopSettings& settings, WindowPlacement placement) noexcept;
+
   struct DesktopSettingsYamlSchema final
   {
     Result<> serialize(ryml::NodeRef node, DesktopSettings const& state) const;

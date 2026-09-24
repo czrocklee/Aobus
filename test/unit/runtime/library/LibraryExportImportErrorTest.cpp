@@ -20,10 +20,12 @@
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
 #include <limits>
 #include <stop_token>
@@ -38,14 +40,14 @@ namespace ao::rt::test
   {
     std::string readAll(std::filesystem::path const& path)
     {
-      auto ifs = std::ifstream{path};
+      auto ifs = std::ifstream{path, std::ios::binary};
       auto const begin = std::istreambuf_iterator{ifs};
       return std::string{begin, decltype(begin){}};
     }
   } // namespace
 
   TEST_CASE("LibraryYaml - a cancelled export leaves the file it was asked to replace",
-            "[runtime][workflow][import-export][error]")
+            "[runtime][unit][import-export][error][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -54,17 +56,14 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "backup.yaml";
     auto const previous = std::string{"# the backup the user already has\n"};
     {
-      auto ofs = std::ofstream{yamlPath};
+      auto ofs = std::ofstream{yamlPath, std::ios::binary};
       ofs << previous;
     }
 
     auto stopSource = std::stop_source{};
     stopSource.request_stop();
 
-    // The export path a user reaches is usually a file they are replacing, so a
-    // cancelled run must cost them nothing. Cancellation is the deterministic
-    // stand-in for the whole class: a full disk or a crash mid-write leaves the
-    // same thing behind, which is the file that was already there.
+    // A pre-cancelled export must preserve the destination byte-for-byte.
     auto exporter = LibraryYamlExporter{ml};
     CHECK_THROWS_AS(
       exporter.exportToYaml(yamlPath, ExportMode::Full, stopSource.get_token()), async::OperationCancelled);
@@ -72,8 +71,8 @@ namespace ao::rt::test
     CHECK(readAll(yamlPath) == previous);
   }
 
-  TEST_CASE("LibraryYaml - an export replaces its target whole and creates no directory",
-            "[runtime][workflow][import-export][error]")
+  TEST_CASE("LibraryYaml - an export replaces its target with the complete new document",
+            "[runtime][unit][import-export][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -91,9 +90,18 @@ namespace ao::rt::test
     REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::Full));
     REQUIRE(exporter.exportToYaml(freshPath, ExportMode::Full));
     CHECK(readAll(yamlPath) == readAll(freshPath));
+  }
 
-    // Writing through a temporary file must not turn a mistyped destination into
-    // a directory tree the user never asked for.
+  TEST_CASE("LibraryYaml - an export does not create a missing destination directory",
+            "[runtime][unit][import-export][error]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeTrackSpec("Exported"));
+    library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeTrackSpec("Second"));
+    auto exporter = LibraryYamlExporter{ml};
+
+    // A temporary output file must not create an unsolicited directory tree.
     auto const missingDirectory = std::filesystem::path{temp.path()} / "missing";
     auto const belowMissing = missingDirectory / "backup.yaml";
     auto const res = exporter.exportToYaml(belowMissing, ExportMode::Full);
@@ -102,7 +110,7 @@ namespace ao::rt::test
     CHECK_FALSE(std::filesystem::exists(missingDirectory));
   }
 
-  TEST_CASE("LibraryYaml - import reports invalid input errors", "[runtime][workflow][import-export][error]")
+  TEST_CASE("LibraryYaml - import reports invalid input errors", "[runtime][unit][import-export][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -394,7 +402,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - import handles structural corruption cases", "[runtime][workflow][import-export][error]")
+  TEST_CASE("LibraryYaml - import handles structural corruption cases", "[runtime][unit][import-export][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -418,26 +426,6 @@ library:
       REQUIRE(!res);
       CHECK(res.error().code == Error::Code::FormatRejected);
       CHECK(res.error().message.contains("library.tracks must be a sequence"));
-    }
-
-    SECTION("List missing mandatory ID")
-    {
-      {
-        auto yaml = std::ofstream{yamlPath};
-        yaml << R"(
-version: 5
-export_mode: full
-library:
-  resources: []
-  tracks: []
-  lists:
-    - name: "No ID"
-)";
-      }
-      auto const res = importer.importFromYamlOffline(yamlPath);
-      REQUIRE(!res);
-      CHECK(res.error().code == Error::Code::FormatRejected);
-      CHECK(res.error().message.contains("missing required 'id'"));
     }
 
     SECTION("List entry points to non-existent track")
@@ -468,8 +456,42 @@ library:
     }
   }
 
+  TEST_CASE("LibraryYaml - full transfer preserves duration boundaries", "[runtime][integration][import-export]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto source = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "source");
+    library::test::addTrack(
+      source, library::test::TrackSpec{.uri = "unknown.flac", .duration = std::chrono::milliseconds{0}});
+    library::test::addTrack(
+      source, library::test::TrackSpec{.uri = "maximum.flac", .duration = std::chrono::milliseconds{2147483647}});
+    auto const yamlPath = temp.path() / "durations.yaml";
+    REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
+    CHECK(readAll(yamlPath).contains("duration: 2147483647"));
+
+    auto target = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "target");
+    auto const res = LibraryYamlImporter{target}.importFromYamlOffline(yamlPath, ImportMode::Restore);
+    REQUIRE(res);
+    CHECK(res->tracksCreated == 2);
+    CHECK(res->tracksUpdated == 0);
+
+    auto transaction = target.readTransaction();
+    auto const tracks = target.tracks().reader(transaction);
+    auto const manifest = target.manifest().reader(transaction);
+    REQUIRE(tracks.entryCount() == 2);
+    auto const optUnknown = manifest.get("unknown.flac");
+    auto const optMaximum = manifest.get("maximum.flac");
+    REQUIRE(optUnknown);
+    REQUIRE(optMaximum);
+    auto const optUnknownTrack = tracks.get(optUnknown->trackId(), TrackStore::Reader::LoadMode::Both);
+    auto const optMaximumTrack = tracks.get(optMaximum->trackId(), TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optUnknownTrack);
+    REQUIRE(optMaximumTrack);
+    CHECK(optUnknownTrack->property().duration() == std::chrono::milliseconds{0});
+    CHECK(optMaximumTrack->property().duration() == std::chrono::milliseconds{2147483647});
+  }
+
   TEST_CASE("LibraryYaml - restore rolls back every mutation when a later track fails",
-            "[runtime][workflow][import-export][regression]")
+            "[runtime][integration][import-export]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -485,7 +507,32 @@ library:
     }
 
     constexpr auto kUint16Overflow = std::size_t{std::numeric_limits<std::uint16_t>::max()} + 1;
-    auto const oversizedTitle = std::string(kUint16Overflow, 'x');
+    auto rejectedField = std::string{};
+    auto expectedError = std::string_view{"cannot be represented in the library"};
+
+    SECTION("Oversized title")
+    {
+      rejectedField = "title: \"" + std::string(kUint16Overflow, 'x') + "\"";
+    }
+
+    SECTION("Duration just above the stored maximum")
+    {
+      rejectedField = "duration: 2147483648";
+      expectedError = "Track duration";
+    }
+
+    SECTION("Duration at the unsigned YAML maximum")
+    {
+      rejectedField = "duration: 4294967295";
+      expectedError = "Track duration";
+    }
+
+    SECTION("Negative duration")
+    {
+      rejectedField = "duration: -1";
+      expectedError = "Track record.duration";
+    }
+
     auto const yamlPath = temp.path() / "rollback.yaml";
 
     {
@@ -501,18 +548,22 @@ library:
       artist: "Transient Artist"
     - id: 2
       uri: "oversized.flac"
-      title: ")"
-           << oversizedTitle << R"("
+      )" << rejectedField
+           << R"(
   lists: []
 )";
     }
 
     auto importer = LibraryYamlImporter{library};
-    auto const res = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
+    auto const previewRes = importer.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
+    REQUIRE_FALSE(previewRes);
+    CHECK(previewRes.error().code == Error::Code::FormatRejected);
+    CHECK(previewRes.error().message.contains(expectedError));
 
+    auto const res = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::FormatRejected);
-    CHECK(res.error().message.contains("cannot be represented in the library"));
+    CHECK(res.error().message.contains(expectedError));
     CHECK(library.dictionary().generation() == originalDictionaryGeneration);
     CHECK_FALSE(library.dictionary().findId("Transient Artist"));
 

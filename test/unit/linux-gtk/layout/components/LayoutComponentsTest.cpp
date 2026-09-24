@@ -67,33 +67,49 @@ namespace ao::gtk::layout::test
             "[gtk][unit][layout-component][registry]")
   {
     auto fixture = LayoutRuntimeFixture{};
+    auto const types = std::to_array<std::string_view>({"status.message",
+                                                        "library.listTree",
+                                                        "track.table",
+                                                        "library.openLibraryButton",
+                                                        "app.menuBar",
+                                                        "status.playbackDetails",
+                                                        "status.nowPlaying",
+                                                        "status.trackCount",
+                                                        "track.detailScope",
+                                                        "track.selectionRegion",
+                                                        "track.coverArt",
+                                                        "track.fieldGrid",
+                                                        "track.detailUndoBar",
+                                                        "track.tagEditor",
+                                                        "track.quickFilter"});
 
-    SECTION("all registered status and semantic types")
+    for (auto const type : types)
     {
-      auto const types = std::to_array<std::string_view>({"status.message",
-                                                          "library.listTree",
-                                                          "track.table",
-                                                          "library.openLibraryButton",
-                                                          "app.menuBar",
-                                                          "status.playbackDetails",
-                                                          "status.nowPlaying",
-                                                          "status.importProgress",
-                                                          "status.notification",
-                                                          "status.trackCount",
-                                                          "track.detailScope",
-                                                          "track.selectionRegion",
-                                                          "track.coverArt",
-                                                          "track.fieldGrid",
-                                                          "track.detailUndoBar",
-                                                          "track.tagEditor",
-                                                          "track.quickFilter"});
+      CAPTURE(type);
+      REQUIRE(fixture.components().schema().component(type));
 
-      for (auto const type : types)
-      {
-        auto const node = LayoutNode{.type = std::string{type}};
-        std::unique_ptr<LayoutComponent> const compPtr = fixture.create(node);
-        CHECK(compPtr != nullptr);
-      }
+      auto const node = LayoutNode{.type = std::string{type}};
+      std::unique_ptr<LayoutComponent> const compPtr = fixture.create(node);
+      REQUIRE(compPtr != nullptr);
+      CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
+    }
+  }
+
+  TEST_CASE("LayoutComponents - stale status registry ids remain explicit rejection controls",
+            "[gtk][unit][layout-component][registry]")
+  {
+    auto fixture = LayoutRuntimeFixture{};
+    auto const staleTypes = std::to_array<std::string_view>({"status.importProgress", "status.notification"});
+
+    for (auto const type : staleTypes)
+    {
+      CAPTURE(type);
+      CHECK_FALSE(fixture.components().schema().component(type));
+
+      auto const node = LayoutNode{.type = std::string{type}};
+      std::unique_ptr<LayoutComponent> const compPtr = fixture.create(node);
+      REQUIRE(compPtr != nullptr);
+      CHECK(containsLayoutErrorPlaceholder(compPtr->widget()));
     }
   }
 } // namespace ao::gtk::layout::test

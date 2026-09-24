@@ -12,36 +12,36 @@
 
 #include <array>
 #include <chrono>
+#include <vector>
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - load mode optimization supports mixed access profiles",
-            "[runtime][unit][smart-list][load-mode]")
+  TEST_CASE("SmartListEvaluator - one reload evaluates pending metadata and property predicates",
+            "[runtime][unit][smart-list][membership]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
-    hotList.setExpression("$year >= 2020"); // Hot metadata
+    auto metadataList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    metadataList.setExpression("$year >= 2020");
 
-    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
-    coldList.setExpression("@duration >= 3m"); // Cold property
+    auto propertyList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    propertyList.setExpression("@duration >= 3m");
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
     auto const batchTrackIds = std::array{t1};
     source.batchInsert(batchTrackIds);
 
-    hotList.reload();
-    coldList.reload();
+    metadataList.reload();
 
-    CHECK(hotList.size() == 1);
-    CHECK(coldList.size() == 1);
+    CHECK(sourceTrackIds(metadataList) == std::vector{t1});
+    CHECK(sourceTrackIds(propertyList) == std::vector{t1});
   }
 
-  TEST_CASE("SmartListEvaluator - hot and cold access profile optimization uses both readers",
-            "[runtime][unit][smart-list][load-mode]")
+  TEST_CASE("SmartListEvaluator - a compound metadata and property predicate filters membership",
+            "[runtime][unit][smart-list][membership]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
@@ -49,7 +49,6 @@ namespace ao::rt::test
     auto& source = *sourcePtr;
 
     auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
-    // Requires both metadata and property reader
     list.setExpression("$year >= 2020 && @duration >= 3m");
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
@@ -58,7 +57,6 @@ namespace ao::rt::test
     source.batchInsert(batchTrackIds);
 
     list.reload();
-    CHECK(list.size() == 1);
-    CHECK(list.trackIdAt(0) == t1);
+    CHECK(sourceTrackIds(list) == std::vector{t1});
   }
 } // namespace ao::rt::test

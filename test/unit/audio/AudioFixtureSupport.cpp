@@ -3,6 +3,7 @@
 
 #include "AudioFixtureSupport.h"
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
@@ -20,10 +21,8 @@ namespace ao::audio::test
   {
     auto const path = std::filesystem::path{AUDIO_TEST_DATA_DIR} / fileName;
 
-    if (!std::filesystem::exists(path))
-    {
-      SKIP("Required audio fixture missing: " << path);
-    }
+    INFO("Required audio fixture: " << path);
+    REQUIRE(std::filesystem::is_regular_file(path));
 
     return path;
   }

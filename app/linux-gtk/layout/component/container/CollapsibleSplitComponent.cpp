@@ -332,7 +332,7 @@ namespace ao::gtk::layout
         else if (requestedSize > 0)
         {
           APP_LOG_INFO("CollapsibleSplit: using fixed position id='{}' size={}", node.id, requestedSize);
-          _currentSize = static_cast<std::int32_t>(requestedSize);
+          _currentSize = std::max(kMinCollapsibleSplitSize, static_cast<std::int32_t>(requestedSize));
           _persistableSizeKnown = true;
           setSize(_currentSize);
         }
@@ -348,7 +348,7 @@ namespace ao::gtk::layout
         }
         else
         {
-          _currentSize = 0;
+          _currentSize = kMinCollapsibleSplitSize;
           setSize(_currentSize);
         }
       }

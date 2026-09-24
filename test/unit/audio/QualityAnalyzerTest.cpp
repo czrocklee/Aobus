@@ -412,7 +412,7 @@ namespace ao::audio::test
   // The ALSA sink reports the precision its converter resolves, which may be
   // narrower than the container feeding it. Narrowing back to bits that were
   // only padded on the way in returns the original samples.
-  TEST_CASE("QualityAnalyzer - narrowing back to proven integer precision is lossless", "[audio][regression][quality]")
+  TEST_CASE("QualityAnalyzer - narrowing back to proven integer precision is lossless", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     signalAt(graph, 0).precisionBits = 24;
@@ -429,7 +429,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasFinding(findAssessment(result, "ao-sink"), QualityFindingKind::Truncation));
   }
 
-  TEST_CASE("QualityAnalyzer - an endpoint narrower than the source reports truncation", "[audio][regression][quality]")
+  TEST_CASE("QualityAnalyzer - an endpoint narrower than the source reports truncation", "[audio][unit][quality]")
   {
     // Same 32-bit container, but now the source really has 32 bits, so the
     // endpoint discards eight of them.
@@ -447,7 +447,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("QualityAnalyzer - a reduced endpoint after full-precision delivery reports truncation",
-            "[audio][regression][quality]")
+            "[audio][unit][quality]")
   {
     // The Jabra shape: a 24-bit source delivered as 16-bit bytes to a 16-bit
     // endpoint. The loss happens upstream of the sink and must be reported.
@@ -486,7 +486,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("QualityAnalyzer - a reachable Sink wins over a duplicated multi-hop dead end regardless of order",
-            "[audio][regression][quality]")
+            "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes.push_back({.id = "monitor-input", .type = flow::NodeType::Intermediary});
@@ -525,7 +525,7 @@ namespace ao::audio::test
     CHECK(findAssessment(result, "monitor-endpoint") == nullptr);
   }
 
-  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a cyclic side branch", "[audio][regression][quality]")
+  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a cyclic side branch", "[audio][unit][quality]")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes.push_back({.id = "cycle-a", .type = flow::NodeType::Intermediary});

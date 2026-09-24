@@ -53,7 +53,7 @@ namespace ao::utility::test
     CHECK(toAsciiUpper(utf8Byte) == utf8Byte);
   }
 
-  TEST_CASE("String - ASCII transforms preserve UTF-8 bytes", "[utility][unit][string][utf8]")
+  TEST_CASE("String - ASCII transforms preserve UTF-8 bytes", "[utility][unit][string]")
   {
     auto const text = std::string{" \tDVO\xC5\x98\xC3\x81K \n"};
 

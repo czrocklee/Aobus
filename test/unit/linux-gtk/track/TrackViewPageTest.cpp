@@ -46,6 +46,7 @@
 #include <glib-object.h>
 #include <glibmm/value.h>
 #include <gtkmm/box.h>
+#include <gtkmm/columnview.h>
 #include <gtkmm/dragsource.h>
 #include <gtkmm/droptarget.h>
 #include <gtkmm/entry.h>
@@ -118,7 +119,41 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackViewPage - initializes localized list controls and geometry", "[gtk][unit][geometry][localization]")
+  TEST_CASE("TrackViewPage - exposes list identity and status message state", "[gtk][unit][track-view]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
+                                     { std::ignore = addAlbumTrack(musicLibrary, "Album"); }};
+    auto& runtime = fixture.runtime();
+    auto const textCatalog = ao::test::messageCatalog("de-DE");
+    auto cache = TrackRowCache{runtime.library(), textCatalog};
+    auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ResourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()};
+    auto window = Gtk::Window{};
+    auto modelPtr = TrackListModel::create(cache);
+    auto columnLayouts = uimodel::TrackColumnLayouts{runtime.library().changes()};
+    auto page = TrackViewPage{rt::kAllTracksListId,
+                              modelPtr,
+                              columnLayouts,
+                              textCatalog,
+                              runtime.async(),
+                              runtime.library(),
+                              runtime.views(),
+                              thumbnailLoader};
+    window.set_child(page);
+
+    CHECK(page.listId() == rt::kAllTracksListId);
+    CHECK(page.projection() == nullptr);
+    page.setStatusMessage("Loading...");
+    auto* const label = findLabelByText(page, "Loading...");
+    REQUIRE(label != nullptr);
+    CHECK(label->get_visible());
+    page.clearStatusMessage();
+    CHECK_FALSE(label->get_visible());
+  }
+
+  TEST_CASE("TrackViewPage - grouped headers render localized cover placeholders",
+            "[gtk][unit][track-view][geometry][localization]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto albumTrackId = kInvalidTrackId;
@@ -143,23 +178,6 @@ namespace ao::gtk::test
                               runtime.views(),
                               thumbnailLoader};
     window.set_child(page);
-
-    SECTION("initial state")
-    {
-      CHECK(page.listId() == rt::kAllTracksListId);
-      CHECK(page.projection() == nullptr);
-    }
-
-    SECTION("status message shows then hides the status label")
-    {
-      page.setStatusMessage("Loading...");
-      auto* const label = findLabelByText(page, "Loading...");
-      REQUIRE(label != nullptr);
-      CHECK(label->get_visible());
-
-      page.clearStatusMessage();
-      CHECK_FALSE(label->get_visible());
-    }
 
     SECTION("album grouped section header reserves a fixed cover slot")
     {
@@ -230,8 +248,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackViewPage - large projections materialize only the GTK prefetch window",
-            "[gtk][regression][track-view]")
+  TEST_CASE("TrackViewPage - large projections materialize only the GTK prefetch window", "[gtk][unit][track-view]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     constexpr std::size_t kTrackCount = 10000;
@@ -289,7 +306,8 @@ namespace ao::gtk::test
     CHECK(groupedRows < kMaximumPrefetchedRows);
   }
 
-  TEST_CASE("TrackViewPage - drag handle follows the shared List order capability", "[gtk][unit][track][list-order]")
+  TEST_CASE("TrackViewPage - drag handle follows the shared List order capability",
+            "[gtk][unit][track-view][list-order]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
@@ -328,6 +346,36 @@ namespace ao::gtk::test
     windowFixture.mount(page);
     windowFixture.present();
 
+    auto const presentableFieldCount = static_cast<std::size_t>(
+      std::ranges::count_if(rt::trackFieldDefinitions(), &rt::TrackFieldDefinition::presentable));
+    auto currentColumnCount = [&page] -> std::size_t
+    {
+      auto* const columnView = findWidget<Gtk::ColumnView>(page);
+      REQUIRE(columnView != nullptr);
+      auto const columnsPtr = columnView->get_columns();
+      REQUIRE(columnsPtr);
+      return columnsPtr->get_n_items();
+    };
+    auto checkCellAlignment = [&page]
+    {
+      REQUIRE(tryPumpGtkEventsUntil(
+        [&page]
+        {
+          auto* const label = findWidgetByClass<Gtk::Label>(page, "ao-track-title-cell");
+          return label != nullptr && label->get_text() == "Track";
+        }));
+      auto* const titleLabel = findWidgetByClass<Gtk::Label>(page, "ao-track-title-cell");
+      auto* const durationLabel = findLabelByText(page, "3:00");
+      REQUIRE(titleLabel != nullptr);
+      REQUIRE(durationLabel != nullptr);
+      CHECK(titleLabel->get_text() == "Track");
+      CHECK(titleLabel->get_halign() == Gtk::Align::START);
+      CHECK(titleLabel->get_xalign() == 0.0F);
+      CHECK(durationLabel->get_halign() == Gtk::Align::END);
+      CHECK(durationLabel->get_xalign() == 1.0F);
+    };
+    CHECK(currentColumnCount() == presentableFieldCount + 1);
+    checkCellAlignment();
     CHECK(page.hasOrderDragHandle());
     auto* const dragHandle = findWidgetByClass<Gtk::Box>(page, "ao-order-drag-handle");
     REQUIRE(dragHandle != nullptr);
@@ -337,10 +385,14 @@ namespace ao::gtk::test
     REQUIRE(runtime.views().setPresentation(viewId, rt::defaultTrackPresentationSpec()));
     page.applyPresentation(rt::defaultTrackPresentationSpec());
     CHECK_FALSE(page.hasOrderDragHandle());
+    CHECK(currentColumnCount() == presentableFieldCount);
+    checkCellAlignment();
 
     REQUIRE(runtime.views().setPresentation(viewId, manual->spec));
     page.applyPresentation(manual->spec);
     CHECK(page.hasOrderDragHandle());
+    CHECK(currentColumnCount() == presentableFieldCount + 1);
+    checkCellAlignment();
 
     REQUIRE(runtime.views().setFilter(viewId, "true"));
     page.applyPresentation(manual->spec);
@@ -357,7 +409,8 @@ namespace ao::gtk::test
           "Fix the List or quick-filter expression before changing its order.");
   }
 
-  TEST_CASE("TrackViewPage - dropping a drag handle preserves the order submission", "[gtk][regression][list-order]")
+  TEST_CASE("TrackViewPage - dropping a drag handle preserves the order submission",
+            "[gtk][integration][track-view][list-order]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
@@ -471,7 +524,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("TrackViewPage - an intervening revision cancels inline metadata without changing the row",
-            "[gtk][regression][track-view][metadata]")
+            "[gtk][integration][track-view][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;

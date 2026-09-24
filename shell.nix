@@ -130,6 +130,8 @@ let
     gsettings-desktop-schemas
 
     pipewire
+    wireplumber
+    dbus
     alsa-lib
     udev
   ];

@@ -48,6 +48,11 @@ namespace ao::utility::test
       auto const encoded = base64Encode(data);
       auto const optDecoded = base64Decode(encoded);
       CHECK(optDecoded == data);
+
+      // Independent known answer with a zero and two high-bit bytes.
+      auto const known = std::vector{std::byte{0x00}, std::byte{0x80}, std::byte{0xFF}};
+      CHECK(base64Encode(known) == "AID/");
+      CHECK(base64Decode("AID/") == known);
     } // std::optional<vector> == vector compares the engaged value
 
     SECTION("Large binary data round-trip")

@@ -152,7 +152,8 @@ Reference id, property, layout, and tooltip overlays are charged when applied ev
 Missing, unknown, and recursive template references may produce diagnostic nodes only while the resulting diagnostic tree remains within the same effective limits.
 
 The file ceiling is checked before YAML parsing and before atomic replacement with serialized output.
-Tree-limit exhaustion returns `ValueTooLarge`; an allocation failure during preparation returns `ResourceExhausted`.
+Tree-limit exhaustion returns `ValueTooLarge`.
+Allocation failures during preparation follow the [shared exception-carrier rules](../../system/failure/exception-carriers.md#language-and-asynchronous-transport) rather than being translated to `ResourceExhausted`.
 
 ## Compatibility and versioning
 

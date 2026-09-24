@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "runtime/source/AllTracksSource.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
@@ -79,22 +81,47 @@ namespace ao::rt::test
 
     REQUIRE(observedBatches.size() == 1);
     REQUIRE(sourceEditScript(observedBatches[0]).edits.size() == 2);
+    CHECK(sourceEditScript(observedBatches[0]) ==
+          delta::RegularTrackEditScript{
+            .edits = {delta::RemoveRange{.start = 1, .trackIds = {TrackId{20}}},
+                      delta::InsertRange{.start = 2, .trackIds = {TrackId{40}, TrackId{50}}}},
+          });
     CHECK(observedIds == std::vector<TrackId>(finalIds.begin(), finalIds.end()));
   }
 
   TEST_CASE("TrackSource - invalidation is terminal and idempotent", "[runtime][unit][source]")
   {
-    auto source = MutableTrackSource{};
+    auto libraryFixture = MusicLibraryFixture{};
+    auto first = libraryFixture.addTrack("first");
+    auto second = libraryFixture.addTrack("second");
+    auto source = AllTracksSource{libraryFixture.library().tracks()};
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      source.reloadFromStore(transaction);
+    }
+    REQUIRE(sourceTrackIds(source) == std::vector{first, second});
+
     auto batches = std::vector<TrackSourceDelta>{};
-    auto subscription = source.subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
+    auto callbackSizes = std::vector<std::size_t>{};
+    auto subscription = source.subscribe(
+      [&](TrackSourceDelta const& batch) noexcept
+      {
+        callbackSizes.push_back(source.size());
+        batches.push_back(batch);
+      });
 
     TrackSourceAccess::invalidate(source);
     TrackSourceAccess::invalidate(source);
-    source.emitReset();
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      source.reloadFromStore(transaction);
+    }
 
     REQUIRE(batches.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(batches[0]));
+    CHECK(callbackSizes == std::vector<std::size_t>{0});
     CHECK(source.state() == TrackSourceState::Invalidated);
+    CHECK(source.size() == 0);
 
     auto lateBatches = std::vector<TrackSourceDelta>{};
     auto lateSubscription =

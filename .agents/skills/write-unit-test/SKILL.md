@@ -1,6 +1,6 @@
 ---
 name: write-unit-test
-description: Write or review Aobus C++ tests and select their owning layer and fixtures.
+description: Write, restructure, or review Aobus C++ tests, including their owning layer, fixtures, scope, and tags.
 ---
 
 # Write Aobus C++ tests
@@ -11,13 +11,13 @@ event binding, widget lifecycle, and layout boundaries.
 
 Read only the applicable references under `doc/development/test/`:
 
-- `layer-selection.md`: choosing the owning layer and suite.
-- `naming-and-assertion.md`: Catch2 names, tags, assertions, and SECTION policy.
-- `fixture-and-helper.md`: existing helpers, FakeIt, test data, and testability seams.
+- `layer-selection.md`: owning layer and unit/integration scope.
+- `naming-and-assertion.md`: names, tags, assertions, and SECTION policy.
+- `fixture-and-helper.md`: where a new case belongs, helpers, fakes, and seams.
 - `runtime-and-async.md`: deterministic executors and runtime subscriptions.
 - `uimodel-and-gtk.md`: UI model policy and native GTK harnesses.
 - `concurrency-and-sanitizer.md`: synchronization and cancellation contracts.
+- `validation-and-review.md`: registering files, reviewing existing tests, and completion.
+- `performance.md`: `test/perf` workloads and reports.
 
-Add new C++ test files to `test/CMakeLists.txt`. Completion and coverage reuse
-follow `doc/development/test/validation-and-review.md`.
 For a task explicitly about measured coverage gaps, use `improve-test-coverage`.

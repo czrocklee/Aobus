@@ -3,6 +3,7 @@
 import contextlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ from ao.core import builddir
 
 
 class PerformanceIdentityTest(unittest.TestCase):
+    @mock.patch.dict(os.environ, {"AOBUS_PERF_BASELINE_JSON": ""})
     def test_reused_executable_cannot_claim_the_current_checkout_revision(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -34,7 +36,16 @@ class PerformanceIdentityTest(unittest.TestCase):
                         "platform": env["AOBUS_PERF_PLATFORM"],
                         "icu_version": "78.3",
                     },
-                    "measurements": [],
+                    "measurements": [
+                        {
+                            "capability": "ordering",
+                            "scenario": "construction",
+                            "dataset": "none",
+                            "input_count": 0,
+                            "median_ns": 1,
+                            "p95_ns": 2,
+                        }
+                    ],
                 }
                 Path(env["AOBUS_PERF_REPORT_JSON"]).write_text(json.dumps(report), encoding="utf-8")
                 return 0

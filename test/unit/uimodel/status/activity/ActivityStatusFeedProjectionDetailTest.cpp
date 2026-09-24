@@ -12,8 +12,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedProjection - projects detail feed items and helpers",
-            "[uimodel][unit][status][activity]")
+  TEST_CASE("ActivityStatusFeedProjection - projects detail feed items and helpers", "[uimodel][unit][activity-status]")
   {
     auto const retainedError = entry(
       rt::NotificationId{12}, rt::NotificationSeverity::Error, "Write failed", rt::NotificationLifetime::pinned());
@@ -45,25 +44,56 @@ namespace ao::uimodel::test
 
     SECTION("detail items expose severity message and local dismissibility")
     {
-      auto const& errorItem = feedProjection.viewState().detail.items[2];
+      auto const& detail = feedProjection.viewState().detail;
+      REQUIRE(detail.items.size() == 3);
+      auto const& errorItem = detail.items[2];
+      CHECK(errorItem.id == rt::NotificationId{12});
       CHECK(errorItem.severity == rt::NotificationSeverity::Error);
       CHECK(errorItem.message == "Write failed");
       CHECK_FALSE(errorItem.dismissible);
 
-      auto const& warningItem = feedProjection.viewState().detail.items[0];
+      auto const& warningItem = detail.items[0];
+      CHECK(warningItem.id == rt::NotificationId{14});
       CHECK(warningItem.severity == rt::NotificationSeverity::Warning);
       CHECK(warningItem.message == "Latest warning");
       CHECK(warningItem.dismissible);
+
+      auto const& clearableItem = detail.items[1];
+      CHECK(clearableItem.id == rt::NotificationId{13});
+      CHECK(clearableItem.severity == rt::NotificationSeverity::Warning);
+      CHECK(clearableItem.message == "Clearable warning");
+      CHECK(clearableItem.dismissible);
     }
 
     SECTION("detail dismiss ignores pinned and hides clearable notifications")
     {
       feedProjection.hideDetailNotification(rt::NotificationId{12}, currentFeed);
+      REQUIRE(feedProjection.viewState().detail.items.size() == 3);
+      CHECK(feedProjection.viewState().detail.items[0].id == rt::NotificationId{14});
+      CHECK(feedProjection.viewState().detail.items[1].id == rt::NotificationId{13});
+      CHECK(feedProjection.viewState().detail.items[2].id == rt::NotificationId{12});
+
       feedProjection.hideDetailNotification(rt::NotificationId{14}, currentFeed);
 
       REQUIRE(feedProjection.viewState().detail.items.size() == 2);
       CHECK(feedProjection.viewState().detail.items[0].id == rt::NotificationId{13});
       CHECK(feedProjection.viewState().detail.items[1].id == rt::NotificationId{12});
     }
+  }
+
+  TEST_CASE("ActivityStatusFeedProjection - task-only detail counts as content", "[uimodel][unit][activity-status]")
+  {
+    auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
+    REQUIRE_FALSE(hasDetailContent(feedProjection.viewState().detail));
+
+    feedProjection.handleLibraryTaskProgress(
+      libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.5));
+
+    auto const& detail = feedProjection.viewState().detail;
+    REQUIRE(detail.items.empty());
+    REQUIRE(detail.optLibraryTask);
+    CHECK(detail.optLibraryTask->message == "Scanning: album.flac");
+    CHECK(detail.optLibraryTask->progressFraction == 0.5);
+    CHECK(hasDetailContent(detail));
   }
 } // namespace ao::uimodel::test

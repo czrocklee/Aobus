@@ -49,6 +49,7 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-muted-symbolic");
+    CHECK(btn->get_tooltip_text() == "Volume: 50% (Muted)");
     CHECK(hasAccessibleLabel(*btn, "Volume: 50% (Muted)"));
 
     playback.commands().setMuted(false);
@@ -56,11 +57,15 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-low-symbolic");
+    CHECK(btn->get_tooltip_text() == "Volume: 25%");
+    CHECK(hasAccessibleLabel(*btn, "Volume: 25%"));
 
     playback.commands().setVolume(1.0F);
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-high-symbolic");
+    CHECK(btn->get_tooltip_text() == "Volume: 100%");
+    CHECK(hasAccessibleLabel(*btn, "Volume: 100%"));
   }
 
   TEST_CASE("VolumeControlWidget - exposes localized volume state", "[gtk][unit][playback][localization]")

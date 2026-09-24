@@ -11,10 +11,12 @@ import tempfile
 import uuid
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Generator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Literal
+from urllib.parse import quote
 
 from ..core import appkitprocess, builddir, buildlock, linttest, proc, tooltest, workspace_cache
 from ..core.paths import PROJECT_ROOT
@@ -48,7 +50,10 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
 EPILOG = """\
 Pass any valid Catch2 filter string as the last argument. Quote it to avoid shell
 globbing, e.g. "[layout],[model]" (OR logic) or "[audio][backend]" (AND logic).
-Filters and --list apply to Catch2 suites; non-Catch2 suites report their suite name.
+An explicit filter applies only to Catch2 suites; selected tooling and lint suites
+are skipped. Across a suite group, individual suites may have no match, but at
+least one test must match globally. Tests that match and then skip still count as
+matches. Without a filter, --list reports non-Catch2 suite names.
 
 examples:
   ./ao test                          # build and run the native default suites
@@ -145,6 +150,42 @@ def _start_xvfb() -> "subprocess.Popen[str]":
         ) from exc
 
 
+def _start_gtk_bus(config: Path) -> "subprocess.Popen[str]":
+    try:
+        return subprocess.Popen(
+            ["dbus-daemon", "--nofork", f"--config-file={config}", "--print-address=1"],
+            stdout=subprocess.PIPE,
+            # Preserve startup diagnostics in the portal log without an unread pipe.
+            stderr=None,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise die("GTK tests require dbus-daemon. Enter the project nix-shell.") from exc
+
+
+def _gtk_daemon_ready(server: "subprocess.Popen[str]", label: str, *, timeout: float = 5) -> str:
+    """Read a single startup handshake without retaining an unread pipe."""
+    assert server.stdout is not None
+    # Both daemons stay in the foreground and write only their startup address
+    # to stdout. Killing a silent daemon closes that pipe before joining its
+    # reader; stderr is separate so later diagnostics cannot fill the pipe.
+    with ThreadPoolExecutor(max_workers=1) as reader:
+        try:
+            ready = reader.submit(server.stdout.readline)
+            line = ready.result(timeout=timeout)
+        except BaseException as exc:
+            # Interruption must also retire the writer before close/join can
+            # wait for the buffered reader's lock. Preserve non-timeout errors.
+            server.kill()
+            server.wait()
+            if isinstance(exc, TimeoutError):
+                raise die(f"{label} did not report readiness within {timeout:g} seconds.") from exc
+            raise
+        finally:
+            server.stdout.close()
+    return line.strip()
+
+
 def _gtk_display_environment(display: str) -> dict[str, str]:
     # GTK may select its accessibility and input-method backends before the
     # test binary reaches main().  Set the complete headless profile on the
@@ -157,48 +198,74 @@ def _gtk_display_environment(display: str) -> dict[str, str]:
         "GDK_BACKEND": "x11",
         "GDK_DISABLE": "gl,vulkan",
         "GSK_RENDERER": "cairo",
+        "G_DEBUG": f"{os.environ.get('G_DEBUG', '')},fatal-warnings".lstrip(","),
     }
 
 
 @contextmanager
 def virtual_gtk_displays(count: int = 1) -> Generator[list[dict[str, str]], None, None]:
-    """Start one Xvfb per GTK test process.
+    """Own one Xvfb and private session bus per GTK test process.
 
-    Sharing one display across shards is not merely untidy, it is unreliable.
-    Several tests present a window and then drain only the events already
-    pending, so a popover that is still waiting on an X round trip has not been
-    created yet when the assertion runs. One busy server serving eight clients
-    made that race real: eight shards on a shared display failed 5 of 13 runs,
-    and 0 of 14 with a display each.
+    Sharing one display across shards is unreliable: popovers can still be
+    waiting for an X round trip when assertions run. Sharing the session bus
+    also makes independent MPRIS tests compete for one canonical name. The
+    portal owns both daemons beyond the test process, including GTK's retained
+    process-global bus clients, and never exposes the caller's desktop bus.
     """
     servers: list[subprocess.Popen[str]] = []
+    # Linux Unix socket names cannot accommodate an arbitrarily deep TMPDIR
+    # (notably nested nix-shell directories). Keep only this private IPC root
+    # short; do not change the caller's temporary-file or build environment.
+    with tempfile.TemporaryDirectory(
+        prefix="aobus-gtk-bus-", dir="/tmp" if sys.platform == "linux" else None
+    ) as directory:
+        try:
+            # Partial startup must still retire every already-started daemon.
+            for _ in range(count):
+                servers.append(_start_xvfb())
 
-    try:
-        # Started inside the block: a failure on the third Xvfb must still shut
-        # down the first two.
-        for _ in range(count):
-            servers.append(_start_xvfb())
+            displays = []
+            for server in servers:
+                display_number = _gtk_daemon_ready(server, "Xvfb")
+                if not display_number.isdecimal():
+                    raise die(f"Xvfb failed to start. Output: {display_number}")
+                displays.append(f":{display_number}")
 
-        displays = []
-        for server in servers:
-            assert server.stdout is not None
-            display_number = server.stdout.readline().strip()
-            if not display_number:
-                output = server.stdout.read()
-                raise die(f"Xvfb failed to start.{(' Output: ' + output.strip()) if output.strip() else ''}")
-            displays.append(f":{display_number}")
+            config = Path(directory) / "session.conf"
+            # No service directories: tests must not activate host desktop
+            # services or their mounts on this isolated bus.
+            config.write_text(
+                "<busconfig><type>session</type>"
+                f"<listen>unix:tmpdir={quote(Path(directory).as_posix(), safe='/')}</listen>"
+                '<policy context="default"><allow send_destination="*"/>'
+                '<allow receive_sender="*"/><allow own="*"/></policy></busconfig>',
+                encoding="utf-8",
+            )
+            environments = []
+            for display in displays:
+                bus = _start_gtk_bus(config)
+                servers.append(bus)
+                address = _gtk_daemon_ready(bus, "GTK private D-Bus")
+                if not address.startswith("unix:"):
+                    raise die(f"GTK private D-Bus failed to start. Output: {address}")
+                environments.append(
+                    _gtk_display_environment(display)
+                    | {"DBUS_SESSION_BUS_ADDRESS": address, "AOBUS_OWNED_GTK_BUS": address}
+                )
 
-        print(f"GTK display{'s' if count > 1 else ''}: Xvfb {' '.join(displays)}")
-        yield [_gtk_display_environment(display) for display in displays]
-    finally:
-        for server in servers:
-            server.terminate()
-        for server in servers:
-            try:
-                server.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                server.kill()
-                server.wait()
+            print(f"GTK display{'s' if count > 1 else ''}: Xvfb {' '.join(displays)} (private session buses)")
+            yield environments
+        finally:
+            for server in servers:
+                server.terminate()
+            for server in servers:
+                try:
+                    server.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait()
+                if server.stdout is not None:
+                    server.stdout.close()
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -240,7 +307,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         dest="suite",
         action="store_const",
         const="concurrency",
-        help="run [concurrency] tests across every native Catch2 suite",
+        help="run non-hidden [concurrency] tests across every native Catch2 suite",
     )
     parser.add_argument("-p", "--path", metavar="<dir>", help="override the native test build directory")
     parser.add_argument("--clang", action="store_true", help="test the clang build tree")
@@ -312,6 +379,14 @@ def suite_shards(*, list_only: bool = False, repeat: int = 1, tsan: bool = False
 _OVERALL_KEYS = ("successes", "failures", "expectedFailures", "skips")
 
 
+@dataclass(frozen=True)
+class _SuiteOutcome:
+    """One Catch2 suite's process status and reported matching case count."""
+
+    status: int
+    matched: int | None = None
+
+
 @dataclass
 class _Shard:
     """One shard process, how it was started, and the files it writes."""
@@ -325,11 +400,18 @@ class _Shard:
     report: Path
 
 
+def _read_xml_root(report: Path) -> ElementTree.Element | None:
+    """Return a Catch2 report root, or None when the report is unreadable."""
+    try:
+        return ElementTree.parse(report).getroot()
+    except (OSError, ElementTree.ParseError):
+        return None
+
+
 def _read_shard_totals(report: Path) -> tuple[dict[str, int], dict[str, int]] | None:
     """Return one shard's (assertion, test case) tallies, or None when unreadable."""
-    try:
-        root = ElementTree.parse(report).getroot()
-    except (OSError, ElementTree.ParseError):
+    root = _read_xml_root(report)
+    if root is None:
         return None
 
     assertions = root.find("OverallResults")
@@ -342,6 +424,25 @@ def _read_shard_totals(report: Path) -> tuple[dict[str, int], dict[str, int]] | 
             {key: int(assertions.get(key, "0")) for key in _OVERALL_KEYS},
             {key: int(cases.get(key, "0")) for key in _OVERALL_KEYS},
         )
+    except ValueError:
+        return None
+
+
+def _read_matching_tests(report: Path, *, list_only: bool) -> int | None:
+    """Return how many cases Catch2 matched in an unsharded XML report."""
+    root = _read_xml_root(report)
+    if root is None:
+        return None
+    if list_only:
+        if root.tag != "MatchingTests":
+            return None
+        return len(root.findall("TestCase"))
+
+    cases = root.find("OverallResultsCases")
+    if cases is None:
+        return None
+    try:
+        return sum(int(cases.get(key, "0")) for key in _OVERALL_KEYS)
     except ValueError:
         return None
 
@@ -375,7 +476,7 @@ def _shard_argv(command: Sequence[str], shard: int, shards: int, seed: int, repo
         # A filter can match fewer tests than there are shards, which leaves the
         # trailing shards empty. Empty shards are expected here, so the caller
         # checks the combined tally instead of each process's own opinion.
-        "--allow-running-no-tests",
+        *([] if "--allow-running-no-tests" in command else ["--allow-running-no-tests"]),
         "--shard-count",
         str(shards),
         "--shard-index",
@@ -394,7 +495,7 @@ def _run_sharded(
     environments: Sequence[dict[str, str]],
     log: Path | None,
     allow_no_tests: bool,
-) -> int:
+) -> _SuiteOutcome:
     """Run one Catch2 binary as parallel shards and report a single combined tally.
 
     Each shard also writes an XML report, so the totals are summed exactly rather
@@ -464,9 +565,10 @@ def _run_sharded(
 
     print(_shard_summary(label, assertions, cases, shards))
 
-    if not allow_no_tests and not unreported and not sum(cases.values()):
+    matched = None if unreported else sum(cases.values())
+    if not allow_no_tests and matched == 0:
         raise die(f"no {label} tests matched the supplied filter.")
-    return status
+    return _SuiteOutcome(status, matched)
 
 
 def _repro_command(shard: _Shard) -> str:
@@ -480,10 +582,11 @@ def _repro_command(shard: _Shard) -> str:
     The shard's environment is carried along, because part of it decides whether
     the failure reproduces at all rather than merely how the run is configured:
     on an ASan tree UBSAN_OPTIONS is what makes undefined behaviour halt instead
-    of log and continue. DISPLAY and its ownership marker are deliberate
-    exceptions: they describe an Xvfb that this run tears down on the way out.
-    Omitting both makes native-input tests skip rather than target the caller's
-    desktop.
+    of log and continue. DISPLAY, its ownership marker, and the private bus
+    address are deliberate exceptions: this run retires those daemons. Direct
+    GTK reruns must replace the disabled endpoints with fresh isolated services;
+    prefer the portal. Explicitly removing the ownership marker also prevents
+    native input against the caller's desktop.
     """
     argv = list(shard.argv)
     kept = [
@@ -500,9 +603,18 @@ def _repro_command(shard: _Shard) -> str:
         return subprocess.list2cmdline(kept)
 
     exported = {
-        key: value for key, value in shard.environment.items() if key not in {"DISPLAY", "AOBUS_OWNED_GTK_DISPLAY"}
+        key: value
+        for key, value in shard.environment.items()
+        if key not in {"DISPLAY", "AOBUS_OWNED_GTK_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "AOBUS_OWNED_GTK_BUS"}
     }
-    prefix = ["env", *(f"{key}={value}" for key, value in sorted(exported.items()))] if exported else []
+    unset = []
+    if {"AOBUS_OWNED_GTK_DISPLAY", "AOBUS_OWNED_GTK_BUS"} & shard.environment.keys():
+        # Omitting inherited endpoints is not isolation: GIO can even discover
+        # the host bus through XDG_RUNTIME_DIR. Disable it explicitly until the
+        # reader supplies fresh isolated services (prefer a portal rerun).
+        unset = ["-u", "AOBUS_OWNED_GTK_DISPLAY", "-u", "AOBUS_OWNED_GTK_BUS"]
+        exported |= {"DISPLAY": "", "DBUS_SESSION_BUS_ADDRESS": "disabled:"}
+    prefix = ["env", *unset, *(f"{key}={value}" for key, value in sorted(exported.items()))] if exported else []
     return shlex.join([*prefix, *kept])
 
 
@@ -519,6 +631,8 @@ def _report_shard_output(shard: _Shard, shards: int, *, log: Path | None) -> Non
 
     if shard.process.returncode != 0:
         repro = f"rerun this shard: {_repro_command(shard)}\n".encode()
+        if {"AOBUS_OWNED_GTK_DISPLAY", "AOBUS_OWNED_GTK_BUS"} & shard.environment.keys():
+            repro += b"GTK endpoints above are disabled for safety; use ./ao test --gtk to recreate owned services.\n"
         _echo(banner + b"".join(lines) + repro)
 
 
@@ -721,7 +835,7 @@ def run_appkit_smoke(
     return 0
 
 
-def run_suite(
+def _run_catch2_suite(
     name: str,
     build_dir: Path,
     *,
@@ -732,7 +846,8 @@ def run_suite(
     tsan: bool = False,
     log: Path | None = None,
     shards: int = 1,
-) -> int:
+    report_matches: bool = False,
+) -> _SuiteOutcome:
     spec = SUITES[name]
     if spec.kind != "catch2" or spec.target is None:
         raise ValueError(f"{name} is not a Catch2 suite")
@@ -757,18 +872,67 @@ def run_suite(
 
     sanitizer_env = _sanitizer_env(name, build_dir, asan=asan, tsan=tsan)
 
-    def execute(environments: list[dict[str, str]]) -> int:
+    def execute(environments: list[dict[str, str]]) -> _SuiteOutcome:
         if sharded:
             return _run_sharded(
                 command, label=spec.label, environments=environments, log=log, allow_no_tests=allow_no_tests
             )
-        return run(command, env=environments[0] or None, log=log, append=log is not None)
+        if not report_matches:
+            return _SuiteOutcome(run(command, env=environments[0] or None, log=log, append=log is not None))
+
+        with tempfile.TemporaryDirectory(prefix="aobus-catch2-report-") as directory:
+            report = Path(directory) / "suite.xml"
+            reported_command = [
+                *command,
+                "--reporter",
+                "console::out=-",
+                "--reporter",
+                f"xml::out={report}",
+            ]
+            status = run(
+                reported_command,
+                env=environments[0] or None,
+                log=log,
+                append=log is not None,
+            )
+            matched = _read_matching_tests(report, list_only=list_only)
+
+        if matched is None:
+            print(f"{spec.label}: no readable Catch2 XML report; matching tests could not be counted")
+            status = status or 1
+        return _SuiteOutcome(status, matched)
 
     if name == "gtk" and not list_only:
         with virtual_gtk_displays(shards if sharded else 1) as displays:
             return execute([{**sanitizer_env, **display} for display in displays])
 
     return execute([sanitizer_env] * (shards if sharded else 1))
+
+
+def run_suite(
+    name: str,
+    build_dir: Path,
+    *,
+    test_filter: str = "",
+    list_only: bool = False,
+    allow_no_tests: bool = False,
+    asan: bool = False,
+    tsan: bool = False,
+    log: Path | None = None,
+    shards: int = 1,
+) -> int:
+    """Run one Catch2 suite while preserving the integer status API used by coverage."""
+    return _run_catch2_suite(
+        name,
+        build_dir,
+        test_filter=test_filter,
+        list_only=list_only,
+        allow_no_tests=allow_no_tests,
+        asan=asan,
+        tsan=tsan,
+        log=log,
+        shards=shards,
+    ).status
 
 
 def run_non_catch2_suite(name: str, build_dir: Path, *, list_only: bool = False, log: Path | None = None) -> int:
@@ -790,6 +954,21 @@ def run_non_catch2_suite(name: str, build_dir: Path, *, list_only: bool = False,
     raise ValueError(f"unknown suite kind: {spec.kind}")
 
 
+def _catch2_suites_for_filter(suites: tuple[str, ...], test_filter: str) -> tuple[str, ...]:
+    """Exclude suites that cannot interpret an explicit Catch2 filter."""
+    if not test_filter:
+        return suites
+
+    excluded = tuple(name for name in suites if SUITES[name].kind != "catch2")
+    selected = tuple(name for name in suites if SUITES[name].kind == "catch2")
+    if excluded:
+        labels = ", ".join(SUITES[name].label for name in excluded)
+        print(f"Skipping {labels}: explicit filters apply only to Catch2 suites.")
+    if not selected:
+        raise die("the supplied filter cannot be applied because no Catch2 suite is selected.")
+    return selected
+
+
 def run_suites(
     suites: tuple[str, ...],
     build_dir: Path,
@@ -803,9 +982,11 @@ def run_suites(
     concurrency: bool = False,
     log: Path | None = None,
 ) -> int:
+    suites = _catch2_suites_for_filter(suites, test_filter)
     shards = suite_shards(list_only=list_only, repeat=repeat, tsan=tsan, concurrency=concurrency)
     iterations = 1 if list_only else repeat
     for iteration in range(iterations):
+        matched_tests = 0
         if iterations > 1:
             print(f"Concurrency/stress repetition {iteration + 1}/{iterations}")
 
@@ -814,23 +995,32 @@ def run_suites(
                 print()
 
             spec = SUITES[name]
-            status = (
-                run_suite(
+            if spec.kind == "catch2":
+                outcome = _run_catch2_suite(
                     name,
                     build_dir,
                     test_filter=test_filter,
                     list_only=list_only,
-                    allow_no_tests=allow_no_tests,
+                    allow_no_tests=allow_no_tests or bool(test_filter),
                     asan=asan,
                     tsan=tsan,
                     log=log,
                     shards=shards,
+                    report_matches=bool(test_filter),
                 )
-                if spec.kind == "catch2"
-                else run_non_catch2_suite(name, build_dir, list_only=list_only, log=log)
-            )
-            if status != 0:
-                return status
+                if outcome.status != 0:
+                    return outcome.status
+                if test_filter:
+                    if outcome.matched is None:
+                        return 1
+                    matched_tests += outcome.matched
+            else:
+                status = run_non_catch2_suite(name, build_dir, list_only=list_only, log=log)
+                if status != 0:
+                    return status
+
+        if test_filter and matched_tests == 0:
+            raise die(f"no tests in the selected Catch2 suites matched filter {test_filter!r}.")
 
     return 0
 
@@ -861,10 +1051,13 @@ def run_command(args: argparse.Namespace) -> int:
     )
 
     if args.suite == "concurrency" and args.filter:
-        raise die("--concurrency supplies the [concurrency] filter; do not also pass a positional filter.")
+        raise die("--concurrency supplies [concurrency]~[.]; do not also pass a positional filter.")
 
     suites = suites_for(args.suite, tsan=args.tsan)
-    test_filter = "[concurrency]" if args.suite == "concurrency" else args.filter
+    # An explicit Catch2 tag also selects hidden cases. The automatic gate must
+    # not turn a hardware/manual probe into unattended coverage when it is tagged.
+    test_filter = "[concurrency]~[.]" if args.suite == "concurrency" else args.filter
+    suites = _catch2_suites_for_filter(suites, test_filter)
 
     if any(SUITES[suite].kind != "tooling" for suite in suites):
         if not build_dir.is_dir():

@@ -22,8 +22,10 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -189,8 +191,17 @@ namespace ao::rt::test
       return checksum;
     }
 
+    struct LookupExpectation final
+    {
+      std::string_view prefix;
+      std::size_t size;
+      std::string_view representativeDisplay;
+    };
+
     Timing measureLookups(uimodel::TrackFilterCompleter& completer,
                           std::string_view prefix,
+                          std::size_t const expectedSize,
+                          std::string_view const representativeDisplay,
                           std::size_t const warmups,
                           std::size_t const measuredRuns)
     {
@@ -205,6 +216,28 @@ namespace ao::rt::test
         auto const optResult = completer.complete(prefix, prefix.size(), kLookupLimit);
         auto const elapsed =
           std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+
+        // Validate every lookup after the clock stops, including warm-ups and
+        // misses; a nonzero checksum is not evidence that a miss is correct.
+        CAPTURE(prefix, run);
+
+        if (expectedSize == 0)
+        {
+          REQUIRE_FALSE(optResult);
+        }
+        else
+        {
+          REQUIRE(optResult);
+          REQUIRE(optResult->items.size() == expectedSize);
+
+          if (!representativeDisplay.empty())
+          {
+            CHECK(std::ranges::any_of(optResult->items,
+                                      [representativeDisplay](auto const& item)
+                                      { return item.displayText == representativeDisplay; }));
+          }
+        }
+
         resultSize = optResult ? optResult->items.size() : 0;
 
         if (run >= warmups)
@@ -340,26 +373,30 @@ namespace ao::rt::test
     REQUIRE(vocabulary.snapshotAndAggregate.resultSize == 93674);
 
     auto completer = uimodel::TrackFilterCompleter{service};
-    constexpr auto kLookupPrefixes = std::to_array<std::pair<std::string_view, std::size_t>>({
-      {"Track", kLookupLimit},
-      {"\"artist 049", kLookupLimit},
-      {"\"Work 2499", kLookupLimit},
-      {"zhoujielun", 1},
-      {"hikaru", 1},
-      {"kanaide", 1},
-      {"hanbato", 1},
-      {"missing", 0},
+    constexpr auto kLookupPrefixes = std::to_array<LookupExpectation>({
+      {"Track", kLookupLimit, "Track 00000"},
+      {"\"artist 049", kLookupLimit, ""},
+      {"\"Work 2499", kLookupLimit, ""},
+      {"zhoujielun", 1, "周杰倫"},
+      {"hikaru", 1, "宇多田ヒカル"},
+      {"kanaide", 1, "行かないで"},
+      {"hanbato", 1, "ﾊﾝﾊﾞｰﾄ"},
+      {"missing", 0, ""},
     });
 
     APP_LOG_INFO("=== Cached Quick-filter lookup: one request per sample ===");
 
-    for (auto const& [prefix, expectedSize] : kLookupPrefixes)
+    for (auto const& [prefix, expectedSize, representativeDisplay] : kLookupPrefixes)
     {
-      auto const timing = measureLookups(completer, prefix, warmups, samples);
+      auto const timing = measureLookups(completer, prefix, expectedSize, representativeDisplay, warmups, samples);
       APP_LOG_INFO(
         "  '{}': {} candidates; median/p95 {} / {} ns", prefix, timing.resultSize, timing.median, timing.percentile95);
       addMeasurement(std::format("cached-lookup/{}", prefix), timing, 1);
-      CHECK(timing.checksum != 0);
+
+      if (expectedSize != 0)
+      {
+        CHECK(timing.checksum != 0);
+      }
 
       CHECK(timing.resultSize == expectedSize);
     }

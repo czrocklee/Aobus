@@ -7,11 +7,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
-#include <tuple>
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("SeekInteraction - pointer seek decisions", "[uimodel][unit][playback]")
+  TEST_CASE("SeekInteraction - pointer seek decisions", "[uimodel][unit][playback][seek]")
   {
     constexpr auto kFirstOccurrenceId = rt::PlaybackOccurrenceId{1};
     constexpr auto kSecondOccurrenceId = rt::PlaybackOccurrenceId{2};
@@ -72,8 +71,15 @@ namespace ao::uimodel::test
     {
       model.applyViewState(std::chrono::seconds{20}, true, kFirstOccurrenceId);
 
-      CHECK(model.valueChanged(std::chrono::seconds{30}).elapsed == std::chrono::seconds{20});
-      CHECK(model.valueChanged(std::chrono::seconds{-3}).elapsed == std::chrono::milliseconds{0});
+      auto const upper = model.valueChanged(std::chrono::seconds{30});
+      CHECK(upper.action == SeekSliderAction::Commit);
+      CHECK(upper.occurrenceId == kFirstOccurrenceId);
+      CHECK(upper.elapsed == std::chrono::seconds{20});
+
+      auto const lower = model.valueChanged(std::chrono::seconds{-3});
+      CHECK(lower.action == SeekSliderAction::Commit);
+      CHECK(lower.occurrenceId == kFirstOccurrenceId);
+      CHECK(lower.elapsed == std::chrono::milliseconds{0});
     }
 
     SECTION("replacement leaves the held pointer sequence inert until release")
@@ -92,8 +98,12 @@ namespace ao::uimodel::test
       REQUIRE(model.tryBeginPointerInteraction());
       auto const preview = model.valueChanged(std::chrono::seconds{12});
       auto const commit = model.endPointerInteraction(std::chrono::seconds{13});
+      CHECK(preview.action == SeekSliderAction::Preview);
       CHECK(preview.occurrenceId == kSecondOccurrenceId);
+      CHECK(preview.elapsed == std::chrono::seconds{12});
+      CHECK(commit.action == SeekSliderAction::Commit);
       CHECK(commit.occurrenceId == kSecondOccurrenceId);
+      CHECK(commit.elapsed == std::chrono::seconds{13});
     }
 
     SECTION("same occurrence updates preserve a held pointer sequence")
@@ -105,8 +115,10 @@ namespace ao::uimodel::test
       CHECK(model.duration() == std::chrono::seconds{20});
       auto const preview = model.valueChanged(std::chrono::seconds{23});
       auto const commit = model.endPointerInteraction(std::chrono::seconds{24});
+      CHECK(preview.action == SeekSliderAction::Preview);
       CHECK(preview.occurrenceId == kFirstOccurrenceId);
       CHECK(preview.elapsed == std::chrono::seconds{20});
+      CHECK(commit.action == SeekSliderAction::Commit);
       CHECK(commit.occurrenceId == kFirstOccurrenceId);
       CHECK(commit.elapsed == std::chrono::seconds{20});
     }
@@ -114,8 +126,11 @@ namespace ao::uimodel::test
     SECTION("reset clears state")
     {
       model.applyViewState(std::chrono::seconds{20}, true, kFirstOccurrenceId);
-      CHECK(model.tryBeginPointerInteraction());
-      std::ignore = model.valueChanged(std::chrono::seconds{3});
+      REQUIRE(model.tryBeginPointerInteraction());
+      auto const preview = model.valueChanged(std::chrono::seconds{3});
+      REQUIRE(preview.action == SeekSliderAction::Preview);
+      REQUIRE(model.isPointerActive());
+      REQUIRE(model.hasPendingFinalSeek());
 
       model.reset();
 

@@ -22,6 +22,10 @@ namespace ao::query::test
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019};
     result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
+
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2021};
+    result = evaluator.matchesFullPlan(plan, track3.view());
+    CHECK(result == false);
   }
 
   TEST_CASE("PlanEvaluator - matches duration above an exclusive threshold", "[query][unit][plan-evaluator]")
@@ -36,6 +40,10 @@ namespace ao::query::test
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 170000};
     result = evaluator.matchesFullPlan(plan, track2.view());
+    CHECK(result == false);
+
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 179000};
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -71,6 +79,10 @@ namespace ao::query::test
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 179999};
     result = evaluator.matchesFullPlan(plan, track2.view());
     CHECK(result == false);
+
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180001};
+    result = evaluator.matchesFullPlan(plan, track3.view());
+    CHECK(result == true);
   }
 
   TEST_CASE("PlanEvaluator - matches years below an exclusive threshold", "[query][unit][plan-evaluator]")
@@ -85,6 +97,10 @@ namespace ao::query::test
 
     auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2021};
     result = evaluator.matchesFullPlan(plan, track2.view());
+    CHECK(result == false);
+
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2022};
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 
@@ -129,6 +145,10 @@ namespace ao::query::test
 
     auto track2 = TestTrack{"Title", "Artist", "Album", "path", 1990};
     result = evaluator.matchesFullPlan(plan, track2.view());
+    CHECK(result == false);
+
+    auto track3 = TestTrack{"Title", "Artist", "Album", "path", 2000};
+    result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
   }
 } // namespace ao::query::test

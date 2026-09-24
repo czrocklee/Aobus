@@ -319,6 +319,21 @@ namespace ao::tui::test
 
     CHECK_FALSE(plan.actionFor(ftxui::Event::Character("l")));
     CHECK(plan.actionFor(ftxui::Event::F2) == KeyAction::ToggleLists);
+    CHECK(plan.shortcutFor(KeyAction::ToggleLists) == "F2");
+  }
+
+  TEST_CASE("Keymap - scoped hints select only executable projected chords", "[tui][unit][keymap]")
+  {
+    auto const plan = KeymapPlan{uimodel::KeymapModel{defaultKeymap()}};
+    auto const question = ftxui::Event::Character("?");
+    auto const f1 = ftxui::Event::F1;
+
+    CHECK(plan.actionFor(question) == KeyAction::ShowHelp);
+    CHECK(plan.actionFor(f1) == KeyAction::ShowHelp);
+    CHECK(plan.shortcutFor(KeyAction::ShowHelp) == "?");
+    CHECK(plan.shortcutFor(KeyAction::ShowHelp, std::array{question}) == "F1");
+    CHECK(plan.shortcutFor(KeyAction::ShowHelp, std::array{f1}) == "?");
+    CHECK(plan.shortcutFor(KeyAction::ShowHelp, std::array{question, f1}).empty());
   }
 
   TEST_CASE("Keymap - ordinary global preference writes preserve untouched shortcuts", "[tui][unit][keymap]")

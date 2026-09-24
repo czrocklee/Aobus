@@ -26,6 +26,10 @@ namespace ao::query::test
     auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 50000};
     result = evaluator.matchesFullPlan(plan, track3.view());
     CHECK(result == false);
+
+    auto track4 = TestTrack{"Test", "Artist", "Album", "path", 2019, 5, 50000};
+    result = evaluator.matchesFullPlan(plan, track4.view());
+    CHECK(result == false);
   }
 
   TEST_CASE("PlanEvaluator - matches when any OR operand matches", "[query][unit][plan-evaluator]")

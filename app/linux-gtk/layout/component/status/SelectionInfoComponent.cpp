@@ -7,6 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "track/SelectionInfoLabel.h"
 #include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -21,8 +22,10 @@ namespace ao::gtk::layout
     class SelectionInfoComponent final : public LayoutComponent
     {
     public:
-      SelectionInfoComponent(rt::ViewService& views, i18n::MessageCatalog const& textCatalog)
-        : _widget{views, textCatalog}
+      SelectionInfoComponent(rt::ViewService& views,
+                             rt::WorkspaceService& workspace,
+                             i18n::MessageCatalog const& textCatalog)
+        : _widget{views, workspace, textCatalog}
       {
         _widget.widget().add_css_class("ao-selection-info-modern");
       }
@@ -36,11 +39,12 @@ namespace ao::gtk::layout
 
   void registerSelectionInfoComponent(ComponentRegistry& registry,
                                       rt::ViewService& views,
+                                      rt::WorkspaceService& workspace,
                                       i18n::MessageCatalog const& textCatalog)
   {
     registry.registerSharedComponent(
       "status.selectionInfo",
-      [&views, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-      { return std::make_unique<SelectionInfoComponent>(views, textCatalog); });
+      [&views, &workspace, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<SelectionInfoComponent>(views, workspace, textCatalog); });
   }
 } // namespace ao::gtk::layout

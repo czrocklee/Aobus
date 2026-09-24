@@ -14,6 +14,7 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/Path.h>
+#include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/Theme.h>
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/layout/ShellState.h>
@@ -184,19 +185,21 @@ namespace winrt::Aobus::implementation
         return;
       }
 
-      auto& placement = _session->settings().window;
       auto nativePlacement = WINDOWPLACEMENT{};
       nativePlacement.length = sizeof(nativePlacement);
 
       if (::GetWindowPlacement(nativeWindow(*this), &nativePlacement) != FALSE)
       {
         auto const& normal = nativePlacement.rcNormalPosition;
-        placement.x = normal.left;
-        placement.y = normal.top;
-        placement.width = normal.right - normal.left;
-        placement.height = normal.bottom - normal.top;
-        placement.maximized =
-          nativePlacement.showCmd == SW_SHOWMAXIMIZED || (nativePlacement.flags & WPF_RESTORETOMAXIMIZED) != 0;
+        auto const placement = ao::winui::WindowPlacement{
+          .x = normal.left,
+          .y = normal.top,
+          .width = normal.right - normal.left,
+          .height = normal.bottom - normal.top,
+          .maximized =
+            nativePlacement.showCmd == SW_SHOWMAXIMIZED || (nativePlacement.flags & WPF_RESTORETOMAXIMIZED) != 0,
+        };
+        ao::winui::rememberDesktopWindowPlacement(_session->settings(), placement);
       }
       else
       {

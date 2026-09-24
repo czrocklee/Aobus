@@ -122,7 +122,7 @@ namespace ao::tui::test
   } // namespace
 
   TEST_CASE("SettingsEditor - title format previews drafts and rejects invalid expressions before saving",
-            "[tui][unit][settings]")
+            "[tui][unit][setting]")
   {
     using ftxui::Event;
     auto fixture = SettingsFixture{};
@@ -153,7 +153,7 @@ namespace ao::tui::test
     CHECK(fixture.editor.isActive());
   }
 
-  TEST_CASE("SettingsEditor - drawing a title draft only reads its prepared preview", "[tui][regression][settings]")
+  TEST_CASE("SettingsEditor - drawing a title draft only reads its prepared preview", "[tui][unit][setting]")
   {
     using ftxui::Event;
     auto fixture = SettingsFixture{};
@@ -178,7 +178,7 @@ namespace ao::tui::test
     CHECK(fixture.previewCalls == calls);
   }
 
-  TEST_CASE("SettingsEditor - invalid title drafts offer cancellation until corrected", "[tui][regression][settings]")
+  TEST_CASE("SettingsEditor - invalid title drafts offer cancellation until corrected", "[tui][unit][setting]")
   {
     using ftxui::Event;
     auto fixture = SettingsFixture{};
@@ -204,7 +204,7 @@ namespace ao::tui::test
     CHECK(fixture.render().contains("Preview: Playing track"));
   }
 
-  TEST_CASE("SettingsEditor - title editing requires activation instead of adjustment arrows", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - title editing requires activation instead of adjustment arrows", "[tui][unit][setting]")
   {
     using ftxui::Event;
     auto fixture = SettingsFixture{};
@@ -222,8 +222,7 @@ namespace ao::tui::test
     CHECK(fixture.render().contains("Preview: Playing track"));
   }
 
-  TEST_CASE("SettingsEditor - constrained title editor keeps the insertion point visible",
-            "[tui][regression][settings]")
+  TEST_CASE("SettingsEditor - constrained title editor keeps the insertion point visible", "[tui][unit][setting]")
   {
     using ftxui::Event;
     auto fixture = SettingsFixture{};
@@ -246,8 +245,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("SettingsEditor - title value click opens editing and input clicks place the caret",
-            "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - title value click opens editing and input clicks place the caret", "[tui][unit][setting]")
   {
     using ftxui::Event;
     auto fixture = SettingsFixture{};
@@ -271,7 +269,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - empty title format disables after confirmation and failed saves can retry",
-            "[tui][unit][settings]")
+            "[tui][unit][setting]")
   {
     using ftxui::Event;
     auto fixture = SettingsFixture{};
@@ -292,7 +290,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - language choice applies on confirmation and refreshes its own labels",
-            "[tui][unit][settings][localization]")
+            "[tui][unit][setting][localization]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -307,7 +305,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - language chooser displays every catalog locale by its native name",
-            "[tui][unit][settings][localization]")
+            "[tui][unit][setting][localization]")
   {
     auto fixture = SettingsFixture{};
 
@@ -323,7 +321,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("SettingsEditor - hover-only panel indicators use the live preference save path", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - hover-only panel indicators use the live preference save path", "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -346,7 +344,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.preferences.revealIndicatorsOnHover);
   }
 
-  TEST_CASE("SettingsEditor - cover renderer cycles in both directions and wraps", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - cover renderer cycles in both directions and wraps", "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -364,7 +362,7 @@ namespace ao::tui::test
     CHECK(fixture.preferences.coverArtMode == "off");
   }
 
-  TEST_CASE("SettingsEditor - panel separation cycles without changing the cover renderer", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - panel separation cycles without changing the cover renderer", "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -392,7 +390,7 @@ namespace ao::tui::test
     CHECK(fixture.preferences.panelSeparator == "single");
   }
 
-  TEST_CASE("SettingsEditor - failed preference save preserves applied values until retry", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - failed preference save preserves applied values until retry", "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -408,7 +406,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - save failures show localized context and retain the diagnostic",
-            "[tui][unit][settings][localization]")
+            "[tui][unit][setting][localization]")
   {
     for (auto const page : {SettingsPage::Appearance, SettingsPage::Keyboard})
     {
@@ -427,7 +425,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - successful retry leaves the close confirmation and restores editing",
-            "[tui][regression][settings]")
+            "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -444,7 +442,7 @@ namespace ao::tui::test
     CHECK(fixture.editor.page() == SettingsPage::Interaction);
   }
 
-  TEST_CASE("SettingsEditor - discarding a failed candidate preserves effective preferences", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - discarding a failed candidate preserves effective preferences", "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -458,7 +456,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.editor.isActive());
   }
 
-  TEST_CASE("SettingsEditor - confirming close discards a failed keymap candidate", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - confirming close discards a failed keymap candidate", "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -476,7 +474,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - resetting an action restores defaults and selected binding",
-            "[tui][unit][settings][keymap]")
+            "[tui][unit][setting][keymap]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -490,7 +488,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - replacing a chord removes the old binding and retains its siblings",
-            "[tui][regression][settings][keymap]")
+            "[tui][unit][setting][keymap]")
   {
     auto fixture = SettingsFixture{};
     REQUIRE(fixture.keymap.tryBind("tui.shell.openSettings", *uimodel::KeyChord::parse("F12")));
@@ -508,8 +506,7 @@ namespace ao::tui::test
     CHECK_FALSE(std::ranges::contains(chords, *uimodel::KeyChord::parse("F12")));
   }
 
-  TEST_CASE("SettingsEditor - adding and removing a binding preserves the other chords",
-            "[tui][unit][settings][keymap]")
+  TEST_CASE("SettingsEditor - adding and removing a binding preserves the other chords", "[tui][unit][setting][keymap]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -529,7 +526,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - conflicting chord is rejected and failed save keeps live bindings unchanged",
-            "[tui][unit][settings][keymap]")
+            "[tui][unit][setting][keymap]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -552,7 +549,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - all maintained languages and pseudo keep page controls visible",
-            "[tui][unit][settings][localization]")
+            "[tui][unit][setting][localization]")
   {
     auto fixture = SettingsFixture{};
 
@@ -581,7 +578,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - all pages keep close and page controls visible in a small terminal",
-            "[tui][unit][settings][render]")
+            "[tui][unit][setting][render]")
   {
     for (auto const columns : {36, 80})
     {
@@ -605,7 +602,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("SettingsEditor - mouse pages language and values use the live save path", "[tui][unit][mouse][settings]")
+  TEST_CASE("SettingsEditor - mouse pages language and values use the live save path", "[tui][unit][setting][mouse]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -623,8 +620,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.editor.isActive());
   }
 
-  TEST_CASE("SettingsEditor - mouse save failure keeps retry and discard available",
-            "[tui][regression][mouse][settings]")
+  TEST_CASE("SettingsEditor - mouse save failure keeps retry and discard available", "[tui][unit][setting][mouse]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -641,7 +637,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - mouse wheel moves the keyboard list without changing bindings",
-            "[tui][unit][mouse][settings]")
+            "[tui][unit][setting][mouse]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -662,7 +658,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - searching a keyboard action preserves its binding identity",
-            "[tui][regression][settings][search]")
+            "[tui][unit][setting][search]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -686,7 +682,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("SettingsEditor - an empty keyboard search cannot edit or save the hidden selection",
-            "[tui][regression][settings][search]")
+            "[tui][unit][setting][search]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -701,8 +697,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.render().contains("no such action"));
   }
 
-  TEST_CASE("SettingsEditor - contextual footer wraps and clears search before closing",
-            "[tui][regression][settings][mouse]")
+  TEST_CASE("SettingsEditor - contextual footer wraps and clears search before closing", "[tui][unit][setting][mouse]")
   {
     for (auto const columns : {36, 80, 140})
     {
@@ -732,8 +727,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("SettingsEditor - recovery footer exposes retry discard and keep editing",
-            "[tui][regression][settings][mouse]")
+  TEST_CASE("SettingsEditor - recovery footer exposes retry discard and keep editing", "[tui][unit][setting][mouse]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();
@@ -756,7 +750,7 @@ namespace ao::tui::test
     CHECK(fixture.preferences.dimBackdrop == previous);
   }
 
-  TEST_CASE("SettingsEditor - terminal Soul switch persists independently of the title format", "[tui][unit][settings]")
+  TEST_CASE("SettingsEditor - terminal Soul switch persists independently of the title format", "[tui][unit][setting]")
   {
     auto fixture = SettingsFixture{};
     fixture.editor.open();

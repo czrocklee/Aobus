@@ -19,6 +19,12 @@ called_from_lib:libgvfsdbus.so
 # GTK image and text stack.
 called_from_lib:libgtk-4.so
 called_from_lib:libgdk_pixbuf-2.0.so
+# SVG decoding initializes libxml2 on a GTask worker. Its uninstrumented task
+# completion handoff is invisible at the later catalog-mutex access. The public
+# probe reproduces on the unmodified base; an instrumented completion control
+# resolves it. Remove when dependency synchronization becomes visible and the
+# unsuppressed SVG/GTask probe, full GTK TSan, and full TSan check all pass.
+called_from_lib:libxml2.so
 # Cairo recycles clip objects through an atomic freed pool. The dependency is
 # uninstrumented, so TSan cannot observe that cross-thread handoff.
 called_from_lib:libcairo.so

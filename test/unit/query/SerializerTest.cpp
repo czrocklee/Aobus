@@ -6,6 +6,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
@@ -60,7 +61,9 @@ namespace ao::query::test
     SECTION("Quoted names round-trip")
     {
       auto const var = VariableExpression{.type = VariableType::Custom, .name = "Replay Gain"};
-      CHECK(serialize(parseOk(serialize(var))) == serialize(var));
+      auto const serialized = serialize(var);
+      CHECK(serialized == R"(%"Replay Gain")");
+      CHECK(serialize(parseOk(serialized)) == serialized);
     }
   }
 
@@ -108,10 +111,45 @@ namespace ao::query::test
 
   TEST_CASE("Serializer - serializes unary not", "[query][unit][serializer]")
   {
-    auto unaryPtr = std::make_unique<UnaryExpression>();
-    unaryPtr->op = Operator::Not;
-    unaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
-    CHECK(serialize(Expression{std::move(unaryPtr)}) == "not $artist");
+    SECTION("Variable operand")
+    {
+      auto unaryPtr = std::make_unique<UnaryExpression>();
+      unaryPtr->op = Operator::Not;
+      unaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "artist"};
+      CHECK(serialize(Expression{std::move(unaryPtr)}) == "not $artist");
+    }
+
+    SECTION("Grouped comparison retains its negation after parsing")
+    {
+      auto binaryPtr = std::make_unique<BinaryExpression>();
+      binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "year"};
+      binaryPtr->optOperation = BinaryExpression::Operation{.op = Operator::Equal, .operand = std::int64_t{2020}};
+      auto unaryPtr = std::make_unique<UnaryExpression>();
+      unaryPtr->op = Operator::Not;
+      unaryPtr->operand = std::move(binaryPtr);
+
+      auto const serialized = serialize(Expression{std::move(unaryPtr)});
+      CHECK(serialized == "not ($year = 2020)");
+      auto const reparsed = parseOk(serialized);
+      auto const* negation = std::get_if<std::unique_ptr<UnaryExpression>>(&reparsed);
+      REQUIRE(negation != nullptr);
+      REQUIRE(*negation);
+      CHECK((*negation)->op == Operator::Not);
+      auto const* comparison = std::get_if<std::unique_ptr<BinaryExpression>>(&(*negation)->operand);
+      REQUIRE(comparison != nullptr);
+      REQUIRE(*comparison);
+      auto const* field = std::get_if<VariableExpression>(&(*comparison)->operand);
+      REQUIRE(field != nullptr);
+      CHECK(field->type == VariableType::Metadata);
+      CHECK(field->name == "year");
+      REQUIRE((*comparison)->optOperation);
+      CHECK((*comparison)->optOperation->op == Operator::Equal);
+      auto const* constant = std::get_if<ConstantExpression>(&(*comparison)->optOperation->operand);
+      REQUIRE(constant != nullptr);
+      auto const* year = std::get_if<std::int64_t>(constant);
+      REQUIRE(year != nullptr);
+      CHECK(*year == 2020);
+    }
   }
 
   TEST_CASE("Serializer - serializes existence tests", "[query][unit][serializer]")
@@ -141,17 +179,17 @@ namespace ao::query::test
       Operator op;
       std::string expected;
     };
-    auto const cases = {Case{.op = Operator::And, .expected = " and "},
-                        Case{.op = Operator::Or, .expected = " or "},
-                        Case{.op = Operator::Less, .expected = " < "},
-                        Case{.op = Operator::LessEqual, .expected = " <= "},
-                        Case{.op = Operator::Greater, .expected = " > "},
-                        Case{.op = Operator::GreaterEqual, .expected = " >= "},
-                        Case{.op = Operator::Equal, .expected = " = "},
-                        Case{.op = Operator::NotEqual, .expected = " != "},
-                        Case{.op = Operator::Like, .expected = " ~ "},
-                        Case{.op = Operator::In, .expected = " in "},
-                        Case{.op = Operator::Add, .expected = " + "}};
+    auto const cases = {Case{.op = Operator::And, .expected = "$a and $b"},
+                        Case{.op = Operator::Or, .expected = "$a or $b"},
+                        Case{.op = Operator::Less, .expected = "$a < $b"},
+                        Case{.op = Operator::LessEqual, .expected = "$a <= $b"},
+                        Case{.op = Operator::Greater, .expected = "$a > $b"},
+                        Case{.op = Operator::GreaterEqual, .expected = "$a >= $b"},
+                        Case{.op = Operator::Equal, .expected = "$a = $b"},
+                        Case{.op = Operator::NotEqual, .expected = "$a != $b"},
+                        Case{.op = Operator::Like, .expected = "$a ~ $b"},
+                        Case{.op = Operator::In, .expected = "$a in $b"},
+                        Case{.op = Operator::Add, .expected = "$a + $b"}};
 
     for (auto const& c : cases)
     {
@@ -160,7 +198,8 @@ namespace ao::query::test
       binaryPtr->optOperation = BinaryExpression::Operation{
         .op = c.op, .operand = VariableExpression{.type = VariableType::Metadata, .name = "b"}};
 
-      CHECK(serialize(Expression{std::move(binaryPtr)}).contains(c.expected));
+      CAPTURE(c.expected);
+      CHECK(serialize(Expression{std::move(binaryPtr)}) == c.expected);
     }
   }
 
@@ -214,23 +253,32 @@ namespace ao::query::test
 
   TEST_CASE("Serializer - preserves canonical shape across parse serialize parse", "[query][unit][serializer]")
   {
-    auto queries = {R"($artist = "Bach" and $year >= 2020)",
-                    "not ($year = 2020)",
-                    R"($title ~ "Bach" or $composer ~ "Mozart")",
-                    R"(%isrc = "X" and @duration >= 3m)",
-                    R"($artist in ["Bach", "Mozart"])",
-                    "@duration in 2m30s..5m",
-                    R"(#"90s Rock" and %"Replay Gain" = "high")",
-                    R"($year? and %"Replay Gain"?)",
-                    R"($title = "A \"quote\"")"};
-
-    for (auto const& q : queries)
+    struct Case final
     {
-      auto const expr1 = parseOk(q);
+      std::string_view input;
+      std::string_view expected;
+    };
+    auto const queries = {
+      Case{R"($artist = "Bach" and $year >= 2020)", R"(($artist = "Bach") and ($year >= 2020))"},
+      Case{"not ($year = 2020)", "not ($year = 2020)"},
+      Case{R"($title ~ "Bach" or $composer ~ "Mozart")", R"(($title ~ "Bach") or ($composer ~ "Mozart"))"},
+      Case{R"(%isrc = "X" and @duration >= 3m)", R"((%isrc = "X") and (@duration >= 3m))"},
+      Case{R"($artist in ["Bach", "Mozart"])", R"($artist in ["Bach", "Mozart"])"},
+      Case{"@duration in 2m30s..5m", "@duration in 2m30s..5m"},
+      Case{R"(#"90s Rock" and %"Replay Gain" = "high")", R"(#"90s Rock" and (%"Replay Gain" = "high"))"},
+      Case{R"($year? and %"Replay Gain"?)", R"($year? and %"Replay Gain"?)"},
+      Case{R"($title = "A \"quote\"")", R"($title = "A \"quote\"")"},
+    };
+
+    for (auto const& query : queries)
+    {
+      CAPTURE(query.input);
+      auto const expr1 = parseOk(query.input);
       auto const s1 = serialize(expr1);
       auto const expr2 = parseOk(s1);
       auto const s2 = serialize(expr2);
 
+      CHECK(s1 == query.expected);
       CHECK(s1 == s2);
     }
   }

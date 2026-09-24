@@ -29,18 +29,33 @@
 
 namespace ao::tui::test
 {
+  namespace
+  {
+    TerminalTitle makeRecordingTitle(rt::Library const& library, std::vector<std::string>& writes)
+    {
+      return TerminalTitle{library,
+                           [&writes](std::string_view value)
+                           {
+                             writes.emplace_back(value);
+                             return true;
+                           }};
+    }
+  } // namespace
+
   TEST_CASE("TerminalTitle - compiles existing format language and empty disables", "[tui][unit][terminal-title]")
   {
     auto emptyRes = compileTerminalTitleFormat("");
     REQUIRE(emptyRes);
     CHECK_FALSE(*emptyRes);
-    CHECK(compileTerminalTitleFormat(R"($artist " - " $title " " %catalog)"));
+    auto formatRes = compileTerminalTitleFormat(R"($artist " - " $title " " %catalog)");
+    REQUIRE(formatRes);
+    CHECK(formatRes->has_value());
     CHECK_FALSE(compileTerminalTitleFormat("$missing"));
     CHECK_FALSE(compileTerminalTitleFormat("$year > 2000"));
   }
 
   TEST_CASE("TerminalTitle - writes only changed playing titles and balances title ownership",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -89,18 +104,13 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitle - Soul replaces fallback branding and changes independently of track text",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     REQUIRE(title.setFormat("$title"));
     auto const start = std::chrono::steady_clock::time_point{};
     auto const now = start + std::chrono::seconds{1};
@@ -126,18 +136,13 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitle - identical output consumes semantic changes without delaying animation",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     REQUIRE(title.setFormat("$title"));
     auto const start = std::chrono::steady_clock::time_point{};
     auto context = TerminalTitleContext{.transport = audio::Transport::Playing};
@@ -176,19 +181,14 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitle - animation coalesces to the latest frame without postponing its deadline",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto const other = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Other"});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     auto const start = std::chrono::steady_clock::time_point{};
     REQUIRE(title.setFormat("$title"));
     title.update(track, "A", start);
@@ -213,18 +213,13 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitle - enabling Soul writes immediately after a title without Soul",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     auto const now = std::chrono::steady_clock::time_point{};
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);
@@ -235,17 +230,12 @@ namespace ao::tui::test
     CHECK(writes.back() == "\033]2;A Song\033\\");
   }
 
-  TEST_CASE("TerminalTitle - animation coalesces without a current track", "[tui][regression][terminal-title]")
+  TEST_CASE("TerminalTitle - animation coalesces without a current track", "[tui][unit][terminal-title]")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     auto const start = std::chrono::steady_clock::time_point{};
     auto const context = TerminalTitleContext{.transport = audio::Transport::Opening};
     REQUIRE(title.setFormat("$title"));
@@ -260,19 +250,14 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitle - content transport and settings changes bypass animation throttling",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song"});
     auto const other = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Other"});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     auto const start = std::chrono::steady_clock::time_point{};
     REQUIRE(title.setFormat("$title"));
     title.update(track, "A", start, {.transport = audio::Transport::Playing});
@@ -329,27 +314,21 @@ namespace ao::tui::test
     CHECK(writes.size() == 2);
   }
 
-  TEST_CASE("TerminalTitle - metadata controls cannot escape the title payload", "[tui][regression][terminal-title]")
+  TEST_CASE("TerminalTitle - metadata controls cannot escape the title payload", "[tui][unit][terminal-title]")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "曲名\n\033]2;injected\a\xc2\x9c"});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);
     REQUIRE(writes.size() == 1);
     CHECK(writes.front() == "\033[22;2t\033]2;曲名  ]2;injected  \033\\");
   }
 
-  TEST_CASE("TerminalTitle - failed writes restore once and disable further output",
-            "[tui][regression][terminal-title]")
+  TEST_CASE("TerminalTitle - failed writes restore once and disable further output", "[tui][unit][terminal-title]")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -421,7 +400,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitle - failed write after throttling restores once and retires output",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -476,8 +455,7 @@ namespace ao::tui::test
     CHECK(writes == std::vector<std::string>{"\033[22;2t\033]2;A\033\\", "\033]2;D\033\\", "\033[23;2t"});
   }
 
-  TEST_CASE("TerminalTitle - unexpected sink exceptions remain programming failures",
-            "[tui][regression][terminal-title]")
+  TEST_CASE("TerminalTitle - unexpected sink exceptions remain programming failures", "[tui][unit][terminal-title]")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -497,7 +475,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitle - failed restoration retires ownership without escaping teardown",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
@@ -567,12 +545,7 @@ namespace ao::tui::test
 
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = longTitle});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);
     REQUIRE(writes.size() == 1);
@@ -597,7 +570,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitleFormatter - releases library observation before later publications",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
@@ -618,19 +591,14 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TerminalTitleFormatter - draft changes remain independent of the published title",
-            "[tui][regression][terminal-title]")
+            "[tui][unit][terminal-title]")
   {
     auto const now = std::chrono::steady_clock::time_point{};
     auto temp = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeRuntime(temp, std::make_unique<rt::test::QueuedExecutor>());
     auto const track = rt::test::addRuntimeTrack(*runtimePtr, {.title = "Song", .artist = "Artist"});
     auto writes = std::vector<std::string>{};
-    auto title = TerminalTitle{runtimePtr->library(),
-                               [&](std::string_view value)
-                               {
-                                 writes.emplace_back(value);
-                                 return true;
-                               }};
+    auto title = makeRecordingTitle(runtimePtr->library(), writes);
     auto preview = TerminalTitleFormatter{runtimePtr->library()};
     REQUIRE(title.setFormat("$title"));
     title.update(track, {}, now);

@@ -3,6 +3,7 @@
 //
 // Synthetic baseline measurement — no machine-dependent pass/fail thresholds.
 
+#include "PerformanceReport.h"
 #include "lib/library/OpenValidationMetrics.h"
 #include "lib/library/TextAdmission.h"
 #include "runtime/source/ListOrderSource.h"
@@ -50,13 +51,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <expected>
 #include <format>
-#include <fstream>
 #include <functional>
-#include <ios>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -72,6 +69,8 @@
 
 #ifdef __linux__
 #include <unistd.h>
+
+#include <fstream>
 #endif
 
 namespace ao::rt::test
@@ -213,162 +212,9 @@ namespace ao::rt::test
       std::uint64_t checksum = 0;
     };
 
-    struct BaselineMetric final
-    {
-      std::string name{};
-      std::int64_t value = 0;
-      std::string unit{};
-    };
-
-    struct BaselineRecord final
-    {
-      std::string benchmark{};
-      std::vector<BaselineMetric> metrics{};
-    };
-
-    std::string jsonEscape(std::string_view value)
-    {
-      auto out = std::string{};
-      out.reserve(value.size() + 8);
-
-      for (auto const ch : value)
-      {
-        switch (ch)
-        {
-          case '"': out += "\\\""; break;
-          case '\\': out += "\\\\"; break;
-          case '\b': out += "\\b"; break;
-          case '\f': out += "\\f"; break;
-          case '\n': out += "\\n"; break;
-          case '\r': out += "\\r"; break;
-          case '\t': out += "\\t"; break;
-          default:
-            if (static_cast<unsigned char>(ch) < 0x20)
-            {
-              constexpr auto kHex = std::string_view{"0123456789abcdef"};
-              out += "\\u00";
-              out += kHex[(static_cast<unsigned char>(ch) >> 4) & 0x0f];
-              out += kHex[static_cast<unsigned char>(ch) & 0x0f];
-            }
-            else
-            {
-              out += ch;
-            }
-
-            break;
-        }
-      }
-
-      return out;
-    }
-
-    class BaselineRecorder final
-    {
-    public:
-      BaselineRecorder() = default;
-      BaselineRecorder(BaselineRecorder const&) = delete;
-      BaselineRecorder& operator=(BaselineRecorder const&) = delete;
-      BaselineRecorder(BaselineRecorder&&) = delete;
-      BaselineRecorder& operator=(BaselineRecorder&&) = delete;
-      ~BaselineRecorder() noexcept
-      {
-        try
-        {
-          writeBaselineIfRequested();
-        }
-        catch (...)
-        {
-          // NOLINTNEXTLINE(modernize-use-std-print) -- destructor must not throw
-          std::fprintf(stderr, "Aobus performance baseline: unexpected failure while writing output\n");
-        }
-      }
-
-      void record(BaselineRecord record) { _records.push_back(std::move(record)); }
-
-    private:
-      void writeBaselineIfRequested() const
-      {
-        auto const* const path = std::getenv("AOBUS_PERF_BASELINE_JSON");
-
-        if (path == nullptr || path[0] == '\0')
-        {
-          return;
-        }
-
-        auto out = std::ofstream{path, std::ios::trunc};
-
-        if (!out)
-        {
-          // NOLINTNEXTLINE(modernize-use-std-print) — destructor must not throw
-          std::fprintf(stderr, "Aobus performance baseline: failed to open %s\n", path);
-          return;
-        }
-
-        out << "{\n";
-        out << R"(  "schema": "aobus-performance-baseline/v1",)" << "\n";
-        out << "  \"records\": [\n";
-
-        for (std::size_t recordIndex = 0; recordIndex < _records.size(); ++recordIndex)
-        {
-          auto const& record = _records[recordIndex];
-
-          out << "    {\n";
-          out << R"(      "benchmark": ")" << jsonEscape(record.benchmark) << R"(",)" << "\n";
-          out << "      \"metrics\": [\n";
-
-          for (std::size_t metricIndex = 0; metricIndex < record.metrics.size(); ++metricIndex)
-          {
-            auto const& metric = record.metrics[metricIndex];
-
-            out << R"(        {"name": ")" << jsonEscape(metric.name) << R"(", "value": )" << metric.value
-                << R"(, "unit": ")" << jsonEscape(metric.unit) << R"("})";
-
-            if (metricIndex + 1 < record.metrics.size())
-            {
-              out << ",";
-            }
-
-            out << "\n";
-          }
-
-          out << "      ]\n";
-          out << "    }";
-
-          if (recordIndex + 1 < _records.size())
-          {
-            out << ",";
-          }
-
-          out << "\n";
-        }
-
-        out << "  ]\n";
-        out << "}\n";
-
-        if (!out)
-        {
-          // NOLINTNEXTLINE(modernize-use-std-print) — destructor must not throw
-          std::fprintf(stderr, "Aobus performance baseline: failed to write %s\n", path);
-        }
-      }
-
-      std::vector<BaselineRecord> _records;
-    };
-
-    BaselineRecorder& baselineRecorder()
-    {
-      static auto recorder = BaselineRecorder{};
-      return recorder;
-    }
-
     BaselineMetric metric(std::string name, std::int64_t value, std::string unit)
     {
       return BaselineMetric{.name = std::move(name), .value = value, .unit = std::move(unit)};
-    }
-
-    void recordBaseline(std::string benchmark, std::vector<BaselineMetric> metrics)
-    {
-      baselineRecorder().record(BaselineRecord{.benchmark = std::move(benchmark), .metrics = std::move(metrics)});
     }
 
     std::int64_t currentResidentSetKiB()
@@ -1084,30 +930,45 @@ namespace ao::rt::test
 
     struct ScaleBench final
     {
-      MusicLibraryFixture libraryFixture;
+      static constexpr std::uint64_t kPinnedMapBytes = std::uint64_t{2} * 1024 * 1024 * 1024;
+
+      ao::test::TempDir tempDir;
+      library::MusicLibrary musicLibrary{ao::test::requireValue(
+        library::MusicLibrary::open(tempDir.path(),
+                                    tempDir.path(),
+                                    library::MusicLibrary::Options{.pinnedMapBytes = kPinnedMapBytes}))};
       std::vector<TrackId> ids;
     };
 
     void buildLibrary(ScaleBench& bench, std::int32_t trackCount)
     {
       bench.ids.reserve(trackCount);
+      auto transaction = library::test::writeTransaction(bench.musicLibrary);
+      auto populateRes = transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          for (std::int32_t index = 0; index < trackCount; ++index)
+          {
+            auto const spec = library::test::TrackSpec{
+              .title = std::format("Track {:06d}", index),
+              .artist = std::format("Artist {:04d}", index % ((trackCount / 50) + 1)),
+              .album = std::format("Album {:04d}", index % ((trackCount / 200) + 1)),
+              .genre = std::format("Genre {:02d}", index % 20),
+              .uri = index == 0 ? std::string{"test.flac"} : std::format(".aobus-test/track-{}.flac", index),
+              .year = static_cast<std::uint16_t>(1990 + (index % 35)),
+              .discNumber = static_cast<std::uint16_t>(1 + (index % 3)),
+              .trackNumber = static_cast<std::uint16_t>(1 + (index % 20)),
+              .duration = std::chrono::minutes{3} + std::chrono::milliseconds{static_cast<std::uint32_t>(
+                                                      (static_cast<std::int64_t>(index) * 137) %
+                                                      std::chrono::milliseconds{std::chrono::minutes{7}}.count())},
+            };
+            bench.ids.push_back(library::test::addTrackWithUniqueFixtureUri(bench.musicLibrary, write, spec));
+          }
 
-      for (std::int32_t index = 0; index < trackCount; ++index)
-      {
-        auto const spec = library::test::TrackSpec{
-          .title = std::format("Track {:06d}", index),
-          .artist = std::format("Artist {:04d}", index % ((trackCount / 50) + 1)),
-          .album = std::format("Album {:04d}", index % ((trackCount / 200) + 1)),
-          .genre = std::format("Genre {:02d}", index % 20),
-          .year = static_cast<std::uint16_t>(1990 + (index % 35)),
-          .discNumber = static_cast<std::uint16_t>(1 + (index % 3)),
-          .trackNumber = static_cast<std::uint16_t>(1 + (index % 20)),
-          .duration = std::chrono::minutes{3} + std::chrono::milliseconds{static_cast<std::uint32_t>(
-                                                  (static_cast<std::int64_t>(index) * 137) %
-                                                  std::chrono::milliseconds{std::chrono::minutes{7}}.count())},
-        };
-        bench.ids.push_back(bench.libraryFixture.addTrack(spec));
-      }
+          return {};
+        });
+      REQUIRE(populateRes);
+      REQUIRE(transaction.commit());
     }
 
     void buildCaselessSearchLibrary(ScaleBench& bench, std::int32_t trackCount)
@@ -1134,23 +995,32 @@ namespace ao::rt::test
       });
 
       bench.ids.reserve(trackCount);
+      auto transaction = library::test::writeTransaction(bench.musicLibrary);
+      auto populateRes = transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          for (std::int32_t index = 0; index < trackCount; ++index)
+          {
+            auto const arrayIndex = static_cast<std::size_t>(index) % kArtists.size();
+            auto const artist = kArtists[arrayIndex];
+            auto const album = kAlbums[arrayIndex];
+            auto const spec = library::test::TrackSpec{
+              .title = std::format("{} — Straße {:06d}", artist, index),
+              .artist = std::string{artist},
+              .album = std::string{album},
+              .albumArtist = std::string{artist},
+              .genre = arrayIndex % 2 == 0 ? "Électronique" : "現代音楽",
+              .composer = std::string{artist},
+              .work = std::string{album},
+              .uri = index == 0 ? std::string{"test.flac"} : std::format(".aobus-test/track-{}.flac", index),
+            };
+            bench.ids.push_back(library::test::addTrackWithUniqueFixtureUri(bench.musicLibrary, write, spec));
+          }
 
-      for (std::int32_t index = 0; index < trackCount; ++index)
-      {
-        auto const arrayIndex = static_cast<std::size_t>(index) % kArtists.size();
-        auto const artist = kArtists[arrayIndex];
-        auto const album = kAlbums[arrayIndex];
-        auto const spec = library::test::TrackSpec{
-          .title = std::format("{} — Straße {:06d}", artist, index),
-          .artist = std::string{artist},
-          .album = std::string{album},
-          .albumArtist = std::string{artist},
-          .genre = arrayIndex % 2 == 0 ? "Électronique" : "現代音楽",
-          .composer = std::string{artist},
-          .work = std::string{album},
-        };
-        bench.ids.push_back(bench.libraryFixture.addTrack(spec));
-      }
+          return {};
+        });
+      REQUIRE(populateRes);
+      REQUIRE(transaction.commit());
     }
 
     class BenchmarkTrackSource final : public TrackSource
@@ -1183,7 +1053,7 @@ namespace ao::rt::test
     Timings measureScale(ScaleBench& bench, std::int32_t trackCount)
     {
       auto t = Timings{};
-      auto& lib = bench.libraryFixture.library();
+      auto& lib = bench.musicLibrary;
 
       // 1. Projection construction + setPresentation
       auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
@@ -1237,7 +1107,7 @@ namespace ao::rt::test
 
       // 3. indexOf — 10k iterations at a fixed position
       auto const midId = proj.trackIdAt(static_cast<std::size_t>(trackCount / 2));
-      [[maybe_unused]] auto const optWarm = proj.indexOf(midId); // warm
+      auto const optWarm = proj.indexOf(midId); // warm
 
       constexpr int kLookupIters = 10000;
       auto const t5 = std::chrono::steady_clock::now();
@@ -1250,6 +1120,24 @@ namespace ao::rt::test
       auto const t6 = std::chrono::steady_clock::now();
 
       t.indexOfLookupDuration = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5);
+
+      // Check the measured work's post-state without changing its timed region.
+      REQUIRE(bench.ids.size() == static_cast<std::size_t>(trackCount));
+      REQUIRE(proj.size() == bench.ids.size());
+      CHECK(proj.trackIdAt(0) == bench.ids.front());
+      CHECK(proj.trackIdAt(proj.size() - 1) == bench.ids.back());
+      auto const midpointIndex = static_cast<std::size_t>(trackCount / 2);
+      CHECK(midId == bench.ids[midpointIndex]);
+      REQUIRE(optWarm);
+      CHECK(*optWarm == midpointIndex);
+
+      for (auto const* const source : {&filtered, &filteredExpr, &filteredIn})
+      {
+        REQUIRE_FALSE(source->hasError());
+        REQUIRE(source->size() == bench.ids.size());
+        CHECK(source->trackIdAt(0) == bench.ids.front());
+        CHECK(source->trackIdAt(source->size() - 1) == bench.ids.back());
+      }
 
       return t;
     }
@@ -1276,7 +1164,7 @@ namespace ao::rt::test
       auto expandedBinding = query::PlanBinding{expandedPlan};
       auto setBinding = query::PlanBinding{setPlan};
       auto evaluator = query::PlanEvaluator{};
-      auto& lib = bench.libraryFixture.library();
+      auto& lib = bench.musicLibrary;
       auto transaction = lib.readTransaction();
       auto reader = lib.tracks().reader(transaction);
 
@@ -1327,7 +1215,7 @@ namespace ao::rt::test
       auto planRes = query::compileQuery(*expressionRes);
       REQUIRE(planRes);
 
-      auto& musicLibrary = bench.libraryFixture.library();
+      auto& musicLibrary = bench.musicLibrary;
       auto transaction = musicLibrary.readTransaction();
       auto reader = musicLibrary.tracks().reader(transaction);
       auto caselessDictionaryCache = library::DictionaryReadCache{musicLibrary.dictionary()};
@@ -1372,12 +1260,33 @@ namespace ao::rt::test
     std::chrono::milliseconds measureProjectionSortFieldDuration(ScaleBench& bench, TrackSortField field)
     {
       auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
-      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
+      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.musicLibrary};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
         .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = field, .ascending = true}}});
       auto const end = std::chrono::steady_clock::now();
+
+      REQUIRE(bench.ids.size() > 20001);
+      REQUIRE(proj.size() == bench.ids.size());
+      std::size_t earlierIndex = 0;
+
+      switch (field)
+      {
+        case TrackSortField::Title: earlierIndex = 0; break;
+        case TrackSortField::Artist: earlierIndex = 20001; break;
+        case TrackSortField::Album: earlierIndex = 5001; break;
+        case TrackSortField::Genre: earlierIndex = 20; break;
+        default: FAIL("Unexpected projection sort field in the baseline workload");
+      }
+
+      auto const optEarlier = proj.indexOf(bench.ids[earlierIndex]);
+      auto const optLater = proj.indexOf(bench.ids[1]);
+      REQUIRE(optEarlier);
+      REQUIRE(optLater);
+      CHECK(proj.trackIdAt(*optEarlier) == bench.ids[earlierIndex]);
+      CHECK(proj.trackIdAt(*optLater) == bench.ids[1]);
+      CHECK(*optEarlier < *optLater);
 
       return std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     }
@@ -1386,11 +1295,29 @@ namespace ao::rt::test
                                                                     TrackPresentationSpec const& spec)
     {
       auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
-      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
+      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.musicLibrary};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(spec);
       auto const end = std::chrono::steady_clock::now();
+
+      REQUIRE_FALSE(bench.ids.empty());
+      REQUIRE(proj.size() == bench.ids.size());
+      auto const optFirst = proj.indexOf(bench.ids.front());
+      auto const optLast = proj.indexOf(bench.ids.back());
+      REQUIRE(optFirst);
+      REQUIRE(optLast);
+      CHECK(proj.trackIdAt(*optFirst) == bench.ids.front());
+      CHECK(proj.trackIdAt(*optLast) == bench.ids.back());
+
+      if (spec.groupBy == TrackGroupKey::None)
+      {
+        CHECK(proj.groupCount() == 0);
+      }
+      else
+      {
+        CHECK(proj.groupCount() > 0);
+      }
 
       return std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     }
@@ -1610,6 +1537,21 @@ namespace ao::rt::test
         auto newIds = createPipelineTracks(_libraryFixture.library(), kInitialTrackCount, kBulkCount, &timing.insert);
         timing.insert.callbackDuration = measureCallbackDuration([&] { _rootPtr->appendBatch(newIds); });
 
+        constexpr auto kAfterInsert = std::array<std::size_t, kSmartListCount>{55000, 47140, 39280};
+        REQUIRE(_rootPtr->size() == kInitialTrackCount + kBulkCount);
+        REQUIRE(_orderedPtr->size() == kInitialTrackCount);
+        REQUIRE(_smartSources.size() == kSmartListCount);
+        REQUIRE(_projections.size() == kSmartListCount + 1);
+
+        for (std::size_t index = 0; index < kSmartListCount; ++index)
+        {
+          REQUIRE_FALSE(_smartSources[index]->hasError());
+          REQUIRE(_smartSources[index]->size() == kAfterInsert[index]);
+          REQUIRE(_projections[index]->size() == kAfterInsert[index]);
+        }
+
+        REQUIRE(_projections.back()->size() == kInitialTrackCount);
+
         timing.remove = removeTracksTiming(newIds);
         timing.remove.callbackDuration =
           measureCallbackDuration([&] { CHECK(_rootPtr->removeTail(kBulkCount) == newIds); });
@@ -1633,6 +1575,26 @@ namespace ao::rt::test
         {
           CHECK(projectionPtr->size() > 0);
         }
+
+        constexpr auto kFinalCounts = std::array<std::size_t, kSmartListCount>{50000, 42855, 35710};
+        REQUIRE(_rootPtr->size() == kInitialTrackCount);
+        REQUIRE(_orderedPtr->size() == kInitialTrackCount);
+        REQUIRE(_smartSources.size() == kSmartListCount);
+        REQUIRE(_projections.size() == kSmartListCount + 1);
+
+        for (std::size_t index = 0; index < kSmartListCount; ++index)
+        {
+          REQUIRE_FALSE(_smartSources[index]->hasError());
+          REQUIRE(_smartSources[index]->size() == kFinalCounts[index]);
+          REQUIRE(_projections[index]->size() == kFinalCounts[index]);
+          CHECK(_projections[index]->trackIdAt(0) == _rootPtr->trackIdAt(kBulkCount + 1));
+          CHECK(_projections[index]->trackIdAt(kFinalCounts[index] - 1) == _rootPtr->trackIdAt(kBulkCount));
+        }
+
+        REQUIRE(_projections.back()->size() == kInitialTrackCount);
+        CHECK(_orderedPtr->trackIdAt(0) == _rootPtr->trackIdAt(kOrderMoveCount));
+        CHECK(_orderedPtr->trackIdAt(kInitialTrackCount - 1) == _rootPtr->trackIdAt(kOrderMoveCount - 1));
+        CHECK(_projections.back()->trackIdAt(kInitialTrackCount - 1) == _rootPtr->trackIdAt(kBulkCount));
 
         return timing;
       }
@@ -1881,7 +1843,8 @@ namespace ao::rt::test
                    });
   }
 
-  TEST_CASE("PerformanceBaseline - source pipeline 50k batch operations", "[perf][unit][baseline][source-pipeline]")
+  TEST_CASE("PerformanceBaseline - source pipeline 50k batch operations",
+            "[perf][integration][baseline][source-pipeline]")
   {
     Log::initialize(LogLevel::Info);
     constexpr std::size_t kMeasuredRuns = 5;
@@ -1936,7 +1899,7 @@ namespace ao::rt::test
     reportPipelineOperation("saved-order-move-500", moveSamples);
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][unit][baseline]")
+  TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][integration][baseline]")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 10000;
@@ -1959,14 +1922,6 @@ namespace ao::rt::test
     APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
     recordScaleBaseline(kN, buildDuration, t);
-
-    // Regression thresholds — deliberately generous to avoid flakes
-    CHECK(t.createProjectionDuration < std::chrono::seconds{5});
-    CHECK(t.setTitleSortDuration < std::chrono::seconds{5});
-    CHECK(t.evaluateMembersDuration < std::chrono::seconds{10});
-    CHECK(t.filterEvalDuration < std::chrono::seconds{10});
-    CHECK(t.largeInEvalDuration < std::chrono::seconds{10});
-    CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 
   TEST_CASE("PerformanceBaseline - Unicode library text admission", "[perf][unit][baseline][unicode]")
@@ -2033,6 +1988,10 @@ namespace ao::rt::test
                    });
 
     CHECK(timing.firstPassMatches == timing.secondPassMatches);
+
+    // One of eight literal artist rows matches across 10,000 tracks.
+    CHECK(timing.firstPassMatches == 1250);
+    CHECK(timing.secondPassMatches == 1250);
   }
 
   TEST_CASE("PerformanceBaseline - phase 0 query IN threshold sweep", "[perf][unit][baseline][query]")
@@ -2064,6 +2023,11 @@ namespace ao::rt::test
                      });
 
       CHECK(timing.expandedMatches == timing.setMatches);
+
+      // Each of these first 16 years occurs 286 times in the 10k fixture.
+      auto const expectedMatches = std::size_t{286} * listSize;
+      CHECK(timing.expandedMatches == expectedMatches);
+      CHECK(timing.setMatches == expectedMatches);
     }
   }
 
@@ -2309,6 +2273,7 @@ namespace ao::rt::test
 
     auto bench = ScaleBench{};
     buildLibrary(bench, kN);
+    REQUIRE(bench.ids.size() == static_cast<std::size_t>(kN));
 
     auto const titleDuration = measureProjectionSortFieldDuration(bench, TrackSortField::Title);
     auto const artistDuration = measureProjectionSortFieldDuration(bench, TrackSortField::Artist);
@@ -2327,11 +2292,6 @@ namespace ao::rt::test
                      metric("album_sort", albumDuration.count(), "ms"),
                      metric("genre_sort", genreDuration.count(), "ms"),
                    });
-
-    CHECK(titleDuration < std::chrono::minutes{5});
-    CHECK(artistDuration < std::chrono::minutes{5});
-    CHECK(albumDuration < std::chrono::minutes{5});
-    CHECK(genreDuration < std::chrono::minutes{5});
   }
 
   TEST_CASE("PerformanceBaseline - phase 0 projection preset timing", "[perf][unit][baseline][projection]")
@@ -2343,6 +2303,7 @@ namespace ao::rt::test
 
     auto bench = ScaleBench{};
     buildLibrary(bench, kN);
+    REQUIRE(bench.ids.size() == static_cast<std::size_t>(kN));
 
     for (auto const& preset : builtinTrackPresentationPresets())
     {
@@ -2353,7 +2314,6 @@ namespace ao::rt::test
                        metric("track_count", kN, "count"),
                        metric("duration", duration.count(), "ms"),
                      });
-      CHECK(duration < std::chrono::minutes{5});
     }
   }
 
@@ -2445,7 +2405,7 @@ namespace ao::rt::test
     CHECK(metrics.namedDatabaseOpens == 7);
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][unit][baseline]")
+  TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][integration][baseline]")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 100000;
@@ -2468,17 +2428,9 @@ namespace ao::rt::test
     APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
     recordScaleBaseline(kN, buildDuration, t);
-
-    // Regression thresholds — deliberately generous to avoid flakes
-    CHECK(t.createProjectionDuration < std::chrono::seconds{30});
-    CHECK(t.setTitleSortDuration < std::chrono::seconds{30});
-    CHECK(t.evaluateMembersDuration < std::chrono::minutes{1});
-    CHECK(t.filterEvalDuration < std::chrono::minutes{1});
-    CHECK(t.largeInEvalDuration < std::chrono::minutes{1});
-    CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 1M baseline", "[perf][unit][baseline]")
+  TEST_CASE("PerformanceBaseline - phase 0 1M baseline", "[perf][integration][baseline]")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 1000000;
@@ -2501,13 +2453,5 @@ namespace ao::rt::test
     APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
     APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
     recordScaleBaseline(kN, buildDuration, t);
-
-    // Regression thresholds — deliberately generous to avoid flakes
-    CHECK(t.createProjectionDuration < std::chrono::minutes{5});
-    CHECK(t.setTitleSortDuration < std::chrono::minutes{5});
-    CHECK(t.evaluateMembersDuration < std::chrono::minutes{10});
-    CHECK(t.filterEvalDuration < std::chrono::minutes{10});
-    CHECK(t.largeInEvalDuration < std::chrono::minutes{10});
-    CHECK(t.indexOfLookupDuration < std::chrono::microseconds{500000});
   }
 } // namespace ao::rt::test

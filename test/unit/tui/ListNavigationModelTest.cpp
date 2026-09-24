@@ -303,7 +303,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("ListNavigationModel - tree replacement refreshes folded names and paths during search",
-            "[tui][regression][list-navigation]")
+            "[tui][unit][list-navigation]")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree("Straße"), rt::kAllTracksListId);
@@ -456,8 +456,7 @@ namespace ao::tui::test
     CHECK(model.cursor() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - shared cycle repair remains finite and ordered",
-            "[tui][regression][list-navigation]")
+  TEST_CASE("ListNavigationModel - shared cycle repair remains finite and ordered", "[tui][unit][list-navigation]")
   {
     auto const projection =
       uimodel::buildListTreeProjection(ao::test::englishMessageCatalog(),

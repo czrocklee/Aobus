@@ -109,19 +109,90 @@ class WinUiTest(unittest.TestCase):
                 {
                     "Version": "2.4.0.0",
                     "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.4.0.0_x64__8wekyb3d8bbwe",
+                    "Status": "Ok",
                 },
                 {
                     "Version": "2.4.0.0",
                     "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.4.0.0_x86__8wekyb3d8bbwe",
+                    "Status": "Ok",
                 },
             ]
         )
 
-        packages = winui._runtime_packages_from_json(payload, "x64")
+        packages = winui._runtime_packages_from_json(payload, winui._runtime_contract())
 
         self.assertEqual(len(packages), 1)
         self.assertEqual(packages[0].architecture, "x64")
         self.assertIn("_x64__", packages[0].package_full_name)
+
+    def test_runtime_match_accepts_servicing_updates_and_selects_the_highest_numeric_version(self):
+        runtime = winui._runtime_contract()
+        for versions, expected in (
+            (("2.4.0.0",), "2.4.0.0"),
+            (("2.5.1.0",), "2.5.1.0"),
+            (("2.10.0.0", "2.9.0.0", "2.4.0.0"), "2.10.0.0"),
+            (("2.3.65535.65535",), None),
+            ((), None),
+        ):
+            with self.subTest(versions=versions):
+                payload = json.dumps(
+                    [
+                        {
+                            "Name": runtime.package_name,
+                            "Version": version,
+                            "PackageFullName": f"{runtime.package_name}_{version}_x64__8wekyb3d8bbwe",
+                            "Status": "Ok",
+                        }
+                        for version in versions
+                    ]
+                )
+                query = subprocess.CompletedProcess([], 0, payload, "")
+                with mock.patch.object(winui, "_run_text", return_value=query):
+                    installed = winui.matching_runtime(runtime)
+                self.assertEqual(installed.version if installed else None, expected)
+
+    def test_runtime_json_rejects_wrong_identity_status_or_malformed_version(self):
+        valid = {
+            "Version": "2.5.1.0",
+            "PackageFullName": "Microsoft.WindowsAppRuntime.2_2.5.1.0_x64__8wekyb3d8bbwe",
+            "Status": "Ok",
+        }
+        runtime = winui._runtime_contract()
+        self.assertEqual(len(winui._runtime_packages_from_json(json.dumps(valid), runtime)), 1)
+        for overrides in (
+            {"PackageFullName": "Microsoft.WindowsAppRuntime.3_2.5.1.0_x64__8wekyb3d8bbwe"},
+            {"PackageFullName": "Microsoft.WindowsAppRuntime.2-preview_2.5.1.0_x64__8wekyb3d8bbwe"},
+            {"PackageFullName": "Microsoft.WindowsAppRuntime.2_2.5.1.0_x64__otherpublisher"},
+            {"PackageFullName": "Microsoft.WindowsAppRuntime.2_2.5.1.0_arm64__8wekyb3d8bbwe"},
+            {"Version": "2.5.2.0"},
+            {"Status": "Modified"},
+            {"Status": "NeedsRemediation"},
+            {"Status": None},
+            {"Status": 0},
+        ):
+            with self.subTest(overrides=overrides):
+                payload = json.dumps(valid | overrides)
+                self.assertEqual(winui._runtime_packages_from_json(payload, runtime), ())
+        for version in ("2.5.1", "2.5.1.0.0", "2.5.-1.0", "2.5.65536.0", "2.5.1.x", "\uff12.5.1.0", "2.5.1.0 "):
+            with self.subTest(version=version):
+                payload = json.dumps(
+                    valid
+                    | {
+                        "Version": version,
+                        "PackageFullName": f"Microsoft.WindowsAppRuntime.2_{version}_x64__8wekyb3d8bbwe",
+                    }
+                )
+                self.assertEqual(winui._runtime_packages_from_json(payload, runtime), ())
+
+    def test_runtime_query_failure_is_not_reported_as_an_absent_package(self):
+        query = subprocess.CompletedProcess([], 1, "", "AppX service unavailable")
+        with mock.patch.object(winui, "_run_text", return_value=query) as run:
+            with self.assertRaisesRegex(RuntimeError, "AppX service unavailable"):
+                winui.matching_runtime()
+        command = run.call_args.args[0][-1]
+        self.assertIn("$ErrorActionPreference = 'Stop'", command)
+        self.assertNotIn("-AllUsers", command)
+        self.assertIn("-PackageTypeFilter Framework", command)
 
     def test_runtime_query_uses_selected_environment_without_powershell_7_module_path(self):
         runtime = winui.RuntimeContract(
@@ -260,18 +331,79 @@ class WinUiTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "returned invalid data"):
                 winui._verify_authenticode(Path("C:/runtime.exe"), environ={})
 
-    def test_runtime_setup_is_idempotent_when_the_exact_runtime_exists(self):
-        installed = winui.RuntimePackage(
-            version="2.4.0.0",
-            architecture="x64",
-            package_full_name="Microsoft.WindowsAppRuntime.2_2.4.0.0_x64__8wekyb3d8bbwe",
-        )
-        with mock.patch.object(winui.os, "name", "nt"):
-            with mock.patch.object(winui, "matching_runtime", return_value=installed):
-                with mock.patch.object(winui, "_download_verified_installer") as download:
-                    self.assertEqual(winui.setup_runtime(), installed)
+    def test_runtime_setup_does_not_install_or_downgrade_an_acceptable_runtime(self):
+        for version in ("2.4.0.0", "2.5.1.0"):
+            with self.subTest(version=version):
+                full_name = f"Microsoft.WindowsAppRuntime.2_{version}_x64__8wekyb3d8bbwe"
+                payload = json.dumps({"Version": version, "PackageFullName": full_name, "Status": "Ok"})
+                with (
+                    mock.patch.object(winui, "os", SimpleNamespace(name="nt", environ={})),
+                    mock.patch.object(winui, "_run_text", return_value=subprocess.CompletedProcess([], 0, payload, "")),
+                    mock.patch.object(winui, "_download_verified_installer") as download,
+                    mock.patch.object(winui, "_verify_authenticode") as verify,
+                    mock.patch.object(winui.subprocess, "run") as install,
+                ):
+                    self.assertEqual(winui.setup_runtime(), winui.RuntimePackage(version, "x64", full_name))
+                download.assert_not_called()
+                verify.assert_not_called()
+                install.assert_not_called()
 
-        download.assert_not_called()
+    def test_runtime_setup_accepts_a_compatible_post_install_registration(self):
+        full_name = "Microsoft.WindowsAppRuntime.2_2.5.1.0_x64__8wekyb3d8bbwe"
+        payload = json.dumps({"Version": "2.5.1.0", "PackageFullName": full_name, "Status": "Ok"})
+        with (
+            mock.patch.object(winui, "os", SimpleNamespace(name="nt", environ={})),
+            mock.patch.object(
+                winui,
+                "_run_text",
+                side_effect=(
+                    subprocess.CompletedProcess([], 0, "", ""),
+                    subprocess.CompletedProcess([], 0, payload, ""),
+                ),
+            ),
+            mock.patch.object(winui, "_download_verified_installer", return_value=Path("runtime.exe")) as download,
+            mock.patch.object(winui, "_verify_authenticode") as verify,
+            mock.patch.object(winui.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as install,
+        ):
+            self.assertEqual(
+                winui.setup_runtime(state_root=Path("state")), winui.RuntimePackage("2.5.1.0", "x64", full_name)
+            )
+        download.assert_called_once_with(winui._runtime_contract(), Path("state"))
+        verify.assert_called_once_with(Path("runtime.exe"))
+        install.assert_called_once_with(["runtime.exe", "--quiet"], check=False)
+
+    def test_runtime_setup_failure_reports_current_user_packages_without_hiding_query_errors(self):
+        installed_name = "Microsoft.WindowsAppRuntime.2_2.5.0.0_x64__8wekyb3d8bbwe"
+        inventory = json.dumps([{"PackageFullName": installed_name, "Version": "2.5.0.0"}])
+        for query_code, stdout, stderr, expected in (
+            (0, inventory, "", installed_name),
+            (0, "", "", "(none)"),
+            (1, "", "Package inventory is inaccessible", "Package inventory is inaccessible"),
+        ):
+            with self.subTest(query_code=query_code, stdout=stdout):
+                with (
+                    mock.patch.object(winui, "os", SimpleNamespace(name="nt", environ={})),
+                    mock.patch.object(winui, "matching_runtime", return_value=None),
+                    mock.patch.object(winui, "_download_verified_installer", return_value=Path("runtime.exe")),
+                    mock.patch.object(winui, "_verify_authenticode") as verify,
+                    mock.patch.object(winui.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as install,
+                    mock.patch.object(
+                        winui,
+                        "_run_text",
+                        return_value=subprocess.CompletedProcess([], query_code, stdout, stderr),
+                    ) as query,
+                ):
+                    with self.assertRaises(RuntimeError) as raised:
+                        winui.setup_runtime(state_root=Path("state"))
+
+                self.assertIn(
+                    "Microsoft.WindowsAppRuntime.2 >= 2.4.0.0 x64 is still unavailable", str(raised.exception)
+                )
+                self.assertIn(expected, str(raised.exception))
+                verify.assert_called_once_with(Path("runtime.exe"))
+                install.assert_called_once_with(["runtime.exe", "--quiet"], check=False)
+                self.assertIn("Microsoft.WindowsAppRuntime*", query.call_args.args[0][-1])
+                self.assertIn("$ErrorActionPreference = 'Stop'", query.call_args.args[0][-1])
 
     def test_service_session_is_rejected_before_launch(self):
         with mock.patch.object(winui, "current_session_id", return_value=0):

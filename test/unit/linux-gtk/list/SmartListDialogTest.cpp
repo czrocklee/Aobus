@@ -79,7 +79,7 @@ namespace ao::gtk::test
     CHECK(foundPreviewPane);
   }
 
-  TEST_CASE("SmartListDialog - invalid preview source shows the acquisition failure", "[gtk][regression][list][dialog]")
+  TEST_CASE("SmartListDialog - invalid preview source shows the acquisition failure", "[gtk][unit][list][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -101,15 +101,15 @@ namespace ao::gtk::test
 
     for (auto* const label : collectAll<Gtk::Label>(dialog))
     {
-      visibleError =
-        visibleError || (label->get_visible() && !label->get_text().empty() && label->has_css_class("ao-layout-error"));
+      visibleError = visibleError || (label->get_visible() && label->get_text() == "List 999999 does not exist" &&
+                                      label->has_css_class("ao-layout-error"));
     }
 
     CHECK(visibleError);
   }
 
   TEST_CASE("SmartListDialog - valid expression filters the transient preview projection",
-            "[gtk][regression][smart-list][preview]")
+            "[gtk][unit][list][dialog][preview]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -143,8 +143,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(dialog, "Showing all matches: 1") != nullptr);
   }
 
-  TEST_CASE("SmartListDialog - invalid expression rejects the transient preview",
-            "[gtk][regression][smart-list][preview]")
+  TEST_CASE("SmartListDialog - invalid expression rejects the transient preview", "[gtk][unit][list][dialog][preview]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -185,7 +184,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("SmartListDialog - valid local expression surfaces a stored parent filter error",
-            "[gtk][regression][smart-list][preview]")
+            "[gtk][unit][list][dialog][preview]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto parentListId = kInvalidListId;
@@ -231,7 +230,7 @@ namespace ao::gtk::test
   // dialog treats the expression as unvalidated, so the readiness pass must
   // re-run the full preview or naming a list never enables submission.
   TEST_CASE("SmartListDialog - naming a list enables submission once the preview source is ready",
-            "[gtk][regression][list][dialog]")
+            "[gtk][unit][list][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -274,7 +273,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("SmartListDialog - pending submission remains guarded while the draft changes",
-            "[gtk][regression][list][dialog]")
+            "[gtk][unit][list][dialog][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -327,7 +326,7 @@ namespace ao::gtk::test
   // editing, carries parentId kInvalidListId. The source cache rejects that id
   // outright, so the dialog must resolve it to the All Tracks root or the
   // preview never builds and the editor opens showing an acquisition error.
-  TEST_CASE("SmartListDialog - root parent previews against All Tracks", "[gtk][regression][list][dialog]")
+  TEST_CASE("SmartListDialog - root parent previews against All Tracks", "[gtk][unit][list][dialog]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -379,7 +378,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("SmartListDialog - Playlist template exposes a visible tag and chooses Manual Order",
-            "[gtk][unit][smart-list-dialog][playlist]")
+            "[gtk][unit][list][dialog][playlist]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -408,7 +407,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("SmartListDialog - retained presentation callback retires with the dialog",
-            "[gtk][regression][smart-list-dialog][concurrency]")
+            "[gtk][unit][list][dialog][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

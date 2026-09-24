@@ -15,6 +15,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <format>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
@@ -35,6 +36,16 @@ namespace ao::library::test
     {
       auto const list = ListBuilder::makeEmpty().name(name).parentId(parentId);
       return ao::test::requireValue(writer.create(list));
+    }
+
+    ListId createCommittedList(MusicLibrary& library, std::string_view const name)
+    {
+      auto transaction = writeTransaction(library);
+      auto const createdRes = transaction.apply([&](LibraryWrite& write)
+                                                { return write.lists().create(ListBuilder::makeEmpty().name(name)); });
+      REQUIRE(createdRes);
+      REQUIRE(transaction.commit());
+      return *createdRes;
     }
   } // namespace
 
@@ -58,29 +69,40 @@ namespace ao::library::test
       REQUIRE(transaction.commit());
     }
 
-    auto missingTransaction = writeTransaction(library);
-    auto missingParent = ListBuilder::makeEmpty().name("Missing parent").parentId(ListId{childId.raw() + 100});
-    auto missingRes =
-      missingTransaction.apply([&](LibraryWrite& write) { return write.lists().create(missingParent); });
-    REQUIRE_FALSE(missingRes);
-    CHECK(missingRes.error().code == Error::Code::InvalidInput);
+    SECTION("create rejects a missing parent")
+    {
+      auto transaction = writeTransaction(library);
+      auto const missingId = ListId{childId.raw() + 100};
+      auto const missingParent = ListBuilder::makeEmpty().name("Missing parent").parentId(missingId);
+      auto const missingRes =
+        transaction.apply([&](LibraryWrite& write) { return write.lists().create(missingParent); });
+      REQUIRE_FALSE(missingRes);
+      CHECK(missingRes.error().code == Error::Code::InvalidInput);
+      CHECK(missingRes.error().message == std::format("list parent not found: {}", missingId.raw()));
+    }
 
-    auto cycleTransaction = writeTransaction(library);
-    auto cycle = ListBuilder::makeEmpty().name("Root").parentId(childId);
-    auto cycleRes = cycleTransaction.apply([&](LibraryWrite& write) { return write.lists().update(rootId, cycle); });
-    REQUIRE_FALSE(cycleRes);
-    CHECK(cycleRes.error().code == Error::Code::InvalidInput);
+    SECTION("update rejects a descendant parent")
+    {
+      auto transaction = writeTransaction(library);
+      auto const cycle = ListBuilder::makeEmpty().name("Changed root").parentId(childId);
+      auto const cycleRes = transaction.apply([&](LibraryWrite& write) { return write.lists().update(rootId, cycle); });
+      REQUIRE_FALSE(cycleRes);
+      CHECK(cycleRes.error().code == Error::Code::InvalidInput);
+      CHECK(cycleRes.error().message == "list parent cannot be a descendant of the list");
+    }
 
     auto readTransaction = library.readTransaction();
     auto const optRoot = library.lists().reader(readTransaction).get(rootId);
     auto const optChild = library.lists().reader(readTransaction).get(childId);
     REQUIRE(optRoot);
     REQUIRE(optChild);
+    CHECK(optRoot->name() == "Root");
     CHECK(optRoot->parentId() == kInvalidListId);
+    CHECK(optChild->name() == "Child");
     CHECK(optChild->parentId() == rootId);
   }
 
-  TEST_CASE("ListWriter - update does not upsert a missing id", "[library][regression][list-writer]")
+  TEST_CASE("ListWriter - update does not upsert a missing id", "[library][unit][list-writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -92,49 +114,69 @@ namespace ao::library::test
 
     REQUIRE_FALSE(updateRes);
     CHECK(updateRes.error().code == Error::Code::NotFound);
+    CHECK(updateRes.error().message == "List 41 does not exist");
     auto readTransaction = library.readTransaction();
     CHECK_FALSE(library.lists().reader(readTransaction).get(missingId));
   }
 
-  TEST_CASE("ListWriter - self-parenting and missing deletion targets return typed errors",
-            "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - self-parent rejection preserves the stored list", "[library][unit][list-writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto listId = kInvalidListId;
-
-    {
-      auto transaction = writeTransaction(library);
-      auto createRes = transaction.apply([&](LibraryWrite& write)
-                                         { return write.lists().create(ListBuilder::makeEmpty().name("List")); });
-      REQUIRE(createRes);
-      listId = *createRes;
-      REQUIRE(transaction.commit());
-    }
-
-    {
-      auto transaction = writeTransaction(library);
-      auto selfParent = ListBuilder::makeEmpty().name("List").parentId(listId);
-      auto updateRes = transaction.apply([&](LibraryWrite& write) { return write.lists().update(listId, selfParent); });
-      REQUIRE_FALSE(updateRes);
-      CHECK(updateRes.error().code == Error::Code::InvalidInput);
-    }
-
-    {
-      auto transaction = writeTransaction(library);
-      auto removeRes = transaction.apply([](LibraryWrite& write) { return write.lists().remove(ListId{4242}); });
-      REQUIRE_FALSE(removeRes);
-      CHECK(removeRes.error().code == Error::Code::NotFound);
-    }
-
+    auto const listId = createCommittedList(library, "Original");
     auto transaction = writeTransaction(library);
-    auto removeSubtreeRes =
-      transaction.apply([](LibraryWrite& write) { return write.lists().removeSubtree(ListId{4242}); });
-    REQUIRE_FALSE(removeSubtreeRes);
-    CHECK(removeSubtreeRes.error().code == Error::Code::NotFound);
+    auto const selfParent = ListBuilder::makeEmpty().name("Changed").parentId(listId);
+    auto const updateRes =
+      transaction.apply([&](LibraryWrite& write) { return write.lists().update(listId, selfParent); });
+    REQUIRE_FALSE(updateRes);
+    CHECK(updateRes.error().code == Error::Code::InvalidInput);
+    CHECK(updateRes.error().message == "list parent cannot be the list itself");
+
+    auto read = library.readTransaction();
+    auto const optStored = library.lists().reader(read).get(listId);
+    REQUIRE(optStored);
+    CHECK(optStored->name() == "Original");
+    CHECK(optStored->parentId() == kInvalidListId);
   }
 
-  TEST_CASE("ListWriter - leaf deletion conflicts while a child remains", "[library][unit][list-writer]")
+  TEST_CASE("ListWriter - missing leaf deletion preserves existing lists", "[library][unit][list-writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const survivorId = createCommittedList(library, "Survivor");
+    auto transaction = writeTransaction(library);
+    auto const removeRes = transaction.apply([](LibraryWrite& write) { return write.lists().remove(ListId{4242}); });
+    REQUIRE_FALSE(removeRes);
+    CHECK(removeRes.error().code == Error::Code::NotFound);
+    CHECK(removeRes.error().message == "List 4242 does not exist");
+
+    auto read = library.readTransaction();
+    auto const optSurvivor = library.lists().reader(read).get(survivorId);
+    REQUIRE(optSurvivor);
+    CHECK(optSurvivor->name() == "Survivor");
+    CHECK(optSurvivor->parentId() == kInvalidListId);
+  }
+
+  TEST_CASE("ListWriter - missing subtree deletion preserves existing lists", "[library][unit][list-writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const survivorId = createCommittedList(library, "Survivor");
+    auto transaction = writeTransaction(library);
+    auto const removeRes =
+      transaction.apply([](LibraryWrite& write) { return write.lists().removeSubtree(ListId{4242}); });
+    REQUIRE_FALSE(removeRes);
+    CHECK(removeRes.error().code == Error::Code::NotFound);
+    CHECK(removeRes.error().message == "List 4242 does not exist");
+
+    auto read = library.readTransaction();
+    auto const optSurvivor = library.lists().reader(read).get(survivorId);
+    REQUIRE(optSurvivor);
+    CHECK(optSurvivor->name() == "Survivor");
+    CHECK(optSurvivor->parentId() == kInvalidListId);
+  }
+
+  TEST_CASE("ListWriter - leaf deletion rejects a parent until child-first cleanup", "[library][unit][list-writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");

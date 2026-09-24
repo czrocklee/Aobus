@@ -4,6 +4,7 @@
 #include "runtime/playback/PlaybackSuccession.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/PlaybackSuccessionBaseTestSupport.h"
+#include <ao/Error.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationState.h>
@@ -159,6 +160,7 @@ namespace ao::rt::test
     SECTION("repeat all")
     {
       succession.setRepeatMode(RepeatMode::All);
+      REQUIRE(succession.state().repeat == RepeatMode::All);
     }
 
     fixture.removeFromList(std::array{fixture.firstTrackId});
@@ -166,6 +168,51 @@ namespace ao::rt::test
     CHECK_FALSE(succession.state().hasNext);
     CHECK_FALSE(succession.state().optResolvedSuccessor);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
+
+    succession.tryMoveNext();
+    CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Idle);
+
+    auto const feed = fixture.notifications.feed();
+    REQUIRE(feed.entries.size() == 1);
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+          NotificationReportTemplate::PlaybackSequenceFinished);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Info);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
+  }
+
+  TEST_CASE("PlaybackSuccession - live membership governs succession without interrupting current audio",
+            "[runtime][unit][playback-succession][projection]")
+  {
+    auto fixture = PlaybackSuccessionFixture{};
+    fixture.buildThreeTrackManualView();
+    auto& succession = *fixture.successionPtr;
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+    auto const beforeRemoval = succession.state();
+
+    fixture.removeFromList(std::array{fixture.firstTrackId});
+
+    auto const afterRemoval = succession.state();
+    CHECK(afterRemoval.currentTrackId == fixture.firstTrackId);
+    CHECK(afterRemoval.sourceState == PlaybackSuccessionSourceState::Live);
+    CHECK(afterRemoval.optResolvedSuccessor == fixture.secondTrackId);
+    CHECK(afterRemoval == beforeRemoval);
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
+    CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
+
+    REQUIRE(fixture.commandsFixture.runTask(fixture.commands().deleteListAsync(fixture.listId)));
+    auto const invalidated = succession.state();
+    CHECK(invalidated.sourceState == PlaybackSuccessionSourceState::Invalidated);
+    CHECK(invalidated.currentTrackId == fixture.firstTrackId);
+    CHECK_FALSE(invalidated.hasNext);
+    CHECK_FALSE(invalidated.optResolvedSuccessor);
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
+
+    auto const rejectedRelaunchRes = succession.playFromView(fixture.viewId, fixture.firstTrackId);
+    REQUIRE_FALSE(rejectedRelaunchRes);
+    CHECK(rejectedRelaunchRes.error().code == Error::Code::NotFound);
+    CHECK(succession.state() == invalidated);
 
     succession.tryMoveNext();
     CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Inactive);

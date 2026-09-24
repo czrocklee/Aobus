@@ -327,10 +327,15 @@ namespace ao::lmdb::test
 
     REQUIRE(writer.update(1, createStringData("still active")));
     REQUIRE(transaction.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const optData = db.reader(readTransaction).get(1);
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "still active");
   }
 
   TEST_CASE("IntegerKeyDatabase::Writer - clear resets integer append allocation on the same writer",
-            "[lmdb][regression][database][writer]")
+            "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -571,10 +576,17 @@ namespace ao::lmdb::test
     REQUIRE(writer1.create(1, createStringData("test")));
 
     auto writer2 = IntegerKeyDatabase::Writer{std::move(writer1)};
-    // writer1 is now in moved-from state
-    // writer2 should still be usable
-
+    REQUIRE(writer2.create(2, createStringData("after move")));
     REQUIRE(wtxn.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const reader = db.reader(readTransaction);
+    auto const optOriginal = reader.get(1);
+    auto const optMoved = reader.get(2);
+    REQUIRE(optOriginal);
+    REQUIRE(optMoved);
+    CHECK(utility::bytes::stringView(*optOriginal) == "test");
+    CHECK(utility::bytes::stringView(*optMoved) == "after move");
   }
 
   TEST_CASE("IntegerKeyDatabase::Writer - create returns Conflict on duplicate id with data",
@@ -643,7 +655,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("IntegerKeyDatabase::Writer - non-conflict mutation failure unwinds and rolls back its transaction",
-            "[lmdb][regression][database][writer]")
+            "[lmdb][unit][database][writer]")
   {
     // Apple Silicon uses 16 KiB pages. Leave enough LMDB pages for the named
     // database and baseline record before forcing the capacity failure.

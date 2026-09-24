@@ -12,7 +12,8 @@ namespace ao::winui::test
   static_assert(!std::is_copy_constructible_v<CallbackAdmissionGate>);
   static_assert(!std::is_move_constructible_v<CallbackAdmissionGate>);
 
-  TEST_CASE("CallbackAdmissionGate - retirement invalidates existing callback tokens", "[winui][unit][lifetime]")
+  TEST_CASE("CallbackAdmissionGate - retirement invalidates existing callback tokens",
+            "[winui][unit][callback-admission][async]")
   {
     auto const emptyToken = CallbackAdmissionGate::Token{};
     CHECK_FALSE(emptyToken.accepts());
@@ -30,7 +31,8 @@ namespace ao::winui::test
     CHECK_FALSE(token.accepts());
   }
 
-  TEST_CASE("CallbackAdmissionGate - renewal cannot reopen an older generation", "[winui][unit][lifetime]")
+  TEST_CASE("CallbackAdmissionGate - renewal cannot reopen an older generation",
+            "[winui][unit][callback-admission][async]")
   {
     auto gate = CallbackAdmissionGate{};
     auto const oldToken = gate.token();

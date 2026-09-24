@@ -11,11 +11,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
-#include <gtkmm/widget.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,24 +26,33 @@ namespace ao::gtk::layout::editor::test
   using ao::gtk::layout::test::preparedLayout;
 
   TEST_CASE("LayoutEditorTemplate - built-in layout templates expose expected component structure",
-            "[gtk][unit][layout][editor]")
+            "[gtk][unit][layout-editor]")
   {
-    SECTION("the default layout carries all 8 built-in templates")
+    SECTION("the default layout carries the exact built-in template inventory")
     {
       auto const templates = makeDefaultLayout().templates;
+      auto const expected = std::set<std::string>{"app.defaultContentShell",
+                                                  "app.defaultLayout",
+                                                  "app.defaultMainPaned",
+                                                  "app.defaultMenuBar",
+                                                  "library.defaultListPane",
+                                                  "playback.compactControls",
+                                                  "playback.defaultBar",
+                                                  "playback.transportGroup",
+                                                  "status.defaultBar",
+                                                  "track.defaultDetailPane",
+                                                  "track.selectionDetailPane",
+                                                  "tracks.defaultControlsBar",
+                                                  "tracks.defaultWorkspace"};
+      auto actual = std::set<std::string>{};
 
-      CHECK(templates.contains("playback.compactControls"));
-      CHECK(templates.contains("playback.transportGroup"));
-      CHECK(templates.contains("playback.defaultBar"));
-      CHECK(templates.contains("library.defaultListPane"));
-      CHECK(templates.contains("track.defaultDetailPane"));
-      CHECK(templates.contains("status.defaultBar"));
-      CHECK(templates.contains("tracks.defaultWorkspace"));
-      CHECK(templates.contains("app.defaultLayout"));
-      CHECK(templates.contains("track.selectionDetailPane"));
+      for (auto const& entry : templates)
+      {
+        actual.insert(entry.first);
+      }
 
-      int const expectedCount = 9;
-      CHECK(templates.size() >= expectedCount);
+      CHECK(actual == expected);
+      CHECK(templates.size() == expected.size());
     }
 
     SECTION("playback.transportGroup has 2 children and linked class")
@@ -202,7 +211,7 @@ namespace ao::gtk::layout::editor::test
       auto const compPtr = fixture.layoutRuntime().build(fixture.context(), preparedLayout(doc));
 
       REQUIRE(compPtr != nullptr);
-      CHECK(dynamic_cast<Gtk::Widget*>(&compPtr->widget()) != nullptr);
+      CHECK(ao::gtk::layout::test::containsLayoutErrorPlaceholder(compPtr->widget()));
     }
 
     SECTION("template YAML round-trip")

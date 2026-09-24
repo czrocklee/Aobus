@@ -7,8 +7,6 @@
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 
-#include <glibmm/refptr.h>
-
 #include <filesystem>
 #include <memory>
 
@@ -35,7 +33,7 @@ namespace ao::gtk
     std::filesystem::path databasePath;
   };
 
-  Result<Glib::RefPtr<MainWindow>> prepareLibraryWindow(
+  Result<std::unique_ptr<MainWindow>> prepareLibraryWindow(
     LibraryWindowPaths paths,
     std::shared_ptr<AppConfigStore> appConfigStorePtr,
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
@@ -45,6 +43,6 @@ namespace ao::gtk
     rt::CompletionAliasPolicy const* completionAliasPolicy = nullptr);
 
   Result<> activateLibraryWindow(Gtk::Application& app,
-                                 Glib::RefPtr<MainWindow> const& windowPtr,
+                                 std::unique_ptr<MainWindow> const& windowPtr,
                                  MainWindow::PlaybackRestoreMode restoreMode);
 } // namespace ao::gtk

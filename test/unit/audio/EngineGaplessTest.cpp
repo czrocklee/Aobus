@@ -195,7 +195,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - consecutive gapless splices reclaim retired sources without restarting backend",
-            "[audio][unit][engine-gapless][reclaim]")
+            "[audio][unit][engine][gapless][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -262,7 +262,8 @@ namespace ao::audio::test
     CHECK(countBackendEvents(events, "start") == 1);
   }
 
-  TEST_CASE("Engine - stop frees an armed but unspliced successor", "[audio][unit][engine-gapless][cancel]")
+  TEST_CASE("Engine - stop frees an armed but unspliced successor",
+            "[audio][unit][engine][gapless][cancel][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -292,7 +293,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - seek commands settle a pending splice before acting",
-            "[audio][regression][engine-gapless][concurrency]")
+            "[audio][unit][engine][gapless][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -558,7 +559,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - gapless lookahead never lowers a higher-precision successor",
-            "[audio][regression][gapless][precision]")
+            "[audio][unit][engine][gapless][precision]")
   {
     auto const firstFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const secondFormat =
@@ -586,7 +587,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - gapless lookahead widens a lower-precision successor into the active PCM mode",
-            "[audio][regression][gapless][precision]")
+            "[audio][unit][engine][gapless][precision]")
   {
     auto const firstFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
     auto const secondFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
@@ -618,7 +619,8 @@ namespace ao::audio::test
     CHECK(countBackendEvents(backendRaw->events(), "open") == 1);
   }
 
-  TEST_CASE("Engine - transport and route changes cancel prepared successor", "[audio][unit][engine-gapless][cancel]")
+  TEST_CASE("Engine - transport and route changes cancel prepared successor",
+            "[audio][unit][engine][gapless][cancel][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -666,7 +668,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - an unchanged device snapshot preserves the prepared successor",
-            "[audio][unit][engine-gapless][cancel]")
+            "[audio][unit][engine][gapless][cancel]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -698,7 +700,8 @@ namespace ao::audio::test
     REQUIRE(advancedLatch.tryWaitForCount(1));
   }
 
-  TEST_CASE("Engine - clearNext before end of stream restores drain fallback", "[audio][unit][engine][gapless]")
+  TEST_CASE("Engine - clearNext before end of stream restores drain fallback",
+            "[audio][unit][engine][gapless][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -736,7 +739,8 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - clearNext returns empty after render consumed the successor", "[audio][unit][engine][gapless]")
+  TEST_CASE("Engine - clearNext returns empty after render consumed the successor",
+            "[audio][unit][engine][gapless][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -807,7 +811,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - rejected staged starts preserve the current generation and prepared lookahead",
-            "[audio][unit][engine][staged]")
+            "[audio][unit][engine][staged][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -854,7 +858,8 @@ namespace ao::audio::test
     CHECK(optAdvancedItemId == secondItem.id);
   }
 
-  TEST_CASE("Engine - staging inspects without decoding or replacing active playback", "[audio][unit][engine][staged]")
+  TEST_CASE("Engine - staging inspects without decoding or replacing active playback",
+            "[audio][unit][engine][staged][concurrency]")
   {
     auto failureGate = StagedFailureGate{};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -888,7 +893,8 @@ namespace ao::audio::test
     CHECK(endedCount.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("Engine - staged commit before decode error publishes one active failure", "[audio][unit][engine][staged]")
+  TEST_CASE("Engine - staged commit before decode error publishes one active failure",
+            "[audio][unit][engine][staged][concurrency]")
   {
     auto failureGate = StagedFailureGate{};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -933,7 +939,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - explicit start barrier suppresses a queued old-generation track advance",
-            "[audio][unit][engine][barrier]")
+            "[audio][unit][engine][barrier][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -989,7 +995,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - prepared source failure reports its item and audio generation without stopping current",
-            "[audio][unit][engine][failure]")
+            "[audio][unit][engine][failure][concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -1044,7 +1050,7 @@ namespace ao::audio::test
   } // namespace
 
   TEST_CASE("Engine - an unreduced mode never pulls a wider successor down for a splice",
-            "[audio][regression][engine][gapless]")
+            "[audio][unit][engine][gapless]")
   {
     // Sonata case: 16-bit is playing because the track is 16-bit, not because
     // the device is limited. Reusing it would quietly downgrade a 24-bit

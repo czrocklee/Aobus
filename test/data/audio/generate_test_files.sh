@@ -84,7 +84,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "movementname=Fixture Movement" \
     -metadata "movement=2/4" \
     -metadata "track=3/9" \
-    -metadata "date=2026" \
+    -metadata "date=2026-05-17" \
     -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
     -y "$OUTPUT_DIR/classical_metadata.flac" 2>/dev/null
 echo "  Created classical_metadata.flac"
@@ -225,7 +225,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "movementname=Fixture Movement" \
     -metadata "movement=2/4" \
     -metadata "track=3/9" \
-    -metadata "date=2026" \
+    -metadata "date=2026-05-17" \
     -movflags use_metadata_tags \
     -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
     -y "$OUTPUT_DIR/classical_metadata.m4a" 2>/dev/null
@@ -308,7 +308,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "movementname=Fixture Movement" \
     -metadata "movement=2/4" \
     -metadata "track=3/9" \
-    -metadata "date=2026" \
+    -metadata "date=2026-05-17" \
     -id3v2_version 3 \
     -af "aformat=sample_fmts=s16:channel_layouts=stereo" \
     -y "$OUTPUT_DIR/classical_metadata.mp3" 2>/dev/null
@@ -432,7 +432,7 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -metadata "movementname=Fixture Movement" \
     -metadata "movement=2/4" \
     -metadata "track=3/9" \
-    -metadata "date=2026" \
+    -metadata "date=2026-05-17" \
     -af "aformat=channel_layouts=stereo" \
     -codec:a libopus \
     -y "$OUTPUT_DIR/classical_metadata.opus" 2>/dev/null

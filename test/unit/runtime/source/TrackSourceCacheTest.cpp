@@ -40,138 +40,152 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  TEST_CASE("TrackSourceCache - source lookup and reload maintain source state",
+  TEST_CASE("TrackSourceCache - acquire resolves only the explicit All Tracks virtual id",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    auto const allTracksRes = cache.acquire(kAllTracksListId);
+    REQUIRE(allTracksRes);
+    auto const secondAllTracksRes = cache.acquire(kAllTracksListId);
+    REQUIRE(secondAllTracksRes);
+    CHECK(&allTracksRes->source() == &secondAllTracksRes->source());
 
-    SECTION("acquire resolves only the explicit All Tracks virtual id")
+    auto const invalidRes = cache.acquire(kInvalidListId);
+    REQUIRE_FALSE(invalidRes);
+    CHECK(invalidRes.error().code == Error::Code::InvalidInput);
+  }
+
+  TEST_CASE("TrackSourceCache - acquire creates and reuses one saved List identity",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto listId = ListId{0};
     {
-      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-      auto cache = TrackSourceCache{libraryFixture.library(), changes};
-      auto const allTracksRes = cache.acquire(kAllTracksListId);
-      REQUIRE(allTracksRes);
-      auto const secondAllTracksRes = cache.acquire(kAllTracksListId);
-      REQUIRE(secondAllTracksRes);
-      CHECK(&allTracksRes->source() == &secondAllTracksRes->source());
-
-      auto const invalidRes = cache.acquire(kInvalidListId);
-      REQUIRE_FALSE(invalidRes);
-      CHECK(invalidRes.error().code == Error::Code::InvalidInput);
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto builder = ListBuilder::makeEmpty();
+      builder.name("Saved List");
+      listId = ao::test::requireValue(
+        transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
+      REQUIRE(transaction.commit());
     }
 
-    SECTION("acquire creates and reuses one saved List identity")
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    auto firstLease = ao::test::requireValue(cache.acquire(listId));
+    auto const& source = firstLease.source();
+    CHECK(source.state() == TrackSourceState::Live);
+
+    auto secondLease = ao::test::requireValue(cache.acquire(listId));
+    CHECK(&source == &secondLease.source());
+  }
+
+  TEST_CASE("TrackSourceCache - acquire creates a live filtered smart list",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const matchingId = libraryFixture.addTrack("foo");
+    libraryFixture.addTrack("bar");
+    auto listId = ListId{0};
     {
-      auto listId = ListId{0};
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto builder = ListBuilder::makeEmpty();
-        builder.name("Saved List");
-        listId = ao::test::requireValue(
-          transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
-        REQUIRE(transaction.commit());
-      }
-
-      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-      auto cache = TrackSourceCache{libraryFixture.library(), changes};
-      auto firstLease = ao::test::requireValue(cache.acquire(listId));
-      auto const& source = firstLease.source();
-      CHECK(source.state() == TrackSourceState::Live);
-
-      auto secondLease = ao::test::requireValue(cache.acquire(listId));
-      CHECK(&source == &secondLease.source());
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto builder = ListBuilder::makeEmpty();
+      builder.name("SmartList");
+      builder.filter("$title = \"foo\"");
+      listId = ao::test::requireValue(
+        transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
+      REQUIRE(transaction.commit());
     }
 
-    SECTION("acquire creates a live smart list identity")
-    {
-      auto listId = ListId{0};
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto builder = ListBuilder::makeEmpty();
-        builder.name("SmartList");
-        builder.filter("title == \"foo\"");
-        listId = ao::test::requireValue(
-          transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
-        REQUIRE(transaction.commit());
-      }
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    cache.reloadAllTracks();
+    auto lease = ao::test::requireValue(cache.acquire(listId));
+    CHECK(lease->state() == TrackSourceState::Live);
+    CHECK_FALSE(cache.sourceError(lease));
+    CHECK(sourceTrackIds(lease.source()) == std::vector{matchingId});
+  }
 
-      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-      auto cache = TrackSourceCache{libraryFixture.library(), changes};
-      auto lease = ao::test::requireValue(cache.acquire(listId));
-      CHECK(lease->state() == TrackSourceState::Live);
+  TEST_CASE("TrackSourceCache - acquire rejects a missing list without an All Tracks fallback",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    auto const res = cache.acquire(ListId{999});
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("TrackSourceCache - reloadAllTracks updates allTracks source",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const firstId = libraryFixture.addTrack("Track 1");
+    auto const secondId = libraryFixture.addTrack("Track 2");
+
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
+    REQUIRE(allTracks->size() == 0);
+    cache.reloadAllTracks();
+    CHECK(sourceTrackIds(allTracks.source()) == std::vector{firstId, secondId});
+  }
+
+  TEST_CASE("TrackSourceCache - track delete notifications remove allTracks membership",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Track 1");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
+    cache.reloadAllTracks();
+    REQUIRE(allTracks->size() == 1);
+    auto spy = TrackSourceBatchSpy{allTracks.source()};
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+
+    REQUIRE(commandsFixture.runTask(commands.deleteTrackAsync(trackId)).has_value());
+    CHECK(allTracks->size() == 0);
+    REQUIRE(spy.batches.size() == 1);
+    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(spy.batches.front()).edits.front());
+    CHECK(removal.start == 0);
+    CHECK(removal.trackIds == std::vector{trackId});
+  }
+
+  TEST_CASE("TrackSourceCache - deleting a saved list invalidates its lease and rejects reacquisition",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto listId = ListId{0};
+    {
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto builder = ListBuilder::makeEmpty();
+      builder.name("ToErase");
+      listId = ao::test::requireValue(
+        transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
+      REQUIRE(transaction.commit());
     }
 
-    SECTION("acquire rejects a missing list without an All Tracks fallback")
-    {
-      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-      auto cache = TrackSourceCache{libraryFixture.library(), changes};
-      auto const res = cache.acquire(ListId{999});
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotFound);
-    }
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    auto lease = ao::test::requireValue(cache.acquire(listId));
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
 
-    SECTION("reloadAllTracks updates allTracks source")
-    {
-      libraryFixture.addTrack("Track 1");
-      libraryFixture.addTrack("Track 2");
+    REQUIRE(commandsFixture.runTask(commands.deleteListAsync(listId)));
 
-      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-      auto cache = TrackSourceCache{libraryFixture.library(), changes};
-      auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
-      cache.reloadAllTracks();
-      CHECK(allTracks->size() == 2);
-    }
-
-    SECTION("track delete notifications remove allTracks membership")
-    {
-      auto const trackId = libraryFixture.addTrack("Track 1");
-      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-      auto cache = TrackSourceCache{libraryFixture.library(), changes};
-      auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
-      cache.reloadAllTracks();
-      REQUIRE(allTracks->size() == 1);
-      auto spy = TrackSourceBatchSpy{allTracks.source()};
-      auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
-      auto& commands = commandsFixture.commands();
-
-      REQUIRE(commandsFixture.runTask(commands.deleteTrackAsync(trackId)).has_value());
-      CHECK(allTracks->size() == 0);
-      REQUIRE(spy.batches.size() == 1);
-      REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
-      auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(spy.batches.front()).edits.front());
-      CHECK(removal.start == 0);
-      CHECK(removal.trackIds == std::vector{trackId});
-    }
-
-    SECTION("LibraryCommands integration")
-    {
-      auto listId = ListId{0};
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto builder = ListBuilder::makeEmpty();
-        builder.name("ToErase");
-        listId = ao::test::requireValue(
-          transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
-        REQUIRE(transaction.commit());
-      }
-
-      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-      auto cache = TrackSourceCache{libraryFixture.library(), changes};
-      auto lease = ao::test::requireValue(cache.acquire(listId));
-      auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
-      auto& commands = commandsFixture.commands();
-
-      REQUIRE(commandsFixture.runTask(commands.deleteListAsync(listId)));
-
-      CHECK(lease->state() == TrackSourceState::Invalidated);
-      auto const res = cache.acquire(listId);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotFound);
-    }
+    CHECK(lease->state() == TrackSourceState::Invalidated);
+    auto const res = cache.acquire(listId);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("TrackSourceCache - headless metadata mutation updates all-tracks and smart membership once",
-            "[runtime][workflow][source][track-source-cache]")
+            "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
@@ -294,6 +308,42 @@ namespace ao::rt::test
     CHECK((*optLease)->state() == TrackSourceState::Live);
     REQUIRE((*optLease)->size() == 1);
     CHECK((*optLease)->trackIdAt(0) == trackId);
+    CHECK(batches.empty());
+    subscription.reset();
+  }
+
+  TEST_CASE("TrackSourceCache - a filtered saved-list lease survives cache shutdown",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const matchingId = libraryFixture.addTrack("Pinned");
+    libraryFixture.addTrack("Other");
+    auto listId = kInvalidListId;
+
+    {
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto builder = ListBuilder::makeEmpty().name("Saved").filter("$title = \"Pinned\"");
+      listId = ao::test::requireValue(
+        transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto optLease = std::optional<TrackSourceLease>{};
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto subscription = async::Subscription{};
+
+    {
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
+      cache.reloadAllTracks();
+      optLease.emplace(ao::test::requireValue(cache.acquire(listId)));
+      REQUIRE_FALSE(cache.sourceError(*optLease));
+      REQUIRE(sourceTrackIds(optLease->source()) == std::vector{matchingId});
+      subscription = (*optLease)->subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
+    }
+
+    CHECK((*optLease)->state() == TrackSourceState::Live);
+    CHECK(sourceTrackIds(optLease->source()) == std::vector{matchingId});
     CHECK(batches.empty());
     subscription.reset();
   }
@@ -551,7 +601,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackSourceCache - reentrant metadata mutation is rejected during detailed publication",
-            "[runtime][regression][source][list-order]")
+            "[runtime][unit][source][list-order]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -617,7 +667,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackSourceCache - reentrant reparent is rejected during detailed publication",
-            "[runtime][regression][source][list-order]")
+            "[runtime][unit][source][list-order]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -717,7 +767,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackSourceCache - mutations reentered from a delta observer are rejected",
-            "[runtime][regression][source][list-order]")
+            "[runtime][unit][source][list-order]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -745,7 +795,6 @@ namespace ao::rt::test
     auto const* const identity = &childLease.source();
     auto batches = std::vector<TrackSourceDelta>{};
     bool callbackInvoked = false;
-    auto nestedMoveStatus = AuthoringStatus::NoOp;
     auto intermediateReparentError = Error::Code::Generic;
     auto finalReparentError = Error::Code::Generic;
     auto optNestedMoveTask = std::optional<async::Task<Result<AuthoringResult<MoveListOrderReply>>>>{};
@@ -788,14 +837,8 @@ namespace ao::rt::test
 
     auto const nestedMoveRes = commandsFixture.runTask(std::move(*optNestedMoveTask));
 
-    if (nestedMoveRes)
-    {
-      nestedMoveStatus = nestedMoveRes->status;
-    }
-    else
-    {
-      nestedMoveStatus = AuthoringStatus::Unavailable;
-    }
+    REQUIRE(nestedMoveRes);
+    CHECK(nestedMoveRes->status == AuthoringStatus::Unavailable);
 
     auto const intermediateRes = commandsFixture.runTask(std::move(*optIntermediateTask));
 
@@ -811,7 +854,6 @@ namespace ao::rt::test
       finalReparentError = finalRes.error().code;
     }
 
-    CHECK(nestedMoveStatus == AuthoringStatus::Unavailable);
     CHECK(intermediateReparentError == Error::Code::InvalidState);
     CHECK(finalReparentError == Error::Code::InvalidState);
     CHECK(&childLease.source() == identity);
@@ -927,7 +969,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackSourceCache - explicit List removal publishes one final visible removal",
-            "[runtime][regression][track-source][list-order]")
+            "[runtime][unit][source][list-order]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
@@ -989,7 +1031,7 @@ namespace ao::rt::test
     CHECK(&first.source() != &different.source());
   }
 
-  TEST_CASE("TrackSourceCache - an invalid transient ad-hoc source reports its error and can expire",
+  TEST_CASE("TrackSourceCache - an invalid ad-hoc source reports its error without affecting a valid spec",
             "[runtime][unit][source][source-spec]")
   {
     auto libraryFixture = MusicLibraryFixture{};

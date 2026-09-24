@@ -3,6 +3,7 @@
 
 #include "app/ShellLayoutComponentStateStore.h"
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
@@ -15,12 +16,11 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk::test
 {
-  using namespace uimodel;
-
   namespace
   {
     uimodel::LayoutNode splitNode(std::string id = "main-paned")
@@ -34,16 +34,21 @@ namespace ao::gtk::test
       return node;
     }
 
+    uimodel::LayoutComponentStateEntry stateEntryFor(uimodel::LayoutNode const& node, double const positionPercent)
+    {
+      return uimodel::LayoutComponentStateEntry{
+        .type = node.type,
+        .stateVersion = uimodel::kStateEntryVersion,
+        .baselineHash = uimodel::componentBaselineHash(node),
+        .state = {{"positionPercent", uimodel::LayoutValue{positionPercent}}},
+      };
+    }
+
     uimodel::LayoutComponentStateDocument stateDocFor(uimodel::LayoutNode const& node)
     {
       auto doc = uimodel::LayoutComponentStateDocument{};
       doc.preset = "classic";
-      doc.components[node.id] = uimodel::LayoutComponentStateEntry{
-        .type = node.type,
-        .stateVersion = uimodel::kStateEntryVersion,
-        .baselineHash = uimodel::componentBaselineHash(node),
-        .state = {{"positionPercent", uimodel::LayoutValue{0.35}}},
-      };
+      doc.components[node.id] = stateEntryFor(node, 0.35);
       return doc;
     }
 
@@ -53,9 +58,33 @@ namespace ao::gtk::test
       REQUIRE(schema.tryAddSharedComponent("split"));
       return schema;
     }
+
+    void checkStateEntry(uimodel::LayoutComponentStateEntry const& entry,
+                         std::string_view const type,
+                         std::string const& baselineHash,
+                         double const positionPercent)
+    {
+      CHECK(entry.type == type);
+      CHECK(entry.stateVersion == uimodel::kStateEntryVersion);
+      CHECK(entry.baselineHash == baselineHash);
+      REQUIRE(entry.state.size() == 1);
+      REQUIRE(entry.state.contains("positionPercent"));
+      CHECK(entry.state.at("positionPercent").asDouble() == positionPercent);
+    }
+
+    void checkSingleStateDocument(uimodel::LayoutComponentStateDocument const& doc,
+                                  uimodel::LayoutNode const& node,
+                                  double const positionPercent)
+    {
+      CHECK(doc.version == uimodel::kStateFileVersion);
+      CHECK(doc.preset == "classic");
+      REQUIRE(doc.components.size() == 1);
+      REQUIRE(doc.components.contains(node.id));
+      checkStateEntry(doc.components.at(node.id), node.type, uimodel::componentBaselineHash(node), positionPercent);
+    }
   } // namespace
 
-  TEST_CASE("ShellLayoutComponentStateStore - persists component state by layout id", "[gtk][unit][app][layout-state]")
+  TEST_CASE("ShellLayoutComponentStateStore - persists and rejects state documents", "[gtk][unit][app][layout-state]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
@@ -68,17 +97,16 @@ namespace ao::gtk::test
 
     SECTION("save creates a state file and load retrieves it")
     {
-      auto store = ShellLayoutComponentStateStore{stateDir};
       auto const node = splitNode();
-      auto doc = stateDocFor(node);
+      {
+        auto store = ShellLayoutComponentStateStore{stateDir};
+        store.save("classic", stateDocFor(node));
+      }
 
-      store.save("classic", doc);
-
-      auto const optLoaded = store.load("classic");
+      auto const freshStore = ShellLayoutComponentStateStore{stateDir};
+      auto const optLoaded = freshStore.load("classic");
       REQUIRE(optLoaded);
-      CHECK(optLoaded->preset == "classic");
-      REQUIRE(optLoaded->components.contains("main-paned"));
-      CHECK(optLoaded->components.at("main-paned").state.at("positionPercent").asDouble() == 0.35);
+      checkSingleStateDocument(*optLoaded, node, 0.35);
     }
 
     SECTION("load rejects corrupted and mismatched files without throwing")
@@ -97,12 +125,20 @@ namespace ao::gtk::test
       CHECK_FALSE(store.load("corrupted").has_value());
       CHECK_FALSE(store.load("modern").has_value());
     }
+  }
+
+  TEST_CASE("ShellLayoutComponentStateStore - prune removes only entries outside the prepared baseline",
+            "[gtk][unit][app][layout-state]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
 
     SECTION("prune removes orphan, type-mismatched, and stale-baseline entries")
     {
       auto store = ShellLayoutComponentStateStore{stateDir};
-      auto liveNode = splitNode("live-split");
-      auto staleNode = splitNode("stale-split");
+      auto const liveNode = splitNode("live-split");
+      auto const wrongTypeNode = splitNode("wrong-type");
+      auto const staleNode = splitNode("stale-split");
       auto doc = stateDocFor(liveNode);
       doc.components["orphan-split"] = uimodel::LayoutComponentStateEntry{
         .type = "split",
@@ -110,13 +146,10 @@ namespace ao::gtk::test
         .baselineHash = "orphan",
         .state = {{"positionPercent", uimodel::LayoutValue{0.10}}},
       };
-      doc.components["wrong-type"] = uimodel::LayoutComponentStateEntry{
-        .type = "collapsibleSplit",
-        .stateVersion = uimodel::kStateEntryVersion,
-        .baselineHash = uimodel::componentBaselineHash(liveNode),
-        .state = {{"positionPercent", uimodel::LayoutValue{0.20}}},
-      };
-      doc.components["stale-split"] = uimodel::LayoutComponentStateEntry{
+      auto wrongTypeEntry = stateEntryFor(wrongTypeNode, 0.20);
+      wrongTypeEntry.type = "collapsibleSplit";
+      doc.components[wrongTypeNode.id] = std::move(wrongTypeEntry);
+      doc.components[staleNode.id] = uimodel::LayoutComponentStateEntry{
         .type = "split",
         .stateVersion = uimodel::kStateEntryVersion,
         .baselineHash = "stale",
@@ -126,37 +159,24 @@ namespace ao::gtk::test
 
       auto layoutDoc = uimodel::LayoutDocument{};
       layoutDoc.root.type = "box";
-      layoutDoc.root.children = {liveNode, uimodel::LayoutNode{.id = "wrong-type", .type = "split"}, staleNode};
+      layoutDoc.root.children = {liveNode, wrongTypeNode, staleNode};
       auto const preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
       auto const schema = persistentStateSchema();
 
-      store.tryPrune("classic", *preparedRes, schema);
+      CHECK(store.tryPrune("classic", *preparedRes, schema));
 
-      auto const optLoaded = store.load("classic");
+      auto const freshStore = ShellLayoutComponentStateStore{stateDir};
+      auto const optLoaded = freshStore.load("classic");
       REQUIRE(optLoaded);
-      REQUIRE(optLoaded->components.size() == 1);
-      CHECK(optLoaded->components.contains("live-split"));
-    }
-
-    SECTION("removePreset deletes the file and reports success")
-    {
-      auto store = ShellLayoutComponentStateStore{stateDir};
-      store.save("classic", stateDocFor(splitNode()));
-
-      CHECK(std::filesystem::exists(stateDir / "classic.yaml"));
-
-      CHECK(store.tryRemovePreset("classic"));
-      CHECK_FALSE(std::filesystem::exists(stateDir / "classic.yaml"));
-      CHECK(store.tryRemovePreset("classic"));
+      checkSingleStateDocument(*optLoaded, liveNode, 0.35);
     }
 
     SECTION("prune returns whether anything changed")
     {
       auto store = ShellLayoutComponentStateStore{stateDir};
       auto const node = splitNode("live-split");
-      auto doc = stateDocFor(node);
-      store.save("classic", doc);
+      store.save("classic", stateDocFor(node));
 
       auto layoutDoc = uimodel::LayoutDocument{};
       layoutDoc.root.type = "box";
@@ -166,23 +186,47 @@ namespace ao::gtk::test
       auto const schema = persistentStateSchema();
 
       CHECK_FALSE(store.tryPrune("classic", *preparedRes, schema));
+      {
+        auto const freshStore = ShellLayoutComponentStateStore{stateDir};
+        auto const optLoaded = freshStore.load("classic");
+        REQUIRE(optLoaded);
+        checkSingleStateDocument(*optLoaded, node, 0.35);
+      }
 
       layoutDoc.root.children.clear();
       preparedRes = uimodel::prepareLayout(layoutDoc);
       REQUIRE(preparedRes);
       CHECK(store.tryPrune("classic", *preparedRes, schema));
-    }
+      CHECK_FALSE(std::filesystem::exists(stateDir / "classic.yaml"));
 
-    SECTION("saved state file is readable only by owner")
-    {
-      auto store = ShellLayoutComponentStateStore{stateDir};
-      store.save("classic", stateDocFor(splitNode()));
-
-      auto const perms = std::filesystem::status(stateDir / "classic.yaml").permissions();
-      CHECK((perms & std::filesystem::perms::owner_read) != std::filesystem::perms::none);
-      CHECK((perms & std::filesystem::perms::owner_write) != std::filesystem::perms::none);
-      CHECK((perms & std::filesystem::perms::group_read) == std::filesystem::perms::none);
-      CHECK((perms & std::filesystem::perms::others_read) == std::filesystem::perms::none);
+      auto const freshStore = ShellLayoutComponentStateStore{stateDir};
+      CHECK_FALSE(freshStore.load("classic").has_value());
     }
+  }
+
+  TEST_CASE("ShellLayoutComponentStateStore - removePreset deletes state idempotently",
+            "[gtk][unit][app][layout-state]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
+    auto store = ShellLayoutComponentStateStore{stateDir};
+    store.save("classic", stateDocFor(splitNode()));
+
+    CHECK(std::filesystem::exists(stateDir / "classic.yaml"));
+
+    CHECK(store.tryRemovePreset("classic"));
+    CHECK_FALSE(std::filesystem::exists(stateDir / "classic.yaml"));
+    CHECK(store.tryRemovePreset("classic"));
+  }
+
+  TEST_CASE("ShellLayoutComponentStateStore - saved state file is readable only by owner",
+            "[gtk][unit][app][layout-state]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const stateDir = std::filesystem::path{tempDir.path()} / "layout-state";
+    auto store = ShellLayoutComponentStateStore{stateDir};
+    store.save("classic", stateDocFor(splitNode()));
+
+    CHECK(ao::test::hasPrivateManagedFileAccess(stateDir / "classic.yaml"));
   }
 } // namespace ao::gtk::test

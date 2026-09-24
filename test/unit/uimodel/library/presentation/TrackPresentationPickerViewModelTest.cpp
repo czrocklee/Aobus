@@ -19,7 +19,8 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackPresentationPickerViewModel - localizes shared eligibility copy", "[uimodel][unit][localization]")
+  TEST_CASE("TrackPresentationPickerViewModel - localizes shared eligibility copy",
+            "[uimodel][unit][track-presentation][localization]")
   {
     auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto const eligibility =
@@ -30,7 +31,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - renders disabled picker without an active view",
-            "[uimodel][unit][workflow]")
+            "[uimodel][unit][track-presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto rendered = std::vector<TrackPresentationPickerState>{};
@@ -53,7 +54,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - selecting a presentation captures the spec without persisting",
-            "[uimodel][unit][workflow]")
+            "[uimodel][unit][track-presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
@@ -79,7 +80,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - All Tracks exposes Manual Order as disabled with its reason",
-            "[uimodel][regression][presentation][list-order]")
+            "[uimodel][unit][track-presentation][list-order]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
@@ -105,7 +106,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - completing an applied selection persists the list preference",
-            "[uimodel][unit][workflow]")
+            "[uimodel][unit][track-presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
@@ -132,7 +133,7 @@ namespace ao::uimodel::test
   // A selection that never reaches completeSelection stands for a runtime apply
   // that failed or was superseded before the deferred apply ran.
   TEST_CASE("TrackPresentationPickerViewModel - an unapplied selection leaves preference and label unchanged",
-            "[uimodel][unit][regression][workflow]")
+            "[uimodel][unit][track-presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
@@ -153,8 +154,8 @@ namespace ao::uimodel::test
     CHECK(rendered.back().label == fixture.catalog.labelForId(rt::kDefaultTrackPresentationId));
   }
 
-  TEST_CASE("TrackPresentationPickerViewModel - a closed active view rejects selection without optimistic state",
-            "[uimodel][unit][regression][workflow]")
+  TEST_CASE("TrackPresentationPickerViewModel - closing the active view rejects selection without optimistic state",
+            "[uimodel][unit][track-presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
@@ -165,8 +166,14 @@ namespace ao::uimodel::test
                                                      fixture.listPresentations,
                                                      fixture.textCatalog,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
+    workflow.refresh();
+    REQUIRE_FALSE(rendered.empty());
+    REQUIRE(rendered.back().enabled);
+    REQUIRE(workflow.selectPresentation("albums"));
     auto const activeViewId = fixture.workspace.snapshot().activeViewId;
     REQUIRE(fixture.workspace.closeView(activeViewId));
+    REQUIRE(fixture.workspace.snapshot().activeViewId == rt::kInvalidViewId);
+    REQUIRE_FALSE(fixture.viewService.findTrackListState(activeViewId));
     rendered.clear();
 
     auto const optCommand = workflow.selectPresentation("albums");
@@ -177,7 +184,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - ignores unknown selections without changing preferences",
-            "[uimodel][unit][workflow]")
+            "[uimodel][unit][track-presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
@@ -195,7 +202,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - active view presentation changes refresh picker state",
-            "[uimodel][unit][workflow]")
+            "[uimodel][unit][track-presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));

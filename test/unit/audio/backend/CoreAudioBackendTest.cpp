@@ -15,6 +15,7 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -29,6 +30,7 @@
 #include <span>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 namespace ao::audio::backend::test
 {
@@ -45,7 +47,11 @@ namespace ao::audio::backend::test
 
       void handleUnderrun() noexcept override {}
       void handlePositionAdvanced(std::uint32_t /*frames*/) noexcept override {}
-      void handleDrainComplete() noexcept override { _drained.release(); }
+      void handleDrainComplete() noexcept override
+      {
+        _drainCompletions.fetch_add(1U, std::memory_order_relaxed);
+        _drained.release();
+      }
       void handleRouteReady(std::string_view /*routeAnchor*/) noexcept override {}
       void handleFormatChanged(PcmFormat const& /*format*/) noexcept override {}
       void handlePropertyChanged(PropertySnapshot /*snapshot*/) noexcept override {}
@@ -55,13 +61,15 @@ namespace ao::audio::backend::test
       }
 
       bool tryWaitForDrain(std::chrono::seconds const timeout) { return _drained.try_acquire_for(timeout); }
+      std::size_t drainCompletions() const noexcept { return _drainCompletions.load(std::memory_order_relaxed); }
       std::size_t renderCalls() const noexcept { return _renderCalls.load(std::memory_order_relaxed); }
       std::size_t errors() const noexcept { return _errors.load(std::memory_order_relaxed); }
 
     private:
       std::atomic<std::size_t> _renderCalls{0U};
       std::atomic<std::size_t> _errors{0U};
-      std::binary_semaphore _drained{0};
+      std::atomic<std::size_t> _drainCompletions{0U};
+      std::counting_semaphore<> _drained{0};
     };
 
     class BlockingDrainingRenderTarget final : public RenderTarget
@@ -71,7 +79,7 @@ namespace ao::audio::backend::test
       {
         _renderCalls.fetch_add(1U, std::memory_order_relaxed);
         _renderEntered.release();
-        _releaseRender.acquire();
+        _releaseRender.wait(false);
         return {.drained = true};
       }
 
@@ -87,7 +95,11 @@ namespace ao::audio::backend::test
       }
 
       bool tryWaitForRender(std::chrono::seconds const timeout) { return _renderEntered.try_acquire_for(timeout); }
-      void releaseRender() { _releaseRender.release(); }
+      void releaseRender()
+      {
+        _releaseRender.store(true);
+        _releaseRender.notify_all();
+      }
       std::size_t renderCalls() const noexcept { return _renderCalls.load(std::memory_order_relaxed); }
       std::size_t drainCompletions() const noexcept { return _drainCompletions.load(std::memory_order_relaxed); }
       std::size_t errors() const noexcept { return _errors.load(std::memory_order_relaxed); }
@@ -96,8 +108,8 @@ namespace ao::audio::backend::test
       std::atomic<std::size_t> _renderCalls{0U};
       std::atomic<std::size_t> _drainCompletions{0U};
       std::atomic<std::size_t> _errors{0U};
-      std::binary_semaphore _renderEntered{0};
-      std::binary_semaphore _releaseRender{0};
+      std::counting_semaphore<> _renderEntered{0};
+      std::atomic_bool _releaseRender{false};
     };
   } // namespace
 
@@ -139,8 +151,8 @@ namespace ao::audio::backend::test
       SKIP("macOS host has no live Core Audio output device");
     }
 
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
     auto target = ao::audio::test::NoopRenderTarget{};
+    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
     auto const openedRes = backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target);
     REQUIRE(openedRes);
@@ -174,8 +186,8 @@ namespace ao::audio::backend::test
     constexpr auto kSourceFormats = std::array{
       SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .sampleKind = SampleKind::Integer},
       SignalFormat{.sampleRate = 96000, .channels = 2, .precisionBits = 24, .sampleKind = SampleKind::Integer}};
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
     auto target = ao::audio::test::NoopRenderTarget{};
+    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
 
     for (auto const& sourceFormat : kSourceFormats)
     {
@@ -189,7 +201,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - native drain renders once and completes after the presentation tail",
-            "[audio][integration][coreaudio][concurrency]")
+            "[audio][integration][coreaudio][backend][concurrency]")
   {
     auto const devices = detail::enumerateCoreAudioOutputDevices();
 
@@ -198,8 +210,8 @@ namespace ao::audio::backend::test
       SKIP("macOS host has no live Core Audio output device");
     }
 
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
     auto target = DrainingRenderTarget{};
+    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
     auto const openedRes = backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target);
     REQUIRE(openedRes);
@@ -211,10 +223,12 @@ namespace ao::audio::backend::test
 
     backend.close();
     CHECK(target.renderCalls() == 1U);
+    CHECK(target.drainCompletions() == 1U);
+    CHECK(target.errors() == 0U);
   }
 
   TEST_CASE("CoreAudioBackend - graph observer may close backend without recursive clear",
-            "[audio][integration][coreaudio][concurrency]")
+            "[audio][integration][coreaudio][backend]")
   {
     auto const devices = detail::enumerateCoreAudioOutputDevices();
 
@@ -223,17 +237,19 @@ namespace ao::audio::backend::test
       SKIP("macOS host has no live Core Audio output device");
     }
 
+    std::size_t graphCalls = 0;
+    auto graphs = std::vector<flow::Graph>{};
     auto graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared, graphRegistryPtr};
     auto target = ao::audio::test::NoopRenderTarget{};
+    auto backend = CoreAudioBackend{devices.front(), kProfileShared, graphRegistryPtr};
     REQUIRE(backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target));
 
-    std::size_t graphCalls = 0;
     auto sub = graphRegistryPtr->subscribe(devices.front().id.raw(),
                                            [&](flow::Graph const& graph)
                                            {
                                              ++graphCalls;
+                                             graphs.push_back(graph);
 
                                              if (!graph.nodes.empty())
                                              {
@@ -243,6 +259,11 @@ namespace ao::audio::backend::test
 
     REQUIRE(sub);
     CHECK(graphCalls == 2U);
+    REQUIRE(graphs.size() == 2U);
+    REQUIRE(graphs[0].nodes.size() == 2U);
+    CHECK(graphs[0].nodes[0].id == devices.front().id.raw() + ":client");
+    CHECK(graphs[0].nodes[1].id == devices.front().id.raw());
+    CHECK(graphs[1] == flow::Graph{});
     CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
 
     backend.close();
@@ -250,7 +271,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("CoreAudioBackend - stop fences a blocked render and cancels its drain",
-            "[audio][integration][coreaudio][concurrency]")
+            "[audio][integration][coreaudio][backend][concurrency]")
   {
     auto const devices = detail::enumerateCoreAudioOutputDevices();
 
@@ -259,27 +280,37 @@ namespace ao::audio::backend::test
       SKIP("macOS host has no live Core Audio output device");
     }
 
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
     auto target = BlockingDrainingRenderTarget{};
+    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
+    auto stopEntered = std::binary_semaphore{0};
+    auto stopReturned = std::binary_semaphore{0};
+    auto stopThread = std::jthread{};
+    auto cleanup = utility::ScopedRegistration{[&]
+                                               {
+                                                 target.releaseRender();
+
+                                                 if (stopThread.joinable())
+                                                 {
+                                                   stopThread.join();
+                                                 }
+                                               }};
     REQUIRE(backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target));
     backend.start();
     REQUIRE(target.tryWaitForRender(std::chrono::seconds{5}));
 
-    auto stopEntered = std::binary_semaphore{0};
-    auto stopReturned = std::binary_semaphore{0};
-    auto stopThread = std::jthread{[&]
-                                   {
-                                     stopEntered.release();
-                                     backend.stop();
-                                     stopReturned.release();
-                                   }};
-    stopEntered.acquire();
+    stopThread = std::jthread{[&]
+                              {
+                                stopEntered.release();
+                                backend.stop();
+                                stopReturned.release();
+                              }};
+    REQUIRE(stopEntered.try_acquire_for(std::chrono::seconds{5}));
     CHECK_FALSE(stopReturned.try_acquire());
 
     target.releaseRender();
     REQUIRE(stopReturned.try_acquire_for(std::chrono::seconds{5}));
-    stopThread.join();
+    cleanup.reset();
     backend.close();
 
     CHECK(target.renderCalls() == 1U);

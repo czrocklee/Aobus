@@ -26,6 +26,7 @@
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <array>
 #include <atomic>
@@ -275,8 +276,9 @@ namespace ao::rt::test
   TEST_CASE("ResourceByteMemoryCache - equal requests share one read and cache immutable bytes",
             "[runtime][unit][resource-byte][concurrency]")
   {
-    auto owner = RuntimeOwner{};
     auto release = AsyncBarrier{};
+    auto owner = RuntimeOwner{};
+    auto releaseGuard = gsl_lite::finally([&] { release.release(); });
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto const expected = std::vector{std::byte{0x31}, std::byte{0x32}};
     auto cache = ResourceByteMemoryCache{
@@ -318,7 +320,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ResourceByteMemoryCache - entry budget evicts the least recently used id",
-            "[runtime][unit][resource-byte][concurrency]")
+            "[runtime][unit][resource-byte]")
   {
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
@@ -333,15 +335,27 @@ namespace ao::rt::test
     CHECK(requestAndWait(cache, owner, ResourceId{3}).size() == 2);
     CHECK(requestAndWait(cache, owner, ResourceId{2}).size() == 2);
     CHECK(readCount.load() == 4);
+  }
 
+  TEST_CASE("ResourceByteMemoryCache - invalid id starts no read and invokes no callback",
+            "[runtime][unit][resource-byte]")
+  {
+    auto owner = RuntimeOwner{};
+    auto readCount = AsyncTestState<std::size_t>::create(0);
+    auto cache =
+      ResourceByteMemoryCache{owner.runtimePtr()->async(), std::bind_front(readSizedBytesAsync, readCount, false)};
     bool invalidCompleted = false;
     auto invalidRequest = cache.request(kInvalidResourceId, [&](ResourceBytes) { invalidCompleted = true; });
     CHECK_FALSE(invalidRequest);
     CHECK_FALSE(invalidCompleted);
+    owner.runtimePtr()->async().requestStop();
+    owner.runtimePtr()->async().join();
+    CHECK(readCount.load() == 0);
+    CHECK_FALSE(invalidCompleted);
   }
 
   TEST_CASE("ResourceByteMemoryCache - byte budget evicts entries and does not retain an oversized payload",
-            "[runtime][unit][resource-byte][concurrency]")
+            "[runtime][unit][resource-byte]")
   {
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
@@ -361,7 +375,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ResourceByteMemoryCache - zero capacities clamp to the smallest usable budgets",
-            "[runtime][unit][resource-byte][concurrency]")
+            "[runtime][unit][resource-byte]")
   {
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
@@ -372,24 +386,33 @@ namespace ao::rt::test
         owner.runtimePtr()->async(), std::bind_front(readSizedBytesAsync, readCount, false), 0, 100};
 
       CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
+      CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
+      CHECK(readCount.load() == 1);
       CHECK(requestAndWait(cache, owner, ResourceId{2}).size() == 2);
       CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
       CHECK(readCount.load() == 3);
     }
 
-    SECTION("zero bytes retains no payload larger than one byte")
+    SECTION("zero bytes retains one byte but not a larger payload")
     {
-      auto cache = ResourceByteMemoryCache{
-        owner.runtimePtr()->async(), std::bind_front(readSizedBytesAsync, readCount, false), 4, 0};
+      auto readBytes = [readCount](ResourceId const resourceId, std::stop_token const stopToken)
+      {
+        readCount.increment();
+        auto const byteCount = resourceId == ResourceId{1} ? std::size_t{1} : std::size_t{2};
+        return readCustomBytesAsync(std::vector<std::byte>(byteCount, std::byte{0x4A}), resourceId, stopToken);
+      };
+      auto cache = ResourceByteMemoryCache{owner.runtimePtr()->async(), std::move(readBytes), 4, 0};
 
-      CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
-      CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 2);
-      CHECK(readCount.load() == 2);
+      CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 1);
+      CHECK(requestAndWait(cache, owner, ResourceId{1}).size() == 1);
+      CHECK(readCount.load() == 1);
+      CHECK(requestAndWait(cache, owner, ResourceId{2}).size() == 2);
+      CHECK(requestAndWait(cache, owner, ResourceId{2}).size() == 2);
+      CHECK(readCount.load() == 3);
     }
   }
 
-  TEST_CASE("ResourceByteMemoryCache - cached request completes synchronously",
-            "[runtime][regression][resource-byte][concurrency]")
+  TEST_CASE("ResourceByteMemoryCache - cached request completes synchronously", "[runtime][unit][resource-byte]")
   {
     auto owner = RuntimeOwner{};
     auto const expected = std::vector{std::byte{0x23}, std::byte{0x24}};
@@ -438,8 +461,36 @@ namespace ao::rt::test
     CHECK(retained.view().data() == storage);
   }
 
+  TEST_CASE("ResourceByteMemoryCache - retained bytes survive eviction and reloading the same id",
+            "[runtime][unit][resource-byte]")
+  {
+    auto owner = RuntimeOwner{};
+    auto readCount = AsyncTestState<std::size_t>::create(0);
+    auto const expected = std::vector{std::byte{0x27}, std::byte{0x28}};
+    auto const other = std::vector{std::byte{0x51}, std::byte{0x52}};
+    auto readBytes = [readCount, expected, other](ResourceId const resourceId, std::stop_token const stopToken)
+    {
+      readCount.increment();
+      return readCustomBytesAsync(resourceId == ResourceId{1} ? expected : other, resourceId, stopToken);
+    };
+    auto cache = ResourceByteMemoryCache{owner.runtimePtr()->async(), std::move(readBytes), 1, 100};
+    auto retained = ResourceBytes{};
+    auto request = cache.request(ResourceId{1}, [&](ResourceBytes bytes) { retained = std::move(bytes); });
+    REQUIRE(request);
+    REQUIRE(owner.executor().tryDrainUntil([&] { return !retained.empty(); }));
+    auto const* storage = retained.view().data();
+
+    CHECK(requestAndWait(cache, owner, ResourceId{2}) == other);
+    CHECK(std::vector<std::byte>{retained.view().begin(), retained.view().end()} == expected);
+    CHECK(retained.view().data() == storage);
+    CHECK(requestAndWait(cache, owner, ResourceId{1}) == expected);
+    CHECK(readCount.load() == 3);
+    CHECK(std::vector<std::byte>{retained.view().begin(), retained.view().end()} == expected);
+    CHECK(retained.view().data() == storage);
+  }
+
   TEST_CASE("ResourceByteMemoryCache - read result failure completes empty and permits retry",
-            "[runtime][regression][resource-byte][concurrency]")
+            "[runtime][unit][resource-byte]")
   {
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
@@ -464,7 +515,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ResourceByteMemoryCache - cancellation escapes without invoking a waiter",
-            "[runtime][regression][resource-byte][concurrency]")
+            "[runtime][unit][resource-byte][concurrency]")
   {
     auto owner = RuntimeOwner{};
     auto readCount = AsyncTestState<std::size_t>::create(0);
@@ -480,10 +531,11 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ResourceByteMemoryCache - destruction fences an old flight from a same-id replacement",
-            "[runtime][regression][resource-byte][concurrency]")
+            "[runtime][unit][resource-byte][concurrency]")
   {
-    auto owner = RuntimeOwner{};
     auto release = AsyncBarrier{};
+    auto owner = RuntimeOwner{};
+    auto releaseGuard = gsl_lite::finally([&] { release.release(); });
     auto readCount = AsyncTestState<std::size_t>::create(0);
     auto firstReadReleased = AsyncTestState<bool>::create(false);
     auto const readBytes = std::bind_front(readAcrossRebindAsync, readCount, firstReadReleased, &release);

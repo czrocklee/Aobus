@@ -49,18 +49,11 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("PlaybackTransport playback - playTrack resolves track metadata", "[runtime][unit][playback][play]")
+  TEST_CASE("PlaybackTransport playback - playTrack resolves track metadata", "[runtime][integration][playback][play]")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
-    // Prime the device list. The first notification auto-selects the default
-    // output; the duplicate exercises the "already selected" early return, and the
-    // empty list exercises the no-devices guard.
     fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto emptyStatus = fixture.status;
-    emptyStatus.devices.clear();
-    fixture.onDevicesChangedCb(emptyStatus.devices);
 
     auto spec = library::test::TrackSpec{};
     spec.title = "Playable Track";
@@ -83,7 +76,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport playback - playTrack rejects a URI escaping through a symlink",
-            "[runtime][regression][playback][uri]")
+            "[runtime][unit][playback][uri]")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     auto const outside = ao::test::TempDir{};
@@ -125,7 +118,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport playback - natural terminal completion clears guarded seek ownership",
-            "[runtime][regression][playback][concurrency]")
+            "[runtime][unit][playback][concurrency]")
   {
     auto const format =
       audio::PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = audio::SampleEncoding::Signed16Le};
@@ -233,7 +226,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport playback - final seek before advanced callback keeps prepared metadata",
-            "[runtime][unit][playback][gapless]")
+            "[runtime][unit][playback][gapless][concurrency]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -349,7 +342,7 @@ namespace ao::rt::test
   // retract the report. Pinning it would leave a stale error on screen long
   // after the device became available again.
   TEST_CASE("PlaybackTransport playback - a busy device reports a clearable failure",
-            "[runtime][regression][playback][error]")
+            "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);

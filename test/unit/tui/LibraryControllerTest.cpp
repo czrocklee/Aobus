@@ -109,7 +109,7 @@ namespace ao::tui::test
     CHECK(controller.currentListTitle() != "All Tracks");
   }
 
-  TEST_CASE("LibraryController - startup publishes an active all-tracks view", "[tui][regression][library]")
+  TEST_CASE("LibraryController - startup publishes an active all-tracks view", "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const trackId = fixture.addTrack("Needle");
@@ -193,7 +193,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - failed presentation selection does not change the list preference",
-            "[tui][regression][library][presentation]")
+            "[tui][unit][library][presentation]")
   {
     auto fixture = LibraryControllerFixture{};
     auto catalog =
@@ -214,7 +214,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - persisted preference does not replace an exact restored active view",
-            "[tui][regression][library][presentation]")
+            "[tui][integration][library][presentation]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const* albumsPreset = rt::builtinTrackPresentationPreset("albums");
@@ -244,7 +244,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->workspace().snapshot() == workspaceBefore);
   }
 
-  TEST_CASE("LibraryController - construction attaches the exact active workspace view", "[tui][regression][library]")
+  TEST_CASE("LibraryController - construction attaches the exact active workspace view", "[tui][integration][library]")
   {
     auto tempDir = ao::test::TempDir{};
     auto firstTrackId = kInvalidTrackId;
@@ -317,7 +317,7 @@ namespace ao::tui::test
     CHECK(selection[0] == secondTrackId);
   }
 
-  TEST_CASE("LibraryController - construction keeps a valid empty restored view", "[tui][regression][library]")
+  TEST_CASE("LibraryController - construction keeps a valid empty restored view", "[tui][integration][library]")
   {
     auto tempDir = ao::test::TempDir{};
 
@@ -356,7 +356,7 @@ namespace ao::tui::test
     CHECK(controller.tracks().empty());
   }
 
-  TEST_CASE("LibraryController - reload preserves the active view configuration", "[tui][unit][library]")
+  TEST_CASE("LibraryController - reload preserves the active view configuration", "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const matchingTrackId = fixture.addTrack("Needle");
@@ -383,7 +383,7 @@ namespace ao::tui::test
     CHECK(controller.tracks()[0].id == matchingTrackId);
   }
 
-  TEST_CASE("LibraryController - track-only reload preserves chooser highlights", "[tui][regression][library]")
+  TEST_CASE("LibraryController - track-only reload preserves chooser highlights", "[tui][unit][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Initial");
@@ -448,7 +448,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - chooser refresh retains the selected List identity when rows shift",
-            "[tui][regression][library][selection]")
+            "[tui][unit][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const removedId = fixture.addList("Removed before selection");
@@ -467,8 +467,7 @@ namespace ao::tui::test
     CHECK(controller.selectedList() == 1);
   }
 
-  TEST_CASE("LibraryController - reload falls back when the active view disappeared",
-            "[tui][regression][library][lifecycle]")
+  TEST_CASE("LibraryController - reload falls back when the active view disappeared", "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Needle");
@@ -489,7 +488,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - list deletion recovers without observer-order assumptions",
-            "[tui][regression][library][lifecycle]")
+            "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Needle");
@@ -555,7 +554,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - opening another list clears the previous view filter error",
-            "[tui][regression][library][filter]")
+            "[tui][unit][library][filter]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Needle");
@@ -576,8 +575,7 @@ namespace ao::tui::test
     CHECK(controller.filterError().empty());
   }
 
-  TEST_CASE("LibraryController - filter error preserves visible controller state",
-            "[tui][regression][library][selection]")
+  TEST_CASE("LibraryController - filter error preserves visible controller state", "[tui][unit][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const firstTrackId = fixture.addTrack("Needle");
@@ -609,7 +607,7 @@ namespace ao::tui::test
     CHECK(controller.markedIds() == std::unordered_set<TrackId>{firstTrackId});
   }
 
-  TEST_CASE("LibraryController - empty track views clear the published selection", "[tui][regression][library]")
+  TEST_CASE("LibraryController - empty track views clear the published selection", "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const trackId = fixture.addTrack("Needle");
@@ -646,7 +644,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - revealTrack opens an unfiltered view and preserves the previous filter",
-            "[tui][unit][library]")
+            "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("First");
@@ -707,7 +705,7 @@ namespace ao::tui::test
     CHECK(controller.selectedTrackView().track->id == targetId);
   }
 
-  TEST_CASE("LibraryController - setPresentation applies active workspace presentation", "[tui][unit][library]")
+  TEST_CASE("LibraryController - setPresentation applies active workspace presentation", "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("First");
@@ -721,7 +719,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - construction reads custom presets already restored in workspace",
-            "[tui][regression][library]")
+            "[tui][unit][library]")
   {
     auto tempDir = ao::test::TempDir{};
     auto customSpec = rt::defaultTrackPresentationSpec();
@@ -756,7 +754,7 @@ namespace ao::tui::test
     CHECK(entryIt->label == "Restored Custom");
   }
 
-  TEST_CASE("LibraryController - presentation list follows custom preset changes", "[tui][unit][library]")
+  TEST_CASE("LibraryController - presentation list follows custom preset changes", "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("First");
@@ -873,7 +871,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - marks are independent of focus and publish effective ids",
-            "[tui][unit][library][selection]")
+            "[tui][integration][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const firstId = fixture.addTrack("First");
@@ -930,7 +928,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - cancelling a visual selection restores the marks it started from",
-            "[tui][unit][library][selection]")
+            "[tui][integration][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const firstId = fixture.addTrack("First");
@@ -1269,7 +1267,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - presentation change keeps marks in the new row order",
-            "[tui][unit][library][selection]")
+            "[tui][integration][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const olderId = fixture.addTrack(library::test::TrackSpec{
@@ -1295,7 +1293,7 @@ namespace ao::tui::test
           std::vector<TrackId>{olderId, newerId});
   }
 
-  TEST_CASE("LibraryController - same-view reload reconciles vanished marks", "[tui][unit][library][selection]")
+  TEST_CASE("LibraryController - same-view reload reconciles vanished marks", "[tui][integration][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const firstId = fixture.addTrack("First");
@@ -1351,7 +1349,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - reopening the current list keeps marks, focus, and published selection",
-            "[tui][regression][library][selection]")
+            "[tui][integration][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const firstId = fixture.addTrack("First");
@@ -1385,7 +1383,8 @@ namespace ao::tui::test
     CHECK(controller.selectedTrackView().track->id == secondId);
   }
 
-  TEST_CASE("LibraryController - empty library guidance uses the available scan command", "[tui][unit][usability]")
+  TEST_CASE("LibraryController - empty library guidance uses the available scan command",
+            "[tui][unit][library][usability]")
   {
     auto fixture = LibraryControllerFixture{};
     auto controller = fixture.makeController();
@@ -1395,8 +1394,8 @@ namespace ao::tui::test
     CHECK(controller.emptyStateText().contains(":scan"));
   }
 
-  TEST_CASE("LibraryController - empty-state guidance distinguishes filter errors and empty Lists",
-            "[tui][regression][usability]")
+  TEST_CASE("LibraryController - empty-state guidance recovers from unmatched and invalid filters",
+            "[tui][unit][library][usability]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Alpha");
@@ -1413,6 +1412,13 @@ namespace ao::tui::test
     REQUIRE(controller.applyFilter());
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.tracks().front().row.title == "Alpha");
+  }
+
+  TEST_CASE("LibraryController - empty-state guidance identifies an empty saved List",
+            "[tui][unit][library][usability]")
+  {
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack("Alpha");
     auto const emptyList = ao::test::requireValue(
       rt::test::runRuntimeTask(*fixture.runtimePtr,
                                fixture.runtimePtr->library().commands().createListAsync(
@@ -1426,7 +1432,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - reveal finishes a visual range without extending its marks",
-            "[tui][regression][library][selection]")
+            "[tui][unit][library][selection]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const first = fixture.addTrack("First");
@@ -1441,7 +1447,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("LibraryController - reveal prefers a source view and tolerates a removed source",
-            "[tui][regression][library]")
+            "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     auto const target = fixture.addTrack("Target");
@@ -1472,19 +1478,27 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("LibraryController - reveal of a missing subject leaves the workspace intact", "[tui][regression][library]")
+  TEST_CASE("LibraryController - reveal of a missing subject leaves the workspace intact",
+            "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
-    fixture.addTrack("First");
+    auto const firstId = fixture.addTrack("First");
     auto controller = fixture.makeController();
-    auto const view = controller.activeViewId();
+    auto const before = fixture.runtimePtr->workspace().snapshot();
+    auto const selected = controller.selectedTrackIds();
+    REQUIRE(selected == std::vector{firstId});
+
     CHECK(controller.revealTrack(TrackId{999999}) == "Could not locate the current track in the library");
-    CHECK(controller.activeViewId() == view);
-    CHECK(controller.tracks().size() == 1);
+
+    CHECK(fixture.runtimePtr->workspace().snapshot() == before);
+    CHECK(controller.activeViewId() == before.activeViewId);
+    CHECK(controller.selectedTrackIds() == selected);
+    REQUIRE(controller.tracks().size() == 1);
+    CHECK(controller.tracks().front().id == firstId);
   }
 
   TEST_CASE("LibraryController - missing List fails before changing active view or selection",
-            "[tui][regression][library]")
+            "[tui][integration][library]")
   {
     auto fixture = LibraryControllerFixture{};
     fixture.addTrack("Retained");

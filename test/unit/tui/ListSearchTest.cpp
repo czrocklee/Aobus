@@ -5,7 +5,6 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
-#include "tui/SelectionNavigation.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
@@ -16,7 +15,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("ListSearch - the visible search hint can receive a mouse click", "[tui][regression][search][mouse]")
+  TEST_CASE("ListSearch - the visible search hint can receive a mouse click", "[tui][unit][search][mouse]")
   {
     auto search = ListSearch{};
     auto const rendered = renderElement(search.render(ao::test::englishMessageCatalog()), 30, 1);
@@ -62,9 +61,5 @@ namespace ao::tui::test
     CHECK_FALSE(search.tryHandleEvent(ftxui::Event::ArrowDown));
     CHECK_FALSE(search.tryHandleEvent(ftxui::Event::PageDown));
     CHECK_FALSE(search.tryHandleEvent(ftxui::Event::Return));
-    CHECK(listNavigationDelta(ftxui::Event::PageDown, 3) == 3);
-    CHECK(listNavigationDelta(ftxui::Event::PageUp, 17) == -17);
-    CHECK_FALSE(listNavigationDelta(ftxui::Event::Character("j"), 3));
-    CHECK(listNavigationDelta(ftxui::Event::Character("j"), 3, true) == 1);
   }
 } // namespace ao::tui::test

@@ -92,12 +92,14 @@ namespace ao::uimodel
     {
       auto const sizeIt = entry.state.find(kSizeStateKey);
 
-      if (sizeIt == entry.state.end() || !sizeIt->second.isNumber())
+      auto const* const storedSize = sizeIt == entry.state.end() ? nullptr : sizeIt->second.getIf<std::int64_t>();
+
+      if (storedSize == nullptr)
       {
         return false;
       }
 
-      auto const size = std::max<std::int64_t>(50, sizeIt->second.asInt());
+      auto const size = std::max<std::int64_t>(50, *storedSize);
       node.props["position"] = LayoutValue{size};
       node.props.erase("initialPositionPercent");
       writeResidualState(node, entry, kSizeStateKey, stateDoc);

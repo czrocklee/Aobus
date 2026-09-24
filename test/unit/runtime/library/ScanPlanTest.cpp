@@ -11,6 +11,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/LibraryWrite.h>
@@ -22,10 +23,11 @@
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Xxh3.h>
-#include <runtime/library/ScanApplyOperation.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -42,7 +44,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ScanPlan - is an opaque move-only value", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - is an opaque move-only value", "[runtime][unit][library-scan]")
   {
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<ScanPlan>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ScanPlan>);
@@ -166,7 +168,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ScanPlan - classifies supported and hidden entries", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - classifies supported entries and omits unsupported extensions", "[runtime][unit][library-scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -176,7 +178,18 @@ namespace ao::rt::test
     createFile(musicRoot / "new.flac");
     createFile(musicRoot / "unchanged.mp3");
     createFile(musicRoot / "changed.m4a");
-    createFile(musicRoot / "unsupported.txt");
+
+    // Non-audio files and audio formats without a reader never reach the plan.
+    constexpr auto kUnsupportedNames =
+      std::to_array<std::string_view>({"unsupported.txt", "notes.txt", "cover.jpg", "song.ogg", "song.alac"});
+
+    for (auto const name : kUnsupportedNames)
+    {
+      createFile(musicRoot / name);
+      REQUIRE(std::filesystem::is_regular_file(musicRoot / name));
+    }
+
+    auto missingTrackId = kInvalidTrackId;
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
 
@@ -213,7 +226,9 @@ namespace ao::rt::test
           auto builder3 = library::FileManifestBuilder::makeEmpty();
           auto track3 = library::TrackBuilder::makeEmpty();
           track3.property().uri(missingUri);
-          REQUIRE(trackWriter.create(track3, builder3));
+          auto const missingRes = trackWriter.create(track3, builder3);
+          REQUIRE(missingRes);
+          missingTrackId = *missingRes;
           return {};
         }));
 
@@ -236,12 +251,12 @@ namespace ao::rt::test
 
     for (auto const& item : plan.items())
     {
-      CHECK(item.uri != "unsupported.txt");
+      CHECK_FALSE(std::ranges::contains(kUnsupportedNames, item.uri));
 
       if (item.uri == "missing.flac")
       {
         CHECK(item.classification == ScanClassification::Missing);
-        CHECK(item.trackId == TrackId{3});
+        CHECK(item.trackId == missingTrackId);
         foundMissing = true;
       }
     }
@@ -305,7 +320,7 @@ namespace ao::rt::test
     CHECK(foundRestricted);
   }
 
-  TEST_CASE("ScanPlan - handles empty roots", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - handles empty roots", "[runtime][unit][library-scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
@@ -334,7 +349,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ScanPlan - classifies unambiguous moved files by audio identity", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - classifies unambiguous moved files by audio identity", "[runtime][unit][library-scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -371,7 +386,7 @@ namespace ao::rt::test
     CHECK(plan.count(ScanClassification::New) == 0);
   }
 
-  TEST_CASE("ScanPlan - relinks moved files after metadata retag", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - relinks moved files after metadata retag", "[runtime][unit][library-scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -401,7 +416,7 @@ namespace ao::rt::test
     CHECK(item.audioSignature == identity.signature);
   }
 
-  TEST_CASE("ScanPlan - leaves equal-length signature mismatches unresolved", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - leaves equal-length signature mismatches unresolved", "[runtime][unit][library-scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -453,7 +468,8 @@ namespace ao::rt::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("ScanPlan - leaves duplicate-content moves unresolved", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - duplicate-content moves stay unresolved until a valid explicit relink",
+            "[runtime][unit][library-scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -484,11 +500,13 @@ namespace ao::rt::test
     auto invalidSourceRes = attemptRelink(plan, "old/not-found.flac", "disc-1/copy-a.flac");
     REQUIRE_FALSE(invalidSourceRes);
     CHECK(invalidSourceRes.error().code == Error::Code::InvalidInput);
+    CHECK(invalidSourceRes.error().message == "Relink source is not an unresolved missing item");
     CHECK(plan.size() == 4);
 
     auto invalidDestinationRes = attemptRelink(plan, "old/copy-a.flac", "disc-3/not-found.flac");
     REQUIRE_FALSE(invalidDestinationRes);
     CHECK(invalidDestinationRes.error().code == Error::Code::InvalidInput);
+    CHECK(invalidDestinationRes.error().message == "Relink destination is not an unresolved new item");
     CHECK(plan.size() == 4);
 
     auto relinkRes = attemptRelink(plan, "old/copy-a.flac", "disc-1/copy-a.flac");
@@ -501,22 +519,47 @@ namespace ao::rt::test
     CHECK(relinkItem.trackId == firstTrackId);
   }
 
-  TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities", "[runtime][unit][library-scan]")
   {
     SECTION("pending identity")
     {
       auto const temp = ao::test::TempDir{};
       auto const musicRoot = std::filesystem::path{temp.path()} / "music";
       std::filesystem::create_directories(musicRoot);
-      std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), musicRoot / "new.flac");
+      auto const newFile = musicRoot / "new.flac";
+      std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), newFile);
+      auto const destinationIdentity = requireAudioIdentity(newFile);
+      auto decoyIdentity = destinationIdentity;
+      decoyIdentity.signature.bytes.front() ^= std::byte{1};
+      REQUIRE(decoyIdentity.signature != destinationIdentity.signature);
+      REQUIRE(library::hasAudioIdentity(decoyIdentity.payloadLength, decoyIdentity.signature));
 
       auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-      std::ignore = putManifestEntry(ml, "old.flac", AudioIdentity{});
+      auto const pendingId = putManifestEntry(ml, "old.flac", AudioIdentity{});
+      // A known missing identity of equal length forces destination fingerprinting.
+      std::ignore = putManifestEntry(ml, "decoy.flac", decoyIdentity);
       auto plan = LibraryScan{ml}.buildPlan().value();
+      auto const items = plan.items();
+      auto const source =
+        std::ranges::find_if(items,
+                             [](ScanItem const& item)
+                             { return item.classification == ScanClassification::Missing && item.uri == "old.flac"; });
+      auto const destination = std::ranges::find_if(
+        items,
+        [](ScanItem const& item) { return item.classification == ScanClassification::New && item.uri == "new.flac"; });
+      REQUIRE(source != items.end());
+      REQUIRE(destination != items.end());
+      REQUIRE(source->trackId == pendingId);
+      REQUIRE(source->trackId != kInvalidTrackId);
+      REQUIRE_FALSE(hasAudioIdentity(*source));
+      REQUIRE(hasAudioIdentity(*destination));
+      CHECK(destination->audioPayloadLength == destinationIdentity.payloadLength);
+      CHECK(destination->audioSignature == destinationIdentity.signature);
 
       auto res = std::move(plan).makeRelinkPlan("old.flac", "new.flac");
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message == "Relink source and destination audio identities do not match");
     }
 
     SECTION("different non-pending identities")
@@ -537,9 +580,25 @@ namespace ao::rt::test
 
       REQUIRE(plan.count(ScanClassification::New) == 1);
       REQUIRE(plan.count(ScanClassification::Missing) == 2);
+      auto const items = plan.items();
+      auto const source = std::ranges::find_if(
+        items,
+        [](ScanItem const& item)
+        { return item.classification == ScanClassification::Missing && item.uri == "old-basic.flac"; });
+      auto const destination = std::ranges::find_if(
+        items,
+        [](ScanItem const& item) { return item.classification == ScanClassification::New && item.uri == "new.flac"; });
+      REQUIRE(source != items.end());
+      REQUIRE(destination != items.end());
+      REQUIRE(source->trackId != kInvalidTrackId);
+      REQUIRE(hasAudioIdentity(*source));
+      REQUIRE(hasAudioIdentity(*destination));
+      REQUIRE((source->audioPayloadLength != destination->audioPayloadLength ||
+               source->audioSignature != destination->audioSignature));
       auto res = std::move(plan).makeRelinkPlan("old-basic.flac", "new.flac");
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message == "Relink source and destination audio identities do not match");
     }
   }
 
@@ -567,7 +626,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ScanPlan - preserves UTF-8 names on native filesystems", "[runtime][regression][library-scan]")
+  TEST_CASE("ScanPlan - preserves UTF-8 names on native filesystems", "[runtime][unit][library-scan]")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
@@ -628,7 +687,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanPlan - an escaping directory symlink does not mark descendants missing",
-            "[runtime][regression][library-scan][uri]")
+            "[runtime][unit][library-scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";

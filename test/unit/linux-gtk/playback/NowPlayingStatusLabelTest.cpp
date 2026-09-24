@@ -19,11 +19,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
 
-#include <optional>
+#include <vector>
 
 namespace ao::gtk::test
 {
-  TEST_CASE("NowPlayingStatusLabel - binds status text and reveals the playing track", "[gtk][unit][playback]")
+  TEST_CASE("NowPlayingStatusLabel - binds status text and reveals the playing track", "[gtk][integration][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -49,16 +49,17 @@ namespace ao::gtk::test
     REQUIRE(playback.commands().startFromView(*viewRes, trackId));
     REQUIRE(tryWaitForPlaybackSettlement(fixture.runtime(), trackId));
     drainGtkEvents();
-    CHECK_FALSE(gtkLabel->get_text().empty());
+    CHECK(gtkLabel->get_text() == "Artist - Song");
 
-    auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
-    auto sub = playback.events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
+    auto requests = std::vector<rt::PlaybackRevealTrackRequest>{};
+    auto sub = playback.events().onRevealTrackRequested([&](auto const& ev) noexcept { requests.push_back(ev); });
+    REQUIRE(requests.empty());
 
     REQUIRE(tryEmitGesturePressed(*gtkLabel));
     drainGtkEvents();
 
-    REQUIRE(optRequest);
-    CHECK(optRequest->trackId == trackId);
-    CHECK(optRequest->preferredListId == rt::kAllTracksListId);
+    REQUIRE(requests.size() == 1);
+    CHECK(requests.front().trackId == trackId);
+    CHECK(requests.front().preferredListId == rt::kAllTracksListId);
   }
 } // namespace ao::gtk::test

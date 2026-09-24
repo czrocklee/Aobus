@@ -48,17 +48,18 @@ namespace ao::uimodel::test
 
   TEST_CASE("buildTrackFieldGridSchema filters sections from request flags", "[uimodel][unit][library][detail]")
   {
+    auto const complete = buildTrackFieldGridSchema();
     auto const metadataOnly =
       buildTrackFieldGridSchema(TrackFieldGridSchemaOptions{.includeMetadata = true, .includeTechnical = false});
-    CHECK_FALSE(metadataOnly.metadataFields.empty());
-    CHECK_FALSE(metadataOnly.compositeMetadataFields.empty());
+    CHECK(metadataOnly.metadataFields == complete.metadataFields);
+    CHECK(metadataOnly.compositeMetadataFields == complete.compositeMetadataFields);
     CHECK(metadataOnly.technicalFields.empty());
 
     auto const technicalOnly =
       buildTrackFieldGridSchema(TrackFieldGridSchemaOptions{.includeMetadata = false, .includeTechnical = true});
     CHECK(technicalOnly.metadataFields.empty());
     CHECK(technicalOnly.compositeMetadataFields.empty());
-    CHECK_FALSE(technicalOnly.technicalFields.empty());
+    CHECK(technicalOnly.technicalFields == complete.technicalFields);
   }
 
   TEST_CASE("formatMetadataHeader summarizes collapsed metadata", "[uimodel][unit][library][detail]")

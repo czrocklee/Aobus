@@ -18,18 +18,44 @@ namespace ao::query::test
 {
   TEST_CASE("PlanEvaluator - rejects invalid string constant operands", "[query][unit][plan-evaluator]")
   {
-    auto plan = ExecutionPlan{};
-    plan.instructions.push_back(
-      {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Title), .operand = 0});
-    plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 999});
-    plan.instructions.push_back({.op = OpCode::Eq, .operand = 1}); // out of bounds string index
-    plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = -1LL});
-    plan.instructions.push_back({.op = OpCode::Eq, .operand = 1}); // < 0
-
     auto evaluator = PlanEvaluator{};
     auto track = TestTrack{"Title"};
-    auto result = evaluator.matchesFullPlan(plan, track.view());
-    CHECK(result == false);
+
+    SECTION("OutOfRangeIndex")
+    {
+      auto plan = ExecutionPlan{};
+      plan.stringConstants.emplace_back("Title");
+      plan.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Title), .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 999});
+      plan.instructions.push_back({.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Title), .operand = 1});
+
+      CHECK_FALSE(evaluator.matchesFullPlan(plan, track.view()));
+    }
+
+    SECTION("NegativeIndex")
+    {
+      auto plan = ExecutionPlan{};
+      plan.stringConstants.emplace_back("Title");
+      plan.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Title), .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = -1LL});
+      plan.instructions.push_back({.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Title), .operand = 1});
+
+      CHECK_FALSE(evaluator.matchesFullPlan(plan, track.view()));
+    }
+
+    SECTION("ValidIndex")
+    {
+      auto plan = ExecutionPlan{};
+      plan.stringConstants.emplace_back("Title");
+      plan.instructions.push_back(
+        {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Title), .operand = 0});
+      plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});
+      plan.instructions.push_back({.op = OpCode::Eq, .field = static_cast<std::uint8_t>(Field::Title), .operand = 1});
+
+      CHECK(evaluator.matchesFullPlan(plan, track.view()));
+    }
   }
 
   TEST_CASE("PlanEvaluator - evaluates no-track-data plans without storage tiers", "[query][unit][plan-evaluator]")
@@ -41,6 +67,11 @@ namespace ao::query::test
     auto emptyView = library::TrackView{std::span<std::byte const>{}, std::span<std::byte const>{}};
     CHECK(plan.accessProfile == AccessProfile::NoTrackData);
     CHECK(evaluator.matchesFullPlan(plan, emptyView));
+
+    auto falsePlan = compileOk(parseOk("false"));
+    CHECK(falsePlan.accessProfile == AccessProfile::NoTrackData);
+    CHECK_FALSE(evaluator.matches(falsePlan, emptyView));
+    CHECK_FALSE(evaluator.matchesFullPlan(falsePlan, emptyView));
   }
 
   TEST_CASE("PlanEvaluator - executes cold-only plans with cold-only track views", "[query][unit][plan-evaluator]")

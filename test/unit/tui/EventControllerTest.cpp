@@ -88,6 +88,12 @@ namespace ao::tui::test
 {
   namespace
   {
+    constexpr auto kTitleResizeHandle =
+      TrackColumnResizeHandle{.field = rt::TrackField::Title,
+                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
+                              .columns = 20,
+                              .availableColumns = 100};
+
     rt::PlaybackSnapshot currentPlayback(EventControllerFixture& fixture)
     {
       return fixture.runtimePtr->playback().snapshot();
@@ -156,7 +162,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("EventController - text input is modal for navigation keys", "[tui][regression][event]")
+  TEST_CASE("EventController - text input is modal for navigation keys", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -172,7 +178,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - Ctrl-C requests exit without stopping playback from text input",
-            "[tui][regression][event]")
+            "[tui][integration][event]")
   {
     auto requireExitHandlingFromInput = [](std::string const& opener)
     {
@@ -201,7 +207,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("EventController - quit defers playback stop to the composition root", "[tui][regression][event]")
+  TEST_CASE("EventController - quit defers playback stop to the composition root", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -236,7 +242,8 @@ namespace ao::tui::test
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Custom));
   }
 
-  TEST_CASE("EventController - scan commands start and cancel the library scan", "[tui][unit][event][scan]")
+  TEST_CASE("EventController - scan commands start and cancel the library scan",
+            "[tui][unit][event][scan][concurrency]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -392,7 +399,7 @@ namespace ao::tui::test
     CHECK(fixture.trackEditPtr->activeEditor()->targetCount() == 1);
   }
 
-  TEST_CASE("EventController - disabled mouse input protects an open track editor", "[tui][regression][mouse][editor]")
+  TEST_CASE("EventController - disabled mouse input protects an open track editor", "[tui][unit][event][mouse][editor]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -474,7 +481,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - cancelling untouched Quick Filter preserves the active filter",
-            "[tui][regression][event][filter]")
+            "[tui][unit][event][filter]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -496,7 +503,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - confirming untouched Quick Filter clears the active filter",
-            "[tui][regression][event][filter]")
+            "[tui][unit][event][filter]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -515,7 +522,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - Quick Filter applies edited text after the debounce interval",
-            "[tui][unit][filter][concurrency]")
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -535,7 +542,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - backspacing Quick Filter to empty restores all tracks after debounce",
-            "[tui][regression][filter][concurrency]")
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -560,7 +567,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - Quick Filter Enter accepts completion and cancels pending debounce",
-            "[tui][regression][filter][concurrency]")
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     fixture.addTrack(library::test::TrackSpec{.title = "First Love", .artist = "宇多田光"});
@@ -582,7 +589,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - Quick Filter Escape applies literal text instead of the selected completion",
-            "[tui][unit][filter][concurrency]")
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -598,7 +605,8 @@ namespace ao::tui::test
     CHECK(fixture.sleeperPtr->tryWaitForCancellation(0));
   }
 
-  TEST_CASE("EventController - Quick Filter Tab accepts completion and stays live", "[tui][unit][filter][concurrency]")
+  TEST_CASE("EventController - Quick Filter Tab accepts completion and stays live",
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     fixture.addTrack(library::test::TrackSpec{.title = "First Love", .artist = "宇多田光"});
@@ -623,7 +631,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - Quick Filter shows transient expression errors without posting notifications",
-            "[tui][regression][filter][concurrency]")
+            "[tui][integration][event][filter]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -649,7 +657,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - teardown cancellation retires a pending Quick Filter debounce",
-            "[tui][unit][filter][concurrency]")
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -664,7 +672,8 @@ namespace ao::tui::test
     CHECK(library.filterDraft().empty());
   }
 
-  TEST_CASE("EventController - destruction cancels a pending Quick Filter debounce", "[tui][unit][filter][concurrency]")
+  TEST_CASE("EventController - destruction cancels a pending Quick Filter debounce",
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -786,7 +795,8 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.shell.isDetailVisible());
   }
 
-  TEST_CASE("EventController - effective plan replaces old root keys instead of adding bypasses", "[tui][unit][keymap]")
+  TEST_CASE("EventController - effective plan replaces old root keys instead of adding bypasses",
+            "[tui][unit][event][keymap]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -812,7 +822,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::ListChooser);
   }
 
-  TEST_CASE("EventController - scoped protocol wins over conflicting root bindings", "[tui][unit][keymap]")
+  TEST_CASE("EventController - scoped protocol wins over conflicting root bindings", "[tui][unit][event][keymap]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -906,7 +916,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isDetailVisible());
   }
 
-  TEST_CASE("EventController - detail leaves transport keys reaching playback", "[tui][unit][event][detail]")
+  TEST_CASE("EventController - detail leaves transport keys reaching playback", "[tui][integration][event][detail]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -929,7 +939,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isDetailVisible());
   }
 
-  TEST_CASE("EventController - closing detail ends a scrollbar drag it admitted", "[tui][regression][event][detail]")
+  TEST_CASE("EventController - closing detail ends a scrollbar drag it admitted", "[tui][unit][event][detail]")
   {
     auto fixture = EventControllerFixture{};
 
@@ -957,16 +967,12 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == draggedSelection);
   }
 
-  TEST_CASE("EventController - a modal overlay ends a column drag detail admitted", "[tui][regression][event][detail]")
+  TEST_CASE("EventController - a modal overlay ends a column drag detail admitted", "[tui][unit][event][detail]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     auto& columnLayouts = fixture.trackColumnLayouts;
     auto& resizePreview = fixture.trackColumnResizePreview;
     auto controller = fixture.makeEvents(library);
@@ -1058,7 +1064,8 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
-  TEST_CASE("EventController - opening overlays is silent and closing them reports feedback", "[tui][unit][event]")
+  TEST_CASE("EventController - opening overlays is silent and closing them reports feedback",
+            "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1150,7 +1157,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
-  TEST_CASE("EventController - modal overlays swallow workspace shortcuts", "[tui][regression][event]")
+  TEST_CASE("EventController - modal overlays swallow workspace shortcuts", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1188,7 +1195,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - notification x remains protocol-owned when there is nothing to dismiss",
-            "[tui][unit][keymap]")
+            "[tui][unit][event][keymap]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1202,7 +1209,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::Notifications);
   }
 
-  TEST_CASE("EventController - non-list modal overlays do not page the track table", "[tui][regression][event]")
+  TEST_CASE("EventController - non-list modal overlays do not page the track table", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1235,7 +1242,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
-  TEST_CASE("EventController - presentation shortcut selects track views", "[tui][unit][event]")
+  TEST_CASE("EventController - presentation shortcut selects track views", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1330,7 +1337,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - filter errors preserve rows and enter the notification feed",
-            "[tui][regression][event][library]")
+            "[tui][integration][event][library]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1351,10 +1358,9 @@ namespace ao::tui::test
     CHECK(message.ends_with(" does not exist"));
   }
 
-  TEST_CASE("EventController - named commands route to shell playback and library actions", "[tui][unit][event]")
+  TEST_CASE("EventController - named UI commands route to shell surfaces", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     auto controller = fixture.makeEvents(library);
 
@@ -1382,6 +1388,13 @@ namespace ao::tui::test
     enterCommand(controller, "help");
     CHECK(fixture.shell.overlay() == Overlay::Help);
     CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+  }
+
+  TEST_CASE("EventController - named library commands route to library actions", "[tui][integration][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
 
     enterCommand(controller, "current");
     CHECK(library.selectedTrack() == 0);
@@ -1391,19 +1404,30 @@ namespace ao::tui::test
 
     enterCommand(controller, "reload");
     CHECK(library.tracks().size() == 2);
+  }
+
+  TEST_CASE("EventController - named playback commands route to transport actions", "[tui][integration][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
 
     enterCommand(controller, "play");
     REQUIRE(fixture.tryWaitForPlayback(library.tracks()[library.selectedTrack()].id));
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
 
+    REQUIRE(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
     enterCommand(controller, "toggle");
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Paused);
 
     enterCommand(controller, "stop");
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
   }
 
-  TEST_CASE("EventController - output commands and mouse clicks select devices", "[tui][unit][event]")
+  TEST_CASE("EventController - output commands and mouse clicks select devices", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -1443,7 +1467,7 @@ namespace ao::tui::test
     CHECK(currentPlayback(fixture).transport.output.selectedDevice.backendId == audio::BackendId{"test_backend"});
   }
 
-  TEST_CASE("EventController - stale output row clicks keep the picker open", "[tui][regression][event]")
+  TEST_CASE("EventController - stale output row clicks keep the picker open", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -1490,7 +1514,7 @@ namespace ao::tui::test
     CHECK(outputDevices.selectedRow() == 1);
   }
 
-  TEST_CASE("EventController - hovering the soul button shows transient quality details", "[tui][regression][event]")
+  TEST_CASE("EventController - hovering the soul button shows transient quality details", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1521,7 +1545,7 @@ namespace ao::tui::test
     CHECK_FALSE(controller.isQualityHoverVisible());
   }
 
-  TEST_CASE("EventController - comma opens Settings only at workspace scope", "[tui][unit][event][settings]")
+  TEST_CASE("EventController - comma opens Settings only at workspace scope", "[tui][unit][event][setting]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1540,7 +1564,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.settingsPtr->isActive());
   }
 
-  TEST_CASE("EventController - Settings remains clickable with no keyboard binding", "[tui][unit][event][settings]")
+  TEST_CASE("EventController - Settings remains clickable with no keyboard binding", "[tui][unit][event][setting]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1566,7 +1590,7 @@ namespace ao::tui::test
     CHECK(fixture.settingsPtr->isActive());
   }
 
-  TEST_CASE("EventController - closing Settings does not restore stale hover", "[tui][regression][event][settings]")
+  TEST_CASE("EventController - closing Settings does not restore stale hover", "[tui][unit][event][setting]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1620,7 +1644,7 @@ namespace ao::tui::test
     CHECK(controller.hoveredButton() == HoveredButton::None);
   }
 
-  TEST_CASE("EventController - clicking the soul button toggles playback", "[tui][unit][event]")
+  TEST_CASE("EventController - clicking the soul button toggles playback", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -1654,7 +1678,7 @@ namespace ao::tui::test
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
   }
 
-  TEST_CASE("EventController - unavailable transport command is gated and reported", "[tui][unit][event]")
+  TEST_CASE("EventController - unavailable transport command is gated and reported", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1669,7 +1693,7 @@ namespace ao::tui::test
     CHECK(std::get<std::string>(feed.entries.back().message) == "Playback control unavailable");
   }
 
-  TEST_CASE("EventController - idle stop is a silent no-op", "[tui][unit][event]")
+  TEST_CASE("EventController - idle stop is a silent no-op", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1681,7 +1705,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
 
-  TEST_CASE("EventController - space pauses playback while output selection is pending", "[tui][unit][event]")
+  TEST_CASE("EventController - space pauses playback while output selection is pending", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -1709,7 +1733,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.size() == notificationCount);
   }
 
-  TEST_CASE("EventController - presentation mouse clicks open and select views", "[tui][unit][event]")
+  TEST_CASE("EventController - presentation mouse clicks open and select views", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1756,7 +1780,8 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
-  TEST_CASE("EventController - detail visibility changes do not publish activity notifications", "[tui][unit][event]")
+  TEST_CASE("EventController - detail visibility changes do not publish activity notifications",
+            "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1769,7 +1794,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
 
-  TEST_CASE("EventController - root Escape is a silent no-op without an overlay", "[tui][regression][event]")
+  TEST_CASE("EventController - root Escape is a silent no-op without an overlay", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -1818,11 +1843,7 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     auto& columnLayouts = fixture.trackColumnLayouts;
     auto& resizePreview = fixture.trackColumnResizePreview;
     auto changedLists = std::vector<ListId>{};
@@ -1857,16 +1878,12 @@ namespace ao::tui::test
     CHECK(changedLists.size() == 1);
   }
 
-  TEST_CASE("EventController - column resize follows a terminal resize during the drag", "[tui][regression][event]")
+  TEST_CASE("EventController - column resize follows a terminal resize during the drag", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     auto& columnLayouts = fixture.trackColumnLayouts;
     auto& resizePreview = fixture.trackColumnResizePreview;
     auto controller = fixture.makeEvents(library);
@@ -1897,16 +1914,12 @@ namespace ao::tui::test
     CHECK(committedTitle->columns == 25);
   }
 
-  TEST_CASE("EventController - interrupted column drag does not swallow the next press", "[tui][regression][event]")
+  TEST_CASE("EventController - interrupted column drag does not swallow the next press", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     auto& columnLayouts = fixture.trackColumnLayouts;
     auto& resizePreview = fixture.trackColumnResizePreview;
     auto controller = fixture.makeEvents(library);
@@ -1926,17 +1939,13 @@ namespace ao::tui::test
     CHECK(columnLayouts.snapshot().empty());
   }
 
-  TEST_CASE("EventController - list navigation rolls back an in-flight column preview", "[tui][regression][event]")
+  TEST_CASE("EventController - list navigation rolls back an in-flight column preview", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto const otherListId = fixture.addList("Other");
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     auto& columnLayouts = fixture.trackColumnLayouts;
     auto& resizePreview = fixture.trackColumnResizePreview;
     auto controller = fixture.makeEvents(library);
@@ -1960,11 +1969,7 @@ namespace ao::tui::test
     auto const otherListId = fixture.addList("Other");
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     auto& columnLayouts = fixture.trackColumnLayouts;
     auto controller = fixture.makeEvents(library);
     auto resizeCurrentList = [&](std::int32_t const releaseX)
@@ -1997,16 +2002,12 @@ namespace ao::tui::test
     CHECK(otherTitle->columns == 30);
   }
 
-  TEST_CASE("EventController - teardown rolls back an in-flight column preview", "[tui][regression][event]")
+  TEST_CASE("EventController - teardown rolls back an in-flight column preview", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto& hitRegions = fixture.hitRegions;
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     auto& columnLayouts = fixture.trackColumnLayouts;
     auto& resizePreview = fixture.trackColumnResizePreview;
     auto controller = fixture.makeEvents(library);
@@ -2022,8 +2023,7 @@ namespace ao::tui::test
     CHECK(columnLayouts.snapshot().empty());
   }
 
-  TEST_CASE("EventController - mouse preference changes apply to the running controller",
-            "[tui][unit][event][settings]")
+  TEST_CASE("EventController - mouse preference changes apply to the running controller", "[tui][unit][event][setting]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addTrack(library::test::TrackSpec{.title = "Third"});
@@ -2096,7 +2096,7 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == 0);
   }
 
-  TEST_CASE("EventController - scrollbar handles one-row and interrupted drags", "[tui][regression][event]")
+  TEST_CASE("EventController - scrollbar handles one-row and interrupted drags", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2120,7 +2120,7 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == 0);
   }
 
-  TEST_CASE("EventController - scrollbar ignores empty track tables", "[tui][regression][event]")
+  TEST_CASE("EventController - scrollbar ignores empty track tables", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2154,7 +2154,7 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == 0);
   }
 
-  TEST_CASE("EventController - section shortcuts do not pass through overlays", "[tui][regression][event]")
+  TEST_CASE("EventController - section shortcuts do not pass through overlays", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addTrack(library::test::TrackSpec{
@@ -2188,7 +2188,7 @@ namespace ao::tui::test
     CHECK(library.selectedTrack() == static_cast<std::int32_t>(expected.rowBegin));
   }
 
-  TEST_CASE("EventController - stale section header clicks report unavailable sections", "[tui][regression][event]")
+  TEST_CASE("EventController - stale section header clicks report unavailable sections", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2205,7 +2205,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - same-sized regrouping rejects a previously painted section header",
-            "[tui][regression][mouse][event]")
+            "[tui][integration][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addTrack(
@@ -2245,17 +2245,14 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - refreshed presentation rejects stale column resize gestures",
-            "[tui][regression][mouse][event]")
+            "[tui][unit][event][mouse]")
   {
     for (bool const refreshBeforePress : {true, false})
     {
       auto fixture = EventControllerFixture{};
       auto library = fixture.makeLibrary();
       auto controller = fixture.makeEvents(library);
-      fixture.hitRegions.trackColumnResizeHandles = {{.field = rt::TrackField::Title,
-                                                      .box = {.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                                                      .columns = 20,
-                                                      .availableColumns = 100}};
+      fixture.hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
 
       if (refreshBeforePress)
       {
@@ -2277,7 +2274,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("EventController - list chooser return opens the selected list", "[tui][unit][event]")
+  TEST_CASE("EventController - list chooser return opens the selected list", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2293,7 +2290,7 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.shell.isNavigationFocused());
   }
 
-  TEST_CASE("EventController - playback shortcuts update controls", "[tui][unit][event]")
+  TEST_CASE("EventController - playback shortcuts update controls", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2325,7 +2322,7 @@ namespace ao::tui::test
     CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
-  TEST_CASE("EventController - relative seek is inert without a known duration", "[tui][unit][event]")
+  TEST_CASE("EventController - relative seek is inert without a known duration", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2343,7 +2340,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - mouse click on seek rail previews then commits the target position",
-            "[tui][unit][event]")
+            "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2373,7 +2370,7 @@ namespace ao::tui::test
     CHECK(snapshots[0].transport.elapsed == duration / 2);
   }
 
-  TEST_CASE("EventController - mouse drag on seek rail clamps release outside the rail", "[tui][unit][event]")
+  TEST_CASE("EventController - mouse drag on seek rail clamps release outside the rail", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2407,7 +2404,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - replacement makes a held seek inert until a fresh gesture",
-            "[tui][regression][event][concurrency]")
+            "[tui][integration][event][async]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2445,7 +2442,8 @@ namespace ao::tui::test
     CHECK(playback.snapshot().transport.finalSeekRevision.value == replacement.finalSeekRevision.value + 1);
   }
 
-  TEST_CASE("EventController - seek drag releases over the docked Lists pane", "[tui][regression][mouse][navigation]")
+  TEST_CASE("EventController - seek drag releases over the docked Lists pane",
+            "[tui][integration][event][mouse][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2480,8 +2478,7 @@ namespace ao::tui::test
     CHECK(playback.snapshot().transport.finalSeekRevision == released.finalSeekRevision);
   }
 
-  TEST_CASE("EventController - teardown cancellation stabilizes an active seek drag",
-            "[tui][regression][event][lifecycle]")
+  TEST_CASE("EventController - teardown cancellation stabilizes an active seek drag", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2512,7 +2509,7 @@ namespace ao::tui::test
     CHECK(playback.snapshot().transport.finalSeekRevision == stabilized.finalSeekRevision);
   }
 
-  TEST_CASE("EventController - disabled seek rail ignores mouse clicks", "[tui][unit][event]")
+  TEST_CASE("EventController - disabled seek rail ignores mouse clicks", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2529,7 +2526,7 @@ namespace ao::tui::test
     CHECK(seekPreviews.empty());
   }
 
-  TEST_CASE("EventController - modal overlays block seek rail mouse clicks", "[tui][regression][event]")
+  TEST_CASE("EventController - modal overlays block seek rail mouse clicks", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2548,7 +2545,7 @@ namespace ao::tui::test
     CHECK(seekPreviews.empty());
   }
 
-  TEST_CASE("EventController - text input blocks seek rail mouse clicks", "[tui][regression][event]")
+  TEST_CASE("EventController - text input blocks seek rail mouse clicks", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2567,7 +2564,7 @@ namespace ao::tui::test
     CHECK(seekPreviews.empty());
   }
 
-  TEST_CASE("EventController - text input blocks workspace mouse controls", "[tui][regression][event]")
+  TEST_CASE("EventController - text input blocks workspace mouse controls", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -2580,11 +2577,7 @@ namespace ao::tui::test
     hitRegions.outputDeviceButtonBox = ftxui::Box{.x_min = 4, .x_max = 9, .y_min = 0, .y_max = 0};
     hitRegions.soulButtonBox = ftxui::Box{.x_min = 0, .x_max = 2, .y_min = 0, .y_max = 0};
     hitRegions.trackTableBox = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 1, .y_max = 22};
-    hitRegions.trackColumnResizeHandles = {
-      TrackColumnResizeHandle{.field = rt::TrackField::Title,
-                              .box = ftxui::Box{.x_min = 8, .x_max = 20, .y_min = 2, .y_max = 2},
-                              .columns = 20,
-                              .availableColumns = 100}};
+    hitRegions.trackColumnResizeHandles = {kTitleResizeHandle};
     hitRegions.trackSectionRows = {
       TrackSectionRowHitRegion{.sectionIndex = 1, .box = ftxui::Box{.x_min = 0, .x_max = 79, .y_min = 6, .y_max = 6}}};
     auto& columnLayouts = fixture.trackColumnLayouts;
@@ -2619,7 +2612,7 @@ namespace ao::tui::test
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
   }
 
-  TEST_CASE("EventController - modal overlays cancel active seek rail drags", "[tui][regression][event]")
+  TEST_CASE("EventController - modal overlays cancel active seek rail drags", "[tui][integration][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2673,7 +2666,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - track mouse selection supports modifiers and rejects stale identities",
-            "[tui][unit][mouse][event]")
+            "[tui][integration][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2705,7 +2698,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - a double click plays the clicked track while an intervening key breaks the pair",
-            "[tui][unit][mouse][event]")
+            "[tui][integration][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -2725,7 +2718,7 @@ namespace ao::tui::test
     REQUIRE(fixture.tryWaitForPlayback(target));
   }
 
-  TEST_CASE("EventController - rendered Library rows open the matching saved list", "[tui][unit][mouse][event]")
+  TEST_CASE("EventController - rendered Library rows open the matching saved list", "[tui][unit][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto const listId = fixture.addList("Mouse List");
@@ -2751,7 +2744,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
-  TEST_CASE("EventController - visible status shortcuts open their matching surface", "[tui][unit][mouse][event]")
+  TEST_CASE("EventController - visible status shortcuts open their matching surface", "[tui][unit][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2782,7 +2775,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - command candidate clicks execute through the command protocol",
-            "[tui][unit][mouse][event]")
+            "[tui][unit][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2810,8 +2803,7 @@ namespace ao::tui::test
     CHECK(fixture.settingsPtr->isActive());
   }
 
-  TEST_CASE("EventController - completion mouse coordinates cannot accept an older draft",
-            "[tui][regression][mouse][event]")
+  TEST_CASE("EventController - completion mouse coordinates cannot accept an older draft", "[tui][unit][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2840,7 +2832,8 @@ namespace ao::tui::test
     CHECK(fixture.shell.inputDraft() == "oldx");
   }
 
-  TEST_CASE("EventController - one stable mode button cycles every playback preset", "[tui][unit][mouse][playback]")
+  TEST_CASE("EventController - one stable mode button cycles every playback preset",
+            "[tui][integration][event][mouse][playback]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2909,7 +2902,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - mode clicks respect mouse preferences and foreground ownership",
-            "[tui][unit][mouse][event]")
+            "[tui][integration][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2962,7 +2955,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - unavailable mode click preserves modes and reports the playback warning",
-            "[tui][regression][mouse][playback]")
+            "[tui][integration][event][mouse][playback]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -2986,7 +2979,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - stale mode targets do not normalize an unrecognized mode",
-            "[tui][regression][mouse][playback]")
+            "[tui][integration][event][mouse][playback]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3013,7 +3006,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("EventController - volume mouse wheel and mute share the volume model", "[tui][unit][mouse][event]")
+  TEST_CASE("EventController - volume mouse wheel and mute share the volume model", "[tui][integration][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3032,7 +3025,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - foreground detail content scrolls and blocks controls under its painted cells",
-            "[tui][regression][mouse][event]")
+            "[tui][integration][event][mouse]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3070,7 +3063,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - disabled mouse input also protects an open Settings editor",
-            "[tui][regression][mouse][settings]")
+            "[tui][unit][event][mouse][setting]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3091,7 +3084,7 @@ namespace ao::tui::test
     CHECK(fixture.settingsPtr->page() == SettingsPage::Appearance);
   }
 
-  TEST_CASE("EventController - exact commands win until the user navigates candidates", "[tui][regression][input]")
+  TEST_CASE("EventController - exact commands win until the user navigates candidates", "[tui][unit][event][input]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3123,7 +3116,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("EventController - local list search cannot activate a hidden row", "[tui][regression][search]")
+  TEST_CASE("EventController - local list search cannot activate a hidden row", "[tui][unit][event][search]")
   {
     auto fixture = EventControllerFixture{};
     auto const jazz = fixture.addList("Jazz");
@@ -3146,8 +3139,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
   }
 
-  TEST_CASE("EventController - read-only panels use viewport paging and boundary navigation",
-            "[tui][regression][event]")
+  TEST_CASE("EventController - read-only panels use viewport paging and boundary navigation", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3169,7 +3161,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - moving the filter caret refreshes completion without rescheduling work",
-            "[tui][regression][filter][concurrency]")
+            "[tui][unit][event][filter][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -3195,7 +3187,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - clicking outside a popover dismisses it without activating the workspace",
-            "[tui][regression][mouse][popover]")
+            "[tui][integration][event][mouse][popover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3233,7 +3225,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - popovers retain inside clicks and ignore outside wheel or release events",
-            "[tui][regression][mouse][popover]")
+            "[tui][unit][event][mouse][popover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3254,7 +3246,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - outside clicks cancel command input and preserve the underlying inspector",
-            "[tui][regression][mouse][popover]")
+            "[tui][unit][event][mouse][popover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3271,7 +3263,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - Quick Filter outside clicks keep literal text and cancel pending completion",
-            "[tui][regression][popover][concurrency]")
+            "[tui][unit][event][filter][popover][concurrency]")
   {
     auto fixture = EventControllerFixture{true};
     auto library = fixture.makeLibrary();
@@ -3294,7 +3286,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - outside clicks on untouched filter input preserve the applied filter",
-            "[tui][regression][popover][filter]")
+            "[tui][unit][event][popover][filter]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3312,7 +3304,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - outside clicks retain side panels and disabled mouse popovers",
-            "[tui][regression][mouse][popover]")
+            "[tui][unit][event][mouse][popover]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3332,7 +3324,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - selection footer cancels a range while retaining the detail pane",
-            "[tui][regression][usability]")
+            "[tui][unit][event][usability]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3351,7 +3343,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - browse overlays admit transport while retaining navigation and activation",
-            "[tui][regression][keyboard][event]")
+            "[tui][integration][event][keyboard]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -3383,7 +3375,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - text entry and editors own playback letters and space",
-            "[tui][regression][keyboard][event]")
+            "[tui][integration][event][keyboard]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -3415,7 +3407,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - transport keys change the playback sequence without moving library focus",
-            "[tui][unit][keyboard][event]")
+            "[tui][integration][event][keyboard]")
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
@@ -3443,7 +3435,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - Lists focus suspends track selection and keeps search-local bindings",
-            "[tui][regression][navigation]")
+            "[tui][integration][event][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto const target = fixture.addList("Target");
@@ -3483,7 +3475,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isNavigationPinned());
   }
 
-  TEST_CASE("EventController - stronger surfaces suspend and restore Lists search", "[tui][unit][navigation]")
+  TEST_CASE("EventController - stronger surfaces suspend and restore Lists search", "[tui][unit][event][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3508,7 +3500,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - chooser outside press consumes Tracks while docked press operates Tracks",
-            "[tui][regression][mouse][navigation]")
+            "[tui][integration][event][mouse][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3534,7 +3526,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - docked List wheel never navigates or steals focus",
-            "[tui][regression][mouse][navigation]")
+            "[tui][unit][event][mouse][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto const target = fixture.addList("Wheel target");
@@ -3561,7 +3553,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - track scrollbar and resize take focus before starting a gesture",
-            "[tui][regression][mouse][navigation]")
+            "[tui][unit][event][mouse][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3588,7 +3580,8 @@ namespace ao::tui::test
     CHECK(fixture.trackColumnResizePreview.listId == kInvalidListId);
   }
 
-  TEST_CASE("EventController - only explicit List visibility changes request a layout save", "[tui][unit][navigation]")
+  TEST_CASE("EventController - only explicit List visibility changes request a layout save",
+            "[tui][unit][event][navigation]")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -3612,7 +3605,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("EventController - search paging and scrollbar use visible rows with ancestor context",
-            "[tui][regression][navigation]")
+            "[tui][unit][event][navigation]")
   {
     auto fixture = EventControllerFixture{};
 

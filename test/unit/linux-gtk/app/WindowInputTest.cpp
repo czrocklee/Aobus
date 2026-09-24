@@ -15,6 +15,8 @@
 #include <gtkmm/textview.h>
 #include <gtkmm/window.h>
 
+#include <array>
+
 namespace ao::gtk::test
 {
   TEST_CASE("WindowInput - thumb buttons map to history navigation", "[gtk][unit][app][navigation]")
@@ -58,8 +60,23 @@ namespace ao::gtk::test
     CHECK_FALSE(shouldActivatePlaybackSpaceShortcut(GDK_KEY_space, Gdk::ModifierType{}, nestedEntryChild));
 
     CHECK(shouldActivatePlaybackSpaceShortcut(GDK_KEY_space, Gdk::ModifierType{}, &label));
+    CHECK(shouldActivatePlaybackSpaceShortcut(GDK_KEY_KP_Space, Gdk::ModifierType{}, &label));
+    CHECK(shouldActivatePlaybackSpaceShortcut(GDK_KEY_space, Gdk::ModifierType::LOCK_MASK, &label));
     CHECK(shouldActivatePlaybackSpaceShortcut(GDK_KEY_space, Gdk::ModifierType{}, nullptr));
     CHECK_FALSE(shouldActivatePlaybackSpaceShortcut(GDK_KEY_Return, Gdk::ModifierType{}, &label));
-    CHECK_FALSE(shouldActivatePlaybackSpaceShortcut(GDK_KEY_space, Gdk::ModifierType::CONTROL_MASK, &label));
+
+    constexpr auto kShortcutModifiers = std::to_array<Gdk::ModifierType>({
+      Gdk::ModifierType::SHIFT_MASK,
+      Gdk::ModifierType::CONTROL_MASK,
+      Gdk::ModifierType::ALT_MASK,
+      Gdk::ModifierType::SUPER_MASK,
+      Gdk::ModifierType::HYPER_MASK,
+      Gdk::ModifierType::META_MASK,
+    });
+
+    for (auto const modifier : kShortcutModifiers)
+    {
+      CHECK_FALSE(shouldActivatePlaybackSpaceShortcut(GDK_KEY_space, modifier, &label));
+    }
   }
 } // namespace ao::gtk::test

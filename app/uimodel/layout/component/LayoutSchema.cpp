@@ -178,7 +178,7 @@ namespace ao::uimodel
 
       return candidate.displayName == it->displayName && candidate.category == it->category &&
              candidate.minChildren == it->minChildren && candidate.optMaxChildren == it->optMaxChildren &&
-             candidate.persistentState == it->persistentState &&
+             candidate.surfaces == it->surfaces && candidate.persistentState == it->persistentState &&
              (candidate.actionSlots & it->actionSlots) == it->actionSlots && hasSharedPropertyShape(candidate, *it);
     }
   } // namespace

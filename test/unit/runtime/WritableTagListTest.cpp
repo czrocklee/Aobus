@@ -29,6 +29,7 @@ namespace ao::rt::test
   TEST_CASE("WritableTagList - finds tag references anywhere in a valid expression", "[runtime][unit][writable-tag]")
   {
     CHECK(hasListExpressionTagReference(R"(#"road-trip")", "road-trip"));
+    CHECK(hasListExpressionTagReference(R"((#rock or #jazz) and not #blocked)", "rock"));
     CHECK(hasListExpressionTagReference(R"((#rock or #jazz) and not #blocked)", "jazz"));
     CHECK(hasListExpressionTagReference(R"((#rock or #jazz) and not #blocked)", "blocked"));
     CHECK_FALSE(hasListExpressionTagReference(R"((#rock or #jazz) and not #blocked)", "ambient"));

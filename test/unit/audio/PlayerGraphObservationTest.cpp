@@ -139,7 +139,7 @@ namespace ao::audio::test
   } // namespace
 
   TEST_CASE("Player - graph bursts remain coalesced through outward publication and yield to owner work",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency][stress]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();
@@ -194,7 +194,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - graph producer remains bounded while the Engine worker is withheld",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency][stress]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();
@@ -229,7 +229,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - retiring a graph subscription cancels its queued publication in the same generation",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();
@@ -266,7 +266,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - replacing an unregistered graph callback retires its admission",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto fixture = GraphObservationFixture{false};
     auto& queue = fixture.executor.queue();
@@ -282,8 +282,7 @@ namespace ao::audio::test
     CHECK(fixture.graphName() == "current");
   }
 
-  TEST_CASE("Player - retained graph callbacks become no-ops after teardown",
-            "[audio][regression][player][concurrency]")
+  TEST_CASE("Player - retained graph callbacks become no-ops after teardown", "[audio][unit][player][concurrency]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();

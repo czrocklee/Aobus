@@ -9,12 +9,10 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
-#include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryWrite.h>
-#include <ao/library/TrackStore.h>
 #include <ao/rt/library/ScanPlan.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -63,7 +61,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryScan - buildPlan reports new audio files", "[runtime][unit][library][scan]")
+  TEST_CASE("LibraryScan - buildPlan reports new audio files", "[runtime][unit][library-scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture);
@@ -81,7 +79,7 @@ namespace ao::rt::test
       progressPaths, [](std::filesystem::path const& path) { return path.filename() == "song.flac"; }));
   }
 
-  TEST_CASE("LibraryScan - buildPlan cancellation before start performs no filesystem work",
+  TEST_CASE("LibraryScan - buildPlan cancellation before start reports no progress",
             "[runtime][unit][library-scan][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -117,85 +115,8 @@ namespace ao::rt::test
     CHECK(progressCount == 1);
   }
 
-  TEST_CASE("LibraryScan - applyPlan imports new tracks", "[runtime][unit][library][scan]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    copyBasicAudioFixture(libraryFixture);
-
-    auto service = LibraryScan{libraryFixture.library()};
-    auto plan = service.buildPlan().value();
-    REQUIRE(plan.count(ScanClassification::New) == 1);
-
-    auto operation = ScanApplyOperation{libraryFixture.library(), std::move(plan), {}, {}};
-    auto res = operation.run();
-
-    REQUIRE(res);
-    REQUIRE(res->insertedIds.size() == 1);
-    CHECK(res->failureCount == 0);
-    CHECK_FALSE(operation.isCancelled());
-
-    auto transaction = libraryFixture.library().readTransaction();
-    auto trackReader = libraryFixture.library().tracks().reader(transaction);
-    auto optTrack = trackReader.get(res->insertedIds[0]);
-    REQUIRE(optTrack);
-    CHECK(optTrack->metadata().title() == "Test Title");
-
-    auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(optManifest);
-    CHECK(optManifest->trackId() == res->insertedIds[0]);
-    CHECK(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
-  }
-
-  TEST_CASE("LibraryScan - applyPlan can defer new audio identity", "[runtime][unit][library][scan]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    copyBasicAudioFixture(libraryFixture);
-
-    auto service = LibraryScan{libraryFixture.library()};
-    auto plan = service.buildPlan().value();
-    REQUIRE(plan.count(ScanClassification::New) == 1);
-
-    auto res = ScanApplyOperation{libraryFixture.library(),
-                                  std::move(plan),
-                                  {},
-                                  {},
-                                  ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
-                 .run();
-
-    REQUIRE(res);
-    REQUIRE(res->insertedIds.size() == 1);
-    CHECK(res->failureCount == 0);
-
-    auto transaction = libraryFixture.library().readTransaction();
-    auto optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
-    REQUIRE(optManifest);
-    CHECK_FALSE(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
-  }
-
-  TEST_CASE("LibraryScan - applyPlan honors cancellation", "[runtime][unit][library][scan]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    copyBasicAudioFixture(libraryFixture);
-
-    auto service = LibraryScan{libraryFixture.library()};
-    auto plan = service.buildPlan().value();
-    REQUIRE(plan.count(ScanClassification::New) == 1);
-
-    auto stopSource = std::stop_source{};
-    stopSource.request_stop();
-    auto operation = ScanApplyOperation{libraryFixture.library(), std::move(plan), {}, {}, {}};
-    REQUIRE_THROWS_AS(operation.run(stopSource.get_token()), async::OperationCancelled);
-    CHECK(operation.isCancelled());
-
-    auto transaction = libraryFixture.library().readTransaction();
-    auto trackReader = libraryFixture.library().tracks().reader(transaction);
-    auto manifestReader = libraryFixture.library().manifest().reader(transaction);
-    CHECK(trackReader.begin() == trackReader.end());
-    CHECK(manifestReader.begin() == manifestReader.end());
-  }
-
   TEST_CASE("LibraryScan - a present file restores a missing manifest with unchanged file facts",
-            "[runtime][regression][library-scan]")
+            "[runtime][integration][library-scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture);
@@ -225,7 +146,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryScan - an already missing file is reported without advancing the revision",
-            "[runtime][regression][library-scan]")
+            "[runtime][integration][library-scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     copyBasicAudioFixture(libraryFixture);

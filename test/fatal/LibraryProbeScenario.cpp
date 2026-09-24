@@ -854,7 +854,9 @@ namespace ao::library::test
 
         if (scenario == "lmdb-writer-from-finished")
         {
-          std::ignore = databaseRes->writer(*setupRes);
+          auto postCommitWriter = databaseRes->writer(*setupRes);
+          std::ignore = postCommitWriter.get(1);
+          return 3;
         }
 
         std::ignore = writer.get(1);

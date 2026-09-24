@@ -5,7 +5,6 @@
 
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/async/Runtime.h>
-#include <ao/async/Signal.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 
@@ -15,7 +14,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -171,20 +169,33 @@ namespace ao::rt::test
     service.post(NotificationSeverity::Info, "first", NotificationLifetime::history());
     service.post(NotificationSeverity::Info, "second", NotificationLifetime::history());
     service.post(NotificationSeverity::Info, "third", NotificationLifetime::history());
-    auto const thirdId = updates.back().id;
-
     REQUIRE(updates.size() == 3);
-    CHECK(updates.back().id == thirdId);
     REQUIRE(service.feed().entries.size() == 3);
 
     service.post(NotificationSeverity::Warning, "pinned one", NotificationLifetime::pinned());
+    REQUIRE(updates.size() == 4);
+    REQUIRE(updates.back().feedPtr);
+    REQUIRE(updates.back().feedPtr->entries.size() == 3);
+    CHECK(std::get<std::string>(updates.back().feedPtr->entries[0].message) == "second");
+    CHECK(std::get<std::string>(updates.back().feedPtr->entries[1].message) == "third");
+    CHECK(std::get<std::string>(updates.back().feedPtr->entries[2].message) == "pinned one");
     auto const firstPinnedId = updates.back().id;
     service.post(NotificationSeverity::Warning, "pinned two", NotificationLifetime::pinned());
+    REQUIRE(updates.size() == 5);
+    REQUIRE(updates.back().feedPtr);
+    REQUIRE(updates.back().feedPtr->entries.size() == 3);
+    CHECK(std::get<std::string>(updates.back().feedPtr->entries[0].message) == "third");
+    CHECK(updates.back().feedPtr->entries[1].id == firstPinnedId);
+    CHECK(std::get<std::string>(updates.back().feedPtr->entries[2].message) == "pinned two");
     auto const secondPinnedId = updates.back().id;
     service.post(NotificationSeverity::Warning, "pinned three", NotificationLifetime::pinned());
-    auto const thirdPinnedId = updates.back().id;
-
     REQUIRE(updates.size() == 6);
+    REQUIRE(updates.back().feedPtr);
+    REQUIRE(updates.back().feedPtr->entries.size() == 3);
+    CHECK(updates.back().feedPtr->entries[0].id == firstPinnedId);
+    CHECK(updates.back().feedPtr->entries[1].id == secondPinnedId);
+    CHECK(std::get<std::string>(updates.back().feedPtr->entries[2].message) == "pinned three");
+    auto const thirdPinnedId = updates.back().id;
 
     service.post(NotificationSeverity::Error, "no room", NotificationLifetime::pinned());
 
@@ -214,6 +225,7 @@ namespace ao::rt::test
     };
 
     service.createOrUpdate(key, request);
+    REQUIRE(service.feed().entries.size() == 1);
     auto const createdId = service.feed().entries.front().id;
     service.createOrUpdate(key, request);
     std::get<NotificationReport>(request.message).count = 2;
@@ -234,21 +246,16 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NotificationService - contract-fulfilling feed observers see committed updates",
-            "[runtime][regression][notification][concurrency]")
+            "[runtime][unit][notification]")
   {
     // The feed cannot act on an observer failure: publication is already
     // committed. The owning Signal emission boundary accepts ordinary handlers
     // so it can diagnose an escaping exception before aborting.
-    STATIC_REQUIRE_FALSE(std::is_nothrow_invocable_v<async::Signal<NotificationFeedUpdate const&>::Handler,
-                                                     NotificationFeedUpdate const&>);
-    STATIC_REQUIRE(std::is_constructible_v<async::Signal<NotificationFeedUpdate const&>::Handler,
-                                           decltype([](NotificationFeedUpdate const&) {})>);
-
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
     std::int32_t firstObserverCount = 0;
     std::int32_t laterObserverCount = 0;
-    auto firstSub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++firstObserverCount; });
+    auto firstSub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++firstObserverCount; });
     auto laterSub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++laterObserverCount; });
 
     CHECK_NOTHROW(service.post(NotificationSeverity::Warning, "committed", NotificationLifetime::history()));
@@ -259,7 +266,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NotificationService - reentrant report update preserves immutable publication order",
-            "[runtime][regression][notification][concurrency]")
+            "[runtime][unit][notification]")
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
@@ -312,7 +319,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NotificationService - reentrant post advances the id watermark before publication",
-            "[runtime][regression][notification][concurrency]")
+            "[runtime][unit][notification]")
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;

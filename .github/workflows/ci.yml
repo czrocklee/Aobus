@@ -104,9 +104,61 @@ jobs:
       - name: Show initial disk usage
         run: df -h
 
-      - name: Build and test
+      - name: Build and test with private PipeWire
         id: build
-        run: ./ao check
+        run: |
+          nix-shell --run 'bash -euo pipefail' <<'BASH'
+          runtime=$(mktemp -d)
+          trap 'rm -rf "$runtime"' EXIT
+          export XDG_RUNTIME_DIR="$runtime"
+          export PIPEWIRE_RUNTIME_DIR="$runtime"
+          export PIPEWIRE_REMOTE=pipewire-0
+          export AOBUS_REQUIRE_PIPEWIRE=1
+          # Do not activate host desktop services or their FUSE mounts on this test bus.
+          cat > "$runtime/dbus.conf" <<DBUS
+          <busconfig>
+            <type>session</type>
+            <listen>unix:tmpdir=$runtime</listen>
+            <policy context="default">
+              <allow send_destination="*"/>
+              <allow receive_sender="*"/>
+              <allow own="*"/>
+            </policy>
+          </busconfig>
+          DBUS
+          dbus-run-session --config-file="$runtime/dbus.conf" -- bash -euo pipefail <<'SESSION'
+          runtime=$XDG_RUNTIME_DIR
+          XDG_CONFIG_HOME="$runtime/config" pipewire > "$runtime/pipewire.log" 2>&1 &
+          daemon=$!
+          # Policy only: the fixture owns its null sinks, never host hardware.
+          XDG_STATE_HOME="$runtime/state" XDG_CONFIG_HOME="$runtime/config" \
+            wireplumber --profile=policy > "$runtime/wireplumber.log" 2>&1 &
+          policy=$!
+          cleanup() {
+            status=$?
+            kill "$policy" "$daemon" 2>/dev/null || true
+            wait "$policy" "$daemon" 2>/dev/null || true
+            if (( status != 0 )); then
+              cat "$runtime/pipewire.log" "$runtime/wireplumber.log"
+            fi
+          }
+          trap cleanup EXIT
+          ready=0
+          for attempt in {1..50}; do
+            if ! kill -0 "$daemon" "$policy" 2>/dev/null; then break; fi
+            if timeout 2 pw-cli ls Metadata 2>/dev/null | grep 'metadata.name = "default"' >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 0.1
+          done
+          if (( ready == 0 )); then
+            echo 'Private PipeWire daemon and policy did not become ready.' >&2
+            exit 1
+          fi
+          ./ao check
+          SESSION
+          BASH
 
       - name: Run hygiene
         env:

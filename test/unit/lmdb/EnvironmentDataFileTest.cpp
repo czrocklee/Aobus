@@ -11,6 +11,7 @@
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/FileAllocation.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -162,34 +163,39 @@ namespace ao::lmdb::test
     auto const temp = ao::test::TempDir{};
     auto failures = std::atomic{std::size_t{0}};
     auto denseReports = std::atomic{std::size_t{0}};
-    auto start = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
+    auto ready = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
+    auto start = std::latch{1};
+    auto threads = std::vector<std::jthread>{};
+    threads.reserve(kThreadCount);
+    // Release already-created workers before the thread container joins them if
+    // construction of a later worker throws.
+    auto releaseWorkers = utility::ScopedRegistration{[&start] { start.count_down(); }};
 
+    for (std::size_t index = 0; index < kThreadCount; ++index)
     {
-      auto threads = std::vector<std::jthread>{};
-      threads.reserve(kThreadCount);
+      threads.emplace_back(
+        [&temp, &failures, &denseReports, &ready, &start]
+        {
+          // Every worker is present before release, so they contend for the same
+          // create-and-mark sequence rather than arriving in turn.
+          ready.count_down();
+          start.wait();
+          auto const allocationRes = detail::prepareEnvironmentDataFile(temp.path(), detail::DataFileAccess::ReadWrite);
 
-      for (std::size_t index = 0; index < kThreadCount; ++index)
-      {
-        threads.emplace_back(
-          [&temp, &failures, &denseReports, &start]
+          if (!allocationRes)
           {
-            // Every thread waits for the last one, so they contend for the same
-            // create-and-mark sequence rather than arriving in turn.
-            start.arrive_and_wait();
-            auto const allocationRes =
-              detail::prepareEnvironmentDataFile(temp.path(), detail::DataFileAccess::ReadWrite);
-
-            if (!allocationRes)
-            {
-              failures.fetch_add(1, std::memory_order_relaxed);
-            }
-            else if (*allocationRes == MapAllocation::WholeMap)
-            {
-              denseReports.fetch_add(1, std::memory_order_relaxed);
-            }
-          });
-      }
+            failures.fetch_add(1, std::memory_order_relaxed);
+          }
+          else if (*allocationRes == MapAllocation::WholeMap)
+          {
+            denseReports.fetch_add(1, std::memory_order_relaxed);
+          }
+        });
     }
+
+    ready.wait();
+    releaseWorkers.reset();
+    threads.clear();
 
     CHECK(failures.load(std::memory_order_relaxed) == 0);
     // Every thread saw the same filesystem, so they cannot disagree about it.
@@ -209,21 +215,34 @@ namespace ao::lmdb::test
   {
     constexpr std::size_t kThreadCount = 8;
     auto const temp = ao::test::TempDir{};
-    auto failures = std::atomic{std::size_t{0}};
-    auto start = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
-    auto threads = std::vector<std::jthread>{};
-    threads.reserve(kThreadCount);
+    auto directories = std::vector<std::filesystem::path>{};
+    directories.reserve(kThreadCount);
 
-    // One environment per path, as LMDB requires, so this exercises the real open
-    // path under contention instead of aliasing one environment across threads.
     for (std::size_t index = 0; index < kThreadCount; ++index)
     {
       auto directory = temp.path() / std::to_string(index);
       REQUIRE(std::filesystem::create_directory(directory));
+      directories.push_back(std::move(directory));
+    }
+
+    auto failures = std::atomic{std::size_t{0}};
+    auto ready = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
+    auto start = std::latch{1};
+    auto threads = std::vector<std::jthread>{};
+    threads.reserve(kThreadCount);
+    // Release already-created workers before the thread container joins them if
+    // construction of a later worker throws.
+    auto releaseWorkers = utility::ScopedRegistration{[&start] { start.count_down(); }};
+
+    // One environment per path, as LMDB requires, so this exercises the real open
+    // path under contention instead of aliasing one environment across threads.
+    for (auto const& directory : directories)
+    {
       threads.emplace_back(
-        [directory = std::move(directory), &failures, &start]
+        [directory, &failures, &ready, &start]
         {
-          start.arrive_and_wait();
+          ready.count_down();
+          start.wait();
           auto envRes = Environment::open(directory, largeMapOptions());
 
           if (!envRes || envRes->mapAllocation() != MapAllocation::OnDemand)
@@ -233,11 +252,14 @@ namespace ao::lmdb::test
         });
     }
 
+    ready.wait();
+    releaseWorkers.reset();
     threads.clear();
     CHECK(failures.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("prepareEnvironmentDataFile - a read-only preparation creates nothing", "[lmdb][unit][capacity]")
+  TEST_CASE("prepareEnvironmentDataFile - a read-only preparation creates nothing",
+            "[lmdb][unit][environment][capacity]")
   {
     auto const temp = ao::test::TempDir{};
     auto const dataPath = temp.path() / "data.mdb";
@@ -251,7 +273,7 @@ namespace ao::lmdb::test
   }
 
   TEST_CASE("Environment - opening rejects a flag the data-file preparation is not written for",
-            "[lmdb][unit][capacity]")
+            "[lmdb][unit][environment][capacity]")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -272,15 +294,16 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Environment - a read-only open of an absent database leaves the directory empty", "[lmdb][unit][capacity]")
+  TEST_CASE("Environment - a read-only open of an absent database leaves the data file absent",
+            "[lmdb][unit][environment][capacity]")
   {
     auto const temp = ao::test::TempDir{};
 
     auto envRes =
       Environment::open(temp.path(), Environment::Options{.flags = kEnvNoTls | kEnvReadOnly, .maxDatabases = 4});
 
-    // LMDB owns the diagnostic; what matters here is that reaching it cost the
-    // caller no file and no write permission.
+    // LMDB owns the diagnostic; what matters here is that the failed read-only
+    // open did not create its data file.
     CHECK_FALSE(envRes);
     CHECK_FALSE(std::filesystem::exists(temp.path() / "data.mdb"));
   }

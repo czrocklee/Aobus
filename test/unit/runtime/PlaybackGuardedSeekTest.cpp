@@ -44,8 +44,8 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackCommands trySeek - same-track lower replay rejects a stale published occurrence",
-            "[runtime][regression][playback][concurrency]")
+  TEST_CASE("PlaybackCommands guarded seek - same-track lower replay rejects a stale published occurrence",
+            "[runtime][unit][playback][async]")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);
@@ -56,10 +56,7 @@ namespace ao::rt::test
 
     auto const published = fixture.playback.snapshot();
     REQUIRE(published.transport.occurrenceId.value != 0);
-    auto snapshots = std::vector<PlaybackSnapshot>{};
     auto previews = std::vector<std::chrono::milliseconds>{};
-    auto const snapshotSubscription = fixture.playback.events().onSnapshot(
-      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
     auto const previewSubscription = fixture.playback.events().onSeekPreview(
       [&previews](std::chrono::milliseconds const elapsed) noexcept { previews.push_back(elapsed); });
 
@@ -73,9 +70,20 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot().transport.nowPlaying.trackId ==
           fixture.playbackTransport.state().nowPlaying.trackId);
 
-    fixture.commands().seek(
-      published.transport.occurrenceId, std::chrono::milliseconds{100}, PlaybackSeekMode::Preview);
-    CHECK_FALSE(fixture.commands().trySeek(published.transport.occurrenceId, std::chrono::milliseconds{100}));
+    auto const lowerElapsed = fixture.playbackTransport.state().elapsed;
+
+    SECTION("synchronous final seek")
+    {
+      CHECK_FALSE(fixture.commands().trySeek(published.transport.occurrenceId, std::chrono::milliseconds{100}));
+    }
+
+    SECTION("preview seek")
+    {
+      fixture.commands().seek(
+        published.transport.occurrenceId, std::chrono::milliseconds{100}, PlaybackSeekMode::Preview);
+    }
+
+    CHECK(fixture.playbackTransport.state().elapsed == lowerElapsed);
     CHECK(fixture.playback.snapshot().transport.occurrenceId == lowerOccurrence);
     CHECK(fixture.playback.snapshot().transport.finalSeekRevision == published.transport.finalSeekRevision);
     CHECK(fixture.playback.snapshot().transport.elapsed != std::chrono::milliseconds{100});
@@ -143,7 +151,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackCommands guarded seek - orthogonal backlog preserves preview and final settlement",
-            "[runtime][regression][playback][concurrency]")
+            "[runtime][unit][playback][async]")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);
@@ -189,7 +197,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackService - elapsed retains its committed anchor across lower same-track replay",
-            "[runtime][regression][playback][concurrency]")
+            "[runtime][unit][playback][async]")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);
@@ -211,7 +219,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackCommands guarded seek - service destruction discards already queued positioning",
-            "[runtime][regression][playback][lifecycle]")
+            "[runtime][unit][playback][async]")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);

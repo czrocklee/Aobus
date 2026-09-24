@@ -17,6 +17,7 @@ namespace ao::cli::test
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::IoError, .message = "propagated failure", .location = origin};
+    bool caught = false;
 
     try
     {
@@ -24,6 +25,7 @@ namespace ao::cli::test
     }
     catch (CommandError const& ex)
     {
+      caught = true;
       CHECK(ex.error().code == Error::Code::IoError);
       CHECK(std::string_view{ex.error().message} == "propagated failure");
       CHECK(ex.error().location.line() == origin.line());
@@ -31,12 +33,15 @@ namespace ao::cli::test
       CHECK(ex.code() == Error::Code::IoError);
       CHECK(std::string_view{ex.what()} == "propagated failure");
     }
+
+    REQUIRE(caught);
   }
 
   TEST_CASE("throwCommandError - preserves code and source location", "[cli][unit][error]")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::IoError, .message = "disk full", .location = origin};
+    bool caught = false;
 
     try
     {
@@ -44,16 +49,20 @@ namespace ao::cli::test
     }
     catch (CommandError const& ex)
     {
+      caught = true;
       CHECK(ex.error().code == Error::Code::IoError);
       CHECK(std::string_view{ex.error().message} == "export failed: disk full");
       CHECK(ex.error().location.line() == origin.line());
       CHECK(std::string_view{ex.error().location.function_name()} == std::string_view{origin.function_name()});
     }
+
+    REQUIRE(caught);
   }
 
   TEST_CASE("throwCommandError - captures the call site", "[cli][unit][error]")
   {
     auto const here = std::source_location::current();
+    bool caught = false;
 
     try
     {
@@ -61,12 +70,15 @@ namespace ao::cli::test
     }
     catch (CommandError const& ex)
     {
+      caught = true;
       CHECK(ex.error().code == Error::Code::InvalidInput);
       CHECK(std::string_view{ex.error().message} == "fresh failure");
       CHECK(std::string_view{ex.error().location.function_name()} == std::string_view{here.function_name()});
       CHECK(std::string_view{ex.error().location.file_name()} == std::string_view{here.file_name()});
       CHECK(ex.error().location.line() > here.line());
     }
+
+    REQUIRE(caught);
   }
 
   TEST_CASE("throwCommandError format overloads format inline and preserve codes", "[cli][unit][error]")
@@ -74,6 +86,7 @@ namespace ao::cli::test
     SECTION("not found code")
     {
       auto const here = std::source_location::current();
+      bool caught = false;
 
       try
       {
@@ -81,16 +94,20 @@ namespace ao::cli::test
       }
       catch (CommandError const& ex)
       {
+        caught = true;
         CHECK(ex.error().code == Error::Code::NotFound);
         CHECK(std::string_view{ex.error().message} == "track not found: 42");
         CHECK(std::string_view{ex.error().location.function_name()} == std::string_view{here.function_name()});
         CHECK(ex.error().location.line() > here.line());
       }
+
+      REQUIRE(caught);
     }
 
     SECTION("explicit code")
     {
       auto const here = std::source_location::current();
+      bool caught = false;
 
       try
       {
@@ -98,11 +115,14 @@ namespace ao::cli::test
       }
       catch (CommandError const& ex)
       {
+        caught = true;
         CHECK(ex.error().code == Error::Code::FormatRejected);
         CHECK(std::string_view{ex.error().message} == "filter error: bad token");
         CHECK(std::string_view{ex.error().location.function_name()} == std::string_view{here.function_name()});
         CHECK(ex.error().location.line() > here.line());
       }
+
+      REQUIRE(caught);
     }
   }
 } // namespace ao::cli::test

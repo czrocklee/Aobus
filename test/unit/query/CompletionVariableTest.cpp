@@ -117,7 +117,22 @@ namespace ao::query::test
     CHECK_FALSE(variableCompletionAtCursor("", 0));
     CHECK_FALSE(variableCompletionAtCursor("$artist", 99));
     CHECK_FALSE(variableCompletionAtCursor("$artist", 3));
-    CHECK_FALSE(variableCompletionAtCursor("foo$artist", 10));
+
+    constexpr auto kGluedVariables = std::array{
+      std::string_view{"foo$artist"},
+      std::string_view{"foo@bitrate"},
+      std::string_view{"foo#rock"},
+      std::string_view{"foo%rating"},
+    };
+
+    for (auto const text : kGluedVariables)
+    {
+      DYNAMIC_SECTION("Text: " << text)
+      {
+        CHECK_FALSE(variableCompletionAtCursor(text, text.size()));
+      }
+    }
+
     CHECK_FALSE(variableCompletionAtCursor(R"("$artist")", 5));
     CHECK_FALSE(variableCompletionAtCursor(R"(#"Rock")", 6));
     CHECK_FALSE(variableCompletionAtCursor(R"(#["Rock"])", 7));
@@ -189,6 +204,28 @@ namespace ao::query::test
 
   TEST_CASE("Completion - completes canonical query variables", "[query][unit][completion]")
   {
+    CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "")) ==
+          std::vector<std::string_view>{"title",
+                                        "artist",
+                                        "album",
+                                        "albumArtist",
+                                        "composer",
+                                        "conductor",
+                                        "ensemble",
+                                        "work",
+                                        "movement",
+                                        "soloist",
+                                        "genre",
+                                        "year",
+                                        "trackNumber",
+                                        "trackTotal",
+                                        "discNumber",
+                                        "discTotal",
+                                        "movementNumber",
+                                        "movementTotal",
+                                        "coverArt"});
+    CHECK(canonicalNames(completeQueryVariable(VariableType::Property, "")) ==
+          std::vector<std::string_view>{"duration", "bitrate", "sampleRate", "channels", "bitDepth", "codec"});
     CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "al")) ==
           std::vector<std::string_view>{"album", "albumArtist"});
     CHECK(canonicalNames(completeQueryVariable(VariableType::Property, "b")) ==
@@ -220,13 +257,15 @@ namespace ao::query::test
 
   TEST_CASE("Completion - does not prefix match aliases", "[query][unit][completion]")
   {
-    CHECK(completeQueryVariable(VariableType::Metadata, "t").size() >
-          completeQueryVariable(VariableType::Metadata, "tn").size());
+    CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "t")) ==
+          std::vector<std::string_view>{"title", "trackNumber", "trackTotal"});
+    CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "tn")) ==
+          std::vector<std::string_view>{"trackNumber"});
     CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "d")) ==
           std::vector<std::string_view>{"discNumber", "discTotal"});
   }
 
-  TEST_CASE("FieldCatalog - resolves every descriptor through parsing and completion", "[query][unit][field-catalog]")
+  TEST_CASE("FieldCatalog - resolves every descriptor through lookup and completion", "[query][unit][field-catalog]")
   {
     for (auto const type : {VariableType::Metadata, VariableType::Property})
     {

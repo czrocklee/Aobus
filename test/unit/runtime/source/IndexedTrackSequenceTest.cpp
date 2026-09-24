@@ -58,7 +58,9 @@ namespace ao::rt::test
 
     CHECK(sequence.vector() == std::vector{TrackId{2}, TrackId{5}, TrackId{6}, TrackId{4}});
     CHECK(sequence.indexOf(TrackId{2}) == 0);
+    CHECK(sequence.indexOf(TrackId{5}) == 1);
     CHECK(sequence.indexOf(TrackId{6}) == 2);
+    CHECK(sequence.indexOf(TrackId{4}) == 3);
     CHECK_FALSE(sequence.contains(TrackId{1}));
     auto const after = ::ao::rt::detail::RuntimeOperationProbe::counts(sequence);
     CHECK(after.indexRebuilds == before.indexRebuilds + 1);

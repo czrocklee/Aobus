@@ -38,7 +38,7 @@
 namespace ao::rt::test
 {
   TEST_CASE("Track sources - mixed commit publishes final membership once before phase two",
-            "[runtime][regression][source][concurrency]")
+            "[runtime][unit][source][concurrency]")
   {
     auto fixture = MusicLibraryFixture{};
     auto& storage = fixture.library();

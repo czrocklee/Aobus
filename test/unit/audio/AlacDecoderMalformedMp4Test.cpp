@@ -13,8 +13,8 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::test
@@ -39,6 +39,7 @@ namespace ao::audio::test
       std::vector<std::uint8_t> payload;
       std::uint32_t chunkOffset = kMdatPayloadOffset;
       std::uint32_t sampleSize = 0;
+      std::uint32_t sampleCount = 1;
       std::uint32_t timescale = 44100;
       std::uint32_t duration = 44100;
       bool includeTiming = true;
@@ -55,6 +56,14 @@ namespace ao::audio::test
       return {begin, begin + bytes.size()};
     }
 
+    std::uint32_t readBigEndian32(std::vector<std::uint8_t> const& bytes, std::size_t offset)
+    {
+      REQUIRE(offset + 4 <= bytes.size());
+      return (static_cast<std::uint32_t>(bytes[offset]) << 24U) |
+             (static_cast<std::uint32_t>(bytes[offset + 1]) << 16U) |
+             (static_cast<std::uint32_t>(bytes[offset + 2]) << 8U) | static_cast<std::uint32_t>(bytes[offset + 3]);
+    }
+
     void writeBigEndian32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32_t value)
     {
       REQUIRE(offset + 4 <= bytes.size());
@@ -66,12 +75,7 @@ namespace ao::audio::test
 
     AlacFixtureBytes loadAlacFixture()
     {
-      auto const path = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "alac16.m4a";
-
-      if (!std::filesystem::exists(path))
-      {
-        SKIP("Required audio fixture missing: " << path);
-      }
+      auto const path = requireAudioFixture("alac16.m4a");
 
       auto const fileData = readFileBytes(path);
       auto const demuxerRes = media::mp4::Demuxer::parse(asBytes(fileData), "alac");
@@ -107,8 +111,8 @@ namespace ao::audio::test
       {
         auto stblBody = std::vector<std::uint8_t>{};
         auto const stsd = ao::test::mp4::makeStsdAtom("alac", cookie, options.timescale);
-        auto const stsz = ao::test::mp4::makeStszAtom(options.sampleSize);
-        auto const stsc = ao::test::mp4::makeStscAtom();
+        auto const stsz = ao::test::mp4::makeStszAtom(options.sampleSize, options.sampleCount);
+        auto const stsc = ao::test::mp4::makeStscAtom(options.sampleCount);
         auto const stco = ao::test::mp4::makeStcoAtom(options.chunkOffset);
         stblBody.insert(stblBody.end(), stsd.begin(), stsd.end());
         stblBody.insert(stblBody.end(), stsz.begin(), stsz.end());
@@ -235,16 +239,27 @@ namespace ao::audio::test
 
     SECTION("Uses frame length when sample timing is absent")
     {
-      auto const mp4Data =
-        makeSyntheticAlacMp4(fixture.cookie, {.payload = fixture.firstPacket, .includeTiming = false});
+      auto payload = fixture.firstPacket;
+      payload.insert(payload.end(), fixture.firstPacket.begin(), fixture.firstPacket.end());
+      auto const frameLength = readBigEndian32(fixture.cookie, kAlacCookieFrameLengthOffset);
+      auto const mp4Data = makeSyntheticAlacMp4(fixture.cookie,
+                                                {.payload = std::move(payload),
+                                                 .sampleSize = static_cast<std::uint32_t>(fixture.firstPacket.size()),
+                                                 .sampleCount = 2,
+                                                 .includeTiming = false});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
       auto decoderPtr = ao::test::requireValue(AlacDecoderSession::open(temp.path, SampleEncoding::Signed16Le));
       auto& decoder = *decoderPtr;
 
-      auto const blockRes = decoder.readNextBlock();
-      REQUIRE(blockRes);
-      CHECK(blockRes->firstFrameIndex == 0);
-      CHECK(blockRes->frames > 0);
+      auto const firstBlockRes = decoder.readNextBlock();
+      REQUIRE(firstBlockRes);
+      REQUIRE(firstBlockRes->frames > 0);
+      CHECK(firstBlockRes->firstFrameIndex == 0);
+
+      auto const secondBlockRes = decoder.readNextBlock();
+      REQUIRE(secondBlockRes);
+      CHECK(secondBlockRes->frames > 0);
+      CHECK(secondBlockRes->firstFrameIndex == frameLength);
     }
   }
 } // namespace ao::audio::test

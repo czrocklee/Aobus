@@ -19,21 +19,23 @@ namespace ao::tui::test
   TEST_CASE("Executor - dispatch runs immediately on the owner thread", "[tui][unit][executor]")
   {
     auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
-    auto executor = Executor{screen};
     bool ran = false;
+    bool ranOnOwner = false;
+    auto executor = Executor{screen};
 
     executor.dispatch(
       [&]
       {
         ran = true;
-        CHECK(executor.isCurrent());
+        ranOnOwner = executor.isCurrent();
       });
     executor.dispatch({});
 
     CHECK(ran);
+    CHECK(ranOnOwner);
   }
 
-  TEST_CASE("Executor - defer queues work onto the FTXUI loop", "[tui][unit][executor]")
+  TEST_CASE("Executor - defer queues work onto the FTXUI loop", "[tui][unit][executor][async]")
   {
     auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
     auto executor = Executor{screen};
@@ -52,18 +54,19 @@ namespace ao::tui::test
     CHECK(ran);
   }
 
-  TEST_CASE("Executor - dispatch before the FTXUI loop starts can be drained", "[tui][unit][executor]")
+  TEST_CASE("Executor - dispatch before the FTXUI loop starts can be drained", "[tui][unit][executor][concurrency]")
   {
     auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
-    auto executor = Executor{screen};
     auto ran = std::atomic_bool{false};
+    bool ranOnOwner = false;
+    auto executor = Executor{screen};
 
     auto worker = std::jthread{[&]
                                {
                                  executor.dispatch(
                                    [&]
                                    {
-                                     CHECK(executor.isCurrent());
+                                     ranOnOwner = executor.isCurrent();
                                      ran = true;
                                      screen.ExitLoopClosure()();
                                    });
@@ -77,17 +80,20 @@ namespace ao::tui::test
     executor.drainPendingTasks();
 
     CHECK(ran.load());
+    CHECK(ranOnOwner);
   }
 
   TEST_CASE("Executor - loop checkpoint recovers callbacks queued while terminal hooks are absent",
-            "[tui][regression][executor][concurrency]")
+            "[tui][unit][executor][concurrency]")
   {
+    auto completed = std::vector<std::int32_t>{};
+    auto ranOnOwner = std::vector<bool>{};
+    auto ranDuringInput = std::vector<bool>{};
+    bool handlingInput = false;
     auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
     auto executor = Executor{screen};
     auto rendererPtr = ftxui::Renderer([] { return ftxui::text(""); });
     auto loop = ftxui::Loop{&screen, rendererPtr};
-    auto completed = std::vector<std::int32_t>{};
-    bool handlingInput = false;
     auto enqueueFromWorker = [&](std::int32_t const value)
     {
       auto worker = std::jthread{[&, value]
@@ -95,8 +101,8 @@ namespace ao::tui::test
                                    executor.dispatch(
                                      [&, value]
                                      {
-                                       CHECK(executor.isCurrent());
-                                       CHECK_FALSE(handlingInput);
+                                       ranOnOwner.push_back(executor.isCurrent());
+                                       ranDuringInput.push_back(handlingInput);
                                        completed.push_back(value);
                                      });
                                  }};
@@ -123,8 +129,12 @@ namespace ao::tui::test
     // App drains here, after the FTXUI turn has unwound its input handlers.
     executor.drainPendingTasks();
     CHECK(completed == std::vector<std::int32_t>{1, 2});
+    CHECK(ranOnOwner == std::vector<bool>{true, true});
+    CHECK(ranDuringInput == std::vector<bool>{false, false});
     enqueueFromWorker(3);
     loop.RunOnce();
     CHECK(completed == std::vector<std::int32_t>{1, 2, 3});
+    CHECK(ranOnOwner == std::vector<bool>{true, true, true});
+    CHECK(ranDuringInput == std::vector<bool>{false, false, false});
   }
 } // namespace ao::tui::test

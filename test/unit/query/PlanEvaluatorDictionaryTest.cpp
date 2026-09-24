@@ -200,7 +200,7 @@ namespace ao::query::test
   }
 
   TEST_CASE("PlanEvaluator - nested comparison does not leak a dictionary constant into its parent",
-            "[query][unit][plan-evaluator][regression]")
+            "[query][unit][plan-evaluator]")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();

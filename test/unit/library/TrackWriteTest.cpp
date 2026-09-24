@@ -6,11 +6,10 @@
 #include "lib/library/TrackRecordValidation.h"
 #include "lib/lmdb/detail/TransactionFailure.h"
 #include "test/unit/TestFixtureSupport.h"
-#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
@@ -20,11 +19,9 @@
 #include <ao/library/WriteTransaction.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <lmdb.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -51,17 +48,6 @@ namespace ao::library::test
     static_assert(!HasRawRecordUpdate<TrackStore::Writer>);
     static_assert(noexcept(std::declval<TrackBuilder::PreparedHot const&>().writeTo(std::span<std::byte>{})));
     static_assert(noexcept(std::declval<TrackBuilder::PreparedCold const&>().writeTo(std::span<std::byte>{})));
-
-    void seedColdOnlyTrack(std::filesystem::path const& path)
-    {
-      initializeLibraryStorage(path);
-      auto environment = lmdb::test::openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
-      auto transaction = lmdb::test::beginWriteTransaction(environment);
-      std::ignore = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_hot");
-      auto coldDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "tracks_cold");
-      REQUIRE(coldDatabase.writer(transaction).create(1, makeColdData()));
-      REQUIRE(transaction.commit());
-    }
 
     std::pair<TrackBuilder::PreparedHot, TrackBuilder::PreparedCold> prepareTrack(TrackBuilder& builder,
                                                                                   WriteTransaction& transaction,
@@ -94,6 +80,12 @@ namespace ao::library::test
     CHECK(optView->metadata().title() == "Created Track");
     CHECK(optView->property().uri() == "created.flac");
     REQUIRE(transaction.commit());
+
+    auto readTransaction = fixture.library.readTransaction();
+    auto const optCommitted = fixture.store.reader(readTransaction).get(trackId, TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optCommitted);
+    CHECK(optCommitted->metadata().title() == "Created Track");
+    CHECK(optCommitted->property().uri() == "created.flac");
   }
 
   TEST_CASE("TrackStore - prepared records emit canonical hot and cold bytes", "[library][unit][track-store]")
@@ -143,6 +135,12 @@ namespace ao::library::test
     CHECK(optView->metadata().title() == "Updated Track");
     CHECK(optView->property().uri() == "updated.flac");
     REQUIRE(transaction.commit());
+
+    auto readTransaction = fixture.library.readTransaction();
+    auto const optCommitted = fixture.store.reader(readTransaction).get(trackId, TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optCommitted);
+    CHECK(optCommitted->metadata().title() == "Updated Track");
+    CHECK(optCommitted->property().uri() == "updated.flac");
   }
 
   TEST_CASE("prepared track data is a snapshot unaffected by later builder mutation", "[library][unit][track]")
@@ -151,51 +149,39 @@ namespace ao::library::test
     auto transaction = writeTransaction(fixture.library);
     auto builder = TrackBuilder::makeEmpty();
 
+    auto const [preparedHot, preparedCold] = [&]
     {
-      // Inputs the builder only borrows as string_views; they go out of
-      // scope after prepare to prove the prepared value owns its bytes.
+      // Borrowed input strings die before the prepared values are consumed.
       auto const title = std::string{"Snapshot Title"};
       auto const uri = std::string{"snapshot.flac"};
       builder.metadata().title(title).trackNumber(3);
       builder.property().uri(uri);
+      return prepareTrack(builder, transaction, fixture.library.resources());
+    }();
 
-      auto const [preparedHot, preparedCold] = prepareTrack(builder, transaction, fixture.library.resources());
+    auto const longerTitle = std::string{"Mutated Title That Is Much Longer Than Before"};
+    auto const longerUri = std::string{"mutated/path/that/is/much/longer.flac"};
+    builder.metadata().title(longerTitle).trackNumber(9);
+    builder.property().uri(longerUri);
 
-      auto const longerTitle = std::string{"Mutated Title That Is Much Longer Than Before"};
-      auto const longerUri = std::string{"mutated/path/that/is/much/longer.flac"};
-      builder.metadata().title(longerTitle).trackNumber(9);
-      builder.property().uri(longerUri);
+    auto writer = physicalWriter(fixture.store, transaction);
+    auto createRes = createPreparedTrackRecord(writer, preparedHot, preparedCold);
+    REQUIRE(createRes);
 
-      auto writer = physicalWriter(fixture.store, transaction);
-
-      auto createRes = createPreparedTrackRecord(writer, preparedHot, preparedCold);
-      REQUIRE(createRes);
-
-      auto const trackId = *createRes;
-      auto const optView = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView);
-      CHECK(trackId != kInvalidTrackId);
-      CHECK(optView->isHotValid());
-      CHECK(optView->isColdValid());
-      CHECK(optView->metadata().title() == "Snapshot Title");
-      CHECK(optView->metadata().trackNumber() == 3);
-      CHECK(optView->property().uri() == "snapshot.flac");
-      REQUIRE(transaction.commit());
-    }
-  }
-
-  TEST_CASE("MusicLibrary - open rejects a cold-only Track record", "[library][regression][track-store]")
-  {
-    auto const temp = ao::test::TempDir{};
-    seedColdOnlyTrack(temp.path());
-    auto const libraryRes = openTestMusicLibrary(temp.path(), temp.path());
-
-    REQUIRE_FALSE(libraryRes);
-    CHECK(libraryRes.error().code == Error::Code::CorruptData);
+    auto const trackId = *createRes;
+    auto const optView = writer.get(trackId, TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optView);
+    CHECK(trackId != kInvalidTrackId);
+    CHECK(optView->isHotValid());
+    CHECK(optView->isColdValid());
+    CHECK(optView->metadata().title() == "Snapshot Title");
+    CHECK(optView->metadata().trackNumber() == 3);
+    CHECK(optView->property().uri() == "snapshot.flac");
+    REQUIRE(transaction.commit());
   }
 
   TEST_CASE("updatePreparedTrackRecord rolls back its hot update when the cold reservation fails",
-            "[library][regression][track-store]")
+            "[library][unit][track-store]")
   {
     constexpr std::uint64_t kInitialMapSize = std::uint64_t{1} * 1024 * 1024;
     constexpr std::uint64_t kUpdateHeadroom = std::uint64_t{32} * 1024;

@@ -26,7 +26,7 @@ namespace ao::media::file::test
   static_assert(std::is_move_constructible_v<File>);
   static_assert(!std::is_move_assignable_v<File>);
 
-  TEST_CASE("Media File - recognizes and opens supported extensions", "[media][unit][factory]")
+  TEST_CASE("Media File - recognizes and opens supported extensions", "[media][unit][file][factory]")
   {
     constexpr auto kExtensions = std::to_array<std::string_view>({".mp3", ".m4a", ".flac", ".wav", ".opus"});
 
@@ -39,7 +39,7 @@ namespace ao::media::file::test
     }
   }
 
-  TEST_CASE("Media File - reports unsupported and inaccessible inputs", "[media][unit][factory]")
+  TEST_CASE("Media File - rejects unsupported extensions", "[media][unit][file][factory]")
   {
     SECTION("unknown extension")
     {
@@ -60,16 +60,19 @@ namespace ao::media::file::test
       REQUIRE_FALSE(fileRes);
       CHECK(fileRes.error().code == Error::Code::NotSupported);
     }
-
-    SECTION("missing supported file")
-    {
-      auto fileRes = File::open("/tmp/aobus-missing-file.mp3");
-      REQUIRE_FALSE(fileRes);
-      CHECK(fileRes.error().code == Error::Code::IoError);
-    }
   }
 
-  TEST_CASE("Media File - emits no visitor callbacks when required parsing fails", "[media][unit][visitor]")
+  TEST_CASE("Media File - reports inaccessible supported input", "[media][unit][file][factory]")
+  {
+    auto const tempDir = TempDir{};
+    auto const path = tempDir.path() / "missing.mp3";
+    REQUIRE(File::isSupported(path));
+    auto fileRes = File::open(path);
+    REQUIRE_FALSE(fileRes);
+    CHECK(fileRes.error().code == Error::Code::IoError);
+  }
+
+  TEST_CASE("Media File - emits no visitor callbacks when required parsing fails", "[media][unit][file][visitor]")
   {
     auto const bytes = std::to_array<std::uint8_t>({'b', 'a', 'd'});
     auto const temp = TempFile{bytes, ".flac"};
@@ -84,7 +87,7 @@ namespace ao::media::file::test
     CHECK(content.callCount() == 0);
   }
 
-  TEST_CASE("Media File - moving transfers stable borrowed views", "[media][unit][lifetime]")
+  TEST_CASE("Media File - moving transfers stable borrowed views", "[media][unit][file]")
   {
     auto file = requireValue(File::open(audio::test::requireAudioFixture("basic_metadata.flac")));
     auto firstPayload = requireValue(file.audioPayload());
@@ -100,7 +103,7 @@ namespace ao::media::file::test
     CHECK(content.callCount() > 0);
   }
 
-  TEST_CASE("Media File - visit emits fields in the documented callback order", "[media][unit][visitor]")
+  TEST_CASE("Media File - visit emits fields in the documented callback order", "[media][unit][file][visitor]")
   {
     auto file = requireValue(File::open(audio::test::requireAudioFixture("classical_metadata.mp3")));
     auto content = RecordedContent{};
@@ -137,7 +140,7 @@ namespace ao::media::file::test
     CHECK(content.events() == expected);
   }
 
-  TEST_CASE("Media File - repeated visits retain earlier decoded string views", "[media][regression][lifetime]")
+  TEST_CASE("Media File - repeated visits retain earlier decoded string views", "[media][unit][file]")
   {
     auto file = requireValue(File::open(audio::test::requireAudioFixture("basic_metadata.mp3")));
     auto first = RecordedContent{};

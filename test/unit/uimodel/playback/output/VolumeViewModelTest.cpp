@@ -18,7 +18,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("VolumeViewModel - view state generation", "[uimodel][unit][playback]")
+  TEST_CASE("VolumeViewModel - view state generation", "[uimodel][integration][playback]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;
@@ -102,7 +102,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("VolumeViewModel - unrelated playback snapshots do not rerender", "[uimodel][regression][playback][volume]")
+  TEST_CASE("VolumeViewModel - unrelated playback snapshots do not rerender", "[uimodel][unit][playback]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<VolumeViewState>{};
@@ -111,7 +111,7 @@ namespace ao::uimodel::test
     REQUIRE(log.states.size() == 1);
     fixture.commands().setShuffleMode(ShuffleMode::On);
 
-    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    REQUIRE(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(log.states.size() == 1);
   }
 

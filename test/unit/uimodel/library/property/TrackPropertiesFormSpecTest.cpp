@@ -12,70 +12,55 @@
 
 namespace ao::uimodel::test
 {
-  namespace
+  TEST_CASE("TrackPropertiesFormSpec - projects editable metadata rows", "[uimodel][unit][property]")
   {
-    std::vector<rt::TrackField> fieldsFrom(std::vector<TrackPropertiesFormRow> const& rows)
-    {
-      auto fields = std::vector<rt::TrackField>{};
-      fields.reserve(rows.size());
+    using E = TrackPropertiesFormEditorKind;
+    using F = rt::TrackField;
 
-      for (auto const& row : rows)
-      {
-        fields.push_back(row.field);
-      }
-
-      return fields;
-    }
-  } // namespace
-
-  TEST_CASE("TrackPropertiesFormSpec - projects editable metadata rows", "[uimodel][unit][library][property]")
-  {
     auto const spec = buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
+    auto const expected = std::vector<TrackPropertiesFormRow>{
+      {.field = F::Title, .label = "Title", .editorKind = E::Text},
+      {.field = F::Artist, .label = "Artist", .editorKind = E::Text},
+      {.field = F::Album, .label = "Album", .editorKind = E::Text},
+      {.field = F::AlbumArtist, .label = "Album Artist", .editorKind = E::Text},
+      {.field = F::Genre, .label = "Genre", .editorKind = E::Text},
+      {.field = F::Composer, .label = "Composer", .editorKind = E::Text},
+      {.field = F::Conductor, .label = "Conductor", .editorKind = E::Text},
+      {.field = F::Ensemble, .label = "Ensemble", .editorKind = E::Text},
+      {.field = F::Work, .label = "Work", .editorKind = E::Text},
+      {.field = F::Movement, .label = "Movement", .editorKind = E::Text},
+      {.field = F::Soloist, .label = "Soloist", .editorKind = E::Text},
+      {.field = F::Year, .label = "Year", .editorKind = E::Number},
+      {.field = F::DiscNumber, .label = "Disc", .editorKind = E::Number},
+      {.field = F::DiscTotal, .label = "Total Discs", .editorKind = E::Number},
+      {.field = F::TrackNumber, .label = "Track", .editorKind = E::Number},
+      {.field = F::TrackTotal, .label = "Total Tracks", .editorKind = E::Number},
+      {.field = F::MovementNumber, .label = "Movement No.", .editorKind = E::Number},
+      {.field = F::MovementTotal, .label = "Total Movements", .editorKind = E::Number},
+    };
 
-    CHECK(fieldsFrom(spec.metadataRows) == std::vector{rt::TrackField::Title,
-                                                       rt::TrackField::Artist,
-                                                       rt::TrackField::Album,
-                                                       rt::TrackField::AlbumArtist,
-                                                       rt::TrackField::Genre,
-                                                       rt::TrackField::Composer,
-                                                       rt::TrackField::Conductor,
-                                                       rt::TrackField::Ensemble,
-                                                       rt::TrackField::Work,
-                                                       rt::TrackField::Movement,
-                                                       rt::TrackField::Soloist,
-                                                       rt::TrackField::Year,
-                                                       rt::TrackField::DiscNumber,
-                                                       rt::TrackField::DiscTotal,
-                                                       rt::TrackField::TrackNumber,
-                                                       rt::TrackField::TrackTotal,
-                                                       rt::TrackField::MovementNumber,
-                                                       rt::TrackField::MovementTotal});
-
-    REQUIRE(spec.metadataRows.size() > 9U);
-    CHECK(spec.metadataRows[0].label == "Title");
-    CHECK(spec.metadataRows[0].editorKind == TrackPropertiesFormEditorKind::Text);
-    CHECK(spec.metadataRows[11].field == rt::TrackField::Year);
-    CHECK(spec.metadataRows[11].label == "Year");
-    CHECK(spec.metadataRows[11].editorKind == TrackPropertiesFormEditorKind::Number);
+    CHECK(spec.metadataRows == expected);
   }
 
-  TEST_CASE("TrackPropertiesFormSpec - projects readonly technical property rows", "[uimodel][unit][library][property]")
+  TEST_CASE("TrackPropertiesFormSpec - projects readonly technical property rows", "[uimodel][unit][property]")
   {
+    using E = TrackPropertiesFormEditorKind;
+    using F = rt::TrackField;
+
     auto const spec = buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
+    auto const expected = std::vector<TrackPropertiesFormRow>{
+      {.field = F::Duration, .label = "Duration", .editorKind = E::ReadonlyText},
+      {.field = F::FilePath, .label = "File Path", .editorKind = E::ReadonlyText},
+      {.field = F::Codec, .label = "Codec", .editorKind = E::ReadonlyText},
+      {.field = F::SampleRate, .label = "Sample Rate", .editorKind = E::ReadonlyText},
+      {.field = F::Channels, .label = "Channels", .editorKind = E::ReadonlyText},
+      {.field = F::BitDepth, .label = "Bit Depth", .editorKind = E::ReadonlyText},
+      {.field = F::Bitrate, .label = "Bitrate", .editorKind = E::ReadonlyText},
+      {.field = F::FileSize, .label = "File Size", .editorKind = E::ReadonlyText},
+      {.field = F::ModifiedTime, .label = "Modified", .editorKind = E::ReadonlyText},
+    };
 
-    CHECK(fieldsFrom(spec.propertyRows) == std::vector{rt::TrackField::Duration,
-                                                       rt::TrackField::FilePath,
-                                                       rt::TrackField::Codec,
-                                                       rt::TrackField::SampleRate,
-                                                       rt::TrackField::Channels,
-                                                       rt::TrackField::BitDepth,
-                                                       rt::TrackField::Bitrate,
-                                                       rt::TrackField::FileSize,
-                                                       rt::TrackField::ModifiedTime});
-
-    REQUIRE(spec.propertyRows.size() > 3U);
-    CHECK(spec.propertyRows[0].label == "Duration");
-    CHECK(spec.propertyRows[0].editorKind == TrackPropertiesFormEditorKind::ReadonlyText);
+    CHECK(spec.propertyRows == expected);
   }
 
   TEST_CASE("TrackPropertiesFormSpec - owns labels from a temporary locale catalog",

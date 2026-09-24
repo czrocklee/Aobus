@@ -14,7 +14,6 @@
 #include <fstream>
 #include <ios>
 #include <string>
-#include <string_view>
 
 namespace ao::gtk::test
 {
@@ -38,7 +37,7 @@ namespace ao::gtk::test
     CHECK_FALSE(std::filesystem::exists("classic.yaml"));
   }
 
-  TEST_CASE("ShellLayoutStore - persists layout documents and default selection", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - loads and saves layout documents", "[gtk][unit][app][layout]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
@@ -61,15 +60,26 @@ namespace ao::gtk::test
 
       REQUIRE(store.save(doc, "classic"));
 
-      auto const store2 = ShellLayoutStore{layoutsDir};
-      auto const loadedRes = store2.load("classic");
+      auto const freshStore = ShellLayoutStore{layoutsDir};
+      auto const loadedRes = freshStore.load("classic");
 
       REQUIRE(loadedRes);
       REQUIRE(*loadedRes);
       CHECK((*loadedRes)->version == uimodel::kLayoutDocumentVersion);
       CHECK((*loadedRes)->root.type == "box");
       CHECK((*loadedRes)->root.id == "my-root");
+      CHECK((*loadedRes)->root.props.empty());
+      CHECK((*loadedRes)->root.layout.empty());
+      CHECK((*loadedRes)->root.children.empty());
+      CHECK_FALSE((*loadedRes)->root.optTooltip);
+      CHECK((*loadedRes)->templates.empty());
     }
+  }
+
+  TEST_CASE("ShellLayoutStore - rejected reads report exact errors and preserve bytes", "[gtk][unit][app][layout]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
 
     SECTION("load reports a corrupted file")
     {
@@ -115,6 +125,12 @@ namespace ao::gtk::test
       CHECK(res.error().code == Error::Code::ValueTooLarge);
       CHECK(ao::test::readFile(filePath) == original);
     }
+  }
+
+  TEST_CASE("ShellLayoutStore - failed saves preserve the existing layout", "[gtk][unit][app][layout]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
 
     SECTION("save rejects an over-budget candidate and preserves the existing layout")
     {
@@ -153,20 +169,22 @@ namespace ao::gtk::test
       CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(ao::test::readFile(filePath) == original);
     }
+  }
 
-    SECTION("remove deletes the file, remove on a missing file is a no-op")
-    {
-      auto store = ShellLayoutStore{layoutsDir};
-      auto doc = uimodel::LayoutDocument{};
-      doc.root.type = "box";
-      REQUIRE(store.save(doc, "classic"));
+  TEST_CASE("ShellLayoutStore - remove deletes a layout idempotently", "[gtk][unit][app][layout]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
+    auto store = ShellLayoutStore{layoutsDir};
+    auto doc = uimodel::LayoutDocument{};
+    doc.root.type = "box";
+    REQUIRE(store.save(doc, "classic"));
 
-      CHECK(std::filesystem::exists(layoutsDir / "classic.yaml"));
+    CHECK(std::filesystem::exists(layoutsDir / "classic.yaml"));
 
-      REQUIRE(store.remove("classic"));
-      CHECK(!std::filesystem::exists(layoutsDir / "classic.yaml"));
+    REQUIRE(store.remove("classic"));
+    CHECK_FALSE(std::filesystem::exists(layoutsDir / "classic.yaml"));
 
-      REQUIRE(store.remove("classic"));
-    }
+    REQUIRE(store.remove("classic"));
   }
 } // namespace ao::gtk::test

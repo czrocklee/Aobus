@@ -4,6 +4,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryWrite.h>
@@ -16,6 +17,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -153,10 +155,8 @@ namespace ao::rt::test
     {
       auto const source = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "empty.flac";
 
-      if (!std::filesystem::exists(source))
-      {
-        return {};
-      }
+      INFO("Required audio fixture: " << source);
+      REQUIRE(std::filesystem::is_regular_file(source));
 
       auto const destination = libraryFixture.root() / name;
       std::filesystem::create_directories(destination.parent_path());
@@ -281,8 +281,33 @@ namespace ao::rt::test
 
     auto const commitRes = commandsFixture.runTask(commands.createListAsync(draft));
     REQUIRE(commitRes);
-    CHECK(hasList(libraryFixture, *commitRes));
+    auto transaction = libraryFixture.library().readTransaction();
+    auto const optList = libraryFixture.library().lists().reader(transaction).get(*commitRes);
+    REQUIRE(optList);
+    CHECK(optList->name() == "Draft");
+    CHECK(optList->filter().empty());
     CHECK(recorder.listsMutated == 1);
+  }
+
+  TEST_CASE("LibraryCommands - list creation preview rejects an invalid draft without committing",
+            "[runtime][unit][library][dry-run]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+    auto recorder = ChangeRecorder{changes};
+    auto const revisionBefore = libraryFixture.library().libraryRevision(libraryFixture.library().readTransaction());
+    auto draft = ListDraft{.name = "Invalid", .expression = "("};
+
+    auto const previewRes = commandsFixture.runTask(commands.previewCreateListAsync(draft));
+
+    REQUIRE_FALSE(previewRes);
+    CHECK(previewRes.error().code == Error::Code::FormatRejected);
+    CHECK(previewRes.error().message.contains("invalid list filter"));
+    CHECK(listCount(libraryFixture) == 0);
+    CHECK(libraryFixture.library().libraryRevision(libraryFixture.library().readTransaction()) == revisionBefore);
+    CHECK(recorder.listsMutated == 0);
   }
 
   TEST_CASE("LibraryCommands - dry-run previews list updates without committing", "[runtime][unit][library][dry-run]")
@@ -300,6 +325,7 @@ namespace ao::rt::test
 
     REQUIRE(dryRunRes);
     CHECK(dryRunRes->changed);
+    REQUIRE(dryRunRes->fieldChanges.size() == 1);
     CHECK(dryRunRes->fieldChanges[0] == ListFieldChange{.field = "name", .oldValue = "Before", .newValue = "After"});
     CHECK(listName(libraryFixture, listId) == "Before");
     CHECK(containsListOrderTrack(libraryFixture, listId, trackId));
@@ -379,11 +405,7 @@ namespace ao::rt::test
     auto recorder = ChangeRecorder{changes};
     auto const absValidFile = copyFixtureAudio(libraryFixture, "music/song.flac");
 
-    if (!std::filesystem::exists(absValidFile))
-    {
-      SUCCEED("Skipping test because test file is missing");
-      return;
-    }
+    REQUIRE(std::filesystem::is_regular_file(absValidFile));
 
     auto const dryRunRes = commandsFixture.runTask(commands.previewCreateTrackFromFileAsync(absValidFile));
 

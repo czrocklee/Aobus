@@ -90,6 +90,7 @@ namespace ao::uimodel::test
     REQUIRE(ListPresentationPreferenceYamlSchema{}.serialize(tree.rootref(), state));
     CHECK(yaml::scalarView(tree.rootref()["version"]) == "1");
     REQUIRE(tree.rootref()["preferences"].is_seq());
+    REQUIRE(tree.rootref()["preferences"].num_children() == 1);
     CHECK(yaml::scalarView(tree.rootref()["preferences"][0]["presentationId"]) == "plugin-preset");
 
     auto const decodedRes =
@@ -137,6 +138,51 @@ namespace ao::uimodel::test
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
       CHECK(decodedRes.error().message.contains("future"));
+    }
+
+    SECTION("Unknown preference keys are rejected")
+    {
+      auto const* source = R"(
+        version: 1
+        preferences:
+          - listId: 1
+            presentationId: albums
+            future: true
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes =
+        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("future"));
+    }
+
+    SECTION("Preference sequence entries must be mappings")
+    {
+      auto const* source = "version: 1\npreferences:\n  - malformed\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes =
+        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("preferences"));
+    }
+
+    SECTION("Missing nested presentation id is rejected")
+    {
+      auto const* source = "version: 1\npreferences:\n  - listId: 1\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes =
+        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("presentationId"));
     }
 
     SECTION("Malformed nested entries reject the whole candidate")

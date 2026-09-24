@@ -50,6 +50,8 @@ namespace ao::desktop::test
     auto encodedRes = librarySuccessorArguments(*parsedRes->optRequest);
 
     REQUIRE(encodedRes);
+    CHECK(*encodedRes ==
+          std::vector<std::string>{"--aobus-successor", "--library-root", rootText, "--scan-after-open"});
     auto roundTripViews = std::vector<std::string_view>{};
 
     for (auto const& argument : *encodedRes)

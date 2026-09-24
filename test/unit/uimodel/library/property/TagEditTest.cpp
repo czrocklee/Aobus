@@ -35,7 +35,8 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("applyTagEdit reports tag mutations for a bound authoring session", "[uimodel][unit][tag-edit]")
+  TEST_CASE("applyTagEdit reports tag mutations for a bound authoring session",
+            "[uimodel][integration][tag-edit][concurrency]")
   {
     auto fixture = TrackAuthoringFixture{2};
     auto const& textCatalog = ao::test::englishMessageCatalog();
@@ -53,6 +54,25 @@ namespace ao::uimodel::test
       CHECK(fixture.tags(trackId).empty());
     }
 
+    SECTION("a submitted semantic no-op keeps the session current")
+    {
+      auto session = beginSession(fixture, std::array{trackId});
+      auto const setupRes = fixture.runTask(session.submitTagsAsync({"Tag1"}, {}));
+      REQUIRE(setupRes);
+      REQUIRE(setupRes->status == rt::AuthoringStatus::Applied);
+      auto const revision = session.boundRevision();
+
+      auto const res = fixture.runTask(applyTagEditAsync(session, textCatalog, {"Tag1"}, {}));
+
+      REQUIRE(res);
+      CHECK(res->status == rt::AuthoringStatus::NoOp);
+      CHECK(res->notificationText.empty());
+      CHECK(session.isCurrent());
+      CHECK(session.boundRevision() == revision);
+      CHECK(fixture.library().authoringAvailability().libraryRevision == revision);
+      CHECK(fixture.tags(trackId) == std::vector<std::string>{"Tag1"});
+    }
+
     SECTION("an intervening commit reports the edit as stale")
     {
       auto session = beginSession(fixture, std::array{trackId});
@@ -63,6 +83,33 @@ namespace ao::uimodel::test
       REQUIRE(res);
       CHECK(res->status == rt::AuthoringStatus::Stale);
       CHECK(res->notificationText == "Library changed while the tag editor was open. Reload and try again.");
+      CHECK(fixture.tags(trackId).empty());
+    }
+
+    SECTION("closed runtime authoring reports the edit as unavailable")
+    {
+      auto session = beginSession(fixture, std::array{trackId});
+      fixture.library().beginClosing();
+
+      auto const res = fixture.runTask(applyTagEditAsync(session, textCatalog, {"Tag1"}, {}));
+
+      REQUIRE(res);
+      CHECK(res->status == rt::AuthoringStatus::Unavailable);
+      CHECK(res->notificationText == "Library changed while the tag editor was open. Reload and try again.");
+      CHECK_FALSE(session.isCurrent());
+      CHECK(fixture.tags(trackId).empty());
+    }
+
+    SECTION("overlapping add and remove input propagates InvalidInput")
+    {
+      auto session = beginSession(fixture, std::array{trackId});
+
+      auto const res = fixture.runTask(applyTagEditAsync(session, textCatalog, {"Tag1"}, {"Tag1"}));
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message == "A tag cannot be both added and removed");
+      CHECK_FALSE(session.isCurrent());
       CHECK(fixture.tags(trackId).empty());
     }
 

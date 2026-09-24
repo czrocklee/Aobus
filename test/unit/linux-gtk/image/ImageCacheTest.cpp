@@ -48,6 +48,39 @@ namespace ao::gtk::test
       CHECK(cache.get(ImageCacheKey::full(kResource2)) == nullptr);
     }
 
+    SECTION("replacement updates pixels and promotes without a read")
+    {
+      auto cache = ImageCache{2};
+      auto firstPtr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 1, 1);
+      auto secondPtr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 1, 1);
+      auto replacementPtr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 2, 2);
+      auto thirdPtr = Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, 1, 1);
+      replacementPtr->fill(0x123456FFU);
+      auto* const replacementIdentity = replacementPtr.get();
+
+      cache.put(ImageCacheKey::full(kResource1), firstPtr);
+      cache.put(ImageCacheKey::full(kResource2), secondPtr);
+      cache.put(ImageCacheKey::full(kResource1), replacementPtr);
+      replacementPtr.reset();
+
+      // Replacement itself must promote resource 1. Reading it before this insertion
+      // would also promote it and hide a broken replacement branch.
+      cache.put(ImageCacheKey::full(kResource3), thirdPtr);
+
+      auto const cachedReplacementPtr = cache.get(ImageCacheKey::full(kResource1));
+      REQUIRE(cachedReplacementPtr);
+      CHECK(cachedReplacementPtr.get() == replacementIdentity);
+      CHECK(cachedReplacementPtr->get_width() == 2);
+      CHECK(cachedReplacementPtr->get_height() == 2);
+      auto const* const pixels = cachedReplacementPtr->get_pixels();
+      REQUIRE(pixels != nullptr);
+      CHECK(pixels[0] == 0x12U);
+      CHECK(pixels[1] == 0x34U);
+      CHECK(pixels[2] == 0x56U);
+      CHECK(cache.get(ImageCacheKey::full(kResource2)) == nullptr);
+      CHECK(cache.get(ImageCacheKey::full(kResource3)) == thirdPtr);
+    }
+
     SECTION("same resource keeps full-size and thumbnail entries distinct")
     {
       auto cache = ImageCache{3};

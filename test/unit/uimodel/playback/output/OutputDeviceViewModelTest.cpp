@@ -128,7 +128,9 @@ namespace ao::uimodel::test
         audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
       viewModel.refresh();
 
+      REQUIRE(!log.empty());
       auto const& rows = log.last().rows;
+      REQUIRE(rows.size() == 3);
       // The Exclusive profile row should be active
       CHECK(rows[2].isActive == true);
       CHECK(rows[2].profileId == audio::kProfileExclusive);
@@ -211,7 +213,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("OutputDeviceViewModel - unrelated playback snapshots do not rebuild output rows",
-            "[uimodel][regression][playback][output]")
+            "[uimodel][unit][playback][output]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
@@ -224,13 +226,13 @@ namespace ao::uimodel::test
     fixture.commands().setShuffleMode(ShuffleMode::On);
     fixture.commands().setRepeatMode(RepeatMode::All);
 
-    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
-    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::All);
+    REQUIRE(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    REQUIRE(fixture.playback.snapshot().succession.repeat == RepeatMode::All);
     CHECK(log.states.size() == 1);
   }
 
   TEST_CASE("OutputDeviceViewModel - reports exact requested intent when the engine cannot confirm it",
-            "[uimodel][regression][playback][output]")
+            "[uimodel][unit][playback][output]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
@@ -254,17 +256,19 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("OutputDeviceViewModel - copies row identity before a synchronous render replaces the rows",
-            "[uimodel][regression][playback][output]")
+            "[uimodel][unit][playback][output]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
     auto rendered = OutputDeviceViewState{};
+    std::size_t renderCount = 0;
     auto optRequested = std::optional<audio::OutputDeviceSelection>{};
     auto viewModel = OutputDeviceViewModel{
       fixture.playback,
       ao::test::englishMessageCatalog(),
-      [&rendered](OutputDeviceViewState const& view)
+      [&rendered, &renderCount](OutputDeviceViewState const& view)
       {
+        ++renderCount;
         auto replacement = view;
         rendered = {};
         rendered = std::move(replacement);
@@ -274,10 +278,15 @@ namespace ao::uimodel::test
     };
     viewModel.refresh();
     REQUIRE(rendered.rows.size() == 3);
+    REQUIRE_FALSE(rendered.rows[2].isActive);
+    auto const renderCountBeforeSelection = renderCount;
     auto const& row = rendered.rows[2];
 
     viewModel.selectOutputDevice(row.backendId, row.deviceId, row.profileId);
 
+    REQUIRE(renderCount > renderCountBeforeSelection);
+    REQUIRE(rendered.rows.size() == 3);
+    CHECK(rendered.rows[2].isActive);
     REQUIRE(optRequested);
     CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
     CHECK(optRequested->deviceId == audio::DeviceId{"device1"});

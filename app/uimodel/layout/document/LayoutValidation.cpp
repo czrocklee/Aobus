@@ -112,6 +112,14 @@ namespace ao::uimodel
         }
       }
 
+      if ((name == "hexpand" || name == "vexpand" || name == "visible") && value.getIf<bool>() == nullptr)
+      {
+        return reject(LayoutRejectionReason::InvalidLayoutFieldValue,
+                      node,
+                      name,
+                      std::format("Layout field '{}' must be a Boolean", name));
+      }
+
       if (isCommonLayoutProp(name))
       {
         return std::nullopt;

@@ -83,7 +83,7 @@ namespace ao::media::wav::test
     CHECK_FALSE(parsed.data.empty());
   }
 
-  TEST_CASE("WAV RIFF parser - required audio extent ignores malformed trailing chunks", "[media][regression][wav]")
+  TEST_CASE("WAV RIFF parser - required audio extent ignores malformed trailing chunks", "[media][unit][wav]")
   {
     auto data = ao::test::wav::makeWav({});
     ao::test::wav::appendTruncatedChunk(data, "JUNK", 100);
@@ -97,7 +97,7 @@ namespace ao::media::wav::test
     CHECK(completeRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("WAV RIFF parser - skips empty data chunks before required audio", "[media][regression][wav]")
+  TEST_CASE("WAV RIFF parser - skips empty data chunks before required audio", "[media][unit][wav]")
   {
     auto const emptyData = ao::test::wav::Chunk{.id = {'d', 'a', 't', 'a'}, .payload = {}};
     auto const data = ao::test::wav::makeWav({.extraChunks = {emptyData}});

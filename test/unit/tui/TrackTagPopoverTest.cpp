@@ -74,19 +74,26 @@ namespace ao::tui::test
 
     SECTION("Submitting consumes close and edit keys")
     {
+      REQUIRE(editor.buildPatch().tagsToRemove == std::vector<std::string>{"Jazz"});
       editor.setStatus(TrackEditorStatus::Submitting);
       editor.tryHandleEvent(ftxui::Event::Escape);
       editor.tryHandleEvent(ftxui::Event::Return);
       editor.tryHandleEvent(ftxui::Event::CtrlR);
       CHECK(editor.takeRequest() == TrackEditorRequest::None);
       CHECK(editor.buildPatch().tagsToAdd.empty());
+      CHECK(editor.buildPatch().tagsToRemove == std::vector<std::string>{"Jazz"});
     }
   }
 
-  TEST_CASE("TrackTagPopover - query matches do not become implicit edits on apply", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - exact existing-tag query stays clean and Enter closes", "[tui][unit][editor]")
   {
     auto editor = makeEditor({{.title = "First", .album = "Album"}}, {}, {}, {"Acoustic"}, "en", TrackEditorMode::Tags);
     typeText(editor, "Acoustic");
+    auto const filtered = frame(editor);
+    CHECK(filtered.contains("[ ] Acoustic"));
+    CHECK_FALSE(filtered.contains("Add new tag"));
+    CHECK(editor.buildPatch().tagsToAdd.empty());
+    CHECK(editor.buildPatch().tagsToRemove.empty());
     editor.tryHandleEvent(ftxui::Event::Return);
     CHECK(editor.takeRequest() == TrackEditorRequest::Close);
     CHECK_FALSE(editor.isDirty());
@@ -132,8 +139,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isConfirmingDiscard());
   }
 
-  TEST_CASE("TrackTagPopover - exit label distinguishes a clean view from pending tag changes",
-            "[tui][regression][editor]")
+  TEST_CASE("TrackTagPopover - exit label distinguishes a clean view from pending tag changes", "[tui][unit][editor]")
   {
     constexpr auto kLabels = std::array{std::tuple{"en", "Close", "Discard changes"},
                                         std::tuple{"zh-Hans", "关闭", "放弃更改"},
@@ -177,7 +183,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TrackTagPopover - clearing a new-tag query and filtering an existing tag keep the view clean",
-            "[tui][regression][editor]")
+            "[tui][unit][editor]")
   {
     auto editor =
       makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -447,8 +453,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - query Enter creates an offered name alongside partial matches",
-            "[tui][regression][editor]")
+  TEST_CASE("TrackTagPopover - query Enter creates an offered name alongside partial matches", "[tui][unit][editor]")
   {
     auto editor = makeEditor({{.title = "First", .album = "Album"}}, {}, {}, {"jazzy"}, "en", TrackEditorMode::Tags);
     typeText(editor, "jazz");
@@ -486,8 +491,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{"new tag"});
   }
 
-  TEST_CASE("TrackTagPopover - narrow results preserve readable names across intent changes",
-            "[tui][regression][editor]")
+  TEST_CASE("TrackTagPopover - narrow results preserve readable names across intent changes", "[tui][unit][editor]")
   {
     for (std::int32_t const width : {24, 32})
     {

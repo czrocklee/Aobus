@@ -4,8 +4,10 @@
 #include "tui/CoverArt.h"
 
 #include "CoverArtTestSupport.h"
+#include "test/unit/tui/RenderTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <ftxui/screen/color.hpp>
 
 #include <array>
 #include <cstddef>
@@ -123,6 +125,21 @@ namespace ao::tui::test
     CHECK(optPreview->size() == static_cast<std::size_t>(kCoverArtRows));
     CHECK(optPreview->front().size() == static_cast<std::size_t>(kCoverArtDefaultColumns));
     CHECK(renderCoverArtPreview(optPreview) != nullptr);
+    auto const painted = renderElement(renderCoverArtPreview(optPreview), kCoverArtDefaultColumns, kCoverArtRows);
+
+    // A reserved box alone is not a painted cover: every half-block must carry
+    // both the top and bottom red samples from the one-pixel source.
+    for (std::int32_t row = 0; row < kCoverArtRows; ++row)
+    {
+      for (std::int32_t column = 0; column < kCoverArtDefaultColumns; ++column)
+      {
+        auto const& pixel = painted.screen.PixelAt(column, row);
+        CHECK(pixel.character == "▀");
+        CHECK(pixel.foreground_color == ftxui::Color::RGB(255, 0, 0));
+        CHECK(pixel.background_color == ftxui::Color::RGB(255, 0, 0));
+      }
+    }
+
     // Without a transform there is no artwork element to place at all.
     CHECK(renderCoverArtPreview(std::nullopt) == nullptr);
   }
@@ -166,9 +183,20 @@ namespace ao::tui::test
       REQUIRE(optPreview);
       REQUIRE(optPreview->size() == 2);
       REQUIRE((*optPreview)[0].size() == 2);
-      CHECK((*optPreview)[0][0].topRed > 200);
-      CHECK((*optPreview)[0][0].topGreen < 50);
-      CHECK((*optPreview)[0][0].topBlue < 50);
+      // The BMP's BGR pixels are blue, red, green. A centered 1x1 crop
+      // preserves the middle red pixel in both halves of every output cell.
+      for (auto const& row : *optPreview)
+      {
+        for (auto const& cell : row)
+        {
+          CHECK(cell.topRed == 255);
+          CHECK(cell.topGreen == 0);
+          CHECK(cell.topBlue == 0);
+          CHECK(cell.bottomRed == 255);
+          CHECK(cell.bottomGreen == 0);
+          CHECK(cell.bottomBlue == 0);
+        }
+      }
     }
 
     SECTION("transparent pixels")
@@ -181,6 +209,9 @@ namespace ao::tui::test
       CHECK((*optPreview)[0][0].topRed == 18);
       CHECK((*optPreview)[0][0].topGreen == 18);
       CHECK((*optPreview)[0][0].topBlue == 18);
+      CHECK((*optPreview)[0][0].bottomRed == 18);
+      CHECK((*optPreview)[0][0].bottomGreen == 18);
+      CHECK((*optPreview)[0][0].bottomBlue == 18);
     }
   }
 
@@ -212,6 +243,27 @@ namespace ao::tui::test
     CHECK((*optPng)[3] == std::byte{0x47});
     CHECK(pngUint32(*optPng, 16) == 8);
     CHECK(pngUint32(*optPng, 20) == 4);
+
+    // Read the persisted PNG through the public raster decoder, not the
+    // writer's header routine: both halves of every output cell remain red.
+    auto const optDecoded = decodeCoverArtPreview(*optPng, 8, 4);
+    REQUIRE(optDecoded);
+    REQUIRE(optDecoded->size() == 4);
+
+    for (auto const& row : *optDecoded)
+    {
+      REQUIRE(row.size() == 8);
+
+      for (auto const& cell : row)
+      {
+        CHECK(cell.topRed == 255);
+        CHECK(cell.topGreen == 0);
+        CHECK(cell.topBlue == 0);
+        CHECK(cell.bottomRed == 255);
+        CHECK(cell.bottomGreen == 0);
+        CHECK(cell.bottomBlue == 0);
+      }
+    }
   }
 
   TEST_CASE("CoverArt - malformed input and invalid dimensions are rejected", "[tui][unit][cover-art]")
@@ -260,8 +312,7 @@ namespace ao::tui::test
     auto const escape = kittyImageEscape(data, 24, 12);
 
     CHECK(kittyDeleteImageEscape(kKittyCoverArtImageId) == "\033_Ga=d,i=1,q=2;\033\\");
-    CHECK(escape.starts_with("\033_Ga=T,i=1,f=100,t=d,c=24,r=12,q=2,m=0;"));
-    CHECK(escape.ends_with("\033\\"));
+    CHECK(escape == "\033_Ga=T,i=1,f=100,t=d,c=24,r=12,q=2,m=0;AQID\033\\");
   }
 
   TEST_CASE("CoverArt - Kitty escape splits large payloads into continuation chunks", "[tui][unit][cover-art]")
@@ -270,9 +321,34 @@ namespace ao::tui::test
 
     auto const escape = kittyImageEscape(data, 24, 12, 99);
 
-    CHECK(escape.starts_with("\033_Ga=T,i=99,f=100,t=d,c=24,r=12,q=2,m=1;"));
-    CHECK(escape.contains("\033_Gm=0;"));
-    CHECK(escape.ends_with("\033\\"));
+    auto const firstHeader = std::string{"\033_Ga=T,i=99,f=100,t=d,c=24,r=12,q=2,m=1;"};
+    auto const lastHeader = std::string{"\033_Gm=0;"};
+    REQUIRE(escape.starts_with(firstHeader));
+    auto const firstEnd = escape.find("\033\\", firstHeader.size());
+    REQUIRE(firstEnd != std::string::npos);
+    CHECK(firstEnd - firstHeader.size() == 4096);
+    auto const nextStart = firstEnd + 2;
+    REQUIRE(escape.substr(nextStart).starts_with(lastHeader));
+    auto const lastStart = nextStart + lastHeader.size();
+    auto const lastEnd = escape.find("\033\\", lastStart);
+    REQUIRE(lastEnd != std::string::npos);
+    CHECK(lastEnd - lastStart == 1368);
+    CHECK(lastEnd + 2 == escape.size());
+
+    // 4096 literal 0x42 bytes encode as 1365 "QkJC" triples and "Qg==".
+    // Joining both frames catches missing/repeated payload even if markers pass.
+    auto expectedPayload = std::string{};
+    expectedPayload.reserve(5464);
+
+    for (std::int32_t triple = 0; triple < 1365; ++triple)
+    {
+      expectedPayload += "QkJC";
+    }
+
+    expectedPayload += "Qg==";
+    CHECK(escape.substr(firstHeader.size(), firstEnd - firstHeader.size()) +
+            escape.substr(lastStart, lastEnd - lastStart) ==
+          expectedPayload);
   }
 
   TEST_CASE("CoverArt - cover columns adapt to cell aspect ratio", "[tui][unit][cover-art]")

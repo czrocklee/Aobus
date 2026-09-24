@@ -58,7 +58,10 @@ namespace ao::media::file::mpeg::test
 
     SECTION("Invalid sync")
     {
-      auto data = std::to_array<std::uint8_t>({0xFE, 0xE0, 0x00, 0x00});
+      auto data = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0);
+      REQUIRE(FrameView{data.data(), data.size()}.isValid());
+      data[0] = 0xFE;
+
       auto const view = FrameView{data.data(), data.size()};
       CHECK_FALSE(view.isValid());
     }
@@ -191,7 +194,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optXing->frames == 0);
   }
 
-  TEST_CASE("MPEG Frame - parses Xing information after a protected-frame CRC", "[media][regression][mpeg]")
+  TEST_CASE("MPEG Frame - parses Xing information after a protected-frame CRC", "[media][unit][mpeg][frame]")
   {
     auto buffer = std::vector<std::uint8_t>(417, 0);
     auto const header =
@@ -225,7 +228,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optView->isValid());
   }
 
-  TEST_CASE("MPEG Frame - locates free-format frames from adjacent sync distance", "[media][regression][mpeg]")
+  TEST_CASE("MPEG Frame - locates free-format frames from adjacent sync distance", "[media][unit][mpeg][frame]")
   {
     constexpr std::size_t kFrameLength = 720;
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 0, 1);
@@ -241,7 +244,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optView->bitrate() == 240000);
   }
 
-  TEST_CASE("MPEG Frame - skips an unconfirmed sync candidate in leading junk", "[media][regression][mpeg]")
+  TEST_CASE("MPEG Frame - skips an unconfirmed sync candidate in leading junk", "[media][unit][mpeg][frame]")
   {
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0);
     auto const frameLength = FrameView{header.data(), header.size()}.length();
@@ -257,7 +260,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optView->data() == buffer.data() + kActualFrameOffset);
   }
 
-  TEST_CASE("MPEG Frame - rejects incomplete frame after valid header", "[media][regression][mpeg][frame]")
+  TEST_CASE("MPEG Frame - rejects incomplete frame after valid header", "[media][unit][mpeg][frame]")
   {
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0, ChannelMode::JointStereo);
 
@@ -267,7 +270,7 @@ namespace ao::media::file::mpeg::test
   }
 
   TEST_CASE("MPEG Frame - rejects a candidate followed only by a matching truncated header",
-            "[media][regression][mpeg]")
+            "[media][unit][mpeg][frame]")
   {
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0);
     auto const frameLength = FrameView{header.data(), header.size()}.length();

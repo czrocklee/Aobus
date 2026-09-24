@@ -160,8 +160,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesWithDictionary(PlanEvaluator{}, plan, collisionTrack, dictionaryFixture.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - tag bloom rejects before full bytecode evaluation",
-            "[query][unit][plan-evaluator][regression]")
+  TEST_CASE("PlanEvaluator - tag bloom rejects before full bytecode evaluation", "[query][unit][plan-evaluator]")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto const requiredId = dictionaryFixture.intern("required");

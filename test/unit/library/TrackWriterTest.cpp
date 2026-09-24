@@ -28,7 +28,9 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <span>
+#include <string_view>
 #include <type_traits>
 
 namespace ao::library::test
@@ -130,8 +132,7 @@ namespace ao::library::test
     CHECK(optManifest->mtime() == 654);
   }
 
-  TEST_CASE("TrackWriter - create rejects a missing existing Resource before mutation",
-            "[library][regression][track-writer]")
+  TEST_CASE("TrackWriter - create rejects a missing existing Resource before mutation", "[library][unit][track-writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -165,11 +166,11 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackWriter - create rejects a duplicate manifest URI without aliasing it",
-            "[library][regression][track-writer]")
+            "[library][unit][track-writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    [[maybe_unused]] auto const firstId = addTrack(library, TrackSpec{.title = "First", .uri = "shared.flac"});
+    auto const firstId = addTrack(library, TrackSpec{.title = "First", .uri = "shared.flac"});
     auto transaction = writeTransaction(library);
     auto duplicate = TrackBuilder::makeEmpty();
     duplicate.metadata().title("Duplicate");
@@ -182,6 +183,12 @@ namespace ao::library::test
     CHECK(createRes.error().code == Error::Code::Conflict);
     auto readTransaction = library.readTransaction();
     CHECK(library.tracks().reader(readTransaction).entryCount() == 1);
+    auto const optTrack = library.tracks().reader(readTransaction).get(firstId);
+    REQUIRE(optTrack);
+    CHECK(optTrack->metadata().title() == "First");
+    auto const optManifest = library.manifest().reader(readTransaction).get("shared.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->trackId() == firstId);
   }
 
   TEST_CASE("TrackWriter - validate accepts complete builders and rejects hot-only builders as input",
@@ -220,41 +227,72 @@ namespace ao::library::test
     auto const trackId = addTrack(library, TrackSpec{.title = "Before", .uri = "updates.flac"});
     auto transaction = writeTransaction(library);
 
-    REQUIRE(transaction.apply(
-      [&](LibraryWrite& write) -> Result<>
-      {
-        auto writer = write.tracks();
-        auto full = builderFrom(library, writer, trackId);
-        full.metadata().title("Full update");
-        full.property().duration(std::chrono::seconds{210});
-        REQUIRE(writer.update(trackId, full));
+    auto expectedTitle = std::string_view{"Before"};
+    auto expectedDuration = std::chrono::seconds{200};
+    std::uint64_t expectedFileSize = 0;
+    auto expectedStatus = FileStatus::Available;
 
-        auto cold = builderFrom(library, writer, trackId);
-        cold.metadata().title("Ignored by cold update");
-        cold.property().duration(std::chrono::seconds{220});
-        REQUIRE(writer.updateCold(trackId, cold));
+    SECTION("full update persists both sides")
+    {
+      expectedTitle = "Full update";
+      expectedDuration = std::chrono::seconds{210};
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write)
+        {
+          auto writer = write.tracks();
+          auto full = builderFrom(library, writer, trackId);
+          full.metadata().title("Full update");
+          full.property().duration(std::chrono::seconds{210});
+          return writer.update(trackId, full);
+        }));
+    }
 
-        auto replacement = builderFrom(library, writer, trackId);
-        replacement.metadata().title("Replacement");
-        replacement.property().duration(std::chrono::seconds{230});
-        auto const optManifest = writer.manifest("updates.flac");
-        REQUIRE(optManifest);
-        auto manifest = FileManifestBuilder::fromView(*optManifest);
-        manifest.fileSize(987).status(FileStatus::Missing);
-        return writer.replace(trackId, replacement, manifest);
-      }));
+    SECTION("cold update does not replace hot metadata")
+    {
+      expectedDuration = std::chrono::seconds{220};
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write)
+        {
+          auto writer = write.tracks();
+          auto cold = builderFrom(library, writer, trackId);
+          cold.metadata().title("Ignored by cold update");
+          cold.property().duration(std::chrono::seconds{220});
+          return writer.updateCold(trackId, cold);
+        }));
+    }
+
+    SECTION("replacement persists both sides and manifest facts")
+    {
+      expectedTitle = "Replacement";
+      expectedDuration = std::chrono::seconds{230};
+      expectedFileSize = 987;
+      expectedStatus = FileStatus::Missing;
+      REQUIRE(transaction.apply(
+        [&](LibraryWrite& write)
+        {
+          auto writer = write.tracks();
+          auto replacement = builderFrom(library, writer, trackId);
+          replacement.metadata().title("Replacement");
+          replacement.property().duration(std::chrono::seconds{230});
+          auto const optManifest = writer.manifest("updates.flac");
+          REQUIRE(optManifest);
+          auto manifest = FileManifestBuilder::fromView(*optManifest);
+          manifest.fileSize(987).status(FileStatus::Missing);
+          return writer.replace(trackId, replacement, manifest);
+        }));
+    }
+
     REQUIRE(transaction.commit());
-
     auto readTransaction = library.readTransaction();
     auto const optTrack = library.tracks().reader(readTransaction).get(trackId, TrackStore::Reader::LoadMode::Both);
     REQUIRE(optTrack);
-    CHECK(optTrack->metadata().title() == "Replacement");
-    CHECK(optTrack->property().duration() == std::chrono::seconds{230});
+    CHECK(optTrack->metadata().title() == expectedTitle);
+    CHECK(optTrack->property().duration() == expectedDuration);
     auto const optManifest = library.manifest().reader(readTransaction).get("updates.flac");
     REQUIRE(optManifest);
     CHECK(optManifest->trackId() == trackId);
-    CHECK(optManifest->fileSize() == 987);
-    CHECK(optManifest->status() == FileStatus::Missing);
+    CHECK(optManifest->fileSize() == expectedFileSize);
+    CHECK(optManifest->status() == expectedStatus);
   }
 
   TEST_CASE("TrackWriter - ordinary updates preserve the URI and manifest binding", "[library][unit][track-writer]")
@@ -271,6 +309,7 @@ namespace ao::library::test
           auto writer = write.tracks();
           auto track = builderFrom(library, writer, trackId);
           track.metadata().title("After");
+          track.property().uri("ignored-by-hot-update.flac");
 
           if (auto updateRes = writer.updateHot(trackId, track); !updateRes)
           {
@@ -299,7 +338,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("TrackWriter - normal update rejects a URI change without committing partial state",
-            "[library][regression][track-writer]")
+            "[library][unit][track-writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -360,7 +399,8 @@ namespace ao::library::test
     CHECK(optManifest->fileSize() == 999);
   }
 
-  TEST_CASE("TrackWriter - delete and clear remove both Track and manifest sides", "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - delete removes its Track and manifest while preserving others",
+            "[library][unit][track-writer]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -375,13 +415,19 @@ namespace ao::library::test
       REQUIRE(transaction.commit());
     }
 
-    {
-      auto readTransaction = library.readTransaction();
-      CHECK_FALSE(library.tracks().reader(readTransaction).get(firstId));
-      CHECK_FALSE(library.manifest().reader(readTransaction).get("first.flac"));
-      REQUIRE(library.tracks().reader(readTransaction).get(secondId));
-      REQUIRE(library.manifest().reader(readTransaction).get("second.flac"));
-    }
+    auto readTransaction = library.readTransaction();
+    CHECK_FALSE(library.tracks().reader(readTransaction).get(firstId));
+    CHECK_FALSE(library.manifest().reader(readTransaction).get("first.flac"));
+    REQUIRE(library.tracks().reader(readTransaction).get(secondId));
+    REQUIRE(library.manifest().reader(readTransaction).get("second.flac"));
+  }
+
+  TEST_CASE("TrackWriter - clear removes all Tracks and manifests", "[library][unit][track-writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    addTrack(library, TrackSpec{.title = "First", .uri = "first.flac"});
+    addTrack(library, TrackSpec{.title = "Second", .uri = "second.flac"});
 
     auto transaction = writeTransaction(library);
     REQUIRE(transaction.apply([](LibraryWrite& write) { return write.tracks().clear(); }));

@@ -5,6 +5,7 @@
 
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/completion/CompletionTestSupport.h"
 #include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
@@ -14,6 +15,7 @@
 
 #include <chrono>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,21 +32,9 @@ namespace ao::rt::test
                                                                            .uri = "metadata-value-completion.flac",
                                                                            .duration = std::chrono::seconds{120}});
     }
-
-    std::vector<std::string> insertTexts(std::vector<CompletionItem> const& items)
-    {
-      auto result = std::vector<std::string>{};
-
-      for (auto const& item : items)
-      {
-        result.push_back(item.insertText);
-      }
-
-      return result;
-    }
   } // namespace
 
-  TEST_CASE("MetadataValueCompleter - completes supported field values", "[runtime][unit][completion][value]")
+  TEST_CASE("MetadataValueCompleter - completes supported field values", "[runtime][unit][completion-value]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "Massive Attack", "Mezzanine");
@@ -57,18 +47,16 @@ namespace ao::rt::test
     auto artistCompleter = MetadataValueCompleter{service, TrackField::Artist};
     auto artistItems = artistCompleter.complete("ma");
 
-    CHECK(insertTexts(artistItems) == std::vector<std::string>{"Massive Attack", "Mazzy Star"});
-    REQUIRE_FALSE(artistItems.empty());
-    CHECK(artistItems[0].displayText == "Massive Attack");
-    CHECK(artistItems[0].detail.kind == CompletionDetailKind::Frequency);
-    CHECK(artistItems[0].detail.frequency == 2);
+    REQUIRE(insertTexts(artistItems) == std::vector<std::string>{"Massive Attack", "Mazzy Star"});
+    checkCompletionItem(artistItems[0], "Massive Attack", "Massive Attack", CompletionDetailKind::Frequency, 2, 0);
+    checkCompletionItem(artistItems[1], "Mazzy Star", "Mazzy Star", CompletionDetailKind::Frequency, 1, 1);
 
     auto albumCompleter = MetadataValueCompleter{service, TrackField::Album};
     CHECK(insertTexts(albumCompleter.complete("pro")) == std::vector<std::string>{"Protection"});
   }
 
   TEST_CASE("MetadataValueCompleter - rejects unsupported fields and limits results",
-            "[runtime][unit][completion-value][limit]")
+            "[runtime][unit][completion-value]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "Artist A", "Album A");
@@ -121,12 +109,21 @@ namespace ao::rt::test
     CHECK(optResult->replaceEnd == std::string{"ma suffix"}.size());
     CHECK(insertTexts(optResult->items) == std::vector<std::string>{"Massive Attack", "Mazzy Star"});
 
+    auto optClampedResult = provider("ma", 100);
+    REQUIRE(optClampedResult);
+    CHECK(optClampedResult->replaceBegin == 0);
+    CHECK(optClampedResult->replaceEnd == 2);
+    REQUIRE(insertTexts(optClampedResult->items) == std::vector<std::string>{"Massive Attack", "Mazzy Star"});
+    checkCompletionItem(
+      optClampedResult->items[0], "Massive Attack", "Massive Attack", CompletionDetailKind::Frequency, 1, 0);
+    checkCompletionItem(optClampedResult->items[1], "Mazzy Star", "Mazzy Star", CompletionDetailKind::Frequency, 1, 1);
+
     auto unsupportedProvider = MetadataValueCompleter{service, TrackField::Title}.asProvider();
     CHECK_FALSE(unsupportedProvider("Metadata", 3));
   }
 
   TEST_CASE("MetadataValueCompleter - alias matches preserve source text and rank below direct matches",
-            "[runtime][unit][completion-alias][value]")
+            "[runtime][unit][completion-value][completion-alias]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     addMetadataValueTrack(libraryFixture, "周杰倫", "One");

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -40,7 +39,7 @@ namespace ao::uimodel::test
     struct PlaybackRelativeSeekFixture final
     {
       PlaybackRelativeSeekFixture()
-        : bootstrap{application.transport.playbackTransport}, playback{createPlayback(application, bootstrap)}
+        : playback{createPlayback(application)}
       {
         auto const previousRevision = playback.snapshot().transport.positionRevision;
         REQUIRE(playback.commands().startFromView(application.viewId, application.firstTrackId));
@@ -63,23 +62,18 @@ namespace ao::uimodel::test
         return application.transport.playbackTransport.elapsed();
       }
 
-      static PlaybackService createPlayback(PlaybackSuccessionTransportFixture& application,
-                                            PlaybackBootstrap& bootstrap)
+      static PlaybackService createPlayback(PlaybackSuccessionTransportFixture& application)
       {
         application.buildTwoTrackManualView();
-        return bootstrap.createPlaybackService(application.transport.executor,
-                                               *application.successionPtr,
-                                               application.transport.libraryFixture.library(),
-                                               application.changes);
+        return application.createPlayback();
       }
 
       PlaybackSuccessionTransportFixture application;
-      PlaybackBootstrap bootstrap;
       PlaybackService playback;
     };
   } // namespace
 
-  TEST_CASE("PlaybackPositionViewModel - reactive updates", "[uimodel][unit][playback]")
+  TEST_CASE("PlaybackPositionViewModel - reactive updates", "[uimodel][integration][playback][seek][async]")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto& playback = fixture.playback;
@@ -99,7 +93,7 @@ namespace ao::uimodel::test
 
       log.clear();
       fixture.commands().setShuffleMode(ShuffleMode::On);
-      CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+      REQUIRE(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
       CHECK(log.empty());
     }
 
@@ -195,8 +189,10 @@ namespace ao::uimodel::test
       CHECK(log.last().immediateUpdate);
     }
 
-    SECTION("relative seek is unavailable without a known duration")
+    SECTION("relative seek is unavailable while idle")
     {
+      REQUIRE(playback.snapshot().transport.occurrenceId == PlaybackOccurrenceId{});
+      REQUIRE(playback.snapshot().transport.duration == std::chrono::milliseconds{0});
       auto seekEvents = std::vector<PlaybackTransport::SeekUpdate>{};
       auto seekSub = playbackTransport.onSeekUpdate([&seekEvents](PlaybackTransport::SeekUpdate const& event) noexcept
                                                     { seekEvents.push_back(event); });
@@ -216,17 +212,18 @@ namespace ao::uimodel::test
 
     REQUIRE(!log.empty());
     CHECK(log.last().occurrenceId == rt::PlaybackOccurrenceId{});
+    CHECK_FALSE(log.last().seekable);
     CHECK(log.last().elapsed == std::chrono::milliseconds{0});
     CHECK(log.last().duration == std::chrono::milliseconds{0});
 
     log.clear();
     fixture.commands().setShuffleMode(ShuffleMode::On);
-    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    REQUIRE(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(log.empty());
   }
 
   TEST_CASE("PlaybackPositionViewModel - relative seek samples the live clock after headless construction",
-            "[uimodel][regression][playback][seek]")
+            "[uimodel][integration][playback][seek]")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     auto const cachedElapsed = fixture.playback.snapshot().transport.elapsed;
@@ -251,7 +248,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackPositionViewModel - orthogonal publication does not freeze the relative seek clock",
-            "[uimodel][regression][playback][seek]")
+            "[uimodel][integration][playback][seek]")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     auto viewModel =
@@ -275,7 +272,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackPositionViewModel - reentrant relative seeks accumulate from each execution-live target",
-            "[uimodel][regression][playback][seek]")
+            "[uimodel][integration][playback][seek][async]")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     fixture.playback.commands().pause();
@@ -317,12 +314,13 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("PlaybackPositionViewModel - queued navigation retires a stale relative seek occurrence",
-            "[uimodel][regression][playback][seek]")
+            "[uimodel][integration][playback][seek][async]")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     auto viewModel =
       PlaybackPositionViewModel{fixture.playback, std::function<void(PlaybackPositionViewState const&)>{}};
     auto const before = fixture.playback.snapshot().transport;
+    REQUIRE(before.occurrenceId.value != 0);
     auto seekEvents = std::vector<PlaybackTransport::SeekUpdate>{};
     auto const seekSubscription = fixture.application.transport.playbackTransport.onSeekUpdate(
       [&seekEvents](PlaybackTransport::SeekUpdate const& event) noexcept { seekEvents.push_back(event); });
@@ -350,7 +348,8 @@ namespace ao::uimodel::test
     CHECK(seekEvents.empty());
   }
 
-  TEST_CASE("PlaybackPositionViewModel - transport seeks render preview and final modes", "[uimodel][unit][playback]")
+  TEST_CASE("PlaybackPositionViewModel - transport seeks render preview and final modes",
+            "[uimodel][unit][playback][seek]")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto& playback = fixture.playback;

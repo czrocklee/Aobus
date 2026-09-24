@@ -3,15 +3,38 @@
 
 #pragma once
 
+#include <ao/Error.h>
+
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <iosfwd>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::rt::test
 {
+  struct BaselineMetric final
+  {
+    std::string name;
+    std::int64_t value = 0;
+    std::string unit;
+  };
+
+  struct BaselineRecord final
+  {
+    std::string benchmark;
+    std::vector<BaselineMetric> metrics;
+  };
+
+  void recordBaseline(std::string benchmark, std::vector<BaselineMetric> metrics);
+  Result<> writeBaselineReport(std::ostream& output, std::span<BaselineRecord const> records);
+  Result<> writeBaselineReport(std::filesystem::path const& path, std::span<BaselineRecord const> records);
+  Result<> writeRequestedBaselineReport();
+
   struct Measurement final
   {
     struct ByteMetric final

@@ -107,16 +107,15 @@ namespace ao::media::file::mpeg::id3v2
       }
     }
 
-    template<NumberSetter Setter>
-    void handleNumber(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
+    void handleYear(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
     {
       auto convertedStorage = std::string{};
 
       if (auto const optText = decodeFrameText(content, convertedStorage); optText)
       {
-        if (auto const optValue = decodeUint16(optText->value); optValue)
+        if (auto const optYear = decodeYear(optText->value); optYear)
         {
-          (builder.metadata().*Setter)(*optValue);
+          builder.metadata().year(*optYear);
         }
       }
     }

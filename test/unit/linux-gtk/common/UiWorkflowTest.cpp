@@ -98,7 +98,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("UiWorkflow - cancellation before callback admission suppresses the body",
-            "[gtk][regression][uiworkflow][concurrency]")
+            "[gtk][unit][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
@@ -154,8 +154,7 @@ namespace ao::gtk::test
     CHECK(scope.empty());
   }
 
-  TEST_CASE("UiWorkflow - owner cancellation suppresses a late result callback",
-            "[gtk][regression][uiworkflow][concurrency]")
+  TEST_CASE("UiWorkflow - owner cancellation suppresses a late result callback", "[gtk][unit][uiworkflow][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};

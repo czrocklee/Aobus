@@ -51,182 +51,174 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Engine - play reports decoder and backend setup failures", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - unsupported extension reports track-open failure", "[audio][unit][engine][error]")
   {
-    auto const device = Device{.id = DeviceId{"test-device"},
-                               .displayName = "Test",
-                               .description = "Test",
-                               .isDefault = false,
-                               .backendId = kBackendNone};
+    auto const device = makeEngineTestDevice();
+    auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device};
+    auto const desc = PlaybackInput{.filePath = "song.txt"};
+    auto failureFuture = captureNextFailure(engine);
 
-    SECTION("Unsupported extension")
-    {
-      auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device};
-      auto const desc = PlaybackInput{.filePath = "song.txt"};
-      auto failureFuture = captureNextFailure(engine);
+    auto const item = makePlaybackItem(desc);
+    engine.play(item);
 
-      auto const item = makePlaybackItem(desc);
-      engine.play(item);
+    auto const failure = requireFailure(failureFuture);
+    CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
+    CHECK(failure.itemId == item.id);
+    CHECK(failure.input.filePath == desc.filePath);
+    CHECK(failure.generation > 0);
+    CHECK(failure.recoverable);
+    CHECK(failure.error.message.contains("Unsupported audio file extension"));
 
-      auto const failure = requireFailure(failureFuture);
-      CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
-      CHECK(failure.itemId == item.id);
-      CHECK(failure.input.filePath == desc.filePath);
-      CHECK(failure.generation > 0);
-      CHECK(failure.recoverable);
-      CHECK(failure.error.message.contains("Unsupported audio file extension"));
-
-      CHECK(engine.status().transport == Transport::Idle);
-      CHECK(engine.status().statusText.empty());
-    }
-
-    SECTION("Decoder open failure")
-    {
-      auto const factory = [](auto const&, std::optional<SampleEncoding>) -> Result<std::unique_ptr<DecoderSession>>
-      { return std::unexpected{Error{.message = "open failed"}}; };
-
-      auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device, factory};
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-      auto failureFuture = captureNextFailure(engine);
-
-      auto const item = makePlaybackItem(desc);
-      engine.play(item);
-
-      auto const failure = requireFailure(failureFuture);
-      CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
-      CHECK(failure.itemId == item.id);
-      CHECK(failure.input.filePath == desc.filePath);
-      CHECK(failure.generation > 0);
-      CHECK(failure.recoverable);
-      CHECK(failure.error.message == "open failed");
-
-      CHECK(engine.status().transport == Transport::Idle);
-      CHECK(engine.status().statusText.empty());
-    }
-
-    SECTION("Backend open failure")
-    {
-      auto backendPtr = std::make_unique<FakeCapturingBackend>();
-
-      backendPtr->setOpenResult(std::unexpected(Error{.message = "hw init failed"}));
-
-      auto const factory = [](auto const&, std::optional<SampleEncoding> optOutputEncoding)
-      {
-        auto info = makeScriptedStreamInfo(makeEngineTestFormat());
-        info.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(SampleEncoding::Signed16Le));
-        auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
-
-        decPtr->setReadScript({{{}, true}});
-        return decPtr;
-      };
-
-      auto engine = Engine{std::move(backendPtr), device, factory};
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-      auto failureFuture = captureNextFailure(engine);
-
-      auto const item = makePlaybackItem(desc);
-      engine.play(item);
-
-      auto const failure = requireFailure(failureFuture);
-      CHECK(failure.kind == Engine::PlaybackFailureKind::RouteActivation);
-      CHECK(failure.itemId == item.id);
-      CHECK(failure.input.filePath == desc.filePath);
-      CHECK(failure.generation > 0);
-      CHECK_FALSE(failure.recoverable);
-      CHECK(failure.error.message == "hw init failed");
-
-      CHECK(engine.status().transport == Transport::Error);
-      CHECK(engine.status().statusText == "hw init failed");
-    }
-
-    SECTION("Initial offset seek failure")
-    {
-      auto backendPtr = std::make_unique<FakeCapturingBackend>();
-      auto* const backend = backendPtr.get();
-
-      auto const factory = [](auto const&, std::optional<SampleEncoding> optOutputEncoding)
-      {
-        auto info = makeScriptedStreamInfo(makeEngineTestFormat());
-        info.duration = std::chrono::seconds{1};
-        info.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(SampleEncoding::Signed16Le));
-        auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
-
-        decPtr->setReadScript({{{}, true}});
-        decPtr->setSeekResult(
-          std::unexpected(Error{.code = Error::Code::SeekFailed, .message = "restore seek failed"}));
-        return decPtr;
-      };
-
-      auto engine = Engine{std::move(backendPtr), device, factory};
-      auto const desc = PlaybackInput{.filePath = "song.flac"};
-      auto failureFuture = captureNextFailure(engine);
-
-      auto const item = makePlaybackItem(desc);
-      engine.play(item, std::chrono::milliseconds{50});
-
-      auto const failure = requireFailure(failureFuture);
-      CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
-      CHECK(failure.itemId == item.id);
-      CHECK(failure.input.filePath == desc.filePath);
-      CHECK(failure.generation > 0);
-      CHECK(failure.recoverable);
-      CHECK(failure.error.code == Error::Code::SeekFailed);
-      CHECK(failure.error.message == "restore seek failed");
-
-      auto const snap = engine.status();
-      CHECK(snap.transport == Transport::Error);
-      CHECK(snap.statusText == "restore seek failed");
-
-      auto const events = backend->events();
-      CHECK(std::ranges::any_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "open"; }));
-      CHECK(
-        std::ranges::any_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "close"; }));
-      CHECK(
-        std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
-    }
-
-    SECTION("Source format changes after inspection")
-    {
-      auto backendPtr = std::make_unique<FakeCapturingBackend>();
-      auto* const backend = backendPtr.get();
-      auto const factory = [](auto const&, std::optional<SampleEncoding> optOutputEncoding)
-      {
-        auto const sourceFormat = SignalFormat{
-          .sampleRate = optOutputEncoding ? 48000U : 44100U,
-          .channels = 2,
-          .precisionBits = 16,
-        };
-        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-          .sourceFormat = sourceFormat,
-          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(SampleEncoding::Signed16Le)),
-          .duration = std::chrono::seconds{1},
-          .codec = AudioCodec::Flac,
-        });
-        decoderPtr->setReadScript({{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false}});
-        return decoderPtr;
-      };
-      auto engine = Engine{std::move(backendPtr), device, factory};
-      auto const item = makePlaybackItem(PlaybackInput{.filePath = "changed.flac"});
-      auto failureFuture = captureNextFailure(engine);
-
-      engine.play(item);
-
-      auto const failure = requireFailure(failureFuture);
-      CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
-      CHECK(failure.itemId == item.id);
-      CHECK(failure.recoverable);
-      CHECK(failure.error.code == Error::Code::FormatRejected);
-      CHECK(failure.error.message == "Track signal format changed after inspection");
-      CHECK(engine.status().transport == Transport::Error);
-      auto const events = backend->events();
-      CHECK(
-        std::ranges::any_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "close"; }));
-      CHECK(
-        std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
-    }
+    CHECK(engine.status().transport == Transport::Idle);
+    CHECK(engine.status().statusText.empty());
   }
 
-  TEST_CASE("Engine - failed committed start retires the previous session state", "[audio][regression][engine][error]")
+  TEST_CASE("Engine - decoder-open failure is recoverable", "[audio][unit][engine][error]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto const factory = [](auto const&, std::optional<SampleEncoding>) -> Result<std::unique_ptr<DecoderSession>>
+    { return std::unexpected{Error{.message = "open failed"}}; };
+
+    auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device, factory};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
+    auto failureFuture = captureNextFailure(engine);
+
+    auto const item = makePlaybackItem(desc);
+    engine.play(item);
+
+    auto const failure = requireFailure(failureFuture);
+    CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
+    CHECK(failure.itemId == item.id);
+    CHECK(failure.input.filePath == desc.filePath);
+    CHECK(failure.generation > 0);
+    CHECK(failure.recoverable);
+    CHECK(failure.error.message == "open failed");
+
+    CHECK(engine.status().transport == Transport::Idle);
+    CHECK(engine.status().statusText.empty());
+  }
+
+  TEST_CASE("Engine - backend-open failure is a terminal route failure", "[audio][unit][engine][error]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+
+    backendPtr->setOpenResult(std::unexpected(Error{.message = "hw init failed"}));
+
+    auto const factory = [](auto const&, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      auto info = makeScriptedStreamInfo(makeEngineTestFormat());
+      info.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(SampleEncoding::Signed16Le));
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
+
+      decPtr->setReadScript({{{}, true}});
+      return decPtr;
+    };
+
+    auto engine = Engine{std::move(backendPtr), device, factory};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
+    auto failureFuture = captureNextFailure(engine);
+
+    auto const item = makePlaybackItem(desc);
+    engine.play(item);
+
+    auto const failure = requireFailure(failureFuture);
+    CHECK(failure.kind == Engine::PlaybackFailureKind::RouteActivation);
+    CHECK(failure.itemId == item.id);
+    CHECK(failure.input.filePath == desc.filePath);
+    CHECK(failure.generation > 0);
+    CHECK_FALSE(failure.recoverable);
+    CHECK(failure.error.message == "hw init failed");
+
+    CHECK(engine.status().transport == Transport::Error);
+    CHECK(engine.status().statusText == "hw init failed");
+  }
+
+  TEST_CASE("Engine - initial seek failure closes the unopened playback", "[audio][unit][engine][error]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
+
+    auto const factory = [](auto const&, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      auto info = makeScriptedStreamInfo(makeEngineTestFormat());
+      info.duration = std::chrono::seconds{1};
+      info.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(SampleEncoding::Signed16Le));
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
+
+      decPtr->setReadScript({{{}, true}});
+      decPtr->setSeekResult(std::unexpected(Error{.code = Error::Code::SeekFailed, .message = "restore seek failed"}));
+      return decPtr;
+    };
+
+    auto engine = Engine{std::move(backendPtr), device, factory};
+    auto const desc = PlaybackInput{.filePath = "song.flac"};
+    auto failureFuture = captureNextFailure(engine);
+
+    auto const item = makePlaybackItem(desc);
+    engine.play(item, std::chrono::milliseconds{50});
+
+    auto const failure = requireFailure(failureFuture);
+    CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
+    CHECK(failure.itemId == item.id);
+    CHECK(failure.input.filePath == desc.filePath);
+    CHECK(failure.generation > 0);
+    CHECK(failure.recoverable);
+    CHECK(failure.error.code == Error::Code::SeekFailed);
+    CHECK(failure.error.message == "restore seek failed");
+
+    auto const snap = engine.status();
+    CHECK(snap.transport == Transport::Error);
+    CHECK(snap.statusText == "restore seek failed");
+
+    auto const events = backend->events();
+    CHECK(std::ranges::any_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "open"; }));
+    CHECK(std::ranges::any_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "close"; }));
+    CHECK(std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
+  }
+
+  TEST_CASE("Engine - changed inspection format rejects and closes the candidate", "[audio][unit][engine][error]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
+    auto const factory = [](auto const&, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      auto const sourceFormat = SignalFormat{
+        .sampleRate = optOutputEncoding ? 48000U : 44100U,
+        .channels = 2,
+        .precisionBits = 16,
+      };
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(SampleEncoding::Signed16Le)),
+        .duration = std::chrono::seconds{1},
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript({{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false}});
+      return decoderPtr;
+    };
+    auto engine = Engine{std::move(backendPtr), device, factory};
+    auto const item = makePlaybackItem(PlaybackInput{.filePath = "changed.flac"});
+    auto failureFuture = captureNextFailure(engine);
+
+    engine.play(item);
+
+    auto const failure = requireFailure(failureFuture);
+    CHECK(failure.kind == Engine::PlaybackFailureKind::TrackOpen);
+    CHECK(failure.itemId == item.id);
+    CHECK(failure.recoverable);
+    CHECK(failure.error.code == Error::Code::FormatRejected);
+    CHECK(failure.error.message == "Track signal format changed after inspection");
+    CHECK(engine.status().transport == Transport::Error);
+    auto const events = backend->events();
+    CHECK(std::ranges::any_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "close"; }));
+    CHECK(std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
+  }
+
+  TEST_CASE("Engine - failed committed start retires the previous session state",
+            "[audio][unit][engine][error][concurrency]")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();
@@ -267,7 +259,7 @@ namespace ao::audio::test
     CHECK(backend->target() == nullptr);
   }
 
-  TEST_CASE("Engine - successful lossy backend result is rejected", "[audio][regression][engine][backend]")
+  TEST_CASE("Engine - successful lossy backend result is rejected", "[audio][unit][engine][backend]")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();

@@ -40,7 +40,7 @@ namespace ao::gtk::test
   } // namespace
 
   TEST_CASE("PopoverAttachment - close unparents immediately and retires after GTK dispatch",
-            "[gtk][unit][common][popover-lifetime]")
+            "[gtk][unit][popover-attachment][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto anchor = Gtk::Button{};
@@ -66,7 +66,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE("PopoverAttachment - anchor unmap retires attachment before replacement",
-            "[gtk][regression][popover-lifetime]")
+            "[gtk][unit][popover-attachment][async]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     std::int32_t destructionCount = 0;

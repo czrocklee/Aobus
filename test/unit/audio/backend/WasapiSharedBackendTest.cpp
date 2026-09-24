@@ -109,7 +109,7 @@ namespace ao::audio::backend::test
     CHECK(received.back().connections.empty());
   }
 
-  TEST_CASE("prepareWasapiRenderPacket pads short PCM without advancing silence", "[audio][regression][wasapi][render]")
+  TEST_CASE("prepareWasapiRenderPacket pads short PCM without advancing silence", "[audio][unit][wasapi][render]")
   {
     auto buffer = std::array<std::byte, 16>{};
     std::ranges::fill(buffer, std::byte{0x5a});
@@ -130,7 +130,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("prepareWasapiRenderPacket releases drained short and empty packets correctly",
-            "[audio][regression][wasapi][render]")
+            "[audio][unit][wasapi][render]")
   {
     auto buffer = std::array<std::byte, 16>{};
     std::ranges::fill(buffer, std::byte{0x5a});

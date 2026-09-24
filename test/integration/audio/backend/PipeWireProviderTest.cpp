@@ -33,6 +33,7 @@ extern "C"
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -74,7 +75,7 @@ namespace ao::audio::backend::test
       NullAudioSinkGuard(NullAudioSinkGuard&&) = delete;
       NullAudioSinkGuard& operator=(NullAudioSinkGuard&&) = delete;
 
-      NullAudioSinkGuard()
+      explicit NullAudioSinkGuard(char const* nodeName = "rs-test-null-sink", char const* mediaClass = "Audio/Sink")
       {
         threadLoopPtr.reset(::pw_thread_loop_new("TestSinkLoop", nullptr));
 
@@ -104,12 +105,17 @@ namespace ao::audio::backend::test
             auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
                                                                                              "support.null-audio-sink",
                                                                                              "node.name",
-                                                                                             "rs-test-null-sink",
+                                                                                             nodeName,
                                                                                              "media.class",
-                                                                                             "Audio/Sink",
+                                                                                             mediaClass,
                                                                                              "object.linger",
                                                                                              "false",
                                                                                              nullptr));
+
+            if (!propsPtr)
+            {
+              return;
+            }
 
             // Create node via adapter factory
             void* const p = ::pw_core_create_object(
@@ -226,24 +232,26 @@ namespace ao::audio::backend::test
     // Quick check if we can connect to a daemon
     {
       auto loopPtr = utility::makeUniquePtr<::pw_main_loop_destroy>(::pw_main_loop_new(nullptr));
+      REQUIRE(loopPtr);
       auto contextPtr = PwContextPtr{::pw_context_new(::pw_main_loop_get_loop(loopPtr.get()), nullptr, 0)};
+      REQUIRE(contextPtr);
       auto corePtr = PwCorePtr{::pw_context_connect(contextPtr.get(), nullptr, 0)};
 
       if (!corePtr)
       {
-        WARN("Skipping PipeWire integration test: Daemon not running");
-        return;
+        if (auto const* required = std::getenv("AOBUS_REQUIRE_PIPEWIRE");
+            required != nullptr && std::string_view{required} == "1")
+        {
+          FAIL("Required PipeWire daemon is unavailable (AOBUS_REQUIRE_PIPEWIRE=1)");
+        }
+
+        SKIP("Optional PipeWire daemon is unavailable");
       }
     }
 
     auto const sinkGuard = NullAudioSinkGuard{};
 
-    if (!sinkGuard.isValid())
-    {
-      WARN("Skipping PipeWire integration test: Failed to create dummy sink");
-      return;
-    }
-
+    INFO("A connected PipeWire daemon must support the test's null sink fixture");
     REQUIRE(sinkGuard.isValid());
 
     auto provider = PipeWireProvider{};
@@ -271,58 +279,13 @@ namespace ao::audio::backend::test
 
     SECTION("Enumeration finds Audio/Duplex nodes")
     {
-      auto threadLoopPtr = PwThreadLoopPtr{};
-      auto contextPtr = PwContextPtr{};
-      auto corePtr = PwCorePtr{};
-      auto proxyPtr = PwProxyPtr<::pw_proxy>{};
+      auto const duplexGuard = NullAudioSinkGuard{"ao-test-duplex-sink", "Audio/Duplex"};
+      REQUIRE(duplexGuard.isValid());
+      auto const found = devicesPtr->tryWaitUntilContains("ao-test-duplex-sink", std::chrono::seconds{1});
 
-      threadLoopPtr.reset(::pw_thread_loop_new("DuplexTestLoop", nullptr));
-      REQUIRE(threadLoopPtr);
-      contextPtr.reset(::pw_context_new(::pw_thread_loop_get_loop(threadLoopPtr.get()), nullptr, 0));
-      REQUIRE(contextPtr);
-      REQUIRE(::pw_thread_loop_start(threadLoopPtr.get()) >= 0);
-
-      {
-        auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
-        corePtr.reset(::pw_context_connect(contextPtr.get(), nullptr, 0));
-
-        if (corePtr)
-        {
-          auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new("factory.name",
-                                                                                           "support.null-audio-sink",
-                                                                                           "node.name",
-                                                                                           "ao-test-duplex-sink",
-                                                                                           "media.class",
-                                                                                           "Audio/Duplex",
-                                                                                           "object.linger",
-                                                                                           "false",
-                                                                                           nullptr));
-          void* const p = ::pw_core_create_object(
-            corePtr.get(), "adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, &propsPtr->dict, 0);
-          proxyPtr.reset(static_cast<::pw_proxy*>(p));
-          ::pw_core_sync(corePtr.get(), PW_ID_CORE, 0);
-        }
-      }
-
-      if (proxyPtr)
-      {
-        auto const found = devicesPtr->tryWaitUntilContains("ao-test-duplex-sink", std::chrono::seconds{1});
-
-        INFO("Expected PipeWire device 'ao-test-duplex-sink' after 1s; observed "
-             << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());
-        CHECK(found);
-      }
-
-      if (threadLoopPtr)
-      {
-        ::pw_thread_loop_stop(threadLoopPtr.get());
-        {
-          auto guard = PwThreadLoopGuard{threadLoopPtr.get()};
-          proxyPtr.reset();
-          corePtr.reset();
-          contextPtr.reset();
-        }
-      }
+      INFO("Expected PipeWire device 'ao-test-duplex-sink' after 1s; observed "
+           << devicesPtr->updateCount() << " device snapshots: " << devicesPtr->describeSnapshot());
+      CHECK(found);
     }
 
     SECTION("Shared backend negotiates the preferred source-native client format")

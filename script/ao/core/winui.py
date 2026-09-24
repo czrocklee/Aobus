@@ -156,7 +156,15 @@ def bundled_cmake(installation: Path) -> Path:
     return installation / "Common7" / "IDE" / "CommonExtensions" / "Microsoft" / "CMake" / "CMake" / "bin" / "cmake.exe"
 
 
-def _runtime_packages_from_json(text: str, architecture: str) -> tuple[RuntimePackage, ...]:
+def _runtime_version(version: str) -> tuple[int, ...] | None:
+    parts = version.split(".")
+    if len(parts) != 4 or any(not part.isascii() or not part.isdecimal() or len(part) > 5 for part in parts):
+        return None
+    values = tuple(int(part) for part in parts)
+    return values if all(value <= 65535 for value in values) else None
+
+
+def _runtime_packages_from_json(text: str, runtime: RuntimeContract) -> tuple[RuntimePackage, ...]:
     if not text.strip():
         return ()
     try:
@@ -165,17 +173,22 @@ def _runtime_packages_from_json(text: str, architecture: str) -> tuple[RuntimePa
         raise RuntimeError(f"PowerShell returned invalid Windows App Runtime data: {exc}") from exc
     records = decoded if isinstance(decoded, list) else [decoded]
     result: list[RuntimePackage] = []
-    marker = f"_{architecture.lower()}__"
     for record in records:
         if not isinstance(record, dict):
             continue
+        version = str(record.get("Version", ""))
         package_full_name = str(record.get("PackageFullName", ""))
-        if marker not in package_full_name.lower():
+        expected_name = f"{runtime.package_name}_{version}_{runtime.architecture}__8wekyb3d8bbwe"
+        if (
+            _runtime_version(version) is None
+            or package_full_name.casefold() != expected_name.casefold()
+            or record.get("Status") != "Ok"
+        ):
             continue
         result.append(
             RuntimePackage(
-                version=str(record.get("Version", "")),
-                architecture=architecture,
+                version=version,
+                architecture=runtime.architecture,
                 package_full_name=package_full_name,
             )
         )
@@ -190,8 +203,10 @@ def installed_runtime_packages(
 ) -> tuple[RuntimePackage, ...]:
     selected = _runtime_contract() if runtime is None else runtime
     command = (
+        "$ErrorActionPreference = 'Stop'; "
         f"Get-AppxPackage -Name '{selected.package_name}' -PackageTypeFilter Framework | "
-        "Select-Object Name,Version,Architecture,PackageFullName | ConvertTo-Json -Compress"
+        "Select-Object Name,Version,Architecture,PackageFullName,"
+        "@{Name='Status';Expression={[string]$_.Status}} | ConvertTo-Json -Compress"
     )
     result = _run_text(
         [powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
@@ -199,7 +214,7 @@ def installed_runtime_packages(
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "Get-AppxPackage failed")
-    return _runtime_packages_from_json(result.stdout, selected.architecture)
+    return _runtime_packages_from_json(result.stdout, selected)
 
 
 def matching_runtime(
@@ -209,10 +224,19 @@ def matching_runtime(
     environ: Mapping[str, str] | None = None,
 ) -> RuntimePackage | None:
     selected = _runtime_contract() if runtime is None else runtime
+    minimum = _runtime_version(selected.version)
+    if minimum is None:
+        raise RuntimeError(f"Invalid Windows App Runtime minimum version: {selected.version!r}")
+    # The framework is serviced in place; SDK bootstrap uses a minimum version
+    # within its package family, not an exact match to the installer version.
+    best = None
+    best_version = minimum
     for package in installed_runtime_packages(selected, powershell=powershell, environ=environ):
-        if package.version == selected.version:
-            return package
-    return None
+        version = _runtime_version(package.version)
+        if version is not None and version >= best_version:
+            best = package
+            best_version = version
+    return best
 
 
 def _registry_dword(path: str, name: str) -> int | None:
@@ -279,7 +303,7 @@ def inspect_host(
             installed = matching_runtime(runtime, environ=environment)
             checks.append(
                 HostCheck(
-                    f"Windows App Runtime {runtime.version} {runtime.architecture}",
+                    f"Windows App Runtime >= {runtime.version} {runtime.architecture}",
                     installed is not None,
                     installed.package_full_name if installed else "missing; run `ao.bat setup winui-runtime`",
                 )
@@ -326,7 +350,8 @@ def require_runtime() -> RuntimePackage:
     installed = matching_runtime(runtime)
     if installed is None:
         raise RuntimeError(
-            f"Windows App Runtime {runtime.version} {runtime.architecture} is not installed; "
+            f"Windows App Runtime >= {runtime.version} {runtime.architecture} "
+            f"({runtime.package_name}) is not installed; "
             "run `ao.bat setup winui-runtime`."
         )
     return installed
@@ -420,7 +445,27 @@ def setup_runtime(*, state_root: Path | None = None) -> RuntimePackage:
         raise RuntimeError(f"Windows App Runtime installer failed with exit code {result.returncode}.")
     installed = matching_runtime(runtime)
     if installed is None:
-        raise RuntimeError(f"Windows App Runtime installer completed but {runtime.version} is still unavailable.")
+        inventory = _run_text(
+            [
+                "powershell.exe",
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$ErrorActionPreference = 'Stop'; "
+                "Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime*' | "
+                "Select-Object Name,Version,Architecture,PackageFullName,Status | ConvertTo-Json -Compress",
+            ],
+            environ=_windows_powershell_environment(),
+        )
+        detail = inventory.stdout.strip() or "(none)"
+        if inventory.returncode != 0:
+            detail = f"inventory query failed: {inventory.stderr.strip() or inventory.returncode}"
+        raise RuntimeError(
+            f"Windows App Runtime installer completed but {runtime.package_name} "
+            f">= {runtime.version} {runtime.architecture} is still unavailable.\n"
+            f"Current-user Windows App Runtime packages: {detail}"
+        )
     return installed
 
 

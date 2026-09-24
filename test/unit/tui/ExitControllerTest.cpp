@@ -64,7 +64,7 @@ namespace ao::tui::test
     CHECK(postCount == 1);
   }
 
-  TEST_CASE("ExitController - waits for a pending submitted write before posting exit", "[tui][unit][exit]")
+  TEST_CASE("ExitController - waits for a pending submitted write before posting exit", "[tui][unit][exit][async]")
   {
     auto events = std::vector<std::string>{};
     auto controller = ExitController{{
@@ -90,7 +90,7 @@ namespace ao::tui::test
     CHECK(events == std::vector<std::string>{"retire", "postExit"});
   }
 
-  TEST_CASE("ExitController - a second request stops application-level waiting", "[tui][unit][exit]")
+  TEST_CASE("ExitController - a second request stops application-level waiting", "[tui][unit][exit][async]")
   {
     std::int32_t postCount = 0;
     std::int32_t retireCount = 0;

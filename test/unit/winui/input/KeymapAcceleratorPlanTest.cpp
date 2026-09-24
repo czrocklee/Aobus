@@ -46,22 +46,9 @@ namespace ao::winui::test
 
     /// Answers yes for everything, so a case can isolate the other rules.
     KeymapActionAvailability const kEverythingOffered = [](std::string_view) { return true; };
-
-    bool isShippedWindowsAction(LayoutSchema const& schema, std::string_view const id)
-    {
-      if (schema.action(id))
-      {
-        return true;
-      }
-
-      // These commands are native shell behavior rather than layout-document
-      // actions. ShellBuilder registers their live handlers directly.
-      return id == "workspace.revealCurrentTrack" || id == "track.orderMoveUp" || id == "track.orderMoveDown" ||
-             id == "track.orderMoveToTop" || id == "track.orderMoveToBottom";
-    }
   } // namespace
 
-  TEST_CASE("KeymapAcceleratorPlan - hints describe only surviving executable bindings", "[winui][regression][input]")
+  TEST_CASE("KeymapAcceleratorPlan - hints describe only surviving executable bindings", "[winui][unit][input]")
   {
     auto const keymap = KeymapModel{KeymapBindings{
       {"first", {chord("Ctrl+P")}},
@@ -190,15 +177,14 @@ namespace ao::winui::test
     CHECK(plans.size() == 2);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - the shipped shell reaches its keyboard commands", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - the default Windows keymap plans caller-offered keyboard commands",
+            "[winui][unit][input]")
   {
-    // Layout actions and native-only shell commands both participate in the
-    // keymap when the running shell offers a handler.
+    // Availability is supplied here. Live ShellBuilder registration belongs to
+    // the native consumer, not this headless planner test.
     auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&schema](std::string_view const id) { return isShippedWindowsAction(schema, id); };
-
-    auto const plans = planKeymapAccelerators(keymap, schema, offered);
+    auto const plans = planKeymapAccelerators(keymap, schema, kEverythingOffered);
 
     auto const planned = [&plans](std::string_view const id)
     { return std::ranges::any_of(plans, [id](auto const& plan) { return plan.actionId == id; }); };
@@ -229,9 +215,7 @@ namespace ao::winui::test
   {
     auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};
-    auto const offered = [&schema](std::string_view const id) { return isShippedWindowsAction(schema, id); };
-
-    auto const plans = planKeymapAccelerators(keymap, schema, offered);
+    auto const plans = planKeymapAccelerators(keymap, schema, kEverythingOffered);
     auto seen = std::set<std::pair<std::uint32_t, std::uint32_t>>{};
 
     for (auto const& plan : plans)

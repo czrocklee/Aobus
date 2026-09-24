@@ -21,9 +21,10 @@ namespace ao::tui
    * combining mark, a flag, or a joined emoji from being cut in half by a
    * cursor move or a Backspace.
    *
-   * Mutations report whether the value actually changed, because the editor
-   * turns a field's Apply intent on for an accepted edit and must not turn it
-   * on for a rejected paste or a Backspace at the start of the value.
+   * Text key events report whether the value changed, because the editor
+   * must not turn on Apply intent for a rejected paste or a Backspace at the
+   * start. Direct range replacement instead reports acceptance, including
+   * replacement with the same value.
    */
   class TextFieldModel final
   {

@@ -18,7 +18,7 @@
 namespace ao::winui::test
 {
   TEST_CASE("List authoring presentation - applies an explicit preference or the saved-List recommendation",
-            "[winui][regression][list-authoring]")
+            "[winui][unit][list-authoring]")
   {
     auto fixture = uimodel::test::TrackPresentationFixture{};
     auto const listId = ListId{71};

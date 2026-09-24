@@ -33,7 +33,7 @@ namespace ao::uimodel::test
   TEST_CASE("KeymapModel - exposes defaults when no overrides applied", "[uimodel][unit][input][keymap]")
   {
     auto const model = KeymapModel{sampleDefaults()};
-    CHECK(model.chordsFor("playback.playPause").size() == 2);
+    CHECK(model.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P"), chord("Media:Play")});
     CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
     CHECK(model.chordsFor("unknown").empty());
   }
@@ -46,7 +46,7 @@ namespace ao::uimodel::test
     CHECK(diagnostics.empty());
     CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+N")});
     // Untouched actions keep defaults.
-    CHECK(model.chordsFor("playback.playPause").size() == 2);
+    CHECK(model.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P"), chord("Media:Play")});
   }
 
   TEST_CASE("KeymapModel - empty override list means explicitly unbound", "[uimodel][unit][input][keymap]")
@@ -70,15 +70,16 @@ namespace ao::uimodel::test
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
+    REQUIRE(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+N")});
     model.applyOverrides(KeymapOverrides{}); // empty overrides -> back to defaults
-    CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
+    CHECK(model.bindings() == sampleDefaults());
   }
 
   TEST_CASE("KeymapModel - deduplicates chords within an override", "[uimodel][unit][input][keymap]")
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N", "ctrl+n"}}});
-    CHECK(model.chordsFor("playback.next").size() == 1);
+    CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+N")});
   }
 
   TEST_CASE("KeymapModel - actionFor returns the action bound to a chord", "[uimodel][unit][input][keymap]")
@@ -121,14 +122,15 @@ namespace ao::uimodel::test
   {
     auto model = KeymapModel{sampleDefaults()};
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
+    REQUIRE(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+N")});
 
     model.resetToDefault("playback.next");
-    CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
+    CHECK(model.bindings() == sampleDefaults());
 
     model.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}, {"playback.playPause", {}}});
+    REQUIRE(model.bindings() == KeymapBindings{{"playback.next", {chord("Ctrl+N")}}, {"playback.playPause", {}}});
     model.resetAllToDefault();
-    CHECK(model.chordsFor("playback.playPause").size() == 2);
-    CHECK(model.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
+    CHECK(model.bindings() == sampleDefaults());
   }
 
   TEST_CASE("KeymapModel - toOverrides returns only deltas", "[uimodel][unit][input][keymap]")
@@ -145,13 +147,19 @@ namespace ao::uimodel::test
 
   TEST_CASE("defaultKeymap matches the shipped command actions", "[uimodel][unit][input][keymap]")
   {
-    auto const defaults = defaultKeymap();
-    REQUIRE(defaults.count("playback.playPause") == 1);
-    CHECK(defaults.at("playback.playPause").front() == chord("Ctrl+P"));
-    CHECK(defaults.count("workspace.revealCurrentTrack") == 1);
-    CHECK(defaults.at("track.orderMoveUp") == std::vector<KeyChord>{chord("Alt+Up")});
-    CHECK(defaults.at("track.orderMoveDown") == std::vector<KeyChord>{chord("Alt+Down")});
-    CHECK(defaults.at("track.orderMoveToTop") == std::vector<KeyChord>{chord("Alt+Home")});
-    CHECK(defaults.at("track.orderMoveToBottom") == std::vector<KeyChord>{chord("Alt+End")});
+    auto const expected = KeymapBindings{
+      {"playback.playPause", {chord("Ctrl+P"), chord("Media:Play"), chord("Media:Pause")}},
+      {"playback.stop", {chord("Media:Stop")}},
+      {"playback.next", {chord("Ctrl+Right"), chord("Media:Next")}},
+      {"playback.previous", {chord("Ctrl+Left"), chord("Media:Prev")}},
+      {"playback.toggleShuffle", {chord("Ctrl+U")}},
+      {"playback.cycleRepeat", {chord("Ctrl+R")}},
+      {"workspace.revealCurrentTrack", {chord("Ctrl+L")}},
+      {"track.orderMoveUp", {chord("Alt+Up")}},
+      {"track.orderMoveDown", {chord("Alt+Down")}},
+      {"track.orderMoveToTop", {chord("Alt+Home")}},
+      {"track.orderMoveToBottom", {chord("Alt+End")}},
+    };
+    CHECK(defaultKeymap() == expected);
   }
 } // namespace ao::uimodel::test

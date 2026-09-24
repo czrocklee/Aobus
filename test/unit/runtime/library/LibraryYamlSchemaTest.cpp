@@ -52,7 +52,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("LibraryYaml - version 4 is rejected before interpreting its payload",
-            "[runtime][workflow][import-export][schema]")
+            "[runtime][unit][import-export][schema]")
   {
     checkRejectedPayload({
       .label = "previous version",
@@ -62,7 +62,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryYaml - version 5 rejects ambiguous or forward-unknown records",
-            "[runtime][workflow][import-export][schema]")
+            "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "library field",
@@ -203,7 +203,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - version 5 requires explicit scope and root-contained URIs",
-            "[runtime][workflow][import-export][schema]")
+            "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "missing export mode",
@@ -284,7 +284,7 @@ library:
   }
 
   TEST_CASE("LibraryYaml - import rejects a URI resolving through a root-escaping symlink",
-            "[runtime][workflow][import-export][uri]")
+            "[runtime][unit][import-export][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -311,7 +311,7 @@ library:
     CHECK(res.error().message.contains("resolves outside the library root"));
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects duplicate semantic keys", "[runtime][workflow][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 5 rejects duplicate semantic keys", "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "canonical track URI",
@@ -346,7 +346,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects invalid list semantics", "[runtime][workflow][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 5 rejects invalid list semantics", "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "invalid List filter",
@@ -380,8 +380,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects values beyond supported limits",
-            "[runtime][workflow][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 5 rejects values beyond supported limits", "[runtime][unit][import-export][schema]")
   {
     auto overlongUri = std::string(LibraryUri::kMaxLength + 1U, 'a');
     checkRejectedPayload(RejectedPayload{

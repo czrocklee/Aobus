@@ -16,14 +16,17 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/TaskFuture.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryJobs.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -32,6 +35,8 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -89,7 +94,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("LibraryYaml - failed import wait retires the suspended task during runtime unwinding",
-            "[runtime][regression][import-export][concurrency]")
+            "[runtime][unit][import-export][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
@@ -118,7 +123,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks",
-            "[runtime][workflow][import-export][delta]")
+            "[runtime][integration][import-export][delta]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -204,6 +209,10 @@ namespace ao::rt::test
       REQUIRE(tracks.is_seq());
       REQUIRE(tracks.num_children() == 4);
 
+      CHECK(yaml::scalarView(tracks[0]["uri"]) == "no-file.flac");
+      CHECK(yaml::scalarView(tracks[1]["uri"]) == "dummy.flac");
+      CHECK(yaml::scalarView(tracks[2]["uri"]) == "cover.flac");
+      CHECK(yaml::scalarView(tracks[3]["uri"]) == "cover-removed.flac");
       CHECK(yaml::scalarView(tracks[0]["title"]) == "Should Export Fully");
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
@@ -216,12 +225,10 @@ namespace ao::rt::test
       CHECK_FALSE(tracks[2].has_child("covers"));
       CHECK_FALSE(tracks[3].has_child("covers"));
       CHECK_FALSE(root["library"].has_child("resources"));
-      CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
     }
   }
 
-  TEST_CASE("LibraryYaml - delta export reports filesystem inspection errors",
-            "[runtime][workflow][import-export][delta]")
+  TEST_CASE("LibraryYaml - delta export reports filesystem inspection errors", "[runtime][unit][import-export][delta]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -260,8 +267,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors",
-            "[runtime][workflow][import-export][delta]")
+  TEST_CASE("LibraryYaml - delta import reports filesystem inspection errors", "[runtime][unit][import-export][delta]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -297,7 +303,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryYaml - merge publishes truthful inserted and mutated track ids",
-            "[runtime][workflow][import-export][changeset]")
+            "[runtime][integration][import-export][changeset]")
   {
     auto const temp = ao::test::TempDir{};
     auto existingId = kInvalidTrackId;
@@ -335,14 +341,26 @@ library:
 
     REQUIRE(observed.size() == 1);
     REQUIRE(observed.front().tracksInserted.size() == 1);
-    CHECK(observed.front().tracksInserted.front() != existingId);
     CHECK(observed.front().tracksMutated == std::vector{existingId});
     CHECK_FALSE(observed.front().libraryReset);
     auto transaction = ml.readTransaction();
     CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
+    auto const optInserted = ml.manifest().reader(transaction).get("inserted.flac");
+    auto const optExisting = ml.manifest().reader(transaction).get("existing.flac");
+    REQUIRE(optInserted);
+    REQUIRE(optExisting);
+    CHECK(optInserted->trackId() != existingId);
+    CHECK(optExisting->trackId() == existingId);
+    CHECK(observed.front().tracksInserted == std::vector{optInserted->trackId()});
+    auto const optInsertedTrack = ml.tracks().reader(transaction).get(optInserted->trackId());
+    auto const optExistingTrack = ml.tracks().reader(transaction).get(existingId);
+    REQUIRE(optInsertedTrack);
+    REQUIRE(optExistingTrack);
+    CHECK(optInsertedTrack->metadata().title() == "Inserted");
+    CHECK(optExistingTrack->metadata().title() == "After");
   }
 
-  TEST_CASE("LibraryYaml - restore publishes a library reset", "[runtime][workflow][import-export][changeset]")
+  TEST_CASE("LibraryYaml - restore publishes a library reset", "[runtime][integration][import-export][changeset]")
   {
     auto const temp = ao::test::TempDir{};
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
@@ -369,19 +387,26 @@ library:
   }
 
   TEST_CASE("LibraryYaml - restore commits library id and content under one revision",
-            "[runtime][workflow][import-export][changeset]")
+            "[runtime][integration][import-export][changeset]")
   {
     auto const temp = ao::test::TempDir{};
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 5\n"
-           << "libraryId: 123E4567-E89B-12D3-A456-426614174000\n"
-           << "export_mode: full\n"
-           << "library:\n"
-           << "  resources: []\n"
-           << "  tracks: []\n"
-           << "  lists: []\n";
+      yaml << R"(version: 5
+libraryId: 123E4567-E89B-12D3-A456-426614174000
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: restored.flac
+      title: Restored
+  lists:
+    - id: 42
+      name: Restored List
+      order:
+        - uri: restored.flac
+)";
     }
 
     auto executorPtr = std::make_unique<QueuedExecutor>();
@@ -393,17 +418,35 @@ library:
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
+    auto const revisionBefore = core.library().snapshot().revision();
     REQUIRE(importThroughRuntime(core, executor, yamlPath, ImportMode::Restore));
 
-    CHECK(utility::formatUuid(ml.metadataHeader().libraryId) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(observed.size() == 1);
     CHECK(observed.front().libraryReset);
     auto transaction = ml.readTransaction();
-    CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
+    CHECK(utility::formatUuid(ml.metadataHeader(transaction).libraryId) == "123e4567-e89b-12d3-a456-426614174000");
+    CHECK(observed.front().libraryRevision == revisionBefore + 1);
+    CHECK(ml.libraryRevision(transaction) == revisionBefore + 1);
+    auto const optManifest = ml.manifest().reader(transaction).get("restored.flac");
+    REQUIRE(optManifest);
+    auto const trackReader = ml.tracks().reader(transaction);
+    CHECK(trackReader.entryCount() == 1);
+    auto const optTrack = trackReader.get(optManifest->trackId());
+    REQUIRE(optTrack);
+    CHECK(optTrack->property().uri() == "restored.flac");
+    CHECK(optTrack->metadata().title() == "Restored");
+    auto const listReader = ml.lists().reader(transaction);
+    auto listIterator = listReader.begin();
+    REQUIRE(listIterator != listReader.end());
+    auto const [listId, list] = *listIterator;
+    CHECK(listId != kInvalidListId);
+    CHECK(list.name() == "Restored List");
+    CHECK(std::ranges::equal(list.orderTrackIds(), std::array{optManifest->trackId()}));
+    ++listIterator;
+    CHECK(listIterator == listReader.end());
   }
 
-  TEST_CASE("LibraryYaml - preview preserves library id and publishes no changes",
-            "[runtime][workflow][import-export][dry-run]")
+  TEST_CASE("LibraryYaml - preview preserves library id and revision", "[runtime][integration][import-export][dry-run]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -426,8 +469,8 @@ library:
 
     REQUIRE(importer.previewImportFromYamlOffline(yamlPath, ImportMode::Restore));
 
-    CHECK(ml.metadataHeader().libraryId == originalLibraryId);
     auto afterTransaction = ml.readTransaction();
+    CHECK(ml.metadataHeader(afterTransaction).libraryId == originalLibraryId);
     CHECK(ml.libraryRevision(afterTransaction) == originalRevision);
   }
 } // namespace ao::rt::test

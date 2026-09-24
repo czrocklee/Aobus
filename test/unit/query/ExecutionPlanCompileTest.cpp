@@ -3,6 +3,7 @@
 
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include <ao/AudioCodec.h>
+#include <ao/Error.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/detail/Bytecode.h>
@@ -17,6 +18,8 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace ao::query::test
 {
@@ -25,19 +28,24 @@ namespace ao::query::test
     auto expr = parseOk("$artist = Bach");
     auto plan = compileOk(expr);
 
-    CHECK_FALSE(plan.instructions.empty());
+    CHECK(plan.dictionarySymbols == std::vector<std::string>{"Bach"});
+    CHECK(plan.stringConstants.empty());
+    CHECK(plan.requiresDictionary);
+    CHECK(checkComparison(plan, OpCode::Eq, Field::ArtistId, 0, 0)->operand == 1);
     CHECK_FALSE(plan.matchesAll);
   }
 
   TEST_CASE("ExecutionPlan - compiles constant true expressions", "[query][unit][execution-plan]")
   {
-    // Note: matchesAll is not automatically set - it's a hint for optimization
-    // The plan should still compile a constant true expression
     auto expr = parseOk("true");
     auto plan = compileOk(expr);
 
-    // The plan should have at least one instruction (LoadConstant)
-    CHECK_FALSE(plan.instructions.empty());
+    // Constant truth must not depend on the optional matchesAll shortcut.
+    auto const constant = findInstruction(plan, OpCode::LoadConstant);
+    CHECK(constant->operand == 0);
+    CHECK(constant->constValue == 1);
+    CHECK(plan.accessProfile == AccessProfile::NoTrackData);
+    CHECK_FALSE(plan.requiresDictionary);
   }
 
   TEST_CASE("ExecutionPlan - compiles metadata fields", "[query][unit][execution-plan]")
@@ -45,21 +53,9 @@ namespace ao::query::test
     auto expr = parseOk("$title = 'Test'");
     auto plan = compileOk(expr);
 
-    CHECK(plan.instructions.size() >= 2);
-    CHECK(plan.instructions[0].op == OpCode::LoadField);
-
-    bool hasEq = false;
-
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::Eq)
-      {
-        hasEq = true;
-        break;
-      }
-    }
-
-    CHECK(hasEq == true);
+    CHECK(plan.stringConstants == std::vector<std::string>{"Test"});
+    CHECK(plan.dictionarySymbols.empty());
+    CHECK(checkComparison(plan, OpCode::Eq, Field::Title, 0)->operand == 1);
   }
 
   TEST_CASE("ExecutionPlan - compiles property fields", "[query][unit][execution-plan]")
@@ -67,21 +63,7 @@ namespace ao::query::test
     auto expr = parseOk("@duration > 180000");
     auto plan = compileOk(expr);
 
-    CHECK(plan.instructions.size() >= 2);
-    CHECK(plan.instructions[0].op == OpCode::LoadField);
-
-    bool hasGt = false;
-
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::Gt)
-      {
-        hasGt = true;
-        break;
-      }
-    }
-
-    CHECK(hasGt == true);
+    CHECK(checkComparison(plan, OpCode::Gt, Field::Duration, 180000)->operand == 1);
   }
 
   TEST_CASE("ExecutionPlan - compiles codec constants", "[query][unit][execution-plan]")
@@ -118,18 +100,15 @@ namespace ao::query::test
     auto expr = parseOk("$artist = Bach && $genre = Classical");
     auto plan = compileOk(expr);
 
-    bool hasAnd = false;
-
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::And)
-      {
-        hasAnd = true;
-        break;
-      }
-    }
-
-    CHECK(hasAnd == true);
+    CHECK(plan.dictionarySymbols == std::vector<std::string>{"Bach", "Classical"});
+    auto const artist = checkComparison(plan, OpCode::Eq, Field::ArtistId, 0, 0);
+    auto const genre = checkComparison(plan, OpCode::Eq, Field::GenreId, 0, 1, 1);
+    auto const conjunction = findInstruction(plan, OpCode::And);
+    CHECK(artist < genre);
+    CHECK(genre < conjunction);
+    CHECK(artist->operand == 1);
+    CHECK(genre->operand == artist->operand + 1);
+    CHECK(conjunction->operand == genre->operand - 1);
   }
 
   TEST_CASE("ExecutionPlan - compiles logical or", "[query][unit][execution-plan]")
@@ -138,18 +117,15 @@ namespace ao::query::test
     auto expr = parseOk("$artist = Bach || $artist = Mozart");
     auto plan = compileOk(expr);
 
-    bool hasOr = false;
-
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::Or)
-      {
-        hasOr = true;
-        break;
-      }
-    }
-
-    CHECK(hasOr == true);
+    CHECK(plan.dictionarySymbols == std::vector<std::string>{"Bach", "Mozart"});
+    auto const bach = checkComparison(plan, OpCode::Eq, Field::ArtistId, 0, 0);
+    auto const mozart = checkComparison(plan, OpCode::Eq, Field::ArtistId, 0, 1, 1);
+    auto const disjunction = findInstruction(plan, OpCode::Or);
+    CHECK(bach < mozart);
+    CHECK(mozart < disjunction);
+    CHECK(bach->operand == 1);
+    CHECK(mozart->operand == bach->operand + 1);
+    CHECK(disjunction->operand == mozart->operand - 1);
   }
 
   TEST_CASE("ExecutionPlan - compiles logical not", "[query][unit][execution-plan]")
@@ -157,18 +133,12 @@ namespace ao::query::test
     auto expr = parseOk("not #favorite");
     auto plan = compileOk(expr);
 
-    bool hasNot = false;
-
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::Not)
-      {
-        hasNot = true;
-        break;
-      }
-    }
-
-    CHECK(hasNot == true);
+    CHECK(plan.dictionarySymbols == std::vector<std::string>{"favorite"});
+    auto const tag = checkComparison(plan, OpCode::Eq, Field::Tag, 0, 0);
+    auto const negation = findInstruction(plan, OpCode::Not);
+    CHECK(tag < negation);
+    CHECK(tag->operand == 1);
+    CHECK(negation->operand == tag->operand - 1);
   }
 
   TEST_CASE("ExecutionPlan - compiles existence tests", "[query][unit][execution-plan]")
@@ -192,31 +162,31 @@ namespace ao::query::test
       CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Duration));
       CHECK(plan.accessProfile == AccessProfile::ColdOnly);
     }
+  }
 
-    SECTION("BareNonTagVariablesAreRejectedAsPredicates")
-    {
-      std::ignore = compileError(parseOk("$year"));
-      std::ignore = compileError(parseOk("@duration"));
-      std::ignore = compileError(parseOk("%rating"));
-      std::ignore = compileError(parseOk("not $year"));
-      CHECK_THAT(compileError(parseOk("!$year")).message, Catch::Matchers::ContainsSubstring("!$year?"));
-      std::ignore = compileError(parseOk("$artist and $year = 1990"));
-      std::ignore = compileError(parseOk("$artist or $year = 1990"));
-      std::ignore = compileError(parseOk("$year = 1990 or $artist"));
-    }
+  TEST_CASE("ExecutionPlan - rejects bare non-tag predicate operands", "[query][unit][execution-plan]")
+  {
+    std::ignore = compileError(parseOk("$year"));
+    std::ignore = compileError(parseOk("@duration"));
+    std::ignore = compileError(parseOk("%rating"));
+    std::ignore = compileError(parseOk("not $year"));
+    CHECK_THAT(compileError(parseOk("!$year")).message, Catch::Matchers::ContainsSubstring("!$year?"));
+    std::ignore = compileError(parseOk("$artist and $year = 1990"));
+    std::ignore = compileError(parseOk("$artist or $year = 1990"));
+    std::ignore = compileError(parseOk("$year = 1990 or $artist"));
+  }
 
-    SECTION("ExistenceRequiresVariableOperand")
-    {
-      std::ignore = compileError(parseOk("($year = 1990)?"));
-      std::ignore = compileError(parseOk("1990?"));
-      std::ignore = compileError(parseOk(R"("Bach"?)"));
-    }
+  TEST_CASE("ExecutionPlan - rejects existence on non-variable operands", "[query][unit][execution-plan]")
+  {
+    std::ignore = compileError(parseOk("($year = 1990)?"));
+    std::ignore = compileError(parseOk("1990?"));
+    std::ignore = compileError(parseOk(R"("Bach"?)"));
+  }
 
-    SECTION("BareTagsRemainPredicates")
-    {
-      std::ignore = compileOk(parseOk("#favorite"));
-      std::ignore = compileOk(parseOk("!#favorite"));
-    }
+  TEST_CASE("ExecutionPlan - accepts bare and negated tag predicates", "[query][unit][execution-plan]")
+  {
+    std::ignore = compileOk(parseOk("#favorite"));
+    std::ignore = compileOk(parseOk("!#favorite"));
   }
 
   TEST_CASE("ExecutionPlan - compiles relational operators", "[query][unit][execution-plan]")
@@ -224,34 +194,12 @@ namespace ao::query::test
     auto expr = parseOk("$year < 2000");
     auto plan = compileOk(expr);
 
-    bool hasLt = false;
-
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::Lt)
-      {
-        hasLt = true;
-        break;
-      }
-    }
-
-    CHECK(hasLt == true);
+    CHECK(checkComparison(plan, OpCode::Lt, Field::Year, 2000)->operand == 1);
 
     expr = parseOk("$year <= 2000");
     plan = compileOk(expr);
 
-    bool hasLe = false;
-
-    for (auto const& instr : plan.instructions)
-    {
-      if (instr.op == OpCode::Le)
-      {
-        hasLe = true;
-        break;
-      }
-    }
-
-    CHECK(hasLe == true);
+    CHECK(checkComparison(plan, OpCode::Le, Field::Year, 2000)->operand == 1);
   }
 
   TEST_CASE("ExecutionPlan - rejects add operators", "[query][unit][execution-plan]")
@@ -276,6 +224,24 @@ namespace ao::query::test
     {
       auto var = VariableExpression{.type = static_cast<VariableType>(99), .name = "invalid"};
       std::ignore = compileError(var);
+    }
+
+    SECTION("Unsupported variable type reaches field resolution in a comparison")
+    {
+      auto binaryPtr = std::make_unique<BinaryExpression>();
+      binaryPtr->operand = VariableExpression{.type = VariableType::Metadata, .name = "year"};
+      binaryPtr->optOperation =
+        BinaryExpression::Operation{.op = Operator::Equal, .operand = ConstantExpression{std::int64_t{1990}}};
+      auto expression = Expression{std::move(binaryPtr)};
+
+      auto const validPlan = compileOk(expression);
+      CHECK(checkComparison(validPlan, OpCode::Eq, Field::Year, 1990)->operand == 1);
+
+      std::get<std::unique_ptr<BinaryExpression>>(expression)->operand =
+        VariableExpression{.type = static_cast<VariableType>(99), .name = "year"};
+      auto const error = compileError(expression);
+      CHECK(error.code == Error::Code::FormatRejected);
+      CHECK_THAT(error.message, Catch::Matchers::ContainsSubstring("unsupported variable type for 'year'"));
     }
 
     SECTION("Unsupported operator in BinaryExpression")

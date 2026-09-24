@@ -36,7 +36,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes->endpointPrecisionBits == 24);
   }
 
-  TEST_CASE("selectAlsaMode - a 16-bit endpoint rejects a 24-bit signal", "[audio][regression][alsa]")
+  TEST_CASE("selectAlsaMode - a 16-bit endpoint rejects a 24-bit signal", "[audio][unit][alsa]")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 16}};
@@ -62,8 +62,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes->endpointPrecisionBits == 24);
   }
 
-  TEST_CASE("selectAlsaMode - significant bits decide whether a wide container is lossless",
-            "[audio][regression][alsa]")
+  TEST_CASE("selectAlsaMode - significant bits decide whether a wide container is lossless", "[audio][unit][alsa]")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le, .optSignificantBits = 24}};
@@ -80,8 +79,7 @@ namespace ao::audio::backend::detail::test
     CHECK(reducedRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("selectAlsaMode - missing significant-bit evidence is not treated as full precision",
-            "[audio][regression][alsa]")
+  TEST_CASE("selectAlsaMode - missing significant-bit evidence is not treated as full precision", "[audio][unit][alsa]")
   {
     auto const evidence = std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le}};
 
@@ -92,7 +90,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().message.contains("S32_LE sbits=unknown"));
   }
 
-  TEST_CASE("selectAlsaMode - endpoint precision never exceeds its encoding", "[audio][regression][alsa]")
+  TEST_CASE("selectAlsaMode - endpoint precision never exceeds its encoding", "[audio][unit][alsa]")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 32}};
@@ -103,7 +101,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("selectAlsaMode - an integer signal is not quantized into float", "[audio][regression][alsa]")
+  TEST_CASE("selectAlsaMode - an integer signal is not quantized into float", "[audio][unit][alsa]")
   {
     auto const evidence = std::array{AlsaModeEvidence{.encoding = SampleEncoding::Float32Le, .optSignificantBits = 32}};
 
@@ -113,7 +111,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("selectAlsaMode - a float signal is not quantized into integer", "[audio][regression][alsa]")
+  TEST_CASE("selectAlsaMode - a float signal is not quantized into integer", "[audio][unit][alsa]")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le, .optSignificantBits = 32}};

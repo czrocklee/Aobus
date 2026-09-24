@@ -122,7 +122,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ListOrderSource - empty stored order forwards the exact regular parent script",
-            "[runtime][regression][source][list-order]")
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{std::vector<TrackId>{}};
@@ -213,9 +213,18 @@ namespace ao::rt::test
 
     CHECK(sourceTrackIds(source) == std::vector{TrackId{1}, TrackId{9}});
     REQUIRE(batches.size() == 3);
-    CHECK(std::holds_alternative<delta::InsertRange>(sourceEditScript(batches[0]).edits.front()));
-    CHECK(std::holds_alternative<delta::UpdateRange>(sourceEditScript(batches[1]).edits.front()));
-    CHECK(std::holds_alternative<delta::RemoveRange>(sourceEditScript(batches[2]).edits.front()));
+    REQUIRE(sourceEditScript(batches[0]).edits.size() == 1);
+    REQUIRE(sourceEditScript(batches[1]).edits.size() == 1);
+    REQUIRE(sourceEditScript(batches[2]).edits.size() == 1);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(batches[0]).edits.front());
+    auto const& update = std::get<delta::UpdateRange>(sourceEditScript(batches[1]).edits.front());
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(batches[2]).edits.front());
+    CHECK(insertion.start == 2);
+    CHECK(insertion.trackIds == std::vector{TrackId{8}});
+    CHECK(update.start == 1);
+    CHECK(update.trackIds == std::vector{TrackId{9}});
+    CHECK(removal.start == 2);
+    CHECK(removal.trackIds == std::vector{TrackId{8}});
   }
 
   TEST_CASE("ListOrderSource - parent reset rebuilds effective state without discarding stored intent",

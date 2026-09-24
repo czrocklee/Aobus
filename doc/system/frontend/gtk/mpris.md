@@ -51,8 +51,10 @@ The bridge-owned `MprisArtUrlSession` retains only the current cover resource id
 
 ## Commands and transitions
 
-`start()` subscribes to playback and command availability, requests the canonical session-bus name, registers both interfaces after bus acquisition, and marks the bridge active only after name acquisition.
-Repeated start is a no-op while ownership registration exists.
+`start()` first reserves the process's single canonical-name registration, then subscribes to playback and command availability, requests the session-bus name without queuing, registers both interfaces after bus acquisition, and marks the bridge active only after name acquisition.
+An overlapping bridge in the same process is rejected before subscribing or requesting the name: GIO's shared session connection requires same-name ownership and release calls to alternate.
+Repeated start is a no-op while that bridge retains its process reservation.
+The reservation does not make the bridge thread-safe; startup, callbacks, and teardown remain confined to the GTK main context.
 
 Known player methods execute the corresponding `PlaybackActions` command, preserving its capability gate and ordinary queued completion. The standalone Next method has no captured position target.
 Relative seek captures the current occurrence and signed offset, then uses queued `seekBy` with `PlaybackRelativeSeekEndBehavior::Next`.
@@ -79,6 +81,8 @@ A completion guarded by the current callback scope stores the URL and emits `Met
 
 Bus connection, introspection, object registration, and name-ownership failures disable MPRIS for that instance and log a warning.
 They do not post a user notification, change playback, or disturb an instance that already owns the name.
+A failed acquisition clears exported objects and playback subscriptions but retains its non-queued name token and process reservation until normal teardown; it does not become the owner when another instance exits.
+Teardown releases the GIO name token before admitting another bridge in the process. The name-lost callback must not release that token reentrantly while GIO is still updating ownership state.
 Unknown methods and unsupported writable properties return protocol errors.
 
 The bridge uses scoped cancellation for the current art URL interest and closes its callback scope before cancelling that interest.
@@ -111,6 +115,7 @@ Later instances continue as ordinary GTK applications without MPRIS.
 ## Test map
 
 - [`MprisBridgeTest.cpp`](../../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects status, occurrence-qualified metadata identity, time, guarded-command no-ops, capability, repeat/shuffle, volume, and cover-art mapping.
+- [`MprisBusLifetimeTest.cpp`](../../../../test/unit/linux-gtk/platform/MprisBusLifetimeTest.cpp) protects real-bus pending and acquired ownership, same-process rejection, external-name contention without promotion, and replacement after retirement.
 - [`MprisPlaybackPositionTest.cpp`](../../../../test/unit/linux-gtk/platform/MprisPlaybackPositionTest.cpp) protects real-clock relative positioning, busy submission, stale replay, endpoint behavior, and pending realtime succession.
 - [`MprisArtUrlSessionTest.cpp`](../../../../test/unit/linux-gtk/platform/MprisArtUrlSessionTest.cpp) protects request replacement, synchronous completion, invalidation-before-cancellation, destruction, and requester-exception cleanup.
 

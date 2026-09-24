@@ -29,6 +29,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/editable.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -125,6 +126,19 @@ namespace ao::gtk
           close();
         }
       });
+    signal_close_request().connect(
+      [this]
+      {
+        if (_interactionState != InteractionState::Closing)
+        {
+          // A native close need not retire a retained C++ owner. Cancel its
+          // presentation delivery, not the independently admitted command.
+          _tasks.cancelAll();
+        }
+
+        return false;
+      },
+      false);
   }
 
   TrackPropertiesDialog::~TrackPropertiesDialog() = default;
@@ -384,12 +398,16 @@ namespace ao::gtk
           return;
         }
 
+        owner->setInteractionState(InteractionState::Closing);
+
         for (auto const& change : replyRes->reply.changes)
         {
           owner->_rowCache.invalidate(change.trackId);
         }
 
-        owner->setInteractionState(InteractionState::Closing);
+        // Return from the task completion before closing the native window. A
+        // managed toplevel may retire its C++ owner as part of close handling;
+        // the tracked idle therefore owns no unguarded post-close access.
         Glib::signal_idle().connect_once(sigc::track_object([owner] { owner->close(); }, *owner));
       });
   }
@@ -418,7 +436,14 @@ namespace ao::gtk
     for (auto const& editor : _editors)
     {
       auto const view = _formModel.rowView(editor.field);
-      editor.widget->set_sensitive(sessionCanEdit && interactionCanEdit && view.editable && !view.mixed);
+      auto const canEdit = sessionCanEdit && interactionCanEdit && view.editable && !view.mixed;
+      editor.widget->set_sensitive(canEdit);
+
+      if (auto* const editable = dynamic_cast<Gtk::Editable*>(editor.widget); editable != nullptr)
+      {
+        // Also reject delayed editable operations, such as a clipboard reply.
+        editable->set_editable(canEdit);
+      }
     }
   }
 
@@ -508,6 +533,7 @@ namespace ao::gtk
 
     if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
+      entry->set_text("");
       entry->set_placeholder_text(std::string{text});
       return;
     }

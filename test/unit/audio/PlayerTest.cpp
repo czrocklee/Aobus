@@ -417,7 +417,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Player - lifecycle ignores stale route and graph updates", "[audio][unit][player][lifecycle]")
+  TEST_CASE("Player - lifecycle ignores stale route and graph updates", "[audio][unit][player][concurrency]")
   {
     auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -597,7 +597,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Player - pending output activates when matching device appears", "[audio][unit][player][pending]")
+  TEST_CASE("Player - pending output activates when matching device appears", "[audio][unit][player]")
   {
     auto mockProvider = Mock<BackendProvider>{};
     Fake(Method(mockProvider, shutdown));
@@ -651,13 +651,18 @@ namespace ao::audio::test
     CHECK(snapAfter.engine.backendId == kBackendPipeWire);
     CHECK(player.isReady() == true);
 
-    // 4. Simulate SECOND devices change to trigger updateDevice for active device
+    // Updated device evidence must keep the selected output and refresh its public description.
     onOutputDevicesChanged({Device{.id = DeviceId{"system-default"},
                                    .displayName = "System Default (Updated)",
                                    .description = "PipeWire",
                                    .isDefault = true,
                                    .backendId = kBackendPipeWire}});
-    // This should hit line 126 in Player.cpp
+    auto const updated = player.status();
+    REQUIRE(updated.availableBackends.size() == 1);
+    REQUIRE(updated.availableBackends.front().devices.size() == 1);
+    CHECK(updated.availableBackends.front().devices.front().displayName == "System Default (Updated)");
+    CHECK(updated.engine.backendId == kBackendPipeWire);
+    CHECK(updated.engine.currentDeviceId == "system-default");
   }
 
   TEST_CASE("Player - setOutputDevice rejects unknown backend", "[audio][unit][player][output]")
@@ -671,12 +676,22 @@ namespace ao::audio::test
 
     auto executor = rt::test::InlineExecutor{};
     auto player = Player{executor};
-    player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
+
+    SECTION("no providers are registered")
+    {
+      CHECK(player.status().availableBackends.empty());
+    }
+
+    SECTION("another backend is registered")
+    {
+      player.addProvider(std::make_unique<MockProviderProxy>(mockProvider.get()));
+    }
 
     auto const res = player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-device"}, kProfileShared);
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::NotFound);
+    CHECK(player.status().engine.backendId == kBackendNone);
     CHECK(player.status().engine.currentDeviceId == "null");
   }
 
@@ -770,7 +785,7 @@ namespace ao::audio::test
     CHECK(deviceSignals == 0);
   }
 
-  TEST_CASE("Player - outward callback defers player teardown", "[audio][regression][player][concurrency]")
+  TEST_CASE("Player - outward callback defers player teardown", "[audio][unit][player][concurrency]")
   {
     struct CallbackLifetime final
     {
@@ -911,8 +926,7 @@ namespace ao::audio::test
     CHECK(playerPtr == nullptr);
   }
 
-  TEST_CASE("Player - ALSA-style synchronous graph update defers player teardown",
-            "[audio][regression][player][concurrency]")
+  TEST_CASE("Player - ALSA-style synchronous graph update defers player teardown", "[audio][unit][player][concurrency]")
   {
     auto const fixturePath = requireAudioFixture("basic_metadata.flac");
     auto probePtr = std::make_shared<SynchronousGraphProbe>();
@@ -950,7 +964,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - switching output while playing subscribes to the new route",
-            "[audio][regression][player][output]")
+            "[audio][unit][player][output][concurrency]")
   {
     auto const fixturePath = requireAudioFixture("basic_metadata.flac");
     auto probePtr = std::make_shared<SynchronousGraphProbe>();
@@ -1025,7 +1039,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - graph bursts do not consume the ordered playback failure notification",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto const fixturePath = requireAudioFixture("basic_metadata.flac");
     auto probePtr = std::make_shared<SynchronousGraphProbe>();
@@ -1210,7 +1224,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - blocked optimistic preroll leaves the callback executor responsive and cancels safely",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto const candidatePath = std::filesystem::path{"preroll-blocked.flac"};
@@ -1295,8 +1309,7 @@ namespace ao::audio::test
     CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) == 2);
   }
 
-  TEST_CASE("Player - explicit cancellation discards a blocked start preparation",
-            "[audio][regression][player][concurrency]")
+  TEST_CASE("Player - explicit cancellation discards a blocked start preparation", "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1334,7 +1347,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - explicit cancellation discards a blocked lookahead preparation",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1373,7 +1386,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - replacement suppresses a blocked lookahead for the same item",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1427,8 +1440,7 @@ namespace ao::audio::test
     executor.drain();
   }
 
-  TEST_CASE("Player - start acceptance veto completes exactly once with conflict",
-            "[audio][regression][player][concurrency]")
+  TEST_CASE("Player - start acceptance veto completes exactly once with conflict", "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1462,7 +1474,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - worker lookahead acceptance veto completes exactly once with conflict",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1497,7 +1509,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - logical drain-fallback acceptance veto completes exactly once with conflict",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto probePtr = std::make_shared<BarrierBackendProbe>();
     auto executor = QueuedExecutor{};
@@ -1540,7 +1552,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - asynchronous start distinguishes unchanged and stale device evidence",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1672,7 +1684,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - queued preparation completion is harmless after owner destruction",
-            "[audio][regression][player][concurrency]")
+            "[audio][unit][player][concurrency]")
   {
     auto gatePtr = std::make_shared<BlockingPreparationGate>();
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1759,7 +1771,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - accepted play and stop filter an old failure already queued on its executor",
-            "[audio][unit][player][barrier]")
+            "[audio][unit][player][barrier][concurrency]")
   {
     auto const fixturePath = requireAudioFixture("basic_metadata.flac");
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1805,7 +1817,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - failed committed start advances callback and graph barriers",
-            "[audio][regression][player][barrier]")
+            "[audio][unit][player][barrier][concurrency]")
   {
     auto probePtr = std::make_shared<BarrierBackendProbe>();
     auto executor = QueuedExecutor{};
@@ -1841,7 +1853,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - accepted play and stop filter an old route already queued on its executor",
-            "[audio][unit][player][barrier]")
+            "[audio][unit][player][barrier][concurrency]")
   {
     auto const fixturePath = requireAudioFixture("basic_metadata.flac");
     auto probePtr = std::make_shared<BarrierBackendProbe>();
@@ -1883,7 +1895,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - accepted play and stop filter an old track end already queued on its executor",
-            "[audio][unit][player][barrier]")
+            "[audio][unit][player][barrier][concurrency]")
   {
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const data = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
@@ -1935,7 +1947,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - queued gapless route follows the graph generation advanced on the executor",
-            "[audio][unit][player][gapless]")
+            "[audio][unit][player][gapless][concurrency]")
   {
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
@@ -1973,7 +1985,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - prepared source failure preserves item and audio generation on executor forwarding",
-            "[audio][unit][player][failure]")
+            "[audio][unit][player][failure][concurrency]")
   {
     auto const format = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
     auto const factory = [format](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
@@ -2028,59 +2040,45 @@ namespace ao::audio::test
     CHECK(player.transport() == Transport::Playing);
   }
 
-  TEST_CASE("Player - controls update engine-backed status", "[audio][unit][player][control]")
+  TEST_CASE("Player - adding a null provider leaves output availability unchanged", "[audio][unit][player][control]")
   {
     auto executor = rt::test::InlineExecutor{};
     auto player = Player{executor};
 
-    SECTION("addProvider(nullptr) is safe")
-    {
-      player.addProvider(nullptr);
-      // No crash, nothing added.
-    }
+    player.addProvider(nullptr);
 
-    SECTION("setOutputDevice with non-existent provider")
-    {
-      CHECK_FALSE(player.setOutputDevice(kBackendAlsa, DeviceId{"alsa-dev"}, kProfileShared));
-      // It should just log an error and return.
-      auto const snap = player.status();
-      CHECK(snap.engine.backendId == kBackendNone);
-    }
-
-    SECTION("Seek is propagated to engine")
-    {
-      // Even with NullBackend, elapsed should be updated in Engine status
-      // wait, Engine::seek returns early if no source.
-      player.seek(std::chrono::seconds{1});
-      CHECK(player.status().engine.elapsed == std::chrono::milliseconds{0});
-    }
-
-    SECTION("Volume and mute are propagated to engine and status")
-    {
-      CHECK(player.setVolume(0.6F));
-      CHECK(player.status().engine.volume == Catch::Approx{0.6F});
-
-      CHECK(player.setMuted(true));
-      CHECK(player.status().engine.muted == true);
-
-      CHECK(player.toggleMute());
-      CHECK(player.status().engine.muted == false);
-    }
+    auto const snap = player.status();
+    CHECK(snap.availableBackends.empty());
+    CHECK(snap.engine.backendId == kBackendNone);
+    CHECK(snap.engine.currentDeviceId == "null");
   }
 
-  TEST_CASE("Player - subscription unsubscribe removes callback", "[audio][unit][player][subscription]")
+  TEST_CASE("Player - seeking without a source leaves elapsed unchanged", "[audio][unit][player][control]")
   {
-    bool called = false;
-    auto sub = utility::ScopedRegistration{[&] { called = true; }};
+    auto executor = rt::test::InlineExecutor{};
+    auto player = Player{executor};
 
-    {
-      auto tempSub = std::move(sub);
-    }
+    player.seek(std::chrono::seconds{1});
 
-    CHECK(called == true);
+    CHECK(player.status().engine.elapsed == std::chrono::milliseconds{0});
   }
 
-  TEST_CASE("Player - provider state outlives backend shutdown", "[audio][unit][player][lifecycle]")
+  TEST_CASE("Player - volume and mute controls update engine-backed status", "[audio][unit][player][control]")
+  {
+    auto executor = rt::test::InlineExecutor{};
+    auto player = Player{executor};
+
+    CHECK(player.setVolume(0.6F));
+    CHECK(player.status().engine.volume == Catch::Approx{0.6F});
+
+    CHECK(player.setMuted(true));
+    CHECK(player.status().engine.muted == true);
+
+    CHECK(player.toggleMute());
+    CHECK(player.status().engine.muted == false);
+  }
+
+  TEST_CASE("Player - provider state outlives backend shutdown", "[audio][unit][player]")
   {
     struct Events final
     {

@@ -11,8 +11,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,7 +43,7 @@ namespace ao::media::file::flac::test
       data.push_back(size & 0xFF);
     }
 
-    std::vector<std::uint8_t> createMinimalFlac(std::string_view title = "Title")
+    std::vector<std::uint8_t> createFlac(std::span<std::string const> comments)
     {
       auto data = std::vector<std::uint8_t>{'f', 'L', 'a', 'C'};
 
@@ -63,39 +66,49 @@ namespace ao::media::file::flac::test
         vc.insert(vc.end(), s.begin(), s.end());
       };
       addString("Vendor");
-      std::uint32_t const count = 21;
+      auto const count = static_cast<std::uint32_t>(comments.size());
       vc.push_back(count & 0xFF);
       vc.push_back((count >> 8) & 0xFF);
       vc.push_back((count >> 16) & 0xFF);
       vc.push_back((count >> 24) & 0xFF);
-      auto titleComment = std::string{"TITLE="};
-      titleComment += title;
-      addString(titleComment);
-      addString("ARTIST=Artist");
-      addString("ALBUMARTIST=AlbumArtist");
-      addString("COMPOSER=Composer");
-      addString("CONDUCTOR=Conductor");
-      addString("ENSEMBLE=Ensemble");
-      addString("ORCHESTRA=Orchestra Fallback");
-      addString("GENRE=Genre");
-      addString("TRACKNUMBER=1");
-      addString("TRACKTOTAL=10");
-      addString("TOTALTRACKS=10");
-      addString("DISCNUMBER=2/5");
-      addString("DISCTOTAL=5");
-      addString("TOTALDISCS=5");
-      addString("DATE=2024");
-      addString("WORK=WorkName");
-      addString("MOVEMENTNAME=MovementName");
-      addString("MOVEMENT=2/4");
-      addString("SOLOIST=Soloist");
-      addString("PERFORMER=Performer Fallback");
-      addString("UNKNOWN=IgnoredValue");
+
+      for (auto const& comment : comments)
+      {
+        addString(comment);
+      }
 
       addBlockHeader(data, MetadataBlockType::VorbisComment, true, static_cast<std::uint32_t>(vc.size()));
       data.insert(data.end(), vc.begin(), vc.end());
 
       return data;
+    }
+
+    std::vector<std::uint8_t> createMinimalFlac(std::string_view title = "Title")
+    {
+      auto const comments = std::vector<std::string>{
+        "TITLE=" + std::string{title},
+        "ARTIST=Artist",
+        "ALBUMARTIST=AlbumArtist",
+        "COMPOSER=Composer",
+        "CONDUCTOR=Conductor",
+        "ENSEMBLE=Ensemble",
+        "ORCHESTRA=Orchestra Fallback",
+        "GENRE=Genre",
+        "TRACKNUMBER=1",
+        "TRACKTOTAL=10",
+        "TOTALTRACKS=10",
+        "DISCNUMBER=2/5",
+        "DISCTOTAL=5",
+        "TOTALDISCS=5",
+        "DATE=2024",
+        "WORK=WorkName",
+        "MOVEMENTNAME=MovementName",
+        "MOVEMENT=2/4",
+        "SOLOIST=Soloist",
+        "PERFORMER=Performer Fallback",
+        "UNKNOWN=IgnoredValue",
+      };
+      return createFlac(comments);
     }
 
     ao::media::file::test::RecordedContent readContent(File const& file)
@@ -139,6 +152,27 @@ namespace ao::media::file::flac::test
     CHECK(prop.bitDepth() == 16);
     CHECK(prop.codec() == AudioCodec::Flac);
     CHECK(prop.duration() == std::chrono::seconds{1});
+  }
+
+  TEST_CASE("FLAC File - count comments require complete numbers while dates yield their year",
+            "[media][unit][flac][file]")
+  {
+    auto const comments = std::vector<std::string>{
+      "TRACKTOTAL=12x",
+      "DISCTOTAL=3",
+      "MOVEMENTTOTAL=4 ",
+      "DATE=2024-05-17",
+    };
+    auto data = createFlac(comments);
+    data.push_back(0xA0);
+    auto const temp = TempFile{data, ".flac"};
+    auto const content = readContent(File{temp.path});
+
+    // An absent number reads as zero; a lenient prefix parse would yield 12 and 4.
+    CHECK(content.number(NumberField::TrackTotal) == 0);
+    CHECK(content.number(NumberField::DiscTotal) == 3);
+    CHECK(content.number(NumberField::MovementTotal) == 0);
+    CHECK(content.number(NumberField::Year) == 2024);
   }
 
   TEST_CASE("FLAC File - emits real fixture tag fields", "[media][unit][flac][file]")
@@ -218,6 +252,9 @@ namespace ao::media::file::flac::test
 
     CHECK(firstPayloadRes->bytes.size() == audioPayload.size());
     CHECK(secondPayloadRes->bytes.size() == audioPayload.size());
+    auto const expectedPayload = std::array{std::byte{0xC0}, std::byte{0xC1}, std::byte{0xC2}, std::byte{0xC3}};
+    CHECK(std::ranges::equal(firstPayloadRes->bytes, expectedPayload));
+    CHECK(std::ranges::equal(secondPayloadRes->bytes, expectedPayload));
     CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 

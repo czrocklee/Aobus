@@ -155,6 +155,7 @@ namespace ao::library::test
     auto const view = makeColdTrackView(data);
 
     CHECK(view.property().uri().empty());
+    CHECK(view.isColdValid());
   }
 
   // === Property Tests ===
@@ -170,13 +171,6 @@ namespace ao::library::test
     CHECK(view.property().codec() == AudioCodec::Flac);
     CHECK(view.property().bitDepth() == 24);
     CHECK(view.property().sampleRate() == 96000);
-  }
-
-  TEST_CASE("TrackView - returns file size and modification time from cold data", "[library][unit][track]")
-  {
-    auto const data = makeColdTrackViewData({}, {}, "");
-    auto const view = makeColdTrackView(data);
-    CHECK(view.isColdValid());
   }
 
   TEST_CASE("TrackView - returns audio format from cold data", "[library][unit][track]")

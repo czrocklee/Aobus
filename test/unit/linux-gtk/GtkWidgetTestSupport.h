@@ -24,6 +24,11 @@ namespace Gtk
   class Popover;
 } // namespace Gtk
 
+namespace ao::gtk
+{
+  class AppDialog;
+}
+
 namespace ao::gtk::test
 {
   template<typename T>
@@ -48,6 +53,8 @@ namespace ao::gtk::test
   Gtk::Label* findLabelByText(Gtk::Widget& root, std::string const& text);
   std::vector<std::string> directChildLabelTextsByClass(Gtk::Widget& container, std::string_view cssClass);
   Gtk::Button* findButtonByLabel(Gtk::Widget& root, std::string const& labelText);
+  /// Returns the first process-wide toplevel AppDialog whose title is exactly @p title, or nullptr.
+  AppDialog* findAppDialogByTitle(std::string_view title);
   bool hasCssClass(Gtk::Widget const& widget, std::string_view cssClass);
   bool hasAccessibleLabel(Gtk::Widget& widget, std::string_view label);
 

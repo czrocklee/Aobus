@@ -90,7 +90,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - list-only export restores lists by track URI", "[runtime][workflow][import-export][list]")
+  TEST_CASE("LibraryYaml - list-only export restores lists by track URI", "[runtime][integration][import-export][list]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -149,6 +149,7 @@ namespace ao::rt::test
       targetTrackId = library::test::addTrackWithUniqueFixtureUri(ml2, library::test::makeEmptyTrackSpec(uri));
     }
 
+    REQUIRE(targetTrackId != trackId);
     auto importer = LibraryYamlImporter{ml2};
     REQUIRE(importer.importFromYamlOffline(yamlPath, rt::ImportMode::Restore));
 
@@ -169,14 +170,20 @@ namespace ao::rt::test
 
       CHECK(listCount == 1);
 
-      // Verify tracks were NOT cleared
-      CHECK(ml2.tracks().reader(transaction).begin() != ml2.tracks().reader(transaction).end());
+      // Both the remapped target and the unrelated track survive list-only restore.
+      auto const trackReader = ml2.tracks().reader(transaction);
+      auto const optTarget = trackReader.get(targetTrackId);
+      auto const optJunk = trackReader.get(junkTrackId);
+      REQUIRE(optTarget);
+      REQUIRE(optJunk);
+      CHECK(optTarget->property().uri() == uri);
+      CHECK(optJunk->property().uri() == "library-export-import-junk.flac");
       CHECK(ml2.metadataHeader(transaction).libraryId == targetLibraryId);
     }
   }
 
   TEST_CASE("LibraryYaml - import remaps list parents regardless of YAML order",
-            "[runtime][workflow][import-export][list]")
+            "[runtime][integration][import-export][list]")
   {
     auto temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -245,7 +252,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - import drops dangling list references", "[runtime][workflow][import-export][list]")
+  TEST_CASE("LibraryYaml - import drops dangling list references", "[runtime][integration][import-export][list]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -286,6 +293,9 @@ library:
     auto const listReader = ml.lists().reader(transaction);
 
     std::int32_t listCount = 0;
+    bool foundParent = false;
+    bool foundDanglingParent = false;
+    auto const trackReader = ml.tracks().reader(transaction);
 
     for (auto const& [lid, view] : listReader)
     {
@@ -293,20 +303,30 @@ library:
 
       if (view.name() == "Parent")
       {
+        CHECK_FALSE(foundParent);
+        foundParent = true;
         REQUIRE(view.orderTrackIds().size() == 1);
+        auto const optTrack = trackReader.get(view.orderTrackIds()[0]);
+        REQUIRE(optTrack);
+        CHECK(optTrack->property().uri() == "valid.flac");
         CHECK(view.parentId() == kInvalidListId);
       }
       else if (view.name() == "Dangling Parent")
       {
+        CHECK_FALSE(foundDanglingParent);
+        foundDanglingParent = true;
         CHECK(view.parentId() == kInvalidListId);
+        CHECK(view.orderTrackIds().empty());
       }
     }
 
     CHECK(listCount == 2);
+    CHECK(foundParent);
+    CHECK(foundDanglingParent);
   }
 
   TEST_CASE("LibraryYaml - mixed list order references preserve first-occurrence order across round-trip",
-            "[runtime][workflow][import-export][list]")
+            "[runtime][integration][import-export][list]")
   {
     auto const sourceTemp = ao::test::TempDir{};
     auto sourceLibrary = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());

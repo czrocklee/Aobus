@@ -197,7 +197,10 @@ Late cover-art results, late runtime events, and callbacks delivered after shell
 
 Window placement, shell mode, library root, and pane sizes belong to the versioned Windows `desktop` group. Inline navigation and inspector boundaries are draggable, save their widths after a completed drag, and reuse those widths in both shells.
 Window placement saves the native restored rectangle independently from the
-maximized state, so saving while maximized does not replace the normal bounds.
+maximized state, so saving while maximized does not replace them with maximized
+screen bounds. Native capture floors undersized restore dimensions to the
+[persisted minimum](../../reference/windows/desktop-state.md#surface) before
+installing live settings, without resizing the current window.
 Per-list presentation choice and column state use the shared `trackView.presentations` and `trackView.columnLayouts` groups.
 Track-property drafts and dialog state are not persisted; accepted metadata, custom metadata, and tags use ordinary library mutation. [Library workflows](windows-library-workflows.md#persistence) owns List and transfer state and their persistence boundaries.
 The global `desktop` group and the two per-library presentation groups have separate writers and save boundaries. Each presentation store saves only its own group in `winui_layout.yaml`, preserving siblings; a desktop-settings checkpoint does not atomically commit all three groups. `windows-theme.yaml` remains independent.

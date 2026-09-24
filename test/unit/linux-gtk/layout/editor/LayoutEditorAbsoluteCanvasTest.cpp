@@ -3,6 +3,7 @@
 
 #include "../components/ContainerTestHelpers.h"
 #include "app/ShellLayoutCollaborators.h"
+#include "app/linux-gtk/layout/document/LayoutDialect.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
@@ -17,6 +18,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/document/LayoutValidation.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -34,7 +36,7 @@ namespace ao::gtk::layout::editor::test
   using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("absoluteCanvas - builds positioned child containers", "[gtk][unit][layout][editor]")
+  TEST_CASE("absoluteCanvas - builds positioned child containers", "[gtk][unit][layout-editor]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
@@ -66,6 +68,17 @@ namespace ao::gtk::layout::editor::test
       CHECK(uimodel::isContainer(*optComponentSchema));
       CHECK(optComponentSchema->minChildren == 0);
       CHECK(!optComponentSchema->optMaxChildren);
+      REQUIRE(optComponentSchema->layoutProperties.size() == 5);
+      CHECK(optComponentSchema->layoutProperties[0].name == "x");
+      CHECK(optComponentSchema->layoutProperties[1].name == "y");
+      CHECK(optComponentSchema->layoutProperties[2].name == "width");
+      CHECK(optComponentSchema->layoutProperties[3].name == "height");
+      CHECK(optComponentSchema->layoutProperties[4].name == "zIndex");
+
+      for (auto const& property : optComponentSchema->layoutProperties)
+      {
+        CHECK(property.kind == PropertyKind::Int);
+      }
     }
 
     SECTION("absoluteCanvas with no children builds a component")
@@ -73,8 +86,12 @@ namespace ao::gtk::layout::editor::test
       auto doc = LayoutDocument{};
       doc.root.type = "absoluteCanvas";
 
+      auto const preparedRes = prepareLayout(doc);
+      REQUIRE(preparedRes);
+      REQUIRE(requireValidLayout(*preparedRes, registry.schema(), layoutDialect()));
+
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const compPtr = layoutRuntime.build(ctx, ao::test::requireValue(prepareLayout(doc)));
+      auto const compPtr = layoutRuntime.build(ctx, *preparedRes);
 
       CHECK(compPtr != nullptr);
     }
@@ -94,14 +111,19 @@ namespace ao::gtk::layout::editor::test
       child.layout["zIndex"] = LayoutValue{static_cast<std::int64_t>(2)};
       doc.root.children.push_back(std::move(child));
 
+      auto const preparedRes = prepareLayout(doc);
+      REQUIRE(preparedRes);
+      REQUIRE(requireValidLayout(*preparedRes, registry.schema(), layoutDialect()));
+
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const compPtr = layoutRuntime.build(ctx, ao::test::requireValue(prepareLayout(doc)));
+      auto const compPtr = layoutRuntime.build(ctx, *preparedRes);
 
       CHECK(compPtr != nullptr);
     }
   }
 
-  TEST_CASE("absoluteCanvas - geometry allocates children at configured coordinates", "[gtk][unit][geometry]")
+  TEST_CASE("absoluteCanvas - geometry allocates children at configured coordinates",
+            "[gtk][unit][absolute-canvas][geometry]")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 
@@ -137,8 +159,12 @@ namespace ao::gtk::layout::editor::test
     child.layout["height"] = LayoutValue{static_cast<std::int64_t>(50)};
     doc.root.children.push_back(std::move(child));
 
+    auto const preparedRes = prepareLayout(doc);
+    REQUIRE(preparedRes);
+    REQUIRE(requireValidLayout(*preparedRes, registry.schema(), layoutDialect()));
+
     auto layoutRuntime = LayoutRuntime{registry};
-    auto const compPtr = layoutRuntime.build(ctx, ao::test::requireValue(prepareLayout(doc)));
+    auto const compPtr = layoutRuntime.build(ctx, *preparedRes);
 
     REQUIRE(compPtr != nullptr);
 

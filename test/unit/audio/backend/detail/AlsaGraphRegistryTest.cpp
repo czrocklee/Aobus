@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -231,63 +232,20 @@ TEST_CASE("AlsaGraphRegistry - subscription reset stops updates", "[audio][unit]
   CHECK(callCount == 1);
 }
 
-TEST_CASE("AlsaGraphRegistry - initial callback defers registry teardown", "[audio][regression][alsa][concurrency]")
-{
-  auto registryPtr = std::make_unique<AlsaGraphRegistry>();
-  std::int32_t callbackCount = 0;
-  bool teardownRequested = false;
-
-  auto sub = registryPtr->subscribe("hw:0,0",
-                                    [&](Graph const&)
-                                    {
-                                      ++callbackCount;
-                                      teardownRequested = true;
-                                    });
-
-  CHECK(callbackCount == 1);
-  CHECK(teardownRequested);
-  REQUIRE(registryPtr);
-  sub.reset();
-  registryPtr.reset();
-  CHECK_FALSE(registryPtr);
-}
-
-TEST_CASE("AlsaGraphRegistry - publication callback defers registry teardown", "[audio][regression][alsa][concurrency]")
-{
-  auto registryPtr = std::make_unique<AlsaGraphRegistry>();
-  std::int32_t callbackCount = 0;
-  bool teardownRequested = false;
-  auto sub = registryPtr->subscribe("hw:0,0",
-                                    [&](Graph const&)
-                                    {
-                                      ++callbackCount;
-
-                                      if (callbackCount == 2)
-                                      {
-                                        teardownRequested = true;
-                                      }
-                                    });
-
-  registryPtr->publish({.routeAnchor = "hw:0,0", .volume = 0.5F, .volumeMode = AlsaVolumeControlMode::HardwareMixer});
-
-  CHECK(callbackCount == 2);
-  CHECK(teardownRequested);
-  REQUIRE(registryPtr);
-  sub.reset();
-  registryPtr.reset();
-  CHECK_FALSE(registryPtr);
-}
-
-TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly", "[audio][regression][alsa]")
+TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   std::int32_t callbackCount = 0;
+  std::int32_t callbackDepth = 0;
+  std::int32_t maximumDepth = 0;
   bool nestedPublish = false;
   float observedVolume = 1.0F;
   auto sub = registry.subscribe(
     "hw:0,0",
     [&](Graph const& graph)
     {
+      ++callbackDepth;
+      maximumDepth = std::max(maximumDepth, callbackDepth);
       ++callbackCount;
 
       if (graph.nodes.size() == 2)
@@ -300,16 +258,19 @@ TEST_CASE("AlsaGraphRegistry - volume callback may publish reentrantly", "[audio
         nestedPublish = true;
         registry.publish({.routeAnchor = "hw:0,0", .volume = 0.25F, .volumeMode = AlsaVolumeControlMode::SoftwareGain});
       }
+
+      --callbackDepth;
     });
 
   registry.publish({.routeAnchor = "hw:0,0", .volume = 0.5F, .volumeMode = AlsaVolumeControlMode::SoftwareGain});
 
   CHECK(callbackCount == 3);
+  CHECK(maximumDepth == 1);
   CHECK(observedVolume == 0.25F);
 }
 
 TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied for publication",
-          "[audio][regression][alsa][subscription]")
+          "[audio][unit][alsa][subscription][concurrency]")
 {
   auto registry = AlsaGraphRegistry{};
   bool cancelSecond = false;
@@ -336,7 +297,7 @@ TEST_CASE("AlsaGraphRegistry - cancellation removes a callback already copied fo
 }
 
 TEST_CASE("AlsaGraphRegistry - shutdown retires subscriptions and retained publishers",
-          "[audio][regression][alsa][concurrency]")
+          "[audio][unit][alsa][concurrency]")
 {
   auto registry = AlsaGraphRegistry{};
   auto publisher = registry.publisher();
@@ -359,8 +320,7 @@ TEST_CASE("AlsaGraphRegistry - shutdown retires subscriptions and retained publi
   sub.reset();
 }
 
-TEST_CASE("AlsaGraphRegistry - publisher and subscription may outlive registry",
-          "[audio][regression][alsa][concurrency]")
+TEST_CASE("AlsaGraphRegistry - publisher and subscription may outlive registry", "[audio][unit][alsa][concurrency]")
 {
   auto publisher = AlsaGraphPublisher{};
   auto sub = ao::utility::ScopedRegistration{};

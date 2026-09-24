@@ -65,8 +65,7 @@ namespace ao::audio::detail::test
     CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
   }
 
-  TEST_CASE("DecoderOutputAdapter - requested encoding converts exact byte layout",
-            "[audio][regression][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - requested encoding converts exact byte layout", "[audio][unit][decoder-output]")
   {
     auto adapter = DecoderOutputAdapter{SampleEncoding::Signed24In32Le};
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 24};
@@ -81,7 +80,7 @@ namespace ao::audio::detail::test
   }
 
   TEST_CASE("DecoderOutputAdapter - widened native PCM may narrow to the requested lossless container",
-            "[audio][regression][decoder-output]")
+            "[audio][unit][decoder-output]")
   {
     auto adapter = DecoderOutputAdapter{SampleEncoding::Signed24PackedLe};
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16};

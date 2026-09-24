@@ -11,6 +11,7 @@
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <cstdint>
@@ -78,6 +79,7 @@ namespace ao::uimodel::test
     LayoutComponentStateDocument panelState(LayoutDocument const& document, double const percent = 0.68)
     {
       auto state = LayoutComponentStateDocument{.preset = "modern"};
+      REQUIRE(document.root.children.size() == 1);
       auto const& split = document.root.children.front();
       state.components[split.id] = LayoutComponentStateEntry{
         .type = "split",
@@ -105,6 +107,25 @@ namespace ao::uimodel::test
       session.apply(std::move(document), std::move(state), generation);
       return generation;
     }
+
+    void checkStaticWriteSuppression(LayoutSurface const surface,
+                                     LayoutNode const& node,
+                                     std::string preset,
+                                     bool const editMode)
+    {
+      auto store = RecordingStateStore{};
+      auto session = LayoutSession{&store};
+      auto state = LayoutComponentStateDocument{.preset = std::move(preset)};
+      auto const optSnapshot = session.buildSnapshot(state, editMode);
+      REQUIRE(optSnapshot);
+      session.apply({}, state, optSnapshot->generation());
+      auto binding = session.stateFor(*optSnapshot, surface, node, "split");
+
+      CHECK_FALSE(binding.canWrite());
+      binding.write(positionState(0.42));
+      CHECK(session.componentState().components.empty());
+      CHECK(store.saved().empty());
+    }
   } // namespace
 
   TEST_CASE("LayoutSession - preset selection is deterministic", "[uimodel][unit][layout][session]")
@@ -130,25 +151,35 @@ namespace ao::uimodel::test
             "[uimodel][unit][layout][session]")
   {
     auto session = LayoutSession{};
-    auto state = LayoutComponentStateDocument{.preset = "modern"};
+    auto candidate = LayoutComponentStateDocument{.preset = "modern"};
+    candidate.components["panel"] =
+      LayoutComponentStateEntry{.type = "split", .stateVersion = kStateEntryVersion, .state = positionState(0.25)};
+
+    auto const optCandidateSnapshot = session.buildSnapshot(candidate, false);
+    REQUIRE(optCandidateSnapshot);
+    session.apply({}, candidate, optCandidateSnapshot->generation());
+    candidate.preset = "changed-after-capture";
+    candidate.components.at("panel").state = positionState(0.75);
+
+    CHECK(optCandidateSnapshot->componentState().preset == "modern");
+    REQUIRE(optCandidateSnapshot->componentState().components.contains("panel"));
+    CHECK(optCandidateSnapshot->componentState().components.at("panel").state.at("positionPercent").asDouble() == 0.25);
+
     auto moved = std::string{};
-
-    auto const optInitial = session.buildSnapshot(state, false);
-    REQUIRE(optInitial);
-    session.apply({}, state, optInitial->generation());
+    bool replacementCalled = false;
     session.setEditMode(true, [&moved](std::string const& nodeId, std::int32_t, std::int32_t) { moved = nodeId; });
-
     auto const optSnapshot = session.buildSnapshot();
     REQUIRE(optSnapshot);
+    session.setEditMode(
+      true, [&replacementCalled](std::string const&, std::int32_t, std::int32_t) { replacementCalled = true; });
+
     CHECK(optSnapshot->presetId() == "modern");
     CHECK(optSnapshot->generation() == session.generation() + 1);
     CHECK(optSnapshot->isEditMode());
     REQUIRE(optSnapshot->onNodeMoved());
-
-    state.preset = "changed-after-capture";
-    CHECK(optSnapshot->componentState().preset == "modern");
     optSnapshot->onNodeMoved()("soul", 10, 20);
     CHECK(moved == "soul");
+    CHECK_FALSE(replacementCalled);
   }
 
   TEST_CASE("LayoutSession - applying a candidate advances the generation and replaces the session atomically",
@@ -161,8 +192,11 @@ namespace ao::uimodel::test
 
     CHECK(session.generation() == generation);
     CHECK(session.presetId() == "modern");
+    REQUIRE(session.layout().root.children.size() == 1);
     CHECK(session.layout().root.children.front().id == "library-panel");
     CHECK(session.componentState().preset == "modern");
+    REQUIRE(session.componentState().components.contains("library-panel"));
+    CHECK(session.componentState().components.at("library-panel").state.at("positionPercent").asDouble() == 0.68);
 
     auto const optNext = session.buildSnapshot();
     REQUIRE(optNext);
@@ -212,8 +246,16 @@ namespace ao::uimodel::test
     REQUIRE(binding.canWrite());
 
     binding.write(positionState(0.5));
+    REQUIRE(session.componentState().components.contains("library-panel"));
+    auto const& active = session.componentState().components.at("library-panel");
+    CHECK(active.type == "split");
+    CHECK(active.stateVersion == kStateEntryVersion);
+    CHECK(active.baselineHash == componentBaselineHash(node));
+    CHECK(active.state.at("positionPercent").asDouble() == 0.5);
+
     REQUIRE(store.saved().size() == 1);
     CHECK(store.saved().front().first == "modern");
+    REQUIRE(store.saved().front().second.components.contains("library-panel"));
     auto const& saved = store.saved().front().second.components.at("library-panel");
     CHECK(saved.type == "split");
     CHECK(saved.stateVersion == kStateEntryVersion);
@@ -221,64 +263,84 @@ namespace ao::uimodel::test
     CHECK(saved.state.at("positionPercent").asDouble() == 0.5);
   }
 
-  TEST_CASE("ComponentStateBinding - writes require an attributable active generation",
-            "[uimodel][unit][layout][session]")
+  TEST_CASE("ComponentStateBinding - a successor generation fences stale writes",
+            "[uimodel][unit][layout][session][async]")
   {
     auto store = RecordingStateStore{};
+    auto session = LayoutSession{&store};
+    auto const node = splitNode();
+    auto const classicState = LayoutComponentStateDocument{.preset = "classic"};
+    auto const optStaleSnapshot = session.buildSnapshot(classicState, false);
+    REQUIRE(optStaleSnapshot);
+    session.apply({}, classicState, optStaleSnapshot->generation());
+    auto stale = session.stateFor(*optStaleSnapshot, LayoutSurface::Main, node, "split");
+    REQUIRE(stale.canWrite());
+
+    auto const* const successorPreset = GENERATE("classic", "modern");
+    auto const successorState = LayoutComponentStateDocument{.preset = successorPreset};
+    auto const optSuccessor = session.buildSnapshot(successorState, false);
+    REQUIRE(optSuccessor);
+    session.apply({}, successorState, optSuccessor->generation());
+
+    CHECK_FALSE(stale.canWrite());
+    stale.write(positionState(0.42));
+    CHECK(session.componentState().components.empty());
+    CHECK(store.saved().empty());
+  }
+
+  TEST_CASE("ComponentStateBinding - static eligibility prerequisites independently suppress writes",
+            "[uimodel][unit][layout][session]")
+  {
     auto const node = splitNode();
 
-    SECTION("a stale candidate cannot write after a successor commits")
+    SECTION("tooltip surface")
     {
+      checkStaticWriteSuppression(LayoutSurface::Tooltip, node, "classic", false);
+    }
+
+    SECTION("edit mode")
+    {
+      checkStaticWriteSuppression(LayoutSurface::Main, node, "classic", true);
+    }
+
+    SECTION("anonymous node")
+    {
+      checkStaticWriteSuppression(LayoutSurface::Main, splitNode(""), "classic", false);
+    }
+
+    SECTION("empty preset")
+    {
+      checkStaticWriteSuppression(LayoutSurface::Main, node, "", false);
+    }
+
+    SECTION("active preset mismatch")
+    {
+      auto store = RecordingStateStore{};
       auto session = LayoutSession{&store};
       auto const classicState = LayoutComponentStateDocument{.preset = "classic"};
-      auto const optStaleSnapshot = session.buildSnapshot(classicState, false);
-      REQUIRE(optStaleSnapshot);
-      session.apply({}, classicState, optStaleSnapshot->generation());
-      auto stale = session.stateFor(*optStaleSnapshot, LayoutSurface::Main, node, "split");
-      REQUIRE(stale.canWrite());
+      auto const optSnapshot = session.buildSnapshot(classicState, false);
+      REQUIRE(optSnapshot);
+      session.apply({}, LayoutComponentStateDocument{.preset = "modern"}, optSnapshot->generation());
+      auto binding = session.stateFor(*optSnapshot, LayoutSurface::Main, node, "split");
 
-      auto const modernState = LayoutComponentStateDocument{.preset = "modern"};
-      auto const optSuccessor = session.buildSnapshot(modernState, false);
-      REQUIRE(optSuccessor);
-      session.apply({}, modernState, optSuccessor->generation());
-
-      CHECK_FALSE(stale.canWrite());
-      stale.write(positionState(0.42));
+      CHECK_FALSE(binding.canWrite());
+      binding.write(positionState(0.42));
+      CHECK(session.componentState().components.empty());
       CHECK(store.saved().empty());
     }
 
-    SECTION("tooltip, edit-mode, anonymous, and empty-preset bindings cannot write")
-    {
-      auto session = LayoutSession{&store};
-      auto const assertSuppressed = [&](LayoutSurface const surface,
-                                        LayoutNode const& candidateNode,
-                                        std::string_view const preset,
-                                        bool const editMode)
-      {
-        auto const state = LayoutComponentStateDocument{.preset = std::string{preset}};
-        auto const optSnapshot = session.buildSnapshot(state, editMode);
-        REQUIRE(optSnapshot);
-        session.advanceGeneration(optSnapshot->generation());
-        auto binding = session.stateFor(*optSnapshot, surface, candidateNode, "split");
-        CHECK_FALSE(binding.canWrite());
-        binding.write(positionState(0.42));
-      };
-
-      assertSuppressed(LayoutSurface::Tooltip, node, "classic", false);
-      assertSuppressed(LayoutSurface::Main, node, "classic", true);
-      assertSuppressed(LayoutSurface::Main, splitNode(""), "classic", false);
-      assertSuppressed(LayoutSurface::Main, node, "", false);
-      CHECK(store.saved().empty());
-    }
-
-    SECTION("a missing store cannot write")
+    SECTION("missing store")
     {
       auto session = LayoutSession{};
-      auto const optSnapshot = session.buildSnapshot(LayoutComponentStateDocument{.preset = "classic"}, false);
+      auto const state = LayoutComponentStateDocument{.preset = "classic"};
+      auto const optSnapshot = session.buildSnapshot(state, false);
       REQUIRE(optSnapshot);
-      session.advanceGeneration(optSnapshot->generation());
+      session.apply({}, state, optSnapshot->generation());
       auto binding = session.stateFor(*optSnapshot, LayoutSurface::Main, node, "split");
+
       CHECK_FALSE(binding.canWrite());
+      binding.write(positionState(0.42));
+      CHECK(session.componentState().components.empty());
     }
   }
 
@@ -294,6 +356,7 @@ namespace ao::uimodel::test
     REQUIRE(optPromotion);
     CHECK(optPromotion->componentState.preset == "modern");
     CHECK(optPromotion->componentState.components.empty());
+    REQUIRE(optPromotion->layout.root.children.size() == 1);
     auto const& split = optPromotion->layout.root.children.front();
     CHECK_FALSE(split.props.contains("position"));
     CHECK(split.props.at("initialPositionPercent").asDouble() == 0.68);

@@ -60,65 +60,61 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("PipeWireMonitorParsing - properties classify sinks and parse node records",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - sink media classes", "[audio][unit][pipewire][monitor]")
   {
-    SECTION("isSinkMediaClass")
-    {
-      CHECK(isSinkMediaClass("Audio/Sink"));
-      CHECK(isSinkMediaClass("Audio/Duplex"));
-      CHECK(isSinkMediaClass("Stream/Output/Audio/Sink"));
-      CHECK_FALSE(isSinkMediaClass("Audio/Source"));
-      CHECK_FALSE(isSinkMediaClass("Video/Sink"));
-    }
+    CHECK(isSinkMediaClass("Audio/Sink"));
+    CHECK(isSinkMediaClass("Audio/Duplex"));
+    CHECK(isSinkMediaClass("Stream/Output/Audio/Sink"));
+    CHECK_FALSE(isSinkMediaClass("Audio/Source"));
+    CHECK_FALSE(isSinkMediaClass("Video/Sink"));
+  }
 
-    SECTION("lookupProperty")
-    {
-      auto const items = std::to_array<::spa_dict_item>(
-        {::spa_dict_item{.key = "key1", .value = "val1"}, ::spa_dict_item{.key = "key2", .value = "val2"}});
-      auto const dict = makeDict(items);
+  TEST_CASE("PipeWireMonitorParsing - dictionary property lookup", "[audio][unit][pipewire][monitor]")
+  {
+    auto const items = std::to_array<::spa_dict_item>(
+      {::spa_dict_item{.key = "key1", .value = "val1"}, ::spa_dict_item{.key = "key2", .value = "val2"}});
+    auto const dict = makeDict(items);
 
-      CHECK(lookupProperty(&dict, "key1") == "val1");
-      CHECK(lookupProperty(&dict, "key2") == "val2");
-      CHECK(lookupProperty(&dict, "key3").empty());
-      CHECK(lookupProperty(nullptr, "key1").empty());
-    }
+    CHECK(lookupProperty(&dict, "key1") == "val1");
+    CHECK(lookupProperty(&dict, "key2") == "val2");
+    CHECK(lookupProperty(&dict, "key3").empty());
+    CHECK(lookupProperty(nullptr, "key1").empty());
+  }
 
-    SECTION("parsePipeWireUint32 strictness")
-    {
-      CHECK(parsePipeWireUint32(nullptr) == std::nullopt);
-      CHECK(parsePipeWireUint32("") == std::nullopt);
-      CHECK(parsePipeWireUint32("abc") == std::nullopt);
-      CHECK(parsePipeWireUint32("12abc") == std::nullopt);
-      CHECK(parsePipeWireUint32("abc12") == std::nullopt);
-      CHECK(parsePipeWireUint32(" 12") == std::nullopt);
-      CHECK(parsePipeWireUint32("4294967296") == std::nullopt);
+  TEST_CASE("PipeWireMonitorParsing - strict unsigned integer properties", "[audio][unit][pipewire][monitor]")
+  {
+    CHECK(parsePipeWireUint32(nullptr) == std::nullopt);
+    CHECK(parsePipeWireUint32("") == std::nullopt);
+    CHECK(parsePipeWireUint32("abc") == std::nullopt);
+    CHECK(parsePipeWireUint32("12abc") == std::nullopt);
+    CHECK(parsePipeWireUint32("abc12") == std::nullopt);
+    CHECK(parsePipeWireUint32(" 12") == std::nullopt);
+    CHECK(parsePipeWireUint32("4294967296") == std::nullopt);
 
-      CHECK(parsePipeWireUint32("42") == 42);
-      CHECK(parsePipeWireUint32("0") == 0);
-      CHECK(parsePipeWireUint32("4294967295") == 4294967295U);
-    }
+    CHECK(parsePipeWireUint32("42") == 42);
+    CHECK(parsePipeWireUint32("0") == 0);
+    CHECK(parsePipeWireUint32("4294967295") == 4294967295U);
+  }
 
-    SECTION("parseNodeRecord")
-    {
-      auto const items =
-        std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_MEDIA_CLASS, .value = "Audio/Sink"},
-                                        ::spa_dict_item{.key = PW_KEY_NODE_NAME, .value = "test-node"},
-                                        ::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "1234"},
-                                        ::spa_dict_item{.key = "node.driver-id", .value = "5678"}});
-      auto const dict = makeDict(items);
+  TEST_CASE("PipeWireMonitorParsing - node record fields", "[audio][unit][pipewire][monitor]")
+  {
+    auto const items =
+      std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_MEDIA_CLASS, .value = "Audio/Sink"},
+                                      ::spa_dict_item{.key = PW_KEY_NODE_NAME, .value = "test-node"},
+                                      ::spa_dict_item{.key = PW_KEY_OBJECT_SERIAL, .value = "1234"},
+                                      ::spa_dict_item{.key = "node.driver-id", .value = "5678"}});
+    auto const dict = makeDict(items);
 
-      auto record = parseNodeRecord(1, &dict);
-      CHECK(record.version == 1);
-      CHECK(record.mediaClass == "Audio/Sink");
-      CHECK(record.nodeName == "test-node");
-      CHECK(record.optObjectSerial == 1234);
-      CHECK(record.optDriverId == 5678);
-    }
+    auto record = parseNodeRecord(1, &dict);
+    CHECK(record.version == 1);
+    CHECK(record.mediaClass == "Audio/Sink");
+    CHECK(record.nodeName == "test-node");
+    CHECK(record.optObjectSerial == 1234);
+    CHECK(record.optDriverId == 5678);
   }
 
   TEST_CASE("SinkProps::classifyVolume - zero channel gain remains the range minimum regardless of order",
-            "[audio][regression][pipewire]")
+            "[audio][unit][pipewire][monitor]")
   {
     for (auto const& channelVolumes : {std::vector{0.0F, 0.8F}, std::vector{0.8F, 0.0F}})
     {
@@ -138,37 +134,38 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorParsing - SPA pods expose current format and properties",
+  TEST_CASE("PipeWireMonitorParsing - preferred offer encoding is also a valid enum alternative",
+            "[audio][unit][pipewire][monitor]")
+  {
+    auto offerBuffer = std::array<std::byte, 1024>{};
+    auto const encodings =
+      std::to_array({SampleEncoding::Signed24PackedLe, SampleEncoding::Signed24In32Le, SampleEncoding::Signed32Le});
+    auto const* pod = buildRawStreamFormatOffer(
+      offerBuffer, SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, encodings);
+    REQUIRE(pod != nullptr);
+
+    auto const* property = ::spa_pod_find_prop(pod, nullptr, SPA_FORMAT_AUDIO_format);
+    REQUIRE(property != nullptr);
+    REQUIRE(::spa_pod_is_choice(&property->value) != 0);
+
+    auto const valueBytes =
+      utility::bytes::view(static_cast<void const*>(&property->value), property->value.size + sizeof(::spa_pod));
+    auto const* choice = utility::layout::view<::spa_pod_choice>(valueBytes);
+    REQUIRE(SPA_POD_CHOICE_VALUE_TYPE(choice) == SPA_TYPE_Id);
+    REQUIRE(SPA_POD_CHOICE_N_VALUES(choice) == encodings.size() + 1U);
+
+    auto const* values = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
+    CHECK(values[0] == SPA_AUDIO_FORMAT_S24_LE);
+    CHECK(values[1] == SPA_AUDIO_FORMAT_S24_LE);
+    CHECK(values[2] == SPA_AUDIO_FORMAT_S24_32_LE);
+    CHECK(values[3] == SPA_AUDIO_FORMAT_S32_LE);
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - only current-format parameters describe the opened format",
             "[audio][unit][pipewire][monitor]")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);
-
-    SECTION("buildRawStreamFormatOffer - preferred encoding is also a valid enum alternative")
-    {
-      auto offerBuffer = std::array<std::byte, 1024>{};
-      auto const encodings =
-        std::to_array({SampleEncoding::Signed24PackedLe, SampleEncoding::Signed24In32Le, SampleEncoding::Signed32Le});
-      auto const* pod = buildRawStreamFormatOffer(
-        offerBuffer, SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, encodings);
-      REQUIRE(pod != nullptr);
-
-      auto const* property = ::spa_pod_find_prop(pod, nullptr, SPA_FORMAT_AUDIO_format);
-      REQUIRE(property != nullptr);
-      REQUIRE(::spa_pod_is_choice(&property->value) != 0);
-
-      auto const valueBytes =
-        utility::bytes::view(static_cast<void const*>(&property->value), property->value.size + sizeof(::spa_pod));
-      auto const* choice = utility::layout::view<::spa_pod_choice>(valueBytes);
-      REQUIRE(SPA_POD_CHOICE_VALUE_TYPE(choice) == SPA_TYPE_Id);
-      REQUIRE(SPA_POD_CHOICE_N_VALUES(choice) == encodings.size() + 1U);
-
-      auto const* values = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-      CHECK(values[0] == SPA_AUDIO_FORMAT_S24_LE);
-      CHECK(values[1] == SPA_AUDIO_FORMAT_S24_LE);
-      CHECK(values[2] == SPA_AUDIO_FORMAT_S24_32_LE);
-      CHECK(values[3] == SPA_AUDIO_FORMAT_S32_LE);
-    }
 
     SECTION("currentFormatFromNodeParam - EnumFormat is not current format")
     {
@@ -188,6 +185,7 @@ namespace ao::audio::backend::detail::test
                             0);
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
+      REQUIRE(parseRawStreamFormat(pod));
       CHECK_FALSE(currentFormatFromNodeParam(SPA_PARAM_EnumFormat, pod));
     }
 
@@ -215,53 +213,63 @@ namespace ao::audio::backend::detail::test
       CHECK(optFormat->channels == 2);
       CHECK(optFormat->encoding == SampleEncoding::Signed16Le);
     }
+  }
 
-    SECTION("parseRawStreamFormat - an unsupported negotiated encoding is rejected")
-    {
-      auto f = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
-      ::spa_pod_builder_add(&b,
-                            SPA_FORMAT_mediaType,
-                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                            SPA_FORMAT_mediaSubtype,
-                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                            SPA_FORMAT_AUDIO_format,
-                            SPA_POD_Id(SPA_AUDIO_FORMAT_U8),
-                            SPA_FORMAT_AUDIO_rate,
-                            SPA_POD_Int(48000),
-                            SPA_FORMAT_AUDIO_channels,
-                            SPA_POD_Int(2),
-                            0);
-      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+  TEST_CASE("PipeWireMonitorParsing - rejects an unsupported negotiated encoding", "[audio][unit][pipewire][monitor]")
+  {
+    auto buffer = std::array<std::byte, 1024>{};
+    auto b = makePodBuilder(buffer);
+    auto f = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+    ::spa_pod_builder_add(&b,
+                          SPA_FORMAT_mediaType,
+                          SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                          SPA_FORMAT_mediaSubtype,
+                          SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                          SPA_FORMAT_AUDIO_format,
+                          SPA_POD_Id(SPA_AUDIO_FORMAT_U8),
+                          SPA_FORMAT_AUDIO_rate,
+                          SPA_POD_Int(48000),
+                          SPA_FORMAT_AUDIO_channels,
+                          SPA_POD_Int(2),
+                          0);
+    auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      CHECK_FALSE(parseRawStreamFormat(pod));
-    }
+    CHECK_FALSE(parseRawStreamFormat(pod));
+  }
 
-    SECTION("updateCurrentFormatFromNodeParam - failed current format clears stale cache")
-    {
-      auto f = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
-      ::spa_pod_builder_add(&b,
-                            SPA_FORMAT_mediaType,
-                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                            SPA_FORMAT_mediaSubtype,
-                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                            SPA_FORMAT_AUDIO_format,
-                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
-                            SPA_FORMAT_AUDIO_rate,
-                            SPA_POD_Int(44100),
-                            SPA_FORMAT_AUDIO_channels,
-                            SPA_POD_Int(2),
-                            0);
-      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+  TEST_CASE("PipeWireMonitorParsing - failed current format clears the stale cache", "[audio][unit][pipewire][monitor]")
+  {
+    auto buffer = std::array<std::byte, 1024>{};
+    auto b = makePodBuilder(buffer);
+    auto f = ::spa_pod_frame{};
+    ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+    ::spa_pod_builder_add(&b,
+                          SPA_FORMAT_mediaType,
+                          SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                          SPA_FORMAT_mediaSubtype,
+                          SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                          SPA_FORMAT_AUDIO_format,
+                          SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                          SPA_FORMAT_AUDIO_rate,
+                          SPA_POD_Int(44100),
+                          SPA_FORMAT_AUDIO_channels,
+                          SPA_POD_Int(2),
+                          0);
+    auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      auto cache = std::unordered_map<std::uint32_t, PcmFormat>{};
-      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, pod);
-      REQUIRE(cache.contains(42));
+    auto cache = std::unordered_map<std::uint32_t, PcmFormat>{};
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, pod);
+    REQUIRE(cache.contains(42));
 
-      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, nullptr);
-      CHECK_FALSE(cache.contains(42));
-    }
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, nullptr);
+    CHECK_FALSE(cache.contains(42));
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - merges sink property updates", "[audio][unit][pipewire][monitor]")
+  {
+    auto buffer = std::array<std::byte, 1024>{};
+    auto b = makePodBuilder(buffer);
 
     SECTION("mergeSinkProps - volume and mute")
     {
@@ -314,6 +322,45 @@ namespace ao::audio::backend::detail::test
       CHECK(props.channelVolumes.back() == 0.5F);
       CHECK(props.classifyVolume().unclassifiedNotUnity == true);
     }
+
+    SECTION("mergeSinkProps - preserves hardware flags across unflagged updates")
+    {
+      // First event has hardware flag
+      auto f1 = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f1, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
+      auto const vols1 = std::array{0.5F, 0.5F};
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols1.size(), utility::layout::asLegacyPtr<float>(vols1.data()));
+      auto* pod1 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f1));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod1);
+      CHECK(props.channelVolumesAreHardware == true);
+
+      // Second event updates volume without repeating hardware flag (e.g. just raw param update)
+      auto f2 = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f2, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      auto const vols2 = std::array{0.25F, 0.25F};
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols2.size(), utility::layout::asLegacyPtr<float>(vols2.data()));
+      auto* pod2 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f2));
+
+      mergeSinkProps(props, pod2);
+
+      // Hardware flag should be preserved
+      CHECK(props.channelVolumesAreHardware == true);
+      auto const cls = props.classifyVolume();
+      CHECK(cls.hardwareNotUnity == true);
+    }
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - classifies hardware software and ambiguous volume evidence",
+            "[audio][unit][pipewire][monitor]")
+  {
+    auto buffer = std::array<std::byte, 1024>{};
+    auto b = makePodBuilder(buffer);
 
     SECTION("SinkProps::classifyVolume - Hardware-only")
     {
@@ -734,53 +781,6 @@ namespace ao::audio::backend::detail::test
       props.volume = 0.999F; // Outside tolerance
       auto const cls2 = props.classifyVolume();
       CHECK(cls2.hardwareNotUnity == true);
-    }
-
-    SECTION("SinkProps::classifyVolume - Flag preservation")
-    {
-      // First event has hardware flag
-      auto f1 = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&b, &f1, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
-      auto const vols1 = std::array{0.5F, 0.5F};
-      ::spa_pod_builder_array(
-        &b, sizeof(float), SPA_TYPE_Float, vols1.size(), utility::layout::asLegacyPtr<float>(vols1.data()));
-      auto* pod1 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f1));
-
-      auto props = SinkProps{};
-      mergeSinkProps(props, pod1);
-      CHECK(props.channelVolumesAreHardware == true);
-
-      // Second event updates volume without repeating hardware flag (e.g. just raw param update)
-      auto f2 = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&b, &f2, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
-      auto const vols2 = std::array{0.25F, 0.25F};
-      ::spa_pod_builder_array(
-        &b, sizeof(float), SPA_TYPE_Float, vols2.size(), utility::layout::asLegacyPtr<float>(vols2.data()));
-      auto* pod2 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f2));
-
-      mergeSinkProps(props, pod2);
-
-      // Hardware flag should be preserved
-      CHECK(props.channelVolumesAreHardware == true);
-      auto const cls = props.classifyVolume();
-      CHECK(cls.hardwareNotUnity == true);
-    }
-
-    SECTION("Builder flag propagation")
-    {
-      auto f = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
-      auto const vols = std::array{0.5F, 0.5F};
-      ::spa_pod_builder_array(
-        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
-      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
-
-      auto const* prop = ::spa_pod_find_prop(pod, nullptr, SPA_PROP_channelVolumes);
-      REQUIRE(prop != nullptr);
-      CHECK((prop->flags & SPA_POD_PROP_FLAG_HARDWARE) != 0);
     }
   }
 

@@ -5,6 +5,7 @@
 
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/ViewIds.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -16,6 +17,7 @@
 namespace ao::rt
 {
   class ViewService;
+  class WorkspaceService;
 }
 
 namespace ao::gtk
@@ -27,7 +29,7 @@ namespace ao::gtk
   class SelectionInfoLabel final
   {
   public:
-    SelectionInfoLabel(rt::ViewService& viewService, i18n::MessageCatalog textCatalog);
+    SelectionInfoLabel(rt::ViewService& viewService, rt::WorkspaceService& workspace, i18n::MessageCatalog textCatalog);
     ~SelectionInfoLabel();
 
     // Not copyable or movable
@@ -39,11 +41,15 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _label; }
 
   private:
+    void refreshActiveView(rt::ViewId activeViewId);
     void updateState(std::size_t count, std::optional<std::chrono::milliseconds> optTotalDuration = std::nullopt);
 
     rt::ViewService& _viewService;
+    rt::WorkspaceService& _workspace;
     i18n::MessageCatalog _textCatalog;
-    Gtk::Label _label;
+    Gtk::Label _label{};
+    rt::ViewId _activeViewId{rt::kInvalidViewId};
     async::Subscription _selectionChangedSub;
+    async::Subscription _workspaceChangedSub;
   };
 } // namespace ao::gtk

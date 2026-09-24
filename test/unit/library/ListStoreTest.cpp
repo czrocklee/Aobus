@@ -28,8 +28,6 @@ namespace ao::library::test
     template<typename Writer>
     concept HasRawListUpdate = requires(Writer& writer) { writer.update(ListId{1}, std::span<std::byte const>{}); };
 
-    static_assert(!HasRawListCreate<ListStore::Writer>);
-    static_assert(!HasRawListUpdate<ListStore::Writer>);
     std::pair<ListId, ListView> requireCreate(ListStore::Writer writer, ListBuilder::Prepared const& prepared)
     {
       auto res = writer.create(prepared);
@@ -46,7 +44,11 @@ namespace ao::library::test
     auto& library = fixture.library;
     auto const& store = library.lists();
 
-    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().name("Stored").prepare());
+    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty()
+                                                   .name("Stored")
+                                                   .description("Testing smart list round-trip")
+                                                   .filter("@year > 2020")
+                                                   .prepare());
 
     auto wtxn2 = writeTransaction(library);
     auto const [id, view] = requireCreate(physicalWriter(store, wtxn2), prepared);
@@ -59,6 +61,9 @@ namespace ao::library::test
     REQUIRE(it != reader.end());
     CHECK((*it).first == id);
     CHECK((*it).second.name() == "Stored");
+    CHECK((*it).second.description() == "Testing smart list round-trip");
+    CHECK((*it).second.filter() == "@year > 2020");
+    CHECK((*it).second.orderTrackIds().empty());
   }
 
   TEST_CASE("ListStore - read by id", "[library][unit][list]")
@@ -89,16 +94,44 @@ namespace ao::library::test
     CHECK(optFound->orderTrackIds()[9] == TrackId{10});
   }
 
-  TEST_CASE("ListStore - delete", "[library][unit][list]")
+  TEST_CASE("ListStore - non-contiguous saved order round-trips", "[library][unit][list]")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
     auto const& store = library.lists();
 
-    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().prepare());
+    auto builder = ListBuilder::makeEmpty().name("RoundTrip Test").description("Testing round-trip");
+    builder.orderTrackIds().add(TrackId{42});
+    builder.orderTrackIds().add(TrackId{99});
+    auto const prepared = ao::test::requireValue(builder.prepare());
+
+    auto wtxn2 = writeTransaction(library);
+    auto const [id, createdView] = requireCreate(physicalWriter(store, wtxn2), prepared);
+    REQUIRE(wtxn2.commit());
+
+    auto rtxn = library.readTransaction();
+    auto const optFoundResult = store.reader(rtxn).get(id);
+    REQUIRE(optFoundResult);
+
+    auto const& found = *optFoundResult;
+    CHECK(found.name() == "RoundTrip Test");
+    REQUIRE(found.orderTrackIds().size() == 2);
+    CHECK(found.orderTrackIds()[0] == TrackId{42});
+    CHECK(found.orderTrackIds()[1] == TrackId{99});
+  }
+
+  TEST_CASE("ListStore - delete removes only the selected record", "[library][unit][list]")
+  {
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.lists();
+
+    auto const prepared = ao::test::requireValue(ListBuilder::makeEmpty().name("Target").prepare());
+    auto const survivor = ao::test::requireValue(ListBuilder::makeEmpty().name("Survivor").prepare());
 
     auto wtxn2 = writeTransaction(library);
     auto const [id, view] = requireCreate(physicalWriter(store, wtxn2), prepared);
+    auto const [survivorId, survivorView] = requireCreate(physicalWriter(store, wtxn2), survivor);
     REQUIRE(wtxn2.commit());
 
     // Delete it
@@ -109,18 +142,17 @@ namespace ao::library::test
     // Verify it's gone
     auto rtxn = library.readTransaction();
     auto reader = store.reader(rtxn);
-    auto it = reader.begin();
-    CHECK(it == reader.end());
+    CHECK_FALSE(reader.get(id));
+    auto const optSurvivor = reader.get(survivorId);
+    REQUIRE(optSurvivor);
+    CHECK(optSurvivor->name() == "Survivor");
   }
 
-  TEST_CASE("ListStore - invalid candidates cannot reach the prepared writer", "[library][regression][list]")
+  TEST_CASE("ListStore - prepared-only writes persist a canonical replacement", "[library][unit][list]")
   {
+    STATIC_REQUIRE_FALSE(HasRawListCreate<ListStore::Writer>);
+    STATIC_REQUIRE_FALSE(HasRawListUpdate<ListStore::Writer>);
     auto fixture = LibraryStoreFixture{};
-    auto invalidBuilder = ListBuilder::makeEmpty();
-    invalidBuilder.orderTrackIds().add(kInvalidTrackId);
-    auto const invalidRes = invalidBuilder.prepare();
-    REQUIRE_FALSE(invalidRes);
-    CHECK(invalidRes.error().code == Error::Code::CorruptData);
 
     auto const original = ao::test::requireValue(ListBuilder::makeEmpty().name("Original").prepare());
     auto const updated = ao::test::requireValue(ListBuilder::makeEmpty().name("Updated").prepare());

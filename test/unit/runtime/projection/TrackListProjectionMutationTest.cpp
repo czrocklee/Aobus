@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -14,14 +15,52 @@
 
 #include <array>
 #include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
 #include <variant>
 #include <vector>
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    struct MutationProjectionFixture final
+    {
+      MutationProjectionFixture()
+      {
+        firstId = environment.libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
+        secondId = environment.libraryFixture.addTrack(library::test::makeTrackSpec("C", 2020));
+        environment.setupFiltered({{firstId, secondId}});
+        projectionPtr = std::make_unique<TrackListProjection>(
+          ViewId{1}, TrackSourceLease{environment.filteredPtr}, environment.libraryFixture.library());
+        subscription = projectionPtr->subscribe([this](TrackListProjectionDeltaBatch const& batch) noexcept
+                                                { batches.push_back(batch); });
+      }
+
+      TrackListProjection& projection() const noexcept { return *projectionPtr; }
+
+      void useSortedPresentation()
+      {
+        projection().setPresentation(TrackPresentationSpec{
+          .groupBy = TrackGroupKey::None,
+          .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}},
+        });
+        batches.clear();
+      }
+
+      void useSourceOrderPresentation()
+      {
+        projection().setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None});
+        batches.clear();
+      }
+
+      TrackListProjectionFixture environment;
+      TrackId firstId{};
+      TrackId secondId{};
+      std::unique_ptr<TrackListProjection> projectionPtr;
+      std::vector<TrackListProjectionDeltaBatch> batches;
+      async::Subscription subscription;
+    };
+  } // namespace
+
   TEST_CASE("TrackListProjection - batch insertion keeps sorted rows and index map", "[runtime][unit][projection]")
   {
     auto env = TrackListProjectionFixture{};
@@ -97,21 +136,15 @@ namespace ao::rt::test
     CHECK_FALSE(proj.indexOf(id4).has_value());
   }
 
-  TEST_CASE("TrackListProjection - single and batch mutations without grouping", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sorted ungrouped insertion publishes exact ranges", "[runtime][unit][projection]")
   {
-    auto env = TrackListProjectionFixture{};
-    auto id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
-    auto id2 = env.libraryFixture.addTrack(library::test::makeTrackSpec("C", 2020));
-    env.setupFiltered({{id1, id2}});
-
-    auto proj = env.createProjection(ViewId{1});
-    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
-
-    // No grouping, yes comparator
-    proj.setPresentation(TrackPresentationSpec{
-      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
-    batches.clear();
+    auto fixture = MutationProjectionFixture{};
+    fixture.useSortedPresentation();
+    auto& env = fixture.environment;
+    auto& proj = fixture.projection();
+    auto const id1 = fixture.firstId;
+    auto const id2 = fixture.secondId;
+    auto& batches = fixture.batches;
 
     SECTION("single insertion via single method")
     {
@@ -123,6 +156,7 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(2) == id2);
       CHECK(proj.indexOf(id3) == 1);
       REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
       auto const* delta = std::get_if<ProjectionInsertRange>(&batches.back().deltas.front());
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 1);
@@ -140,11 +174,23 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(2) == id2);
       CHECK(proj.indexOf(id3) == 1);
       REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
       auto const* delta = std::get_if<ProjectionInsertRange>(&batches.back().deltas.front());
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 1);
       CHECK(delta->range.count == 1);
     }
+  }
+
+  TEST_CASE("TrackListProjection - sorted ungrouped removal publishes exact ranges", "[runtime][unit][projection]")
+  {
+    auto fixture = MutationProjectionFixture{};
+    fixture.useSortedPresentation();
+    auto& env = fixture.environment;
+    auto& proj = fixture.projection();
+    auto const id1 = fixture.firstId;
+    auto const id2 = fixture.secondId;
+    auto& batches = fixture.batches;
 
     SECTION("single removal via single method")
     {
@@ -154,6 +200,7 @@ namespace ao::rt::test
       CHECK_FALSE(proj.indexOf(id1).has_value());
       CHECK(proj.indexOf(id2) == 0);
       REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
       auto const* delta = std::get_if<ProjectionRemoveRange>(&batches.back().deltas.front());
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 0);
@@ -169,11 +216,24 @@ namespace ao::rt::test
       CHECK_FALSE(proj.indexOf(id1).has_value());
       CHECK(proj.indexOf(id2) == 0);
       REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
       auto const* delta = std::get_if<ProjectionRemoveRange>(&batches.back().deltas.front());
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 0);
       CHECK(delta->range.count == 1);
     }
+  }
+
+  TEST_CASE("TrackListProjection - sorted ungrouped updates publish stable ranges and exact moves",
+            "[runtime][unit][projection]")
+  {
+    auto fixture = MutationProjectionFixture{};
+    fixture.useSortedPresentation();
+    auto& env = fixture.environment;
+    auto& proj = fixture.projection();
+    auto const id1 = fixture.firstId;
+    auto const id2 = fixture.secondId;
+    auto& batches = fixture.batches;
 
     SECTION("single update of non-sort field preserves order")
     {
@@ -183,6 +243,7 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(0) == id1);
       CHECK(proj.trackIdAt(1) == id2);
       REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
       auto const* delta = std::get_if<ProjectionUpdateRange>(&batches.back().deltas.front());
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 0);
@@ -200,8 +261,14 @@ namespace ao::rt::test
       CHECK(proj.indexOf(id1) == 1);
       REQUIRE(batches.size() == 1);
       REQUIRE(batches.front().deltas.size() == 2);
-      CHECK(std::holds_alternative<ProjectionRemoveRange>(batches.front().deltas[0]));
-      CHECK(std::holds_alternative<ProjectionInsertRange>(batches.front().deltas[1]));
+      REQUIRE(std::holds_alternative<ProjectionRemoveRange>(batches.front().deltas[0]));
+      REQUIRE(std::holds_alternative<ProjectionInsertRange>(batches.front().deltas[1]));
+      auto const& removal = std::get<ProjectionRemoveRange>(batches.front().deltas[0]);
+      auto const& insertion = std::get<ProjectionInsertRange>(batches.front().deltas[1]);
+      CHECK(removal.range.start == 0);
+      CHECK(removal.range.count == 1);
+      CHECK(insertion.range.start == 1);
+      CHECK(insertion.range.count == 1);
     }
 
     SECTION("single update via batch method")
@@ -213,7 +280,11 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(0) == id1);
       CHECK(proj.trackIdAt(1) == id2);
       REQUIRE(batches.size() == 1);
-      CHECK(std::holds_alternative<ProjectionUpdateRange>(batches.back().deltas.front()));
+      REQUIRE(batches.back().deltas.size() == 1);
+      auto const* delta = std::get_if<ProjectionUpdateRange>(&batches.back().deltas.front());
+      REQUIRE(delta != nullptr);
+      CHECK(delta->range.start == 0);
+      CHECK(delta->range.count == 1);
     }
 
     SECTION("batch update of non-sort fields preserves order and coalesces update ranges")
@@ -251,8 +322,14 @@ namespace ao::rt::test
       CHECK(proj.indexOf(id2) == 0);
       REQUIRE(batches.size() == 1);
       REQUIRE(batches.back().deltas.size() == 2);
-      CHECK(std::holds_alternative<ProjectionRemoveRange>(batches.back().deltas[0]));
-      CHECK(std::holds_alternative<ProjectionInsertRange>(batches.back().deltas[1]));
+      REQUIRE(std::holds_alternative<ProjectionRemoveRange>(batches.back().deltas[0]));
+      REQUIRE(std::holds_alternative<ProjectionInsertRange>(batches.back().deltas[1]));
+      auto const& removal = std::get<ProjectionRemoveRange>(batches.back().deltas[0]);
+      auto const& insertion = std::get<ProjectionInsertRange>(batches.back().deltas[1]);
+      CHECK(removal.range.start == 0);
+      CHECK(removal.range.count == 2);
+      CHECK(insertion.range.start == 0);
+      CHECK(insertion.range.count == 2);
     }
 
     SECTION("batch update of stable rows coalesces final update coordinates")
@@ -273,6 +350,16 @@ namespace ao::rt::test
       CHECK(update->range.start == 0);
       CHECK(update->range.count == 2);
     }
+  }
+
+  TEST_CASE("TrackListProjection - grouped topology changes publish singleton resets", "[runtime][unit][projection]")
+  {
+    auto fixture = MutationProjectionFixture{};
+    auto& env = fixture.environment;
+    auto& proj = fixture.projection();
+    auto const id1 = fixture.firstId;
+    auto const id2 = fixture.secondId;
+    auto& batches = fixture.batches;
 
     SECTION("batch insertion with grouping")
     {
@@ -290,8 +377,115 @@ namespace ao::rt::test
       CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
       CHECK(trackGroupHeadingText(proj.groupAt(2).heading.primary) == "Rock");
       REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
+
+    SECTION("batch removal with grouping")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Composer,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Composer, .ascending = true}}});
+      batches.clear();
+
+      auto arr = std::array{id1, id2};
+      env.source.batchRemove(arr);
+      REQUIRE(proj.size() == 0);
+      CHECK(proj.groupCount() == 0);
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
+      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+    }
+
+    SECTION("batch update with grouping")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}}});
+      batches.clear();
+
+      env.libraryFixture.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Zulu"; });
+      env.libraryFixture.updateTrack(id2, [](library::test::TrackSpec& s) { s.artist = "Bravo"; });
+      auto arr = std::array{id1, id2};
+      env.source.batchUpdate(arr);
+      REQUIRE(proj.size() == 2);
+      CHECK(proj.trackIdAt(0) == id2);
+      CHECK(proj.trackIdAt(1) == id1);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Bravo");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
+      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+    }
+
+    SECTION("single update with grouping")
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
+                              .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}}});
+      batches.clear();
+
+      env.libraryFixture.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Zulu"; });
+      env.source.singleUpdate(id1);
+      REQUIRE(proj.size() == 2);
+      CHECK(proj.trackIdAt(0) == id2);
+      CHECK(proj.trackIdAt(1) == id1);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Artist");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
+      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+    }
+
+    SECTION("single insertion with grouping")
+    {
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
+      batches.clear();
+
+      auto id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
+      env.source.singleInsert(id3);
+      REQUIRE(proj.size() == 3);
+      REQUIRE(proj.groupCount() == 2);
+      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
+      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+    }
+
+    SECTION("single removal with grouping")
+    {
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
+
+      auto id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
+      env.source.singleInsert(id3);
+      REQUIRE(proj.groupCount() == 2);
+      batches.clear();
+
+      env.source.singleRemove(id3);
+      REQUIRE(proj.size() == 2);
+      CHECK(proj.trackIdAt(0) == id1);
+      CHECK(proj.trackIdAt(1) == id2);
+      REQUIRE(proj.groupCount() == 1);
+      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
+      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
+    }
+  }
+
+  TEST_CASE("TrackListProjection - mutations inside one group publish regular ranges", "[runtime][unit][projection]")
+  {
+    auto fixture = MutationProjectionFixture{};
+    auto& env = fixture.environment;
+    auto& proj = fixture.projection();
+    auto const id1 = fixture.firstId;
+    auto const id2 = fixture.secondId;
+    auto& batches = fixture.batches;
 
     SECTION("batch insertion into existing group coalesces insert range")
     {
@@ -313,21 +507,6 @@ namespace ao::rt::test
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 2);
       CHECK(delta->range.count == 2);
-    }
-
-    SECTION("batch removal with grouping")
-    {
-      proj.setPresentation(
-        TrackPresentationSpec{.groupBy = TrackGroupKey::Composer,
-                              .sortBy = {TrackSortTerm{.field = TrackSortField::Composer, .ascending = true}}});
-      batches.clear();
-
-      auto arr = std::array{id1, id2};
-      env.source.batchRemove(arr);
-      REQUIRE(proj.size() == 0);
-      CHECK(proj.groupCount() == 0);
-      REQUIRE(batches.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
 
     SECTION("batch removal from existing group coalesces remove range")
@@ -358,46 +537,6 @@ namespace ao::rt::test
       CHECK(delta->range.count == 2);
     }
 
-    SECTION("batch update with grouping")
-    {
-      proj.setPresentation(
-        TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
-                              .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}}});
-      batches.clear();
-
-      env.libraryFixture.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Zulu"; });
-      env.libraryFixture.updateTrack(id2, [](library::test::TrackSpec& s) { s.artist = "Bravo"; });
-      auto arr = std::array{id1, id2};
-      env.source.batchUpdate(arr);
-      REQUIRE(proj.size() == 2);
-      CHECK(proj.trackIdAt(0) == id2);
-      CHECK(proj.trackIdAt(1) == id1);
-      REQUIRE(proj.groupCount() == 2);
-      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Bravo");
-      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
-      REQUIRE(batches.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
-    }
-
-    SECTION("single update with grouping")
-    {
-      proj.setPresentation(
-        TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
-                              .sortBy = {TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}}});
-      batches.clear();
-
-      env.libraryFixture.updateTrack(id1, [](library::test::TrackSpec& s) { s.artist = "Zulu"; });
-      env.source.singleUpdate(id1);
-      REQUIRE(proj.size() == 2);
-      CHECK(proj.trackIdAt(0) == id2);
-      CHECK(proj.trackIdAt(1) == id1);
-      REQUIRE(proj.groupCount() == 2);
-      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Artist");
-      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
-      REQUIRE(batches.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
-    }
-
     SECTION("single insertion into existing group publishes insert range")
     {
       proj.setPresentation(TrackPresentationSpec{
@@ -418,22 +557,6 @@ namespace ao::rt::test
       CHECK(delta->range.count == 1);
     }
 
-    SECTION("single insertion with grouping")
-    {
-      proj.setPresentation(TrackPresentationSpec{
-        .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
-      batches.clear();
-
-      auto id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
-      env.source.singleInsert(id3);
-      REQUIRE(proj.size() == 3);
-      REQUIRE(proj.groupCount() == 2);
-      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
-      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
-      REQUIRE(batches.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
-    }
-
     SECTION("single removal from existing group publishes remove range")
     {
       proj.setPresentation(TrackPresentationSpec{
@@ -452,26 +575,6 @@ namespace ao::rt::test
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 0);
       CHECK(delta->range.count == 1);
-    }
-
-    SECTION("single removal with grouping")
-    {
-      proj.setPresentation(TrackPresentationSpec{
-        .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
-
-      auto id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .genre = "Pop", .year = 2020});
-      env.source.singleInsert(id3);
-      REQUIRE(proj.groupCount() == 2);
-      batches.clear();
-
-      env.source.singleRemove(id3);
-      REQUIRE(proj.size() == 2);
-      CHECK(proj.trackIdAt(0) == id1);
-      CHECK(proj.trackIdAt(1) == id2);
-      REQUIRE(proj.groupCount() == 1);
-      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
-      REQUIRE(batches.size() == 1);
-      CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
 
     SECTION("batch update inside existing group coalesces update range")
@@ -516,15 +619,29 @@ namespace ao::rt::test
       CHECK(proj.groupAt(0).rows.count == 2);
       REQUIRE(batches.size() == 1);
       REQUIRE(batches.back().deltas.size() == 2);
-      CHECK(std::holds_alternative<ProjectionRemoveRange>(batches.back().deltas[0]));
-      CHECK(std::holds_alternative<ProjectionInsertRange>(batches.back().deltas[1]));
+      REQUIRE(std::holds_alternative<ProjectionRemoveRange>(batches.back().deltas[0]));
+      REQUIRE(std::holds_alternative<ProjectionInsertRange>(batches.back().deltas[1]));
+      auto const& removal = std::get<ProjectionRemoveRange>(batches.back().deltas[0]);
+      auto const& insertion = std::get<ProjectionInsertRange>(batches.back().deltas[1]);
+      CHECK(removal.range.start == 0);
+      CHECK(removal.range.count == 2);
+      CHECK(insertion.range.start == 0);
+      CHECK(insertion.range.count == 2);
     }
+  }
+
+  TEST_CASE("TrackListProjection - source-order mutations preserve unsorted coordinates", "[runtime][unit][projection]")
+  {
+    auto fixture = MutationProjectionFixture{};
+    fixture.useSourceOrderPresentation();
+    auto& env = fixture.environment;
+    auto& proj = fixture.projection();
+    auto const id1 = fixture.firstId;
+    auto const id2 = fixture.secondId;
+    auto& batches = fixture.batches;
 
     SECTION("batch insert without comparator")
     {
-      proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None});
-      batches.clear();
-
       auto id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .year = 2020});
       auto id4 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "D", .year = 2020});
       auto arr = std::array{id3, id4};
@@ -544,26 +661,17 @@ namespace ao::rt::test
 
     SECTION("single update without comparator")
     {
-      proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None});
-      batches.clear();
-
       env.libraryFixture.updateTrack(id1, [](library::test::TrackSpec& s) { s.title = "AA"; });
       env.source.singleUpdate(id1);
       REQUIRE(proj.size() == 2);
       CHECK(proj.trackIdAt(0) == id1);
       CHECK(proj.trackIdAt(1) == id2);
       REQUIRE(batches.size() == 1);
+      REQUIRE(batches.back().deltas.size() == 1);
       auto const* delta = std::get_if<ProjectionUpdateRange>(&batches.back().deltas.front());
       REQUIRE(delta != nullptr);
       CHECK(delta->range.start == 0);
       CHECK(delta->range.count == 1);
-    }
-
-    SECTION("Destructor coverage")
-    {
-      auto proj2Ptr = std::make_unique<TrackListProjection>(
-        ViewId{2}, TrackSourceLease{env.filteredPtr}, env.libraryFixture.library());
-      proj2Ptr.reset();
     }
   }
 } // namespace ao::rt::test

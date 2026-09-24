@@ -58,7 +58,7 @@ namespace ao::media::mp4::test
     CHECK_FALSE(*endRes);
   }
 
-  TEST_CASE("MP4 AtomCursor - accepts extended and end-of-file atom sizes", "[media][regression][mp4]")
+  TEST_CASE("MP4 AtomCursor - accepts extended and end-of-file atom sizes", "[media][unit][mp4]")
   {
     auto data = ao::test::mp4::makeExtendedAtom("free", {1, 2});
     auto const endOfFileAtom = ao::test::mp4::makeEndOfFileAtom("mdat", {3, 4, 5});
@@ -148,7 +148,7 @@ namespace ao::media::mp4::test
     CHECK(childRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("MP4 AtomView - short typed layout returns no view", "[media][regression][mp4]")
+  TEST_CASE("MP4 AtomView - short typed layout returns no view", "[media][unit][mp4]")
   {
     auto const bytes = toBytes(ao::test::mp4::makeAtom("stsd", {}));
     auto cursor = AtomView::root(bytes).children();
@@ -195,7 +195,7 @@ namespace ao::media::mp4::test
     CHECK(malformedRes.error().message == "mp4 atom size exceeds its container boundary");
   }
 
-  TEST_CASE("MP4 findAtom - stops before unrelated siblings after the matched path", "[media][regression][mp4]")
+  TEST_CASE("MP4 findAtom - stops before unrelated siblings after the matched path", "[media][unit][mp4]")
   {
     auto data = ao::test::mp4::makeAtom("moov", {});
     ao::test::mp4::appendBe32(data, 100);

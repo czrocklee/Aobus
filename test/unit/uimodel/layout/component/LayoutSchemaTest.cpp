@@ -294,12 +294,14 @@ namespace ao::uimodel::test
     node.props[std::string{kSecondaryActionProp}] = LayoutValue{std::string{"other.action"}};
     CHECK(component.actionId(node, ActionSlot::SecondaryClick) == "other.action");
     CHECK(component.hasBoundAction(node));
-    CHECK((component.boundActionSlots(node) & actionSlotBit(ActionSlot::SecondaryClick)) != 0);
+    CHECK(component.boundActionSlots(node) ==
+          (actionSlotBit(ActionSlot::PrimaryClick) | actionSlotBit(ActionSlot::SecondaryClick)));
 
     for (auto const& unbound : {std::string{}, std::string{"none"}})
     {
       node.props[std::string{kPrimaryActionProp}] = LayoutValue{unbound};
       CHECK_FALSE(component.actionId(node, ActionSlot::PrimaryClick));
+      CHECK(component.boundActionSlots(node) == actionSlotBit(ActionSlot::SecondaryClick));
     }
   }
 
@@ -433,6 +435,11 @@ namespace ao::uimodel::test
       candidate.persistentState = true;
     }
 
+    SECTION("surface capability")
+    {
+      candidate.surfaces |= static_cast<LayoutSurfaceCapabilityMask>(LayoutSurfaceCapability::Tooltip);
+    }
+
     SECTION("action-slot floor")
     {
       candidate.actionSlots &= ~actionSlotBit(ActionSlot::PrimaryClick);
@@ -500,7 +507,19 @@ namespace ao::uimodel::test
       .capabilities = ActionCapability::RequiresAnchor | ActionCapability::PresentsMenu,
     };
 
+    CHECK(action.capabilities == (actionCapabilityBit(ActionCapability::RequiresAnchor) |
+                                  actionCapabilityBit(ActionCapability::PresentsMenu)));
     CHECK(action.supports(ActionCapability::RequiresAnchor));
     CHECK(action.supports(ActionCapability::PresentsMenu));
+
+    auto anchorOnly = action;
+    anchorOnly.capabilities = actionCapabilityBit(ActionCapability::RequiresAnchor);
+    CHECK(anchorOnly.supports(ActionCapability::RequiresAnchor));
+    CHECK_FALSE(anchorOnly.supports(ActionCapability::PresentsMenu));
+
+    auto noCapabilities = action;
+    noCapabilities.capabilities = ActionCapabilityMask{0};
+    CHECK_FALSE(noCapabilities.supports(ActionCapability::RequiresAnchor));
+    CHECK_FALSE(noCapabilities.supports(ActionCapability::PresentsMenu));
   }
 } // namespace ao::uimodel::test

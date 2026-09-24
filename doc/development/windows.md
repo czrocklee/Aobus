@@ -147,7 +147,12 @@ The Windows App SDK development closure is restored from
 `app/windows-winui/packages.config` and `NuGet.Config`. The Windows App Runtime
 is separate user/host state. `setup winui-runtime` verifies the governed SHA-256
 and Microsoft Authenticode signature before installation; normal build and
-doctor commands never install it.
+doctor commands never install it. A healthy runtime registered for the current
+user in the governed Microsoft package family and architecture satisfies the
+requirement when its four-part version is at least the contract's runtime
+version. Doctor and setup accept newer serviced versions rather than requiring
+a downgrade; setup reports the selected installed version. The NuGet development
+closure remains exactly pinned.
 
 Build or launch the dedicated tree with:
 

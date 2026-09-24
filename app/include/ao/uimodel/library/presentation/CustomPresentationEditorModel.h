@@ -93,7 +93,7 @@ namespace ao::uimodel
     template<typename T>
     static bool tryMoveElementDown(std::vector<T>& elements, std::size_t index)
     {
-      if (index + 1 >= elements.size())
+      if (index >= elements.size() || index + 1 >= elements.size())
       {
         return false;
       }

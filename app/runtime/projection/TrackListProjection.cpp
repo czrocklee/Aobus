@@ -1457,11 +1457,9 @@ namespace ao::rt
 
       auto const script = delta::diff(previousTrackIds, finalTrackIds, updatedTrackIds, preferredMovedIds);
 
-      if (auto const appliedRes = delta::apply(previousTrackIds, script); !appliedRes || *appliedRes != finalTrackIds)
-      {
-        publishReset(previousSize);
-        return;
-      }
+      auto const appliedRes = delta::apply(previousTrackIds, script);
+      AO_INVARIANT(
+        appliedRes && *appliedRes == finalTrackIds, "Projection sort diff does not reproduce its final order");
 
       auto batch = eraseTrackIds(script);
 
@@ -1470,12 +1468,9 @@ namespace ao::rt
         return;
       }
 
-      if (!isValidTrackListProjectionDeltaBatch(batch, previousSize) ||
-          finalSizeOf(batch, previousSize) != orderIndex.size())
-      {
-        publishReset(previousSize);
-        return;
-      }
+      auto const validBatch = isValidTrackListProjectionDeltaBatch(batch, previousSize) &&
+                              finalSizeOf(batch, previousSize) == orderIndex.size();
+      AO_INVARIANT(validBatch, "Projection sort ranges do not match its final size");
 
       publishBatch(std::move(batch), previousSize);
     }
@@ -1506,12 +1501,8 @@ namespace ao::rt
 
       auto const& script = std::get<delta::RegularTrackEditScript>(sourceBatch);
 
-      if (!tryApplyIncrementalBatch(script))
-      {
-        rebuildOrderIndex();
-        publishReset(previousSize);
-        return;
-      }
+      auto const incrementalApplied = tryApplyIncrementalBatch(script);
+      AO_INVARIANT(incrementalApplied, "Projection incremental batch is inconsistent with its source or stored tracks");
 
       if (previousSections != sectionFingerprint())
       {
@@ -1525,21 +1516,14 @@ namespace ao::rt
         return;
       }
 
-      if (auto const finalTrackIds = projectionTrackIds();
-          !matchesSourceOrderBatch(previousTrackIds, script, finalTrackIds))
-      {
-        publishReset(previousSize);
-        return;
-      }
+      auto const finalTrackIds = projectionTrackIds();
+      auto const sourceOrderMatches = matchesSourceOrderBatch(previousTrackIds, script, finalTrackIds);
+      AO_INVARIANT(sourceOrderMatches, "Projection source-order script does not reproduce its final order");
 
       auto batch = sourceOrderProjectionBatch(script);
-
-      if (!isValidTrackListProjectionDeltaBatch(batch, previousSize) ||
-          finalSizeOf(batch, previousSize) != orderIndex.size())
-      {
-        publishReset(previousSize);
-        return;
-      }
+      auto const validBatch = isValidTrackListProjectionDeltaBatch(batch, previousSize) &&
+                              finalSizeOf(batch, previousSize) == orderIndex.size();
+      AO_INVARIANT(validBatch, "Projection source-order ranges do not match its final size");
 
       publishBatch(std::move(batch), previousSize);
     }

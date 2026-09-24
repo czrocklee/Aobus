@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
+
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -137,5 +139,6 @@ namespace ao::gtk
     std::optional<std::int32_t> _optDefaultResponseId;
     std::optional<std::int32_t> _optCloseResponseId;
     bool _responseInProgress = false;
+    MainContextCallbackScope _responseCallbacks;
   };
 } // namespace ao::gtk

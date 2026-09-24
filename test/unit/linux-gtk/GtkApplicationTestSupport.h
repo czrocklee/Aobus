@@ -18,11 +18,14 @@ namespace Gtk
 
 namespace ao::gtk::test
 {
+  bool isOwnedGtkSessionBus(char const* address, char const* ownershipAddress) noexcept;
+  void requireOwnedGtkSessionBus();
   Glib::RefPtr<Gtk::Application> ensureGtkApplication();
+  Glib::RefPtr<Gtk::Application> ensureRegisteredGtkApplication();
   void drainGtkEvents();
   void drainGtkEventsFor(std::chrono::milliseconds duration);
   bool tryPumpGtkEventsUntil(std::function<bool()> const& predicate,
-                             std::chrono::milliseconds timeout = std::chrono::milliseconds{500});
+                             std::chrono::milliseconds timeout = std::chrono::seconds{10});
 
   class GtkWindowFixture final
   {

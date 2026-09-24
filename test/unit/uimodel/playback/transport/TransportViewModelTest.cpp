@@ -13,9 +13,12 @@
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <memory>
+#include <string_view>
 
 namespace ao::uimodel::test
 {
@@ -28,64 +31,139 @@ namespace ao::uimodel::test
     auto& playback = fixture.runtime().playback();
     auto actions = PlaybackActions{playback, [] {}};
 
-    SECTION("Play action uses play icon and disabled command state")
+    SECTION("every command has complete semantic icon and label policy")
     {
-      auto log = ao::test::RenderLog<TransportViewState>{};
-      auto vm = TransportViewModel{playback,
-                                   actions,
-                                   ao::test::englishMessageCatalog(),
-                                   PlaybackCommand::Play,
-                                   false,
-                                   [&log](auto const& v) { log.render(v); }};
+      struct ExpectedPresentation final
+      {
+        PlaybackCommand command;
+        TransportIcon icon;
+        std::string_view text;
+      };
 
-      REQUIRE(!log.empty());
-      CHECK(log.last().enabled == false);
-      CHECK(log.last().icon == TransportIcon::Play);
-      CHECK(log.last().tooltip == "Play");
+      constexpr auto kExpectedPresentations = std::array{
+        ExpectedPresentation{PlaybackCommand::Play, TransportIcon::Play, "Play"},
+        ExpectedPresentation{PlaybackCommand::Pause, TransportIcon::Pause, "Pause"},
+        ExpectedPresentation{PlaybackCommand::PlayPause, TransportIcon::Play, "Play"},
+        ExpectedPresentation{PlaybackCommand::Stop, TransportIcon::Stop, "Stop"},
+        ExpectedPresentation{PlaybackCommand::Next, TransportIcon::Next, "Next Track"},
+        ExpectedPresentation{PlaybackCommand::Previous, TransportIcon::Previous, "Previous Track"},
+        ExpectedPresentation{PlaybackCommand::ToggleShuffle, TransportIcon::Shuffle, "Shuffle"},
+        ExpectedPresentation{PlaybackCommand::CycleRepeat, TransportIcon::Repeat, "Repeat"},
+      };
+
+      for (auto const& expected : kExpectedPresentations)
+      {
+        CAPTURE(playbackCommandId(expected.command));
+        auto withoutLabel = ao::test::RenderLog<TransportViewState>{};
+        auto hiddenLabelViewModel =
+          TransportViewModel{playback,
+                             actions,
+                             ao::test::englishMessageCatalog(),
+                             expected.command,
+                             false,
+                             [&withoutLabel](auto const& view) { withoutLabel.render(view); }};
+        auto withLabel = ao::test::RenderLog<TransportViewState>{};
+        auto shownLabelViewModel = TransportViewModel{playback,
+                                                      actions,
+                                                      ao::test::englishMessageCatalog(),
+                                                      expected.command,
+                                                      true,
+                                                      [&withLabel](auto const& view) { withLabel.render(view); }};
+
+        REQUIRE_FALSE(withoutLabel.empty());
+        REQUIRE_FALSE(withLabel.empty());
+        CHECK(withoutLabel.last().icon == expected.icon);
+        CHECK(withoutLabel.last().tooltip == expected.text);
+        CHECK(withoutLabel.last().label.empty());
+        CHECK_FALSE(withoutLabel.last().enabled);
+        CHECK_FALSE(withoutLabel.last().engaged);
+        CHECK_FALSE(withoutLabel.last().playing);
+        CHECK(withLabel.last().icon == expected.icon);
+        CHECK(withLabel.last().tooltip == expected.text);
+        CHECK(withLabel.last().label == expected.text);
+        CHECK_FALSE(withLabel.last().enabled);
+        CHECK_FALSE(withLabel.last().engaged);
+        CHECK_FALSE(withLabel.last().playing);
+      }
     }
 
-    SECTION("PlayPause switches icon and label from playback transport")
+    SECTION("PlayPause follows reachable idle playing and paused states")
     {
+      fixture.makePlaybackReady();
+      auto const trackId = fixture.addPlayableTrack("Presentation Track");
       auto log = ao::test::RenderLog<TransportViewState>{};
-      auto vm = TransportViewModel{playback,
-                                   actions,
-                                   ao::test::englishMessageCatalog(),
-                                   PlaybackCommand::PlayPause,
-                                   true,
-                                   [&log](auto const& v) { log.render(v); }};
+      auto viewModel = TransportViewModel{playback,
+                                          actions,
+                                          ao::test::englishMessageCatalog(),
+                                          PlaybackCommand::PlayPause,
+                                          true,
+                                          [&log](auto const& view) { log.render(view); }};
 
+      REQUIRE_FALSE(log.empty());
       CHECK(log.last().icon == TransportIcon::Play);
       CHECK(log.last().tooltip == "Play");
       CHECK(log.last().label == "Play");
-      CHECK(log.last().playing == false);
-      CHECK(log.last().enabled == false);
+      CHECK_FALSE(log.last().playing);
+
+      REQUIRE(fixture.playFromView(trackId));
+      CHECK(log.last().icon == TransportIcon::Pause);
+      CHECK(log.last().tooltip == "Pause");
+      CHECK(log.last().label == "Pause");
+      CHECK(log.last().playing);
+
+      playback.commands().pause();
+      CHECK(log.last().icon == TransportIcon::Play);
+      CHECK(log.last().tooltip == "Play");
+      CHECK(log.last().label == "Play");
+      CHECK_FALSE(log.last().playing);
     }
 
-    SECTION("Repeat and shuffle render engaged state from sequence modes")
+    SECTION("Shuffle presents both engagement states")
     {
-      playback.commands().setShuffleMode(ShuffleMode::On);
-      playback.commands().setRepeatMode(RepeatMode::One);
-
-      auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
-      auto repeatLog = ao::test::RenderLog<TransportViewState>{};
-      auto shuffleVm = TransportViewModel{playback,
+      auto log = ao::test::RenderLog<TransportViewState>{};
+      auto viewModel = TransportViewModel{playback,
                                           actions,
                                           ao::test::englishMessageCatalog(),
                                           PlaybackCommand::ToggleShuffle,
                                           true,
-                                          [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
-      auto repeatVm = TransportViewModel{playback,
-                                         actions,
-                                         ao::test::englishMessageCatalog(),
-                                         PlaybackCommand::CycleRepeat,
-                                         true,
-                                         [&repeatLog](auto const& v) { repeatLog.render(v); }};
+                                          [&log](auto const& view) { log.render(view); }};
 
-      CHECK(shuffleLog.last().engaged == true);
-      CHECK(shuffleLog.last().label == "Shuffle");
-      CHECK(repeatLog.last().engaged == true);
-      CHECK(repeatLog.last().icon == TransportIcon::RepeatOne);
-      CHECK(repeatLog.last().label == "Repeat");
+      REQUIRE_FALSE(log.empty());
+      CHECK_FALSE(log.last().engaged);
+      CHECK(log.last().icon == TransportIcon::Shuffle);
+      CHECK(log.last().label == "Shuffle");
+
+      playback.commands().setShuffleMode(ShuffleMode::On);
+      CHECK(log.last().engaged);
+      CHECK(log.last().icon == TransportIcon::Shuffle);
+
+      playback.commands().setShuffleMode(ShuffleMode::Off);
+      CHECK_FALSE(log.last().engaged);
+    }
+
+    SECTION("Repeat presents Off All and One states")
+    {
+      auto log = ao::test::RenderLog<TransportViewState>{};
+      auto viewModel = TransportViewModel{playback,
+                                          actions,
+                                          ao::test::englishMessageCatalog(),
+                                          PlaybackCommand::CycleRepeat,
+                                          true,
+                                          [&log](auto const& view) { log.render(view); }};
+
+      REQUIRE_FALSE(log.empty());
+      CHECK_FALSE(log.last().engaged);
+      CHECK(log.last().icon == TransportIcon::Repeat);
+      CHECK(log.last().tooltip == "Repeat");
+      CHECK(log.last().label == "Repeat");
+
+      playback.commands().setRepeatMode(RepeatMode::All);
+      CHECK(log.last().engaged);
+      CHECK(log.last().icon == TransportIcon::Repeat);
+
+      playback.commands().setRepeatMode(RepeatMode::One);
+      CHECK(log.last().engaged);
+      CHECK(log.last().icon == TransportIcon::RepeatOne);
     }
   }
 
@@ -150,7 +228,7 @@ namespace ao::uimodel::test
     CHECK(shuffleLog.last().engaged == true);
   }
 
-  TEST_CASE("TransportViewModel - clicks delegate to command surface", "[uimodel][unit][playback]")
+  TEST_CASE("TransportViewModel - clicks delegate to command surface", "[uimodel][integration][playback]")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();

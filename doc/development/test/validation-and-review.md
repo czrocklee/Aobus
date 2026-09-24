@@ -8,32 +8,36 @@ id: development.test.validation-and-review
 When creating a new test file:
 
 1. Place it under the matching existing `test/unit/...` module or layer directory, such as `runtime`, `uimodel`, `linux-gtk`, `library`, `query`, `audio`, `utility`, `cli`, `tui`, or `winui`.
-2. Add it to the correct target in `test/CMakeLists.txt`.
+2. Register it with its owning executable in `test/CMakeLists.txt`. Declare a platform- or frontend-conditional test once, outside the condition, with `aobus_target_test_sources(target enabled disabled_reason ...)`.
 3. Match namespace and include style of neighboring tests.
 4. Include only headers that are used.
 5. Check the focused `*TestSupport.h` files in the owning layer before creating a new shared helper; do not add an include-all umbrella.
 6. Keep file-scope helpers local unless multiple files need them.
 7. Do not create duplicate helper types and hide the conflict in a nested namespace; reuse or extend the existing helper instead.
 
+That helper takes only `*Test.cpp` and `*Test.mm` files; a disabled declaration
+needs a one-line reason. Support files such as `*TestSupport.cpp` use ordinary
+`target_sources`. CMake configuration fails on any unregistered or doubly owned
+test source, even for an app-only target, unless `AOBUS_BUILD_TESTS=OFF`; keep
+throwaway tests outside the checkout. The resulting `aobus-test-sources.tsv`
+in the build tree records configuration, not execution. When moving tests
+between binaries, compare runtime test lists on each affected platform.
+
 ## Regression tests
 
-Regression tests are encouraged when they protect a real bug, especially for:
+Protect a real bug with a test named for the behavior, placed with related cases
+(see [fixtures and helpers](fixture-and-helper.md#before-adding-or-restructuring-tests)).
+Keep its unit/integration scope and add no marker tag. Add a short comment
+when the assertion guards a non-obvious lifecycle or layout invariant.
 
-- Query optimizer correctness.
-- Async cancellation/lifetime cleanup.
-- GTK widget destruction order.
-- Layout measurement stability.
-- Import/export data preservation.
-- Parser/serializer edge cases.
+## Reviewing existing tests
 
-Name and tag them as regressions when appropriate:
-
-```cpp
-TEST_CASE("ImportExportCoordinator - cancellation after worker completion does not post error",
-          "[gtk][regression][import-export]")
-```
-
-Add a short comment if the assertion is non-obvious or protects a fragile UI/layout lifecycle invariant.
+A review of test quality or tags reads each complete case, every `SECTION`, and
+the helpers needed to explain its assertions. Names, tags, and keyword searches
+are triage only. Judge scope and `[concurrency]` from the asserted contract, not
+from the fixture's threads or binary. For an exhaustive review, keep a per-case
+record of reviewed and pending cases outside the repository and report gaps; a
+clean `test-audit` or passing run does not show the review is complete.
 
 ## Large test files
 
@@ -172,7 +176,7 @@ This changes workflow routing without changing repository branch-protection rule
 - The test checks only `has_value()` or `count` when content matters.
 - A GTK test duplicates detailed policy already covered in `uimodel`.
 - A pure rule is tested through a full widget tree.
-- A runtime unit test performs a full filesystem workflow without being marked workflow/integration.
+- A full production import/export/scan workflow is marked unit merely because it lives in the core target.
 - The test uses sleep/yield to make async behavior pass.
 - The same fixture setup is copied into many cases.
 - The expected value is computed by duplicating the production algorithm.
@@ -188,7 +192,7 @@ Before finishing, confirm:
 
 - The test lives at the lowest layer that proves the behavior.
 - The name explains behavior and condition.
-- Tags identify layer, type, and component.
+- Tags start with layer, one unit/integration scope, and component.
 - The test asserts observable outcomes, not implementation details.
 - Mutations have postconditions.
 - Async/GTK behavior is deterministic.
@@ -197,8 +201,6 @@ Before finishing, confirm:
 - Fixtures reduce noise without hiding the behavior under test.
 - GTK tests do not duplicate policy better tested in `uimodel`.
 - Testability seams follow [fixtures and helpers](fixture-and-helper.md).
-- New files are listed in `test/CMakeLists.txt`.
+- New test files are registered as described in [Adding new files](#adding-new-files).
 - Focused validation has been run when practical, or skipped with an honest reason.
 - The applicable completion route above passes, with its scope and any missing host evidence reported.
-
-`ao check` rejects unregistered C++ and Objective-C++ test sources before building on every native profile, including macOS. This lightweight invariant does not depend on running the Python tooling suite.

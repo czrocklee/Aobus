@@ -11,6 +11,7 @@
 #include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -51,7 +52,9 @@ namespace ao::audio::test
     CHECK(soughtBlockRes->firstFrameIndex > 0);
 
     decoder.flush();
-    CHECK(decoder.readNextBlock());
+    auto const flushedBlockRes = decoder.readNextBlock();
+    REQUIRE(flushedBlockRes);
+    CHECK(flushedBlockRes->frames > 0);
   }
 
   TEST_CASE("Mp3DecoderSession - empty output format probes native stream", "[audio][unit][mp3]")
@@ -89,6 +92,7 @@ namespace ao::audio::test
 
     auto const blockRes = decoder.readNextBlock();
     REQUIRE(blockRes);
+    REQUIRE(blockRes->frames > 0);
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 4U);
   }
 
@@ -102,8 +106,7 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) == 44100);
   }
 
-  TEST_CASE("Mp3DecoderSession - scans VBR streams without seek tables before validating seeks",
-            "[audio][regression][mp3]")
+  TEST_CASE("Mp3DecoderSession - scans VBR streams without seek tables before validating seeks", "[audio][unit][mp3]")
   {
     auto const testFile = requireAudioFixture("vbr_no_seek_table.mp3");
     auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
@@ -164,11 +167,12 @@ namespace ao::audio::test
     CHECK(recoveredBlockRes->frames > 0);
   }
 
-  TEST_CASE("Mp3DecoderSession - reports error paths", "[audio][unit][mp3][error]")
+  TEST_CASE("Mp3DecoderSession - rejects unreadable or malformed input", "[audio][unit][mp3][error]")
   {
     SECTION("Non-existent file")
     {
-      CHECK(!Mp3DecoderSession::open("/path/to/nowhere/nonexistent.mp3", SampleEncoding::Signed16Le));
+      auto const tempDir = ao::test::TempDir{};
+      CHECK_FALSE(Mp3DecoderSession::open(tempDir.path() / "missing.mp3", SampleEncoding::Signed16Le));
     }
 
     SECTION("Invalid file content")
@@ -184,30 +188,28 @@ namespace ao::audio::test
       CHECK(res.error().message.contains(":"));
       CHECK(res.error().message != "Failed to get MP3 format: A generic mpg123 error.");
     }
+  }
 
-    SECTION("Seek way beyond duration")
-    {
-      auto const testFile = requireAudioFixture("basic_metadata.mp3");
-      auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
-      auto& decoder = *decoderPtr;
-      // Seek to 1 hour (much longer than basic_metadata.mp3)
-      CHECK(!decoder.seek(std::chrono::hours{1}));
-    }
+  TEST_CASE("Mp3DecoderSession - rejects a seek beyond duration", "[audio][unit][mp3][error]")
+  {
+    auto const testFile = requireAudioFixture("basic_metadata.mp3");
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
+    CHECK_FALSE(decoderPtr->seek(std::chrono::hours{1}));
+  }
 
-    SECTION("Supports lossless wider integer output")
-    {
-      auto const testFile = requireAudioFixture("basic_metadata.mp3");
-      auto int32DecoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed32Le));
-      auto& int32Decoder = *int32DecoderPtr;
-      CHECK(int32Decoder.streamInfo().outputFormat.encoding == SampleEncoding::Signed32Le);
-    }
+  TEST_CASE("Mp3DecoderSession - supports wider integer carriers", "[audio][unit][mp3]")
+  {
+    auto const encoding =
+      GENERATE(SampleEncoding::Signed32Le, SampleEncoding::Signed24PackedLe, SampleEncoding::Signed24In32Le);
+    auto const testFile = requireAudioFixture("basic_metadata.mp3");
+    auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, encoding));
+    CHECK(decoderPtr->streamInfo().outputFormat.encoding == encoding);
+    CHECK(decoderPtr->streamInfo().outputFormat.channels == 2);
 
-    SECTION("Supports lossless packed and padded output")
-    {
-      auto const testFile = requireAudioFixture("basic_metadata.mp3");
-
-      CHECK(Mp3DecoderSession::open(testFile, SampleEncoding::Signed24PackedLe));
-      CHECK(Mp3DecoderSession::open(testFile, SampleEncoding::Signed24In32Le));
-    }
+    auto const blockRes = decoderPtr->readNextBlock();
+    REQUIRE(blockRes);
+    REQUIRE(blockRes->frames > 0);
+    CHECK(blockRes->bytes.size() ==
+          static_cast<std::size_t>(blockRes->frames) * 2U * encodingContainerBits(encoding) / 8U);
   }
 } // namespace ao::audio::test

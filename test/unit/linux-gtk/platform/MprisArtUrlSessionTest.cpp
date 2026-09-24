@@ -26,7 +26,7 @@ namespace ao::gtk::platform::test
   } // namespace
 
   TEST_CASE("MprisArtUrlSession - replacing a resource invalidates the cancelled request callback",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][unit][mpris][concurrency]")
   {
     constexpr auto kFirstResourceId = ResourceId{11};
     constexpr auto kSecondResourceId = ResourceId{22};
@@ -72,7 +72,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - synchronous completion publishes once without retaining the request",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][unit][mpris][concurrency]")
   {
     constexpr auto kResourceId = ResourceId{33};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -104,7 +104,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - clear invalidates completion before cancelling an active request",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][unit][mpris][concurrency]")
   {
     constexpr auto kResourceId = ResourceId{43};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -135,7 +135,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - destruction invalidates completion before cancelling an active request",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][unit][mpris][concurrency]")
   {
     constexpr auto kResourceId = ResourceId{44};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -165,7 +165,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - requester exceptions invalidate the completion before rethrowing",
-            "[gtk][regression][mpris][concurrency]")
+            "[gtk][unit][mpris][concurrency]")
   {
     constexpr auto kResourceId = ResourceId{55};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};

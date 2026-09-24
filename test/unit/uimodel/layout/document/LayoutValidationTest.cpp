@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::uimodel::test
 {
@@ -155,6 +156,9 @@ namespace ao::uimodel::test
     auto const belowMinimum = rejectionOf(LayoutNode{.type = "frame"}, bare);
     CHECK(belowMinimum.reason == LayoutRejectionReason::ChildCountBelowMinimum);
 
+    auto const optAtMaximum = validate(LayoutNode{.type = "frame", .children = {readout("a"), readout("b")}}, bare);
+    CHECK_FALSE(optAtMaximum);
+
     auto const aboveMaximum =
       rejectionOf(LayoutNode{.type = "frame", .children = {readout("a"), readout("b"), readout("c")}}, bare);
     CHECK(aboveMaximum.reason == LayoutRejectionReason::ChildCountAboveMaximum);
@@ -266,6 +270,28 @@ namespace ao::uimodel::test
                                       bare);
     CHECK_FALSE(optAccepted);
 
+    for (auto const* const name : {"hexpand", "vexpand", "visible"})
+    {
+      for (bool const value : {false, true})
+      {
+        auto const optBoolean = validate(
+          LayoutNode{.type = "frame", .layout = {{name, LayoutValue{value}}}, .children = {readout("a")}}, bare);
+        CHECK_FALSE(optBoolean);
+      }
+
+      for (auto const& malformed : std::vector{LayoutValue{std::string{"true"}},
+                                               LayoutValue{std::int64_t{1}},
+                                               LayoutValue{1.0},
+                                               LayoutValue{},
+                                               LayoutValue{std::vector<std::string>{"true"}}})
+      {
+        auto const rejection =
+          rejectionOf(LayoutNode{.type = "frame", .layout = {{name, malformed}}, .children = {readout("a")}}, bare);
+        CHECK(rejection.reason == LayoutRejectionReason::InvalidLayoutFieldValue);
+        CHECK(rejection.detail == name);
+      }
+    }
+
     auto const badAlign = rejectionOf(
       LayoutNode{
         .type = "frame", .layout = {{"halign", LayoutValue{std::string{"stretch"}}}}, .children = {readout("a")}},
@@ -307,6 +333,7 @@ namespace ao::uimodel::test
     // Likewise for a presentation that fixes its own child count.
     auto const leaf =
       LayoutNode{.type = "frame", .props = {{"mode", LayoutValue{std::string{"leaf"}}}}, .children = {readout("a")}};
+    CHECK_FALSE(validate(leaf, bare));
     CHECK(rejectionOf(leaf, fakeDialect()).reason == LayoutRejectionReason::ChildCountAboveMaximum);
   }
 
@@ -329,10 +356,38 @@ namespace ao::uimodel::test
 
   TEST_CASE("validateLayout - node ids stay unique across the whole document", "[uimodel][unit][layout][validation]")
   {
-    auto const duplicated =
-      rejectionOf(LayoutNode{.type = "frame", .children = {readout("same"), readout("same")}}, fakeDialect());
+    SECTION("siblings")
+    {
+      auto const duplicated =
+        rejectionOf(LayoutNode{.type = "frame", .children = {readout("same"), readout("same")}}, fakeDialect());
 
-    CHECK(duplicated.reason == LayoutRejectionReason::DuplicateNodeId);
-    CHECK(duplicated.nodeId == "same");
+      CHECK(duplicated.reason == LayoutRejectionReason::DuplicateNodeId);
+      CHECK(duplicated.nodeId == "same");
+    }
+
+    SECTION("main and tooltip surfaces")
+    {
+      auto root = LayoutNode{.type = "frame", .children = {readout("same")}};
+      root.optTooltip = BoxedLayoutNode{readout("same")};
+      auto dialect = fakeDialect();
+      dialect.authorsTooltips = true;
+
+      auto const duplicated = rejectionOf(std::move(root), dialect);
+      CHECK(duplicated.reason == LayoutRejectionReason::DuplicateNodeId);
+      CHECK(duplicated.nodeId == "same");
+    }
+  }
+
+  TEST_CASE("validateLayout - reports the first defect in document order", "[uimodel][unit][layout][validation]")
+  {
+    auto first = readout("first");
+    first.props["undeclared"] = LayoutValue{std::string{"value"}};
+    auto const rejection = rejectionOf(
+      LayoutNode{.type = "frame", .children = {std::move(first), LayoutNode{.id = "second", .type = "nosuchtype"}}},
+      LayoutDialect{.name = "Bare"});
+
+    CHECK(rejection.reason == LayoutRejectionReason::UnknownProperty);
+    CHECK(rejection.nodeId == "first");
+    CHECK(rejection.detail == "undeclared");
   }
 } // namespace ao::uimodel::test

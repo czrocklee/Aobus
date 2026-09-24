@@ -102,4 +102,19 @@ namespace ao::query::test
       CHECK(context.replacement.prefix == "Br");
     }
   }
+
+  TEST_CASE("Completion - preserves value byte ranges after complete Unicode text", "[query][unit][completion]")
+  {
+    auto const text = std::string{R"($artist = "Björk" and $album = Ki)"};
+    REQUIRE(text.size() == 34);
+
+    auto const context = valueContext(analyzeQueryCompletion(text, text.size()));
+
+    CHECK(context.field == Field::AlbumId);
+    CHECK(context.replacement.replaceBegin == 32);
+    CHECK(context.replacement.replaceEnd == 34);
+    CHECK(context.replacement.prefix == "Ki");
+    CHECK(text.substr(context.replacement.replaceBegin,
+                      context.replacement.replaceEnd - context.replacement.replaceBegin) == "Ki");
+  }
 } // namespace ao::query::test

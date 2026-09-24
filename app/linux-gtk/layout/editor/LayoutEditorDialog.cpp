@@ -117,6 +117,7 @@ namespace ao::gtk::layout::editor
     set_default_size(-1, -1);
 
     addCancelAction(gtkText(_textCatalog, MessageId::GtkCommonCancel), Gtk::ResponseType::CANCEL);
+    setCloseResponse(Gtk::ResponseType::CANCEL);
     addPrimaryAction(gtkText(_textCatalog, MessageId::GtkLayoutApply), Gtk::ResponseType::APPLY);
     addPrimaryAction(gtkText(_textCatalog, MessageId::GtkCommonSave), Gtk::ResponseType::OK);
 
@@ -160,12 +161,14 @@ namespace ao::gtk::layout::editor
               return;
             }
 
-            close();
+            _previewDebounceConn.disconnect();
+            set_visible(false);
           }
         }
         else
         {
-          close();
+          _previewDebounceConn.disconnect();
+          set_visible(false);
         }
       });
 

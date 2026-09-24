@@ -37,8 +37,10 @@ namespace ao::query::test
     SECTION("OR retains a tag shared by every branch")
     {
       auto const plan = compileOk(parseOk("(#rock and #jazz) or (#rock and #blues)"));
-      REQUIRE_FALSE(plan.requiredTagSymbols.empty());
-      CHECK(plan.dictionarySymbols[plan.requiredTagSymbols.front()] == "rock");
+      REQUIRE(plan.requiredTagSymbols.size() == 1);
+      auto const symbol = plan.requiredTagSymbols.front();
+      REQUIRE(symbol < plan.dictionarySymbols.size());
+      CHECK(plan.dictionarySymbols[symbol] == "rock");
     }
 
     SECTION("NOT has no positive required tag")

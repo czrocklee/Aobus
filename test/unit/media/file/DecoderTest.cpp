@@ -61,7 +61,52 @@ namespace ao::media::file::test
     CHECK_FALSE(parseSlashPair("").optPrimary);
     CHECK_FALSE(parseSlashPair("abc").optPrimary);
 
+    // A malformed component does not discard its valid counterpart.
+    auto const malformedPrimary = parseSlashPair("3x/12");
+    CHECK_FALSE(malformedPrimary.optPrimary);
+    REQUIRE(malformedPrimary.optSecondary);
+    CHECK(*malformedPrimary.optSecondary == 12U);
+
+    auto const malformedSecondary = parseSlashPair("3/12x");
+    REQUIRE(malformedSecondary.optPrimary);
+    CHECK(*malformedSecondary.optPrimary == 3U);
+    CHECK_FALSE(malformedSecondary.optSecondary);
+
+    // The uint16 boundary is accepted independently from an overflowing peer.
+    auto const secondaryOverflow = parseSlashPair("65535/65536");
+    REQUIRE(secondaryOverflow.optPrimary);
+    CHECK(*secondaryOverflow.optPrimary == 65535U);
+    CHECK_FALSE(secondaryOverflow.optSecondary);
+
+    auto const primaryOverflow = parseSlashPair("65536/65535");
+    CHECK_FALSE(primaryOverflow.optPrimary);
+    REQUIRE(primaryOverflow.optSecondary);
+    CHECK(*primaryOverflow.optSecondary == 65535U);
+
     // Out-of-range for uint16 is rejected (not silently truncated).
     CHECK_FALSE(parseSlashPair("70000").optPrimary);
+  }
+
+  TEST_CASE("Decoder - standalone numbers require the complete field", "[media][unit][decoder]")
+  {
+    auto const optNumber = decodeUint16("12");
+    REQUIRE(optNumber);
+    CHECK(*optNumber == 12U);
+
+    CHECK_FALSE(decodeUint16(""));
+    CHECK_FALSE(decodeUint16("12x"));
+    CHECK_FALSE(decodeUint16("2024-05-17"));
+    CHECK_FALSE(decodeUint16("-1"));
+    CHECK_FALSE(decodeUint16("65536"));
+  }
+
+  TEST_CASE("Decoder - years take the leading digits of a date", "[media][unit][decoder]")
+  {
+    auto const optYear = decodeYear("2024-05-17");
+    REQUIRE(optYear);
+    CHECK(*optYear == 2024U);
+
+    CHECK_FALSE(decodeYear(""));
+    CHECK_FALSE(decodeYear("May 2024"));
   }
 } // namespace ao::media::file::test

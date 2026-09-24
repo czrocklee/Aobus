@@ -17,7 +17,7 @@
 namespace ao::uimodel::test
 {
   TEST_CASE("TrackPresentationCatalog - language replacement notifies observers after labels change",
-            "[uimodel][regression][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;
@@ -37,7 +37,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationCatalog - projects builtin and custom presentation choices",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;
@@ -74,7 +74,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackPresentationCatalog - omits custom separator when no custom presets exist",
-            "[uimodel][unit][library][presentation]")
+            "[uimodel][unit][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;

@@ -111,7 +111,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetail - cover art keeps square sizing under constrained width", "[gtk][unit][geometry]")
+  TEST_CASE("TrackDetail - cover art keeps square sizing under constrained width", "[gtk][unit][cover-art][geometry]")
   {
     int const targetSize = 250;
 
@@ -164,7 +164,8 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry.get_child_visible());
   }
 
-  TEST_CASE("TrackFieldGrid - edit actions use locale-selected accessibility copy", "[gtk][unit][localization]")
+  TEST_CASE("TrackFieldGrid - edit actions use locale-selected accessibility copy",
+            "[gtk][unit][track-field-grid][localization]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_editor_localization_test", {}, "de-DE"};
     auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
@@ -181,7 +182,7 @@ namespace ao::gtk::layout::test
   }
 
   TEST_CASE("TrackFieldGrid - long localized keys preserve value-column space",
-            "[gtk][regression][track-field-grid][geometry]")
+            "[gtk][unit][track-field-grid][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_key_width_localization_test", {}, "fr-FR"};
     auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
@@ -257,7 +258,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackFieldGrid - maintains constrained value-column geometry", "[gtk][unit][geometry]")
+  TEST_CASE("TrackFieldGrid - maintains constrained value-column geometry", "[gtk][unit][track-field-grid][geometry]")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& registry = fixture.components();

@@ -80,7 +80,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("TrackDetailProjection - refreshes selected fields after intersecting TracksMutated",
-            "[runtime][unit][projection][detail]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
 
@@ -114,7 +114,8 @@ namespace ao::rt::test
     CHECK(snap.libraryRevision > expectedRevision);
   }
 
-  TEST_CASE("TrackDetailProjection - ignores non-intersecting TracksMutated", "[runtime][unit][projection][detail]")
+  TEST_CASE("TrackDetailProjection - ignores non-intersecting TracksMutated",
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
 
@@ -129,6 +130,7 @@ namespace ao::rt::test
     [[maybe_unused]] auto subscription =
       projPtr->subscribe([&](TrackDetailSnapshot const&) noexcept { ++publicationCount; });
     CHECK(publicationCount == 1);
+    auto const capturedRevision = projPtr->snapshot().libraryRevision;
 
     // Mutate a track not in the selection
     auto const otherIds = std::array{id2};
@@ -136,10 +138,13 @@ namespace ao::rt::test
 
     CHECK(publicationCount == 1);
     CHECK(projPtr->snapshot().trackIds == std::vector{id1});
+    CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Selected");
+    CHECK(projPtr->snapshot().libraryRevision == capturedRevision);
+    CHECK(env.commandsFixture.library().snapshot().revision() > capturedRevision);
   }
 
   TEST_CASE("TrackDetailProjection - outstanding subscription is safe after projection destruction",
-            "[runtime][unit][track-detail][lifecycle]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto subscription = async::Subscription{};
@@ -158,7 +163,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - aggregates common and mixed metadata for multi-select",
-            "[runtime][unit][projection][detail]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
 
@@ -187,7 +192,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - mixed field remains mixed when a later value matches the first",
-            "[runtime][unit][projection][detail]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.addTrack(library::test::TrackSpec{.title = "Repeated", .artist = "Same"});
@@ -207,7 +212,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - explicit selection target snapshots provided track ids",
-            "[runtime][unit][projection][detail]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.addTrack(library::test::TrackSpec{.title = "Song A"});
@@ -218,7 +223,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - explicit view target is empty when its view is already gone",
-            "[runtime][regression][projection][lifecycle]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
     [[maybe_unused]] auto const committedTrackId = env.addTrack("Committed");
@@ -235,7 +240,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - explicit view target clears when its view closes",
-            "[runtime][regression][projection][lifecycle]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const trackId = env.addTrack("Selected");
@@ -260,7 +265,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - focused view target follows focused view selection",
-            "[runtime][unit][track-detail][workspace]")
+            "[runtime][unit][projection][track-detail][workspace][async]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.addTrack(library::test::TrackSpec{.title = "Song A"});
@@ -303,19 +308,37 @@ namespace ao::rt::test
 
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
 
-    // Change focus away
+    auto const secondView = ao::test::requireValue(env.workspace.navigate(
+      {.target = FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "$title = \"Song B\""}}));
+    REQUIRE(secondView != reply1);
+    REQUIRE(env.views.setSelection(secondView, {id2}));
+
+    while (env.executor.tryRunReadyTurn())
+    {
+    }
+
+    REQUIRE(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
+    auto const countBeforeOldSelection = callCount;
+    REQUIRE(env.views.setSelection(reply1, {id1}));
+
+    while (env.executor.tryRunReadyTurn())
+    {
+    }
+
+    CHECK(callCount == countBeforeOldSelection);
+    CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
+
     REQUIRE(env.workspace.closeView(reply1));
+    REQUIRE(env.workspace.closeView(secondView));
 
     while (env.executor.tryRunReadyTurn())
     {
     }
 
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
-
-    // Unsubscribe
     sub = {};
 
-    // Now trigger a selection change in the old view, should NOT update because it's no longer focused
+    // A closed view is rejected by ViewService, independently of projection focus.
     auto const removedSelectionRes = env.views.setSelection(reply1, {id1});
     REQUIRE_FALSE(removedSelectionRes);
     CHECK(removedSelectionRes.error().code == Error::Code::NotFound);
@@ -323,7 +346,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - focused view target initializes from active selection",
-            "[runtime][unit][track-detail][workspace]")
+            "[runtime][unit][projection][track-detail][workspace]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.addTrack(library::test::TrackSpec{.title = "Already Selected"});
@@ -340,7 +363,8 @@ namespace ao::rt::test
     CHECK(aggregateString(titleAgg) == "Already Selected");
   }
 
-  TEST_CASE("TrackDetailProjection - missing tracks produce empty field values", "[runtime][unit][projection][detail]")
+  TEST_CASE("TrackDetailProjection - missing tracks produce empty field values",
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const projPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector{TrackId{9999}}});
@@ -349,7 +373,8 @@ namespace ao::rt::test
     CHECK_FALSE(snap.fields[static_cast<std::size_t>(F::Title)].optValue);
   }
 
-  TEST_CASE("TrackDetailProjection - tag aggregation exposes common tag ids", "[runtime][unit][track-detail][tag]")
+  TEST_CASE("TrackDetailProjection - tag aggregation exposes common tag ids",
+            "[runtime][unit][projection][track-detail][tag]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.addTrack(library::test::TrackSpec{.title = "Song A"});
@@ -362,11 +387,12 @@ namespace ao::rt::test
     auto const projPtr = env.workspace.detailProjection(ExplicitSelectionTarget{std::vector{id1}});
     auto const snap = projPtr->snapshot();
     CHECK(snap.selectionKind == SelectionKind::Single);
-    CHECK(snap.commonTagIds.size() == 1);
+    REQUIRE(snap.commonTagIds.size() == 1);
+    CHECK(env.commandsFixture.library().snapshot().resolve(snap.commonTagIds.front()) == "MyTag");
   }
 
   TEST_CASE("TrackDetailProjection - custom metadata aggregation marks partial shared and mixed values",
-            "[runtime][unit][projection][detail]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
 
@@ -443,7 +469,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("TrackDetailProjection - single selection projects custom metadata without mixed state",
-            "[runtime][unit][projection][detail]")
+            "[runtime][unit][projection][track-detail]")
   {
     auto env = TrackDetailProjectionFixture{};
     auto const seedTrackId = env.addTrack("Seed");
@@ -467,5 +493,10 @@ namespace ao::rt::test
     CHECK_FALSE(snapshot.customMetadata.front().value.mixed);
     REQUIRE(snapshot.customMetadata.front().value.optValue);
     CHECK(*snapshot.customMetadata.front().value.optValue == "First");
+    CHECK(snapshot.customMetadata.back().presentOnAll);
+    CHECK(snapshot.customMetadata.back().presentOnAny);
+    CHECK_FALSE(snapshot.customMetadata.back().value.mixed);
+    REQUIRE(snapshot.customMetadata.back().value.optValue);
+    CHECK(*snapshot.customMetadata.back().value.optValue == "Last");
   }
 } // namespace ao::rt::test

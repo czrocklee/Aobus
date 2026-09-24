@@ -13,15 +13,22 @@
 
 namespace ao::query::test
 {
+  namespace
+  {
+    std::int64_t requireLoadConstant(ExecutionPlan const& plan)
+    {
+      auto const it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
+      REQUIRE(it != plan.instructions.end());
+      return it->constValue;
+    }
+  } // namespace
+
   TEST_CASE("ExecutionPlan - scales duration unit constants", "[query][unit][execution-plan]")
   {
     auto expr = parseOk("@duration >= 3m");
     auto plan = compileOk(expr);
 
-    auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
-
-    REQUIRE(it != plan.instructions.end());
-    CHECK(it->constValue == 180000);
+    CHECK(requireLoadConstant(plan) == 180000);
   }
 
   TEST_CASE("ExecutionPlan - scales bitrate unit constants", "[query][unit][execution-plan]")
@@ -29,10 +36,7 @@ namespace ao::query::test
     auto expr = parseOk("@bitrate >= 2m");
     auto plan = compileOk(expr);
 
-    auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
-
-    REQUIRE(it != plan.instructions.end());
-    CHECK(it->constValue == 2000000);
+    CHECK(requireLoadConstant(plan) == 2000000);
   }
 
   TEST_CASE("ExecutionPlan - scales sample-rate unit constants", "[query][unit][execution-plan]")
@@ -40,10 +44,7 @@ namespace ao::query::test
     auto expr = parseOk("@sampleRate = 44.1k");
     auto plan = compileOk(expr);
 
-    auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
-
-    REQUIRE(it != plan.instructions.end());
-    CHECK(it->constValue == 44100);
+    CHECK(requireLoadConstant(plan) == 44100);
   }
 
   TEST_CASE("ExecutionPlan - rejects unit constants on unsupported fields", "[query][unit][execution-plan]")
@@ -71,36 +72,46 @@ namespace ao::query::test
       {
         auto expr = parseOk("@duration >= " + c.unit);
         auto plan = compileOk(expr);
-        auto it = std::ranges::find(plan.instructions, OpCode::LoadConstant, &Instruction::op);
-        CHECK(it->constValue == c.expected);
+        CHECK(requireLoadConstant(plan) == c.expected);
       }
     }
 
     SECTION("DurationSupportsCompoundUnits")
     {
       auto expr = parseOk("@duration >= 2m30s");
-      CHECK(compileOk(expr).instructions[1].constValue == 150000);
+      auto plan = compileOk(expr);
+      CHECK(requireLoadConstant(plan) == 150000);
     }
 
     SECTION("Bitrate and SampleRate Support KAndMUnits")
     {
       auto expr1 = parseOk("@bitrate >= 256k");
-      CHECK(compileOk(expr1).instructions[1].constValue == 256000);
+      auto plan1 = compileOk(expr1);
+      CHECK(requireLoadConstant(plan1) == 256000);
 
       auto expr2 = parseOk("@sampleRate >= 44.1k");
-      CHECK(compileOk(expr2).instructions[1].constValue == 44100);
+      auto plan2 = compileOk(expr2);
+      CHECK(requireLoadConstant(plan2) == 44100);
     }
 
     SECTION("Unit Suffix Is CaseInsensitive")
     {
       auto expr = parseOk("@bitrate >= 256K");
-      CHECK(compileOk(expr).instructions[1].constValue == 256000);
+      auto plan = compileOk(expr);
+      CHECK(requireLoadConstant(plan) == 256000);
     }
 
     SECTION("Negative Unit Literal Compiles")
     {
       auto expr = parseOk("@bitrate >= -2k");
-      CHECK(compileOk(expr).instructions[1].constValue == -2000);
+      auto plan = compileOk(expr);
+      CHECK(requireLoadConstant(plan) == -2000);
+    }
+
+    SECTION("Accepts Zero")
+    {
+      auto plan = compileOk(parseOk("@duration >= 0s"));
+      CHECK(requireLoadConstant(plan) == 0);
     }
   }
 
@@ -140,12 +151,6 @@ namespace ao::query::test
     SECTION("RejectsCompoundUnitsOutsideDuration")
     {
       std::ignore = compileError(parseOk("@bitrate >= 2k3m"));
-    }
-
-    SECTION("Accepts Zero")
-    {
-      auto plan = compileOk(parseOk("@duration >= 0s"));
-      CHECK(plan.instructions[1].constValue == 0);
     }
 
     SECTION("Rejects MissingNumericFieldContext")

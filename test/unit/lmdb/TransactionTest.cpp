@@ -8,6 +8,7 @@
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
+#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -140,6 +141,7 @@ namespace ao::lmdb::test
     auto it = reader.begin();
     REQUIRE(it != reader.end());
     REQUIRE(static_cast<std::uint32_t>(it->first) == 1);
+    CHECK(utility::bytes::stringView(it->second) == "test data");
   }
 
   TEST_CASE("WriteTransaction - destructor without commit aborts", "[lmdb][unit][transaction]")
@@ -179,6 +181,12 @@ namespace ao::lmdb::test
     CHECK_FALSE(transaction.isActive());
     CHECK(transaction.isFinished());
     CHECK_NOTHROW(transaction.abort());
+
+    auto reopenTransaction = beginWriteTransaction(env);
+    auto reopened = openIntegerKeyDatabase(reopenTransaction, "test");
+    REQUIRE(reopenTransaction.commit());
+    auto const readTransaction = beginReadTransaction(env);
+    CHECK_FALSE(reopened.reader(readTransaction).get(1));
   }
 
   TEST_CASE("WriteTransaction - move constructor transfers usable transactions", "[lmdb][unit][transaction]")
@@ -194,13 +202,18 @@ namespace ao::lmdb::test
     // Now test move
     auto txn1 = beginWriteTransaction(env);
     auto txn2 = WriteTransaction{std::move(txn1)};
-    // Verify moved transaction is valid by using it
-    [[maybe_unused]] auto writer = db.writer(txn2);
+    auto writer = db.writer(txn2);
+    REQUIRE(writer.create(7, createStringData("moved transaction")));
     REQUIRE(txn2.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const optData = db.reader(readTransaction).get(7);
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "moved transaction");
   }
 
   TEST_CASE("WriteTransaction - database-open admission releases after every terminal path",
-            "[lmdb][regression][transaction][concurrency]")
+            "[lmdb][unit][transaction][concurrency]")
   {
     static constexpr auto kScenarios = std::array<std::string_view, 3>{
       "lmdb-database-open-admission-release-commit",

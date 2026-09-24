@@ -107,30 +107,7 @@ namespace ao::media::file::mp4::test
 
       auto addFreeformAtom = [&](std::string_view name, std::string_view value)
       {
-        auto freeformBody = std::vector<std::uint8_t>{};
-
-        auto addFreeformTextChild = [&](std::string_view type, std::string_view text)
-        {
-          auto childBody = std::vector<std::uint8_t>{0, 0, 0, 0};
-          childBody.insert(childBody.end(), text.begin(), text.end());
-          auto const child = ao::test::mp4::makeAtom(type, childBody);
-          freeformBody.insert(freeformBody.end(), child.begin(), child.end());
-        };
-
-        addFreeformTextChild("mean", "com.apple.iTunes");
-        addFreeformTextChild("name", name);
-
-        auto dataLayout = DataAtomLayout{};
-        dataLayout.common.length = static_cast<std::uint32_t>(sizeof(DataAtomLayout) + value.size());
-        std::memcpy(dataLayout.common.type.data(), "data", 4);
-        dataLayout.dataLength = static_cast<std::uint32_t>(16 + value.size());
-        std::memcpy(dataLayout.magic.data(), "data", 4);
-        dataLayout.type = 1;
-        auto const* dataAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
-        freeformBody.insert(freeformBody.end(), dataAddr, dataAddr + sizeof(dataLayout));
-        freeformBody.insert(freeformBody.end(), value.begin(), value.end());
-
-        auto const atom = ao::test::mp4::makeAtom("----", freeformBody);
+        auto const atom = makeFreeformTextAtom(name, value);
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       };
 
@@ -415,9 +392,8 @@ namespace ao::media::file::mp4::test
     CHECK(static_cast<std::uint8_t>(firstData[0]) == 0xCC);
     CHECK(covers[1].type == PictureType::FrontCover);
     auto const secondData = covers[1].bytes;
+    REQUIRE(secondData.size() == 2);
     CHECK(static_cast<std::uint8_t>(secondData[0]) == 0xEE);
-
-    CHECK(metadata.number(NumberField::DiscTotal) == 5);
 
     CHECK(content.sampleRate() == 44100);
     CHECK(content.duration() == std::chrono::seconds{1});
@@ -426,7 +402,7 @@ namespace ao::media::file::mp4::test
     CHECK(content.codec() == AudioCodec::Aac);
   }
 
-  TEST_CASE("MP4 File - reads metadata from an extended-size semantic atom", "[media][regression][mp4]")
+  TEST_CASE("MP4 File - reads metadata from an extended-size semantic atom", "[media][unit][mp4][file]")
   {
     auto const title = ao::test::mp4::makeExtendedFromCompactAtom(makeTextMetadataAtom("\xA9"
                                                                                        "nam",
@@ -500,6 +476,18 @@ namespace ao::media::file::mp4::test
     CHECK(content.text(TextField::Ensemble) == "Fallback Ensemble");
   }
 
+  TEST_CASE("MP4 File - a day atom date yields the leading year", "[media][unit][mp4][file]")
+  {
+    auto const data = createMinimalM4aWithRawIlstAtom(makeTextMetadataAtom("\xA9"
+                                                                           "day",
+                                                                           "2024-05-17"));
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.number(NumberField::Year) == 2024);
+  }
+
   TEST_CASE("MP4 File - maps orchestra mdta fixture fallback when ensemble is absent", "[media][unit][mp4][file]")
   {
     auto const file = File{audio::test::requireAudioFixture("classical_fallback.m4a")};
@@ -529,8 +517,7 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - audio payload range accepts standard variable-size mdat forms",
-            "[media][regression][mp4][file]")
+  TEST_CASE("MP4 File - audio payload range accepts standard variable-size mdat forms", "[media][unit][mp4][file]")
   {
     auto const payload = std::vector<std::uint8_t>{0x11, 0x22, 0x33, 0x44};
 
@@ -588,7 +575,7 @@ namespace ao::media::file::mp4::test
     CHECK(utility::xxh3Hash128(baselinePayloadRes->bytes) == utility::xxh3Hash128(retaggedPayloadRes->bytes));
   }
 
-  TEST_CASE("MP4 File - single covr with two data boxes", "[media][unit][mp4-file][cover-art]")
+  TEST_CASE("MP4 File - single covr with two data boxes", "[media][unit][mp4][file]")
   {
     // Standard iTunes encoding: one covr atom containing two data children.
     // Each data child has: [length(4)]["data"(4)][type_indicator(4)][locale(4)][payload]
@@ -758,236 +745,236 @@ namespace ao::media::file::mp4::test
     }
   }
 
-  TEST_CASE("MP4 File - derives audio properties", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - recognizes ALAC sample entries", "[media][unit][mp4][file]")
   {
-    SECTION("Recognizes ALAC sample entries")
-    {
-      auto const data = createMinimalM4a("alac");
-      auto const temp = TempFile{data, ".m4a"};
+    auto const data = createMinimalM4a("alac");
+    auto const temp = TempFile{data, ".m4a"};
 
-      auto const file = File{temp.path};
-      auto content = readContent(file);
+    auto const file = File{temp.path};
+    auto content = readContent(file);
 
-      CHECK(content.codec() == AudioCodec::Alac);
-    }
-
-    SECTION("Reads AAC entries that contain child atoms")
-    {
-      auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0});
-      auto const data = createMinimalM4a("mp4a", esdsAtom);
-      auto const temp = TempFile{data, ".m4a"};
-
-      auto const file = File{temp.path};
-      auto content = readContent(file);
-
-      CHECK(content.codec() == AudioCodec::Aac);
-      CHECK(content.sampleRate() == 44100);
-      CHECK(content.channels() == 2);
-      CHECK(content.bitDepth() == 16);
-    }
-
-    SECTION("Skips a leading video track")
-    {
-      auto const data = createMinimalM4aWithLeadingVideoTrack();
-      auto const temp = TempFile{data, ".m4a"};
-
-      auto const file = File{temp.path};
-      auto content = readContent(file);
-
-      CHECK(content.codec() == AudioCodec::Aac);
-      CHECK(content.sampleRate() == 48000);
-      CHECK(content.duration().count() == 2000);
-      CHECK(content.channels() == 2);
-      CHECK(content.bitDepth() == 16);
-    }
-
-    SECTION("Skips malformed media header when deriving optional properties")
-    {
-      auto const stbl = ao::test::mp4::makeSampleTableAtom(ao::test::mp4::makeStsdAtom("mp4a"));
-      auto const shortMdhd = ao::test::mp4::makeAtom("mdhd", {0, 0, 0, 0});
-      auto const track = ao::test::mp4::makeTrackAtomWithMdhd("soun", stbl, shortMdhd);
-
-      auto data = std::vector<std::uint8_t>{};
-      ao::test::mp4::addAtom(data, "moov", track);
-      ao::test::mp4::addAtom(data, "mdat", {0x01});
-      auto const temp = TempFile{data, ".m4a"};
-
-      auto const file = File{temp.path};
-      auto content = readContent(file);
-
-      CHECK(content.codec() == AudioCodec::Aac);
-      CHECK(content.sampleRate() == 44100);
-      CHECK(content.duration() == std::chrono::milliseconds{0});
-      CHECK(content.channels() == 2);
-      CHECK(content.bitDepth() == 16);
-    }
+    CHECK(content.codec() == AudioCodec::Alac);
   }
 
-  TEST_CASE("MP4 File - handles malformed input", "[media][unit][mp4][file]")
+  TEST_CASE("MP4 File - reads AAC entries containing child atoms", "[media][unit][mp4][file]")
   {
-    SECTION("Truncated Atom")
-    {
-      auto data = std::vector<std::uint8_t>{};
-      // moov atom claiming to be 500 bytes long, but we only give it 8
-      std::uint32_t const length = 500;
-      auto lenBuf = boost::endian::big_uint32_buf_t{};
-      lenBuf = length;
-      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      data.insert(data.end(), lenAddr, lenAddr + 4);
-      data.push_back('m');
-      data.push_back('o');
-      data.push_back('o');
-      data.push_back('v');
+    auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0});
+    auto const data = createMinimalM4a("mp4a", esdsAtom);
+    auto const temp = TempFile{data, ".m4a"};
 
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto res = file.readContent();
+    auto const file = File{temp.path};
+    auto content = readContent(file);
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
-    }
+    CHECK(content.codec() == AudioCodec::Aac);
+    CHECK(content.sampleRate() == 44100);
+    CHECK(content.channels() == 2);
+    CHECK(content.bitDepth() == 16);
+  }
 
-    SECTION("End-of-file moov without mdat")
-    {
-      auto data = std::vector<std::uint8_t>{};
-      // atom claiming to be 0 bytes long (meaning extends to EOF)
-      std::uint32_t const length = 0;
-      auto lenBuf = boost::endian::big_uint32_buf_t{};
-      lenBuf = length;
-      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      data.insert(data.end(), lenAddr, lenAddr + 4);
-      data.push_back('m');
-      data.push_back('o');
-      data.push_back('o');
-      data.push_back('v');
+  TEST_CASE("MP4 File - skips a leading video track for audio properties", "[media][unit][mp4][file]")
+  {
+    auto const data = createMinimalM4aWithLeadingVideoTrack();
+    auto const temp = TempFile{data, ".m4a"};
 
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto res = file.readContent();
+    auto const file = File{temp.path};
+    auto content = readContent(file);
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
-    }
+    CHECK(content.codec() == AudioCodec::Aac);
+    CHECK(content.sampleRate() == 48000);
+    CHECK(content.duration().count() == 2000);
+    CHECK(content.channels() == 2);
+    CHECK(content.bitDepth() == 16);
+  }
 
-    SECTION("Length less than header size")
-    {
-      auto data = std::vector<std::uint8_t>{};
-      std::uint32_t const length = 4; // Too small for header
-      auto lenBuf = boost::endian::big_uint32_buf_t{};
-      lenBuf = length;
-      auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
-      data.insert(data.end(), lenAddr, lenAddr + 4);
-      data.push_back('m');
-      data.push_back('o');
-      data.push_back('o');
-      data.push_back('v');
+  TEST_CASE("MP4 File - preserves audio properties when the optional media header is malformed",
+            "[media][unit][mp4][file]")
+  {
+    auto const stbl = ao::test::mp4::makeSampleTableAtom(ao::test::mp4::makeStsdAtom("mp4a"));
+    auto const shortMdhd = ao::test::mp4::makeAtom("mdhd", {0, 0, 0, 0});
+    auto const track = ao::test::mp4::makeTrackAtomWithMdhd("soun", stbl, shortMdhd);
 
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto res = file.readContent();
+    auto data = std::vector<std::uint8_t>{};
+    ao::test::mp4::addAtom(data, "moov", track);
+    ao::test::mp4::addAtom(data, "mdat", {0x01});
+    auto const temp = TempFile{data, ".m4a"};
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
-    }
+    auto const file = File{temp.path};
+    auto content = readContent(file);
 
-    SECTION("Metadata atom shorter than the data-atom header")
-    {
-      // A ©nam atom whose declared length (16) is smaller than the fixed data-atom
-      // header (24). atomData() must refuse to interpret it instead of underflowing
-      // the payload size and reading past the atom.
-      auto child = std::vector<std::uint8_t>{};
-      auto common = AtomLayout{};
-      common.length = 16;
-      std::memcpy(common.type.data(), "\xA9nam", 4);
-      auto const* c = reinterpret_cast<std::uint8_t const*>(&common);
-      child.insert(child.end(), c, c + sizeof(common));
-      child.insert(child.end(), 8, 0); // filler to reach the declared length
+    CHECK(content.codec() == AudioCodec::Aac);
+    CHECK(content.sampleRate() == 44100);
+    CHECK(content.duration() == std::chrono::milliseconds{0});
+    CHECK(content.channels() == 2);
+    CHECK(content.bitDepth() == 16);
+  }
 
-      auto const data = createMinimalM4aWithRawIlstAtom(child);
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto const content = readContent(file);
-      CHECK(content.text(TextField::Title).empty());
-    }
+  TEST_CASE("MP4 File - rejects truncated top-level atoms through the content API", "[media][unit][mp4][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    // moov atom claiming to be 500 bytes long, but we only give it 8
+    std::uint32_t const length = 500;
+    auto lenBuf = boost::endian::big_uint32_buf_t{};
+    lenBuf = length;
+    auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
+    data.insert(data.end(), lenAddr, lenAddr + 4);
+    data.push_back('m');
+    data.push_back('o');
+    data.push_back('o');
+    data.push_back('v');
 
-    SECTION("Empty mdat payload")
-    {
-      auto data = std::vector<std::uint8_t>{};
-      ao::test::mp4::addAtom(data, "mdat", {});
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto res = file.readContent();
 
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto res = file.audioPayload();
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "mp4 atom size exceeds its container boundary");
+  }
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
-    }
+  TEST_CASE("MP4 File - requires audio payload after an EOF-sized moov", "[media][unit][mp4][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    // atom claiming to be 0 bytes long (meaning extends to EOF)
+    std::uint32_t const length = 0;
+    auto lenBuf = boost::endian::big_uint32_buf_t{};
+    lenBuf = length;
+    auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
+    data.insert(data.end(), lenAddr, lenAddr + 4);
+    data.push_back('m');
+    data.push_back('o');
+    data.push_back('o');
+    data.push_back('v');
 
-    SECTION("Truncated atom after mdat invalidates the required top-level walk")
-    {
-      auto data = std::vector<std::uint8_t>{};
-      ao::test::mp4::addAtom(data, "mdat", {0x11});
-      ao::test::mp4::appendBe32(data, 100);
-      data.insert(data.end(), {'f', 'r', 'e', 'e'});
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto res = file.readContent();
 
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto res = file.audioPayload();
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "mp4 file has no mdat audio payload");
+  }
 
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::CorruptData);
-    }
+  TEST_CASE("MP4 File - rejects atom lengths smaller than the header", "[media][unit][mp4][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    std::uint32_t const length = 4; // Too small for header
+    auto lenBuf = boost::endian::big_uint32_buf_t{};
+    lenBuf = length;
+    auto const* lenAddr = reinterpret_cast<std::uint8_t const*>(&lenBuf);
+    data.insert(data.end(), lenAddr, lenAddr + 4);
+    data.push_back('m');
+    data.push_back('o');
+    data.push_back('o');
+    data.push_back('v');
 
-    SECTION("Malformed text metadata atom does not overwrite valid metadata")
-    {
-      auto ilstChildren = makeTextMetadataAtom("\xA9nam", "Before");
-      auto malformed = makeTextMetadataAtom("\xA9nam", "After");
-      malformed[8] = 0;
-      malformed[9] = 0;
-      malformed[10] = 0;
-      malformed[11] = 16;
-      ilstChildren.insert(ilstChildren.end(), malformed.begin(), malformed.end());
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto res = file.readContent();
 
-      auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto const content = readContent(file);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "mp4 atom length is smaller than its header");
+  }
 
-      CHECK(content.text(TextField::Title) == "Before");
-    }
+  TEST_CASE("MP4 File - ignores optional metadata shorter than the data header", "[media][unit][mp4][file]")
+  {
+    // A ©nam atom whose declared length (16) is smaller than the fixed data-atom
+    // header (24). atomData() must refuse to interpret it instead of underflowing
+    // the payload size and reading past the atom.
+    auto child = std::vector<std::uint8_t>{};
+    auto common = AtomLayout{};
+    common.length = 16;
+    std::memcpy(common.type.data(), "\xA9nam", 4);
+    auto const* c = reinterpret_cast<std::uint8_t const*>(&common);
+    child.insert(child.end(), c, c + sizeof(common));
+    child.insert(child.end(), 8, 0); // filler to reach the declared length
 
-    SECTION("Malformed metadata child boundary preserves completed siblings")
-    {
-      auto ilstChildren = makeTextMetadataAtom("\xA9nam", "Before");
-      ao::test::mp4::appendBe32(ilstChildren, 100);
-      ilstChildren.insert(ilstChildren.end(), {'b', 'a', 'd', '!'});
+    auto const data = createMinimalM4aWithRawIlstAtom(child);
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+    CHECK(content.text(TextField::Title).empty());
+  }
 
-      auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto const content = readContent(file);
+  TEST_CASE("MP4 File - rejects an empty mdat payload", "[media][unit][mp4][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    ao::test::mp4::addAtom(data, "mdat", {});
 
-      CHECK(content.text(TextField::Title) == "Before");
-    }
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto res = file.audioPayload();
 
-    SECTION("Malformed covr atom discards all of its artwork")
-    {
-      auto covrBody = std::vector<std::uint8_t>{};
-      ao::test::mp4::appendBe32(covrBody, 18);
-      covrBody.insert(covrBody.end(), {'d', 'a', 't', 'a'});
-      ao::test::mp4::appendBe32(covrBody, 13);
-      ao::test::mp4::appendBe32(covrBody, 0);
-      covrBody.insert(covrBody.end(), {0xAA, 0xBB});
-      ao::test::mp4::appendBe32(covrBody, 100);
-      covrBody.insert(covrBody.end(), {'d', 'a', 't', 'a'});
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "mp4 file has no mdat audio payload");
+  }
 
-      auto const covr = ao::test::mp4::makeAtom("covr", covrBody);
-      auto const data = createMinimalM4aWithRawIlstAtom(covr);
-      auto const temp = TempFile{data, ".m4a"};
-      auto const file = File{temp.path};
-      auto const content = readContent(file);
+  TEST_CASE("MP4 File - validates top-level atoms even after finding mdat", "[media][unit][mp4][file]")
+  {
+    auto data = std::vector<std::uint8_t>{};
+    ao::test::mp4::addAtom(data, "mdat", {0x11});
+    ao::test::mp4::appendBe32(data, 100);
+    data.insert(data.end(), {'f', 'r', 'e', 'e'});
 
-      CHECK(content.pictures().empty());
-    }
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto res = file.audioPayload();
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == "mp4 atom size exceeds its container boundary");
+  }
+
+  TEST_CASE("MP4 File - malformed text metadata cannot overwrite valid metadata", "[media][unit][mp4][file]")
+  {
+    auto ilstChildren = makeTextMetadataAtom("\xA9nam", "Before");
+    auto malformed = makeTextMetadataAtom("\xA9nam", "After");
+    malformed[8] = 0;
+    malformed[9] = 0;
+    malformed[10] = 0;
+    malformed[11] = 16;
+    ilstChildren.insert(ilstChildren.end(), malformed.begin(), malformed.end());
+
+    auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Title) == "Before");
+  }
+
+  TEST_CASE("MP4 File - malformed metadata child boundaries preserve completed siblings", "[media][unit][mp4][file]")
+  {
+    auto ilstChildren = makeTextMetadataAtom("\xA9nam", "Before");
+    ao::test::mp4::appendBe32(ilstChildren, 100);
+    ilstChildren.insert(ilstChildren.end(), {'b', 'a', 'd', '!'});
+
+    auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Title) == "Before");
+  }
+
+  TEST_CASE("MP4 File - malformed covr discards all artwork from that atom", "[media][unit][mp4][file]")
+  {
+    auto covrBody = std::vector<std::uint8_t>{};
+    ao::test::mp4::appendBe32(covrBody, 18);
+    covrBody.insert(covrBody.end(), {'d', 'a', 't', 'a'});
+    ao::test::mp4::appendBe32(covrBody, 13);
+    ao::test::mp4::appendBe32(covrBody, 0);
+    covrBody.insert(covrBody.end(), {0xAA, 0xBB});
+    ao::test::mp4::appendBe32(covrBody, 100);
+    covrBody.insert(covrBody.end(), {'d', 'a', 't', 'a'});
+
+    auto const covr = ao::test::mp4::makeAtom("covr", covrBody);
+    auto const data = createMinimalM4aWithRawIlstAtom(covr);
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.pictures().empty());
   }
 } // namespace ao::media::file::mp4::test

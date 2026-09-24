@@ -161,9 +161,13 @@ namespace ao::tui::test
     CHECK(model.value() == "Kind of Blue");
     CHECK(model.cursor() == model.value().size());
 
-    // U+2027 and U+202A share bytes with them and are ordinary characters.
+    // Nearby U+2027 and U+202A share UTF-8 lead bytes but are not line separators.
     CHECK(model.tryInsert("\u2027"));
     CHECK(model.value() == "Kind of Blue\u2027");
+    auto const directionalEmbedding =
+      std::string{static_cast<char>(0xE2), static_cast<char>(0x80), static_cast<char>(0xAA)};
+    CHECK(model.tryInsert(directionalEmbedding));
+    CHECK(model.value() == "Kind of Blue\u2027" + directionalEmbedding);
   }
 
   TEST_CASE("TextFieldModel - reports no change at the value's edges", "[tui][unit][editor]")
@@ -242,6 +246,8 @@ namespace ao::tui::test
     SECTION("Rejects control characters and invalid UTF-8")
     {
       CHECK_FALSE(field.tryReplaceRange(0, 4, "Kind of\nBlue"));
+      CHECK_FALSE(field.tryReplaceRange(0, 4, "Kind\u2028of Blue"));
+      CHECK_FALSE(field.tryReplaceRange(0, 4, "Kind\u2029of Blue"));
       CHECK_FALSE(field.tryReplaceRange(0, 4, "Kind\tof Blue"));
       CHECK_FALSE(field.tryReplaceRange(0, 4, "\x1b[31mBlue"));
       CHECK_FALSE(field.tryReplaceRange(0, 4, std::string{"Bl"} + static_cast<char>(0x80) + "ue"));
@@ -302,7 +308,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TextFieldModel - word navigation skips spaces and keeps grapheme boundaries",
-            "[tui][unit][keyboard][editor]")
+            "[tui][unit][editor][keyboard]")
   {
     auto const value = std::string{"A  界"} + std::string{kFamily} + " B";
     auto field = TextFieldModel{value};
@@ -325,7 +331,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TextFieldModel - word deletion removes trailing spaces and a complete Unicode word",
-            "[tui][unit][keyboard][editor]")
+            "[tui][unit][editor][keyboard]")
   {
     auto field = TextFieldModel{std::string{"A  界"} + std::string{kFamily} + "  "};
     REQUIRE(field.tryApplyEvent(ftxui::Event::CtrlW));
@@ -338,7 +344,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("TextFieldModel - line deletion respects the caret and grapheme boundaries",
-            "[tui][unit][keyboard][editor]")
+            "[tui][unit][editor][keyboard]")
   {
     auto field = TextFieldModel{std::string{"a"} + std::string{kFamily} + "尾"};
     REQUIRE(field.tryMoveLeft());
@@ -351,13 +357,23 @@ namespace ao::tui::test
     CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlK));
   }
 
-  TEST_CASE("TextFieldModel - pointer placement respects wide and joined graphemes", "[tui][unit][mouse][editor]")
+  TEST_CASE("TextFieldModel - pointer placement respects wide and joined graphemes", "[tui][unit][editor][mouse]")
   {
     auto field = TextFieldModel{"a界👨‍👩‍👧‍👦b"};
     REQUIRE(field.tryMoveToCell(0));
     CHECK(field.cursor() == 0);
+    CHECK_FALSE(field.tryMoveToCell(-2));
+    CHECK(field.cursor() == 0);
     REQUIRE(field.tryMoveToCell(1));
     CHECK(field.cursor() == 1);
+    REQUIRE(field.tryMoveToCell(2)); // Tie inside the two-cell CJK glyph selects its trailing boundary.
+    CHECK(field.cursor() == std::string{"a界"}.size());
+    CHECK_FALSE(field.tryMoveToCell(3));
+    CHECK(field.cursor() == std::string{"a界"}.size());
+    auto const joinedEnd = cellWidth("a界👨‍👩‍👧‍👦");
+    REQUIRE(joinedEnd > 3);
+    REQUIRE(field.tryMoveToCell(joinedEnd - 1));
+    CHECK(field.cursor() == std::string{"a界👨‍👩‍👧‍👦"}.size());
     REQUIRE(field.tryMoveToCell(3));
     CHECK(field.cursor() == std::string{"a界"}.size());
     REQUIRE(field.tryMoveToCell(cellWidth("a界👨‍👩‍👧‍👦")));
@@ -365,5 +381,37 @@ namespace ao::tui::test
     REQUIRE(field.tryMoveToCell(100));
     CHECK(field.cursor() == field.value().size());
     CHECK(field.value() == "a界👨‍👩‍👧‍👦b");
+  }
+
+  TEST_CASE("TextFieldModel - edits at grapheme boundaries and distinguishes movement from typing",
+            "[tui][unit][editor][input]")
+  {
+    auto field = TextFieldModel{"a👨‍👩‍👧‍👦b"};
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::ArrowLeft));
+    CHECK(field.value() == "a👨‍👩‍👧‍👦b");
+    CHECK(field.cursor() == std::string{"a👨‍👩‍👧‍👦"}.size());
+    CHECK(field.tryApplyEvent(ftxui::Event::Character("X")));
+    CHECK(field.value() == "a👨‍👩‍👧‍👦Xb");
+    CHECK(field.tryApplyEvent(ftxui::Event::Backspace));
+    CHECK(field.tryApplyEvent(ftxui::Event::Backspace));
+    CHECK(field.value() == "ab");
+    CHECK(field.cursor() == 1);
+    CHECK(field.tryApplyEvent(ftxui::Event::Delete));
+    CHECK(field.value() == "a");
+  }
+
+  TEST_CASE("TextFieldModel - word editing preserves Unicode text around the cursor", "[tui][unit][editor][input]")
+  {
+    auto field = TextFieldModel{"filter 中文 音乐"};
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::Special("\x1b"
+                                                          "b")));
+    CHECK(field.tryApplyEvent(ftxui::Event::CtrlW));
+    CHECK(field.value() == "filter 音乐");
+    CHECK(field.cursor() == 7);
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlA));
+    CHECK(field.tryApplyEvent(ftxui::Event::Character(":")));
+    CHECK(field.value() == ":filter 音乐");
+    CHECK_FALSE(field.tryApplyEvent(ftxui::Event::CtrlE));
+    CHECK(field.cursor() == field.value().size());
   }
 } // namespace ao::tui::test

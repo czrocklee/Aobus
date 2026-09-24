@@ -51,7 +51,7 @@ namespace ao::audio::backend::test
   } // namespace
 
   TEST_CASE("PipeWireMonitor - stop closes publication and later subscription admission",
-            "[audio][unit][pipewire][monitor]")
+            "[audio][unit][pipewire][monitor][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto monitor = PipeWireMonitor{hooksPtr};
@@ -90,7 +90,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireMonitor - graph subscription racing with stop is rejected",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][monitor][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto initialRefreshCompleted = std::binary_semaphore{0};
@@ -137,7 +137,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireMonitor - device and graph subscriptions may outlive monitor",
-            "[audio][regression][pipewire][monitor]")
+            "[audio][unit][pipewire][monitor][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto stateDestroyed = std::binary_semaphore{0};
@@ -163,7 +163,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireProvider - status and subscriptions expose the same default-route inventory",
-            "[audio][regression][pipewire][provider]")
+            "[audio][unit][pipewire][provider]")
   {
     auto provider = PipeWireProvider{makeMonitorHooks()};
     auto const status = provider.status();
@@ -184,7 +184,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireProvider - initial device callback may destroy provider",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][provider][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto monitorExited = std::binary_semaphore{0};
@@ -213,7 +213,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireProvider - nested provider callback may destroy the outer provider",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][provider][concurrency]")
   {
     auto outerRefreshCompleted = std::binary_semaphore{0};
     auto innerRefreshCompleted = std::binary_semaphore{0};
@@ -256,7 +256,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireProvider - graph worker callback may destroy provider",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][provider][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto monitorExited = std::binary_semaphore{0};
@@ -297,7 +297,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireProvider - device and graph subscriptions may outlive provider",
-            "[audio][regression][pipewire][provider]")
+            "[audio][unit][pipewire][provider][concurrency]")
   {
     auto deviceSub = utility::ScopedRegistration{};
     auto graphSub = utility::ScopedRegistration{};
@@ -317,7 +317,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireMonitor - concurrent subscriptions retain distinct registrations",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][monitor][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto monitor = PipeWireMonitor{hooksPtr};
@@ -361,7 +361,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireMonitor - reset suppresses a callback copied by refresh",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][monitor][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto refreshPrepared = std::binary_semaphore{0};
@@ -418,7 +418,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireMonitor - concurrent external shutdown callers share callback quiescence",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][monitor][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto callbackEntered = std::binary_semaphore{0};
@@ -469,7 +469,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE("PipeWireMonitor - callback shutdown returns while later external shutdown waits",
-            "[audio][regression][pipewire][concurrency]")
+            "[audio][unit][pipewire][monitor][concurrency]")
   {
     auto hooksPtr = makeMonitorHooks();
     auto callbackShutdownReturned = std::binary_semaphore{0};

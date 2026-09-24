@@ -19,7 +19,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -35,14 +34,9 @@ namespace ao::rt::test
     auto& service = env.service;
     auto const result = env.requireView();
 
-    auto projView = kInvalidViewId;
-    std::int32_t projectionChangedCount = 0;
-    auto projSub = service.onProjectionChanged(
-      [&](auto const& ev) noexcept
-      {
-        projView = ev.viewId;
-        ++projectionChangedCount;
-      });
+    auto projectionChanges = std::vector<TrackListProjectionChanged>{};
+    auto projSub = service.onProjectionChanged([&](TrackListProjectionChanged const& changed) noexcept
+                                               { projectionChanges.push_back(changed); });
 
     SECTION("setting a new filter expression creates adHocSource")
     {
@@ -54,10 +48,25 @@ namespace ao::rt::test
       REQUIRE(filteredProjectionPtr != nullptr);
       CHECK(snap.filterExpression == "$year > 2000");
       CHECK_FALSE(snap.optFilterError);
-      CHECK(projView == result);
-      CHECK(projectionChangedCount == 1);
+      REQUIRE(projectionChanges.size() == 1);
+      CHECK(projectionChanges[0].viewId == result);
+      CHECK(projectionChanges[0].projectionPtr == filteredProjectionPtr);
       REQUIRE(filteredProjectionPtr->size() == 1);
       CHECK(filteredProjectionPtr->trackIdAt(0) == newTrackId);
+
+      REQUIRE(service.setFilter(result, "$year > 2000"));
+      env.drainCallbacks();
+      auto const stateAfterNoOp = service.trackListState(result);
+      CHECK(stateAfterNoOp.id == snap.id);
+      CHECK(stateAfterNoOp.listId == snap.listId);
+      CHECK(stateAfterNoOp.filterExpression == snap.filterExpression);
+      CHECK(stateAfterNoOp.optFilterError.has_value() == snap.optFilterError.has_value());
+      CHECK(stateAfterNoOp.groupBy == snap.groupBy);
+      CHECK(stateAfterNoOp.sortBy == snap.sortBy);
+      CHECK(stateAfterNoOp.selection == snap.selection);
+      CHECK(stateAfterNoOp.presentation == snap.presentation);
+      CHECK(env.requireProjection(result) == filteredProjectionPtr);
+      CHECK(projectionChanges.size() == 1);
 
       REQUIRE(service.setFilter(result, "$year > 2025"));
       env.drainCallbacks();
@@ -65,7 +74,9 @@ namespace ao::rt::test
       auto const updatedFilteredProjectionPtr = env.requireProjection(result);
       CHECK(snap2.filterExpression == "$year > 2025");
       CHECK_FALSE(snap2.optFilterError);
-      CHECK(projectionChangedCount == 2);
+      REQUIRE(projectionChanges.size() == 2);
+      CHECK(projectionChanges[1].viewId == result);
+      CHECK(projectionChanges[1].projectionPtr == updatedFilteredProjectionPtr);
       REQUIRE(updatedFilteredProjectionPtr != nullptr);
       CHECK(updatedFilteredProjectionPtr != filteredProjectionPtr);
       CHECK(updatedFilteredProjectionPtr->size() == 0);
@@ -76,7 +87,9 @@ namespace ao::rt::test
       auto const unfilteredProjectionPtr = env.requireProjection(result);
       CHECK(snap3.filterExpression.empty());
       CHECK_FALSE(snap3.optFilterError);
-      CHECK(projectionChangedCount == 3);
+      REQUIRE(projectionChanges.size() == 3);
+      CHECK(projectionChanges[2].viewId == result);
+      CHECK(projectionChanges[2].projectionPtr == unfilteredProjectionPtr);
       REQUIRE(unfilteredProjectionPtr != nullptr);
       CHECK(unfilteredProjectionPtr != filteredProjectionPtr);
       REQUIRE(unfilteredProjectionPtr->size() == 2);
@@ -96,7 +109,9 @@ namespace ao::rt::test
       CHECK(snap.optFilterError->code == Error::Code::FormatRejected);
       REQUIRE(filteredProjectionPtr != nullptr);
       CHECK(filteredProjectionPtr->size() == 0);
-      CHECK(projectionChangedCount == 1);
+      REQUIRE(projectionChanges.size() == 1);
+      CHECK(projectionChanges[0].viewId == result);
+      CHECK(projectionChanges[0].projectionPtr == filteredProjectionPtr);
     }
 
     SECTION("invalid view ID is safe")
@@ -105,6 +120,39 @@ namespace ao::rt::test
       REQUIRE_FALSE(missingViewRes);
       CHECK(missingViewRes.error().code == Error::Code::NotFound);
     }
+  }
+
+  TEST_CASE("ViewService - queued projection change retains its payload after the view closes",
+            "[runtime][unit][view][filter][async]")
+  {
+    auto env = ViewServiceFixture{};
+    auto const oldTrackId = env.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
+    env.cachePtr->reloadAllTracks();
+    auto const viewId = env.requireView();
+    auto changes = std::vector<TrackListProjectionChanged>{};
+    auto const sub = env.service.onProjectionChanged([&](TrackListProjectionChanged const& changed) noexcept
+                                                     { changes.push_back(changed); });
+
+    REQUIRE(env.service.setFilter(viewId, "$year > 2000"));
+    CHECK(changes.empty());
+    REQUIRE(env.workspace.closeView(viewId));
+    CHECK(changes.empty());
+    auto const missingStateRes = env.service.findTrackListState(viewId);
+    auto const missingProjectionRes = env.service.findTrackListProjection(viewId);
+    REQUIRE_FALSE(missingStateRes);
+    CHECK(missingStateRes.error().code == Error::Code::NotFound);
+    REQUIRE_FALSE(missingProjectionRes);
+    CHECK(missingProjectionRes.error().code == Error::Code::NotFound);
+
+    env.drainCallbacks();
+
+    REQUIRE(changes.size() == 1);
+    CHECK(changes[0].viewId == viewId);
+    REQUIRE(changes[0].projectionPtr != nullptr);
+    REQUIRE(changes[0].projectionPtr->size() == 1);
+    CHECK(changes[0].projectionPtr->trackIdAt(0) == newTrackId);
+    CHECK_FALSE(changes[0].projectionPtr->indexOf(oldTrackId));
   }
 
   TEST_CASE("ViewService - stored parent filter error reaches child view state", "[runtime][unit][view][filter]")

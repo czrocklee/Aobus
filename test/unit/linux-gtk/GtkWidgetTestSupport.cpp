@@ -3,6 +3,8 @@
 
 #include "GtkWidgetTestSupport.h"
 
+#include "app/AppDialog.h"
+
 #include <glib-object.h>
 #include <gtk/gtk.h>
 #include <gtkmm/button.h>
@@ -15,6 +17,7 @@
 #include <gtkmm/listbox.h>
 #include <gtkmm/listboxrow.h>
 #include <gtkmm/popover.h>
+#include <gtkmm/window.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -65,6 +68,20 @@ namespace ao::gtk::test
       if (button->get_label() == labelText)
       {
         return button;
+      }
+    }
+
+    return nullptr;
+  }
+
+  AppDialog* findAppDialogByTitle(std::string_view const title)
+  {
+    for (auto* const window : Gtk::Window::list_toplevels())
+    {
+      if (auto* const dialog = dynamic_cast<AppDialog*>(window);
+          dialog != nullptr && dialog->get_title().raw() == title)
+      {
+        return dialog;
       }
     }
 

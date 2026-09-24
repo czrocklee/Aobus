@@ -201,8 +201,7 @@ namespace ao::gtk::test
     CHECK(hasLabel(labels, "Bitperfekte Wiedergabe"));
   }
 
-  TEST_CASE("AudioPipelinePanel - escapes external device names before applying markup",
-            "[gtk][unit][playback][regression]")
+  TEST_CASE("AudioPipelinePanel - escapes external device names before applying markup", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog()};

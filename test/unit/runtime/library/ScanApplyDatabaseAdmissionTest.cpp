@@ -7,6 +7,7 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/library/ScanApplyTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/compat/MoveOnlyFunction.h>
@@ -23,7 +24,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -49,22 +49,6 @@ namespace ao::rt::test
       }
     };
 
-    void replaceFile(std::filesystem::path const& target, std::filesystem::path const& source)
-    {
-      auto const previousTime = std::filesystem::last_write_time(target);
-      std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing);
-      std::filesystem::last_write_time(target, previousTime + std::chrono::seconds{10});
-    }
-
-    TrackId importOne(library::MusicLibrary& library)
-    {
-      auto plan = LibraryScan{library}.buildPlan().value();
-      auto res = ScanApplyOperation{library, std::move(plan), {}, {}}.run();
-      REQUIRE(res);
-      REQUIRE(res->insertedIds.size() == 1);
-      return res->insertedIds.front();
-    }
-
     void removeTrack(library::MusicLibrary& library, TrackId const trackId)
     {
       auto transaction = library::test::writeTransaction(library);
@@ -82,7 +66,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("ScanApplyOperation - changed file merges technical facts into concurrently curated metadata",
-            "[runtime][regression][scan-admission]")
+            "[runtime][unit][library-scan][admission][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -91,20 +75,12 @@ namespace ao::rt::test
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), target);
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     auto const trackId = importOne(library);
-    auto const initialSampleRate = [&]
-    {
-      auto transaction = library.readTransaction();
-      auto const optTrack = library.tracks().reader(transaction).get(trackId);
-      REQUIRE(optTrack);
-      return optTrack->property().sampleRate();
-    }();
-
     replaceFile(target, audio::test::requireAudioFixture("hires.flac"));
     auto plan = LibraryScan{library}.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::Changed) == 1);
     auto failures = FailureLog{};
     auto operation = ScanApplyOperation{library, std::move(plan), {}, failures.callback()};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     library::test::updateTrackSpec(library,
                                    trackId,
@@ -113,6 +89,8 @@ namespace ao::rt::test
                                      spec.title = "Curated while scanning";
                                      spec.tags = {"favorite"};
                                    });
+
+    requireRevalidation(operation, 0, 0);
 
     auto res = operation.run();
 
@@ -126,11 +104,12 @@ namespace ao::rt::test
     auto const spec = library::test::trackSpecFromView(library, *optTrack);
     CHECK(spec.title == "Curated while scanning");
     CHECK(spec.tags == std::vector<std::string>{"favorite"});
-    CHECK(optTrack->property().sampleRate() != initialSampleRate);
+    CHECK(optTrack->property().sampleRate() == 96000);
+    CHECK(optTrack->property().bitDepth() == 24);
   }
 
   TEST_CASE("ScanApplyOperation - deleting a changed Track during preparation skips it without aborting",
-            "[runtime][regression][scan-admission]")
+            "[runtime][unit][library-scan][admission][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -143,9 +122,11 @@ namespace ao::rt::test
     auto plan = LibraryScan{library}.buildPlan().value();
     auto failures = FailureLog{};
     auto operation = ScanApplyOperation{library, std::move(plan), {}, failures.callback()};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     removeTrack(library, trackId);
+    requireRevalidation(operation, 0, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);
@@ -159,7 +140,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - a replacement at a planned missing URI is not marked missing",
-            "[runtime][regression][scan-admission]")
+            "[runtime][unit][library-scan][admission][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -173,12 +154,14 @@ namespace ao::rt::test
     REQUIRE(plan.count(ScanClassification::Missing) == 1);
     auto failures = FailureLog{};
     auto operation = ScanApplyOperation{library, std::move(plan), {}, failures.callback()};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     removeTrack(library, originalTrackId);
     auto replacement = library::test::makeEmptyTrackSpec("song.flac");
     replacement.title = "Replacement";
     auto const replacementTrackId = library::test::addTrack(library, replacement);
+    requireRevalidation(operation, 0, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);
@@ -194,7 +177,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - independently updated identity does not stale a missing item",
-            "[runtime][regression][scan-admission]")
+            "[runtime][unit][library-scan][admission][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -208,7 +191,7 @@ namespace ao::rt::test
     REQUIRE(plan.count(ScanClassification::Missing) == 1);
     auto failures = FailureLog{};
     auto operation = ScanApplyOperation{library, std::move(plan), {}, failures.callback()};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
     auto const replacementSignature = utility::xxh3Hash128("identity completed after scan planning");
 
     {
@@ -226,6 +209,8 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
+    requireRevalidation(operation, 0, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);
@@ -242,7 +227,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - an occupied moved destination aborts all co-planned writes",
-            "[runtime][regression][scan-admission]")
+            "[runtime][unit][library-scan][admission][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -259,11 +244,13 @@ namespace ao::rt::test
     REQUIRE(plan.count(ScanClassification::New) == 1);
     auto failures = FailureLog{};
     auto operation = ScanApplyOperation{library, std::move(plan), {}, failures.callback()};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     auto occupier = library::test::makeEmptyTrackSpec("renamed.flac");
     occupier.title = "Concurrent destination";
     auto const occupyingTrackId = library::test::addTrack(library, occupier);
+    requireRevalidation(operation, 0, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);
@@ -284,7 +271,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - a deleted moved source aborts all co-planned writes",
-            "[runtime][regression][scan-admission]")
+            "[runtime][unit][library-scan][admission][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -300,9 +287,11 @@ namespace ao::rt::test
     REQUIRE(plan.count(ScanClassification::New) == 1);
     auto failures = FailureLog{};
     auto operation = ScanApplyOperation{library, std::move(plan), {}, failures.callback()};
-    REQUIRE(operation.prepare());
+    requirePrepared(operation);
 
     removeTrack(library, originalTrackId);
+    requireRevalidation(operation, 0, 0);
+
     auto res = operation.run();
 
     REQUIRE(res);

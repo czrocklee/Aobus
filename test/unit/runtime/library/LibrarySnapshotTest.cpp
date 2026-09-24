@@ -31,6 +31,7 @@
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -260,7 +261,7 @@ namespace ao::rt::test
     CHECK(scope.resolve(seeded.albumId) == "The Album");
   }
 
-  TEST_CASE("Library - published facade identity is nonmovable", "[runtime][unit][library][lifetime]")
+  TEST_CASE("Library - published facade identity is nonmovable", "[runtime][unit][library]")
   {
     STATIC_CHECK_FALSE(std::is_move_constructible_v<Library>);
     STATIC_CHECK_FALSE(std::is_move_assignable_v<Library>);
@@ -341,15 +342,37 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
-    auto runtimePtr = makeCoreRuntime(tempDir);
-    auto& library = runtimePtr->library();
+    auto storage = library::test::makeTestMusicLibrary(tempDir.path(), LibraryPaths{tempDir.path()}.databasePath());
+    auto executor = QueuedExecutor{};
+    auto changes = makeLibraryChanges(executor, storage);
+    auto commands = LibraryCommandsFixture{storage, changes, executor};
+    auto& library = commands.library();
 
     auto const snapshot = library.snapshot();
-    CHECK(snapshot.revision() == library.authoringAvailability().libraryRevision);
-
+    auto const revision = snapshot.revision();
+    CHECK(revision == library.authoringAvailability().libraryRevision);
     auto const boundRes = library.bindTrackTargets(std::array{seeded.trackId});
     REQUIRE(boundRes);
-    CHECK(boundRes->revision() == snapshot.revision());
+    CHECK(boundRes->revision() == revision);
+    auto const optBefore = snapshot.trackRow(seeded.trackId);
+    REQUIRE(optBefore);
+    CHECK(optBefore->title == "A Song");
+
+    REQUIRE(commands.updateMetadata(std::array{seeded.trackId}, MetadataPatch{.optTitle = "Changed Song"}));
+
+    CHECK(snapshot.revision() == revision);
+    auto const optRetained = snapshot.trackRow(seeded.trackId);
+    REQUIRE(optRetained);
+    CHECK(optRetained->title == "A Song");
+    auto const fresh = library.snapshot();
+    CHECK(fresh.revision() == revision + 1);
+    CHECK(fresh.revision() == library.authoringAvailability().libraryRevision);
+    auto const optUpdated = fresh.trackRow(seeded.trackId);
+    REQUIRE(optUpdated);
+    CHECK(optUpdated->title == "Changed Song");
+    auto const freshBoundRes = library.bindTrackTargets(std::array{seeded.trackId});
+    REQUIRE(freshBoundRes);
+    CHECK(freshBoundRes->revision() == fresh.revision());
   }
 
   TEST_CASE("LibrarySnapshot - snapshots tag DTOs", "[runtime][unit][library][readmodel]")
@@ -369,16 +392,13 @@ namespace ao::rt::test
     CHECK(tagCounts == std::vector<std::pair<std::string, std::size_t>>{{"Favorite", 2}, {"Jazz", 1}, {"Live", 1}});
 
     auto const byFrequency = scope.allTagsByFrequency();
-    REQUIRE(byFrequency.size() >= 3);
-    auto const firstThree =
-      std::vector<std::pair<std::string, std::size_t>>{byFrequency.begin(), byFrequency.begin() + 3};
-    CHECK(firstThree == std::vector<std::pair<std::string, std::size_t>>{{"Favorite", 2}, {"Jazz", 1}, {"Live", 1}});
+    CHECK(byFrequency == std::vector<std::pair<std::string, std::size_t>>{{"Favorite", 2}, {"Jazz", 1}, {"Live", 1}});
 
     // A stale id in the selection contributes no tags, collapsing the intersection.
     auto const selectionWithMissing = std::array{seeded.trackId, TrackId{999999}};
     CHECK(scope.selectionTags(selectionWithMissing).empty());
-    CHECK(scope.selectionTagCounts(selectionWithMissing) ==
-          std::vector<std::pair<std::string, std::size_t>>{{"Favorite", 1}, {"Live", 1}});
+    auto const remainingCounts = scope.selectionTagCounts(selectionWithMissing);
+    CHECK(remainingCounts == std::vector<std::pair<std::string, std::size_t>>{{"Favorite", 1}, {"Live", 1}});
 
     CHECK(scope.selectionTags(std::span<TrackId const>{}).empty());
     CHECK(scope.selectionTagCounts(std::span<TrackId const>{}).empty());

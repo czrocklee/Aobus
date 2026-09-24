@@ -9,7 +9,8 @@
 
 namespace ao::gtk::layout::editor::test
 {
-  TEST_CASE("LayoutEditorText - localizes built-in vocabulary and preserves extensions", "[gtk][unit][localization]")
+  TEST_CASE("LayoutEditorText - localizes built-in vocabulary and preserves extensions",
+            "[gtk][unit][layout-editor][localization]")
   {
     auto const german = ao::test::messageCatalog("de-DE");
     CHECK(layoutEditorVocabularyText(german, "Split Pane") == "Geteilte Ansicht");

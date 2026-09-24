@@ -13,9 +13,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
 
+#include <cstdint>
+
 namespace ao::gtk::test
 {
-  TEST_CASE("TransportButton - renders transport action state and dispatches clicks", "[gtk][unit][playback]")
+  TEST_CASE("TransportButton - projects initial and localized action presentation", "[gtk][unit][playback]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -32,24 +34,10 @@ namespace ao::gtk::test
       windowFixture.mount(button.widget());
       windowFixture.present();
 
-      CHECK_FALSE(gtkButton->get_icon_name().empty());
+      CHECK(gtkButton->get_icon_name() == "media-playback-start-symbolic");
       CHECK(gtkButton->has_css_class("ao-playback-button"));
+      CHECK(gtkButton->get_tooltip_text() == "Play");
       CHECK(hasAccessibleLabel(*gtkButton, "Play"));
-    }
-
-    SECTION("Play action routes clicks to selection playback callback")
-    {
-      rt::test::addReadyAudioProvider(fixture.runtime());
-      drainGtkEvents();
-      bool playSelectionCalled = false;
-      auto actions = uimodel::PlaybackActions{playback, [&playSelectionCalled] { playSelectionCalled = true; }};
-      auto button =
-        TransportButton{playback, actions, ao::test::englishMessageCatalog(), TransportButton::Action::Play, false};
-      auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
-      REQUIRE(gtkButton != nullptr);
-
-      emitClicked(*gtkButton);
-      CHECK(playSelectionCalled);
     }
 
     SECTION("The selected catalog supplies the accessible control name")
@@ -62,7 +50,28 @@ namespace ao::gtk::test
       auto windowFixture = GtkWindowFixture{};
       windowFixture.mount(button.widget());
       windowFixture.present();
+      CHECK(gtkButton->get_icon_name() == "media-skip-backward-symbolic");
+      CHECK(gtkButton->get_tooltip_text() == "Vorheriger Titel");
       CHECK(hasAccessibleLabel(*gtkButton, "Vorheriger Titel"));
     }
+  }
+
+  TEST_CASE("TransportButton - routes a play click once to selection playback", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& playback = fixture.runtime().playback();
+    rt::test::addReadyAudioProvider(fixture.runtime());
+    drainGtkEvents();
+    std::int32_t playSelectionCalls = 0;
+    auto actions = uimodel::PlaybackActions{playback, [&] { ++playSelectionCalls; }};
+    auto button =
+      TransportButton{playback, actions, ao::test::englishMessageCatalog(), TransportButton::Action::Play, false};
+    auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
+    REQUIRE(gtkButton != nullptr);
+    REQUIRE(playSelectionCalls == 0);
+
+    emitClicked(*gtkButton);
+    CHECK(playSelectionCalls == 1);
   }
 } // namespace ao::gtk::test

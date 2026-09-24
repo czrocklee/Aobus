@@ -376,7 +376,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("AudioQualityFormatter - localized copy preserves numeric and external values",
-            "[uimodel][unit][quality][localization]")
+            "[uimodel][unit][playback][quality][localization]")
   {
     auto const catalog = ao::test::messageCatalog("de-DE");
     auto const formatter = AudioQualityFormatter{catalog};
@@ -393,7 +393,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("AudioQualityFormatter - unclassified volume copy keeps both selector branches in every locale",
-            "[uimodel][unit][quality][localization]")
+            "[uimodel][unit][playback][quality][localization]")
   {
     // The catalog compiler validates argument names and kinds, not branch placement. A translation
     // that drops the `yes` branch or moves `{gain}` into `other` still compiles, so assert the shape
@@ -428,7 +428,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("AudioQualityFormatter - localized bit units preserve signal and PCM widths",
-            "[uimodel][regression][quality][localization]")
+            "[uimodel][unit][playback][quality][localization]")
   {
     struct ExpectedFormatLabels final
     {
@@ -466,7 +466,8 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - localized unclassified volume copy", "[uimodel][unit][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - localized unclassified volume copy",
+            "[uimodel][unit][playback][quality][localization]")
   {
     auto const catalog = ao::test::messageCatalog("de-DE");
     auto const formatter = AudioQualityFormatter{catalog};
@@ -480,7 +481,8 @@ namespace ao::uimodel::test
           }) == "Gerätelautstärke geändert (Herkunft ungeklärt)");
   }
 
-  TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values", "[uimodel][unit][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values",
+            "[uimodel][unit][playback][quality][localization]")
   {
     auto const catalog = ao::test::messageCatalog("qps-ploc");
     auto const formatter = AudioQualityFormatter{catalog};

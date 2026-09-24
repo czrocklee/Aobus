@@ -33,7 +33,7 @@ namespace ao::rt::test
   } // namespace
 
   TEST_CASE("PreparedNextRegistry - activating a replacement retires the previous commitment",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 1, 4));
@@ -73,7 +73,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PreparedNextRegistry - exact disarm acknowledgement forgets active and retired tokens",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
@@ -91,7 +91,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PreparedNextRegistry - retired winner closes the window while unknown token changes nothing",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
@@ -112,7 +112,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PreparedNextRegistry - runtime barrier clears only strictly older issuance generations",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 3));
@@ -132,7 +132,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PreparedNextRegistry - equal-generation replacement survives an older barrier",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
@@ -147,7 +147,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PreparedNextRegistry - invalidation retains an unacknowledged race winner",
-            "[runtime][unit][playback-cursor]")
+            "[runtime][unit][playback-cursor][concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::gap(kFirstTrack, 2, 3));

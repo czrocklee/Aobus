@@ -25,8 +25,8 @@ TPE2, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::alb
 TPE3, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::conductor>
 TALB, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::album>
 TCOM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::composer>
-TYER, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
-TDRC, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::year>
+TYER, &handleYear
+TDRC, &handleYear
 TRCK, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 TPOS, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
 TCON, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::genre>

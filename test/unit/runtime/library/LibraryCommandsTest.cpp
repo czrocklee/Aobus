@@ -98,10 +98,12 @@ namespace ao::rt::test
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
     auto const targetIds = std::array{trackId};
+    auto const revisionBefore = commandsFixture.bind(targetIds).revision();
     auto const res = commandsFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "Original Title"});
 
     REQUIRE(res);
     CHECK(res->changes.empty());
+    CHECK(commandsFixture.bind(targetIds).revision() == revisionBefore);
     CHECK(mutated.empty());
   }
 
@@ -114,10 +116,13 @@ namespace ao::rt::test
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
-    auto const res = commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Cafe\u0301"});
+    auto const targetIds = std::array{trackId};
+    auto const revisionBefore = commandsFixture.bind(targetIds).revision();
+    auto const res = commandsFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "Cafe\u0301"});
 
     REQUIRE(res);
     CHECK(res->changes.empty());
+    CHECK(commandsFixture.bind(targetIds).revision() == revisionBefore);
     CHECK(mutated.empty());
   }
 
@@ -155,10 +160,22 @@ namespace ao::rt::test
       libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
     auto const& dictionary = libraryFixture.library().dictionary();
+    CHECK(optView->metadata().title() == "New Title");
+    CHECK(dictionary.get(optView->metadata().artistId()) == "Artist");
+    CHECK(dictionary.get(optView->metadata().albumId()) == "Album");
+    CHECK(dictionary.get(optView->metadata().albumArtistId()) == "Album Artist");
+    CHECK(dictionary.get(optView->metadata().genreId()) == "Rock");
+    CHECK(dictionary.get(optView->metadata().composerId()) == "Composer");
     CHECK(dictionary.get(optView->classical().conductorId()) == "Conductor");
     CHECK(dictionary.get(optView->classical().ensembleId()) == "Ensemble");
+    CHECK(dictionary.get(optView->classical().workId()) == "Work");
     CHECK(dictionary.get(optView->classical().movementId()) == "Movement");
     CHECK(dictionary.get(optView->classical().soloistId()) == "Soloist");
+    CHECK(optView->metadata().year() == 2024);
+    CHECK(optView->metadata().trackNumber() == 1);
+    CHECK(optView->metadata().trackTotal() == 10);
+    CHECK(optView->metadata().discNumber() == 1);
+    CHECK(optView->metadata().discTotal() == 2);
   }
 
   TEST_CASE("LibraryCommands - updateMetadata applies and removes custom metadata",
@@ -249,6 +266,7 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Track");
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto const revisionBefore = commandsFixture.bind(std::array{trackId}).revision();
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
@@ -266,65 +284,71 @@ namespace ao::rt::test
     CHECK(mutated.empty());
 
     auto const transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
     auto const optView =
       libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
     CHECK(std::ranges::distance(optView->customMetadata()) == 0);
   }
 
-  TEST_CASE("LibraryCommands - editTags reports mutations for tag edits", "[runtime][unit][library][tag]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId = libraryFixture.addTrack("Track");
-    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
-
-    auto const trackIdsArr = std::array{trackId};
-    auto const toAdd = std::array{std::string{"rock"}};
-    auto const toRemove = std::array{std::string{"pop"}};
-    auto const res = commandsFixture.editTags(trackIdsArr, toAdd, toRemove);
-
-    REQUIRE(res);
-    CHECK_FALSE(res->changes.empty());
-  }
-
-  TEST_CASE("LibraryCommands - editTags rejects missing targets before mutation", "[runtime][unit][library][tag]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
-    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
-
-    auto const trackIdsArr = std::array{TrackId{999}};
-    auto const toAdd = std::array{std::string{"rock"}};
-    auto const res = commandsFixture.editTags(trackIdsArr, toAdd, {});
-    REQUIRE_FALSE(res);
-    CHECK(res.error().code == Error::Code::NotFound);
-  }
-
-  TEST_CASE("LibraryCommands - lists can be created and updated", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - createList persists its draft", "[runtime][unit][library][list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
-
-    auto draft = ListDraft{};
-    draft.name = "List";
-    draft.expression = R"(#favorite)";
+    auto const draft = ListDraft{
+      .name = "List",
+      .description = "Created description",
+      .expression = R"(#favorite)",
+    };
 
     auto const listId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(draft)));
+
     CHECK(listId != kInvalidListId);
-
-    auto updateDraft = ListDraft{};
-    updateDraft.listId = listId;
-    updateDraft.name = "Updated";
-    updateDraft.expression = R"(#favorite or #recent)";
-    auto const updateRes = commandsFixture.runTask(commands.updateListAsync(updateDraft));
-    REQUIRE(updateRes);
-
     auto const optNode = commandsFixture.library().snapshot().listNode(listId);
     REQUIRE(optNode);
+    CHECK(optNode->id == listId);
+    CHECK(optNode->parentId == kInvalidListId);
+    CHECK(optNode->name == "List");
+    CHECK(optNode->description == "Created description");
+    CHECK(optNode->expression == R"(#favorite)");
+  }
+
+  TEST_CASE("LibraryCommands - updateList persists its draft", "[runtime][unit][library][list]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+    auto const listId = ao::test::requireValue(
+      commandsFixture.runTask(commands.createListAsync(ListDraft{.name = "List", .expression = R"(#favorite)"})));
+    auto const updateDraft = ListDraft{
+      .listId = listId,
+      .name = "Updated",
+      .description = "Updated description",
+      .expression = R"(#favorite or #recent)",
+    };
+
+    auto const updateRes = commandsFixture.runTask(commands.updateListAsync(updateDraft));
+
+    REQUIRE(updateRes);
+    CHECK(*updateRes ==
+          UpdateListReply{
+            .changed = true,
+            .fieldChanges =
+              {
+                ListFieldChange{.field = "name", .oldValue = "List", .newValue = "Updated"},
+                ListFieldChange{.field = "description", .oldValue = "", .newValue = "Updated description"},
+                ListFieldChange{.field = "filter", .oldValue = R"(#favorite)", .newValue = R"(#favorite or #recent)"},
+              },
+          });
+    auto const optNode = commandsFixture.library().snapshot().listNode(listId);
+    REQUIRE(optNode);
+    CHECK(optNode->id == listId);
+    CHECK(optNode->parentId == kInvalidListId);
     CHECK(optNode->name == "Updated");
+    CHECK(optNode->description == "Updated description");
     CHECK(optNode->expression == R"(#favorite or #recent)");
   }
 
@@ -381,90 +405,107 @@ namespace ao::rt::test
     CHECK(upserted[0] == listId);
   }
 
-  TEST_CASE("LibraryCommands - rejects invalid list drafts", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - createList rejects malformed expressions", "[runtime][unit][library][list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
+    auto draft = ListDraft{};
+    draft.name = "Invalid";
+    draft.expression = "(";
 
-    SECTION("invalid smart filter")
-    {
-      auto draft = ListDraft{};
-      draft.name = "Invalid";
-      draft.expression = "(";
+    auto const res = commandsFixture.runTask(commands.createListAsync(draft));
 
-      auto const res = commandsFixture.runTask(commands.createListAsync(draft));
-      REQUIRE(!res);
-      CHECK(res.error().code == Error::Code::FormatRejected);
-      CHECK(res.error().message.contains("invalid list filter"));
-      CHECK(libraryFixture.library().lists().reader(libraryFixture.library().readTransaction()).begin() ==
-            library::ListStore::Reader::Iterator{});
-    }
+    REQUIRE(!res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(res.error().message.contains("invalid list filter"));
+    CHECK(libraryFixture.library().lists().reader(libraryFixture.library().readTransaction()).begin() ==
+          library::ListStore::Reader::Iterator{});
+  }
 
-    SECTION("empty expression matches the parent source")
-    {
-      auto draft = ListDraft{};
-      draft.name = "Empty";
+  TEST_CASE("LibraryCommands - createList accepts an empty expression as the parent identity",
+            "[runtime][unit][library][list]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+    auto draft = ListDraft{};
+    draft.name = "Empty";
 
-      auto const res = commandsFixture.runTask(commands.createListAsync(draft));
-      REQUIRE(res);
+    auto const res = commandsFixture.runTask(commands.createListAsync(draft));
 
-      auto const optNode = commandsFixture.library().snapshot().listNode(*res);
-      REQUIRE(optNode);
-      CHECK(optNode->expression.empty());
-    }
+    REQUIRE(res);
+    auto const optNode = commandsFixture.library().snapshot().listNode(*res);
+    REQUIRE(optNode);
+    CHECK(optNode->expression.empty());
+  }
 
-    SECTION("missing parent")
-    {
-      auto draft = ListDraft{};
-      draft.name = "Child";
-      draft.parentId = ListId{999};
+  TEST_CASE("LibraryCommands - createList rejects a missing parent", "[runtime][unit][library][list]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+    auto draft = ListDraft{};
+    draft.name = "Child";
+    draft.parentId = ListId{999};
 
-      auto const res = commandsFixture.runTask(commands.createListAsync(draft));
-      REQUIRE(!res);
-      CHECK(res.error().code == Error::Code::InvalidInput);
-      CHECK(res.error().message.contains("list parent not found"));
-    }
+    auto const res = commandsFixture.runTask(commands.createListAsync(draft));
 
-    SECTION("self parent")
-    {
-      auto draft = ListDraft{};
-      draft.name = "List";
-      auto const listId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(draft)));
+    REQUIRE(!res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("list parent not found"));
+  }
 
-      draft.listId = listId;
-      draft.parentId = listId;
-      auto const res = commandsFixture.runTask(commands.updateListAsync(draft));
-      REQUIRE(!res);
-      CHECK(res.error().code == Error::Code::InvalidInput);
-      CHECK(res.error().message.contains("list parent cannot be the list itself"));
-    }
+  TEST_CASE("LibraryCommands - updateList rejects itself as parent", "[runtime][unit][library][list]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+    auto draft = ListDraft{};
+    draft.name = "List";
+    auto const listId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(draft)));
+    draft.listId = listId;
+    draft.parentId = listId;
 
-    SECTION("descendant parent")
-    {
-      auto parentDraft = ListDraft{};
-      parentDraft.name = "Parent";
-      auto const parentId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(parentDraft)));
+    auto const res = commandsFixture.runTask(commands.updateListAsync(draft));
 
-      auto childDraft = ListDraft{};
-      childDraft.name = "Child";
-      childDraft.parentId = parentId;
-      auto const childId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(childDraft)));
+    REQUIRE(!res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("list parent cannot be the list itself"));
+  }
 
-      auto grandchildDraft = ListDraft{};
-      grandchildDraft.name = "Grandchild";
-      grandchildDraft.parentId = childId;
-      auto const grandchildId =
-        ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(grandchildDraft)));
+  TEST_CASE("LibraryCommands - updateList rejects a descendant as parent", "[runtime][unit][library][list]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto& commands = commandsFixture.commands();
+    auto parentDraft = ListDraft{};
+    parentDraft.name = "Parent";
+    auto const parentId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(parentDraft)));
 
-      parentDraft.listId = parentId;
-      parentDraft.parentId = grandchildId;
-      auto const res = commandsFixture.runTask(commands.updateListAsync(parentDraft));
-      REQUIRE(!res);
-      CHECK(res.error().code == Error::Code::InvalidInput);
-      CHECK(res.error().message.contains("list parent cannot be a descendant of the list"));
-    }
+    auto childDraft = ListDraft{};
+    childDraft.name = "Child";
+    childDraft.parentId = parentId;
+    auto const childId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(childDraft)));
+
+    auto grandchildDraft = ListDraft{};
+    grandchildDraft.name = "Grandchild";
+    grandchildDraft.parentId = childId;
+    auto const grandchildId =
+      ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(grandchildDraft)));
+
+    parentDraft.listId = parentId;
+    parentDraft.parentId = grandchildId;
+    auto const res = commandsFixture.runTask(commands.updateListAsync(parentDraft));
+
+    REQUIRE(!res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(res.error().message.contains("list parent cannot be a descendant of the list"));
   }
 
   TEST_CASE("LibraryCommands - updateList skips unchanged drafts", "[runtime][unit][library][list]")
@@ -479,11 +520,14 @@ namespace ao::rt::test
     auto const listId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(draft)));
     draft.listId = listId;
 
+    auto const revisionBefore = commandsFixture.library().snapshot().revision();
     auto upserted = std::vector<ListId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upserted = ev.listsUpserted; });
 
     auto const updateRes = commandsFixture.runTask(commands.updateListAsync(draft));
     REQUIRE(updateRes);
+    CHECK_FALSE(updateRes->changed);
+    CHECK(commandsFixture.library().snapshot().revision() == revisionBefore);
     CHECK(upserted.empty());
   }
 
@@ -493,15 +537,31 @@ namespace ao::rt::test
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
     auto& commands = commandsFixture.commands();
-
+    auto const retainedId = ao::test::requireValue(commandsFixture.runTask(
+      commands.createListAsync(ListDraft{.name = "Retained", .description = "Keep me", .expression = "#retained"})));
+    auto const revisionBefore = commandsFixture.library().snapshot().revision();
+    auto events = std::vector<LibraryChangeSet>{};
+    auto sub = changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
     auto draft = ListDraft{};
     draft.listId = ListId{999};
     draft.name = "Missing";
 
     auto const res = commandsFixture.runTask(commands.updateListAsync(draft));
+
     REQUIRE(!res);
     CHECK(res.error().code == Error::Code::NotFound);
     CHECK(res.error().message.contains("list not found: 999"));
+    CHECK(events.empty());
+    auto snapshot = commandsFixture.library().snapshot();
+    CHECK(snapshot.revision() == revisionBefore);
+    auto const nodes = snapshot.lists();
+    REQUIRE(nodes.size() == 1);
+    CHECK(nodes[0].id == retainedId);
+    CHECK(nodes[0].parentId == kInvalidListId);
+    CHECK(nodes[0].name == "Retained");
+    CHECK(nodes[0].description == "Keep me");
+    CHECK(nodes[0].expression == "#retained");
+    CHECK_FALSE(snapshot.listNode(ListId{999}));
   }
 
   TEST_CASE("LibraryCommands - deleteList publishes ListsMutated", "[runtime][unit][library][mutation]")
@@ -525,7 +585,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryCommands - subtree delete previews and commits every descendant atomically",
-            "[runtime][unit][list-delete][delete-subtree]")
+            "[runtime][unit][library][list-delete][delete-subtree]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -545,25 +605,32 @@ namespace ao::rt::test
     CHECK(ordinaryDeleteRes.error().code == Error::Code::Conflict);
     CHECK(ordinaryDeleteRes.error().message.contains("Child"));
 
+    auto const revisionBefore = commandsFixture.library().snapshot().revision();
+    auto events = std::vector<LibraryChangeSet>{};
+    auto sub = changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
     auto const previewRes = commandsFixture.runTask(commands.previewDeleteListAndDescendantsAsync(parentId));
+
     REQUIRE(previewRes);
     CHECK(previewRes->rootListId == parentId);
     REQUIRE(previewRes->deletedLists.size() == 3);
     CHECK(previewRes->deletedLists[0].listId == parentId);
     CHECK(previewRes->deletedLists[1].listId == childId);
     CHECK(previewRes->deletedLists[2].listId == grandchildId);
+    CHECK(commandsFixture.library().snapshot().revision() == revisionBefore);
     CHECK(commandsFixture.library().snapshot().listNode(parentId).has_value());
     CHECK(commandsFixture.library().snapshot().listNode(childId).has_value());
     CHECK(commandsFixture.library().snapshot().listNode(grandchildId).has_value());
+    CHECK(events.empty());
 
-    auto events = std::vector<LibraryChangeSet>{};
-    auto sub = changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
     auto const res = commandsFixture.runTask(commands.deleteListAndDescendantsAsync(parentId));
 
     REQUIRE(res);
-    CHECK(res->deletedLists == previewRes->deletedLists);
+    CHECK(*res == *previewRes);
     REQUIRE(events.size() == 1);
-    CHECK(events.front().listsDeleted == std::vector{parentId, childId, grandchildId});
+    CHECK(events.front() == LibraryChangeSet{
+                              .libraryRevision = revisionBefore + 1,
+                              .listsDeleted = {parentId, childId, grandchildId},
+                            });
     CHECK_FALSE(commandsFixture.library().snapshot().listNode(parentId).has_value());
     CHECK_FALSE(commandsFixture.library().snapshot().listNode(childId).has_value());
     CHECK_FALSE(commandsFixture.library().snapshot().listNode(grandchildId).has_value());

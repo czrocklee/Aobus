@@ -99,7 +99,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - play publishes route state from decoder stream info", "[audio][unit][engine][graph]")
+  TEST_CASE("Engine - play publishes route state from decoder stream info", "[audio][integration][engine][graph]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -139,7 +139,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - backend opens from the inspected native signal", "[audio][unit][engine][backend-open]")
+  TEST_CASE("Engine - backend opens from the inspected native signal", "[audio][integration][engine][backend-open]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -177,7 +177,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - backend result selects the decoder PCM output", "[audio][regression][engine][backend-open]")
+  TEST_CASE("Engine - backend result selects the decoder PCM output", "[audio][unit][engine][backend-open]")
   {
     auto const nativeFormat = PcmFormat{.sampleRate = 96000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
     auto const device = Device{.id = DeviceId{"wasapi-shared"},
@@ -234,7 +234,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - commit reuses a staged decoder when the backend prewarm hint matches",
-            "[audio][regression][engine][staged]")
+            "[audio][unit][engine][staged]")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -277,7 +277,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - a lossy prewarm hint is ignored", "[audio][regression][engine][staged]")
+  TEST_CASE("Engine - a lossy prewarm hint is ignored", "[audio][unit][engine][staged]")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -319,7 +319,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - explicit staging follows the backend hint after a wider current PCM mode",
-            "[audio][regression][engine][staged]")
+            "[audio][unit][engine][staged]")
   {
     auto const currentNativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -365,7 +365,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - commit replaces a staged decoder when the backend selects another lossless mode",
-            "[audio][regression][engine][staged]")
+            "[audio][unit][engine][staged]")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -405,7 +405,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[audio][unit][engine][aac]")
+  TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[audio][integration][engine][aac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -446,7 +446,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - backend format rejection is reported without fallback", "[audio][unit][engine][format]")
+  TEST_CASE("Engine - backend format rejection is reported without fallback", "[audio][integration][engine][format]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -636,67 +636,57 @@ namespace ao::audio::test
     CHECK(seekIt < startIt);
   }
 
-  namespace
+  TEST_CASE("Engine - a confirmed endpoint narrower than the source fails route activation", "[audio][unit][engine]")
   {
-    // Two tracks whose native encodings can be chosen per path, so a lookahead
-    // can be pointed at a successor that either matches the current signal or
-    // deliberately does not.
-    auto makeTwoTrackFactory(
-      std::map<std::filesystem::path, PcmFormat> nativeFormats,
-      std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>& decoderRequests)
-    {
-      return [nativeFormats = std::move(nativeFormats), &decoderRequests](
-               std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
-      {
-        decoderRequests.emplace_back(path, optOutputEncoding);
-        auto const nativeFormat = nativeFormats.at(path);
-        auto const sourceFormat = signalFormat(nativeFormat);
-        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-          .sourceFormat = sourceFormat,
-          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(nativeFormat.encoding)),
-          .duration = std::chrono::seconds{2},
-          .isLossy = false,
-          .codec = AudioCodec::Flac,
-        });
-        decoderPtr->setReadScript(
-          {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
-        return decoderPtr;
-      };
-    }
-  } // namespace
-
-  TEST_CASE("Engine - a confirmed endpoint does not admit a reduced client format", "[audio][regression][engine]")
-  {
-    auto const nativeFormat =
-      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
-    auto decoderRequests = std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>{};
-    auto decoderFactory = makeTwoTrackFactory({{"only-16.flac", nativeFormat}}, decoderRequests);
-
+    auto const nativeFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed32Le};
+    auto info = makeScriptedStreamInfo(nativeFormat);
+    info.duration = std::chrono::seconds{2};
+    auto decoderFactory = makePathScriptedDecoderFactory(
+      {{.path = "endpoint-24.flac", .info = info, .data = std::vector<std::byte>(4000, std::byte{0})}});
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
-    backendPtr->setSelectedEncoding(SampleEncoding::Signed16Le);
-    backendPtr->setConfirmedEndpointPrecision(std::uint8_t{16});
+    auto* const backendRaw = backendPtr.get();
+    backendPtr->setSelectedEncoding(SampleEncoding::Signed32Le);
+    backendPtr->setConfirmedEndpointPrecision(std::uint8_t{24});
     auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
 
-    engine.play(makePlaybackItem("only-16.flac"));
+    engine.play(makePlaybackItem("endpoint-24.flac"));
 
-    CHECK(engine.status().transport == Transport::Error);
+    auto const status = engine.status();
+    CHECK(status.transport == Transport::Error);
+    CHECK(status.statusText == "Backend confirmed a 24-bit endpoint for a 32-bit source");
+    CHECK(std::ranges::none_of(backendRaw->events(), [](auto const& event) { return event.name == "start"; }));
     engine.stop();
   }
 
-  TEST_CASE("Engine - a lossy format without endpoint evidence is refused", "[audio][regression][engine]")
+  TEST_CASE("Engine - a lossy client format is refused regardless of endpoint evidence", "[audio][unit][engine]")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
-    auto decoderRequests = std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>{};
-    auto decoderFactory = makeTwoTrackFactory({{"only-16.flac", nativeFormat}}, decoderRequests);
-
+    auto info = makeScriptedStreamInfo(nativeFormat);
+    info.duration = std::chrono::seconds{2};
+    auto decoderFactory = makePathScriptedDecoderFactory(
+      {{.path = "only-16.flac", .info = info, .data = std::vector<std::byte>(4000, std::byte{0})}});
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
     backendPtr->setSelectedEncoding(SampleEncoding::Signed16Le);
-    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
 
+    SECTION("without endpoint evidence")
+    {
+      backendPtr->setConfirmedEndpointPrecision(std::nullopt);
+    }
+
+    SECTION("with a confirmed reduced endpoint")
+    {
+      backendPtr->setConfirmedEndpointPrecision(std::uint8_t{16});
+    }
+
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
     engine.play(makePlaybackItem("only-16.flac"));
 
-    CHECK(engine.status().transport == Transport::Error);
+    auto const status = engine.status();
+    CHECK(status.transport == Transport::Error);
+    CHECK(status.statusText == "Backend returned lossy S16_LE for a 24-bit source");
+    CHECK(std::ranges::none_of(backendRaw->events(), [](auto const& event) { return event.name == "start"; }));
     engine.stop();
   }
 } // namespace ao::audio::test

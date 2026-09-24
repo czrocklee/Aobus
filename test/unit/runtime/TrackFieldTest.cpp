@@ -53,6 +53,76 @@ namespace
     "quality",
   });
 
+  constexpr auto kMetadataFields = std::to_array<ao::rt::TrackField>({
+    ao::rt::TrackField::Title,
+    ao::rt::TrackField::Artist,
+    ao::rt::TrackField::Album,
+    ao::rt::TrackField::AlbumArtist,
+    ao::rt::TrackField::Genre,
+    ao::rt::TrackField::Composer,
+    ao::rt::TrackField::Conductor,
+    ao::rt::TrackField::Ensemble,
+    ao::rt::TrackField::Work,
+    ao::rt::TrackField::Movement,
+    ao::rt::TrackField::Soloist,
+    ao::rt::TrackField::Year,
+    ao::rt::TrackField::DiscNumber,
+    ao::rt::TrackField::DiscTotal,
+    ao::rt::TrackField::TrackNumber,
+    ao::rt::TrackField::TrackTotal,
+    ao::rt::TrackField::MovementNumber,
+    ao::rt::TrackField::MovementTotal,
+  });
+
+  constexpr auto kTechnicalFields = std::to_array<ao::rt::TrackField>({
+    ao::rt::TrackField::Duration,
+    ao::rt::TrackField::FilePath,
+    ao::rt::TrackField::Codec,
+    ao::rt::TrackField::SampleRate,
+    ao::rt::TrackField::Channels,
+    ao::rt::TrackField::BitDepth,
+    ao::rt::TrackField::Bitrate,
+    ao::rt::TrackField::FileSize,
+    ao::rt::TrackField::ModifiedTime,
+  });
+
+  constexpr auto kSyntheticFields = std::to_array<ao::rt::TrackField>({
+    ao::rt::TrackField::DisplayTrackNumber,
+    ao::rt::TrackField::TechnicalSummary,
+    ao::rt::TrackField::Quality,
+  });
+
+  constexpr auto kSortableFields = std::to_array<ao::rt::TrackField>({
+    ao::rt::TrackField::Title,
+    ao::rt::TrackField::Artist,
+    ao::rt::TrackField::Album,
+    ao::rt::TrackField::AlbumArtist,
+    ao::rt::TrackField::Genre,
+    ao::rt::TrackField::Composer,
+    ao::rt::TrackField::Conductor,
+    ao::rt::TrackField::Ensemble,
+    ao::rt::TrackField::Work,
+    ao::rt::TrackField::Movement,
+    ao::rt::TrackField::Soloist,
+    ao::rt::TrackField::Year,
+    ao::rt::TrackField::DiscNumber,
+    ao::rt::TrackField::TrackNumber,
+    ao::rt::TrackField::MovementNumber,
+    ao::rt::TrackField::Duration,
+  });
+
+  constexpr auto kGroupableFields = std::to_array<ao::rt::TrackField>({
+    ao::rt::TrackField::Artist,
+    ao::rt::TrackField::Album,
+    ao::rt::TrackField::AlbumArtist,
+    ao::rt::TrackField::Genre,
+    ao::rt::TrackField::Composer,
+    ao::rt::TrackField::Conductor,
+    ao::rt::TrackField::Ensemble,
+    ao::rt::TrackField::Work,
+    ao::rt::TrackField::Year,
+  });
+
   constexpr auto kPersistedTrackSortFieldIds = std::to_array<std::string_view>({
     "artist",
     "album",
@@ -219,7 +289,7 @@ namespace ao::rt::test
     CHECK_FALSE(trackFieldFromId("Track").has_value());
   }
 
-  TEST_CASE("TrackField - registry exposes expected category counts", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - registry assigns each field its expected category", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -234,6 +304,29 @@ namespace ao::rt::test
     CHECK(tagCount == 1);
     CHECK(technicalCount == 9);
     CHECK(syntheticCount == 3);
+
+    for (auto const& def : defs)
+    {
+      INFO("Field: " << def.id);
+
+      if (std::ranges::contains(kMetadataFields, def.field))
+      {
+        CHECK(def.category == TrackFieldCategory::Metadata);
+      }
+      else if (def.field == TrackField::Tags)
+      {
+        CHECK(def.category == TrackFieldCategory::Tag);
+      }
+      else if (std::ranges::contains(kTechnicalFields, def.field))
+      {
+        CHECK(def.category == TrackFieldCategory::Technical);
+      }
+      else
+      {
+        REQUIRE(std::ranges::contains(kSyntheticFields, def.field));
+        CHECK(def.category == TrackFieldCategory::Synthetic);
+      }
+    }
   }
 
   TEST_CASE("TrackField - registry marks all fields presentable", "[runtime][unit][trackfield]")
@@ -255,14 +348,7 @@ namespace ao::rt::test
     {
       INFO("Field: " << def.id);
 
-      if (def.category == TrackFieldCategory::Metadata)
-      {
-        CHECK(def.editable);
-      }
-      else
-      {
-        CHECK_FALSE(def.editable);
-      }
+      CHECK(def.editable == std::ranges::contains(kMetadataFields, def.field));
     }
   }
 
@@ -274,7 +360,10 @@ namespace ao::rt::test
     {
       INFO("Field: " << def.id);
 
-      if (def.sortable)
+      auto const expectedSortable = std::ranges::contains(kSortableFields, def.field);
+      CHECK(def.sortable == expectedSortable);
+
+      if (expectedSortable)
       {
         REQUIRE(def.optSortField);
         CHECK(static_cast<std::size_t>(*def.optSortField) < kTrackSortFieldCount);
@@ -294,7 +383,10 @@ namespace ao::rt::test
     {
       INFO("Field: " << def.id);
 
-      if (def.groupable)
+      auto const expectedGroupable = std::ranges::contains(kGroupableFields, def.field);
+      CHECK(def.groupable == expectedGroupable);
+
+      if (expectedGroupable)
       {
         REQUIRE(def.optGroupKey);
         CHECK(static_cast<std::size_t>(*def.optGroupKey) < kTrackGroupKeyCount);
@@ -315,15 +407,7 @@ namespace ao::rt::test
     {
       INFO("Field: " << def.id);
 
-      if (def.field == TrackField::DisplayTrackNumber || def.field == TrackField::TechnicalSummary ||
-          def.field == TrackField::Quality)
-      {
-        CHECK(def.synthetic);
-      }
-      else
-      {
-        CHECK_FALSE(def.synthetic);
-      }
+      CHECK(def.synthetic == std::ranges::contains(kSyntheticFields, def.field));
     }
   }
 
@@ -379,6 +463,8 @@ namespace ao::rt::test
     CHECK(trackFieldFilterExpressionVariable(TrackField::DiscTotal) == "$discTotal");
     CHECK(trackFieldFilterExpressionVariable(TrackField::TrackNumber) == "$trackNumber");
     CHECK(trackFieldFilterExpressionVariable(TrackField::TrackTotal) == "$trackTotal");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::MovementNumber) == "$movementNumber");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::MovementTotal) == "$movementTotal");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Duration) == "@duration");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Codec) == "@codec");
     CHECK(trackFieldFilterExpressionVariable(TrackField::SampleRate) == "@sampleRate");
@@ -455,9 +541,11 @@ namespace ao::rt::test
   TEST_CASE("TrackField - helpers return empty values for invalid fields", "[runtime][unit][trackfield]")
   {
     auto const invalidField = static_cast<TrackField>(255);
+    CHECK(trackFieldDefinition(invalidField) == nullptr);
     CHECK(trackFieldId(invalidField).empty());
     CHECK_FALSE(trackFieldQueryField(invalidField));
     CHECK(trackFieldFilterExpressionVariable(invalidField).empty());
+    CHECK_FALSE(supportsTrackFieldValueCompletion(invalidField));
     CHECK_FALSE(trackFieldFromQueryField(query::Field::Uri));
   }
 } // namespace ao::rt::test

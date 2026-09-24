@@ -12,7 +12,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <string_view>
 #include <vector>
@@ -57,11 +59,35 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetailLines - identity and facts have separate labeled rows", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - identity and facts have separate labeled rows", "[tui][unit][detail]")
   {
     using Kind = TrackDetailLine::Kind;
     auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), fullyPopulatedRow());
-    REQUIRE(lines.size() >= 6);
+    constexpr auto kLabels = std::array<std::string_view, 15>{
+      "Title",
+      "Artist",
+      "Album",
+      "Year",
+      "Track",
+      "Duration",
+      "Album Artist",
+      "Composer",
+      "Conductor",
+      "Ensemble",
+      "Soloist",
+      "Work",
+      "Movement",
+      "Genre",
+      "Tags",
+    };
+    REQUIRE(lines.size() == kLabels.size());
+
+    for (std::size_t index = 0; index < kLabels.size(); ++index)
+    {
+      CHECK(lines[index].label == kLabels[index]);
+      CHECK(lines[index].kind == (index == 0 ? Kind::Title : index == 14 ? Kind::Tags : Kind::Metadata));
+    }
+
     CHECK(lines[0].kind == Kind::Title);
     CHECK(lines[0].label == "Title");
     CHECK(lines[0].value == "Seven");
@@ -84,7 +110,7 @@ namespace ao::tui::test
     CHECK(hasLabel(trackDetailLines(german, fullyPopulatedRow()), "Dirigent"));
   }
 
-  TEST_CASE("TrackDetailLines - labeled fields keep a stable sizing schema", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - labeled fields keep a stable sizing schema", "[tui][unit][detail]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto row = fullyPopulatedRow();
@@ -93,6 +119,22 @@ namespace ao::tui::test
     row.fileSize = 1024;
     auto lines = trackDetailLines(catalog, row);
     auto const technical = trackDetailTechnicalLines(catalog, row);
+    constexpr auto kTechnicalLabels = std::array<std::string_view, 6>{
+      "Codec",
+      "Sample Rate",
+      "Bit Depth",
+      "Channels",
+      "Bitrate",
+      "File Size",
+    };
+    REQUIRE(technical.size() == kTechnicalLabels.size());
+
+    for (std::size_t index = 0; index < kTechnicalLabels.size(); ++index)
+    {
+      CHECK(technical[index].label == kTechnicalLabels[index]);
+      CHECK(technical[index].kind == TrackDetailLine::Kind::Technical);
+    }
+
     lines.insert(lines.end(), technical.begin(), technical.end());
 
     for (auto const field : trackDetailFields())
@@ -101,8 +143,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackDetailLines - sparse identity has no placeholders or duplicate album artist",
-            "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - sparse identity has no placeholders or duplicate album artist", "[tui][unit][detail]")
   {
     auto row = rt::TrackRow{.id = TrackId{3}, .title = "Untagged"};
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -122,7 +163,7 @@ namespace ao::tui::test
     CHECK_FALSE(hasLabel(lines, "Track"));
   }
 
-  TEST_CASE("TrackDetailLines - missing metadata title uses a separately labeled filename", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - missing metadata title uses a separately labeled filename", "[tui][unit][detail]")
   {
     auto const row = rt::TrackRow{.id = TrackId{3}, .optUriPath = "/music/untitled.flac"};
     auto const& catalog = ao::test::englishMessageCatalog();
@@ -133,7 +174,7 @@ namespace ao::tui::test
     CHECK_FALSE(hasLabel(lines, "Title"));
   }
 
-  TEST_CASE("TrackDetailLines - metadata title takes precedence over the filename", "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - metadata title takes precedence over the filename", "[tui][unit][detail]")
   {
     auto const row = rt::TrackRow{.optUriPath = "/music/untitled.flac", .title = "Real title"};
     auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), row);
@@ -143,8 +184,7 @@ namespace ao::tui::test
     CHECK_FALSE(hasLabel(lines, "File Name"));
   }
 
-  TEST_CASE("TrackDetailLines - missing title without a usable filename has no identity row",
-            "[tui][unit][track-detail]")
+  TEST_CASE("TrackDetailLines - missing title without a usable filename has no identity row", "[tui][unit][detail]")
   {
     auto row = rt::TrackRow{.id = TrackId{3}, .optUriPath = "/music/untitled.flac"};
     auto const& catalog = ao::test::englishMessageCatalog();

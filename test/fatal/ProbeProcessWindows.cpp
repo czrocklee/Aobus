@@ -72,6 +72,35 @@ namespace ao::test
       HANDLE _handle = nullptr;
     };
 
+    class [[nodiscard]] ChildProcessCleanup final
+    {
+    public:
+      explicit ChildProcessCleanup(HANDLE processHandle) noexcept
+        : _processHandle{processHandle}
+      {
+      }
+
+      ~ChildProcessCleanup() noexcept
+      {
+        if (_active)
+        {
+          [[maybe_unused]] auto const terminateResult = ::TerminateProcess(_processHandle, 1);
+          [[maybe_unused]] auto const waitResult = ::WaitForSingleObject(_processHandle, INFINITE);
+        }
+      }
+
+      ChildProcessCleanup(ChildProcessCleanup const&) = delete;
+      ChildProcessCleanup& operator=(ChildProcessCleanup const&) = delete;
+      ChildProcessCleanup(ChildProcessCleanup&&) = delete;
+      ChildProcessCleanup& operator=(ChildProcessCleanup&&) = delete;
+
+      void release() noexcept { _active = false; }
+
+    private:
+      HANDLE _processHandle = nullptr;
+      bool _active = true;
+    };
+
     std::filesystem::path readCurrentExecutablePath()
     {
       auto buffer = std::vector<wchar_t>(512);
@@ -245,36 +274,56 @@ namespace ao::test
     standardOutputWriteHandle.reset();
     standardErrorWriteHandle.reset();
     nullHandle.reset();
-    auto standardOutputReader = std::jthread{[handle = standardOutputReadHandle.get(), &result]
-                                             { captureOutput(handle, result.standardOutput); }};
-    auto standardErrorReader =
-      std::jthread{[handle = standardErrorReadHandle.get(), &result] { captureOutput(handle, result.standardError); }};
+    auto standardOutputReader = std::jthread{};
+    auto standardErrorReader = std::jthread{};
 
-    auto const boundedTimeout =
-      std::clamp<std::int64_t>(timeout.count(), 0, static_cast<std::int64_t>(std::numeric_limits<DWORD>::max() - 1));
-    auto const waitResult = ::WaitForSingleObject(processHandle.get(), static_cast<DWORD>(boundedTimeout));
+    {
+      auto childCleanup = ChildProcessCleanup{processHandle.get()};
+      standardOutputReader = std::jthread{[handle = standardOutputReadHandle.get(), &result]
+                                          { captureOutput(handle, result.standardOutput); }};
+      standardErrorReader = std::jthread{[handle = standardErrorReadHandle.get(), &result]
+                                         { captureOutput(handle, result.standardError); }};
 
-    if (waitResult == WAIT_TIMEOUT)
-    {
-      result.timedOut = true;
-      [[maybe_unused]] auto const terminateResult = ::TerminateProcess(processHandle.get(), 1);
-      [[maybe_unused]] auto const finalWait = ::WaitForSingleObject(processHandle.get(), INFINITE);
-    }
-    else if (waitResult == WAIT_FAILED)
-    {
-      result.launchError = windowsError("WaitForSingleObject");
-      [[maybe_unused]] auto const terminateResult = ::TerminateProcess(processHandle.get(), 1);
-      [[maybe_unused]] auto const finalWait = ::WaitForSingleObject(processHandle.get(), INFINITE);
-    }
+      auto const boundedTimeout =
+        std::clamp<std::int64_t>(timeout.count(), 0, static_cast<std::int64_t>(std::numeric_limits<DWORD>::max() - 1));
+      auto const waitResult = ::WaitForSingleObject(processHandle.get(), static_cast<DWORD>(boundedTimeout));
 
-    if (DWORD exitCode = 0; ::GetExitCodeProcess(processHandle.get(), &exitCode) != 0)
-    {
-      result.exited = true;
-      result.exitCode = exitCode;
-    }
-    else if (result.launchError.empty())
-    {
-      result.launchError = windowsError("GetExitCodeProcess");
+      if (waitResult == WAIT_OBJECT_0)
+      {
+        childCleanup.release();
+      }
+      else if (waitResult == WAIT_TIMEOUT)
+      {
+        result.timedOut = true;
+        [[maybe_unused]] auto const terminateResult = ::TerminateProcess(processHandle.get(), 1);
+        auto const finalWait = ::WaitForSingleObject(processHandle.get(), INFINITE);
+
+        if (finalWait == WAIT_OBJECT_0)
+        {
+          childCleanup.release();
+        }
+      }
+      else if (waitResult == WAIT_FAILED)
+      {
+        result.launchError = windowsError("WaitForSingleObject");
+        [[maybe_unused]] auto const terminateResult = ::TerminateProcess(processHandle.get(), 1);
+        auto const finalWait = ::WaitForSingleObject(processHandle.get(), INFINITE);
+
+        if (finalWait == WAIT_OBJECT_0)
+        {
+          childCleanup.release();
+        }
+      }
+
+      if (DWORD exitCode = 0; ::GetExitCodeProcess(processHandle.get(), &exitCode) != 0)
+      {
+        result.exited = true;
+        result.exitCode = exitCode;
+      }
+      else if (result.launchError.empty())
+      {
+        result.launchError = windowsError("GetExitCodeProcess");
+      }
     }
 
     standardOutputReader.join();

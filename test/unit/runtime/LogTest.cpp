@@ -3,15 +3,21 @@
 
 #include <ao/rt/Log.h>
 
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/Contract.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <source_location>
 #include <string>
+#include <string_view>
+#include <system_error>
+#include <tuple>
+#include <utility>
 
 namespace ao::rt::test
 {
@@ -25,15 +31,23 @@ namespace ao::rt::test
 
   TEST_CASE("Log - initialization and shutdown", "[runtime][unit][log]")
   {
-    auto const tempDir = std::filesystem::temp_directory_path() / "ao_log_test";
-    std::filesystem::remove_all(tempDir);
+    auto const temp = ao::test::TempDir{};
+    auto const& tempDir = temp.path();
+    auto const originalDirectory = std::filesystem::current_path();
+    auto restoreDirectory = gsl_lite::finally(
+      [&originalDirectory]
+      {
+        auto error = std::error_code{};
+        std::filesystem::current_path(originalDirectory, error);
+      });
+    auto shutdown = gsl_lite::finally([] { Log::shutdown(); });
 
     // Log is a process-global singleton and Log::initialize() is a no-op while already
     // initialized. Other test cases init logging without shutting it down, so we
     // must clear any leaked state to guarantee init() actually targets tempDir.
     Log::shutdown();
 
-    SECTION("Initialize with specific directory and log level")
+    SECTION("Initialize with specific directory")
     {
       Log::initialize(LogLevel::Debug, tempDir);
 
@@ -50,6 +64,7 @@ namespace ao::rt::test
 
       Log::shutdown();
       auto const registeredAfterShutdown = tryRegisterFatalSink(&tryAcceptTestFatal);
+      auto unregister = gsl_lite::finally([] { std::ignore = tryUnregisterFatalSink(&tryAcceptTestFatal); });
       REQUIRE(registeredAfterShutdown);
       CHECK(tryUnregisterFatalSink(&tryAcceptTestFatal));
 
@@ -72,13 +87,8 @@ namespace ao::rt::test
 
     SECTION("Initialize with empty directory (defaults to current_path/logs)")
     {
-      auto const defaultDir = std::filesystem::current_path() / "logs";
-
-      // Remove if exists to test creation
-      if (std::filesystem::exists(defaultDir))
-      {
-        std::filesystem::remove_all(defaultDir);
-      }
+      std::filesystem::current_path(tempDir);
+      auto const defaultDir = tempDir / "logs";
 
       Log::initialize(LogLevel::Warn, "");
 
@@ -86,17 +96,23 @@ namespace ao::rt::test
       CHECK(std::filesystem::exists(defaultDir / "app.log"));
       CHECK_FALSE(tryRegisterFatalSink(&tryAcceptTestFatal));
 
-      // Use toSpdlog directly to cover it
-      auto const loc = std::source_location::current();
-      auto const spdLoc = toSpdlog(loc);
-      CHECK(spdLoc.filename != nullptr);
-
       Log::shutdown();
       auto const registeredAfterShutdown = tryRegisterFatalSink(&tryAcceptTestFatal);
+      auto unregister = gsl_lite::finally([] { std::ignore = tryUnregisterFatalSink(&tryAcceptTestFatal); });
       REQUIRE(registeredAfterShutdown);
       CHECK(tryUnregisterFatalSink(&tryAcceptTestFatal));
     }
+  }
 
-    std::filesystem::remove_all(tempDir);
+  TEST_CASE("toSpdlog preserves source file line and function", "[runtime][unit][log]")
+  {
+    auto const loc = std::source_location::current();
+    auto const spdLoc = toSpdlog(loc);
+
+    REQUIRE(spdLoc.filename != nullptr);
+    REQUIRE(spdLoc.funcname != nullptr);
+    CHECK(std::string_view{spdLoc.filename} == loc.file_name());
+    CHECK(std::cmp_equal(spdLoc.line, loc.line()));
+    CHECK(std::string_view{spdLoc.funcname} == loc.function_name());
   }
 } // namespace ao::rt::test

@@ -33,25 +33,51 @@ namespace ao::library::test
   using namespace ao::lmdb;
   using namespace ao::lmdb::test;
 
-  TEST_CASE("MusicLibrary metadata - open returns CorruptData for an invalid header size",
+  static_assert(!std::is_same_v<ReadTransaction, lmdb::ReadTransaction>);
+  static_assert(std::is_move_constructible_v<ReadTransaction>);
+  static_assert(!std::is_copy_constructible_v<ReadTransaction>);
+
+  TEST_CASE("MusicLibrary metadata - open rejects truncated prefixes and invalid current header sizes",
             "[library][unit][music-library][integrity]")
   {
-    auto temp = ao::test::TempDir{};
-
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
     {
-      auto env = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 20});
+      auto library = makeTestMusicLibrary(temp.path(), databasePath);
+      CHECK(library.metadataHeader().libraryVersion == kLibraryVersion);
+    }
+
+    auto expectedDiagnostic = std::string{};
+    {
+      auto env = openEnvironment(databasePath, {.flags = MDB_NOTLS, .maxDatabases = 20});
       auto wtxn = beginWriteTransaction(env);
       auto db = openIntegerKeyDatabase(wtxn, "meta");
-      // Seed an invalid physical record; public reads still enter through MusicLibrary.
       auto writer = db.writer(wtxn);
-      auto invalidData = std::vector{std::byte{0x42}};
-      REQUIRE(writer.create(kMetadataHeaderRecordId, std::span<std::byte const>{invalidData}));
+      auto const optHeader = writer.get(kMetadataHeaderRecordId);
+      REQUIRE(optHeader);
+      REQUIRE(optHeader->size() == kMetadataHeaderSize);
+      auto invalidData = std::vector<std::byte>{optHeader->begin(), optHeader->end()};
+
+      SECTION("truncated stable prefix")
+      {
+        invalidData = {std::byte{0x42}};
+        expectedDiagnostic = "Library metadata header is shorter than the stable 8-byte prefix";
+      }
+
+      SECTION("valid prefix and catalog reach the current-header size guard")
+      {
+        invalidData.pop_back();
+        expectedDiagnostic = "Invalid library metadata header size 39 (expected 40)";
+      }
+
+      REQUIRE(writer.update(kMetadataHeaderRecordId, std::span<std::byte const>{invalidData}));
       REQUIRE(wtxn.commit());
     }
 
-    auto const res = MusicLibrary::open(temp.path(), temp.path());
+    auto const res = MusicLibrary::open(temp.path(), databasePath);
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == expectedDiagnostic);
   }
 
   TEST_CASE("MusicLibrary metadata - snapshot exposes the admitted header", "[library][unit][music-library]")
@@ -63,9 +89,6 @@ namespace ao::library::test
 
     CHECK(header.magic == kMetadataMagic);
     CHECK(header.libraryVersion == kLibraryVersion);
-    STATIC_REQUIRE_FALSE(std::is_same_v<ReadTransaction, lmdb::ReadTransaction>);
-    STATIC_REQUIRE(std::is_move_constructible_v<ReadTransaction>);
-    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ReadTransaction>);
   }
 
   TEST_CASE("MusicLibrary metadata - identity restore publishes only after commit", "[library][unit][music-library]")
@@ -122,7 +145,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("MusicLibrary metadata - failed commit leaves no durable candidate revision",
-            "[library][regression][write-transaction][revision]")
+            "[library][unit][write-transaction][revision]")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -149,7 +172,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("MusicLibrary metadata - candidate revision comes from the durable writer snapshot",
-            "[library][regression][write-transaction][concurrency]")
+            "[library][integration][write-transaction][concurrency]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const temp = ao::test::TempDir{};
@@ -180,7 +203,7 @@ namespace ao::library::test
   }
 
   TEST_CASE("MusicLibrary - external dictionary commits refresh snapshots and later writer admission",
-            "[library][regression][dictionary][concurrency]")
+            "[library][integration][dictionary][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");

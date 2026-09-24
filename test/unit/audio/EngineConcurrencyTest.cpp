@@ -19,6 +19,7 @@
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -32,6 +33,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <semaphore>
 #include <stop_token>
 #include <thread>
 #include <tuple>
@@ -146,11 +148,24 @@ namespace ao::audio::test
                                  {
                                    if (auto* const t = _target.load(std::memory_order_relaxed); t != nullptr)
                                    {
-                                     std::ignore = t->renderPcm(buffer);
+                                     auto const result = t->renderPcm(buffer);
+
+                                     if (!_hasRendered.exchange(true))
+                                     {
+                                       _firstRender.release();
+                                     }
+
+                                     // A drained backend run must not render again.
+                                     if (result.drained)
+                                     {
+                                       break;
+                                     }
                                    }
                                  }
                                }};
       }
+
+      bool tryWaitForFirstRender(std::chrono::milliseconds timeout) { return _firstRender.try_acquire_for(timeout); }
 
       void pause() override {}
       void resume() override {}
@@ -196,6 +211,8 @@ namespace ao::audio::test
     private:
       std::atomic<RenderTarget*> _target{nullptr};
       PcmFormat _format{};
+      std::atomic_bool _hasRendered{false};
+      std::binary_semaphore _firstRender{0};
       std::jthread _thread;
     };
   } // namespace
@@ -211,24 +228,34 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device};
 
-    auto first = std::async(std::launch::async, [&engine] { return engine.setVolume(0.25F); });
-    auto const firstEntered = backendRaw->tryWaitForEnteredCalls(1, std::chrono::seconds{1});
-
-    if (!firstEntered)
-    {
-      backendRaw->releaseCalls();
-    }
-
-    CHECK(firstEntered);
-
     auto secondStartedPromise = std::promise<void>{};
     auto secondStarted = secondStartedPromise.get_future();
-    auto second = std::async(std::launch::async,
-                             [&]
-                             {
-                               secondStartedPromise.set_value();
-                               return engine.setMuted(true);
-                             });
+    auto first = std::future<Result<>>{};
+    auto second = std::future<Result<>>{};
+    auto cleanup = gsl_lite::finally(
+      [&]
+      {
+        backendRaw->releaseCalls();
+
+        if (first.valid())
+        {
+          first.wait();
+        }
+
+        if (second.valid())
+        {
+          second.wait();
+        }
+      });
+    first = std::async(std::launch::async, [&engine] { return engine.setVolume(0.25F); });
+    REQUIRE(backendRaw->tryWaitForEnteredCalls(1, std::chrono::seconds{5}));
+
+    second = std::async(std::launch::async,
+                        [&]
+                        {
+                          secondStartedPromise.set_value();
+                          return engine.setMuted(true);
+                        });
 
     auto const secondStartedStatus = secondStarted.wait_for(std::chrono::seconds{1});
 
@@ -239,6 +266,7 @@ namespace ao::audio::test
     REQUIRE(second.wait_for(std::chrono::seconds{1}) == std::future_status::ready);
     CHECK(first.get());
     CHECK(second.get());
+    CHECK(backendRaw->tryWaitForEnteredCalls(2, std::chrono::seconds{1}));
     CHECK(backendRaw->maxActiveCalls() == 1);
   }
 
@@ -246,7 +274,7 @@ namespace ao::audio::test
   // while a contract-conforming backend joins its render thread before each
   // source reset and a poller reads the same queue through status(). PipeWire
   // closes its own render admission and drains both data- and main-loop work.
-  TEST_CASE("Engine - concurrent source swap is race-free", "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine - concurrent source swap is race-free", "[audio][unit][engine][concurrency][stress]")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -271,20 +299,34 @@ namespace ao::audio::test
       return decPtr;
     };
 
-    auto engine = Engine{std::make_unique<RenderingBackend>(), device, factory};
+    auto backendPtr = std::make_unique<RenderingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr), device, factory};
     auto const desc = PlaybackInput{.filePath = "song.flac"};
+    auto pollerStarted = std::binary_semaphore{0};
 
     auto poller = std::jthread{[&](std::stop_token const& st)
                                {
+                                 std::ignore = engine.status();
+                                 pollerStarted.release();
+
                                  while (!st.stop_requested())
                                  {
                                    std::ignore = engine.status();
                                  }
                                }};
 
+    REQUIRE(pollerStarted.try_acquire_for(std::chrono::seconds{5}));
+
     for (std::int32_t i = 0; i < 50; ++i)
     {
       engine.play(makePlaybackItem(desc));
+
+      if (i == 0)
+      {
+        REQUIRE(backendRaw->tryWaitForFirstRender(std::chrono::seconds{5}));
+      }
+
       engine.seek(std::chrono::milliseconds{10});
       engine.stop();
     }

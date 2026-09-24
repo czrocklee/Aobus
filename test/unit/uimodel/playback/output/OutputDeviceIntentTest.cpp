@@ -9,9 +9,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdint>
 #include <optional>
 #include <type_traits>
+#include <vector>
 
 namespace ao::uimodel::test
 {
@@ -58,13 +58,19 @@ namespace ao::uimodel::test
   {
     // Component bundles are copied into each surface that borrows them, so a
     // copy must stay attached to the frontend's recorder.
-    std::int32_t recordedCount = 0;
-    auto const intent = OutputDeviceIntent::recordedBy([&recordedCount](auto const&) { ++recordedCount; });
+    auto recorded = std::vector<audio::OutputDeviceSelection>{};
+    auto const intent = OutputDeviceIntent::recordedBy([&recorded](audio::OutputDeviceSelection const& selection)
+                                                       { recorded.push_back(selection); });
     auto const borrowed = OutputDeviceIntent{intent};
+    auto const first = makeSelection();
+    auto const second = audio::OutputDeviceSelection{
+      .backendId = audio::kBackendAlsa, .deviceId = audio::DeviceId{"headphones"}, .profileId = audio::kProfileShared};
 
-    borrowed.record(makeSelection());
-    intent.record(makeSelection());
-
-    CHECK(recordedCount == 2);
+    borrowed.record(first);
+    CHECK(recorded == std::vector<audio::OutputDeviceSelection>{first});
+    intent.record(first);
+    CHECK(recorded == std::vector<audio::OutputDeviceSelection>{first, first});
+    borrowed.record(second);
+    CHECK(recorded == std::vector<audio::OutputDeviceSelection>{first, first, second});
   }
 } // namespace ao::uimodel::test

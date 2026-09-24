@@ -26,7 +26,7 @@
 namespace ao::uimodel::test
 {
   TEST_CASE("TrackAuthoringSession - owns stable targets and becomes stale after another commit",
-            "[uimodel][unit][library-authoring]")
+            "[uimodel][integration][library-authoring]")
   {
     auto fixture = TrackAuthoringFixture{2};
     auto const targetIds = std::array{fixture.trackIds()[1], fixture.trackIds()[0]};
@@ -62,6 +62,7 @@ namespace ao::uimodel::test
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::Stale);
     CHECK(fixture.title(targetIds[0]) == "Applied");
+    CHECK(fixture.title(targetIds[1]) == "Applied");
   }
 
   TEST_CASE("TrackAuthoringSession - preserves duplicate targets and their captured order",
@@ -76,17 +77,22 @@ namespace ao::uimodel::test
     CHECK(sessionRes->isCurrent());
   }
 
-  TEST_CASE("TrackAuthoringSession - semantic no-op keeps the binding usable", "[uimodel][unit][library-authoring]")
+  TEST_CASE("TrackAuthoringSession - semantic no-op keeps the binding usable",
+            "[uimodel][integration][library-authoring]")
   {
     auto fixture = TrackAuthoringFixture{1};
     auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
     REQUIRE(sessionRes);
     auto session = std::move(*sessionRes);
+    auto const revision = session.boundRevision();
 
     auto submitRes = fixture.runTask(session.submitMetadataAsync(rt::MetadataPatch{.optTitle = "Old Title"}));
     REQUIRE(submitRes);
     CHECK(submitRes->status == rt::AuthoringStatus::NoOp);
     CHECK(session.isCurrent());
+    CHECK(session.boundRevision() == revision);
+    CHECK(fixture.library().authoringAvailability().libraryRevision == revision);
+    CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
 
     submitRes = fixture.runTask(session.submitMetadataAsync(rt::MetadataPatch{.optTitle = "Now changed"}));
     REQUIRE(submitRes);
@@ -95,7 +101,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackAuthoringSession - Properties submission advances one binding for metadata and tags",
-            "[uimodel][regression][library-authoring]")
+            "[uimodel][integration][library-authoring]")
   {
     auto fixture = TrackAuthoringFixture{1};
     auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
@@ -115,7 +121,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackAuthoringSession - a tag commit stales other sessions bound to the old revision",
-            "[uimodel][unit][library-authoring]")
+            "[uimodel][integration][library-authoring]")
   {
     auto fixture = TrackAuthoringFixture{1};
     auto firstRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
@@ -140,7 +146,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackAuthoringSession - Busy reconciles a revision delivered while submission is pending",
-            "[uimodel][regression][library-authoring][concurrency]")
+            "[uimodel][integration][library-authoring][concurrency]")
   {
     auto fixture = TrackAuthoringFixture{1};
     auto sessionRes = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
@@ -174,7 +180,7 @@ namespace ao::uimodel::test
   }
 
   TEST_CASE("TrackAuthoringSession - pending submission outlives moved and destroyed facades",
-            "[uimodel][regression][library-authoring][concurrency]")
+            "[uimodel][integration][library-authoring][concurrency]")
   {
     STATIC_REQUIRE(std::is_nothrow_move_constructible_v<TrackAuthoringSession>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<TrackAuthoringSession>);

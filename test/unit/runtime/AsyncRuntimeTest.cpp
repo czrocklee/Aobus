@@ -27,17 +27,27 @@ namespace ao::rt::test
 
   namespace
   {
-    Task<std::thread::id> pingPongTaskAsync(Runtime* runtime, AsyncTestState<int> counter)
+    struct RuntimeHopThreads final
     {
-      co_await runtime->resumeOnWorkerAsync();
-      // Now on worker thread — the thread switch is the behavior under test.
-      counter.increment();
+      std::thread::id spawned;
+      std::thread::id firstCallback;
+      std::thread::id worker;
+      std::thread::id finalCallback;
+    };
 
+    Task<RuntimeHopThreads> pingPongTaskAsync(Runtime* runtime)
+    {
+      auto threads = RuntimeHopThreads{};
+      threads.spawned = std::this_thread::get_id();
       co_await runtime->resumeOnCallbackExecutorAsync();
-      // Now back on the callback executor's owner thread.
-      counter.increment();
+      threads.firstCallback = std::this_thread::get_id();
 
-      co_return std::this_thread::get_id();
+      // Start this hop on the callback owner, not already in the worker pool.
+      co_await runtime->resumeOnWorkerAsync();
+      threads.worker = std::this_thread::get_id();
+      co_await runtime->resumeOnCallbackExecutorAsync();
+      threads.finalCallback = std::this_thread::get_id();
+      co_return threads;
     }
 
     Task<void> callbackAfterRuntimeShutdownAsync(Runtime* runtime,
@@ -125,8 +135,10 @@ namespace ao::rt::test
                                    AsyncTestState<bool> ranOnWorker,
                                    std::stop_token const stopToken)
     {
+      auto const initialWorker = std::this_thread::get_id();
       co_await runtime->sleepForAsync(delay, stopToken);
-      ranOnWorker.set(!runtime->callbackExecutor().isCurrent());
+      // Both callers use one worker; not being the callback owner alone is insufficient.
+      ranOnWorker.set(std::this_thread::get_id() == initialWorker && !runtime->callbackExecutor().isCurrent());
       callbackCount.increment();
     }
 
@@ -175,22 +187,21 @@ namespace ao::rt::test
   {
     auto executor = LoopExecutor{};
     auto runtime = Runtime{executor};
-    auto counter = AsyncTestState<int>::create(0);
     auto const ownerThread = std::this_thread::get_id();
 
-    auto future = runtime.spawn(pingPongTaskAsync(&runtime, counter));
-    executor.runOneTurn();
-    auto const result = future.get();
+    auto const threads = runLoopTask(runtime, executor, pingPongTaskAsync(&runtime));
 
-    CHECK(result == ownerThread);
-    CHECK(counter.load() == 2);
+    CHECK(threads.spawned != ownerThread);
+    CHECK(threads.firstCallback == ownerThread);
+    CHECK(threads.worker != ownerThread);
+    CHECK(threads.finalCallback == ownerThread);
 
     runtime.requestStop();
     runtime.join();
   }
 
   TEST_CASE("AsyncRuntime - teardown discards queued callback and destroys its suspended frame",
-            "[runtime][regression][async][concurrency]")
+            "[runtime][unit][async][concurrency]")
   {
     auto executor = QueuedExecutor{};
     auto resumed = AsyncTestState<bool>::create(false);
@@ -217,7 +228,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AsyncRuntime - terminal stop closes queued callback admission before destruction",
-            "[runtime][regression][async][concurrency]")
+            "[runtime][unit][async][concurrency]")
   {
     auto executor = QueuedExecutor{};
     auto resumed = AsyncTestState<bool>::create(false);
@@ -280,7 +291,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("AsyncRuntime - sleep resumes its coroutine on the worker executor", "[runtime][unit][async]")
+  TEST_CASE("AsyncRuntime - sleep resumes its coroutine on the worker executor", "[runtime][unit][async][concurrency]")
   {
     auto executor = QueuedExecutor{};
     auto runtime = Runtime{executor, 1};
@@ -297,7 +308,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("AsyncRuntime - sleeping coroutine observes a thread-safe stop request",
-            "[runtime][regression][async][concurrency]")
+            "[runtime][unit][async][concurrency]")
   {
     auto executor = ManualExecutor{};
     auto sleeper = ControlledSleeper{};
@@ -325,8 +336,7 @@ namespace ao::rt::test
     CHECK(callbackCount.load() == 0);
   }
 
-  TEST_CASE("AsyncRuntime - timer expiry races safely with cancellation",
-            "[runtime][regression][async][concurrency][stress]")
+  TEST_CASE("AsyncRuntime - timer expiry races safely with cancellation", "[runtime][unit][async][concurrency][stress]")
   {
     constexpr std::uint32_t kIterationCount = 64;
     auto executor = ManualExecutor{};
