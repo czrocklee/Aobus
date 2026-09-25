@@ -11,21 +11,30 @@
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/OutputDeviceSelection.h>
 #include <ao/rt/AppState.h>
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <glib-object.h>
 #include <glib.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/scrolledwindow.h>
+#include <gtkmm/stack.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -122,6 +131,30 @@ namespace ao::gtk::test
       }
 
       return dynamic_cast<Gtk::ListBox*>(viewport->get_first_child());
+    }
+
+    void activateOutputDeviceRow(PreferencesWindow& window, int const index)
+    {
+      auto* const selector = window.outputSelector();
+      REQUIRE(selector != nullptr);
+      emitShow(*selector);
+      drainGtkEvents();
+
+      auto* const listBox = outputSelectorListBox(window);
+      REQUIRE(listBox != nullptr);
+      auto* const row = listBox->get_row_at_index(index);
+      REQUIRE(row != nullptr);
+      emitRowActivated(*listBox, *row);
+      // Activation may replace or retire the selector synchronously.
+      drainGtkEvents();
+    }
+
+    audio::BackendProvider::Status makeAlsaOutputStatus()
+    {
+      auto status = rt::test::makePipeWireOutputStatus();
+      status.descriptor.id = audio::BackendId{"alsa"};
+      status.devices[0].backendId = audio::BackendId{"alsa"};
+      return status;
     }
   } // namespace
 
@@ -289,26 +322,304 @@ namespace ao::gtk::test
     CHECK(optPersisted->preferredOutputSelection.profileId == audio::kProfileShared.raw());
   }
 
-  TEST_CASE("PreferencesWindow - target hide clears window-scoped output selector", "[gtk][unit][preference]")
+  TEST_CASE(
+    "PreferencesWindow - repeated output requests persist exact selections while summary follows the active route",
+    "[gtk][unit][preference]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-
     auto fixture = GtkRuntimeFixture{};
     rt::test::addReadyAudioProvider(fixture.runtime());
-
-    auto target = Gtk::Window{};
-    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
-    auto prefs = rt::AppPrefsState{};
-
-    window.refreshPreferences(prefs, &fixture.runtime().playback(), &target);
-    REQUIRE(window.hasOutputSelector());
-    CHECK(window.outputDeviceLabelText() != "Unavailable");
-
-    ::g_signal_emit_by_name(target.gobj(), "hide");
+    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
     drainGtkEvents();
+
+    auto persisted = std::vector<rt::AppPrefsState>{};
+    auto window =
+      PreferencesWindow{ao::test::englishMessageCatalog(),
+                        PreferencesWindow::Callbacks{
+                          .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange)
+                          { persisted.push_back(prefs); },
+                        }};
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastThemePreset = "modern";
+    prefs.lastLayoutPreset = "classic";
+    prefs.preferredOutputSelection.backendId = audio::BackendId{"previous-request"};
+    window.refreshPreferences(prefs, &fixture.runtime().playback());
+    CHECK(window.outputDeviceLabelText() == "test_backend");
+    CHECK(persisted.empty());
+
+    activateOutputDeviceRow(window, 3); // PipeWire shared, after the ready backend's header and row.
+    REQUIRE(persisted.size() == 1);
+    auto const pipewireSelection = audio::OutputDeviceSelection{
+      .backendId = audio::BackendId{"pipewire"},
+      .deviceId = audio::DeviceId{"device1"},
+      .profileId = audio::kProfileShared,
+    };
+    CHECK(persisted[0].preferredOutputSelection == pipewireSelection);
+    CHECK(persisted[0].lastThemePreset == "modern");
+    CHECK(persisted[0].lastLayoutPreset == "classic");
+    CHECK(window.outputDeviceLabelText() == "PW");
+
+    activateOutputDeviceRow(window, 1); // Ready backend's shared device.
+    REQUIRE(persisted.size() == 2);
+    auto const readySelection = audio::OutputDeviceSelection{
+      .backendId = audio::BackendId{"test_backend"},
+      .deviceId = audio::DeviceId{"test_device"},
+      .profileId = audio::kProfileShared,
+    };
+    CHECK(persisted[1].preferredOutputSelection == readySelection);
+    CHECK(persisted[1].lastThemePreset == "modern");
+    CHECK(persisted[1].lastLayoutPreset == "classic");
+    CHECK(window.outputDeviceLabelText() == "test_backend");
+  }
+
+  TEST_CASE("PreferencesWindow - removing playback retires the selector and leaves output unavailable",
+            "[gtk][unit][preference][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+    drainGtkEvents();
+
+    bool selectorFinalized = false;
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
+    window.refreshPreferences(rt::AppPrefsState{}, &fixture.runtime().playback());
+    REQUIRE(window.hasOutputSelector());
+    REQUIRE(window.outputDeviceLabelText() == "PW");
+    ::g_object_weak_ref(
+      G_OBJECT(window.outputSelector()->gobj()),
+      +[](void* data, ::GObject*) { *static_cast<bool*>(data) = true; },
+      &selectorFinalized);
+
+    window.refreshPreferences(rt::AppPrefsState{}, nullptr);
 
     CHECK_FALSE(window.hasOutputSelector());
     CHECK(window.outputDeviceLabelText() == "Unavailable");
+    CHECK_FALSE(selectorFinalized);
+    drainGtkEvents();
+    CHECK(selectorFinalized);
+
+    rt::test::addReadyAudioProvider(fixture.runtime(), makeAlsaOutputStatus());
+    fixture.runtime().playback().commands().setOutputDevice(
+      audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+    drainGtkEvents();
+    CHECK_FALSE(window.hasOutputSelector());
+    CHECK(window.outputDeviceLabelText() == "Unavailable");
+  }
+
+  TEST_CASE("PreferencesWindow - consecutive rebinds finalize every retired selector on idle",
+            "[gtk][unit][preference][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+    drainGtkEvents();
+
+    auto retiredSelectorsFinalized = std::array<bool, 3>{};
+    bool currentSelectorFinalized = false;
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
+    window.refreshPreferences(rt::AppPrefsState{}, &fixture.runtime().playback());
+
+    for (auto& finalized : retiredSelectorsFinalized)
+    {
+      REQUIRE(window.hasOutputSelector());
+      ::g_object_weak_ref(
+        G_OBJECT(window.outputSelector()->gobj()),
+        +[](void* data, ::GObject*) { *static_cast<bool*>(data) = true; },
+        &finalized);
+      window.refreshPreferences(rt::AppPrefsState{}, &fixture.runtime().playback());
+    }
+
+    REQUIRE(window.hasOutputSelector());
+    ::g_object_weak_ref(
+      G_OBJECT(window.outputSelector()->gobj()),
+      +[](void* data, ::GObject*) { *static_cast<bool*>(data) = true; },
+      &currentSelectorFinalized);
+
+    for (bool const finalized : retiredSelectorsFinalized)
+    {
+      CHECK_FALSE(finalized);
+    }
+
+    drainGtkEvents();
+
+    for (bool const finalized : retiredSelectorsFinalized)
+    {
+      CHECK(finalized);
+    }
+
+    CHECK_FALSE(currentSelectorFinalized);
+    CHECK(window.hasOutputSelector());
+    CHECK(window.outputDeviceLabelText() == "PW");
+  }
+
+  TEST_CASE("PreferencesWindow - destruction with pending selector retirement finalizes every selector once",
+            "[gtk][unit][preference][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+    drainGtkEvents();
+
+    // Three retired selectors followed by the current one.
+    auto selectorFinalizations = std::array<int, 4>{};
+
+    {
+      auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
+
+      for (int& finalizations : selectorFinalizations)
+      {
+        window.refreshPreferences(rt::AppPrefsState{}, &fixture.runtime().playback());
+        REQUIRE(window.hasOutputSelector());
+        ::g_object_weak_ref(
+          G_OBJECT(window.outputSelector()->gobj()),
+          +[](void* data, ::GObject*) { ++*static_cast<int*>(data); },
+          &finalizations);
+      }
+
+      for (int const finalizations : selectorFinalizations)
+      {
+        REQUIRE(finalizations == 0);
+      }
+    }
+
+    // The window disconnects its retirement idle before releasing the selectors
+    // it captures, so draining never re-enters the destroyed owner.
+    drainGtkEvents();
+
+    for (int const finalizations : selectorFinalizations)
+    {
+      CHECK(finalizations == 1);
+    }
+  }
+
+  TEST_CASE("PreferencesWindow - rebinding during a selection's snapshot publication drops the stale request",
+            "[gtk][unit][preference][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto oldFixture = GtkRuntimeFixture{};
+    auto newFixture = GtkRuntimeFixture{};
+    rt::test::addReadyAudioProvider(oldFixture.runtime(), rt::test::makePipeWireOutputStatus());
+    rt::test::addReadyAudioProvider(newFixture.runtime(), makeAlsaOutputStatus());
+    drainGtkEvents();
+
+    auto persisted = std::vector<rt::AppPrefsState>{};
+    auto window =
+      PreferencesWindow{ao::test::englishMessageCatalog(),
+                        PreferencesWindow::Callbacks{
+                          .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange)
+                          { persisted.push_back(prefs); },
+                        }};
+    window.refreshPreferences(rt::AppPrefsState{}, &oldFixture.runtime().playback());
+    REQUIRE(window.outputDeviceLabelText() == "PW");
+
+    bool rebound = false;
+    auto const rebindSub = oldFixture.runtime().playback().events().onSnapshot(
+      [&](rt::PlaybackSnapshot const& snapshot)
+      {
+        if (!rebound && snapshot.transport.output.selectedDevice.profileId == audio::kProfileExclusive)
+        {
+          rebound = true;
+          window.refreshPreferences(rt::AppPrefsState{}, &newFixture.runtime().playback());
+        }
+      });
+
+    // The command publishes its snapshot before the old selector reaches its recorder.
+    activateOutputDeviceRow(window, 2); // PipeWire exclusive.
+    REQUIRE(rebound);
+    CHECK(persisted.empty());
+    CHECK(window.outputDeviceLabelText() == "ALSA");
+
+    activateOutputDeviceRow(window, 1); // ALSA shared on the replacement binding.
+    REQUIRE(persisted.size() == 1);
+    CHECK(persisted[0].preferredOutputSelection == audio::OutputDeviceSelection{
+                                                     .backendId = audio::BackendId{"alsa"},
+                                                     .deviceId = audio::DeviceId{"device1"},
+                                                     .profileId = audio::kProfileShared,
+                                                   });
+    CHECK(window.outputDeviceLabelText() == "ALSA");
+  }
+
+  TEST_CASE("PreferencesWindow - target hide and ordinary close retire an open output selector",
+            "[gtk][unit][preference][async]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
+    drainGtkEvents();
+
+    auto target = Gtk::Window{};
+    bool selectorFinalized = false;
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
+    window.refreshPreferences(rt::AppPrefsState{}, &fixture.runtime().playback(), &target);
+    REQUIRE(window.hasOutputSelector());
+    REQUIRE(window.outputDeviceLabelText() == "PW");
+    auto* const stack = findWidget<Gtk::Stack>(window);
+    REQUIRE(stack != nullptr);
+    stack->set_visible_child("playback");
+    target.present();
+    window.set_transient_for(target);
+    window.present();
+    REQUIRE(tryPumpGtkEventsUntil([&window] { return window.get_mapped(); }));
+    auto* const selector = window.outputSelector();
+    selector->popup();
+    REQUIRE(tryPumpGtkEventsUntil([selector] { return selector->get_mapped(); }));
+    ::g_object_weak_ref(
+      G_OBJECT(selector->gobj()),
+      +[](void* data, ::GObject*) { *static_cast<bool*>(data) = true; },
+      &selectorFinalized);
+
+    SECTION("target hide")
+    {
+      target.set_visible(false);
+    }
+
+    SECTION("ordinary close")
+    {
+      window.close();
+    }
+
+    CHECK_FALSE(window.get_visible());
+    CHECK_FALSE(window.hasOutputSelector());
+    CHECK(window.outputDeviceLabelText() == "Unavailable");
+    CHECK_FALSE(selectorFinalized);
+    drainGtkEvents();
+    CHECK(selectorFinalized);
+
+    rt::test::addReadyAudioProvider(fixture.runtime(), makeAlsaOutputStatus());
+    fixture.runtime().playback().commands().setOutputDevice(
+      audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+    drainGtkEvents();
+    CHECK_FALSE(window.hasOutputSelector());
+    CHECK(window.outputDeviceLabelText() == "Unavailable");
+  }
+
+  TEST_CASE("PreferencesWindow - output summary follows a replacement playback service, not retired events",
+            "[gtk][unit][preference]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto oldFixture = GtkRuntimeFixture{};
+    auto newFixture = GtkRuntimeFixture{};
+    rt::test::addReadyAudioProvider(newFixture.runtime(), rt::test::makePipeWireOutputStatus());
+    drainGtkEvents();
+
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
+    window.refreshPreferences(rt::AppPrefsState{}, &oldFixture.runtime().playback());
+    REQUIRE(window.outputDeviceLabelText() == "--");
+
+    window.refreshPreferences(rt::AppPrefsState{}, &newFixture.runtime().playback());
+    REQUIRE(window.hasOutputSelector());
+    REQUIRE(window.outputDeviceLabelText() == "PW");
+
+    rt::test::addReadyAudioProvider(newFixture.runtime(), makeAlsaOutputStatus());
+    newFixture.runtime().playback().commands().setOutputDevice(
+      audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+    drainGtkEvents();
+    REQUIRE(window.outputDeviceLabelText() == "ALSA");
+
+    rt::test::addReadyAudioProvider(oldFixture.runtime());
+    drainGtkEvents();
+    CHECK(window.outputDeviceLabelText() == "ALSA");
+    CHECK(window.hasOutputSelector());
   }
 
   TEST_CASE("PreferencesWindow - unknown persisted ids fall back to visible defaults", "[gtk][unit][preference]")
