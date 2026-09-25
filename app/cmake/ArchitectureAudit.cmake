@@ -162,15 +162,19 @@ function(_aobus_architecture_audit_self_test)
       "#include <gtk.h>"
       "#include <gdk.h>"
       "#include <gdk/gdk.h>"
+      "#include <ftxui/component/component.hpp>"
+      "#import \"ftxui/dom/elements.hpp\""
       "#include \"linux-gtk/app/MainWindow.h\""
-      "/* comment */ #include <gtkmm.h>")
+      "/* comment */ #include <gtkmm.h>"
+      "/* comment */ #include <ftxui/component/component.hpp>")
     _aobus_assert_architecture_rejects(system_media_gui "${_sample}")
   endforeach()
   foreach(_sample IN ITEMS
       "#include <giomm.h>"
       "#include <glibmm.h>"
       "// #include <gtkmm.h>"
-      "/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n*/")
+      "// #include <ftxui/component/component.hpp>"
+      "/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n#import \"ftxui/dom/elements.hpp\"\n*/")
     _aobus_assert_architecture_allows(system_media_gui "${_sample}")
   endforeach()
 
@@ -299,7 +303,7 @@ function(_aobus_run_architecture_audit)
   _aobus_register_architecture_rule(system_media_gui
     ROOTS app/platform/media
     FORBIDDEN
-      "#[ \t]*(include|import)[ \t]*[<\"]((gtkmm|gdkmm|gtk|gdk)(/|[.]h[>\"])|linux-gtk/)"
+      "#[ \t]*(include|import)[ \t]*[<\"]((gtkmm|gdkmm|gtk|gdk)(/|[.]h[>\"])|ftxui/|linux-gtk/)"
     ALLOWED "//[^\r\n]*|/[*]([^*]|[*]+[^*/])*[*]+/")
   _aobus_register_architecture_rule(frontend_core
     ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/platform/media app/macos-appkit app/windows-winui app/tui

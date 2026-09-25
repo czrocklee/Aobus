@@ -101,8 +101,15 @@ class ArchitectureAuditTest(unittest.TestCase):
             (source_root / "app/platform/media/Native.cpp").write_text("#include <giomm/file.h>\n", encoding="utf-8")
             (source_root / "app/platform/media/Umbrella.cpp").write_text("#include <gtkmm.h>\n", encoding="utf-8")
             (source_root / "app/platform/media/GdkUmbrella.mm").write_text('#import "gdkmm.h"\n', encoding="utf-8")
+            (source_root / "app/platform/media/TuiComponent.cpp").write_text(
+                "#include <ftxui/component/component.hpp>\n", encoding="utf-8"
+            )
+            (source_root / "app/platform/media/TuiDom.mm").write_text(
+                '#import "ftxui/dom/elements.hpp"\n', encoding="utf-8"
+            )
             (source_root / "app/platform/media/Documented.h").write_text(
-                "// #include <gtkmm.h>\n/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n*/\n"
+                "// #include <gtkmm.h>\n// #include <ftxui/component/component.hpp>\n"
+                '/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n#import "ftxui/dom/elements.hpp"\n*/\n'
                 "#include <giomm.h>\n#include <glibmm.h>\n",
                 encoding="utf-8",
             )
@@ -138,10 +145,12 @@ class ArchitectureAuditTest(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn("Application architecture audit found 14 violation", output)
+        self.assertIn("Application architecture audit found 16 violation", output)
         self.assertIn("system_media_gui: app/platform/media/Gui.cpp", output)
         self.assertIn("system_media_gui: app/platform/media/Umbrella.cpp", output)
         self.assertIn("system_media_gui: app/platform/media/GdkUmbrella.mm", output)
+        self.assertIn("system_media_gui: app/platform/media/TuiComponent.cpp", output)
+        self.assertIn("system_media_gui: app/platform/media/TuiDom.mm", output)
         self.assertNotIn("system_media_gui: app/platform/media/Native.cpp", output)
         self.assertNotIn("system_media_gui: app/platform/media/Documented.h", output)
         self.assertIn("frontend_core: app/tui/Violation.cpp", output)
