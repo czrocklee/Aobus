@@ -4,6 +4,7 @@
 #include "MprisTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/utility/Raii.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -28,6 +29,7 @@
 #include <string>
 #include <string_view>
 #include <sys/ioctl.h>
+#include <system_error>
 #include <thread>
 #include <tuple>
 #include <vector>
@@ -510,7 +512,21 @@ namespace ao::media::test
     auto const* const environmentMode = GENERATE("unset", "empty", "invalid", "explicit", "relative");
     CAPTURE(environmentMode);
     auto directory = ao::test::TempDir{};
-    auto const runtime = directory.path() / "runtime space,%=socket";
+    // CI nests Nix temporary roots. Bind through a short owned alias so sun_path
+    // capacity does not depend on TMPDIR, without changing the process environment.
+    auto const runtimeAlias = std::filesystem::path{"/tmp"} / ("mpris-" + directory.path().filename().string());
+    bool isRuntimeAliasCreated = false;
+    auto runtimeAliasScope = utility::ScopedRegistration{[&runtimeAlias, &isRuntimeAliasCreated] noexcept
+                                                         {
+                                                           if (isRuntimeAliasCreated)
+                                                           {
+                                                             auto error = std::error_code{};
+                                                             std::ignore = std::filesystem::remove(runtimeAlias, error);
+                                                           }
+                                                         }};
+    std::filesystem::create_directory_symlink(directory.path(), runtimeAlias);
+    isRuntimeAliasCreated = true;
+    auto const runtime = runtimeAlias / "runtime space,%=socket";
     std::filesystem::create_directories(runtime);
     auto fallbackBus = PrivateBus{socketAddress(runtime / "bus")};
     auto fallbackClient = BusClient{fallbackBus.address()};

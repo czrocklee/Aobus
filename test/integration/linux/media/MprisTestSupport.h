@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 
 #include <gio/gio.h>
@@ -32,9 +33,9 @@ namespace ao::media::test
 
   /** Disposable private session bus for production MPRIS integration tests.
    *
-   * The daemon is a direct child (no shell), no process environment is changed,
-   * and cleanup signals and reaps only that child. A stalled child is always
-   * resumed before termination.
+   * The daemon uses an owned minimal configuration without host service activation.
+   * It is a direct child (no shell), no process environment is changed, and cleanup
+   * signals and reaps only that child. A stalled child is always resumed before termination.
    */
   class [[nodiscard]] PrivateBus final
   {
@@ -61,6 +62,7 @@ namespace ao::media::test
     void resumeNoThrow() noexcept;
     void stopNoThrow() noexcept;
 
+    ao::test::TempDir _directory;
     ::GSubprocess* _process = nullptr;
     std::string _address;
     ::pid_t _pid = 0;

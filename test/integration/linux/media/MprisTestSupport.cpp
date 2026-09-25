@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <ios>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -92,17 +93,36 @@ namespace ao::media::test
 
   PrivateBus::PrivateBus(std::string const& listenAddress, std::chrono::milliseconds const startupTimeout)
   {
+    // The pinned daemon's --session default can refer to a host-only configuration.
+    // Own the policy instead, with no activation directories or host configuration includes.
+    auto const configPath = _directory.path() / "bus.conf";
+    auto config = std::ofstream{configPath, std::ios::binary};
+    config.exceptions(std::ios::failbit | std::ios::badbit);
+    config << R"(<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir=/tmp</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow own="*"/>
+    <allow send_destination="*"/>
+    <allow receive_sender="*"/>
+  </policy>
+</busconfig>
+)";
+    config.close();
+
+    auto const configOption = "--config-file=" + configPath.string();
     auto const addressOption = "--address=" + listenAddress;
     ::GError* error = nullptr;
-    _process = ::g_subprocess_new(
-      static_cast<::GSubprocessFlags>(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE),
-      &error,
-      "dbus-daemon",
-      "--session",
-      "--nofork",
-      "--print-address",
-      listenAddress.empty() ? nullptr : addressOption.c_str(),
-      nullptr);
+    // Inherit stderr so a startup failure retains the daemon's diagnostic in test output.
+    _process = ::g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE,
+                                  &error,
+                                  "dbus-daemon",
+                                  configOption.c_str(),
+                                  "--nofork",
+                                  "--print-address",
+                                  listenAddress.empty() ? nullptr : addressOption.c_str(),
+                                  nullptr);
     auto const errorPtr = detail::ErrorPtr{error};
 
     if (_process == nullptr)

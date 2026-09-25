@@ -730,6 +730,8 @@ namespace ao::media
       for (auto* const* interface = nodeInfoPtr->gobj()->interfaces; *interface != nullptr; ++interface)
       {
         ::GError* error = nullptr;
+        // GIO runs the destroy notify synchronously on duplicate-registration failure.
+        // Reserve first: the callback consumes this count even when registration returns zero.
         ++registeredObjectCount;
         auto const registrationId = ::g_dbus_connection_register_object(
           connectionPtr->gobj(),
