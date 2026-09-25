@@ -3,12 +3,15 @@
 
 #include "MprisTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/Raii.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <fcntl.h>
 #include <gio/gio.h>
 #include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX child signal delivery.
@@ -24,6 +27,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <ios>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -103,6 +107,7 @@ namespace ao::media::test
           utility::makeUniquePtr<::g_object_unref>(::g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_NONE));
         auto* const launcher = launcherPtr.get();
         auto const library = root / "library";
+        _logPath = rt::LibraryPaths{library}.logsPath() / "app.log";
         std::filesystem::create_directories(library);
         ::g_subprocess_launcher_set_cwd(launcher, root.c_str());
 
@@ -250,9 +255,28 @@ namespace ao::media::test
             return;
           }
 
-          if (std::chrono::steady_clock::now() >= deadline || hasExited())
+          if (hasExited())
           {
-            throw std::runtime_error{"TUI condition not reached; terminal tail: " + _output};
+            // The child can exit between the first drain and the wait observation.
+            // Read again after exit publication so its final diagnostic is not lost.
+            drain();
+            auto status = std::string{"unknown wait status"};
+
+            if (::g_subprocess_get_if_exited(_process))
+            {
+              status = "exit code " + std::to_string(::g_subprocess_get_exit_status(_process));
+            }
+            else if (::g_subprocess_get_if_signaled(_process))
+            {
+              status = "signal " + std::to_string(::g_subprocess_get_term_sig(_process));
+            }
+
+            throw std::runtime_error{"TUI exited before condition (" + status + "); " + diagnostics()};
+          }
+
+          if (std::chrono::steady_clock::now() >= deadline)
+          {
+            throw std::runtime_error{"TUI condition timed out; " + diagnostics()};
           }
 
           // External process readiness has no owner executor to drive. This is
@@ -315,7 +339,32 @@ namespace ao::media::test
       }
 
     private:
+      std::string diagnostics() const
+      {
+        auto input = std::ifstream{_logPath, std::ios::binary | std::ios::ate};
+        auto logTail = std::string{"<unavailable>"};
+
+        if (input)
+        {
+          if (input.tellg() > std::streampos{4096})
+          {
+            input.seekg(-4096, std::ios::end);
+          }
+          else
+          {
+            input.seekg(0, std::ios::beg);
+          }
+
+          auto buffer = std::array<char, 4096>{};
+          input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+          logTail.assign(buffer.data(), static_cast<std::size_t>(input.gcount()));
+        }
+
+        return "terminal tail: " + _output + "\napp log tail: " + logTail;
+      }
+
       TerminalDescriptor _terminal;
+      std::filesystem::path _logPath;
       ::GSubprocess* _process = nullptr;
       std::future<::gboolean> _wait;
       std::string _identifier;
@@ -499,6 +548,9 @@ namespace ao::media::test
     auto bus = PrivateBus{};
     auto client = BusClient{bus.address()};
     auto process = TuiProcess{directory.path(), {bus.address(), directory.path() / "runtime"}, "invalid"};
+    REQUIRE_THROWS_WITH(process.awaitScreen(),
+                        Catch::Matchers::ContainsSubstring("TUI exited before condition (exit code ") &&
+                          Catch::Matchers::ContainsSubstring("--system-media"));
     process.requireExit(false);
     CHECK(process.output().contains("--system-media"));
     CHECK(process.output().contains("invalid"));
@@ -558,7 +610,7 @@ namespace ao::media::test
     if (std::string_view{environmentMode} == "empty" || std::string_view{environmentMode} == "invalid" ||
         std::string_view{environmentMode} == "relative")
     {
-      process.awaitScreen();
+      REQUIRE_NOTHROW(process.awaitScreen());
       // As with off mode, these are readiness/end absence snapshots. They do
       // not assert that arbitrary delayed work could never publish a name.
       CHECK(tuiNames(fallbackClient).empty());
