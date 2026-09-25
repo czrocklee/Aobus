@@ -55,7 +55,8 @@ The native folder chooser retains GTK async operation state until completion.
 Preferences opens from `app.preferences`, `Ctrl+,`, or the Edit menu.
 Appearance changes apply immediately and persist through application preferences.
 Keyboard changes persist the candidate before publishing live accelerators.
-Output changes persist only after the playback path confirms the selected device.
+Output selection issues the playback command, then persists the exact requested route without requiring engine confirmation.
+The output summary follows the active route rather than the persisted request.
 Default layout-preset choice affects the next layout load; structural edits use the layout editor.
 Ordinary close of Preferences with a failed shortcut candidate switches to the Keyboard page and prompts Retry, Discard, or keep editing.
 Repeated close requests reuse the live prompt rather than stacking another one.
