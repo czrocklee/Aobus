@@ -11,8 +11,10 @@
 #include <ao/utility/AtomicFile.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/Sha256.h>
 
 #include <giomm/file.h>
+#include <giomm/init.h>
 #include <glibmm/miscutils.h>
 
 #include <algorithm>
@@ -27,13 +29,8 @@
 #include <system_error>
 #include <utility>
 
-namespace ao::gtk::platform
+namespace ao::media
 {
-  namespace
-  {
-    constexpr auto kKnownExtensions = std::array<std::string_view, 5>{".png", ".jpg", ".gif", ".webp", ".img"};
-  } // namespace
-
   MprisArtUrlCache::MprisArtUrlCache(rt::ResourceByteMemoryCache& byteCache, async::Runtime& runtime)
     : MprisArtUrlCache{byteCache, runtime, defaultCacheDirectory()}
   {
@@ -44,6 +41,8 @@ namespace ao::gtk::platform
                                      std::filesystem::path cacheDir)
     : _byteCache{byteCache}, _runtime{runtime}, _cacheDir{std::move(cacheDir)}
   {
+    // Register wrappers before export workers use Gio::File without a GTK host.
+    Gio::init();
   }
 
   MprisArtUrlCache::~MprisArtUrlCache()
@@ -96,7 +95,7 @@ namespace ao::gtk::platform
 
   std::filesystem::path MprisArtUrlCache::defaultCacheDirectory()
   {
-    return utility::pathFromNative(Glib::get_user_cache_dir()) / "aobus" / "mpris-art";
+    return utility::pathFromNative(Glib::get_user_cache_dir()) / "aobus" / "mpris-art-v2";
   }
 
   std::string_view MprisArtUrlCache::extensionForBytes(std::span<std::byte const> bytes) noexcept
@@ -217,7 +216,7 @@ namespace ao::gtk::platform
 
     if (!bytes.empty())
     {
-      optResult = exportResource(cacheDir, resourceId, bytes.view());
+      optResult = exportResource(cacheDir, bytes.view());
     }
 
     co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
@@ -236,7 +235,6 @@ namespace ao::gtk::platform
   }
 
   std::optional<MprisArtUrlCache::CacheEntry> MprisArtUrlCache::exportResource(std::filesystem::path const& cacheDir,
-                                                                               ResourceId const resourceId,
                                                                                std::span<std::byte const> const bytes)
   {
     if (bytes.empty())
@@ -252,17 +250,13 @@ namespace ao::gtk::platform
       return std::nullopt;
     }
 
-    auto const path =
-      cacheDir / utility::pathFromUtf8(std::to_string(resourceId.raw()) + std::string{extensionForBytes(bytes)});
+    auto const digest = utility::sha256Hex(utility::computeSha256(bytes));
+    auto const path = cacheDir / utility::pathFromUtf8(digest + std::string{extensionForBytes(bytes)});
 
     if (!utility::publishAtomically(path, utility::bytes::stringView(bytes)))
     {
       return std::nullopt;
     }
-
-    // Keep the previously published URI readable until the replacement is
-    // complete, including when a new payload changes the inferred extension.
-    removeStaleResourceFiles(cacheDir, resourceId, path);
 
     auto url = fileUriForPath(path);
 
@@ -287,25 +281,6 @@ namespace ao::gtk::platform
     return !ec && size == entry.byteSize;
   }
 
-  void MprisArtUrlCache::removeStaleResourceFiles(std::filesystem::path const& cacheDir,
-                                                  ResourceId const resourceId,
-                                                  std::filesystem::path const& keepPath)
-  {
-    for (auto const extension : kKnownExtensions)
-    {
-      auto const candidate =
-        cacheDir / utility::pathFromUtf8(std::to_string(resourceId.raw()) + std::string{extension});
-
-      if (candidate == keepPath)
-      {
-        continue;
-      }
-
-      auto ec = std::error_code{};
-      std::filesystem::remove(candidate, ec);
-    }
-  }
-
   std::string MprisArtUrlCache::fileUriForPath(std::filesystem::path const& path)
   {
     try
@@ -318,4 +293,4 @@ namespace ao::gtk::platform
       return {};
     }
   }
-} // namespace ao::gtk::platform
+} // namespace ao::media

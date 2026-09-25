@@ -20,6 +20,11 @@
 #include <string>
 #include <string_view>
 
+namespace ao::async
+{
+  class Executor;
+}
+
 namespace ao::rt
 {
   class PlaybackService;
@@ -35,9 +40,24 @@ namespace ao::uimodel
   class PlaybackActions;
 }
 
-namespace ao::gtk::platform
+namespace ao::media
 {
-  class MprisBridge final
+  struct MprisBridgeOptions final
+  {
+    std::string busName = "org.mpris.MediaPlayer2.aobus";
+    std::string identity = "Aobus";
+    // Empty omits the optional DesktopEntry property.
+    std::string desktopEntry = "aobus";
+    bool uniqueInstance = false;
+    // Absent uses the session-bus environment, or an existing XDG runtime bus
+    // only when that environment variable is unset. Explicit empty disables it.
+    std::optional<std::string> optBusAddress{};
+  };
+
+  // Owner-executor confined. Borrowed collaborators outlive destruction, which
+  // joins the native producer. Only the deferred Quit callback may destroy the
+  // bridge; other callbacks must not destroy it reentrantly.
+  class [[nodiscard]] MprisBridge final
   {
   public:
     using RootCommand = std::function<bool()>;
@@ -54,7 +74,9 @@ namespace ao::gtk::platform
     struct Callbacks final
     {
       RootCommand raise{};
-      RootCommand quit{};
+      // Presence admits a quit attempt; the bridge defers it until after reply
+      // submission. The host still owns save waiting and normal exit policy.
+      std::function<void()> quit{};
       ArtUrlRequester requestArtUrl{};
     };
 
@@ -68,11 +90,17 @@ namespace ao::gtk::platform
       std::int64_t lengthUs = 0;
     };
 
-    MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackActions& actions, Callbacks callbacks);
-    MprisBridge(rt::PlaybackService& playback,
+    MprisBridge(async::Executor& executor,
+                rt::PlaybackService& playback,
                 uimodel::PlaybackActions& actions,
                 Callbacks callbacks,
-                PlaybackSource playbackSource);
+                MprisBridgeOptions options = {});
+    MprisBridge(async::Executor& executor,
+                rt::PlaybackService& playback,
+                uimodel::PlaybackActions& actions,
+                Callbacks callbacks,
+                PlaybackSource playbackSource,
+                MprisBridgeOptions options = {});
     ~MprisBridge();
 
     MprisBridge(MprisBridge const&) = delete;
@@ -81,8 +109,12 @@ namespace ao::gtk::platform
     MprisBridge& operator=(MprisBridge&&) = delete;
 
     void start();
+    /// Closes command/artwork admission immediately without waiting for the bus.
+    void retire();
 
     bool isActive() const noexcept;
+    /// Acquired bus name, empty before activation or after retirement.
+    std::string_view busName() const noexcept;
     MetadataSnapshot metadataSnapshot() const;
     /** Reads the same Player property mapping exported over D-Bus. */
     Glib::VariantBase playerProperty(std::string_view propertyName) const;
@@ -103,4 +135,4 @@ namespace ao::gtk::platform
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };
-} // namespace ao::gtk::platform
+} // namespace ao::media

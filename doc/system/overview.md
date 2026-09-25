@@ -19,6 +19,7 @@ AppKit -+
 CLI --------------------> ao_app_runtime -> core libraries
 
 GTK, WinUI and AppKit -> ao_desktop_launch -> utility / Boost.Process
+Linux GTK and TUI -----> ao_system_media_linux -> GIO / D-Bus
 
 core libraries: utility, async, lmdb, media, library, query, audio
 ```
@@ -62,6 +63,14 @@ It is beside runtime and UIModel, not their lifecycle owner.
 It cannot inspect state stores, drive event loops, checkpoint a runtime, show failures, or tear down the graph.
 TUI and CLI do not link it; [desktop lifecycle](desktop-library-lifecycle.md) owns the shared handoff contract.
 
+### Application platform adapters
+
+`ao_system_media_linux`, under `app/platform/media/linux/`, provides shared Linux MPRIS integration to GTK and TUI.
+It consumes runtime playback state, UIModel playback actions, and an executor supplied by the frontend composition root.
+It does not enter Core, runtime, or UIModel, and it has no GTK or FTXUI dependency.
+Each bridge owns an optional private GIO connection and native context while live runtime queries and host callbacks remain on the frontend's existing callback executor.
+See [Linux MPRIS](frontend/mpris.md) for its transfer and teardown contract.
+
 ### Frontends
 
 Each frontend is a composition root and platform adapter.
@@ -69,8 +78,8 @@ It selects the root and platform paths, supplies an executor, constructs the run
 The runtime must reach its final placement before any provider registration, restoration, subscription, or borrower targets it.
 Frontend observers retire before the services they observe; see [session lifecycle](session-lifecycle.md).
 
-GTK owns GLib/GTK, CSS, dialogs, portals, MPRIS, and native layout construction.
-TUI owns FTXUI input, rendering, geometry, overlays, and its event-loop adapter.
+GTK owns GLib/GTK, CSS, dialogs, portals, native layout construction, and composition of the optional shared Linux MPRIS adapter.
+TUI owns FTXUI input, rendering, geometry, overlays, its event-loop adapter, and composition of that same adapter on supported Linux builds without linking GTK.
 WinUI owns Windows App SDK/XAML, DispatcherQueue, pickers, WASAPI integration, and SMTC.
 AppKit owns native windows and controls, the main run loop, and Core Audio integration.
 CLI owns arguments and output around `CoreRuntime`, bypassing UIModel when no interactive projection is needed.
@@ -81,7 +90,7 @@ CLI owns arguments and output around `CoreRuntime`, bypassing UIModel when no in
 - Runtime cannot depend on UIModel or platform UI types. Public runtime headers hide direct LMDB stores, library store/view types, and audio control-plane implementation types.
 - Desktop support cannot depend on runtime, UIModel, library/storage internals, or platform UI types.
 - UIModel may depend on runtime interfaces and stable values, but cannot include platform UI or direct storage/audio-control headers, or speak for a named frontend even in portable code.
-- Frontends may consume runtime/UIModel and adapt Core platform facilities; platform names, handles, widget types, CSS classes, and terminal geometry stop at that boundary.
+- Frontends and application platform adapters may consume runtime/UIModel and adapt Core platform facilities; platform names, handles, widget types, CSS classes, D-Bus names, and terminal geometry stop at those boundaries.
 - CLI behavior-bearing mutations use runtime facades where available. Low-level inspection, dump, verification, relink, and interchange may use the `MusicLibrary` escape hatch exposed by `CoreRuntime`.
 - Shared signals live in `ao_async`; each event owner still defines payload, executor affinity, and exception containment.
 

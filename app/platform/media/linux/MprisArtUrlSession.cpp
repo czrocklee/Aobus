@@ -5,10 +5,11 @@
 
 #include <ao/CoreIds.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
-namespace ao::gtk::platform
+namespace ao::media
 {
   MprisArtUrlSession::MprisArtUrlSession(UrlRequester requestUrl, OnUrlChanged onUrlChanged)
     : _requestUrl{std::move(requestUrl)}, _onUrlChanged{std::move(onUrlChanged)}
@@ -36,19 +37,36 @@ namespace ao::gtk::platform
       return;
     }
 
-    _optCallbackScope.emplace();
-    auto onReady = _optCallbackScope->guard([this](std::string url) { handleUrlReady(std::move(url)); });
+    _callbackStatePtr = std::make_shared<CallbackState>();
+    // Keep only a weak local identity: synchronous completion must expire the
+    // scope before destroying the request returned by the requester.
+    auto const weakStatePtr = std::weak_ptr<CallbackState>{_callbackStatePtr};
+    auto onReady = [weakStatePtr, this](std::string url)
+    {
+      if (!weakStatePtr.lock())
+      {
+        return;
+      }
+
+      handleUrlReady(std::move(url));
+    };
 
     try
     {
-      if (auto request = _requestUrl(resourceId, std::move(onReady)); _optCallbackScope)
+      auto request = _requestUrl(resourceId, std::move(onReady));
+
+      if (_callbackStatePtr && _callbackStatePtr == weakStatePtr.lock())
       {
         _request = std::move(request);
       }
     }
     catch (...)
     {
-      _optCallbackScope.reset();
+      if (_callbackStatePtr && _callbackStatePtr == weakStatePtr.lock())
+      {
+        _callbackStatePtr.reset();
+      }
+
       throw;
     }
   }
@@ -67,7 +85,7 @@ namespace ao::gtk::platform
 
   void MprisArtUrlSession::invalidateRequest()
   {
-    _optCallbackScope.reset();
+    _callbackStatePtr.reset();
     _request.reset();
   }
 
@@ -81,4 +99,4 @@ namespace ao::gtk::platform
       _onUrlChanged();
     }
   }
-} // namespace ao::gtk::platform
+} // namespace ao::media

@@ -63,6 +63,9 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 Its List navigation pane consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
 `KeymapPlan` is a replaceable frontend projection from an effective neutral keymap to executable FTXUI events and display chords.
 `EventController` translates terminal events from that plan or from fixed scoped protocol into runtime/UIModel commands.
+On supported Linux builds, `App` composes the shared [`ao::media` MPRIS adapter](mpris.md) after `EventController` so external commands borrow the same selection-aware `PlaybackActions` and callback executor.
+The adapter lives under `app/platform/media/linux/`; it adds no GTK dependency to the TUI and no native dependency to runtime, Core, or UIModel.
+`--system-media=off` skips construction of its bridge, private thread, and artwork interests, while `auto` degrades to inert when support or a usable session bus is absent.
 `CoverArtLoader` owns one cancellable selection-settle window and one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
 
 ## Terminology
@@ -360,6 +363,8 @@ The editor is composed over the live workspace with exclusive input ownership; t
 The effective quit shortcut (shipped as `Shift+Q`), the `quit` command, terminal Ctrl-C, and handleable platform signals (POSIX SIGINT/SIGTERM/SIGHUP; Windows Ctrl-C/Ctrl-Break/close) request one App-owned `ExitController`.
 The [TUI track-authoring specification](tui-track-authoring.md#admitted-write-lifetime-and-exit) owns the handshake when an admitted Properties write is still settling.
 The exit gate otherwise retires scan and editor presentation and transient input before posting loop exit; input dispatch does not stop playback early.
+An accepted MPRIS root Quit first receives its D-Bus reply, then enters this same gate on a later owner-executor turn. The first request closes system-media command and artwork admission immediately, including while the gate waits for an already submitted metadata write; it does not create a second exit or write-wait policy.
+The private bus session attempts at most 250 milliseconds of asynchronous flush, closes locally before releasing its name, and joins independently of further TUI executor progress. This bounded transport teardown does not guarantee that a peer received the last reply.
 Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, cover work, and scan presentation before persistence captures state.
 Cancelling an active seek drag commits the current runtime elapsed position as its final stabilization point rather than the uncommitted preview.
 Teardown then checkpoints workspace, checkpoints playback, and requests playback stop.
@@ -397,7 +402,7 @@ The notification center can be opened explicitly even when compact status is not
 ## Implementation map
 
 - [`TerminalTitle.cpp`](../../../app/tui/TerminalTitle.cpp) owns the cached playing-track title and balanced terminal title stack; the runtime `LibrarySnapshot::formatTrack` boundary evaluates one track. [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) supplies the shared glyph frames for the dock and title.
-- [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, and lifetime.
+- [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, lifetime, and optional Linux system media; [`MprisBridge.cpp`](../../../app/platform/media/linux/MprisBridge.cpp) and [`MprisBusSession.cpp`](../../../app/platform/media/linux/MprisBusSession.cpp) own the shared adapter and private bus session.
 - [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp) owns asynchronous selected-resource delivery and stale-result suppression; [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp) owns bounded decode and terminal transforms.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns text-input and overlay state.
 - [`GoToMenu.cpp`](../../../app/tui/GoToMenu.cpp) owns navigation menu availability, menu/footer rendering, and reflected action targets. [`GoToMenu.h`](../../../app/tui/GoToMenu.h) defines the shared playback/history snapshot; [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) selects hints for the active interaction state.
@@ -455,3 +460,4 @@ The notification center can be opened explicitly even when compact status is not
 - [Activity status](../presentation/activity-status.md)
 - [TUI track authoring](tui-track-authoring.md)
 - [TUI command reference](../../reference/tui/command.md)
+- [Linux MPRIS system-media integration](mpris.md)

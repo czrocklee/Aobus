@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "platform/MprisArtUrlSession.h"
+#include "media/linux/MprisArtUrlSession.h"
 
 #include <ao/CoreIds.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::gtk::platform::test
+namespace ao::media::test
 {
   namespace
   {
@@ -26,7 +26,7 @@ namespace ao::gtk::platform::test
   } // namespace
 
   TEST_CASE("MprisArtUrlSession - replacing a resource invalidates the cancelled request callback",
-            "[gtk][unit][mpris][concurrency]")
+            "[platform][unit][mpris][async]")
   {
     constexpr auto kFirstResourceId = ResourceId{11};
     constexpr auto kSecondResourceId = ResourceId{22};
@@ -72,7 +72,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - synchronous completion publishes once without retaining the request",
-            "[gtk][unit][mpris][concurrency]")
+            "[platform][unit][mpris]")
   {
     constexpr auto kResourceId = ResourceId{33};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -104,7 +104,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - clear invalidates completion before cancelling an active request",
-            "[gtk][unit][mpris][concurrency]")
+            "[platform][unit][mpris][async]")
   {
     constexpr auto kResourceId = ResourceId{43};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -135,7 +135,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - destruction invalidates completion before cancelling an active request",
-            "[gtk][unit][mpris][concurrency]")
+            "[platform][unit][mpris][async]")
   {
     constexpr auto kResourceId = ResourceId{44};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -165,7 +165,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisArtUrlSession - requester exceptions invalidate the completion before rethrowing",
-            "[gtk][unit][mpris][concurrency]")
+            "[platform][unit][mpris][async]")
   {
     constexpr auto kResourceId = ResourceId{55};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -188,4 +188,4 @@ namespace ao::gtk::platform::test
     CHECK(changeCount == 0);
     CHECK(session.urlFor(kResourceId).empty());
   }
-} // namespace ao::gtk::platform::test
+} // namespace ao::media::test

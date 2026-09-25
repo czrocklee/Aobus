@@ -56,15 +56,18 @@ The [grouped configuration store specification](../../system/persistence/config-
 | `<config>/user.css` | Optional user-authored GTK style override | `GtkStyleRuntime` reads and monitors it; Aobus does not generate it |
 | `<state>/aobus/layout-state/<preset-id>.yaml` | Per-preset shell component runtime state | `ShellLayoutComponentStateStore` |
 | `<cache>/aobus/logs/` | GTK operational logs | Runtime logging configured by the GTK composition root |
-| `<cache>/aobus/mpris-art/` | Owner-only derived cover-art files atomically published for same-user MPRIS file URLs | `MprisArtUrlCache` |
 
 ### Cross-frontend derived cache
 
 | Location | Class | Writer or reader |
 |---|---|---|
 | `<app-cache>/cover/` | Derived cover-art cache for GTK, TUI, WinUI, and CLI libraries using this cache root | `ResourceByteDiskCache`, constructed by the runtime from the directory its composition root supplied |
+| `<cache>/aobus/mpris-art-v2/` | Linux GTK/TUI MPRIS file URLs, named by full SHA-256 plus detected extension and published owner-only | `MprisArtUrlCache` in each system-media-enabled process |
 
-Entries are named by content digest, so two libraries using the same cache root
+The MPRIS directory is shared by Linux frontends but contains only discardable delivery artifacts. Different `ResourceId` handles for equal bytes converge on the same digest path; no ResourceId-named sibling cleanup occurs. A process-memoized entry receives regular-file and byte-size validation, not a readback digest check.
+The unused legacy `<cache>/aobus/mpris-art/` directory is retained, and the current MPRIS directory has no automatic size limit or eviction; see [MPRIS artwork retention and manual cleanup](../../system/frontend/mpris.md#artwork-delivery).
+
+Derived cover-cache entries are named by content digest, so two libraries using the same cache root
 share one entry for the same cover and neither can serve the other a wrong image.
 AppKit supplies a separate cache root, listed below.
 The directory is discardable: deleting it changes no library fact and can change only what is displayed when every audio file carrying a cover is already gone.
@@ -160,7 +163,7 @@ Workspace and presentation state remain physically per-library so those identiti
 - [`LibraryPaths.h`](../../../app/include/ao/rt/library/LibraryPaths.h) and [`LibraryPaths.cpp`](../../../app/runtime/library/LibraryPaths.cpp) own the canonical per-library managed-data base, database, log, and existing-database probe.
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) resolves global GTK config, layout, component-state, log, selected-root, and workspace locations.
 - [`GtkStyleRuntime.cpp`](../../../app/linux-gtk/app/GtkStyleRuntime.cpp) resolves `user.css`.
-- [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) resolves the MPRIS artwork cache.
+- [`MprisArtUrlCache.cpp`](../../../app/platform/media/linux/MprisArtUrlCache.cpp) resolves the shared Linux MPRIS artwork cache.
 - [`ResourceByteDiskCache.cpp`](../../../app/runtime/resource/ResourceByteDiskCache.cpp) owns the shared derived cover-cache layout below the supplied runtime cache directory.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
 - [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration override selection and appends its frontend-specific configuration filename.

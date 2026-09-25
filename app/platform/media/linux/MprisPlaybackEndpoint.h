@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "platform/MprisBridge.h"
+#include "MprisBridge.h"
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <cstdint>
@@ -22,7 +22,7 @@ namespace ao::uimodel
   class PlaybackActions;
 }
 
-namespace ao::gtk::platform
+namespace ao::media
 {
   class MprisPlaybackEndpoint final
   {
@@ -32,6 +32,7 @@ namespace ao::gtk::platform
                           MprisBridge::Callbacks& callbacks);
 
     bool tryDispatchPlayerMethod(std::string_view methodName) const;
+    // Only synchronous Raise is dispatched here; the bridge owns deferred Quit.
     bool tryDispatchRootMethod(std::string_view methodName) const;
     void handleSeek(std::int64_t offsetUs);
     void handleSetPosition(std::string_view requestedTrackObjectPath, std::int64_t positionUs);
@@ -50,4 +51,4 @@ namespace ao::gtk::platform
     uimodel::PlaybackActions& _actions;
     MprisBridge::Callbacks& _callbacks;
   };
-} // namespace ao::gtk::platform
+} // namespace ao::media

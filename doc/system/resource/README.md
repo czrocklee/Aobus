@@ -63,7 +63,7 @@ YAML export reads descriptors, not cover payloads.
 
 UIModel owns semantic placeholder choices and stable style values, not image decoding or toolkit geometry.
 Frontends own decoding, transforms, native image objects, placeholder rendering, stale-result fences, and adapter-specific caches.
-GTK, WinUI, AppKit, TUI, system-media adapters, and MPRIS therefore share resource identity and encoded bytes without sharing decoded representations.
+GTK, WinUI, AppKit, TUI, and their system-media adapters therefore share resource identity and encoded bytes without sharing decoded representations. Linux GTK and TUI use the same `ao::media` MPRIS implementation without moving it into runtime or UIModel.
 Derived disk entries, pixbufs, native images, terminal PNGs, and MPRIS files are replaceable artifacts, never library truth.
 
 ## Dependency direction
@@ -103,7 +103,7 @@ Frontend owners cancel interests/tasks and fence current identity before releasi
 An invalid resource id may select a frontend placeholder without creating a resource read.
 For GTK and WinUI cover slots, a valid id hides the shared UIModel no-cover placeholder while bytes are pending or delivery fails, preventing a stored cover from being represented as absent.
 AppKit's native artwork view instead draws its independent system-note fallback whenever it has no decoded image, and the TUI uses a separate compact absence line when no transformed artwork is available; neither is one of the shared UIModel placeholder styles.
-MPRIS publishes no art URL until a verified current-resource file exists.
+MPRIS publishes no art URL until current-resource export has produced an owner-only cache file, or its process memo has size-validated that file. The exported bytes originate from runtime's verified resource path, but MPRIS does not perform a readback hash of a memoized file.
 All adapters reject stale completion and never rewrite the stored cover reference after absence or decode failure.
 
 The detailed frontend state machines, ceilings, cache budgets, and transforms are defined in [cover-art resource delivery](cover-art-delivery.md), not repeated here.

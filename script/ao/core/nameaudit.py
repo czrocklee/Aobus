@@ -27,7 +27,14 @@ ROLE_ALLOWED_PREFIXES: dict[str, tuple[str, ...]] = {
     "Controller": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
     "Coordinator": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
     "Host": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Bridge": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
+    "Bridge": (
+        "app/linux-gtk/",
+        "app/platform/media/",
+        "app/tui/",
+        "app/windows-winui/",
+        "test/unit/linux-gtk/",
+        "test/unit/tui/",
+    ),
 }
 
 ROLE_SUFFIXES = tuple(sorted(ROLE_ALLOWED_PREFIXES, key=len, reverse=True))

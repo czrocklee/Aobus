@@ -38,11 +38,6 @@ namespace ao::gtk
   {
     class ImportExportCoordinator;
   }
-  namespace platform
-  {
-    class MprisBridge;
-  }
-
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
@@ -79,7 +74,8 @@ namespace ao::gtk
     Result<> retireForLibrarySwitch();
     std::filesystem::path const& musicRoot() const noexcept;
     SessionPhase sessionPhase() const noexcept;
-    bool isMprisStarted() const noexcept;
+    /// True once activation requested MPRIS start, not when bus ownership succeeds.
+    bool hasRequestedMprisStart() const noexcept;
 
     portal::ImportExportCoordinator& importExportCoordinator();
 
@@ -153,11 +149,10 @@ namespace ao::gtk
     std::unique_ptr<WindowActionRegistry> _windowActionRegistryPtr;
     ActionMapRegistration _windowActionsRegistration;
     ActionMapRegistration _listNavigationActionsRegistration;
-    std::unique_ptr<platform::MprisBridge> _mprisBridgePtr;
     uimodel::KeymapModel _keymap;
     uimodel::KeyRepeatGuard _orderKeyRepeatGuard;
     SessionPhase _sessionPhase = SessionPhase::Constructed;
     PlaybackPersistenceAdmission _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
-    bool _mprisStarted = false;
+    bool _mprisStartRequested = false;
   };
 } // namespace ao::gtk

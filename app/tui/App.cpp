@@ -46,6 +46,10 @@
 #include "TrackListEntry.h"
 #include "TrackPresentationNavigation.h"
 #include "TrackTable.h"
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+#include "media/linux/MprisArtUrlCache.h"
+#include "media/linux/MprisBridge.h"
+#endif
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -84,6 +88,7 @@
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 #include <ao/utility/PlatformDirectories.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -1570,10 +1575,14 @@ namespace ao::tui
         .previewTerminalTitle = [&](std::string_view const expression) -> Result<std::optional<std::string>>
         { return previewTerminalTitle(titlePreview, expression, playback, preferences); },
       }};
+    // Late-bound after EventController constructs its selection-aware actions.
+    // The media scope clears this borrow before either owner is destroyed.
+    auto retireSystemMedia = utility::ScopedRegistration{};
     auto exitController = ExitController{{
       .retire =
         [&]
       {
+        retireSystemMedia.reset();
         libraryScan.retire();
         trackEdit.retire();
         settings.retire();
@@ -1610,6 +1619,35 @@ namespace ao::tui
         .requestLayoutCheckpoint = requestLayoutCheckpoint,
       }};
     activeEvents = &events;
+
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+    auto optMediaArtCache = std::optional<media::MprisArtUrlCache>{};
+    auto optMediaBridge = std::optional<media::MprisBridge>{};
+
+    if (options.systemMediaEnabled)
+    {
+      optMediaArtCache.emplace(runtime.resourceBytes(), runtime.async());
+      optMediaBridge.emplace(
+        *executor,
+        playback,
+        events.playbackActions(),
+        media::MprisBridge::Callbacks{
+          .quit = requestGracefulExit,
+          .requestArtUrl = [&optMediaArtCache](ResourceId resourceId, media::MprisBridge::OnArtUrlReady onReady)
+          { return optMediaArtCache->requestUrl(resourceId, std::move(onReady)); },
+        },
+        media::MprisBridgeOptions{
+          .busName = "org.mpris.MediaPlayer2.aobus.tui",
+          .identity = "Aobus TUI",
+          .desktopEntry = "",
+          .uniqueInstance = true,
+        });
+      optMediaBridge->start();
+      retireSystemMedia = utility::ScopedRegistration{[&optMediaBridge] { optMediaBridge->retire(); }};
+    }
+
+    auto const mediaRetirement = gsl_lite::finally([&retireSystemMedia] { retireSystemMedia.reset(); });
+#endif
 
     auto frameTimer = FrameTimer{};
     auto frameRenderer = AppFrameRenderer{
@@ -1706,6 +1744,11 @@ namespace ao::tui
       std::fflush(stdout);
     }
 
+    retireSystemMedia.reset();
+#ifdef AOBUS_HAS_SYSTEM_MEDIA
+    // Join the native producer before saving and retiring the remaining host state.
+    optMediaBridge.reset();
+#endif
     terminalTitle.restore();
     coverArt.cancel();
     libraryScan.retire();

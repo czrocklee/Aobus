@@ -3,21 +3,20 @@
 
 #pragma once
 
-#include "common/MainContextCallbackScope.h"
 #include <ao/CoreIds.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <functional>
-#include <optional>
+#include <memory>
 #include <string>
 
-namespace ao::gtk::platform
+namespace ao::media
 {
   /**
    * Owns the active MPRIS art URL request and its completion lifetime.
    *
    * The session, requester, cancellation callback, and completion callback must
-   * remain confined to the same GLib main context.
+   * remain confined to the same owner executor.
    */
   class [[nodiscard]] MprisArtUrlSession final
   {
@@ -39,14 +38,17 @@ namespace ao::gtk::platform
     std::string urlFor(ResourceId resourceId) const;
 
   private:
+    struct CallbackState final
+    {};
+
     void invalidateRequest();
     void handleUrlReady(std::string url);
 
     UrlRequester _requestUrl;
     OnUrlChanged _onUrlChanged;
     utility::ScopedRegistration _request;
-    std::optional<MainContextCallbackScope> _optCallbackScope;
+    std::shared_ptr<CallbackState> _callbackStatePtr;
     ResourceId _resourceId = kInvalidResourceId;
     std::string _url;
   };
-} // namespace ao::gtk::platform
+} // namespace ao::media

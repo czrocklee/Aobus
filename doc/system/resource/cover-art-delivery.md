@@ -62,7 +62,7 @@ Each presenter retains one generation-fenced selection.
 Its visible XAML cover state is hidden when there is no group or Inspector entity, remains the configured placeholder when Now Playing has no entity, uses a placeholder for an invalid id, is empty for pending or failed valid-resource delivery, and shows a decoded image for successful delivery.
 
 TUI retains one cancellable selection-settle task, one selected-resource byte interest and transform task, transformed cover data for that id, and separate Kitty paint state for image id `1` and the last terminal box.
-MPRIS retains process-local id-to-file/URL/byte-size entries and one delayed current-resource request in the bridge.
+MPRIS retains process-local id-to-file/URL/byte-size entries and one current-resource request in each frontend bridge.
 
 ## Commands and transitions
 
@@ -224,9 +224,11 @@ The settle window decides only whether a read is worth starting; the current-res
 ### MPRIS and CLI
 
 MPRIS invalid or absent resources produce no art URL.
-The cache validates a memoized file on a worker, or asynchronously reads the resource and publishes original bytes there through owner-only, same-directory atomic replacement.
-It sniffs PNG, JPEG, GIF, and WebP signatures, otherwise uses `.img`; it publishes `<resource-id><extension>` without durability barriers, removes stale known sibling extensions only after replacement succeeds, and returns a file URI on the GTK callback executor.
-Metadata for a new now-playing resource is first published without `mpris:artUrl`; the URL completion causes replacement metadata only if that resource is still current.
+The shared Linux cache writes under `aobus/mpris-art-v2`, asynchronously reading the resource and publishing original bytes through owner-only, same-directory atomic replacement.
+It sniffs PNG, JPEG, GIF, and WebP signatures, otherwise uses `.img`, and names each file `<full-sha256><extension>` without durability barriers. The name is independent of `ResourceId`: equal bytes converge and different bytes remain separate, with no ResourceId sibling purge.
+A process-memoized path is reused after worker validation confirms only that it remains a regular file with the recorded byte size. It is not read back for another hash; failed validation causes re-export from runtime bytes.
+The URL returns on the owning frontend callback executor. Metadata for a new now-playing resource is first published without `mpris:artUrl`; URL completion causes replacement metadata only if that resource is still current.
+The runtime cover cache's 256 MiB budget does not bound these separate delivery files; [MPRIS artwork retention](../frontend/mpris.md#artwork-delivery) owns their cleanup behavior.
 
 CLI list reports each descriptor's id and described length, and export reads through the same verified path with no ceiling, writing the content or reporting absence and exiting nonzero.
 Absence is reported as a row that does not exist or as a row no source could reproduce; the distinction is read after the walk, in its own transaction.
@@ -307,7 +309,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`CoverArtPresenter`](../../../app/windows-winui/image/CoverArtPresenter.h) owns WinUI worker byte preparation and presentation; the shared [`MemoryRandomAccessStream`](../../../app/windows/include/ao/winui/MemoryRandomAccessStream.h) adapter owns native stream wrapping.
 - [`LibrarySession.cpp`](../../../app/macos-appkit/LibrarySession.cpp) owns AppKit selected/playing byte interests; [`ArtworkView.mm`](../../../app/macos-appkit/ArtworkView.mm), [`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm), and [`TrackInspector.mm`](../../../app/macos-appkit/TrackInspector.mm) own native fallback and view decoding, while [`MediaPlayerAdapter.mm`](../../../app/macos-appkit/MediaPlayerAdapter.mm) owns system Now Playing artwork.
 - [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp), [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp), and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own TUI delivery, transform, and paint state.
-- [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) owns file-URL artifacts.
+- [`MprisArtUrlCache.cpp`](../../../app/platform/media/linux/MprisArtUrlCache.cpp) owns shared Linux file-URL artifacts.
 - [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp) owns CLI export.
 
 ## Test map
@@ -325,7 +327,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`MemoryRandomAccessStreamTest.cpp`](../../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact prepared-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`AppKitArtworkScenario.mm`](../../../test/integration/macos/AppKitArtworkScenario.mm) and [`AppKitMediaScenario.mm`](../../../test/integration/macos/AppKitMediaScenario.mm) protect current-cover replacement, native and MediaPlayer artwork publication, clock-anchor retention, and synchronous-cache-hit publication.
 - [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, the selection-settle window and navigation-burst cost, supported decode, limits, block preview, PNG, and Kitty escapes.
-- [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects file extensions, rewriting, stale siblings, missing ids, and URL metadata.
+- [`MprisBridgeTest.cpp`](../../../test/integration/linux/media/MprisBridgeTest.cpp) covers detected extensions, full-digest naming, independent handle/content behavior, size-only revalidation, missing ids, and URL metadata.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and both absence reports.
 
 ## Related documents
@@ -339,5 +341,5 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [Library mutation](../library/mutation.md)
 - [Decision 0010: never write to an audio file](../../decision/0010-never-write-to-audio-files.md)
 - [Managed state location](../../reference/persistence/location.md)
-- [GTK MPRIS specification](../frontend/gtk/mpris.md) and [surface reference](../../reference/linux-gtk/mpris.md)
+- [Linux MPRIS specification](../frontend/mpris.md) and [surface reference](../../reference/linux/mpris.md)
 - [Shell layout lifecycle](../shell/layout-lifecycle.md)

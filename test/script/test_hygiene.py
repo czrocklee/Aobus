@@ -273,65 +273,71 @@ class TidyCommandTest(unittest.TestCase):
         self.assertIn(args.files[0], stderr.getvalue())
 
     def test_explicit_file_without_native_compile_command_fails(self):
-        args = Namespace(
-            files=["lib/Foreign.cpp"],
-            all=False,
-            folder=[],
-            commit=None,
-            check=None,
-            debug=False,
-            output=None,
-            jobs=1,
-            path=None,
-            fix=False,
-            no_build=False,
-            tidy_arg=[],
-            header_filter=None,
-        )
-        foreign = Path("lib/Foreign.cpp")
-        stderr = io.StringIO()
+        for name, kind, reason in (
+            ("lib/Foreign.cpp", "native-coverage", "the source file has no exact compile command"),
+            (
+                "app/platform/media/linux/MprisBridge.cpp",
+                "platform-incompatible",
+                "the file is incompatible with the current platform",
+            ),
+        ):
+            with self.subTest(name=name):
+                args = Namespace(
+                    files=[name],
+                    all=False,
+                    folder=[],
+                    commit=None,
+                    check=None,
+                    debug=False,
+                    output=None,
+                    jobs=1,
+                    path=None,
+                    fix=False,
+                    no_build=False,
+                    tidy_arg=[],
+                    header_filter=None,
+                )
+                foreign = Path(name)
+                stderr = io.StringIO()
 
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(args.files, True)))
-            stack.enter_context(mock.patch.object(tidy, "missing_explicit_files", return_value=[]))
-            stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=(args.files, [])))
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "prepare_toolchain",
-                    return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy,
-                    "classify_existing",
-                    return_value={"STRICT": [foreign], "RELAXED": []},
-                )
-            )
-            stack.enter_context(
-                mock.patch.object(
-                    tidy.tidyengine,
-                    "compile_command_plan",
-                    return_value=tidy.tidyengine.CompileCommandPlan(
-                        (),
-                        (foreign,),
-                        (
-                            tidy.tidyengine.CompileCommandDeferral(
-                                foreign,
-                                "the source file has no exact compile command",
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(
+                        mock.patch.object(tidy.tidyengine, "resolve_scope", return_value=(args.files, True))
+                    )
+                    stack.enter_context(mock.patch.object(tidy, "missing_explicit_files", return_value=[]))
+                    stack.enter_context(mock.patch.object(tidy, "split_existing", return_value=(args.files, [])))
+                    stack.enter_context(
+                        mock.patch.object(
+                            tidy,
+                            "prepare_toolchain",
+                            return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
+                        )
+                    )
+                    stack.enter_context(
+                        mock.patch.object(
+                            tidy,
+                            "classify_existing",
+                            return_value={"STRICT": [foreign], "RELAXED": []},
+                        )
+                    )
+                    stack.enter_context(
+                        mock.patch.object(
+                            tidy.tidyengine,
+                            "compile_command_plan",
+                            return_value=tidy.tidyengine.CompileCommandPlan(
+                                (),
+                                (foreign,),
+                                (tidy.tidyengine.CompileCommandDeferral(foreign, reason, kind),),
                             ),
-                        ),
-                    ),
-                )
-            )
-            run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
-            stack.enter_context(contextlib.redirect_stderr(stderr))
-            self.assertEqual(tidy.run_command(args), 1)
+                        )
+                    )
+                    run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
+                    stack.enter_context(contextlib.redirect_stderr(stderr))
+                    self.assertEqual(tidy.run_command(args), 1)
 
-        run_parallel.assert_not_called()
-        self.assertIn("explicitly selected files", stderr.getvalue())
-        self.assertIn("the source file has no exact compile command", stderr.getvalue())
+                run_parallel.assert_not_called()
+                self.assertIn("explicitly selected files", stderr.getvalue())
+                self.assertIn(reason, stderr.getvalue())
 
     def test_non_explicit_scope_visibly_defers_foreign_platform_files(self):
         args = Namespace(

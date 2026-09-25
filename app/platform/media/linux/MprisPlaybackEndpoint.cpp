@@ -3,7 +3,7 @@
 
 #include "MprisPlaybackEndpoint.h"
 
-#include "platform/MprisBridge.h"
+#include "MprisBridge.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -18,7 +18,7 @@
 #include <optional>
 #include <string_view>
 
-namespace ao::gtk::platform
+namespace ao::media
 {
   MprisPlaybackEndpoint::MprisPlaybackEndpoint(rt::PlaybackService& playback,
                                                uimodel::PlaybackActions& actions,
@@ -45,11 +45,6 @@ namespace ao::gtk::platform
     if (methodName == "Raise")
     {
       return _callbacks.raise && _callbacks.raise();
-    }
-
-    if (methodName == "Quit")
-    {
-      return _callbacks.quit && _callbacks.quit();
     }
 
     return false;
@@ -210,4 +205,4 @@ namespace ao::gtk::platform
 
     return std::nullopt;
   }
-} // namespace ao::gtk::platform
+} // namespace ao::media

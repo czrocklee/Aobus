@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "platform/MprisBridge.h"
-#include "platform/MprisPlaybackEndpoint.h"
+#include "media/linux/MprisBridge.h"
+#include "media/linux/MprisPlaybackEndpoint.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "test/unit/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/audio/RenderTarget.h>
@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace ao::gtk::platform::test
+namespace ao::media::test
 {
   namespace
   {
@@ -61,7 +61,7 @@ namespace ao::gtk::platform::test
   } // namespace
 
   TEST_CASE("MprisPlaybackEndpoint - valid SetPosition survives an orthogonal backlog",
-            "[gtk][integration][mpris][async]")
+            "[platform][integration][mpris][async]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -98,7 +98,7 @@ namespace ao::gtk::platform::test
     CHECK(snapshots[2].finalSeekRevision.value == before.finalSeekRevision.value + 1);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - relative Seek uses live playback progress", "[gtk][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - relative Seek uses live playback progress", "[platform][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -116,7 +116,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - relative past-end Seek decides from live playback progress",
-            "[gtk][integration][mpris]")
+            "[platform][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -133,7 +133,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - queued relative Seek samples at execution rather than admission",
-            "[gtk][integration][mpris][async]")
+            "[platform][integration][mpris][async]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -164,7 +164,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - queued positioning cannot act on a replayed occurrence",
-            "[gtk][integration][mpris][async]")
+            "[platform][integration][mpris][async]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -197,7 +197,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - past-end Seek does not skip a pending realtime successor",
-            "[gtk][integration][mpris][concurrency]")
+            "[platform][integration][mpris][concurrency]")
   {
     auto fixture = MprisPositionFixture{};
     auto const before = fixture.playback.snapshot().transport;
@@ -212,7 +212,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - relative Seek preserves endpoint and overflow behavior",
-            "[gtk][integration][mpris]")
+            "[platform][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto& playback = fixture.playback;
@@ -256,7 +256,7 @@ namespace ao::gtk::platform::test
   }
 
   TEST_CASE("MprisPlaybackEndpoint - positive past-end Seek without a successor is a no-op",
-            "[gtk][integration][mpris]")
+            "[platform][integration][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     REQUIRE(fixture.application.playAndWait(fixture.application.thirdTrackId));
@@ -272,7 +272,7 @@ namespace ao::gtk::platform::test
     CHECK(after.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("MprisBridge - Position reads the live source instead of the snapshot anchor", "[gtk][unit][mpris]")
+  TEST_CASE("MprisBridge - Position reads the live source instead of the snapshot anchor", "[platform][unit][mpris]")
   {
     auto fixture = MprisPositionFixture{};
     auto snapshot = fixture.playback.snapshot();
@@ -283,7 +283,8 @@ namespace ao::gtk::platform::test
       .onSnapshot = [](rt::PlaybackSnapshotObserver) { return async::Subscription{}; },
       .elapsed = [&] { return liveElapsed; },
     };
-    auto bridge = MprisBridge{fixture.playback, fixture.actions, {}, std::move(source)};
+    auto bridge =
+      MprisBridge{fixture.application.transport.executor, fixture.playback, fixture.actions, {}, std::move(source)};
 
     // Read the actual exported property mapping without registering a bus name.
     CHECK(bridge.playerProperty("Position").get_dynamic<std::int64_t>() == 900'000);
@@ -291,4 +292,4 @@ namespace ao::gtk::platform::test
     CHECK(bridge.playerProperty("Position").get_dynamic<std::int64_t>() == 1'100'000);
     CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{100});
   }
-} // namespace ao::gtk::platform::test
+} // namespace ao::media::test

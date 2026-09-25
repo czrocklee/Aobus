@@ -174,16 +174,16 @@ namespace
     }
   }
 
-  void configureOpenLibraryCallback(std::unique_ptr<MainWindow> const& windowPtr,
+  void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
-                                    std::unique_ptr<MainWindow>& mainWindowPtr,
+                                    Glib::RefPtr<MainWindow>& mainWindowPtr,
                                     MainContextCallbackScope const& callbackScope,
                                     utility::ScopedRegistration& openLibraryIdleRegistration,
                                     std::optional<LibraryRestartRequest>& optRestartRequest);
 
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& appPtr,
-                            std::unique_ptr<MainWindow>& mainWindowPtr,
+                            Glib::RefPtr<MainWindow>& mainWindowPtr,
                             std::optional<LibraryRestartRequest>& optRestartRequest,
                             bool const scanAfterOpen)
   {
@@ -222,9 +222,9 @@ namespace
     appPtr->quit();
   }
 
-  void configureOpenLibraryCallback(std::unique_ptr<MainWindow> const& windowPtr,
+  void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
-                                    std::unique_ptr<MainWindow>& mainWindowPtr,
+                                    Glib::RefPtr<MainWindow>& mainWindowPtr,
                                     MainContextCallbackScope const& callbackScope,
                                     utility::ScopedRegistration& openLibraryIdleRegistration,
                                     std::optional<LibraryRestartRequest>& optRestartRequest)
@@ -248,7 +248,7 @@ namespace
       });
   }
 
-  void releaseMainWindow(Gtk::Application& app, std::unique_ptr<MainWindow>& mainWindowPtr)
+  void releaseMainWindow(Gtk::Application& app, Glib::RefPtr<MainWindow>& mainWindowPtr)
   {
     if (!mainWindowPtr)
     {
@@ -257,7 +257,11 @@ namespace
 
     mainWindowPtr->saveSession();
 
-    app.remove_window(*mainWindowPtr);
+    if (mainWindowPtr->get_application())
+    {
+      app.remove_window(*mainWindowPtr);
+    }
+
     mainWindowPtr.reset();
   }
 
@@ -509,7 +513,7 @@ namespace
   }
 
   void handleAppActivate(Glib::RefPtr<Gtk::Application>& appPtr,
-                         std::unique_ptr<MainWindow>& mainWindowPtr,
+                         Glib::RefPtr<MainWindow>& mainWindowPtr,
                          MainContextCallbackScope const& callbackScope,
                          utility::ScopedRegistration& openLibraryIdleRegistration,
                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
@@ -685,7 +689,7 @@ namespace
     // them at the slot boundary; the project fatal root adds owned context.
     Glib::add_exception_handler([] { handleSignalException(); });
 
-    auto mainWindowPtr = std::unique_ptr<MainWindow>{};
+    auto mainWindowPtr = Glib::RefPtr<MainWindow>{};
     auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};
     auto optRestartRequest = std::optional<LibraryRestartRequest>{};
     auto optDiagnosticMessage = std::optional<std::string>{};
@@ -708,8 +712,9 @@ namespace
     auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());
 
     // Preserve reverse-destruction order: application signals/actions close
-    // first, then callback admission and the idle source, then windows and
-    // their attached runtime, style, stores, and finally Gtk::Application.
+    // first, then callback admission and the idle source, then the aliased
+    // window owner (C++ wrapper before runtime), style, stores, and finally
+    // Gtk::Application.
     auto styleRuntimeRegistration = utility::ScopedRegistration{[] { GtkStyleRuntime::instance().shutdown(); }};
     auto windowRegistration =
       utility::ScopedRegistration{[&appPtr, &mainWindowPtr, &preferencesWindowPtr]
