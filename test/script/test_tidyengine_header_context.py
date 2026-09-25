@@ -71,6 +71,67 @@ class HeaderCompileCommandSelectionTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.fixture.close()
 
+    def test_linux_media_trees_defer_only_on_foreign_native_graphs(self):
+        shared = self.fixture.file("app/platform/media/MediaController.cpp")
+        linux_sources = [
+            self.fixture.file("app/platform/media/linux/MprisBridge.cpp"),
+            self.fixture.file("app/platform/media/linux/MprisBridge.h"),
+            self.fixture.file("test/integration/linux/media/MprisBridgeTest.cpp"),
+            self.fixture.file("test/integration/linux/media/MprisTestSupport.h"),
+        ]
+        nearby_sources = [
+            self.fixture.file("app/platform/media/linux-other/MprisBridge.cpp"),
+            self.fixture.file("app/platform/media/shared/MprisBridge.h"),
+            self.fixture.file("test/integration/linux/audio/MprisBridgeTest.cpp"),
+            self.fixture.file("test/integration/linux/media-other/MprisTestSupport.h"),
+            self.fixture.file("test/integration/other/media/MprisBridgeTest.cpp"),
+        ]
+        self.fixture.write_compile_database(shared)
+        selected = [shared, *linux_sources, *nearby_sources]
+
+        for profile in (
+            tidyengine.builddir.LINUX_PROFILE,
+            tidyengine.builddir.MACOS_PROFILE,
+            tidyengine.builddir.WINDOWS_PROFILE,
+        ):
+            with self.subTest(profile=profile.name):
+                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+                    plan = tidyengine.compile_command_plan(
+                        self.fixture.build_dir, selected, project_root=self.fixture.root
+                    )
+
+                self.assertEqual(list(plan.targets), [tidyengine.CompileCommandTarget(shared, shared)])
+                self.assertEqual(list(plan.deferred), [*linux_sources, *nearby_sources])
+                details = {detail.selected: detail for detail in plan.deferral_details}
+                for path in linux_sources:
+                    self.assertEqual(details[path].is_platform_incompatible, profile.name != "linux", path)
+                for path in nearby_sources:
+                    self.assertFalse(details[path].is_platform_incompatible, path)
+                    self.assertEqual(details[path].kind, "native-coverage")
+
+    def test_linux_media_trees_with_exact_commands_are_covered(self):
+        bridge = self.fixture.file("app/platform/media/linux/MprisBridge.cpp")
+        header = self.fixture.file("app/platform/media/linux/MprisBridge.h")
+        support = self.fixture.file("test/integration/linux/media/MprisTestSupport.cpp")
+        support_header = self.fixture.file("test/integration/linux/media/MprisTestSupport.h")
+        self.fixture.write_compile_database(bridge, support)
+
+        with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.LINUX_PROFILE):
+            plan = tidyengine.compile_command_plan(
+                self.fixture.build_dir, [bridge, header, support, support_header], project_root=self.fixture.root
+            )
+
+        self.assertEqual(
+            list(plan.targets),
+            [
+                tidyengine.CompileCommandTarget(bridge, bridge),
+                tidyengine.CompileCommandTarget(header, bridge),
+                tidyengine.CompileCommandTarget(support, support),
+                tidyengine.CompileCommandTarget(support_header, support),
+            ],
+        )
+        self.assertEqual(list(plan.deferred), [])
+
     def test_same_stem_companion_precedes_dependency_graph(self):
         header = self.fixture.file("include/ao/utility/Value.h")
         companion = self.fixture.file("lib/utility/Value.cpp")
