@@ -231,6 +231,47 @@ namespace ao::uimodel::test
     CHECK(log.states.size() == 1);
   }
 
+  TEST_CASE("OutputDeviceViewModel - stopping observation keeps explicit refresh without resubscribing",
+            "[uimodel][unit][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
+    auto log = ao::test::RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{fixture.playback,
+                                           ao::test::englishMessageCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
+
+    viewModel.refresh();
+    REQUIRE(log.states.size() == 1);
+    REQUIRE(log.last().rows.size() == 3);
+    REQUIRE(log.last().rows[1].isActive);
+
+    fixture.playbackTransport.setOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+    REQUIRE(log.states.size() == 2);
+    CHECK(log.last().rows[2].isActive);
+
+    viewModel.stopObserving();
+    viewModel.stopObserving();
+    fixture.playbackTransport.setOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+    CHECK(fixture.playback.snapshot().transport.output.selectedDevice.profileId == audio::kProfileShared);
+    REQUIRE(log.states.size() == 2);
+    CHECK(log.last().rows[2].isActive);
+
+    viewModel.refresh();
+    REQUIRE(log.states.size() == 3);
+    CHECK(log.last().outputDeviceStatus == "PipeWire: Built-in Audio");
+    CHECK(log.last().rows[1].isActive);
+
+    fixture.playbackTransport.setOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+    CHECK(fixture.playback.snapshot().transport.output.selectedDevice.profileId == audio::kProfileExclusive);
+    REQUIRE(log.states.size() == 3);
+    CHECK(log.last().rows[1].isActive);
+  }
+
   TEST_CASE("OutputDeviceViewModel - reports exact requested intent when the engine cannot confirm it",
             "[uimodel][unit][playback][output]")
   {

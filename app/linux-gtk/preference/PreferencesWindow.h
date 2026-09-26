@@ -27,6 +27,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::uimodel
 {
@@ -41,6 +42,7 @@ namespace ao::rt
 namespace ao::gtk
 {
   class AppDialog;
+  class OutputDevicePopover;
 
   class PreferencesWindow final : public Gtk::Window
   {
@@ -50,6 +52,8 @@ namespace ao::gtk
       std::function<void()> onEditLayout{};
       std::function<void()> onResetRuntimeLayoutState{};
       std::function<void()> onSaveCurrentPanelSizesAsLayoutDefaults{};
+      /// Persists synchronously for every preference change. Must return before this window
+      /// is dismissed, rebound or destroyed, including through nested main-context iteration.
       uimodel::PreferencesEditorModel::PersistCallback onPersistPreferences{};
       uimodel::PreferencesEditorModel::ThemeApplyCallback onApplyTheme{};
     };
@@ -95,7 +99,6 @@ namespace ao::gtk
     void clearKeyboardPage();
     void handleLayoutPresetChanged();
     void handleThemeChanged();
-    void refreshOutputSummary(rt::PlaybackService& playback);
     void rebuildOutputSelector(rt::PlaybackService* playback, Gtk::Window* targetWindow);
 
     Callbacks _callbacks;
@@ -122,6 +125,10 @@ namespace ao::gtk
     Gtk::Label _outputDeviceLabel;
     std::unique_ptr<ShortcutEditorWidget> _shortcutEditorPtr;
     std::unique_ptr<uimodel::OutputDeviceViewModel> _outputDeviceViewModelPtr;
+    std::unique_ptr<OutputDevicePopover> _outputSelectorPtr;
+    std::uint64_t _outputBindingGeneration = 0;
+    std::vector<std::unique_ptr<OutputDevicePopover>> _retiredOutputSelectorPtrs;
+    sigc::scoped_connection _outputSelectorRetirementConn;
     /// The live pending-shortcut close prompt, so a second close reuses it and dismiss() retires it.
     AppDialog* _pendingClosePrompt = nullptr;
     /// Invalidates responses retained by a prompt that has been retired or replaced.

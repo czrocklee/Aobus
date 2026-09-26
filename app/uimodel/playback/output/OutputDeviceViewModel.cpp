@@ -110,6 +110,11 @@ namespace ao::uimodel
     render(output);
   }
 
+  void OutputDeviceViewModel::stopObserving()
+  {
+    _snapshotSub.reset();
+  }
+
   void OutputDeviceViewModel::handleSnapshot(rt::PlaybackSnapshot const& snapshot)
   {
     if (snapshot.transport.output == _lastOutput)
