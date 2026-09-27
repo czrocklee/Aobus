@@ -44,6 +44,7 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 The all-tracks source contains every stored track id in its canonical source order.
 It consumes committed track insertions, deletions, and metadata updates and publishes one sequential batch per changeset.
 Mixed changesets combine collection edits and surviving metadata updates in that batch; update ranges address the final sequence after removals and insertions.
+A metadata-only changeset resolves each updated id by binary search in the sorted order, bounding publication work by the changeset rather than the source size.
 Synchronous consumers therefore evaluate changed and inserted tracks together without an intermediate collection-only notification.
 Changesets with no effective track edits publish no batch.
 Runtime factories construct it only after `MusicLibrary::open()` has validated every persisted Track pair and required dictionary reference.

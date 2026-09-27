@@ -6,6 +6,7 @@
 #include "runtime/source/TrackSourceDeltaBuilder.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 
 #include <algorithm>
@@ -19,6 +20,46 @@
 
 namespace ao::rt
 {
+  namespace
+  {
+    std::vector<TrackId> sortedUniqueIds(std::span<TrackId const> const ids)
+    {
+      auto result = std::vector<TrackId>{ids.begin(), ids.end()};
+      std::ranges::sort(result);
+      result.erase(std::ranges::unique(result).begin(), result.end());
+      return result;
+    }
+
+    std::optional<std::size_t> indexInSortedIds(std::span<TrackId const> const sortedIds, TrackId const id)
+    {
+      if (auto const it = std::ranges::lower_bound(sortedIds, id); it != sortedIds.end() && *it == id)
+      {
+        return static_cast<std::size_t>(std::distance(sortedIds.begin(), it));
+      }
+
+      return std::nullopt;
+    }
+
+    // Metadata-only changes keep the installed snapshot; each updated id
+    // resolves by binary search in the sorted source, so publication stays
+    // bounded by the changeset rather than by the source size.
+    std::optional<delta::RegularTrackEditScript> buildMetadataOnlyUpdateBatch(std::span<TrackId const> const trackIds,
+                                                                              std::span<TrackId const> const updated)
+    {
+      auto builder = TrackSourceDeltaBuilder{trackIds.size()};
+
+      for (auto const id : sortedUniqueIds(updated))
+      {
+        if (auto const optIndex = indexInSortedIds(trackIds, id); optIndex)
+        {
+          builder.update(*optIndex, id);
+        }
+      }
+
+      return builder.build();
+    }
+  } // namespace
+
   AllTracksSource::AllTracksSource(library::TrackStore const& store)
     : _store{store}
   {
@@ -56,20 +97,21 @@ namespace ao::rt
       return;
     }
 
+    auto const previousSize = _trackIds.size();
+
     if (inserted.empty() && removed.empty())
     {
-      notifyUpdated(updated);
+      if (auto optBatch = buildMetadataOnlyUpdateBatch(_trackIds, updated); optBatch)
+      {
+        std::ignore = tryPublishDelta(std::move(*optBatch), previousSize);
+      }
+
       return;
     }
 
-    auto const previousSize = _trackIds.size();
     auto builder = TrackSourceDeltaBuilder{previousSize};
-    auto insertedIds = std::vector<TrackId>{inserted.begin(), inserted.end()};
-    auto removedIds = std::vector<TrackId>{removed.begin(), removed.end()};
-    std::ranges::sort(insertedIds);
-    std::ranges::sort(removedIds);
-    insertedIds.erase(std::ranges::unique(insertedIds).begin(), insertedIds.end());
-    removedIds.erase(std::ranges::unique(removedIds).begin(), removedIds.end());
+    auto const insertedIds = sortedUniqueIds(inserted);
+    auto const removedIds = sortedUniqueIds(removed);
 
     auto retained = std::vector<TrackId>{};
     retained.reserve(_trackIds.size());
@@ -120,20 +162,16 @@ namespace ao::rt
       }
     }
 
-    auto updatedIds = std::vector<TrackId>{updated.begin(), updated.end()};
-    std::ranges::sort(updatedIds);
-    updatedIds.erase(std::ranges::unique(updatedIds).begin(), updatedIds.end());
-
-    for (auto const id : updatedIds)
+    for (auto const id : sortedUniqueIds(updated))
     {
       if (std::ranges::binary_search(insertedIds, id) || std::ranges::binary_search(removedIds, id))
       {
         continue;
       }
 
-      if (auto const it = std::ranges::lower_bound(finalIds, id); it != finalIds.end() && *it == id)
+      if (auto const optIndex = indexInSortedIds(finalIds, id); optIndex)
       {
-        builder.update(static_cast<std::size_t>(std::distance(finalIds.begin(), it)), id);
+        builder.update(*optIndex, id);
       }
     }
 
@@ -151,12 +189,7 @@ namespace ao::rt
 
   std::optional<std::size_t> AllTracksSource::indexOf(TrackId const id) const
   {
-    if (auto const it = std::ranges::lower_bound(_trackIds, id); it != _trackIds.end() && *it == id)
-    {
-      return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
-    }
-
-    return std::nullopt;
+    return indexInSortedIds(_trackIds, id);
   }
 
   void AllTracksSource::discardSnapshot() noexcept
