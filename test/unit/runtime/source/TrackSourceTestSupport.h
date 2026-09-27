@@ -9,6 +9,7 @@
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
+#include <concepts>
 #include <cstddef>
 #include <initializer_list>
 #include <memory>
@@ -57,6 +58,20 @@ namespace ao::rt::test
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
+    // Local replacements for the test-only TrackSource notify helpers: this
+    // class owns its ids, so it publishes the same batches through the
+    // protected tryPublishDelta seam without widening TrackSource's API.
+    void publishInserted(std::size_t index, TrackId id);
+    void publishUpdated(std::size_t index, TrackId id);
+    void publishRemoved(std::size_t index, TrackId id);
+
+    // Publishes coalesced ranges for the requested ids already present in this
+    // source. Insert ranges report the pre-insertion size; update ranges keep
+    // the installed size.
+    template<typename Range>
+      requires std::same_as<Range, delta::InsertRange> || std::same_as<Range, delta::UpdateRange>
+    void publishMatchedBatch(std::span<TrackId const> ids);
+
     std::vector<TrackId> _ids;
   };
 

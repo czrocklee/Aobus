@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <initializer_list>
 #include <iterator>
@@ -40,7 +41,7 @@ namespace ao::rt::test
   {
     REQUIRE(index <= _ids.size());
     _ids.insert(_ids.begin() + static_cast<std::ptrdiff_t>(index), id);
-    notifyInserted(id, index);
+    publishInserted(index, id);
   }
 
   void MutableTrackSource::append(TrackId id)
@@ -52,7 +53,7 @@ namespace ao::rt::test
   {
     auto const optIndex = indexOf(id);
     REQUIRE(optIndex);
-    notifyUpdated(id, *optIndex);
+    publishUpdated(*optIndex, id);
   }
 
   void MutableTrackSource::remove(TrackId id)
@@ -60,7 +61,7 @@ namespace ao::rt::test
     auto const optIndex = indexOf(id);
     REQUIRE(optIndex);
     _ids.erase(_ids.begin() + static_cast<std::ptrdiff_t>(*optIndex));
-    notifyRemoved(id, *optIndex);
+    publishRemoved(*optIndex, id);
   }
 
   void MutableTrackSource::reset(std::span<TrackId const> ids)
@@ -77,7 +78,7 @@ namespace ao::rt::test
   void MutableTrackSource::batchInsert(std::span<TrackId const> ids)
   {
     _ids.append_range(ids);
-    notifyInserted(ids);
+    publishMatchedBatch<delta::InsertRange>(ids);
   }
 
   void MutableTrackSource::batchRemove(std::span<TrackId const> ids)
@@ -106,12 +107,15 @@ namespace ao::rt::test
 
   void MutableTrackSource::batchUpdate(std::span<TrackId const> ids)
   {
-    notifyUpdated(ids);
+    publishMatchedBatch<delta::UpdateRange>(ids);
   }
 
   void MutableTrackSource::updateByIdentity(TrackId id)
   {
-    notifyUpdated(id);
+    if (auto const optIndex = indexOf(id); optIndex)
+    {
+      publishUpdated(*optIndex, id);
+    }
   }
 
   void MutableTrackSource::singleInsert(TrackId id)
@@ -159,6 +163,73 @@ namespace ao::rt::test
     }
 
     return std::nullopt;
+  }
+
+  void MutableTrackSource::publishInserted(std::size_t const index, TrackId const id)
+  {
+    // The caller inserted into _ids first, so the stored size is at least one.
+    std::ignore = tryPublishDelta(
+      delta::RegularTrackEditScript{.edits = {delta::InsertRange{.start = index, .trackIds = {id}}}}, _ids.size() - 1);
+  }
+
+  void MutableTrackSource::publishUpdated(std::size_t const index, TrackId const id)
+  {
+    std::ignore = tryPublishDelta(
+      delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = index, .trackIds = {id}}}}, _ids.size());
+  }
+
+  void MutableTrackSource::publishRemoved(std::size_t const index, TrackId const id)
+  {
+    // The caller erased the id first, and a vector cannot reach size_t's
+    // maximum, so the increment cannot overflow.
+    std::ignore = tryPublishDelta(
+      delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = index, .trackIds = {id}}}}, _ids.size() + 1);
+  }
+
+  template<typename Range>
+    requires std::same_as<Range, delta::InsertRange> || std::same_as<Range, delta::UpdateRange>
+  void MutableTrackSource::publishMatchedBatch(std::span<TrackId const> const ids)
+  {
+    if (ids.empty())
+    {
+      return;
+    }
+
+    auto script = delta::RegularTrackEditScript{};
+    std::size_t matchedCount = 0;
+
+    for (std::size_t index = 0; index < _ids.size(); ++index)
+    {
+      auto const trackId = _ids[index];
+
+      if (!std::ranges::contains(ids, trackId))
+      {
+        continue;
+      }
+
+      ++matchedCount;
+
+      if (!script.edits.empty())
+      {
+        if (auto& range = std::get<Range>(script.edits.back()); range.start + range.trackIds.size() == index)
+        {
+          range.trackIds.push_back(trackId);
+          continue;
+        }
+      }
+
+      script.edits.emplace_back(Range{.start = index, .trackIds = {trackId}});
+    }
+
+    if (matchedCount == 0)
+    {
+      return;
+    }
+
+    // Every match occupies one distinct index, so the insert-size subtraction
+    // cannot underflow.
+    auto const previousSize = std::same_as<Range, delta::InsertRange> ? _ids.size() - matchedCount : _ids.size();
+    std::ignore = tryPublishDelta(std::move(script), previousSize);
   }
 
   std::shared_ptr<MutableTrackSource> makeMutableTrackSource(std::span<TrackId const> ids)
