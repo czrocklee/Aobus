@@ -167,6 +167,7 @@
             </Style>
             <Style x:Key="ClassicStatusBarStyle" TargetType="Grid">
                 <Setter Property="Padding" Value="6,2" />
+                <Setter Property="ColumnSpacing" Value="12" />
                 <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
                 <Setter Property="BorderThickness" Value="0,1,0,0" />
                 <Setter Property="CornerRadius" Value="{ThemeResource ClassicChromeCornerRadius}" />

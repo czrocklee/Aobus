@@ -8,6 +8,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/winui/layout/LayoutSchema.h>
+#include <ao/winui/layout/PlacementPlan.h>
 #include <ao/winui/layout/ShellCommands.h>
 #include <ao/winui/layout/ThemeSurface.h>
 
@@ -547,6 +548,25 @@ namespace ao::winui::test
       INFO("node " << node->id);
       CHECK(node->propertyOr<std::string>("variant", std::string{kStatusVariant}) == kStatusVariant);
     }
+  }
+
+  TEST_CASE("prepareShellPresetDocument - the Classic status message owns the bar's remaining width",
+            "[winui][unit][layout]")
+  {
+    // Classic has no activity surface, so its status line is the only place a
+    // message is presented. An auto slot measures the text at its natural width
+    // and lets the window edge clip it without an ellipsis; only the remaining
+    // width lets the line trim and point to its full-text tooltip.
+    auto const classicRes =
+      prepareShellPresetDocument(readShippedDocument(ShellPreset::Classic), shellPresetResource(ShellPreset::Classic));
+    REQUIRE(classicRes.has_value());
+
+    auto const* const message = findById(classicRes->effectiveRoot(), "classic-status-message");
+    auto const* const trackCount = findById(classicRes->effectiveRoot(), "classic-status-track-count");
+    REQUIRE(message != nullptr);
+    REQUIRE(trackCount != nullptr);
+    CHECK(planPlacement(*message).horizontalSlot == SlotSizing::Star);
+    CHECK(planPlacement(*trackCount).horizontalSlot == SlotSizing::Auto);
   }
 
   TEST_CASE("prepareShellPresetDocument - every preset offers play/pause exactly once", "[winui][unit][layout]")

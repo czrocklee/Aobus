@@ -300,12 +300,19 @@ namespace ao::winui::layout
       async::Subscription _shellStateSub;
     };
 
-    /// The shell's transient message, wherever the document put it.
+    /**
+     * @brief The shell's transient message, wherever the document put it.
+     *
+     * A single line can be narrower than the message, and in a shell without an
+     * activity surface this line is the message's only presentation. It trims
+     * with an ellipsis so the cut is visible, and its tooltip carries the full text.
+     */
     class StatusMessageComponent final : public LayoutComponent
     {
     public:
       StatusMessageComponent(LayoutBuildContext& ctx, async::Signal<std::string>& statusMessageChanged)
       {
+        _text.TextTrimming(TextTrimming::CharacterEllipsis);
         applyMessage(ctx.statusMessage);
         _statusMessageSub = subscribeUiUpdate(
           statusMessageChanged, "StatusMessageComponent", [this](std::string message) { applyMessage(message); });
@@ -314,7 +321,13 @@ namespace ao::winui::layout
       FrameworkElement element() const override { return _text; }
 
     private:
-      void applyMessage(std::string_view const message) { _text.Text(winrt::to_hstring(message)); }
+      void applyMessage(std::string_view const message)
+      {
+        auto const text = winrt::to_hstring(message);
+        _text.Text(text);
+        ToolTipService::SetToolTip(
+          _text, text.empty() ? winrt::Windows::Foundation::IInspectable{nullptr} : winrt::box_value(text));
+      }
 
       TextBlock _text{};
       async::Subscription _statusMessageSub;
