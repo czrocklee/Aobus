@@ -6,6 +6,7 @@
 #include "app/AppConfigStore.h"
 #include "app/AppDialog.h"
 #include "app/GtkMainContextExecutor.h"
+#include "app/KeymapApplicator.h"
 #include "app/LibraryWindowLifecycle.h"
 #include "app/ShellLayoutStore.h"
 #include "app/WindowState.h"
@@ -45,6 +46,8 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/input/KeyChord.h>
+#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
@@ -52,6 +55,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <giomm/actiongroup.h>
 #include <giomm/actionmap.h>
+#include <glibmm/ustring.h>
 #include <gsl-lite/gsl-lite.hpp>
 #include <gtkmm/dialog.h>
 #include <gtkmm/menubutton.h>
@@ -601,6 +605,61 @@ namespace ao::gtk::test
     {
       CHECK(dynamic_cast<Gtk::MenuButton&>(*applicationMenu).get_menu_model() != nullptr);
     }
+  }
+
+  TEST_CASE("MainWindow - a keymap publishes accelerators only after it is saved", "[gtk][unit][main-window][shortcut]")
+  {
+    // Accelerators publish only to a window added to a started application.
+    auto const appPtr = ensureRegisteredGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto const configDir = fixture.tempDir().path() / "global-config";
+    auto const configPath = configDir / "config.yaml";
+    std::filesystem::create_directories(configDir);
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+    auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    appPtr->add_window(window);
+
+    auto const chord = [](std::string const& text)
+    {
+      auto const optChord = uimodel::KeyChord::parse(text);
+      REQUIRE(optChord);
+      return *optChord;
+    };
+    auto const actionId = std::string{"main-window.keymap-probe"};
+    auto const detailedAction = "win." + actionId;
+    auto const liveKeymap = uimodel::KeymapModel{uimodel::KeymapBindings{{actionId, {chord("Ctrl+F9")}}}};
+    applyKeymapAccelerators(*appPtr, liveKeymap);
+    auto const liveAccels = std::vector<Glib::ustring>{"<Control>F9"};
+    REQUIRE(appPtr->get_accels_for_action(detailedAction) == liveAccels);
+
+    auto candidate = liveKeymap;
+    REQUIRE(candidate.tryBind(actionId, chord("Ctrl+F10")));
+
+    SECTION("a failed save leaves live accelerators unchanged")
+    {
+      std::filesystem::remove_all(configDir);
+
+      {
+        auto blocker = std::ofstream{configDir};
+        REQUIRE(blocker);
+        blocker << "not a directory";
+      }
+
+      CHECK_FALSE(window.applyKeymap(candidate));
+      CHECK(appPtr->get_accels_for_action(detailedAction) == liveAccels);
+    }
+
+    SECTION("a successful save publishes the saved accelerators")
+    {
+      REQUIRE(window.applyKeymap(candidate));
+
+      CHECK(appPtr->get_accels_for_action(detailedAction) == std::vector<Glib::ustring>{"<Control>F9", "<Control>F10"});
+      auto const reopened = AppConfigStore{configPath}.loadKeymap(liveKeymap.bindings());
+      CHECK(reopened.chordsFor(actionId) == candidate.chordsFor(actionId));
+    }
+
+    appPtr->set_accels_for_action(detailedAction, {});
+    appPtr->remove_window(window);
   }
 
   TEST_CASE("MainWindow - a session checkpoint does not clobber explicit preferences",

@@ -56,6 +56,11 @@ namespace ao::gtk
       /// is dismissed, rebound or destroyed, including through nested main-context iteration.
       uimodel::PreferencesEditorModel::PersistCallback onPersistPreferences{};
       uimodel::PreferencesEditorModel::ThemeApplyCallback onApplyTheme{};
+      /// Persists a Keyboard-page shortcut candidate and publishes it as live accelerators on success.
+      /// Used for every accepted edit and Retry for this window's lifetime, including a Retry after
+      /// reopening for another target, so it must resolve its target when it runs rather than
+      /// capture the window that was active when Preferences was created.
+      ShortcutEditorWidget::ChangedCallback onCommitShortcuts{};
     };
 
     PreferencesWindow(i18n::MessageCatalog textCatalog, Callbacks callbacks);
@@ -66,13 +71,11 @@ namespace ao::gtk
     PreferencesWindow(PreferencesWindow&&) = delete;
     PreferencesWindow& operator=(PreferencesWindow&&) = delete;
 
-    /// Rebuilds the Keyboard page from @p schema and @p keymap. Does nothing while the existing
-    /// editor still holds a failed save candidate, so reopening Preferences never discards it.
-    /// That skip keeps the editor's original @p onChanged, so the callback must resolve its target
-    /// when it runs rather than capturing the window that was active when it was wired.
-    void refreshKeyboardPage(uimodel::LayoutSchema const& schema,
-                             uimodel::KeymapModel keymap,
-                             ShortcutEditorWidget::ChangedCallback onChanged);
+    /// Rebuilds the Keyboard page from @p schema and @p keymap; edits commit through
+    /// Callbacks::onCommitShortcuts. While the existing editor holds a failed save candidate, this
+    /// intentionally postpones the whole data refresh and keeps that editor, so reopening
+    /// Preferences never discards the candidate. The next refresh after Retry or Discard applies.
+    void refreshKeyboardPage(uimodel::LayoutSchema const& schema, uimodel::KeymapModel keymap);
     void refreshPreferences(rt::AppPrefsState prefs,
                             rt::PlaybackService* playback,
                             Gtk::Window* targetWindow = nullptr);

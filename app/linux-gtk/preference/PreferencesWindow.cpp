@@ -281,9 +281,7 @@ namespace ao::gtk
     _layoutPage.append(*actionsBox);
   }
 
-  void PreferencesWindow::refreshKeyboardPage(uimodel::LayoutSchema const& schema,
-                                              uimodel::KeymapModel keymap,
-                                              ShortcutEditorWidget::ChangedCallback onChanged)
+  void PreferencesWindow::refreshKeyboardPage(uimodel::LayoutSchema const& schema, uimodel::KeymapModel keymap)
   {
     if (_shortcutEditorPtr != nullptr && _shortcutEditorPtr->hasPendingCandidate())
     {
@@ -291,8 +289,8 @@ namespace ao::gtk
     }
 
     clearKeyboardPage();
-    _shortcutEditorPtr =
-      std::make_unique<ShortcutEditorWidget>(_textCatalog, schema, std::move(keymap), std::move(onChanged), *this);
+    _shortcutEditorPtr = std::make_unique<ShortcutEditorWidget>(
+      _textCatalog, schema, std::move(keymap), _callbacks.onCommitShortcuts, *this);
     _shortcutEditorPtr->set_hexpand(true);
     _shortcutEditorPtr->set_vexpand(true);
     _keyboardPage.append(*_shortcutEditorPtr);

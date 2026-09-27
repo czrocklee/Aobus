@@ -4,6 +4,7 @@
 #include "preference/PreferencesWindow.h"
 
 #include "app/AppDialog.h"
+#include "preference/ShortcutEditorWidget.h"
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -17,6 +18,7 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
@@ -33,7 +35,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::gtk::test
@@ -46,6 +51,63 @@ namespace ao::gtk::test
       schema.tryAddAction(
         {.id = "playback.playPause", .label = "Play/Pause", .category = "Playback", .capabilities = 0});
       return schema;
+    }
+
+    /// Adds an action the original schema lacks, so a postponed refresh is observable.
+    uimodel::LayoutSchema makeReplacementSchema()
+    {
+      auto schema = makeSchema();
+      schema.tryAddAction({.id = "playback.stop", .label = "Stop Playback", .category = "Playback", .capabilities = 0});
+      return schema;
+    }
+
+    std::vector<std::string> chordTexts(uimodel::KeymapModel const& keymap, std::string_view const actionId)
+    {
+      auto texts = std::vector<std::string>{};
+
+      for (auto const& chord : keymap.chordsFor(actionId))
+      {
+        texts.emplace_back(chord.toString());
+      }
+
+      return texts;
+    }
+
+    /// Stands in for an application window the composition root resolves when a commit runs.
+    struct ShortcutCommitTarget final
+    {
+      bool failSave = false;
+      std::vector<uimodel::KeymapModel> applied{};
+    };
+
+    /// Resolves @p activeTarget at call time, as the GTK composition root resolves the active window.
+    PreferencesWindow::Callbacks resolvingShortcutCommitCallbacks(ShortcutCommitTarget*& activeTarget)
+    {
+      return PreferencesWindow::Callbacks{
+        .onCommitShortcuts = [&activeTarget](uimodel::KeymapModel const& keymap) -> Result<>
+        {
+          if (activeTarget == nullptr)
+          {
+            return makeError(Error::Code::InvalidState, "no active window");
+          }
+
+          if (activeTarget->failSave)
+          {
+            return makeError(Error::Code::IoError, "disk full");
+          }
+
+          activeTarget->applied.push_back(keymap);
+          return {};
+        },
+      };
+    }
+
+    PreferencesWindow::Callbacks failingShortcutCommitCallbacks()
+    {
+      return PreferencesWindow::Callbacks{
+        .onCommitShortcuts = [](uimodel::KeymapModel const&) -> Result<>
+        { return makeError(Error::Code::IoError, "disk full"); },
+      };
     }
 
     auto const kPendingCloseMessage =
@@ -171,7 +233,7 @@ namespace ao::gtk::test
     CHECK(window.hasPage("keyboard"));
 
     auto schema = makeSchema();
-    window.refreshKeyboardPage(schema, uimodel::KeymapModel{uimodel::defaultKeymap()}, {});
+    window.refreshKeyboardPage(schema, uimodel::KeymapModel{uimodel::defaultKeymap()});
 
     CHECK(findLabelByText(window, "Play/Pause") != nullptr);
     CHECK(findLabelByText(window, "Ctrl+P") != nullptr);
@@ -641,11 +703,8 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
-    window.refreshKeyboardPage(makeSchema(),
-                               uimodel::KeymapModel{uimodel::defaultKeymap()},
-                               [](uimodel::KeymapModel const&) -> Result<>
-                               { return makeError(Error::Code::IoError, "disk full"); });
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), failingShortcutCommitCallbacks()};
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
     drainGtkEvents();
 
     auto* const removeButton = findButtonByLabel(window, "✕");
@@ -671,10 +730,8 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto const failPersist = [](uimodel::KeymapModel const&) -> Result<>
-    { return makeError(Error::Code::IoError, "disk full"); };
-    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
-    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, failPersist);
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), failingShortcutCommitCallbacks()};
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
     drainGtkEvents();
 
     auto* const removeButton = findButtonByLabel(window, "✕");
@@ -683,11 +740,102 @@ namespace ao::gtk::test
     drainGtkEvents();
     REQUIRE(findLabelByText(window, "Could not save shortcuts: disk full") != nullptr);
 
-    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()}, failPersist);
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
     drainGtkEvents();
 
     CHECK(findLabelByText(window, "Could not save shortcuts: disk full") != nullptr);
     CHECK(findLabelByText(window, "Ctrl+P") == nullptr);
+  }
+
+  TEST_CASE("PreferencesWindow - Retry after reopening commits the retained candidate to the current target",
+            "[gtk][unit][preference][shortcut]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    auto fixture = GtkRuntimeFixture{};
+    rt::test::addReadyAudioProvider(fixture.runtime());
+
+    auto firstTarget = ShortcutCommitTarget{.failSave = true};
+    auto secondTarget = ShortcutCommitTarget{};
+    auto* activeTarget = &firstTarget;
+    auto firstWindow = Gtk::Window{};
+    auto secondWindow = Gtk::Window{};
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), resolvingShortcutCommitCallbacks(activeTarget)};
+    window.refreshPreferences(rt::AppPrefsState{}, &fixture.runtime().playback(), &firstWindow);
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
+    drainGtkEvents();
+
+    auto* const removeButton = findButtonByLabel(window, "✕");
+    REQUIRE(removeButton != nullptr);
+    emitClicked(*removeButton);
+    drainGtkEvents();
+
+    CHECK(firstTarget.applied.empty());
+    REQUIRE(findLabelByText(window, "Could not save shortcuts: disk full") != nullptr);
+
+    // Reopen for another window: the pending candidate postpones the whole Keyboard data refresh.
+    activeTarget = &secondTarget;
+    window.refreshPreferences(rt::AppPrefsState{}, &fixture.runtime().playback(), &secondWindow);
+    window.refreshKeyboardPage(makeReplacementSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
+    drainGtkEvents();
+
+    CHECK(findLabelByText(window, "Could not save shortcuts: disk full") != nullptr);
+    CHECK(findLabelByText(window, "Ctrl+P") == nullptr);
+    CHECK(findLabelByText(window, "Stop Playback") == nullptr);
+
+    auto* const retryButton = findButtonByLabel(window, "Retry");
+    REQUIRE(retryButton != nullptr);
+    emitClicked(*retryButton);
+    drainGtkEvents();
+
+    CHECK(firstTarget.applied.empty());
+    REQUIRE(secondTarget.applied.size() == 1);
+    CHECK(chordTexts(secondTarget.applied[0], "playback.playPause") ==
+          std::vector<std::string>{"Media:Play", "Media:Pause"});
+    CHECK(findLabelByText(window, "Could not save shortcuts: disk full") == nullptr);
+
+    // Without a pending candidate the next refresh applies its data again.
+    window.refreshKeyboardPage(makeReplacementSchema(), secondTarget.applied[0]);
+    drainGtkEvents();
+
+    CHECK(findLabelByText(window, "Stop Playback") != nullptr);
+    CHECK(findLabelByText(window, "Ctrl+P") == nullptr);
+  }
+
+  TEST_CASE("PreferencesWindow - a shortcut commit without an active target keeps the candidate for Retry",
+            "[gtk][unit][preference][shortcut]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    auto target = ShortcutCommitTarget{};
+    ShortcutCommitTarget* activeTarget = nullptr;
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), resolvingShortcutCommitCallbacks(activeTarget)};
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
+    drainGtkEvents();
+
+    auto* const removeButton = findButtonByLabel(window, "✕");
+    REQUIRE(removeButton != nullptr);
+    emitClicked(*removeButton);
+    drainGtkEvents();
+
+    REQUIRE(findLabelByText(window, "Could not save shortcuts: no active window") != nullptr);
+    CHECK(findLabelByText(window, "Ctrl+P") == nullptr);
+
+    gboolean handled = FALSE;
+    ::g_signal_emit_by_name(window.gobj(), "close-request", &handled);
+    drainGtkEvents();
+    auto* const prompt = pendingShortcutClosePrompt();
+    REQUIRE(prompt != nullptr);
+
+    activeTarget = &target;
+    prompt->response(Gtk::ResponseType::OK);
+    drainGtkEvents();
+
+    REQUIRE(target.applied.size() == 1);
+    CHECK(chordTexts(target.applied[0], "playback.playPause") == std::vector<std::string>{"Media:Play", "Media:Pause"});
+    CHECK(findLabelByText(window, "Could not save shortcuts: no active window") == nullptr);
+    CHECK(findButtonByLabel(window, "✕") == nullptr);
+    CHECK(pendingShortcutClosePrompt() == nullptr);
   }
 
   TEST_CASE("PreferencesWindow - target hide discards a failed shortcut candidate without a new prompt",
@@ -699,13 +847,10 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto target = Gtk::Window{};
-    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), failingShortcutCommitCallbacks()};
     auto prefs = rt::AppPrefsState{};
     window.refreshPreferences(prefs, &fixture.runtime().playback(), &target);
-    window.refreshKeyboardPage(makeSchema(),
-                               uimodel::KeymapModel{uimodel::defaultKeymap()},
-                               [](uimodel::KeymapModel const&) -> Result<>
-                               { return makeError(Error::Code::IoError, "disk full"); });
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
     drainGtkEvents();
 
     auto* const removeButton = findButtonByLabel(window, "✕");
@@ -728,20 +873,21 @@ namespace ao::gtk::test
 
     bool persistShouldFail = true;
     std::int32_t persistCount = 0;
-    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
-    window.refreshKeyboardPage(makeSchema(),
-                               uimodel::KeymapModel{uimodel::defaultKeymap()},
-                               [&](uimodel::KeymapModel const&) -> Result<>
-                               {
-                                 ++persistCount;
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(),
+                                    PreferencesWindow::Callbacks{
+                                      .onCommitShortcuts = [&](uimodel::KeymapModel const&) -> Result<>
+                                      {
+                                        ++persistCount;
 
-                                 if (persistShouldFail)
-                                 {
-                                   return makeError(Error::Code::IoError, "disk full");
-                                 }
+                                        if (persistShouldFail)
+                                        {
+                                          return makeError(Error::Code::IoError, "disk full");
+                                        }
 
-                                 return {};
-                               });
+                                        return {};
+                                      },
+                                    }};
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
     drainGtkEvents();
 
     auto* const removeButton = findButtonByLabel(window, "✕");
@@ -819,11 +965,8 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
-    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
-    window.refreshKeyboardPage(makeSchema(),
-                               uimodel::KeymapModel{uimodel::defaultKeymap()},
-                               [](uimodel::KeymapModel const&) -> Result<>
-                               { return makeError(Error::Code::IoError, "disk full"); });
+    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), failingShortcutCommitCallbacks()};
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
     drainGtkEvents();
 
     auto* const removeButton = findButtonByLabel(window, "✕");
@@ -856,14 +999,17 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     rt::test::addReadyAudioProvider(fixture.runtime());
 
+    // The window keeps one commit capability; each editing session below switches what it does.
+    auto commit = ShortcutEditorWidget::ChangedCallback{[](uimodel::KeymapModel const&) -> Result<>
+                                                        { return makeError(Error::Code::IoError, "disk full"); }};
     auto target = Gtk::Window{};
-    auto window = PreferencesWindow{ao::test::englishMessageCatalog(), {}};
+    auto window =
+      PreferencesWindow{ao::test::englishMessageCatalog(),
+                        PreferencesWindow::Callbacks{.onCommitShortcuts = [&commit](uimodel::KeymapModel const& keymap)
+                                                     { return commit(keymap); }}};
     auto prefs = rt::AppPrefsState{};
     window.refreshPreferences(prefs, &fixture.runtime().playback(), &target);
-    window.refreshKeyboardPage(makeSchema(),
-                               uimodel::KeymapModel{uimodel::defaultKeymap()},
-                               [](uimodel::KeymapModel const&) -> Result<>
-                               { return makeError(Error::Code::IoError, "disk full"); });
+    window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
     drainGtkEvents();
 
     auto* const removeButton = findButtonByLabel(window, "✕");
@@ -890,13 +1036,12 @@ namespace ao::gtk::test
     SECTION("retained response leaves a fresh clean session unchanged")
     {
       std::int32_t freshPersistCount = 0;
-      window.refreshKeyboardPage(makeSchema(),
-                                 uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                 [&freshPersistCount](uimodel::KeymapModel const&) -> Result<>
-                                 {
-                                   ++freshPersistCount;
-                                   return {};
-                                 });
+      commit = [&freshPersistCount](uimodel::KeymapModel const&) -> Result<>
+      {
+        ++freshPersistCount;
+        return {};
+      };
+      window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
       window.set_visible(true);
       drainGtkEvents();
 
@@ -921,13 +1066,12 @@ namespace ao::gtk::test
     SECTION("retained response cannot steer a fresh failed draft or its prompt")
     {
       std::int32_t freshPersistCount = 0;
-      window.refreshKeyboardPage(makeSchema(),
-                                 uimodel::KeymapModel{uimodel::defaultKeymap()},
-                                 [&freshPersistCount](uimodel::KeymapModel const&) -> Result<>
-                                 {
-                                   ++freshPersistCount;
-                                   return makeError(Error::Code::IoError, "fresh disk full");
-                                 });
+      commit = [&freshPersistCount](uimodel::KeymapModel const&) -> Result<>
+      {
+        ++freshPersistCount;
+        return makeError(Error::Code::IoError, "fresh disk full");
+      };
+      window.refreshKeyboardPage(makeSchema(), uimodel::KeymapModel{uimodel::defaultKeymap()});
       window.set_visible(true);
       drainGtkEvents();
 
