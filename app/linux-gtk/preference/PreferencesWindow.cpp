@@ -21,6 +21,8 @@
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
+#include <glibmm/main.h>
+
 // Gtk::Window forward-declares Application, but remove_window requires the complete type.
 // NOLINTNEXTLINE(misc-include-cleaner)
 #include <gtkmm/application.h>
@@ -132,8 +134,19 @@ namespace ao::gtk
   PreferencesWindow::~PreferencesWindow()
   {
     _callbackScope.close();
+    _targetHideConn.disconnect();
+    _outputSelectorRetirementConn.disconnect();
     clearKeyboardPage();
-    clearWindowScopedState();
+    _outputDeviceViewModelPtr.reset();
+
+    if (_outputSelectorPtr)
+    {
+      _outputSelectorPtr->retire();
+      _outputDeviceButton.unset_popover();
+      _outputSelectorPtr.reset();
+    }
+
+    _retiredOutputSelectorPtrs.clear();
   }
 
   void PreferencesWindow::setSelectedThemeId(std::string_view const themeId)
@@ -393,9 +406,28 @@ namespace ao::gtk
 
   void PreferencesWindow::clearWindowScopedState()
   {
+    ++_outputBindingGeneration;
     _targetHideConn.disconnect();
     _outputDeviceViewModelPtr.reset();
-    _outputDeviceButton.unset_popover();
+
+    if (_outputSelectorPtr)
+    {
+      _outputSelectorPtr->retire();
+      _outputSelectorPtr->popdown();
+      _outputDeviceButton.unset_popover();
+      _retiredOutputSelectorPtrs.push_back(std::move(_outputSelectorPtr));
+
+      if (!_outputSelectorRetirementConn.connected())
+      {
+        _outputSelectorRetirementConn = Glib::signal_idle().connect(
+          [this]
+          {
+            _retiredOutputSelectorPtrs.clear();
+            return false;
+          });
+      }
+    }
+
     _outputDeviceLabel.set_text(gtkText(_textCatalog, MessageId::GtkPreferencesOutputUnavailable));
     _outputDeviceButton.set_tooltip_text({});
   }
@@ -453,23 +485,6 @@ namespace ao::gtk
     _modelPtr->setTheme(uimodel::themePresetFromId(themeId.raw()));
   }
 
-  void PreferencesWindow::refreshOutputSummary(rt::PlaybackService& playback)
-  {
-    _outputDeviceViewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(
-      playback,
-      _textCatalog,
-      [this](uimodel::OutputDeviceViewState const& view)
-      {
-        _outputDeviceLabel.set_text(view.outputBackendSummary.empty()
-                                      ? gtkText(_textCatalog, MessageId::GtkPreferencesChooseOutputDevice)
-                                      : view.outputBackendSummary);
-        _outputDeviceButton.set_tooltip_text(view.outputDeviceStatus);
-      },
-      // The summary only reports the active route; the selector popover records requests.
-      uimodel::OutputDeviceIntent::discarded());
-    _outputDeviceViewModelPtr->refresh();
-  }
-
   void PreferencesWindow::rebuildOutputSelector(rt::PlaybackService* playback, Gtk::Window* targetWindow)
   {
     clearWindowScopedState();
@@ -484,22 +499,38 @@ namespace ao::gtk
       _targetHideConn = targetWindow->signal_hide().connect(sigc::mem_fun(*this, &PreferencesWindow::dismiss));
     }
 
-    refreshOutputSummary(*playback);
+    _outputDeviceViewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(
+      *playback,
+      _textCatalog,
+      [this](uimodel::OutputDeviceViewState const& view)
+      {
+        _outputDeviceLabel.set_text(view.outputBackendSummary.empty()
+                                      ? gtkText(_textCatalog, MessageId::GtkPreferencesChooseOutputDevice)
+                                      : view.outputBackendSummary);
+        _outputDeviceButton.set_tooltip_text(view.outputDeviceStatus);
+      },
+      // The summary only reports the active route; the selector popover records requests.
+      uimodel::OutputDeviceIntent::discarded());
+    _outputDeviceViewModelPtr->refresh();
 
-    auto* const selector =
-      Gtk::make_managed<OutputDevicePopover>(*playback,
-                                             _textCatalog,
-                                             uimodel::OutputDeviceIntent::recordedBy(
-                                               [this, playback](audio::OutputDeviceSelection const& selection)
-                                               {
-                                                 if (_modelPtr)
-                                                 {
-                                                   _modelPtr->setPreferredOutputDevice(selection);
-                                                 }
+    _outputSelectorPtr = std::make_unique<OutputDevicePopover>(
+      *playback,
+      _textCatalog,
+      uimodel::OutputDeviceIntent::recordedBy(
+        [this, generation = _outputBindingGeneration](audio::OutputDeviceSelection const& selection)
+        {
+          // The command's snapshot publication may retire this binding before
+          // the requested selection reaches its recorder.
+          if (generation != _outputBindingGeneration || !_modelPtr)
+          {
+            return;
+          }
 
-                                                 refreshOutputSummary(*playback);
-                                               }),
-                                             Gtk::PositionType::BOTTOM);
-    _outputDeviceButton.set_popover(*selector);
+          _modelPtr->setPreferredOutputDevice(selection);
+          // Persistence returns without dismissing or rebinding this window.
+          _outputDeviceViewModelPtr->refresh();
+        }),
+      Gtk::PositionType::BOTTOM);
+    _outputDeviceButton.set_popover(*_outputSelectorPtr);
   }
 } // namespace ao::gtk

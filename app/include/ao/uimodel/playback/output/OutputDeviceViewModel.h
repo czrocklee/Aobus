@@ -74,6 +74,11 @@ namespace ao::uimodel
 
     void refresh();
 
+    /// Stops automatic Playback snapshot observation immediately; calling twice is harmless.
+    /// Observation cannot be restarted for this instance.
+    /// refresh(), selectOutputDevice() and setTextCatalog() still require a live PlaybackService.
+    void stopObserving();
+
     void setTextCatalog(i18n::MessageCatalog textCatalog);
 
   private:

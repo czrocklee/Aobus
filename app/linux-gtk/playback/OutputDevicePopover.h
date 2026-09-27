@@ -41,11 +41,16 @@ namespace ao::gtk
                         Gtk::PositionType position = Gtk::PositionType::BOTTOM);
     ~OutputDevicePopover() override;
 
+    /// Disconnect Playback observation and make the show/selection adapters inert.
+    /// The owner must still defer destruction until the current GTK dispatch returns.
+    void retire();
+
   private:
     Gtk::Widget* createRow(Glib::RefPtr<Glib::Object> const& itemPtr);
 
     Gtk::ListBox _listBox;
     Glib::RefPtr<Gio::ListStore<Glib::Object>> _storePtr{};
     uimodel::OutputDeviceViewModel _outputDeviceViewModel;
+    bool _retired = false;
   };
 } // namespace ao::gtk

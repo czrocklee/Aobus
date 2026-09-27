@@ -96,6 +96,11 @@ namespace ao::gtk
     _listBox.signal_row_activated().connect(
       [this](Gtk::ListBoxRow* row)
       {
+        if (_retired)
+        {
+          return;
+        }
+
         if (auto const index = row->get_index(); index >= 0 && std::cmp_less(index, _storePtr->get_n_items()))
         {
           auto const itemPtr = _storePtr->get_item(index);
@@ -110,10 +115,23 @@ namespace ao::gtk
         }
       });
 
-    signal_show().connect([this] { _outputDeviceViewModel.refresh(); });
+    signal_show().connect(
+      [this]
+      {
+        if (!_retired)
+        {
+          _outputDeviceViewModel.refresh();
+        }
+      });
   }
 
   OutputDevicePopover::~OutputDevicePopover() = default;
+
+  void OutputDevicePopover::retire()
+  {
+    _retired = true;
+    _outputDeviceViewModel.stopObserving();
+  }
 
   Gtk::Widget* OutputDevicePopover::createRow(Glib::RefPtr<Glib::Object> const& itemPtr)
   {
