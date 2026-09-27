@@ -82,6 +82,10 @@ Current ownership is divided as follows:
 Global state may contain library identities only when its lifecycle explicitly pairs the payload with the active library and validates those identities before restore.
 Unrelated global preferences must not retain them.
 
+A composite operation that writes several independent stores defines each store's outcome and acknowledgement explicitly; one aggregate result must not silently describe them all.
+WinUI's desktop-settings candidate is the current composite: its best-effort workspace checkpoint is diagnostic-only, and the checked desktop-settings save that follows is the operation's result and alone gates durable library-root admission.
+Neither write rolls back the other.
+
 ## Schema boundary
 
 Every managed payload uses an explicit schema beside its semantic or format owner.

@@ -24,7 +24,7 @@ The [system architecture](../overview.md) defines the runtime-to-UIModel-to-fron
 
 - One process owns at most one `LibrarySession`, one unique runtime, and one main window; opening a different root replaces the process rather than adding another graph.
 - A different-root restart prepares the still-live graph by checkpointing state and terminally retiring playback persistence. Retirement failure leaves that graph usable and launches no successor.
-- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot and permanently seals playback writes.
+- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot, permanently seals playback writes, and posts the shared [unsaved-library-switch report](../desktop-library-lifecycle.md#launch-and-activate-the-successor), which also takes the status line it shares with the [initial scan](windows-library-workflows.md#scan); the successor continues with its in-memory root, so the previous library opens on the next launch.
 - Switching shells changes presentation only; it neither scans the library nor interrupts playback or an admitted library task.
 - The current output route remains Runtime state. Both shells select it through
   the same UIModel output-device model used by GTK and TUI.
@@ -212,6 +212,7 @@ Exact paths, fields, defaults, validation, and versioning are defined by the [Wi
 ## Frontend observations
 
 Modern uses an integrated title bar, navigation, primary table, optional inspector, and persistent Now Playing surface. Classic uses a system title bar and dense desktop chrome. Neither visual treatment changes the runtime meaning of playback, output, selection, quality, or Soul aura.
+Classic has no activity surface, so its status bar is the only presentation of a status message. The message takes the width the track count leaves; a longer message ends in an ellipsis, and its tooltip shows the full text.
 WinUI packages the shared `note`, `vinyl`, and `equalizer` SVG sources plus the Soul brand mark and its license, even though the fixed Windows slot mapping currently selects only `monogram`, `vinyl`, and `equalizer`.
 UIModel supplies style, monogram, and deterministic monogram foreground-color values; WinUI owns transparent XAML foreground rendering, responsive vinyl geometry, its current-theme-accent outer ring and one-third-diameter muted center label, and asset decoding.
 
@@ -246,6 +247,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 ## Test map
 
 - [`ShellStateTest.cpp`](../../../test/unit/winui/layout/ShellStateTest.cpp) protects Windows breakpoints and shell-mode behavior.
+- [`ShellDocumentTest.cpp`](../../../test/unit/winui/layout/ShellDocumentTest.cpp) protects the shipped presets' roles, including the Classic status message's claim on the status bar's remaining width.
 - [`TrackDisplayIndexTest.cpp`](../../../test/unit/uimodel/library/track/TrackDisplayIndexTest.cpp) and [`IndexedTrackRowCacheTest.cpp`](../../../test/unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp) protect grouping, source/display index mapping, and lazy row caching; runtime resource-byte tests protect shared cover delivery and stale-flight fencing.
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
 - [`OutputSelectionTest.cpp`](../../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)

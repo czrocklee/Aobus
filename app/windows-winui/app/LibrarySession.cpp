@@ -50,6 +50,7 @@
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DesktopOutputSelection.h>
 #include <ao/winui/app/SelectedRootCommit.h>
+#include <ao/winui/app/SettingsPersistence.h>
 
 #include <cstdint>
 #include <exception>
@@ -65,6 +66,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::winui
@@ -219,6 +221,8 @@ namespace ao::winui
     std::string_view operationStatusKey;
     bool operationActive = false;
     bool scanAfterOpen = false;
+    /// A failed root commit's status, which the settled startup scan may restore to the status line.
+    std::optional<std::string> optRootCommitFailureStatus;
     bool shutdown = false;
     PlaybackPersistenceAdmission playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
   };
@@ -518,11 +522,11 @@ namespace ao::winui
     auto& storage = *_storagePtr;
     AO_INVARIANT(storage.optRuntimeGraph, "LibrarySession cannot save settings before the runtime graph exists");
     auto& graph = *storage.optRuntimeGraph;
-    graph.runtime.workspace().saveSession(graph.runtime.workspaceConfigStore());
 
     // The two presentation groups moved to the per-library layout document and
     // are written only by the stores' own persist ports.
-    return storage.settingsStorePtr->save("desktop", settings, winui::DesktopSettingsYamlSchema{});
+    return persistDesktopSettingsCandidate(
+      graph.runtime.workspace(), graph.runtime.workspaceConfigStore(), *storage.settingsStorePtr, settings);
   }
 
   Result<> LibrarySession::commitSelectedRoot()
@@ -543,6 +547,7 @@ namespace ao::winui
       storage.optSelectedRootCommit.reset();
       runtime.sealPlaybackSessionPersistenceWrites();
       storage.playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      reportRootCommitFailure(candidateRes.error());
       return std::unexpected{candidateRes.error()};
     }
 
@@ -553,6 +558,7 @@ namespace ao::winui
     {
       runtime.sealPlaybackSessionPersistenceWrites();
       storage.playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      reportRootCommitFailure(commitRes.error());
       return commitRes;
     }
 
@@ -760,6 +766,7 @@ namespace ao::winui
 
     storage.operationStatusKey = {};
     storage.operationActive = false;
+    auto optRootCommitFailureStatus = std::exchange(storage.optRootCommitFailureStatus, std::nullopt);
 
     // What the scan amounts to, how loudly to say it, and the sentence itself
     // are decided in uimodel, so this window and the GTK one report the same
@@ -774,6 +781,16 @@ namespace ao::winui
     if (severity == rt::NotificationSeverity::Error)
     {
       reportScanFailure(outcome, std::move(message));
+      return;
+    }
+
+    // This scan's status displaced a failed root commit's report. Only a scan
+    // error outranks that report: a scan warning describes the library on
+    // screen, while the failed commit concerns the next launch, which nothing
+    // else on screen reveals.
+    if (optRootCommitFailureStatus)
+    {
+      reportStatus(std::move(*optRootCommitFailureStatus));
       return;
     }
 
@@ -816,6 +833,26 @@ namespace ao::winui
     }
 
     callback(std::move(status));
+  }
+
+  void LibrarySession::reportRootCommitFailure(Error const& error)
+  {
+    // The activity feed retains the shared report past the startup scan's
+    // progress. The Classic preset has no activity surface, so the report also
+    // takes the status line.
+    auto& storage = *_storagePtr;
+    auto request = uimodel::librarySwitchNotSavedNotification(storage.textCatalog, error);
+    auto message = std::get<std::string>(request.message);
+    storage.optRuntimeGraph->runtime.notifications().post(std::move(request));
+
+    // The single status line has no such memory: the startup scan's busy status
+    // replaces it at once, so finishActiveScan decides whether it returns.
+    if (storage.scanAfterOpen)
+    {
+      storage.optRootCommitFailureStatus = message;
+    }
+
+    reportStatus(std::move(message));
   }
 
   void LibrarySession::reportBusy()

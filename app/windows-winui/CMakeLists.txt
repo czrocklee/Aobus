@@ -38,7 +38,9 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   app/LibrarySession.cpp
   app/LibrarySession.h
   app/SelectedRootCommit.cpp
+  app/SettingsPersistence.cpp
   include/ao/winui/app/DesktopOutputSelection.h
+  include/ao/winui/app/SettingsPersistence.h
   image/CoverArtPresenter.cpp
   image/CoverArtPresenter.h
   image/CoverArtPlaceholderRenderer.cpp

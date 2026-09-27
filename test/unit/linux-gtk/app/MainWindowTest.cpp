@@ -32,6 +32,8 @@
 #include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -44,6 +46,7 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/preference/ThemePreset.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -309,6 +312,18 @@ namespace ao::gtk::test
       auto const committedRes = window.commitSuccessorLibrarySelection();
       REQUIRE_FALSE(committedRes);
       CHECK(committedRes.error().code == Error::Code::IoError);
+
+      // Every shipped GTK preset shows the activity feed, which retains the
+      // shared report past the startup scan.
+      auto const expected =
+        uimodel::librarySwitchNotSavedNotification(ao::test::englishMessageCatalog(), committedRes.error());
+      auto const feed = runtimePtr->notifications().feed();
+      CHECK(std::ranges::any_of(feed.entries,
+                                [&expected](rt::NotificationEntry const& entry)
+                                {
+                                  return entry.severity == expected.severity && entry.message == expected.message &&
+                                         entry.lifetime == expected.lifetime;
+                                }));
 
       REQUIRE(std::filesystem::remove(configDir));
       std::filesystem::rename(parkedConfigDir, configDir);

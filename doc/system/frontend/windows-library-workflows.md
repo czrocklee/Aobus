@@ -38,7 +38,9 @@ completion before releasing Runtime borrowers.
 When a successor root contains the canonical database, WinUI opens it without an
 implicit scan. When no canonical database exists, the successor first activates
 the window and settles its durable-root gate, then starts the ordinary initial
-scan. Initial-scan failure leaves the selected root active and permits a later
+scan. When that root commit failed, its report takes the status line back from
+the settled initial scan unless the scan outcome is an Error; its retained
+warning notification keeps it in the activity feed either way. Initial-scan failure leaves the selected root active and permits a later
 **Rescan**.
 
 Rescan runs the transactional scan workflow against the active

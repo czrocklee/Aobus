@@ -215,6 +215,7 @@ es:table {
     library_scan_completed_with_errors { "{hasChanges, select, yes {Escaneo completado con errores; {changes}} other {Escaneo completado con errores}}" }
     library_scan_unreadable { "El escaneo encontró {count, plural, one {# archivo ilegible} other {# archivos ilegibles}} y ningún cambio utilizable" }
     library_scan_failed { "{hasError, select, yes {Error de escaneo: {error}} other {Error de escaneo}}" }
+    library_switch_not_saved { "No se pudo recordar el cambio de biblioteca: {detail}. La biblioteca anterior se abrirá en el próximo inicio." }
     library_all_tracks { "Todas las pistas" }
     library_unnamed_list { "<Lista sin nombre>" }
     library_audio_identity_indexing_failed { "Error al indexar la identidad de audio" }

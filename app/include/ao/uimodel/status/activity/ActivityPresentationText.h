@@ -11,6 +11,11 @@
 #include <string>
 #include <string_view>
 
+namespace ao
+{
+  struct Error;
+}
+
 namespace ao::i18n
 {
   class MessageCatalog;
@@ -29,4 +34,14 @@ namespace ao::uimodel
                                          rt::LibraryTaskProgressKind kind,
                                          std::string_view subject);
   std::string formatLibraryScanMessage(i18n::MessageCatalog const& catalog, LibraryScanOutcome const& outcome);
+
+  /**
+   * @brief Builds the report for a library switch whose new library could not be saved as the startup library.
+   *
+   * The switched-to library stays open and usable, so this is a warning rather
+   * than a startup error. Its consequence appears only at the next launch,
+   * which reopens the previous library, so the report is retained in history
+   * instead of expiring before the user can read it.
+   */
+  rt::NotificationRequest librarySwitchNotSavedNotification(i18n::MessageCatalog const& catalog, Error const& error);
 } // namespace ao::uimodel

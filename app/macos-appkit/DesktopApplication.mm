@@ -14,6 +14,7 @@
 #include "PlaybackBar.h"
 #include "TrackInspector.h"
 #include <ao/Contract.h>
+#include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
@@ -21,11 +22,13 @@
 #include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySuccessorProtocol.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 #include <ao/utility/Path.h>
 
@@ -317,7 +320,7 @@ namespace ao::appkit
         _settings[@"libraryRoot"] = nativeText(ao::utility::pathToUtf8(*planRes->optSelectedRootCommit));
         [self rememberLibraryURL:[NSURL fileURLWithPath:_settings[@"libraryRoot"]]];
 
-        if ([self saveSettings])
+        if (NSError* saveError = nil; [self writeSettings:&saveError] != NO)
         {
           _sessionPtr->runtime().startPlaybackSessionPersistence();
         }
@@ -344,6 +347,12 @@ namespace ao::appkit
           [self refreshRecentLibrariesMenu];
 
           _sessionPtr->runtime().sealPlaybackSessionPersistenceWrites();
+
+          // The session stays usable, so the shared retained report presents this
+          // failure and its next-launch consequence instead of a modal save alert.
+          _sessionPtr->runtime().notifications().post(ao::uimodel::librarySwitchNotSavedNotification(
+            *_optCatalog,
+            ao::Error{.code = ao::Error::Code::IoError, .message = utf8(saveError.localizedDescription)}));
         }
       }
       else if (planRes->source != ao::desktop::LibraryStartupRootSource::EmptyLibraryFallback)
@@ -1052,15 +1061,19 @@ namespace ao::appkit
   return nil;
 }
 
-- (BOOL)saveSettings
+- (BOOL)writeSettings:(NSError**)error
 {
-  NSError* error = nil;
   auto* const data = [NSPropertyListSerialization dataWithPropertyList:_settings
                                                                 format:NSPropertyListBinaryFormat_v1_0
                                                                options:0
-                                                                 error:&error];
+                                                                 error:error];
 
-  if (data == nil || ([data writeToURL:_settingsURL options:NSDataWritingAtomic error:&error] == NO))
+  return static_cast<BOOL>(data != nil && [data writeToURL:_settingsURL options:NSDataWritingAtomic error:error] != NO);
+}
+
+- (BOOL)saveSettings
+{
+  if (NSError* error = nil; [self writeSettings:&error] == NO)
   {
     showError(_window, [self text:MessageId::AppKitOperationFailed], error.localizedDescription);
     return NO;

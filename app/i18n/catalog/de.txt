@@ -215,6 +215,7 @@ de:table {
     library_scan_completed_with_errors { "{hasChanges, select, yes {Scan mit Fehlern abgeschlossen; {changes}} other {Scan mit Fehlern abgeschlossen}}" }
     library_scan_unreadable { "Der Bibliotheksscan fand {count, plural, one {# unlesbare Datei} other {# unlesbare Dateien}} und keine verwendbaren Änderungen" }
     library_scan_failed { "{hasError, select, yes {Scan fehlgeschlagen: {error}} other {Scan fehlgeschlagen}}" }
+    library_switch_not_saved { "Der Bibliothekswechsel konnte nicht gespeichert werden: {detail}. Beim nächsten Start wird die vorherige Bibliothek geöffnet." }
     library_all_tracks { "Alle Titel" }
     library_unnamed_list { "<Unbenannte Liste>" }
     library_audio_identity_indexing_failed { "Indizierung der Audioidentität fehlgeschlagen" }

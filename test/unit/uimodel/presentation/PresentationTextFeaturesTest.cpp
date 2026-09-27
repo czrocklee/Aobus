@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
@@ -298,6 +299,21 @@ namespace ao::uimodel::test
     CHECK(i18n::requiredFormat(catalog, MessageId::TrackFilterError, {{"diagnostic", "unexpected token ')'"}}) ==
           "Filter error: unexpected token ')'");
     CHECK(i18n::requiredFormat(catalog, MessageId::TrackFilterError, {{"diagnostic", ""}}) == "Filter error: ");
+  }
+
+  TEST_CASE("i18n::MessageCatalog - an unsaved library switch is a retained warning with its failure detail",
+            "[uimodel][unit][catalog]")
+  {
+    auto const request = librarySwitchNotSavedNotification(
+      ao::test::englishMessageCatalog(), Error{.code = Error::Code::IoError, .message = "Disk full"});
+
+    // Every desktop frontend posts this request; the history lifetime keeps the
+    // report past a startup scan's progress instead of letting it expire unread.
+    CHECK(request.severity == rt::NotificationSeverity::Warning);
+    CHECK(request.lifetime == rt::NotificationLifetime::history());
+    CHECK(request.message ==
+          rt::NotificationMessage{std::string{
+            "Could not remember the library switch: Disk full. The previous library will open next launch."}});
   }
 
   TEST_CASE("i18n::MessageCatalog - formats shared library and smart-list copy", "[uimodel][unit][catalog]")

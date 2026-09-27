@@ -115,7 +115,7 @@ For ordinary list navigation and playback restoration, GTK always resolves the p
 `WorkspaceService` decides whether to reuse an existing unfiltered view or create one: reuse preserves the exact active presentation, while creation applies the supplied default.
 A filtered view over the same list is not reusable for this purpose, retains its own exact presentation, and does not prevent creation of a plain view with the supplied default.
 
-GTK saves workspace state with its other explicit save, hide, shutdown, and active-library preparation checkpoints.
+GTK saves workspace state at window hide, window destruction, application shutdown, and active-library preparation checkpoints.
 The [GTK active-library lifecycle specification](../frontend/gtk/active-library-lifecycle.md) owns those transitions.
 
 TUI restores the selected workspace store before constructing `LibraryController`.
@@ -129,6 +129,10 @@ If that id disappeared, reload first follows a different active workspace id and
 On normal exit, TUI cancels transient interactions before calling the same best-effort `saveSession()` command, then checkpoints playback and stops it.
 A workspace save failure remains log-only and does not block teardown.
 No shared frontend lifecycle owner is introduced; GTK and TUI keep explicit composition-root sequences.
+
+WinUI checkpoints workspace state through its desktop-settings composite: the best-effort workspace checkpoint runs first, and the checked desktop-settings save that follows is the composite's only result and alone gates durable library-root admission (see the [Windows frontend](../frontend/windows.md)).
+A failed root commit keeps the earlier workspace checkpoint written, reports the failure through the session's notification and status surfaces, and does not block the successor session.
+Session teardown additionally checkpoints the workspace best effort before the runtime graph shuts down.
 
 ## Failure, execution, and lifetime
 

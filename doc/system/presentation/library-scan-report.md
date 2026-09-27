@@ -72,7 +72,9 @@ WinUI does the same in `LibrarySession::finishActiveScan`. It additionally sends
 an Error outcome to its failure surface and a Warning outcome to its status
 line. This matters because only shells containing `status.activity` display the
 notification feed, and the shipped Classic preset lacks that component. Info
-outcomes restore the ready-library status.
+outcomes restore the ready-library status. After a failed successor root commit,
+Info and Warning outcomes leave that line to the commit failure, as the
+[WinUI scan workflow](../frontend/windows-library-workflows.md#scan) specifies.
 
 TUI's `LibraryScanController` and AppKit's `LibrarySession` likewise post the
 shared severity, message, and lifetime to runtime notifications. These are

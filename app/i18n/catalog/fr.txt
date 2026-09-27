@@ -215,6 +215,7 @@ fr:table {
     library_scan_completed_with_errors { "{hasChanges, select, yes {Analyse terminée avec des erreurs ; {changes}} other {Analyse terminée avec des erreurs}}" }
     library_scan_unreadable { "L''analyse a trouvé {count, plural, one {# fichier illisible} other {# fichiers illisibles}} et aucun changement utilisable" }
     library_scan_failed { "{hasError, select, yes {Échec de l''analyse : {error}} other {Échec de l''analyse}}" }
+    library_switch_not_saved { "Impossible de mémoriser le changement de bibliothèque : {detail}. La bibliothèque précédente s''ouvrira au prochain lancement." }
     library_all_tracks { "Tous les morceaux" }
     library_unnamed_list { "<Liste sans nom>" }
     library_audio_identity_indexing_failed { "Échec de l''indexation de l''identité audio" }

@@ -183,11 +183,11 @@ root:
         - id: classic-status-message
           type: status.message
           layout:
+            hexpand: true
             halign: start
             valign: center
         - id: classic-status-track-count
           type: status.trackCount
           layout:
-            hexpand: true
             halign: end
             valign: center

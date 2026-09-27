@@ -75,6 +75,8 @@ desktop lifecycle.
   root snapshot. Success admits playback observation; failure permanently seals
   playback writes for that process and cannot associate target-library playback
   identities with the prior durable root.
+- A failed selected-root commit never blocks the usable successor, and every
+  frontend reports it to the user as the same retained warning.
 - The detached launcher receives UTF-8 arguments. Its native default does not
   inherit unrelated handles; GTK opts into parent standard streams explicitly.
 
@@ -156,6 +158,15 @@ commits a settings candidate containing the selected root. Commit success
 starts playback persistence. Commit failure retains the previous durable-root
 state, restores any frontend live settings candidate, seals playback writes,
 and leaves unrelated settings and workspace persistence available.
+
+Each frontend then posts the shared unsaved-library-switch report,
+[`librarySwitchNotSavedNotification`](../../app/include/ao/uimodel/status/activity/ActivityPresentationText.h),
+to its runtime notification feed: a retained warning that carries the failure
+detail and says the previous library opens at the next launch. Its activity
+surface keeps the warning past the initial scan's progress. WinUI also puts the
+report on its status line, because the Classic preset has no activity surface;
+its [scan workflow](frontend/windows-library-workflows.md#scan) owns how that
+line is shared with the initial scan.
 
 The successor starts a scan when the request carries scan intent or the
 canonical database did not exist, according to the consuming frontend's scan
@@ -254,7 +265,11 @@ dispatcher phase admission, native application exit, and XAML diagnostics.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp)
   and GTK [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp)
   protect the runtime write seal, terminal retirement, and durable-root
-  admission behavior.
+  admission behavior. The GTK case also proves that a failed commit posts the
+  shared report.
+- [`PresentationTextFeaturesTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp)
+  protects the shared unsaved-library-switch report's severity, retained
+  lifetime, and wording.
 - [`AppKitDesktopScenario.mm`](../../test/integration/macos/AppKitDesktopScenario.mm)
   protects AppKit's retained close/reopen behavior, dirty-editor switch block,
   persisted-root observation before the accepted switch, and successor reentry
