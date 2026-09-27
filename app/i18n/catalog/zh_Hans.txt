@@ -216,6 +216,7 @@ zh_Hans:table {
     library_scan_completed_with_errors { "{hasChanges, select, yes {扫描完成但有错误；{changes}} other {扫描完成但有错误}}" }
     library_scan_unreadable { "音乐库扫描发现 {count, plural, one {# 个无法读取的文件} other {# 个无法读取的文件}}，无可用更改" }
     library_scan_failed { "{hasError, select, yes {扫描失败：{error}} other {扫描失败}}" }
+    library_switch_not_saved { "无法记住切换后的音乐库：{detail}。下次启动时将打开原来的音乐库。" }
     library_all_tracks { "所有曲目" }
     library_unnamed_list { "<未命名列表>" }
     library_audio_identity_indexing_failed { "音频标识索引建立失败" }

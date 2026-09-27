@@ -114,6 +114,7 @@ namespace ao::winui
     void finishActiveScan(uimodel::LibraryScanOutcome outcome);
     void reportStatus(std::string status);
     void reportScanFailure(uimodel::LibraryScanOutcome const& outcome, std::string message);
+    void reportRootCommitFailure(Error const& error);
     void reportBusy();
     void reportReady(std::filesystem::path const& root);
     void requestPlaySelection();

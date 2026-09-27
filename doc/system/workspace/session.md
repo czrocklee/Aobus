@@ -131,7 +131,7 @@ A workspace save failure remains log-only and does not block teardown.
 No shared frontend lifecycle owner is introduced; GTK and TUI keep explicit composition-root sequences.
 
 WinUI checkpoints workspace state through its desktop-settings composite: the best-effort workspace checkpoint runs first, and the checked desktop-settings save that follows is the composite's only result and alone gates durable library-root admission (see the [Windows frontend](../frontend/windows.md)).
-A failed root commit keeps the earlier workspace checkpoint written and does not block the successor session.
+A failed root commit keeps the earlier workspace checkpoint written, reports the failure through the session's notification and status surfaces, and does not block the successor session.
 Session teardown additionally checkpoints the workspace best effort before the runtime graph shuts down.
 
 ## Failure, execution, and lifetime

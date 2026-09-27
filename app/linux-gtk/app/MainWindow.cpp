@@ -36,6 +36,7 @@
 #include <ao/rt/AppState.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
@@ -53,6 +54,7 @@
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/output/OutputSelection.h>
 #include <ao/uimodel/preference/ThemePreset.h>
+#include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -505,6 +507,8 @@ namespace ao::gtk
     {
       _runtime.sealPlaybackSessionPersistenceWrites();
       _playbackPersistenceAdmission = PlaybackPersistenceAdmission::Sealed;
+      _runtime.notifications().post(
+        uimodel::librarySwitchNotSavedNotification(_implPtr->textCatalog, persistedRes.error()));
       return persistedRes;
     }
 

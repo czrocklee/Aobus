@@ -4,6 +4,7 @@
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
@@ -208,5 +209,14 @@ namespace ao::uimodel
     }
 
     return requiredFormat(catalog, MessageId::LibraryScanFailed, {{"hasError", "no"}, {"error", ""}});
+  }
+
+  rt::NotificationRequest librarySwitchNotSavedNotification(MessageCatalog const& catalog, Error const& error)
+  {
+    return rt::NotificationRequest{
+      .severity = rt::NotificationSeverity::Warning,
+      .message = requiredFormat(catalog, MessageId::LibrarySwitchNotSaved, {{"detail", error.message}}),
+      .lifetime = rt::NotificationLifetime::history(),
+    };
   }
 } // namespace ao::uimodel

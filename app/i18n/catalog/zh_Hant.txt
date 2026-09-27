@@ -215,6 +215,7 @@ zh_Hant:table {
     library_scan_completed_with_errors { "{hasChanges, select, yes {掃描完成但有錯誤；{changes}} other {掃描完成但有錯誤}}" }
     library_scan_unreadable { "音樂庫掃描發現 {count, plural, one {# 個無法讀取的檔案} other {# 個無法讀取的檔案}}，沒有可套用的變更" }
     library_scan_failed { "{hasError, select, yes {掃描失敗：{error}} other {掃描失敗}}" }
+    library_switch_not_saved { "無法記住切換後的音樂庫：{detail}。下次啟動時將開啟原本的音樂庫。" }
     library_all_tracks { "所有曲目" }
     library_unnamed_list { "<未命名列表>" }
     library_audio_identity_indexing_failed { "音訊識別索引建立失敗" }

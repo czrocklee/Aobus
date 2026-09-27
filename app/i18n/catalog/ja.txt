@@ -215,6 +215,7 @@ ja:table {
     library_scan_completed_with_errors { "{hasChanges, select, yes {エラー付きでスキャン完了; {changes}} other {エラー付きでスキャン完了}}" }
     library_scan_unreadable { "ライブラリスキャンで {count, plural, one {# 件の読み取れないファイル} other {# 件の読み取れないファイル}} が見つかり、利用可能な変更はありませんでした" }
     library_scan_failed { "{hasError, select, yes {スキャン失敗: {error}} other {スキャン失敗}}" }
+    library_switch_not_saved { "切り替えたライブラリを記憶できませんでした: {detail}。次回起動時には前のライブラリが開かれます。" }
     library_all_tracks { "すべての曲" }
     library_unnamed_list { "<無名のリスト>" }
     library_audio_identity_indexing_failed { "オーディオ識別インデックスの作成に失敗しました" }

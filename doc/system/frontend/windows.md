@@ -24,7 +24,7 @@ The [system architecture](../overview.md) defines the runtime-to-UIModel-to-fron
 
 - One process owns at most one `LibrarySession`, one unique runtime, and one main window; opening a different root replaces the process rather than adding another graph.
 - A different-root restart prepares the still-live graph by checkpointing state and terminally retiring playback persistence. Retirement failure leaves that graph usable and launches no successor.
-- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot and permanently seals playback writes.
+- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot, permanently seals playback writes, and posts the shared [unsaved-library-switch report](../desktop-library-lifecycle.md#launch-and-activate-the-successor), which also takes the status line it shares with the [initial scan](windows-library-workflows.md#scan); the successor continues with its in-memory root, so the previous library opens on the next launch.
 - Switching shells changes presentation only; it neither scans the library nor interrupts playback or an admitted library task.
 - The current output route remains Runtime state. Both shells select it through
   the same UIModel output-device model used by GTK and TUI.

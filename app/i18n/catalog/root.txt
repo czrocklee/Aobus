@@ -217,6 +217,7 @@ root:table {
     library_scan_completed_with_errors { "{hasChanges, select, yes {Scan completed with errors; {changes}} other {Scan completed with errors}}" }
     library_scan_unreadable { "Library scan found {count, plural, one {# unreadable file} other {# unreadable files}} and no usable changes" }
     library_scan_failed { "{hasError, select, yes {Scan failed: {error}} other {Scan failed}}" }
+    library_switch_not_saved { "Could not remember the library switch: {detail}. The previous library will open next launch." }
     library_all_tracks { "All Tracks" }
     library_unnamed_list { "<Unnamed List>" }
     library_audio_identity_indexing_failed { "Audio identity indexing failed" }
