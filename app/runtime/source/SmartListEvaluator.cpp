@@ -24,7 +24,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <span>
@@ -139,6 +141,34 @@ namespace ao::rt
     }
   }
 
+  SmartListEvaluator::PublicationScope::PublicationScope(SmartListEvaluator& evaluator)
+    : _evaluator{evaluator}
+  {
+    ++_evaluator._publicationDepth;
+  }
+
+  SmartListEvaluator::PublicationScope::~PublicationScope()
+  {
+    --_evaluator._publicationDepth;
+
+    if (_evaluator._publicationDepth == 0 && _evaluator._hasRetiredBuckets)
+    {
+      _evaluator.eraseRetiredBuckets();
+    }
+  }
+
+  void SmartListEvaluator::eraseRetiredBuckets()
+  {
+    // The outermost publication has unwound; no handler can still reference a
+    // bucket, so fully retired buckets can finally be freed.
+    for (auto it = _buckets.begin(); it != _buckets.end();)
+    {
+      it = it->second->lists.empty() ? _buckets.erase(it) : std::next(it);
+    }
+
+    _hasRetiredBuckets = false;
+  }
+
   void SmartListEvaluator::registerList(SmartListSource& list)
   {
     auto const& source = list.source();
@@ -147,25 +177,37 @@ namespace ao::rt
     if (inserted)
     {
       it->second = std::make_unique<SourceBucket>();
-      it->second->source = &source;
-
-      if (source.state() == TrackSourceState::Live)
-      {
-        it->second->upstreamTracks.assign(snapshotSource(source));
-      }
-      else
-      {
-        it->second->invalidated = true;
-      }
     }
 
     auto& bucket = *it->second;
-    bucket.lists.push_back(&list);
 
-    if (inserted && !bucket.invalidated)
+    // A bucket whose last list retired during a publication stays mapped (its
+    // erasure is deferred) but is semantically dead: its subscription was
+    // reset and its mirror may be stale. A list registering now — e.g. a
+    // nested ad-hoc acquire from inside a delivery — rebuilds the bucket from
+    // the upstream's current state instead of reusing the retired mirror.
+    if (inserted || bucket.lists.empty())
     {
-      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDelta const& batch)
-                                             { handleSourceBatch(*source, batch); });
+      bucket.source = &source;
+      bucket.invalidated = source.state() != TrackSourceState::Live;
+      bucket.upstreamTracks.clear();
+
+      if (!bucket.invalidated)
+      {
+        bucket.upstreamTracks.assign(snapshotSource(source));
+      }
+
+      bucket.lists.push_back(&list);
+
+      if (!bucket.invalidated)
+      {
+        bucket.subscription = source.subscribe([this, source = &source](TrackSourceDelta const& batch)
+                                               { handleSourceBatch(*source, batch); });
+      }
+    }
+    else
+    {
+      bucket.lists.push_back(&list);
     }
 
     if (bucket.invalidated)
@@ -189,7 +231,17 @@ namespace ao::rt
     if (it->second->lists.empty())
     {
       it->second->subscription.reset();
-      _buckets.erase(it);
+
+      // A publication may still hold a reference to this bucket, so defer
+      // its erasure to the outermost publication guard.
+      if (_publicationDepth == 0)
+      {
+        _buckets.erase(it);
+      }
+      else
+      {
+        _hasRetiredBuckets = true;
+      }
     }
   }
 
@@ -207,6 +259,7 @@ namespace ao::rt
       list.setExpression(list._current.expression);
     }
 
+    auto const publication = PublicationScope{*this};
     evaluatePendingLists(*it->second);
   }
 
@@ -214,10 +267,15 @@ namespace ao::rt
   {
     auto const it = _buckets.find(&source);
 
-    if (it == _buckets.end() || it->second->invalidated)
+    // A fully retired bucket can remain mapped until the outermost publication
+    // unwinds; it has no lists to publish to, and its source pointer is no
+    // longer pinned by any lease.
+    if (it == _buckets.end() || it->second->invalidated || it->second->lists.empty())
     {
       return;
     }
+
+    auto const publication = PublicationScope{*this};
 
     if (std::holds_alternative<SourceInvalidated>(batch))
     {
@@ -238,7 +296,11 @@ namespace ao::rt
   {
     bucket.upstreamTracks.assign(snapshotSource(*bucket.source));
     ++_upstreamIndexRebuildCount;
-    rebuildLists(bucket, bucket.lists);
+
+    // A subscriber may retire any list (or every list, emptying the bucket)
+    // while the resets are published; iterate a stable copy.
+    auto lists = bucket.lists;
+    rebuildLists(bucket, lists);
   }
 
   bool SmartListEvaluator::isEvaluatable(SmartListSource const& list)
@@ -435,12 +497,10 @@ namespace ao::rt
     return coalescer.take();
   }
 
-  void SmartListEvaluator::handleUpdateBatch(SourceBucket& bucket,
-                                             delta::RegularTrackEditScript const& script,
-                                             bool const verifyFinalSnapshot)
+  void SmartListEvaluator::handleUpdateBatch(SourceBucket& bucket, delta::RegularTrackEditScript const& script)
   {
     AO_INVARIANT(delta::isValid(script, bucket.upstreamTracks.size()));
-    AO_INVARIANT(!verifyFinalSnapshot || bucket.source->size() == bucket.upstreamTracks.size());
+    AO_INVARIANT(bucket.source->size() == bucket.upstreamTracks.size());
 
     for (auto const& edit : script.edits)
     {
@@ -448,12 +508,9 @@ namespace ao::rt
       auto const mirrored = bucket.upstreamTracks.ids().subspan(update.start, update.trackIds.size());
       AO_INVARIANT(std::ranges::equal(mirrored, update.trackIds));
 
-      if (verifyFinalSnapshot)
+      for (std::size_t offset = 0; offset < update.trackIds.size(); ++offset)
       {
-        for (std::size_t offset = 0; offset < update.trackIds.size(); ++offset)
-        {
-          AO_INVARIANT(bucket.source->trackIdAt(update.start + offset) == update.trackIds[offset]);
-        }
+        AO_INVARIANT(bucket.source->trackIdAt(update.start + offset) == update.trackIds[offset]);
       }
     }
 
@@ -466,6 +523,7 @@ namespace ao::rt
       SmartListSource* list = nullptr;
       delta::RegularTrackEditScript script{};
       std::size_t previousSize = 0;
+      std::uint64_t installToken = 0;
     };
 
     auto works = std::vector<IncrementalWork>{};
@@ -493,10 +551,19 @@ namespace ao::rt
     for (auto& work : works)
     {
       work.list->_members.applyScript(work.script);
+      work.installToken = ++_nextInstallToken;
+      work.list->_installToken = work.installToken;
     }
 
     for (auto& work : works)
     {
+      // A subscriber of an earlier list may have retired (or re-installed)
+      // this one; a retired list receives no further publication.
+      if (!isPublicationCurrent(bucket, work.list, work.installToken))
+      {
+        continue;
+      }
+
       std::ignore = work.list->tryPublishDelta(std::move(work.script), work.previousSize);
     }
   }
@@ -553,6 +620,8 @@ namespace ao::rt
       if (work.active)
       {
         work.list->replaceMembers(std::move(work.members));
+        work.installToken = ++_nextInstallToken;
+        work.list->_installToken = work.installToken;
         ++_membershipIndexRebuildCount;
       }
     }
@@ -564,26 +633,31 @@ namespace ao::rt
         continue;
       }
 
+      // A subscriber of an earlier list may have retired (or re-installed)
+      // this one; a retired list receives no further publication.
+      if (!isPublicationCurrent(bucket, work.list, work.installToken))
+      {
+        continue;
+      }
+
       std::ignore = work.list->tryPublishDelta(std::move(work.script), work.oldMembers.size());
     }
   }
 
-  void SmartListEvaluator::handleRegularBatch(SourceBucket& bucket,
-                                              delta::RegularTrackEditScript const& script,
-                                              bool const verifyFinalSnapshot)
+  void SmartListEvaluator::handleRegularBatch(SourceBucket& bucket, delta::RegularTrackEditScript const& script)
   {
     auto const timer = rt::ScopedTimer{"SmartListEvaluator::handleRegularBatch"};
 
     if (isUpdateOnlyBatch(script))
     {
-      handleUpdateBatch(bucket, script, verifyFinalSnapshot);
+      handleUpdateBatch(bucket, script);
       return;
     }
 
     auto upstreamTracks = bucket.upstreamTracks;
     upstreamTracks.applyScript(script);
     ++_upstreamIndexRebuildCount;
-    AO_INVARIANT(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
+    AO_INVARIANT(upstreamTracks.vector() == snapshotSource(*bucket.source));
 
     auto works = buildDerivedWorks(bucket);
     auto changes = summarizeTrackChanges(script);
@@ -598,9 +672,14 @@ namespace ao::rt
     bucket.subscription.reset();
     bucket.upstreamTracks.clear();
 
-    for (auto* const list : bucket.lists)
+    // Invalidation delivery is synchronous: a subscriber may retire any other
+    // list in this bucket (or itself) while it runs, so iterate a stable copy
+    // and re-check registration before delivering to each list.
+    auto const lists = bucket.lists;
+
+    for (auto* const list : lists)
     {
-      if (list->state() == TrackSourceState::Invalidated)
+      if (!std::ranges::contains(bucket.lists, list) || list->state() == TrackSourceState::Invalidated)
       {
         continue;
       }
@@ -683,26 +762,38 @@ namespace ao::rt
     }
 
     auto previousSizes = std::vector<std::size_t>{};
+    auto installTokens = std::vector<std::uint64_t>{};
     previousSizes.reserve(lists.size());
+    installTokens.reserve(lists.size());
 
     for (std::size_t index = 0; index < lists.size(); ++index)
     {
       previousSizes.push_back(lists[index]->_members.size());
       lists[index]->replaceMembers(std::move(nextMembers[index]));
+      installTokens.push_back(++_nextInstallToken);
+      lists[index]->_installToken = installTokens.back();
       ++_membershipIndexRebuildCount;
     }
 
     for (std::size_t index = 0; index < lists.size(); ++index)
     {
-      auto* const list = lists[index];
-
-      if (list->state() != TrackSourceState::Live)
+      // A subscriber of an earlier list may have retired (or re-installed)
+      // this one; a retired list receives no further publication.
+      if (!isPublicationCurrent(bucket, lists[index], installTokens[index]))
       {
         continue;
       }
 
-      std::ignore = list->tryPublishDelta(SourceReset{}, previousSizes[index]);
+      std::ignore = lists[index]->tryPublishDelta(SourceReset{}, previousSizes[index]);
     }
+  }
+
+  bool SmartListEvaluator::isPublicationCurrent(SourceBucket const& bucket,
+                                                SmartListSource const* const list,
+                                                std::uint64_t const installToken) noexcept
+  {
+    return std::ranges::contains(bucket.lists, list) && list->_installToken == installToken &&
+           list->state() == TrackSourceState::Live;
   }
 
   query::AccessProfile SmartListEvaluator::unionAccessProfile(std::span<SmartListSource* const> const lists)
