@@ -50,6 +50,7 @@
 #include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DesktopOutputSelection.h>
 #include <ao/winui/app/SelectedRootCommit.h>
+#include <ao/winui/app/SettingsPersistence.h>
 
 #include <cstdint>
 #include <exception>
@@ -518,11 +519,11 @@ namespace ao::winui
     auto& storage = *_storagePtr;
     AO_INVARIANT(storage.optRuntimeGraph, "LibrarySession cannot save settings before the runtime graph exists");
     auto& graph = *storage.optRuntimeGraph;
-    graph.runtime.workspace().saveSession(graph.runtime.workspaceConfigStore());
 
     // The two presentation groups moved to the per-library layout document and
     // are written only by the stores' own persist ports.
-    return storage.settingsStorePtr->save("desktop", settings, winui::DesktopSettingsYamlSchema{});
+    return persistDesktopSettingsCandidate(
+      graph.runtime.workspace(), graph.runtime.workspaceConfigStore(), *storage.settingsStorePtr, settings);
   }
 
   Result<> LibrarySession::commitSelectedRoot()

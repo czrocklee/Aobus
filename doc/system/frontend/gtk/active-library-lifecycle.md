@@ -137,8 +137,8 @@ under that name.
 
 ## Save, shutdown, and cancellation
 
-An active window saves on explicit save, hide, destruction, and application
-release according to its playback-admission state. A retired window's save is a
+An active window saves on hide, destruction, active-library preparation, and
+application release according to its playback-admission state. A retired window's save is a
 no-op. Application quit, external GApplication replacement, and handled
 `SIGINT` or `SIGTERM` use the same scoped unwind; the release helper gives an
 eligible active window a final save opportunity before removing it from the
