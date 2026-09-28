@@ -107,3 +107,8 @@ target_link_libraries(aobus-tui PRIVATE
 )
 
 target_include_directories(aobus-tui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+
+if(TARGET ao_system_media_linux)
+    target_link_libraries(aobus-tui PRIVATE ao_system_media_linux)
+    target_compile_definitions(aobus-tui PRIVATE AOBUS_HAS_SYSTEM_MEDIA=1)
+endif()

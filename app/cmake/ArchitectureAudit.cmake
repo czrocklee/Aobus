@@ -154,6 +154,53 @@ function(_aobus_architecture_audit_self_test)
   endforeach()
   _aobus_adjudicate_architecture_rule(
     uimodel_core "#include <ao/library/MusicLibrary.h>" "#include <ao/rt/LibrarySnapshot.h>")
+  _aobus_adjudicate_architecture_rule(
+    system_media_frontend "#include <gtkmm/widget.h>" "#include <giomm/file.h>")
+  foreach(_sample IN ITEMS
+      "#include <gtkmm.h>"
+      "#import \"gdkmm.h\""
+      "#include <gtk.h>"
+      "#include <gdk.h>"
+      "#include <gdk/gdk.h>"
+      "#include <ftxui/component/component.hpp>"
+      "#import \"ftxui/dom/elements.hpp\""
+      "#include <winrt/Microsoft.UI.Dispatching.h>"
+      "#include <microsoft.ui.xaml.window.h>"
+      "#include \"linux-gtk/app/MainWindow.h\""
+      "#include \"tui/App.h\""
+      "#include \"windows-winui/platform/SmtcBridge.h\""
+      "#import \"macos-appkit/AppKitText.h\""
+      "/* comment */ #include <gtkmm.h>"
+      "/* comment */ #include <ftxui/component/component.hpp>")
+    _aobus_assert_architecture_rejects(system_media_frontend "${_sample}")
+  endforeach()
+  foreach(_sample IN ITEMS
+      "#include <giomm.h>"
+      "#include <glibmm.h>"
+      "#include <winrt/Windows.Media.h>"
+      "#import <MediaPlayer/MediaPlayer.h>"
+      "#import <AppKit/NSImage.h>"
+      "#include <ao/systemmedia/linux/MprisBridge.h>"
+      "#include \"MprisBusSession.h\""
+      "// #include <gtkmm.h>"
+      "// #include <ftxui/component/component.hpp>"
+      "/*\n#include <gdkmm.h>\n#include <gtk/gtk.h>\n#import \"ftxui/dom/elements.hpp\"\n*/")
+    _aobus_assert_architecture_allows(system_media_frontend "${_sample}")
+  endforeach()
+  _aobus_adjudicate_architecture_rule(
+    system_media_reverse "#include <ao/systemmedia/linux/MprisBridge.h>" "#include <ao/rt/AppRuntime.h>")
+  foreach(_sample IN ITEMS
+      "#include \"ao/systemmedia/linux/MprisBridge.h\""
+      "#include \"systemmedia/linux/MprisBusSession.h\""
+      "#include <systemmedia/linux/MprisPlaybackEndpoint.h>"
+      "#import <ao/systemmedia/macos/MediaPlayerAdapter.h>")
+    _aobus_assert_architecture_rejects(system_media_reverse "${_sample}")
+  endforeach()
+  foreach(_sample IN ITEMS
+      "// #include <ao/systemmedia/linux/MprisBridge.h>"
+      "#include <ao/media/file/File.h>")
+    _aobus_assert_architecture_allows(system_media_reverse "${_sample}")
+  endforeach()
 
   _aobus_adjudicate_architecture_rule(
     frontend_core "runtime.library().commands()" "runtime.playback().commands()")
@@ -219,9 +266,11 @@ function(_aobus_run_architecture_audit)
       app/include/ao/rt
       app/include/ao/uimodel
       app/include/ao/desktop
+      app/include/ao/systemmedia
       app/uimodel
       app/desktop
       app/linux-gtk
+      app/systemmedia
       app/macos-appkit
       app/tui
       app/windows-winui
@@ -250,6 +299,7 @@ function(_aobus_run_architecture_audit)
       app/uimodel
       app/desktop
       app/linux-gtk
+      app/systemmedia
       app/macos-appkit
       app/tui
       app/windows-winui
@@ -275,13 +325,35 @@ function(_aobus_run_architecture_audit)
     ROOTS app/include/ao/uimodel app/uimodel
     FORBIDDEN
       "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${_forbidden_audio_control}))|${_forbidden_write_authority}")
+  # Shared adapters serve several frontends, so they may use native OS
+  # frameworks but no frontend toolkit or frontend implementation header.
+  _aobus_register_architecture_rule(system_media_frontend
+    ROOTS app/include/ao/systemmedia app/systemmedia
+    FORBIDDEN
+      "#[ \t]*(include|import)[ \t]*[<\"]((gtkmm|gdkmm|gtk|gdk)(/|[.]h[>\"])|ftxui/|(winrt/)?[Mm]icrosoft[.][Uu][Ii][.]|(linux-gtk|tui|windows-winui|macos-appkit)/)"
+    ALLOWED "//[^\r\n]*|/[*]([^*]|[*]+[^*/])*[*]+/")
+  # System media is an application leaf: lower application layers and the CLI
+  # must not reach it even though app/include is on their search path.
+  _aobus_register_architecture_rule(system_media_reverse
+    ROOTS
+      app/include/ao/rt
+      app/include/ao/uimodel
+      app/include/ao/desktop
+      app/include/ao/i18n
+      app/runtime
+      app/uimodel
+      app/desktop
+      app/i18n
+      app/cli
+    FORBIDDEN "#[ \t]*(include|import)[ \t]*[<\"](ao/)?systemmedia/"
+    ALLOWED "//[^\r\n]*|/[*]([^*]|[*]+[^*/])*[*]+/")
   _aobus_register_architecture_rule(frontend_core
-    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/macos-appkit app/windows-winui app/tui
+    ROOTS app/include/ao/desktop app/include/ao/systemmedia app/desktop app/linux-gtk app/systemmedia app/macos-appkit app/windows-winui app/tui
     FORBIDDEN
       "(#[ \t]*include[ \t]*[<\\\"](ao/rt/CoreRuntime[.]h|ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${_forbidden_write_authority}|(^|[^A-Za-z0-9_])LibraryCommands([^A-Za-z0-9_]|$)|${_forbidden_frontend_commands}"
     ALLOWED "${_allowed_playback_commands}")
   _aobus_register_architecture_rule(frontend_library_path
-    ROOTS app/include/ao/desktop app/desktop app/linux-gtk app/macos-appkit app/windows-winui app/tui app/cli
+    ROOTS app/include/ao/desktop app/include/ao/systemmedia app/desktop app/linux-gtk app/systemmedia app/macos-appkit app/windows-winui app/tui app/cli
     FORBIDDEN "\"([.]aobus|data[.]mdb)")
   _aobus_register_architecture_rule(cli_localization
     ROOTS app/cli

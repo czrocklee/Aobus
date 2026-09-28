@@ -12,7 +12,7 @@ The `./ao test` command exposes individual suites and four suite groups:
 - `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
 - `cli`: command-line frontend Catch2 tests (`ao_cli_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
-- `integration`: the standalone media-file, decoder, graph, and native-provider suite (`ao_integration_test`), not every case tagged `[integration]`.
+- `integration`: the standalone media-file, decoder, graph, native-provider, and enabled Linux system-media suite (`ao_integration_test`), not every case tagged `[integration]`.
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
 - `appkit`: an opt-in native macOS GUI smoke harness with scenario selection and required disposable library and isolated state-root inputs; it is not part of a suite group.
@@ -67,6 +67,7 @@ ThreadSanitizer is intentionally different. `ao test --tsan` and
 `ao check --tsan` resolve `default`/`all` to the native `tsan` group. Explicit
 suite selection, such as `ao test --gtk --tsan`, remains available for focused diagnosis.
 The Linux TSan group contains core and GTK; reviewed uninstrumented UI dependencies use module-scoped interceptor suppressions.
+Registered real-TUI MPRIS process cases in the integration binary require Linux system media and TUI support and are disabled under TSan, because they launch the actual FTXUI product. Normal and ASan runs cover that composition; focused adapter tests remain available under TSan.
 The macOS TSan group contains core.
 Windows has no TSan suite group because the MSVC toolchain does not provide
 ThreadSanitizer; requesting `--tsan` is an error. `ao.bat check --asan` runs the

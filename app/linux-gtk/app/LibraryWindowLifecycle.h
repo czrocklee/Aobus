@@ -7,6 +7,8 @@
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 
+#include <glibmm/refptr.h>
+
 #include <filesystem>
 #include <memory>
 
@@ -33,7 +35,9 @@ namespace ao::gtk
     std::filesystem::path databasePath;
   };
 
-  Result<std::unique_ptr<MainWindow>> prepareLibraryWindow(
+  // The returned shared handle owns the C++ window and keeps its runtime alive
+  // through wrapper destruction; a native GObject reference is not that owner.
+  Result<Glib::RefPtr<MainWindow>> prepareLibraryWindow(
     LibraryWindowPaths paths,
     std::shared_ptr<AppConfigStore> appConfigStorePtr,
     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
@@ -43,6 +47,6 @@ namespace ao::gtk
     rt::CompletionAliasPolicy const* completionAliasPolicy = nullptr);
 
   Result<> activateLibraryWindow(Gtk::Application& app,
-                                 std::unique_ptr<MainWindow> const& windowPtr,
+                                 Glib::RefPtr<MainWindow> const& windowPtr,
                                  MainWindow::PlaybackRestoreMode restoreMode);
 } // namespace ao::gtk

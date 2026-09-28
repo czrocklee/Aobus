@@ -109,6 +109,9 @@ namespace ao::tui
     HoveredButton hoveredButton() const noexcept { return _hoveredButton; }
     GoToMenuState goToMenuState() const;
     bool tryHandleEvent(ftxui::Event const& event);
+    // Media composition borrows the same selection-aware actions. Its native
+    // producer and subscriptions must retire before this controller.
+    uimodel::PlaybackActions& playbackActions() noexcept { return _playbackActions; }
     // Check retained hover against the painted frame; return whether a redraw is needed.
     bool tryRetireHover();
     void cancelTransientInteractions();

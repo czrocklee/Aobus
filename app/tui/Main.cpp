@@ -36,6 +36,7 @@ namespace
   {
     auto options = ao::tui::AppOptions{};
     auto app = CLI::App{"Aobus terminal player"};
+    auto systemMedia = std::string{"auto"};
 
     app.add_option("-l,--library", options.libraryRoot, "Music library root")->capture_default_str();
     app.add_option("--database", options.databasePath, "Aobus library database path");
@@ -45,6 +46,9 @@ namespace
         "--cover-art-mode", options.coverArtMode, "Cover art renderer (default: saved preference, otherwise auto)")
       ->check(CLI::IsMember{ao::tui::kCoverArtModes | std::views::transform(&ao::tui::CoverArtModeDescriptor::name) |
                             std::ranges::to<std::vector<std::string_view>>()});
+    app.add_option("--system-media", systemMedia, "System media controls (auto or off)")
+      ->check(CLI::IsMember{{"auto", "off"}})
+      ->capture_default_str();
     app.add_flag_callback(
       "--version",
       []
@@ -76,6 +80,7 @@ namespace
       std::exit(app.exit(e));
     }
 
+    options.systemMediaEnabled = systemMedia == "auto";
     options.libraryRoot = std::filesystem::absolute(options.libraryRoot).lexically_normal();
     auto const libraryPaths = ao::rt::LibraryPaths{options.libraryRoot};
 
