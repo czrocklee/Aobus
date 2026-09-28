@@ -187,6 +187,76 @@ namespace ao::rt::test
     CHECK(listener.batches.empty());
   }
 
+  TEST_CASE("AllTracksSource - metadata-only changes publish ascending coalesced update ranges",
+            "[runtime][unit][source][all-tracks]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto source = AllTracksSource{libraryFixture.library().tracks()};
+    auto const initial = std::vector{TrackId{10}, TrackId{20}, TrackId{30}, TrackId{40}, TrackId{50}, TrackId{60}};
+    source.applyChanges(initial, {}, {});
+    auto listener = TrackSourceBatchSpy{source};
+
+    SECTION("non-contiguous ids publish separate literal ranges")
+    {
+      source.applyChanges({}, {}, std::array{TrackId{60}, TrackId{10}, TrackId{30}});
+
+      REQUIRE(listener.batches.size() == 1);
+      CHECK(sourceEditScript(listener.batches.front()) ==
+            delta::RegularTrackEditScript{{delta::UpdateRange{0, {TrackId{10}}},
+                                           delta::UpdateRange{2, {TrackId{30}}},
+                                           delta::UpdateRange{5, {TrackId{60}}}}});
+      CHECK(sourceTrackIds(source) == initial);
+    }
+
+    SECTION("contiguous ids coalesce into one range")
+    {
+      source.applyChanges({}, {}, std::array{TrackId{40}, TrackId{20}, TrackId{30}});
+
+      REQUIRE(listener.batches.size() == 1);
+      CHECK(sourceEditScript(listener.batches.front()) ==
+            delta::RegularTrackEditScript{{delta::UpdateRange{1, {TrackId{20}, TrackId{30}, TrackId{40}}}}});
+      CHECK(sourceTrackIds(source) == initial);
+    }
+
+    SECTION("duplicate ids collapse into one update each")
+    {
+      source.applyChanges({}, {}, std::array{TrackId{50}, TrackId{20}, TrackId{50}, TrackId{40}, TrackId{20}});
+
+      REQUIRE(listener.batches.size() == 1);
+      CHECK(sourceEditScript(listener.batches.front()) ==
+            delta::RegularTrackEditScript{
+              {delta::UpdateRange{1, {TrackId{20}}}, delta::UpdateRange{3, {TrackId{40}, TrackId{50}}}}});
+      CHECK(sourceTrackIds(source) == initial);
+    }
+
+    SECTION("ids outside the source are ignored")
+    {
+      source.applyChanges({}, {}, std::array{TrackId{999}, TrackId{20}, TrackId{998}});
+
+      REQUIRE(listener.batches.size() == 1);
+      CHECK(sourceEditScript(listener.batches.front()) ==
+            delta::RegularTrackEditScript{{delta::UpdateRange{1, {TrackId{20}}}}});
+      CHECK(sourceTrackIds(source) == initial);
+    }
+
+    SECTION("no known id publishes nothing")
+    {
+      source.applyChanges({}, {}, std::array{TrackId{900}, TrackId{901}});
+
+      CHECK(listener.batches.empty());
+      CHECK(source.size() == initial.size());
+      CHECK(sourceTrackIds(source) == initial);
+    }
+
+    SECTION("an empty changeset publishes nothing")
+    {
+      source.applyChanges({}, {}, {});
+
+      CHECK(listener.batches.empty());
+      CHECK(sourceTrackIds(source) == initial);
+    }
+  }
+
   TEST_CASE("AllTracksSource - invalidation clears and permanently fences its snapshot",
             "[runtime][unit][source][all-tracks]")
   {

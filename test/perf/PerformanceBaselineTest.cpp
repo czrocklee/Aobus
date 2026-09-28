@@ -6,13 +6,16 @@
 #include "PerformanceReport.h"
 #include "lib/library/OpenValidationMetrics.h"
 #include "lib/library/TextAdmission.h"
+#include "runtime/library/LibraryWriteLane.h"
 #include "runtime/source/ListOrderSource.h"
 #include "runtime/source/SmartListEvaluator.h"
 #include "runtime/source/SmartListSource.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/library/LibraryWriteLaneTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/compat/Enumerate.h>
@@ -35,9 +38,12 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -1770,6 +1776,202 @@ namespace ao::rt::test
                      });
     }
 
+    struct AllTracksPublicationTiming final
+    {
+      // Mutation runs inside the write transaction. Publication spans the
+      // library commit, the TrackSourceCache replica apply, and the leased
+      // source's batch emission. Settle covers the remaining phase-two
+      // delivery and command settlement.
+      std::chrono::microseconds mutationDuration{};
+      std::chrono::microseconds publicationDuration{};
+      std::chrono::microseconds settleDuration{};
+    };
+
+    // Drives the real metadata-only publication chain: a LibraryWriteLane
+    // commit publishes a tracksMutated-only LibraryChangeSet, the
+    // TrackSourceCache replica applies it through AllTracksSource, and the
+    // leased All Tracks source republishes the update batch to subscribers.
+    class AllTracksPublicationBench final
+    {
+    public:
+      static constexpr std::size_t kTrackCount = 50000;
+      static constexpr std::size_t kBulkUpdateCount = 5000;
+      static constexpr std::size_t kPublicationWorkerCount = 2;
+
+      AllTracksPublicationBench()
+        : _ids{createPipelineTracks(_libraryFixture.library(), 0, kTrackCount)}
+        , _changes{makeStateOnlyLibraryChanges(_libraryFixture.library())}
+        , _asyncRuntime{stateOnlyLibraryExecutor(), kPublicationWorkerCount}
+        , _writeLane{_asyncRuntime.callbackExecutor(),
+                     library::test::requireWritableLibrary(_libraryFixture.library()),
+                     _changes}
+        , _cache{_libraryFixture.library(), _changes}
+        , _lease{ao::test::requireValue(_cache.acquire(kAllTracksListId))}
+      {
+        REQUIRE(std::ranges::is_sorted(_ids));
+        _cache.reloadAllTracks();
+        REQUIRE(_lease->size() == kTrackCount);
+        _sourceSubscription = _lease->subscribe(
+          [this](TrackSourceDelta const& batch) noexcept
+          {
+            ++_publishedBatchCount;
+            _emissionTime = std::chrono::steady_clock::now();
+            _publishedBatches.push_back(batch);
+          });
+        _observerSubscription = _changes.onChanged([this]([[maybe_unused]] LibraryChangeSet const& changeSet) noexcept
+                                                   { ++_observedChangeCount; });
+      }
+
+      AllTracksPublicationTiming runMetadataUpdate(std::size_t const firstIndex, std::size_t const count)
+      {
+        REQUIRE(firstIndex <= _ids.size());
+        REQUIRE(count <= _ids.size() - firstIndex);
+        auto updatedIds = std::vector<TrackId>{_ids.begin() + static_cast<std::ptrdiff_t>(firstIndex),
+                                               _ids.begin() + static_cast<std::ptrdiff_t>(firstIndex + count)};
+        auto& executor = stateOnlyLibraryExecutor();
+        auto mutationStart = std::chrono::steady_clock::time_point{};
+        auto mutationEnd = std::chrono::steady_clock::time_point{};
+        std::size_t updateFailureCount = 0;
+        auto firstUpdateError = std::string{};
+        auto const batchCountBefore = _publishedBatchCount;
+
+        auto task = executeInteractiveMutationAsync(
+          _writeLane.captureSubmission(),
+          [&updatedIds, &mutationStart, &mutationEnd, &updateFailureCount, &firstUpdateError](
+            library::LibraryWrite& write) -> Result<OperationOutcome<std::vector<TrackId>>>
+          {
+            mutationStart = std::chrono::steady_clock::now();
+            auto writer = write.tracks();
+
+            for (std::size_t const offset : std::views::iota(std::size_t{0}, updatedIds.size()))
+            {
+              // TrackBuilder holds string_views into the spec, so the spec
+              // must outlive the builder's use.
+              auto const spec = pipelineTrackSpec(offset, true);
+              auto builder = library::TrackBuilder::makeEmpty();
+              library::test::applyTrackSpec(builder, spec);
+              auto updateRes = writer.updateHot(updatedIds[offset], builder);
+              updateFailureCount += updateRes ? 0U : 1U;
+
+              if (!updateRes && firstUpdateError.empty())
+              {
+                firstUpdateError = updateRes.error().message;
+              }
+            }
+
+            mutationEnd = std::chrono::steady_clock::now();
+            return Changed<std::vector<TrackId>>{
+              .value = updatedIds,
+              .changeSet = LibraryChangeSet{.tracksMutated = updatedIds},
+            };
+          });
+
+        auto executionRes = runTestTask(_asyncRuntime, executor, std::move(task));
+        REQUIRE(executionRes);
+        REQUIRE(executionRes->optCommittedRevision);
+
+        if (updateFailureCount != 0)
+        {
+          APP_LOG_INFO("metadata update failures: {} ({})", updateFailureCount, firstUpdateError);
+        }
+
+        REQUIRE(updateFailureCount == 0);
+        REQUIRE(_publishedBatchCount == batchCountBefore + 1U);
+        REQUIRE(_observedChangeCount == _publishedBatchCount);
+        REQUIRE(std::holds_alternative<delta::RegularTrackEditScript>(_publishedBatches.back()));
+        CHECK(publishedUpdateIds(_publishedBatches.back()) == updatedIds);
+        CHECK(_lease->size() == kTrackCount);
+
+        auto timing = AllTracksPublicationTiming{};
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.publicationDuration = std::chrono::duration_cast<std::chrono::microseconds>(_emissionTime - mutationEnd);
+        timing.settleDuration =
+          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - _emissionTime);
+        return timing;
+      }
+
+    private:
+      static std::vector<TrackId> publishedUpdateIds(TrackSourceDelta const& batch)
+      {
+        auto const& script = std::get<delta::RegularTrackEditScript>(batch);
+        auto ids = std::vector<TrackId>{};
+
+        for (auto const& edit : script.edits)
+        {
+          auto const* const range = std::get_if<delta::UpdateRange>(&edit);
+          REQUIRE(range != nullptr);
+          ids.append_range(range->trackIds);
+        }
+
+        return ids;
+      }
+
+      MusicLibraryFixture _libraryFixture;
+      std::vector<TrackId> _ids;
+      LibraryChanges _changes;
+      async::Runtime _asyncRuntime;
+      LibraryWriteLane _writeLane;
+      TrackSourceCache _cache;
+      TrackSourceLease _lease;
+      async::Subscription _sourceSubscription;
+      async::Subscription _observerSubscription;
+      std::size_t _publishedBatchCount = 0;
+      std::size_t _observedChangeCount = 0;
+      std::vector<TrackSourceDelta> _publishedBatches;
+      std::chrono::steady_clock::time_point _emissionTime{};
+    };
+
+    void reportAllTracksPublication(std::string_view const name,
+                                    std::size_t const updateCount,
+                                    std::vector<AllTracksPublicationTiming> const& samples)
+    {
+      auto mutations = std::vector<std::int64_t>{};
+      auto publications = std::vector<std::int64_t>{};
+      auto settlements = std::vector<std::int64_t>{};
+      mutations.reserve(samples.size());
+      publications.reserve(samples.size());
+      settlements.reserve(samples.size());
+
+      for (auto const& sample : samples)
+      {
+        mutations.push_back(sample.mutationDuration.count());
+        publications.push_back(sample.publicationDuration.count());
+        settlements.push_back(sample.settleDuration.count());
+      }
+
+      std::ranges::sort(mutations);
+      std::ranges::sort(publications);
+      std::ranges::sort(settlements);
+      auto const medianIndex = publications.size() / 2U;
+      auto const percentile95Index = (((publications.size() * 95U) + 99U) / 100U) - 1U;
+      auto const mutationMedian = mutations[medianIndex];
+      auto const mutationP95 = mutations[percentile95Index];
+      auto const publicationMedian = publications[medianIndex];
+      auto const publicationP95 = publications[percentile95Index];
+      auto const settleMedian = settlements[medianIndex];
+      auto const settleP95 = settlements[percentile95Index];
+      APP_LOG_INFO("  {}: mutation median/p95 {} / {} us; publication median/p95 {} / {} us; "
+                   "settle median/p95 {} / {} us",
+                   name,
+                   mutationMedian,
+                   mutationP95,
+                   publicationMedian,
+                   publicationP95,
+                   settleMedian,
+                   settleP95);
+      recordBaseline(std::format("all-tracks-publication-{}", name),
+                     {
+                       metric("track_count", AllTracksPublicationBench::kTrackCount, "count"),
+                       metric("update_count", static_cast<std::int64_t>(updateCount), "count"),
+                       metric("mutation_median", mutationMedian, "us"),
+                       metric("mutation_p95", mutationP95, "us"),
+                       metric("publication_median", publicationMedian, "us"),
+                       metric("publication_p95", publicationP95, "us"),
+                       metric("settle_median", settleMedian, "us"),
+                       metric("settle_p95", settleP95, "us"),
+                     });
+    }
+
     constexpr std::size_t kUnicodeTextAdmissionIterations = 100'000;
 
     std::chrono::nanoseconds measureTextPreflightDuration(std::string_view const text)
@@ -1897,6 +2099,38 @@ namespace ao::rt::test
     reportPipelineOperation("projection-update-1", singleProjectionUpdateSamples);
     reportPipelineOperation("metadata-update-5k", updateSamples);
     reportPipelineOperation("saved-order-move-500", moveSamples);
+  }
+
+  TEST_CASE("PerformanceBaseline - all-tracks metadata-only publication over 50k tracks",
+            "[perf][integration][baseline][all-tracks-publication]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr std::size_t kMeasuredRuns = 5;
+    auto bench = AllTracksPublicationBench{};
+    auto bulkSamples = std::vector<AllTracksPublicationTiming>{};
+    auto singleSamples = std::vector<AllTracksPublicationTiming>{};
+    bulkSamples.reserve(kMeasuredRuns);
+    singleSamples.reserve(kMeasuredRuns);
+
+    for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
+    {
+      if (auto timing = bench.runMetadataUpdate(0, AllTracksPublicationBench::kBulkUpdateCount); run != 0)
+      {
+        bulkSamples.push_back(std::move(timing));
+      }
+    }
+
+    for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
+    {
+      if (auto timing = bench.runMetadataUpdate(0, 1); run != 0)
+      {
+        singleSamples.push_back(std::move(timing));
+      }
+    }
+
+    APP_LOG_INFO("=== All Tracks metadata-only publication: 50k tracks, 5k and 1-track updates ===");
+    reportAllTracksPublication("metadata-update-5k", AllTracksPublicationBench::kBulkUpdateCount, bulkSamples);
+    reportAllTracksPublication("metadata-update-1", 1, singleSamples);
   }
 
   TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][integration][baseline]")

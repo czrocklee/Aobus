@@ -12,7 +12,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
 
 namespace ao::rt
 {
@@ -53,13 +52,7 @@ namespace ao::rt
 
     void invalidate() noexcept;
 
-    void notifyUpdated(TrackId id);
-    void notifyInserted(std::span<TrackId const> ids);
-    void notifyUpdated(std::span<TrackId const> ids);
     void notifyReset();
-    void notifyInserted(TrackId id, std::size_t index);
-    void notifyUpdated(TrackId id, std::size_t index);
-    void notifyRemoved(TrackId id, std::size_t index);
 
     bool tryPublishDelta(TrackSourceDelta message, std::size_t previousSize);
 

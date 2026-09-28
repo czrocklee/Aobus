@@ -44,6 +44,7 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 The all-tracks source contains every stored track id in its canonical source order.
 It consumes committed track insertions, deletions, and metadata updates and publishes one sequential batch per changeset.
 Mixed changesets combine collection edits and surviving metadata updates in that batch; update ranges address the final sequence after removals and insertions.
+A metadata-only changeset resolves each updated id by binary search in the sorted order, bounding publication work by the changeset rather than the source size.
 Synchronous consumers therefore evaluate changed and inserted tracks together without an intermediate collection-only notification.
 Changesets with no effective track edits publish no batch.
 Runtime factories construct it only after `MusicLibrary::open()` has validated every persisted Track pair and required dictionary reference.
@@ -139,6 +140,9 @@ and treats an escape as fatal rather than exposing a recoverable replica transac
 Invalidation clears each source snapshot before publishing its terminal event, so an outstanding lease cannot read old size or ids.
 
 Source delivery is synchronous on the callback side.
+A handler may release any lease during delivery, including the publishing source's own last lease or a sibling's.
+The smart-list evaluator checks each pending publication before emitting it: a List retired or re-installed by nested evaluator work before its turn receives no stale batch, the remaining Lists still receive exactly their batch, and a fully retired evaluator bucket is freed only after the outermost publication unwinds.
+Destroying the cache or evaluator from inside a delivery remains unsupported.
 Subscriptions release before their source or changes owner; source destruction disconnects subscribers but is not itself a semantic invalidation event.
 
 ## Implementation map
@@ -151,6 +155,7 @@ Subscriptions release before their source or changes owner; source destruction d
 ## Test map
 
 - [`TrackSourcePublicationTest.cpp`](../../../test/unit/runtime/source/TrackSourcePublicationTest.cpp) proves one mixed commit publishes one final all-tracks batch and smart membership transition before phase-two observers and command completion.
+- [`TrackSourceCachePublicationLifetimeTest.cpp`](../../../test/unit/runtime/source/TrackSourceCachePublicationLifetimeTest.cpp) proves that a handler may release its own or a sibling's last lease, retire a whole evaluator bucket, or acquire a new sibling during update-only, structural, reset, and invalidation publication without stale batches or use-after-free.
 - [`TrackSourceCacheTest.cpp`](../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, expired ad-hoc pruning, dependency composition, and contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership.
 - Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source) prove in-place indexed edits, update-only smart-list membership transitions, edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
 

@@ -11,6 +11,7 @@
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -68,6 +69,9 @@ namespace ao::rt
     SmartListEvaluator* _evaluator = nullptr;
 
     IndexedTrackSequence _members;
+    // Generation of the evaluator install that produced _members; owned by
+    // SmartListEvaluator, which stamps it on every members install.
+    std::uint64_t _installToken = 0;
     QueryState _current;
     query::PlanEvaluator _planEvaluator;
 
