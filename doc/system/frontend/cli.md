@@ -77,6 +77,7 @@ Library import dry-run decodes and applies through the import transaction, then 
 `lib fingerprint --pending` is bounded maintenance with no dry-run mode because completed identity batches are its unit of progress.
 It runs worker work through `CliRuntime::runTask()` so callback-executor continuations and terminal completion return through the invocation-thread executor without deadlocking a future wait.
 Its current progress and item-failure callbacks remain worker-produced and are serialized by the indexer.
+Per-item fingerprint failures are diagnostic rows in a report-and-continue run, so the command still exits `0` when some items fail, unlike scan and init apply.
 Successful structured output contains completed, skipped, and per-item-failure counts only.
 Cancellation propagates through the task cancellation channel and emits no successful partial-count document; already published batches remain durable and a later invocation resumes pending rows.
 
@@ -84,7 +85,7 @@ Cancellation propagates through the task cancellation channel and emits no succe
 
 Scan builds a runtime `ScanPlan`, emits summary/optional item output, then applies unless dry-run.
 `--defer-fingerprint` imports new metadata and leaves new manifest identity pending for later fingerprinting.
-Per-item apply failures are diagnostic rows; a transaction-level failure rejects the command.
+Per-item apply failures are diagnostic rows and fail the command with exit `1`, because a partial apply is not a successful scan; plain output also counts them in the apply summary. A transaction-level failure rejects the command.
 
 Verify builds but does not apply a scan plan.
 Changed and moved rows are reported; missing or error rows make verification fail.
