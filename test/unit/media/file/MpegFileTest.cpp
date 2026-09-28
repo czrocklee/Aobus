@@ -14,6 +14,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -98,14 +99,33 @@ namespace ao::media::file::mpeg::test
       data.insert(data.end(), text.begin(), text.end());
     }
 
+    // Append a v2.4 frame with explicit format flags; the content is the stored
+    // (still unsynchronised) frame data.
+    void addV24Frame(std::vector<std::uint8_t>& data,
+                     char const* id,
+                     std::uint8_t formatFlags,
+                     std::span<std::uint8_t const> content)
+    {
+      auto common = id3v2::V24CommonFrameLayout{};
+      std::memcpy(common.id.data(), id, 4);
+      putSyncSafeSize(common.size, static_cast<std::uint32_t>(content.size()));
+      common.flags[1] = formatFlags;
+      auto const* ptr = reinterpret_cast<std::uint8_t const*>(&common);
+      data.insert(data.end(), ptr, ptr + sizeof(common));
+      data.insert(data.end(), content.begin(), content.end());
+    }
+
     // Wrap an ID3v2 tag body in a header of the given major version (header size is
     // always syncsafe regardless of version).
-    std::vector<std::uint8_t> wrapId3v2(std::uint8_t majorVersion, std::vector<std::uint8_t> const& body)
+    std::vector<std::uint8_t> wrapId3v2(std::uint8_t majorVersion,
+                                        std::vector<std::uint8_t> const& body,
+                                        std::uint8_t flags = 0)
     {
       auto data = std::vector<std::uint8_t>{};
       auto header = id3v2::HeaderLayout{};
       std::memcpy(header.id.data(), "ID3", 3);
       header.majorVersion = majorVersion;
+      header.flags = flags;
 
       auto const sz = static_cast<std::uint32_t>(body.size());
       header.size.data[0] = (sz >> 21) & 0x7F;
@@ -561,6 +581,62 @@ namespace ao::media::file::mpeg::test
       auto const content = readContent(file);
       CHECK(content.text(TextField::Title) == "Hi");
     }
+  }
+
+  TEST_CASE("MPEG File - reads metadata from an ID3v2.4 unsynchronised tag", "[media][unit][mpeg][file][id3v2]")
+  {
+    auto body = std::vector<std::uint8_t>{};
+
+    // Tag-level unsynchronisation flag: every frame's stored data may contain
+    // FF 00 escape pairs. UTF-16LE "A<U+00FF>B": the FF 00 code unit for U+00FF
+    // is stored as FF 00 00.
+    auto const storedTitle = std::to_array<std::uint8_t>({0x01, 0xFF, 0xFE, 0x41, 0x00, 0xFF, 0x00, 0x00, 0x42, 0x00});
+    addV24Frame(body, "TIT2", 0x00, storedTitle);
+
+    // A frame without escapes in an unsynchronised tag still parses.
+    auto const storedArtist = std::to_array<std::uint8_t>({0x03, 'A', 'r', 't', 'i', 's', 't'});
+    addV24Frame(body, "TPE1", 0x00, storedArtist);
+
+    // Album with per-frame unsynchronisation plus a data length indicator:
+    // stored = DLI(7) + Latin-1 encoding + "Al" FF 00 "bum".
+    auto const storedAlbum =
+      std::to_array<std::uint8_t>({0x00, 0x00, 0x00, 0x07, 0x00, 'A', 'l', 0xFF, 0x00, 'b', 'u', 'm'});
+    addV24Frame(body, "TALB", 0x03, storedAlbum);
+
+    // Front cover whose picture data contains an FF 00 escape pair.
+    auto picture = std::vector<std::uint8_t>{};
+    picture.push_back(0); // Latin-1
+
+    for (auto const character : std::string_view{"image/jpeg"})
+    {
+      picture.push_back(static_cast<std::uint8_t>(character));
+    }
+
+    picture.push_back(0); // mime terminator
+    picture.push_back(3); // front cover
+    picture.push_back(0); // empty description
+    picture.insert(picture.end(), {0xFF, 0xD8, 0xFF, 0x00, 0x00, 0xE0});
+    addV24Frame(body, "APIC", 0x02, picture);
+
+    auto data = wrapId3v2(4, body, 0x80); // tag-level unsynchronisation
+    auto const frame = createValidMpegFrame();
+    data.insert(data.end(), frame.begin(), frame.end());
+    auto const temp = TempFile{data, ".mp3"};
+    auto const file = TestFile{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Title) == "A\xC3\xBF"
+                                            "B");
+    CHECK(content.text(TextField::Artist) == "Artist");
+    CHECK(content.text(TextField::Album) == "Al\xC3\xBF"
+                                            "bum");
+
+    auto const& covers = content.pictures();
+    REQUIRE(covers.size() == 1);
+    CHECK(covers.front().type == PictureType::FrontCover);
+    auto const expectedPicture =
+      std::to_array<std::byte>({std::byte{0xFF}, std::byte{0xD8}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xE0}});
+    CHECK(std::ranges::equal(covers.front().bytes, expectedPicture));
   }
 
   TEST_CASE("MPEG File - mixed borrowed and converted ID3 text remains stable across File move",

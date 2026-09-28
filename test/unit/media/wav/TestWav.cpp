@@ -6,6 +6,7 @@
 #include "lib/media/file/mpeg/id3v2/Layout.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <span>
@@ -18,19 +19,67 @@ namespace ao::test::wav
   {
     namespace id3v2 = ao::media::file::mpeg::id3v2;
 
-    void addPictureFrame(std::vector<std::uint8_t>& data, std::span<std::uint8_t const> const imageData)
+    // Counts the bytes a stored body shrinks to once FF 00 escape pairs
+    // collapse, which is the size an unsynchronised v2.3 frame header declares.
+    std::size_t deunsynchronisedSize(std::span<std::uint8_t const> const bytes)
+    {
+      auto size = bytes.size();
+
+      for (std::size_t index = 0; index + 1 < bytes.size(); ++index)
+      {
+        if (bytes[index] == 0xFFU && bytes[index + 1] == 0x00U)
+        {
+          --size;
+          ++index;
+        }
+      }
+
+      return size;
+    }
+
+    void appendV23Frame(std::vector<std::uint8_t>& data,
+                        std::string_view const id,
+                        std::span<std::uint8_t const> const body,
+                        std::size_t const declaredSize)
+    {
+      auto frame = id3v2::V23CommonFrameLayout{};
+      std::memcpy(frame.id.data(), id.data(), frame.id.size());
+      frame.size = static_cast<std::uint32_t>(declaredSize);
+      auto const* const frameBytes = reinterpret_cast<std::uint8_t const*>(&frame);
+      data.insert(data.end(), frameBytes, frameBytes + sizeof(frame));
+      data.insert(data.end(), body.begin(), body.end());
+    }
+
+    void appendId3Header(std::vector<std::uint8_t>& data, std::uint8_t const flags, std::size_t const bodySize)
+    {
+      auto header = id3v2::HeaderLayout{};
+      std::memcpy(header.id.data(), "ID3", header.id.size());
+      header.majorVersion = 3;
+      header.flags = flags;
+
+      auto const size = static_cast<std::uint32_t>(bodySize);
+      header.size.data[0] = static_cast<std::uint8_t>((size >> 21U) & 0x7FU);
+      header.size.data[1] = static_cast<std::uint8_t>((size >> 14U) & 0x7FU);
+      header.size.data[2] = static_cast<std::uint8_t>((size >> 7U) & 0x7FU);
+      header.size.data[3] = static_cast<std::uint8_t>(size & 0x7FU);
+
+      auto const* const headerBytes = reinterpret_cast<std::uint8_t const*>(&header);
+      data.insert(data.end(), headerBytes, headerBytes + sizeof(header));
+    }
+
+    std::vector<std::uint8_t> pictureFrameBody(std::span<std::uint8_t const> const imageData)
     {
       auto body = std::vector<std::uint8_t>{0}; // Latin1
       body.insert(body.end(), {'i', 'm', 'a', 'g', 'e', '/', 'p', 'n', 'g', 0});
       body.insert(body.end(), {3, 0}); // Front cover and empty description
       body.insert(body.end(), imageData.begin(), imageData.end());
+      return body;
+    }
 
-      auto frame = id3v2::V23CommonFrameLayout{};
-      std::memcpy(frame.id.data(), "APIC", frame.id.size());
-      frame.size = static_cast<std::uint32_t>(body.size());
-      auto const* const frameBytes = reinterpret_cast<std::uint8_t const*>(&frame);
-      data.insert(data.end(), frameBytes, frameBytes + sizeof(frame));
-      data.insert(data.end(), body.begin(), body.end());
+    void addPictureFrame(std::vector<std::uint8_t>& data, std::span<std::uint8_t const> const imageData)
+    {
+      auto const body = pictureFrameBody(imageData);
+      appendV23Frame(data, "APIC", body, body.size());
     }
   } // namespace
 
@@ -39,19 +88,29 @@ namespace ao::test::wav
     auto body = std::vector<std::uint8_t>{};
     addPictureFrame(body, imageData);
 
-    auto header = id3v2::HeaderLayout{};
-    std::memcpy(header.id.data(), "ID3", header.id.size());
-    header.majorVersion = 3;
+    auto data = std::vector<std::uint8_t>{};
+    appendId3Header(data, 0, body.size());
+    data.insert(data.end(), body.begin(), body.end());
+    return data;
+  }
 
-    auto const size = static_cast<std::uint32_t>(body.size());
-    header.size.data[0] = (size >> 21U) & 0x7FU;
-    header.size.data[1] = (size >> 14U) & 0x7FU;
-    header.size.data[2] = (size >> 7U) & 0x7FU;
-    header.size.data[3] = size & 0x7FU;
+  std::vector<std::uint8_t> makeUnsyncId3WithPictureAndTitle(std::span<std::uint8_t const> const imageData,
+                                                             std::string_view const storedTitle)
+  {
+    auto titleBody = std::vector<std::uint8_t>{0}; // Latin1
+
+    for (char const character : storedTitle)
+    {
+      titleBody.push_back(static_cast<std::uint8_t>(character));
+    }
+
+    auto const pictureBody = pictureFrameBody(imageData);
+    auto body = std::vector<std::uint8_t>{};
+    appendV23Frame(body, "TIT2", titleBody, deunsynchronisedSize(titleBody));
+    appendV23Frame(body, "APIC", pictureBody, deunsynchronisedSize(pictureBody));
 
     auto data = std::vector<std::uint8_t>{};
-    auto const* const headerBytes = reinterpret_cast<std::uint8_t const*>(&header);
-    data.insert(data.end(), headerBytes, headerBytes + sizeof(header));
+    appendId3Header(data, 0x80, body.size()); // tag-level unsynchronisation
     data.insert(data.end(), body.begin(), body.end());
     return data;
   }

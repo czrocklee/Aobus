@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 namespace ao::media::file::wav::test
@@ -117,6 +118,37 @@ namespace ao::media::file::wav::test
     CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[0]) == 0x12);
     CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[1]) == 0x34);
     CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[2]) == 0x56);
+  }
+
+  TEST_CASE("WAV File - preserves ID3 content from unsynchronised chunks", "[media][unit][wav][file]")
+  {
+    // The ID3 reader deunsynchronises the chunk into storage owned by the
+    // per-chunk builder, which dies with it; the copied picture bytes must
+    // stay readable here, after that builder is gone.
+    auto const storedPicture = std::array<std::uint8_t, 5>{0x12, 0x34, 0xFF, 0x00, 0x56};
+    auto const storedTitle = std::string_view{"Ti\xFF\x00"
+                                              "tle",
+                                              7};
+    auto const id3 = ao::test::wav::makeUnsyncId3WithPictureAndTitle(storedPicture, storedTitle);
+    auto const data = ao::test::wav::makeWav({
+      .extraChunks = {{{.id = {'i', 'd', '3', ' '}, .payload = id3}}},
+    });
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    // Latin-1 0xFF converts to UTF-8 C3 BF.
+    CHECK(content.text(TextField::Title) == "Ti\xC3\xBF"
+                                            "tle");
+
+    auto const& pictures = content.pictures();
+    REQUIRE(pictures.size() == 1);
+    CHECK(pictures.front().type == PictureType::FrontCover);
+    REQUIRE(pictures.front().bytes.size() == 4);
+    CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[0]) == 0x12);
+    CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[1]) == 0x34);
+    CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[2]) == 0xFF);
+    CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[3]) == 0x56);
   }
 
   TEST_CASE("WAV File - rejects empty audio data through the content API", "[media][unit][wav][file]")

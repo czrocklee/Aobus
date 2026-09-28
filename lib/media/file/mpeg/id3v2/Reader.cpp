@@ -35,6 +35,24 @@ namespace ao::media::file::mpeg::id3v2
     constexpr std::uint8_t kSyncSafeHighBit = 0x80U;
     constexpr std::uint8_t kAsciiHighBit = 0x80U;
     constexpr std::size_t kFrameHeaderSize = sizeof(V23CommonFrameLayout);
+    constexpr std::uint8_t kTagUnsyncFlag = 0x80U;
+    constexpr std::uint8_t kExtendedHeaderFlag = 0x40U;
+    constexpr std::size_t kExtendedHeaderSizeField = sizeof(EncodedSize);
+    // Smallest legal extended header: v2.4 counts the size field itself, v2.3
+    // counts the bytes after it, but both floors are six bytes.
+    constexpr std::size_t kExtendedHeaderMinSize = 6;
+    // A UTF-8-encoded U+FEFF byte order mark, which per-value BOMs become after
+    // the whole-frame BOM is stripped and the NUL split runs.
+    constexpr std::string_view kUtf8Bom{"\xEF\xBB\xBF", 3};
+    // ID3v2.4 frame format flags (the second flag byte).
+    constexpr std::uint8_t kGroupingIdentityFormatFlag = 0x40U;
+    constexpr std::uint8_t kFrameCompressionFormatFlag = 0x08U;
+    constexpr std::uint8_t kFrameEncryptionFormatFlag = 0x04U;
+    constexpr std::uint8_t kFrameUnsyncFormatFlag = 0x02U;
+    constexpr std::uint8_t kDataLengthIndicatorFlag = 0x01U;
+    constexpr std::size_t kFrameFormatFlagsOffset = 9;
+    constexpr std::size_t kDataLengthIndicatorSize = 4;
+    constexpr std::uint8_t kUnsyncEscapeByte = 0xFFU;
 
     struct DecodedTextView final
     {
@@ -95,51 +113,113 @@ namespace ao::media::file::mpeg::id3v2
       return DecodedTextView{.value = convertedStorage, .requiresOwnership = true};
     }
 
+    // Applies the text once per value. ID3v2.3 strings end at their first
+    // terminator; ID3v2.4 frames may hold several NUL-separated values, which
+    // apply in order like repeated frames, so the last value wins.
+    template<typename Apply>
+    void forEachTextValue(std::string_view text, std::uint8_t version, Apply apply)
+    {
+      if (version != kId3v24MajorVersion)
+      {
+        auto const terminatorOffset = text.find('\0');
+        apply(terminatorOffset == std::string_view::npos ? text : text.substr(0, terminatorOffset));
+        return;
+      }
+
+      std::size_t offset = 0;
+
+      while (offset < text.size())
+      {
+        auto const terminatorOffset = text.find('\0', offset);
+        auto value = text.substr(
+          offset, terminatorOffset == std::string_view::npos ? std::string_view::npos : terminatorOffset - offset);
+
+        // A v2.4 multi-value frame may give each value its own BOM. The
+        // whole-frame BOM was already stripped during conversion, but interior
+        // BOMs survive the NUL split as a leading UTF-8-encoded U+FEFF.
+        if (value.starts_with(kUtf8Bom))
+        {
+          value.remove_prefix(kUtf8Bom.size());
+        }
+
+        apply(value);
+
+        if (terminatorOffset == std::string_view::npos)
+        {
+          return;
+        }
+
+        offset = terminatorOffset + 1;
+      }
+    }
+
     template<TextSetter Setter>
-    void handleText(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
+    void handleText(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
       auto convertedStorage = std::string{};
 
       if (auto const optText = decodeFrameText(content, convertedStorage); optText && !optText->value.empty())
       {
-        auto const value = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
-        (builder.metadata().*Setter)(value);
+        // Own the storage once before splitting so every value segment stays stable.
+        auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
+
+        forEachTextValue(stableText,
+                         version,
+                         [&](std::string_view value)
+                         {
+                           if (!value.empty())
+                           {
+                             (builder.metadata().*Setter)(value);
+                           }
+                         });
       }
     }
 
-    void handleYear(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
+    void handleYear(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
       auto convertedStorage = std::string{};
 
-      if (auto const optText = decodeFrameText(content, convertedStorage); optText)
+      if (auto const optText = decodeFrameText(content, convertedStorage); optText && !optText->value.empty())
       {
-        if (auto const optYear = decodeYear(optText->value); optYear)
-        {
-          builder.metadata().year(*optYear);
-        }
+        auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
+
+        forEachTextValue(stableText,
+                         version,
+                         [&](std::string_view value)
+                         {
+                           if (auto const optYear = decodeYear(value); optYear)
+                           {
+                             builder.metadata().year(*optYear);
+                           }
+                         });
       }
     }
 
     template<NumberSetter PrimarySetter, NumberSetter SecondarySetter>
-    void handleSlashNumber(detail::ContentBuilder& builder,
-                           std::span<std::byte const> content,
-                           std::uint8_t /*version*/)
+    void handleSlashNumber(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
       auto convertedStorage = std::string{};
 
-      if (auto const optText = decodeFrameText(content, convertedStorage); optText)
+      if (auto const optText = decodeFrameText(content, convertedStorage); optText && !optText->value.empty())
       {
-        auto const pair = parseSlashPair(optText->value);
+        auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
 
-        if (pair.optPrimary)
-        {
-          (builder.metadata().*PrimarySetter)(*pair.optPrimary);
-        }
+        forEachTextValue(stableText,
+                         version,
+                         [&](std::string_view value)
+                         {
+                           auto const pair = parseSlashPair(value);
 
-        if (pair.optSecondary)
-        {
-          (builder.metadata().*SecondarySetter)(*pair.optSecondary);
-        }
+                           if (pair.optPrimary)
+                           {
+                             (builder.metadata().*PrimarySetter)(*pair.optPrimary);
+                           }
+
+                           if (pair.optSecondary)
+                           {
+                             (builder.metadata().*SecondarySetter)(*pair.optSecondary);
+                           }
+                         });
       }
     }
 
@@ -224,7 +304,7 @@ namespace ao::media::file::mpeg::id3v2
       return true;
     }
 
-    void handleTxxx(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t /*version*/)
+    void handleTxxx(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
       auto convertedStorage = std::string{};
       auto const optText = decodeFrameText(content, convertedStorage);
@@ -241,8 +321,10 @@ namespace ao::media::file::mpeg::id3v2
         return;
       }
 
-      auto const key = optText->value.substr(0, nullOffset);
-      auto const value = optText->value.substr(nullOffset + 1);
+      // Own the storage once before splitting so every value segment stays stable.
+      auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
+      auto const key = stableText.substr(0, nullOffset);
+      auto const valueText = stableText.substr(nullOffset + 1);
       auto setter = TextSetter{};
 
       if (isEqualIgnoringAsciiCase(key, "work") || isEqualIgnoringAsciiCase(key, "grouping"))
@@ -269,23 +351,35 @@ namespace ao::media::file::mpeg::id3v2
       }
       else if (isEqualIgnoringAsciiCase(key, "movement") || isEqualIgnoringAsciiCase(key, "mvin"))
       {
-        auto const pair = parseSlashPair(value);
+        forEachTextValue(valueText,
+                         version,
+                         [&](std::string_view value)
+                         {
+                           auto const pair = parseSlashPair(value);
 
-        if (pair.optPrimary)
-        {
-          builder.metadata().movementNumber(*pair.optPrimary);
-        }
+                           if (pair.optPrimary)
+                           {
+                             builder.metadata().movementNumber(*pair.optPrimary);
+                           }
 
-        if (pair.optSecondary)
-        {
-          builder.metadata().movementTotal(*pair.optSecondary);
-        }
+                           if (pair.optSecondary)
+                           {
+                             builder.metadata().movementTotal(*pair.optSecondary);
+                           }
+                         });
       }
 
       if (setter != nullptr)
       {
-        auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
-        (builder.metadata().*setter)(stableText.substr(nullOffset + 1));
+        forEachTextValue(valueText,
+                         version,
+                         [&](std::string_view value)
+                         {
+                           if (!value.empty())
+                           {
+                             (builder.metadata().*setter)(value);
+                           }
+                         });
       }
     }
 
@@ -326,6 +420,106 @@ namespace ao::media::file::mpeg::id3v2
 
       return utility::layout::view<V23CommonFrameLayout>(frame)->size.value();
     }
+
+    // Replaces unsynchronisation escape pairs (FF 00) with the encoded FF byte
+    // and keeps the deunsynchronised copy alive in the builder, so borrowed
+    // views into it (picture data, zero-copy text) outlive readFrames.
+    std::span<std::byte const> ownDeunsynchronized(detail::ContentBuilder& builder, std::span<std::byte const> bytes)
+    {
+      auto deunsynchronized = std::string{};
+      deunsynchronized.reserve(bytes.size());
+
+      for (std::size_t index = 0; index < bytes.size(); ++index)
+      {
+        deunsynchronized.push_back(std::to_integer<char>(bytes[index]));
+
+        if (bytes[index] == std::byte{kUnsyncEscapeByte} && index + 1 < bytes.size() && bytes[index + 1] == std::byte{})
+        {
+          ++index;
+        }
+      }
+
+      return utility::bytes::view(builder.own(std::move(deunsynchronized)));
+    }
+
+    // Byte count to skip before the first frame, or nullopt when the extended
+    // header is truncated or malformed. The v2.3 size is a big-endian count
+    // that excludes the size field itself; the v2.4 size is syncsafe and
+    // includes the size field.
+    std::optional<std::size_t> extendedHeaderSkip(std::span<std::byte const> bytes, std::uint8_t version) noexcept
+    {
+      if (bytes.size() < kExtendedHeaderSizeField)
+      {
+        return std::nullopt;
+      }
+
+      if (version == kId3v24MajorVersion)
+      {
+        auto const* const encoded = utility::layout::view<EncodedSize>(bytes);
+
+        if (std::ranges::any_of(encoded->data, [](std::uint8_t value) { return (value & kSyncSafeHighBit) != 0; }))
+        {
+          return std::nullopt;
+        }
+
+        auto const size = decodeSize(*encoded);
+
+        if (size < kExtendedHeaderMinSize || size > bytes.size())
+        {
+          return std::nullopt;
+        }
+
+        return size;
+      }
+
+      auto const size = utility::layout::view<boost::endian::big_uint32_buf_t>(bytes)->value();
+
+      if (size < kExtendedHeaderMinSize || size > bytes.size() - kExtendedHeaderSizeField)
+      {
+        return std::nullopt;
+      }
+
+      return kExtendedHeaderSizeField + static_cast<std::size_t>(size);
+    }
+
+    // Returns the v2.4 frame content a handler should see, deunsynchronising
+    // the frame and skipping its group identity byte and data length
+    // indicator as needed; nullopt means the frame must not be dispatched.
+    std::optional<std::span<std::byte const>> prepareFrameData(detail::ContentBuilder& builder,
+                                                               std::span<std::byte const> frameData,
+                                                               std::uint8_t formatFlags,
+                                                               bool tagUnsynced)
+    {
+      // Compressed and encrypted frames have no decoder here, so they are
+      // skipped instead of dispatching undecodable bytes; the tag walk keeps
+      // going like for any other dropped frame.
+      if ((formatFlags & (kFrameCompressionFormatFlag | kFrameEncryptionFormatFlag)) != 0)
+      {
+        return std::nullopt;
+      }
+
+      // ID3v2.4 frame sizes count stored bytes, so unsynchronised frames are
+      // deunsynchronised before a handler sees the content.
+      if (tagUnsynced || (formatFlags & kFrameUnsyncFormatFlag) != 0)
+      {
+        frameData = ownDeunsynchronized(builder, frameData);
+      }
+
+      // A group identity is a 1-byte prefix on the frame data.
+      if ((formatFlags & kGroupingIdentityFormatFlag) != 0)
+      {
+        frameData = frameData.empty() ? std::span<std::byte const>{} : frameData.subspan(1);
+      }
+
+      // A data length indicator is a 4-byte prefix on the frame data.
+      if ((formatFlags & kDataLengthIndicatorFlag) != 0)
+      {
+        frameData = frameData.size() >= kDataLengthIndicatorSize ? frameData.subspan(kDataLengthIndicatorSize)
+                                                                 : std::span<std::byte const>{};
+      }
+
+      return frameData;
+    }
   } // namespace
 
   std::optional<detail::ContentBuilder> readFrames(HeaderLayout const& header, std::span<std::byte const> bytes)
@@ -342,7 +536,33 @@ namespace ao::media::file::mpeg::id3v2
       return std::nullopt;
     }
 
+    // ID3v2.3 unsynchronisation applies to the whole tag body; ID3v2.4 applies
+    // it per frame instead. Frame sizes are then read from the deunsynchronised
+    // body, i.e. they count deunsynchronised bytes: the v2.3 spec is ambiguous
+    // about which byte count a size holds, and TagLib and mutagen read the
+    // sizes the same way.
+    if (header.majorVersion == kId3v23MajorVersion && (header.flags & kTagUnsyncFlag) != 0)
+    {
+      bytes = ownDeunsynchronized(builder, bytes);
+    }
+
     std::size_t offset = 0;
+
+    // An extended header (flag 0x40) precedes the frame list.
+    if ((header.flags & kExtendedHeaderFlag) != 0)
+    {
+      auto const optSkip = extendedHeaderSkip(bytes, header.majorVersion);
+
+      if (!optSkip)
+      {
+        return std::nullopt;
+      }
+
+      offset = *optSkip;
+    }
+
+    // A v2.4 tag-level unsync flag means every frame in the tag is unsynchronised.
+    auto const tagUnsynced = (header.flags & kTagUnsyncFlag) != 0;
 
     while (offset < bytes.size())
     {
@@ -367,11 +587,27 @@ namespace ao::media::file::mpeg::id3v2
       }
 
       auto const frameSize = kFrameHeaderSize + *optContentSize;
+      auto const frameData = remaining.subspan(kFrameHeaderSize, *optContentSize);
 
       if (auto const* const entry = Id3v2FrameDispatchTable::lookupFrame(frameId.data(), frameId.size());
           entry != nullptr)
       {
-        entry->handler(builder, remaining.subspan(kFrameHeaderSize, *optContentSize), header.majorVersion);
+        // Preparing only handled frames keeps unknown frames in
+        // unsynchronised tags from allocating a deunsynchronised copy.
+        if (header.majorVersion == kId3v24MajorVersion)
+        {
+          auto const formatFlags = std::to_integer<std::uint8_t>(remaining[kFrameFormatFlagsOffset]);
+          auto const optPreparedData = prepareFrameData(builder, frameData, formatFlags, tagUnsynced);
+
+          if (optPreparedData)
+          {
+            entry->handler(builder, *optPreparedData, header.majorVersion);
+          }
+        }
+        else
+        {
+          entry->handler(builder, frameData, header.majorVersion);
+        }
       }
 
       offset += frameSize;
