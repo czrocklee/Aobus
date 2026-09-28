@@ -168,8 +168,8 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     requireJsonLineParses(result.out);
     tree = parseYaml(result.out);
-    REQUIRE(tree.rootref()["tracks"].is_seq());
-    CHECK(tree.rootref()["tracks"].num_children() == 1);
+    REQUIRE(tree.rootref()["list"]["tracks"].is_seq());
+    CHECK(tree.rootref()["list"]["tracks"].num_children() == 1);
 
     result = fixture.run({"list", "update", std::to_string(listId), "--name", "Pinned", "--desc", "Pinned songs"});
     REQUIRE(result.status == 0);
@@ -211,6 +211,45 @@ namespace ao::cli::test
     CHECK(contains(result.out, "HiRes Title"));
 
     checkDomainFailure(fixture.run({"list", "add", std::to_string(listId), "1"}), "membership is computed");
+  }
+
+  TEST_CASE("CLI - list show detail emits one document shape for YAML and JSON", "[cli][integration][list]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"list", "create", "--name", "Playlist", "--filter", "#playlist"});
+    REQUIRE(result.status == 0);
+    auto const listId = parseCreatedListId(result.out);
+
+    result = fixture.run({"list", "add", std::to_string(listId), "1"});
+    REQUIRE(result.status == 0);
+
+    auto const requireDetailDocument = [](std::string_view output)
+    {
+      auto tree = parseYaml(output);
+      REQUIRE(tree.rootref().has_child("list"));
+      auto const list = tree.rootref()["list"];
+      REQUIRE(list.is_map());
+      CHECK(yaml::scalarView(list["name"]) == "Playlist");
+      CHECK(yaml::scalarView(list["filter"]) == "#playlist");
+      REQUIRE(list["order"].is_seq());
+      REQUIRE(list["tracks"].is_seq());
+      REQUIRE(list["tracks"].num_children() == 1);
+      CHECK(yaml::scalarView(list["tracks"][0]["title"]) == "Test Title");
+    };
+
+    result = fixture.run({"-O", "yaml", "list", "show", std::to_string(listId)});
+    REQUIRE(result.status == 0);
+    requireDetailDocument(result.out);
+
+    result = fixture.run({"-O", "json", "list", "show", std::to_string(listId)});
+    REQUIRE(result.status == 0);
+    requireJsonLineParses(result.out);
+    requireDetailDocument(result.out);
   }
 
   TEST_CASE("CLI - child List detail honors parent membership", "[cli][integration][list]")

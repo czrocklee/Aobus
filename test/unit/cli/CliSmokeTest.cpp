@@ -115,6 +115,14 @@ namespace ao::cli::test
     auto createTree = parseYaml(result.out);
     CHECK(yaml::scalarView(createTree.rootref()["action"]) == "create");
     CHECK(yaml::scalarView(createTree.rootref()["name"]) == "Machine");
+    auto const listId = std::string{yaml::scalarView(createTree.rootref()["listId"])};
+
+    // The detail document wraps one row in `list`, in JSON as in YAML.
+    result = fixture.run({"-O", "json", "list", "show", listId});
+    REQUIRE(result.status == 0);
+    requireJsonLineParses(result.out);
+    auto showTree = parseYaml(result.out);
+    CHECK(yaml::scalarView(showTree.rootref()["list"]["name"]) == "Machine");
 
     result = fixture.run({"-O", "yaml", "track", "delete", "1"});
     REQUIRE(result.status == 0);
