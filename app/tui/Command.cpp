@@ -381,6 +381,17 @@ namespace ao::tui
 
     for (auto const& prefixCommand : kPrefixCommands)
     {
+      // Each prefix ends in a single separating space. The bare form (":filter"
+      // with no argument) is equivalent to the prefix with an empty argument, so
+      // an exact match of the prefix word is accepted in addition to the
+      // word-plus-space form that carries an argument.
+      auto const barePrefix = prefixCommand.prefix.substr(0, prefixCommand.prefix.size() - 1);
+
+      if (command == barePrefix)
+      {
+        return Command{.action = prefixCommand.action, .argument = std::string{}};
+      }
+
       if (command.starts_with(prefixCommand.prefix))
       {
         return Command{

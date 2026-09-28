@@ -174,4 +174,34 @@ namespace ao::tui::test
     CHECK(command.action == CommandAction::SetPresentation);
     CHECK(command.argument == "my  presentation");
   }
+
+  TEST_CASE("Command - bare prefix commands behave like an empty argument", "[tui][unit][shell]")
+  {
+    auto command = requiredCommand(":filter");
+    CHECK(command.action == CommandAction::QuickFilter);
+    CHECK(command.argument.empty());
+
+    command = requiredCommand(":view");
+    CHECK(command.action == CommandAction::SetPresentation);
+    CHECK(command.argument.empty());
+
+    command = requiredCommand(":presentation");
+    CHECK(command.action == CommandAction::SetPresentation);
+    CHECK(command.argument.empty());
+
+    command = requiredCommand(":preset");
+    CHECK(command.action == CommandAction::SetPresentation);
+    CHECK(command.argument.empty());
+
+    // Surrounding whitespace still resolves to the bare command with an empty argument.
+    command = requiredCommand("  :filter  ");
+    CHECK(command.action == CommandAction::QuickFilter);
+    CHECK(command.argument.empty());
+
+    // A bareword that merely starts with a prefix word is not the bare command.
+    CHECK_FALSE(parseCommand(":filterfoo"));
+    CHECK_FALSE(parseCommand(":viewx"));
+    CHECK_FALSE(parseCommand(":presentationx"));
+    CHECK_FALSE(parseCommand(":presetx"));
+  }
 } // namespace ao::tui::test
