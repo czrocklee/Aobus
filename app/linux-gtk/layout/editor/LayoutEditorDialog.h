@@ -181,6 +181,9 @@ namespace ao::gtk::layout::editor
     ModelColumns _columns;
     Glib::RefPtr<Gtk::TreeStore> _treeStorePtr;
     Gtk::TreeView _treeView;
+    // Declared after _treeView so it disconnects before the selection model is
+    // destroyed during member teardown (reverse declaration order).
+    sigc::scoped_connection _selectionChangedConn;
     Gtk::ScrolledWindow _treeScroll;
 
     Gtk::Box _treeBox{Gtk::Orientation::VERTICAL};

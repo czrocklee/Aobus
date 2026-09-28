@@ -210,7 +210,7 @@ namespace ao::gtk::layout::editor
     _treeView.append_column(gtkText(_textCatalog, MessageId::GtkLayoutTreeNode), _columns.displayName);
     _treeView.append_column(gtkText(_textCatalog, MessageId::GtkLayoutTreeType), _columns.type);
 
-    _treeView.get_selection()->signal_changed().connect(
+    _selectionChangedConn = _treeView.get_selection()->signal_changed().connect(
       sigc::mem_fun(*this, &LayoutEditorDialog::handleSelectionChanged));
 
     _treeScroll.set_child(_treeView);
@@ -334,6 +334,11 @@ namespace ao::gtk::layout::editor
 
   void LayoutEditorDialog::populateTree(std::optional<std::vector<std::size_t>> optSelectedNodePath)
   {
+    // Block selection-changed while clearing and rebuilding so clear() and the
+    // follow-up select do not each rebuild the properties panel. The final panel
+    // state is applied exactly once below from the resulting selection.
+    _selectionChangedConn.block();
+
     _treeStorePtr->clear();
 
     auto row = *(_treeStorePtr->append());
@@ -370,6 +375,19 @@ namespace ao::gtk::layout::editor
     {
       selectRowByDocumentPath(*optSelectedNodePath);
     }
+
+    _selectionChangedConn.unblock();
+
+    // Apply the final selection state once: the selected node's panel when a row
+    // is selected, otherwise the no-selection panel (constructor/reset/preset).
+    if (auto const selectedRow = _treeView.get_selection()->get_selected(); selectedRow)
+    {
+      updatePropertiesPanel(selectedRow->get_value(_columns.nodePtr));
+    }
+    else
+    {
+      updatePropertiesPanel(nullptr);
+    }
   }
 
   void LayoutEditorDialog::selectRowByDocumentPath(std::vector<std::size_t> const& documentPath)
@@ -385,7 +403,8 @@ namespace ao::gtk::layout::editor
 
     if (auto const rowIt = _treeStorePtr->get_iter(rowPath); rowIt)
     {
-      _treeView.expand_to_path(rowPath);
+      // expand_all() in populateTree has already exposed every row, so an
+      // additional expand_to_path here is redundant for the only caller.
       _treeView.get_selection()->select(rowIt);
 
       if (_treeView.get_mapped())
