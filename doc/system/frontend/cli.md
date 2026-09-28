@@ -67,6 +67,9 @@ The returned `tracks` sequence is effective membership in effective order; the s
 Writer-backed dry-run commands invoke the corresponding `preview*` runtime method.
 The writer performs normal validation and mutation logic inside the write transaction, constructs the ordinary reply, suppresses change publication, and aborts instead of committing.
 
+`track update` with tag options routes the whole edit through the shared properties mutation as one commit.
+The runtime exposes no preview form for that combined mutation, so the CLI rejects `--dry-run` in that combination with an InvalidInput command error instead of previewing a partial edit.
+
 `list add` and `list remove` delegate to the shared writable-tag List operation.
 Add mutates the List's positive tag on the selected tracks; Remove mutates that tag and atomically forgets their saved List positions.
 Saved-order moves bind the current effective sequence and committed revision before asking the writer to apply stable-ID movement, so an intervening mutation is reported instead of applying stale row coordinates.

@@ -114,6 +114,13 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(createTree.rootref()["action"]) == "create");
     CHECK(yaml::scalarView(createTree.rootref()["name"]) == "Machine");
 
+    result = fixture.run({"-O", "json", "track", "update", "1", "--title", "Renamed", "--add-tag", "fav"});
+    REQUIRE(result.status == 0);
+    requireJsonLineParses(result.out);
+    auto updateTree = parseYaml(result.out);
+    CHECK(yaml::scalarView(updateTree.rootref()["updated"]) == "1");
+    CHECK(yaml::scalarView(updateTree.rootref()["tagChanges"][0]["addedTags"][0]) == "fav");
+
     result = fixture.run({"-O", "yaml", "track", "delete", "1"});
     REQUIRE(result.status == 0);
     auto deleteTree = parseYaml(result.out);

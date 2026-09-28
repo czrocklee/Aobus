@@ -383,6 +383,157 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["custom"]["energy"]) == "high");
   }
 
+  TEST_CASE("CLI - track update commits metadata and tag changes as one edit", "[cli][integration][track][update]")
+  {
+    auto fixture = CliFixture{};
+    auto const firstId =
+      fixture.addTrack(library::test::TrackSpec{.title = "First", .uri = "first.flac", .tags = {"old"}});
+    auto const secondId = fixture.addTrack(library::test::TrackSpec{.title = "Second", .uri = "second.flac"});
+
+    auto result = fixture.run({"track",
+                               "update",
+                               std::to_string(firstId.raw()),
+                               "--title",
+                               "Renamed",
+                               "--add-tag",
+                               "fav",
+                               "--remove-tag",
+                               "old"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "updated 1 of 1 matched track(s)"));
+    CHECK(contains(result.out, "added tag: fav to 1 track(s)"));
+    CHECK(contains(result.out, "removed tag: old from 1 track(s)"));
+
+    result = fixture.run({"tag", "show", std::to_string(firstId.raw())});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "fav"));
+    CHECK_FALSE(contains(result.out, "old"));
+
+    result = fixture.run({"-O", "json", "track", "show", std::to_string(firstId.raw())});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["title"]) == "Renamed");
+
+    result = fixture.run(
+      {"-O", "json", "track", "update", std::to_string(secondId.raw()), "--genre", "Jazz", "--add-tag", "fav"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    requireJsonLineParses(result.out);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["matched"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["updated"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["field"]) == "genre");
+    REQUIRE(tree.rootref()["tagChanges"].is_seq());
+    REQUIRE(tree.rootref()["tagChanges"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["trackId"]) == std::to_string(secondId.raw()));
+    CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["addedTags"][0]) == "fav");
+
+    result = fixture.run({"track", "update", std::to_string(secondId.raw()), "--genre", "Rock"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "updated 1 of 1 matched track(s)"));
+
+    result = fixture.run({"-O", "json", "track", "update", std::to_string(secondId.raw()), "--genre", "Fusion"});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["updated"]) == "1");
+    CHECK_FALSE(tree.rootref()["tagChanges"].readable());
+
+    result = fixture.run({"track", "update", std::to_string(secondId.raw()), "--remove-tag", "fav"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "updated 1 of 1 matched track(s)"));
+    CHECK(contains(result.out, "removed tag: fav from 1 track(s)"));
+
+    result = fixture.run({"tag", "show", std::to_string(secondId.raw())});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "no tags"));
+
+    // A tag-only edit reports the union of mutated tracks: updated is 1,
+    // trackIds lists the track, changes stays empty, and tagChanges is non-empty.
+    result = fixture.run({"-O", "json", "track", "update", std::to_string(secondId.raw()), "--add-tag", "fav"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    requireJsonLineParses(result.out);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["matched"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["updated"]) == "1");
+    REQUIRE(tree.rootref()["trackIds"].is_seq());
+    CHECK(tree.rootref()["trackIds"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["trackIds"][0]) == std::to_string(secondId.raw()));
+    REQUIRE(tree.rootref()["changes"].is_seq());
+    CHECK(tree.rootref()["changes"].num_children() == 0);
+    REQUIRE(tree.rootref()["tagChanges"].is_seq());
+    REQUIRE(tree.rootref()["tagChanges"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["trackId"]) == std::to_string(secondId.raw()));
+    CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["addedTags"][0]) == "fav");
+  }
+
+  TEST_CASE("CLI - track update applies combined metadata and tag edits through a filter",
+            "[cli][integration][track][update]")
+  {
+    auto fixture = CliFixture{};
+    auto const firstId =
+      fixture.addTrack(library::test::TrackSpec{.title = "First", .genre = "Jazz", .uri = "first.flac"});
+    auto const secondId =
+      fixture.addTrack(library::test::TrackSpec{.title = "Second", .genre = "Rock", .uri = "second.flac"});
+
+    auto result = fixture.run(
+      {"-O", "json", "track", "update", "--filter", "$genre = \"Jazz\"", "--genre", "Soul", "--add-tag", "fav"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    requireJsonLineParses(result.out);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["matched"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["updated"]) == "1");
+    REQUIRE(tree.rootref()["trackIds"].is_seq());
+    CHECK(tree.rootref()["trackIds"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["trackIds"][0]) == std::to_string(firstId.raw()));
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["fields"][0]["field"]) == "genre");
+    REQUIRE(tree.rootref()["tagChanges"].is_seq());
+    REQUIRE(tree.rootref()["tagChanges"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["trackId"]) == std::to_string(firstId.raw()));
+    CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["addedTags"][0]) == "fav");
+
+    result = fixture.run({"tag", "show", std::to_string(firstId.raw())});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "fav"));
+
+    result = fixture.run({"tag", "show", std::to_string(secondId.raw())});
+    REQUIRE(result.status == 0);
+    CHECK_FALSE(contains(result.out, "fav"));
+  }
+
+  TEST_CASE("CLI - track update rejects conflicting tag edit options", "[cli][unit][track][update]")
+  {
+    auto fixture = CliFixture{};
+    auto const trackId = fixture.addTrack(library::test::makeEmptyTrackSpec("track.flac"));
+
+    checkDomainFailure(fixture.run({"track",
+                                    "update",
+                                    std::to_string(trackId.raw()),
+                                    "--title",
+                                    "Renamed",
+                                    "--add-tag",
+                                    "fav",
+                                    "--remove-tag",
+                                    "fav"}),
+                       "A tag cannot be both added and removed");
+
+    auto result = fixture.run({"tag", "show", std::to_string(trackId.raw())});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "no tags"));
+
+    checkDomainFailure(
+      fixture.run(
+        {"track", "update", std::to_string(trackId.raw()), "--title", "Renamed", "--add-tag", "fav", "--dry-run"}),
+      "--dry-run does not support tag changes yet");
+    checkDomainFailure(
+      fixture.run({"track", "update", std::to_string(trackId.raw()), "--remove-tag", "fav", "--dry-run"}),
+      "--dry-run does not support tag changes yet");
+  }
+
   TEST_CASE("CLI - track mutations support dry-run reports", "[cli][integration][track][dry-run]")
   {
     auto fixture = CliFixture{};
@@ -505,7 +656,7 @@ namespace ao::cli::test
       fixture.run({"track", "create", (fixture.root() / "missing.flac").string()}), "error adding track from:");
     checkDomainFailure(fixture.run({"track", "delete", "999"}), "track not found: 999");
     checkDomainFailure(fixture.run({"track", "update", "999", "--title", "Missing"}), "track not found: 999");
-    checkDomainFailure(fixture.run({"track", "update", "1"}), "track update requires at least one field option");
+    checkDomainFailure(fixture.run({"track", "update", "1"}), "track update requires at least one field or tag option");
     checkDomainFailure(fixture.run({"track", "update", "--title", "Missing"}), "track update requires track ids");
   }
 } // namespace ao::cli::test
