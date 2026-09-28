@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/AtomicFile.h>
@@ -288,8 +289,9 @@ namespace ao::systemmedia
       auto const filePtr = Gio::File::create_for_path(path.native());
       return filePtr ? filePtr->get_uri() : std::string{};
     }
-    catch (Glib::Error const&)
+    catch (Glib::Error const& e)
     {
+      APP_LOG_WARN("MprisArtUrlCache: Failed to build file URI for {}: {}", path.native(), e.what());
       return {};
     }
   }

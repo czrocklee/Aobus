@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/ByteView.h>
@@ -20,8 +21,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <stop_token>
+#include <string>
 #include <utility>
 
 namespace ao::gtk
@@ -268,6 +271,7 @@ namespace ao::gtk
                                                      std::stop_token const stopToken)
   {
     auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+    auto optDecodeError = std::optional<std::string>{};
 
     co_await runtime->resumeOnWorkerAsync(stopToken);
 
@@ -277,13 +281,22 @@ namespace ao::gtk
       {
         decodedPtr = decodePixbuf(bytes.view(), key);
       }
-      catch (Glib::Error const&)
+      catch (Glib::Error const& e)
       {
         decodedPtr.reset();
+        optDecodeError = e.what();
       }
     }
 
     co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
+
+    // Failed decodes are not cached, so a corrupt resource would re-decode on
+    // every request (for example while scrolling). Log the first failure per
+    // resource to surface corrupt art without flooding.
+    if (optDecodeError && loader->_decodeFailureLog.insert(key.resourceId).second)
+    {
+      APP_LOG_WARN("ResourceImageLoader: Failed to decode resource {}: {}", key.resourceId.raw(), *optDecodeError);
+    }
 
     if (decodedPtr && !loader->get(key))
     {
@@ -310,9 +323,11 @@ namespace ao::gtk
       renderedPixbufPtr =
         sourcePixbufPtr->scale_simple(renderedSize.width, renderedSize.height, Gdk::InterpType::HYPER);
     }
-    catch (Glib::Error const&)
+    catch (Glib::Error const& e)
     {
       renderedPixbufPtr.reset();
+      APP_LOG_WARN(
+        "ResourceImageLoader: Failed to render image to {}x{}: {}", renderedSize.width, renderedSize.height, e.what());
     }
 
     co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
