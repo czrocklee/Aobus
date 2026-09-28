@@ -62,6 +62,14 @@ namespace ao::cli::test
     CHECK(result.out.empty());
     CHECK(result.err.empty());
 
+    result = fixture.run({"tag", "add", "smoke", "--filter", "$title ~ \"Test\""});
+    REQUIRE(result.status == 0);
+
+    // tag show accepts the same target selection as tag add and tag remove.
+    result = fixture.run({"tag", "show", "--filter", "$title ~ \"Test\""});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "smoke"));
+
     result = fixture.run({"track", "dump", "--id", "1"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Title:"));

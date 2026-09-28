@@ -143,10 +143,10 @@ namespace ao::cli
       std::println(os);
     }
 
-    void printSelectedTags(CliRuntime& cli, std::vector<std::uint32_t> const& rawIds)
+    void printSelectedTags(CliRuntime& cli, std::vector<std::uint32_t> const& rawIds, std::string const& filter)
     {
+      auto const trackIds = resolveTargets(cli, rawIds, filter);
       auto reader = cli.library().snapshot();
-      auto const trackIds = requireTrackIds(reader, rawIds);
       auto const tags = reader.selectionTags(trackIds);
       printTags(trackIds, tags, cli.options().format, cli.io().out);
     }
@@ -303,7 +303,13 @@ namespace ao::cli
 
     auto* show = tag->add_subcommand("show", "Show tags shared by selected tracks");
     auto showIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
-    show->add_option("id", *showIdsPtr, "track id")->required();
-    show->callback([&cli, showIdsPtr] { printSelectedTags(cli, *showIdsPtr); });
+    show->add_option("id", *showIdsPtr, "track id");
+    auto* showFilter = show->add_option("-f,--filter", "track filter expression");
+    show->callback(
+      [&cli, showIdsPtr, showFilter]
+      {
+        auto const filter = showFilter->count() > 0 ? showFilter->as<std::string>() : std::string{};
+        printSelectedTags(cli, *showIdsPtr, filter);
+      });
   }
 } // namespace ao::cli

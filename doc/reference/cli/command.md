@@ -49,7 +49,7 @@ Exactly one top-level command is required.
 | `list delete` | `<id> [--descendants] [--dry-run]` |
 | `list dump` | `[--raw]` |
 | `tag list` | none |
-| `tag show` | `<id>...` |
+| `tag show` | `(<id>... | -f, --filter <expr>)` |
 | `tag add` | `<tag> (<id>... | -f, --filter <expr>) [--dry-run]` |
 | `tag remove` | `<tag> (<id>... | -f, --filter <expr>) [--dry-run]` |
 | `lib show` | none |
@@ -158,7 +158,7 @@ Any apply failure also fails the command with `scan apply failed: ...` on stderr
 
 Fingerprint summary is `fingerprinted N  skipped N  failed N`.
 Tag list is descending frequency then name.
-`tag show` returns the intersection across all supplied tracks.
+`tag show` returns the intersection across all supplied or filter-matched tracks.
 
 Plain `lib import` output identifies whether the operation is a preview, then prints payload version, payload mode, target scope, track/list create-update-delete counts, and ignored dangling references.
 

@@ -55,7 +55,7 @@ Create previews omit ids allocated only by the aborted transaction.
 
 ### Selection and query
 
-Track show/update and tag add/remove may select explicit ids or a predicate expression.
+Track show/update and tag show/add/remove may select explicit ids or a predicate expression.
 Predicate selection uses the shared query compiler/evaluator; formatted track output uses the scalar format-expression compiler.
 Format expressions are plain-output only and cannot be combined with YAML/JSON output.
 
