@@ -6,6 +6,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+
 namespace ao::cli::test
 {
   TEST_CASE("CLI - init and dump commands run against fixture library", "[cli][integration][command-dispatch]")
@@ -119,6 +121,13 @@ namespace ao::cli::test
     auto deleteTree = parseYaml(result.out);
     CHECK(yaml::scalarView(deleteTree.rootref()["action"]) == "delete");
     CHECK(yaml::scalarView(deleteTree.rootref()["trackId"]) == "1");
+
+    // lib export writes its destination through --output-file; the format
+    // option and JSON shape depth live in LibCommandTest.
+    result = fixture.run({"lib", "export", "--output-file", (fixture.root() / "library.yaml").string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(std::filesystem::exists(fixture.root() / "library.yaml"));
   }
 
   TEST_CASE("CLI - empty YAML collections are sequences", "[cli][unit][output]")
