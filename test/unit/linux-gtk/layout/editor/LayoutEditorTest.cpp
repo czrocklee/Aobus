@@ -20,7 +20,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
+#include <gtkmm/button.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/spinbutton.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/widget.h>
@@ -39,6 +41,9 @@ namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
   using ao::gtk::layout::test::encodedLayout;
+  using ao::gtk::test::collectAll;
+  using ao::gtk::test::emitClicked;
+  using ao::gtk::test::findLabelByText;
   using ao::gtk::test::findWidget;
 
   // ---------------------------------------------------------------------------
@@ -309,5 +314,263 @@ namespace ao::gtk::layout::editor::test
 
     manualScheduler.emit();
     CHECK(previewCount == 0);
+  }
+
+  namespace
+  {
+    // The first store column mirrors the row's node id when the node has one.
+    void selectRowByNodeName(Gtk::TreeView& treeView, std::string_view nodeName)
+    {
+      auto const modelPtr = treeView.get_model();
+      REQUIRE(modelPtr);
+
+      auto const visit = [&](auto const& self, Gtk::TreeModel::ConstChildren const& rows) -> bool
+      {
+        for (auto rowIt = rows.begin(); rowIt != rows.end(); ++rowIt)
+        {
+          auto displayName = Glib::ustring{};
+          (*rowIt).get_value(0, displayName);
+
+          if (displayName.raw() == nodeName)
+          {
+            treeView.get_selection()->select(rowIt);
+            return true;
+          }
+
+          if (self(self, (*rowIt).children()))
+          {
+            return true;
+          }
+        }
+
+        return false;
+      };
+
+      REQUIRE(visit(visit, modelPtr->children()));
+    }
+
+    std::string selectedRowName(Gtk::TreeView& treeView)
+    {
+      auto const selectedIt = treeView.get_selection()->get_selected();
+      REQUIRE(selectedIt);
+      auto displayName = Glib::ustring{};
+      (*selectedIt).get_value(0, displayName);
+      return displayName.raw();
+    }
+
+    void emitToolbarClick(LayoutEditorDialog& dialog, std::string_view tooltip)
+    {
+      Gtk::Button* button = nullptr;
+
+      for (auto* const candidate : collectAll<Gtk::Button>(dialog))
+      {
+        if (candidate->get_tooltip_text().raw() == tooltip)
+        {
+          button = candidate;
+        }
+      }
+
+      REQUIRE(button != nullptr);
+      emitClicked(*button);
+    }
+
+    std::vector<std::string> childIds(LayoutEditorDialog const& dialog)
+    {
+      auto ids = std::vector<std::string>{};
+
+      for (auto const& child : dialog.document().root.children)
+      {
+        ids.push_back(child.id);
+      }
+
+      return ids;
+    }
+
+    std::string selectedNodeId(LayoutEditorDialog& dialog)
+    {
+      // The properties panel renders the selected node's id in its first entry.
+      auto const entries = collectAll<Gtk::Entry>(dialog);
+      REQUIRE(!entries.empty());
+      return entries.front()->get_text().raw();
+    }
+  } // namespace
+
+  TEST_CASE("LayoutEditorDialog - structural mutations keep the edited node selected", "[gtk][unit][layout-editor]")
+  {
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_selection_test");
+
+    auto const tempDir = ao::test::TempDir{};
+    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+
+    auto registry = ComponentRegistry{};
+    LayoutRuntime::registerStandardComponents(
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{
+        .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    auto actionRegistry = ActionRegistry{registry.schema()};
+
+    auto window = Gtk::Window{};
+    auto const stubLoader = [](std::string_view) { return uimodel::LayoutDocument{}; };
+
+    auto const makeDocument = []
+    {
+      auto doc = LayoutDocument{};
+      doc.root.id = "editor-root";
+      doc.root.type = "box";
+      doc.root.children = {
+        LayoutNode{.id = "item-a", .type = "spacer"},
+        LayoutNode{.id = "item-b", .type = "spacer"},
+        LayoutNode{.id = "item-c", .type = "spacer"},
+        LayoutNode{.id = "item-d", .type = "spacer"},
+      };
+      return doc;
+    };
+
+    SECTION("move up twice shifts the node two positions and keeps it selected")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "item-c");
+
+      emitToolbarClick(dialog, "Move Up");
+      emitToolbarClick(dialog, "Move Up");
+
+      auto const expectedIds = std::vector<std::string>{"item-c", "item-a", "item-b", "item-d"};
+      CHECK(childIds(dialog) == expectedIds);
+      CHECK(selectedRowName(*treeView) == "item-c");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "item-c");
+      dialog.close();
+    }
+
+    SECTION("move down twice shifts the node two positions and keeps it selected")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "item-b");
+
+      emitToolbarClick(dialog, "Move Down");
+      emitToolbarClick(dialog, "Move Down");
+
+      auto const expectedIds = std::vector<std::string>{"item-a", "item-c", "item-d", "item-b"};
+      CHECK(childIds(dialog) == expectedIds);
+      CHECK(selectedRowName(*treeView) == "item-b");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "item-b");
+      dialog.close();
+    }
+
+    SECTION("add child selects the newly added child")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "editor-root");
+
+      CHECK(dialog.activate_action("editor.add_spacer"));
+
+      auto const expectedIds = std::vector<std::string>{"item-a", "item-b", "item-c", "item-d", "spacer-new"};
+      CHECK(childIds(dialog) == expectedIds);
+      CHECK(selectedRowName(*treeView) == "spacer-new");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "spacer-new");
+      dialog.close();
+    }
+
+    SECTION("wrap selects the new wrapper container")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "item-b");
+
+      CHECK(dialog.activate_action("editor.wrap_box"));
+
+      auto const expectedIds = std::vector<std::string>{"item-a", "box-wrap", "item-c", "item-d"};
+      CHECK(childIds(dialog) == expectedIds);
+      REQUIRE(dialog.document().root.children[1].children.size() == 1);
+      CHECK(dialog.document().root.children[1].children.front().id == "item-b");
+      CHECK(selectedRowName(*treeView) == "box-wrap");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "box-wrap");
+      dialog.close();
+    }
+
+    SECTION("remove selects the next sibling")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "item-b");
+
+      emitToolbarClick(dialog, "Remove Node");
+
+      auto const expectedIds = std::vector<std::string>{"item-a", "item-c", "item-d"};
+      CHECK(childIds(dialog) == expectedIds);
+      CHECK(selectedRowName(*treeView) == "item-c");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "item-c");
+      dialog.close();
+    }
+
+    SECTION("remove of the last child selects the previous sibling")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "item-d");
+
+      emitToolbarClick(dialog, "Remove Node");
+
+      auto const expectedIds = std::vector<std::string>{"item-a", "item-b", "item-c"};
+      CHECK(childIds(dialog) == expectedIds);
+      CHECK(selectedRowName(*treeView) == "item-c");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "item-c");
+      dialog.close();
+    }
+
+    SECTION("remove of an only child selects the parent")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.id = "editor-root";
+      doc.root.type = "box";
+      auto outer = LayoutNode{.id = "outer", .type = "box"};
+      outer.children.push_back(LayoutNode{.id = "inner", .type = "spacer"});
+      doc.root.children.push_back(std::move(outer));
+
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, std::move(doc), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "inner");
+
+      emitToolbarClick(dialog, "Remove Node");
+
+      auto const expectedIds = std::vector<std::string>{"outer"};
+      CHECK(childIds(dialog) == expectedIds);
+      REQUIRE(dialog.document().root.children.front().children.empty());
+      CHECK(selectedRowName(*treeView) == "outer");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "outer");
+      dialog.close();
+    }
   }
 } // namespace ao::gtk::layout::editor::test
