@@ -111,7 +111,9 @@ snapshot as the restored observation baseline, so a repeated idle restore does
 not look like a later state change and a changed offset is immediately
 observable.
 
-The first later Play or PlayPause consumes the deferred token and starts the resolved subject at the offset.
+The first later Play or PlayPause that commits a start consumes the deferred token and starts the resolved subject at the offset.
+A start rejected before commit, such as a restored file that no longer opens, leaves the token armed: the idle subject and offset stay observable and saveable, and a later Play or PlayPause retries from the same offset.
+A backend failure reported after an accepted commit still consumes the token.
 GTK may navigate/reveal after success, but workspace selection is not part of this transaction.
 
 ### Capture and save triggers
