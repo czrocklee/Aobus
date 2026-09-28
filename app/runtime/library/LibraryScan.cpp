@@ -307,12 +307,24 @@ namespace ao::rt
       return true;
     }
 
-    // Advances the walk to the next entry, discarding an increment error.
-    void advanceWalk(std::filesystem::recursive_directory_iterator& it)
+    // Advances the walk to the next entry. The entry path is taken by value
+    // because an increment replaces the visited entry. A failed increment
+    // leaves the recursive iterator at its end value, so the walk can neither
+    // continue nor skip the failed subtree and the error is reported to the
+    // caller.
+    Result<> advanceWalk(std::filesystem::recursive_directory_iterator& it, std::filesystem::path entryPath)
     {
       auto ec = std::error_code{};
       it.increment(ec);
-      ec.clear();
+
+      if (ec)
+      {
+        return makeError(
+          Error::Code::IoError,
+          "Failed to continue filesystem walk at " + utility::pathToUtf8(entryPath) + ": " + ec.message());
+      }
+
+      return {};
     }
 
     bool hasBlockedUriPrefix(std::string_view uri, std::unordered_set<std::string> const& blockedUriPrefixes)
@@ -568,7 +580,10 @@ namespace ao::rt
         it.disable_recursion_pending();
       }
 
-      advanceWalk(it);
+      if (auto const advanceRes = advanceWalk(it, entry.path()); !advanceRes)
+      {
+        return std::unexpected{advanceRes.error()};
+      }
     }
 
     // 2. Identify MISSING (In manifest but not on disk)
