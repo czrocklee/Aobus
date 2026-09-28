@@ -86,7 +86,8 @@ A callback without an active application window returns an error instead of sile
 Live accelerators are not published until persistence succeeds.
 Retry retries the current candidate; Discard restores the last successfully applied model.
 Ordinary Preferences close protects a failed candidate; cancelling that close continues editing.
-Reopening Preferences while that candidate is pending keeps the existing editor instead of rebuilding the page.
+Reopening Preferences while that candidate is pending keeps the existing editor instead of rebuilding the page from the newly supplied schema and keymap.
+Preferences receives its commit callback once at construction, so Retry after reopening commits through the application window resolved at that time rather than one captured when the editor was built.
 Application exit does not open a new confirmation against a disappearing parent.
 A successful retry clears both the error and the unapplied state.
 The store does not expose a generic commit-receipt system.
@@ -138,6 +139,7 @@ label without a separate default-chord fallback.
 
 - [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp), [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp), and [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect neutral behavior.
 - [`KeymapApplicatorTest.cpp`](../../../test/unit/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
+- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects that a failed keymap save leaves live accelerators unchanged and a successful save publishes them.
 - [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, failed persistence, deferred rebuild, localized chrome, and teardown.
 - [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp) protect TUI projection, fixed-scope precedence, configurable dispatch, and dynamic hints.
 - [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects executable WinUI projection and hints after rebinding, unbinding, unsupported keys, and collisions.

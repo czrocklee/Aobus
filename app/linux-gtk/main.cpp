@@ -423,6 +423,15 @@ namespace
             appConfigStorePtr->saveAppPrefs(uimodel::mergePreferenceChange(std::move(current), prefs, change));
           },
           .onApplyTheme = [appPtr](uimodel::ThemePreset const theme) { applyThemeToMainWindows(appPtr, theme); },
+          .onCommitShortcuts = [appPtr](uimodel::KeymapModel const& keymap) -> Result<>
+          {
+            if (auto* const window = activeMainWindow(appPtr); window != nullptr)
+            {
+              return window->applyKeymap(keymap);
+            }
+
+            return makeError(Error::Code::InvalidState, "No active application window can apply the keyboard map.");
+          },
         });
     }
 
@@ -436,17 +445,7 @@ namespace
     appConfigStorePtr->loadAppPrefs(prefs);
     preferencesWindowPtr->refreshPreferences(prefs, &targetWindow->playback(), targetWindow);
     preferencesWindowPtr->refreshKeyboardPage(
-      targetWindow->layoutSchema(),
-      appConfigStorePtr->loadKeymap(uimodel::defaultKeymap()),
-      [appPtr](uimodel::KeymapModel const& keymap) -> Result<>
-      {
-        if (auto* const window = activeMainWindow(appPtr); window != nullptr)
-        {
-          return window->applyKeymap(keymap);
-        }
-
-        return makeError(Error::Code::InvalidState, "No active application window can apply the keyboard map.");
-      });
+      targetWindow->layoutSchema(), appConfigStorePtr->loadKeymap(uimodel::defaultKeymap()));
     preferencesWindowPtr->present();
   }
 

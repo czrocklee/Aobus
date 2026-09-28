@@ -61,7 +61,8 @@ Default layout-preset choice affects the next layout load; structural edits use 
 Ordinary close of Preferences with a failed shortcut candidate switches to the Keyboard page and prompts Retry, Discard, or keep editing.
 Repeated close requests reuse the live prompt rather than stacking another one.
 Closing the prompt itself answers it with keep editing, never with Discard.
-Reopening Preferences while that candidate is pending keeps the existing Keyboard editor.
+Reopening Preferences while that candidate is pending keeps the existing Keyboard editor and postpones the new schema and keymap until Retry or Discard resolves it.
+Every shortcut commit, including a Retry after reopening for another application window, uses the commit capability Preferences received at construction; the composition root resolves the active application window when that commit runs.
 Hiding the target application window dismisses Preferences without that prompt and retires any live prompt, whose later response no longer steers the window.
 
 Open Library launches a native folder chooser.
@@ -126,7 +127,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 
 ## Test map
 
-- [`PreferencesWindowTest.cpp`](../../../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp) protects page construction, preference persistence, pending-candidate retention on reopen, the close prompt's Retry, Discard, Cancel, and close-request responses, single-prompt reuse and retirement on dismissal, and shortcut-candidate close versus target-hide dismissal.
+- [`PreferencesWindowTest.cpp`](../../../../test/unit/linux-gtk/preference/PreferencesWindowTest.cpp) protects page construction, preference persistence, pending-candidate retention and postponed refresh on reopen, Retry through the currently resolved commit target or without one, the close prompt's Retry, Discard, Cancel, and close-request responses, single-prompt reuse and retirement on dismissal, and shortcut-candidate close versus target-hide dismissal.
 - [`AppDialogTest.cpp`](../../../../test/unit/linux-gtk/app/AppDialogTest.cpp) protects common window composition, parent-bound destruction configuration, and messages.
 - [`MainContextCallbackScopeTest.cpp`](../../../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
 - [`ImportExportCoordinatorTest.cpp`](../../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.
