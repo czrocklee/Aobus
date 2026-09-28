@@ -4,6 +4,7 @@
 #include "tui/EventController.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
@@ -47,6 +48,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -54,6 +56,7 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -81,6 +84,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -159,6 +163,51 @@ namespace ao::tui::test
         .replaceEnd = draft.size(),
         .items = {rt::CompletionItem{.displayText = "宇多田光", .insertText = "\"宇多田光\""}},
       };
+    }
+
+    std::string lastNotification(EventControllerFixture const& fixture)
+    {
+      auto const feed = fixture.runtimePtr->notifications().feed();
+      REQUIRE_FALSE(feed.entries.empty());
+      return std::get<std::string>(feed.entries.back().message);
+    }
+
+    std::size_t notificationCount(EventControllerFixture const& fixture)
+    {
+      return fixture.runtimePtr->notifications().feed().entries.size();
+    }
+
+    /// Prepares a manual-membership saved List with the library's tracks in
+    /// the flat unsorted Manual Order presentation, opened as the active view.
+    void openManualOrderList(EventControllerFixture& fixture, LibraryController& library)
+    {
+      auto const listId =
+        ao::test::requireValue(rt::test::runRuntimeTask(*fixture.runtimePtr,
+                                                        fixture.runtimePtr->library().commands().createListAsync(
+                                                          rt::ListDraft{.name = "Manual", .expression = "#manual"})));
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(library.tracks().size());
+
+      for (auto const& entry : library.tracks())
+      {
+        trackIds.push_back(entry.id);
+      }
+
+      auto targetsRes = fixture.runtimePtr->library().bindTrackTargets(trackIds);
+      REQUIRE(targetsRes);
+      REQUIRE(rt::test::runRuntimeTask(
+        *fixture.runtimePtr,
+        fixture.runtimePtr->library().commands().addTracksToListAsync(listId, std::move(*targetsRes))));
+      fixture.executor->drain();
+
+      openList(library, listId);
+      REQUIRE(library.trySetSelectedPresentation(presentationIndex(library, rt::kListOrderTrackPresentationId)));
+      library.selectSelectedPresentation();
+      REQUIRE(library.activePresentationId() == rt::kListOrderTrackPresentationId);
+
+      // The projection replacement the presentation switch schedules is queued
+      // on the callback executor; settle it before the test drives the shell.
+      fixture.executor->drain();
     }
   } // namespace
 
@@ -255,6 +304,70 @@ namespace ao::tui::test
     enterCommand(controller, "scan cancel");
     CHECK(fixture.libraryScanPtr->phase() == LibraryScanController::Phase::Cancelling);
     fixture.executor->drain();
+  }
+
+  TEST_CASE("EventController - order keys and commands move the focused selection of a manual-order list",
+            "[tui][unit][event][list-order]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const firstId = library.tracks()[0].id;
+    auto const secondId = library.tracks()[1].id;
+
+    openManualOrderList(fixture, library);
+    auto const listId = library.currentListId();
+    REQUIRE(library.tracks().size() == 2);
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3B")));
+    REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 1; }));
+
+    CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
+
+    // The focus stayed on the moved track while the view adopted the new order.
+    REQUIRE(library.tracks().size() == 2);
+    CHECK(library.tracks()[library.selectedTrack()].id == firstId);
+
+    enterCommand(controller, "order up");
+    REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 2; }));
+
+    CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{firstId, secondId});
+  }
+
+  TEST_CASE("EventController - an order key on a virtual source reports the blocking reason",
+            "[tui][unit][event][list-order]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.currentListId() == rt::kAllTracksListId);
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3A")));
+    REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 1; }));
+
+    CHECK(lastNotification(fixture) == "Manual ordering is available for saved Lists only.");
+  }
+
+  TEST_CASE("EventController - an open overlay does not admit order keys", "[tui][unit][event][list-order]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    openManualOrderList(fixture, library);
+    auto const listId = library.currentListId();
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("?")));
+    REQUIRE(fixture.shell.overlay() == Overlay::Help);
+
+    // A modal overlay answers every key, so the order chord reaches nothing.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3B")));
+    fixture.executor->drain();
+
+    CHECK(notificationCount(fixture) == 0);
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId).empty());
   }
 
   TEST_CASE("EventController - select commands mark and clear tracks", "[tui][unit][event][selection]")

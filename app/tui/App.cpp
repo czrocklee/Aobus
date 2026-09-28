@@ -19,6 +19,7 @@
 #include "LibraryChooser.h"
 #include "LibraryController.h"
 #include "LibraryScanController.h"
+#include "ListOrderController.h"
 #include "MouseBindings.h"
 #include "NavigationPanel.h"
 #include "NotificationCenterPanel.h"
@@ -1490,6 +1491,8 @@ namespace ao::tui
     };
     auto libraryScan =
       LibraryScanController{runtime.async(), runtime.library().jobs(), runtime.notifications(), textCatalog};
+    auto listOrder =
+      ListOrderController{runtime.async(), runtime.library(), runtime.views(), runtime.notifications(), textCatalog};
     EventController* activeEvents = nullptr;
     ExitController* activeExit = nullptr;
     auto trackEdit = TrackEditController{runtime.async(),
@@ -1599,6 +1602,7 @@ namespace ao::tui
         .activityStatusViewModel = activityStatusViewModel,
         .notifications = runtime.notifications(),
         .libraryScan = libraryScan,
+        .listOrder = listOrder,
         .trackEdit = trackEdit,
         .settings = settings,
         .preferences = preferences,

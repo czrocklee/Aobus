@@ -155,6 +155,29 @@ namespace ao::tui::test
           std::vector<std::string>{"select toggle", "select visual", "select all", "select clear"});
   }
 
+  TEST_CASE("CommandCompletion - offers every manual order alias with its movement label", "[tui][unit][completion]")
+  {
+    auto const optOrder = completeDraft(ao::test::englishMessageCatalog(), "order", CommandCompletionContext{});
+
+    REQUIRE(optOrder);
+    CHECK(optOrder->replaceBegin == 0);
+    CHECK(optOrder->replaceEnd == 5);
+    CHECK(insertTexts(*optOrder) ==
+          std::vector<std::string>{"order up", "order down", "order top", "order bottom", "order reset"});
+    CHECK(optOrder->items.front().displayText == "Move Up");
+    CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optOrder->items.front().detail) == ":order up");
+
+    auto const optUp = completeDraft(ao::test::englishMessageCatalog(), "order up", CommandCompletionContext{});
+    REQUIRE(optUp);
+    CHECK(insertTexts(*optUp) == std::vector<std::string>{"order up"});
+    CHECK(optUp->items.front().displayText == "Move Up");
+
+    auto const optReset = completeDraft(ao::test::englishMessageCatalog(), "order re", CommandCompletionContext{});
+    REQUIRE(optReset);
+    CHECK(insertTexts(*optReset) == std::vector<std::string>{"order reset"});
+    CHECK(optReset->items.front().displayText == "Reset Order");
+  }
+
   TEST_CASE("CommandCompletion - finds quick tags by command prefix", "[tui][unit][completion]")
   {
     auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "tag", CommandCompletionContext{});

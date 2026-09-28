@@ -11,6 +11,7 @@
 #include "LibraryController.h"
 #include "LibraryNavigation.h"
 #include "LibraryScanController.h"
+#include "ListOrderController.h"
 #include "MouseBindings.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
@@ -178,6 +179,7 @@ namespace ao::tui
     , _activityStatusViewModel{bindings.activityStatusViewModel}
     , _notifications{bindings.notifications}
     , _libraryScan{bindings.libraryScan}
+    , _listOrder{bindings.listOrder}
     , _trackEdit{bindings.trackEdit}
     , _settings{bindings.settings}
     , _preferences{bindings.preferences}
@@ -589,6 +591,11 @@ namespace ao::tui
     }
   }
 
+  void EventController::applyListOrderCommand(ListOrderCommand const command)
+  {
+    _listOrder.apply(command, _library.activeViewId(), _library.selectedTrackIds());
+  }
+
   void EventController::reportPlaybackControlUnavailable()
   {
     postActivityNotification(
@@ -690,6 +697,10 @@ namespace ao::tui
       case SelectVisual:
       case SelectAll:
       case SelectClear:
+      case OrderMoveUp:
+      case OrderMoveDown:
+      case OrderMoveToTop:
+      case OrderMoveToBottom:
       case EditTags:
       case EditProperties:
       case OpenSettings:
@@ -747,6 +758,11 @@ namespace ao::tui
       case CommandAction::SelectVisual: _library.toggleVisualSelection(); break;
       case CommandAction::SelectAll: _library.markAllTracks(); break;
       case CommandAction::SelectClear: _library.clearMarks(); break;
+      case CommandAction::OrderMoveUp: applyListOrderCommand(ListOrderCommand::MoveUp); break;
+      case CommandAction::OrderMoveDown: applyListOrderCommand(ListOrderCommand::MoveDown); break;
+      case CommandAction::OrderMoveToTop: applyListOrderCommand(ListOrderCommand::MoveToTop); break;
+      case CommandAction::OrderMoveToBottom: applyListOrderCommand(ListOrderCommand::MoveToBottom); break;
+      case CommandAction::OrderReset: applyListOrderCommand(ListOrderCommand::Reset); break;
       case CommandAction::EditProperties: editSelectedTrackProperties(TrackEditorMode::Properties); break;
       case CommandAction::EditTags: editSelectedTrackProperties(TrackEditorMode::Tags); break;
       case CommandAction::OpenSettings:
