@@ -334,6 +334,7 @@ zh_Hant:table {
     gtk_playback_toggle_mute { "切換靜音" }
     gtk_playback_show_current_album { "顯示目前專輯" }
     gtk_playback_now_playing_cover_art { "目前播放曲目的封面" }
+    gtk_playback_position { "播放位置" }
     gtk_library_quick_filter_placeholder { "搜尋歌曲、藝人、專輯、標籤..." }
     gtk_library_clear_filter { "清除篩選" }
     gtk_library_create_list_from_filter { "依目前的篩選條件建立列表" }

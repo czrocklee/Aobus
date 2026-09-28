@@ -3,10 +3,12 @@
 
 #include "playback/SeekControlWidget.h"
 #include "playback/TimeLabel.h"
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
@@ -310,13 +312,34 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
 
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
 
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
     CHECK(scale->has_css_class("ao-seekbar"));
     CHECK(scale->get_value() == 0.0);
     CHECK_FALSE(scale->get_sensitive());
+  }
+
+  TEST_CASE("SeekControlWidget - exposes an accessible label for the seek scale", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = GtkRuntimeFixture{};
+    auto& playback = env.runtime().playback();
+    rt::test::addReadyAudioProvider(env.runtime());
+    drainGtkEvents();
+
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
+    auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+    REQUIRE(scale != nullptr);
+
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(seekControl.widget());
+    windowFixture.present();
+    windowFixture.drain();
+
+    CHECK(scale->get_tooltip_text() == "Playback position");
+    CHECK(hasAccessibleLabel(*scale, "Playback position"));
   }
 
   TEST_CASE("TimeLabel - idle state has template text and style", "[gtk][unit][playback]")
@@ -379,7 +402,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
 
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     CHECK_FALSE(seekControl.isTickActive());
 
     startPlayback(env.runtime());
@@ -444,7 +467,7 @@ namespace ao::gtk::test
     auto const transport = playback.snapshot().transport;
     REQUIRE(transport.duration > std::chrono::milliseconds{0});
 
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
 
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
@@ -468,7 +491,7 @@ namespace ao::gtk::test
     drainGtkEvents();
     startPlayback(env.runtime());
     playback.commands().pause();
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
 
@@ -501,7 +524,7 @@ namespace ao::gtk::test
     REQUIRE(requestedElapsed > std::chrono::milliseconds{0});
 
     {
-      auto seekControl = SeekControlWidget{playback};
+      auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
       auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
       REQUIRE(scale != nullptr);
       scale->set_value(static_cast<double>(requestedElapsed.count()));
@@ -533,7 +556,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(env.runtime());
     drainGtkEvents();
     startPlayback(env.runtime());
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
     auto mouse = NativeScaleMouseFixture{*scale};
@@ -566,7 +589,7 @@ namespace ao::gtk::test
     auto env = GtkRuntimeFixture{};
     auto& playback = env.runtime().playback();
     preparePausedLoopingPlayback(env.runtime());
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
     auto mouse = NativeScaleMouseFixture{*scale};
@@ -607,7 +630,7 @@ namespace ao::gtk::test
     auto env = GtkRuntimeFixture{};
     auto& playback = env.runtime().playback();
     preparePausedLoopingPlayback(env.runtime());
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
     auto const button = GENERATE(1U, 2U, 3U);
@@ -654,7 +677,7 @@ namespace ao::gtk::test
     auto env = GtkRuntimeFixture{};
     auto& playback = env.runtime().playback();
     preparePausedLoopingPlayback(env.runtime());
-    auto seekControl = SeekControlWidget{playback};
+    auto seekControl = SeekControlWidget{playback, ao::test::englishMessageCatalog()};
     auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
     REQUIRE(scale != nullptr);
     auto mouse = NativeScaleMouseFixture{*scale};

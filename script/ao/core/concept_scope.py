@@ -88,9 +88,9 @@ CONSTRUCTION_CHAINS: tuple[ConstructionChain, ...] = (
         leaf="gtk.playback.seekSlider",
         path="app/linux-gtk/layout/component/playback/SeekSliderComponent.cpp",
         steps=(
-            "registerSeekSliderComponent(ComponentRegistry&, PlaybackService&)",
-            "SeekSliderComponent(PlaybackService&)",
-            "SeekControlWidget(PlaybackService)",
+            "registerSeekSliderComponent(ComponentRegistry&, PlaybackService&, MessageCatalog)",
+            "SeekSliderComponent(PlaybackService&, MessageCatalog)",
+            "SeekControlWidget(PlaybackService&, MessageCatalog)",
         ),
     ),
     ConstructionChain(

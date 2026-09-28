@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
@@ -30,7 +31,7 @@ namespace ao::gtk
   class SeekControlWidget final
   {
   public:
-    explicit SeekControlWidget(rt::PlaybackService& playback);
+    explicit SeekControlWidget(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog);
     ~SeekControlWidget();
 
     SeekControlWidget(SeekControlWidget const&) = delete;
