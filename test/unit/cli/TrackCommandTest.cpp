@@ -507,5 +507,7 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"track", "update", "999", "--title", "Missing"}), "track not found: 999");
     checkDomainFailure(fixture.run({"track", "update", "1"}), "track update requires at least one field option");
     checkDomainFailure(fixture.run({"track", "update", "--title", "Missing"}), "track update requires track ids");
+    checkDomainFailure(fixture.run({"track", "show", "--filter", ""}),
+                       "track show requires a non-empty --filter expression");
   }
 } // namespace ao::cli::test

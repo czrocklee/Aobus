@@ -126,9 +126,9 @@ namespace ao::cli
     std::vector<TrackId> resolveShowTargets(library::MusicLibrary const& ml,
                                             rt::LibrarySnapshot& snapshot,
                                             std::vector<std::uint32_t> const& rawIds,
-                                            std::string const& filter)
+                                            std::optional<std::string> const& optFilter)
     {
-      if (!rawIds.empty() && !filter.empty())
+      if (!rawIds.empty() && optFilter)
       {
         throwCommandError(Error::Code::InvalidInput, "track show accepts either explicit ids or --filter, not both");
       }
@@ -138,8 +138,15 @@ namespace ao::cli
         return requireTrackIds(snapshot, rawIds);
       }
 
-      return queryMatchingTrackIds(ml, filter);
+      if (optFilter && optFilter->empty())
+      {
+        throwCommandError(Error::Code::InvalidInput, "track show requires a non-empty --filter expression");
+      }
+
+      // Without ids or a filter, show walks every track.
+      return queryMatchingTrackIds(ml, optFilter.value_or(std::string{}));
     }
+
   } // namespace
 
   struct TrackCreateReportDto final
@@ -964,8 +971,8 @@ namespace ao::cli
         {
           auto snapshot = cli.library().snapshot();
           auto const rawIds = ids->count() > 0 ? ids->as<std::vector<std::uint32_t>>() : std::vector<std::uint32_t>{};
-          auto const targetIds = resolveShowTargets(
-            cli.musicLibrary(), snapshot, rawIds, filter->count() > 0 ? filter->as<std::string>() : std::string{});
+          auto const optFilter = filter->count() > 0 ? std::optional{filter->as<std::string>()} : std::nullopt;
+          auto const targetIds = resolveShowTargets(cli.musicLibrary(), snapshot, rawIds, optFilter);
           show(cli.musicLibrary(),
                targetIds,
                cli.options().format,
