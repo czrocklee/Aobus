@@ -341,4 +341,29 @@ namespace ao::tui::test
     CHECK(search.contains("Esc clear"));
     CHECK_FALSE(search.contains("F4 tracks"));
   }
+
+  TEST_CASE("NavigationPanel - the pane's edit hint follows the Edit binding", "[tui][unit][navigation]")
+  {
+    auto shell = ShellInteractionModel{};
+    shell.focusNavigation();
+    auto const hint = [&shell](KeymapPlan const& plan)
+    {
+      return renderText(
+        statusBar(ao::test::englishMessageCatalog(), {.terminalColumns = 160, .shell = &shell}, plan), 160);
+    };
+
+    CHECK(hint(defaultKeymapPlan()).contains("Enter open · e edit · Del delete"));
+
+    auto keymap = uimodel::KeymapModel{defaultKeymap()};
+    REQUIRE(keymap.tryUnbind("tui.library.editProperties", *uimodel::KeyChord::parse("e")));
+    REQUIRE(keymap.tryBind("tui.library.editProperties", *uimodel::KeyChord::parse("F2")));
+    CHECK(hint(KeymapPlan{keymap}).contains("Enter open · F2 edit · Del delete"));
+
+    // A binding the pane's own keys shadow never reaches it, so the verb goes.
+    REQUIRE(keymap.tryUnbind("tui.library.editProperties", *uimodel::KeyChord::parse("F2")));
+    REQUIRE(keymap.tryBind("tui.library.editProperties", *uimodel::KeyChord::parse("Home")));
+    auto const shadowed = hint(KeymapPlan{keymap});
+    CHECK(shadowed.contains("Enter open · Del delete"));
+    CHECK_FALSE(shadowed.contains("edit"));
+  }
 } // namespace ao::tui::test

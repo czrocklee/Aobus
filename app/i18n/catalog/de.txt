@@ -487,12 +487,27 @@ de:table {
     tui_navigation_focus { "Fokus zwischen Listen und Titeln wechseln" }
     tui_navigation_return { "{key} Titel" }
     tui_navigation_search { "/ suchen" }
-    tui_navigation_keys { "Shift+←/→ Breite · ↑↓ bewegen · ←→ Baum · Enter öffnen · Esc Titel" }
+    tui_navigation_keys { "↑↓ bewegen · ←→ Baum · Enter öffnen · {edit, select, none {} other {{editKey} bearbeiten · }}Entf löschen · Shift+←/→ Breite · Esc Titel" }
     tui_layout_save_failed { "Arbeitsbereich konnte nicht gespeichert werden: {detail}" }
     tui_navigation_open_failed { "Liste konnte nicht geöffnet werden: {detail}" }
     tui_navigation_sync_failed { "Aktive Liste konnte nicht angezeigt werden: {detail}" }
     tui_list_search_hint { "/ suchen · Esc löschen" }
     tui_list_search_empty { "Keine Treffer" }
+    tui_list_editor_new_title { "Neue Liste" }
+    tui_list_editor_edit_title { "Liste bearbeiten" }
+    tui_list_field_name { "Name" }
+    tui_list_field_description { "Beschreibung" }
+    tui_list_field_expression { "Filterausdruck" }
+    tui_list_inherited_expression { "Geerbt" }
+    tui_list_effective_expression { "Wirksam" }
+    tui_list_save_action { "Speichern" }
+    tui_list_status_saving { "Wird gespeichert…" }
+    tui_list_status_deleting { "Wird gelöscht…" }
+    tui_list_delete_more { "+{count, plural, one {# weitere Liste} other {# weitere Listen}}" }
+    tui_list_delete_cancelled { "Die Löschung wurde abgebrochen; es wurde nichts entfernt" }
+    tui_list_virtual_target { "„Alle Titel“ kann nicht bearbeitet oder gelöscht werden" }
+    tui_list_open_unavailable { "Die Liste konnte nicht geöffnet werden" }
+    tui_list_expression_placeholder { "$, @, # oder % eingeben" }
     tui_shell_command_palette_footer { "{completeKey} ergänzen  {runKey} ausführen  {cancelKey} abbrechen" }
     tui_shell_quick_filter_title { "Schnellfilter" }
     tui_shell_quick_filter_footer { "{acceptKey} übernehmen  {completeKey} ergänzen  {keepKey} Eingabe behalten" }
@@ -631,6 +646,7 @@ de:table {
     tui_editor_hint_accept { "übernehmen" }
     tui_editor_hint_close { "schließen" }
     tui_editor_hint_dismiss { "ausblenden" }
+    tui_editor_hint_cancel { "abbrechen" }
     tui_editor_status_submitting { "Wird angewendet…" }
     tui_editor_status_stale { "Die Bibliothek hat sich geändert; zum Weiterbearbeiten neu laden" }
     tui_editor_summary_fields { "{count, plural, one {# Feld} other {# Felder}}" }

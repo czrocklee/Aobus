@@ -118,6 +118,10 @@ namespace ao::tui::test
       {KeyAction::WorkspaceForward, "tui.navigation.forward"},
       {KeyAction::BeginPanelResize, "tui.workspace.beginPanelResize"},
       {KeyAction::TogglePinnedLists, "tui.workspace.togglePinnedLists"},
+      {KeyAction::OrderMoveUp, "track.orderMoveUp"},
+      {KeyAction::OrderMoveDown, "track.orderMoveDown"},
+      {KeyAction::OrderMoveToTop, "track.orderMoveToTop"},
+      {KeyAction::OrderMoveToBottom, "track.orderMoveToBottom"},
     });
     auto ids = std::set<std::string_view>{};
     auto actions = std::set<KeyAction>{};
@@ -156,7 +160,12 @@ namespace ao::tui::test
     auto const& playPause = tuiDefaults.at(actionId(KeyAction::PlaybackPlayPause));
     CHECK(playPause == std::vector{chord("Space")});
     CHECK(tuiDefaults.at(actionId(KeyAction::PlaybackStop)) == std::vector{chord("S")});
-    CHECK_FALSE(tuiDefaults.contains("track.orderMoveUp"));
+    // The manual-order actions are the one deliberate exception: their shared
+    // ids and Alt navigation chords ship as TUI defaults too.
+    CHECK(tuiDefaults.at("track.orderMoveUp") == sharedBefore.at("track.orderMoveUp"));
+    CHECK(tuiDefaults.at("track.orderMoveDown") == sharedBefore.at("track.orderMoveDown"));
+    CHECK(tuiDefaults.at("track.orderMoveToTop") == sharedBefore.at("track.orderMoveToTop"));
+    CHECK(tuiDefaults.at("track.orderMoveToBottom") == sharedBefore.at("track.orderMoveToBottom"));
   }
 
   TEST_CASE("Keymap - an explicit quit override preserves the lowercase chord", "[tui][unit][keymap]")
@@ -290,6 +299,68 @@ namespace ao::tui::test
     CHECK_FALSE(eventForChord(chord("Super+Q")));
     CHECK_FALSE(eventForChord(chord("Media:Play")));
     CHECK_FALSE(eventForChord(chord("翼")));
+  }
+
+  TEST_CASE("Keymap - Alt navigation chords project onto their terminal escape sequences", "[tui][unit][keymap]")
+  {
+    CHECK(eventForChord(chord("Alt+Up")) == ftxui::Event::Special("\x1b[1;3A"));
+    CHECK(eventForChord(chord("Alt+Down")) == ftxui::Event::Special("\x1b[1;3B"));
+    CHECK(eventForChord(chord("Alt+Home")) == ftxui::Event::Special("\x1b[1;3H"));
+    CHECK(eventForChord(chord("Alt+End")) == ftxui::Event::Special("\x1b[1;3F"));
+    CHECK(eventForChord(chord("Alt+Up")) != ftxui::Event::ArrowUp);
+    CHECK(eventForChord(chord("Alt+Home")) != ftxui::Event::Home);
+
+    // Every other Alt chord stays unsupported: its terminal encoding is
+    // either ambiguous with an Escape prefix or not one complete sequence.
+    CHECK_FALSE(eventForChord(chord("Alt+Left")));
+    CHECK_FALSE(eventForChord(chord("Alt+Right")));
+    CHECK_FALSE(eventForChord(chord("Alt+PageUp")));
+    CHECK_FALSE(eventForChord(chord("Alt+Q")));
+    CHECK_FALSE(eventForChord(chord("Alt+Shift+Up")));
+  }
+
+  TEST_CASE("Keymap - shipped order movement chords dispatch manual order actions", "[tui][unit][keymap]")
+  {
+    auto model = uimodel::KeymapModel{defaultKeymap()};
+    auto const plan = KeymapPlan{model};
+
+    CHECK(model.chordsFor("track.orderMoveUp") == std::vector{chord("Alt+Up")});
+    CHECK(model.chordsFor("track.orderMoveDown") == std::vector{chord("Alt+Down")});
+    CHECK(model.chordsFor("track.orderMoveToTop") == std::vector{chord("Alt+Home")});
+    CHECK(model.chordsFor("track.orderMoveToBottom") == std::vector{chord("Alt+End")});
+
+    CHECK(plan.actionFor(ftxui::Event::Special("\x1b[1;3A")) == KeyAction::OrderMoveUp);
+    CHECK(plan.actionFor(ftxui::Event::Special("\x1b[1;3B")) == KeyAction::OrderMoveDown);
+    CHECK(plan.actionFor(ftxui::Event::Special("\x1b[1;3H")) == KeyAction::OrderMoveToTop);
+    CHECK(plan.actionFor(ftxui::Event::Special("\x1b[1;3F")) == KeyAction::OrderMoveToBottom);
+
+    CHECK(plan.shortcutFor(KeyAction::OrderMoveUp) == "Alt+Up");
+    CHECK(plan.shortcutFor(KeyAction::OrderMoveDown) == "Alt+Down");
+    CHECK(plan.shortcutFor(KeyAction::OrderMoveToTop) == "Alt+Home");
+    CHECK(plan.shortcutFor(KeyAction::OrderMoveToBottom) == "Alt+End");
+  }
+
+  TEST_CASE("Keymap - order chord editing accepts Alt navigation and rejects ambiguous chords", "[tui][unit][keymap]")
+  {
+    auto candidate = uimodel::KeymapModel{defaultKeymap()};
+    candidate.applyOverrides({{"track.orderMoveDown", {}}});
+    REQUIRE(candidate.tryBind("track.orderMoveUp", *uimodel::KeyChord::parse("Alt+Down")));
+    CHECK(validateActionBindings(candidate, "track.orderMoveUp"));
+
+    // An Alt letter cannot be represented by the terminal adapter.
+    auto unsupported = uimodel::KeymapModel{defaultKeymap()};
+    REQUIRE(unsupported.tryBind("track.orderMoveUp", *uimodel::KeyChord::parse("Alt+J")));
+    auto unsupportedRes = validateActionBindings(unsupported, "track.orderMoveUp");
+    CHECK_FALSE(unsupportedRes);
+    CHECK(unsupportedRes.error().code == Error::Code::NotSupported);
+
+    // The shipped chords are claimed by the order actions first.
+    auto conflict = uimodel::KeymapModel{defaultKeymap()};
+    REQUIRE(conflict.tryBind("tui.shell.quit", *uimodel::KeyChord::parse("Alt+Up")));
+    auto conflictRes = validateActionBindings(conflict, "tui.shell.quit");
+    CHECK_FALSE(conflictRes);
+    CHECK(conflictRes.error().code == Error::Code::Conflict);
+    CHECK(conflictRes.error().message == "track.orderMoveUp");
   }
 
   TEST_CASE("Keymap - override changes dispatch and the selected hint together", "[tui][unit][keymap]")

@@ -484,8 +484,38 @@ namespace ao::tui
         hints.push_back(style::mutedSeparator());
       }
 
-      auto const keys = i18n::requiredText(
-        catalog, state.navigationSearching ? i18n::MessageId::TuiListSearchHint : i18n::MessageId::TuiNavigationKeys);
+      auto keys = std::string{};
+
+      if (state.navigationSearching)
+      {
+        keys = i18n::requiredText(catalog, i18n::MessageId::TuiListSearchHint);
+      }
+      else
+      {
+        // The pane keeps the workspace's Edit key, so the hint names the key
+        // that reaches it after the pane's own movement, open, and delete
+        // keys, and drops the verb when none does.
+        auto const paneKeys = std::to_array({Event::ArrowUp,
+                                             Event::ArrowDown,
+                                             Event::ArrowLeft,
+                                             Event::ArrowRight,
+                                             Event::PageUp,
+                                             Event::PageDown,
+                                             Event::Home,
+                                             Event::End,
+                                             Event::Return,
+                                             Event::Escape,
+                                             Event::Delete,
+                                             Event::Character("j"),
+                                             Event::Character("k"),
+                                             Event::Character("/")});
+        auto const editKey = keymap.shortcutFor(KeyAction::EditProperties, paneKeys);
+        keys = i18n::requiredFormat(
+          catalog,
+          i18n::MessageId::TuiNavigationKeys,
+          {{"edit", editKey.empty() ? std::string_view{"none"} : std::string_view{"shown"}}, {"editKey", editKey}});
+      }
+
       hints.push_back(text(ellipsizeToCellWidth(keys, availableColumns)) | dim);
       return hbox({hasActivity ? activityStatusSlot(state) | xflex : filler() | xflex,
                    text(std::string{title}) | style::accent() | bold,

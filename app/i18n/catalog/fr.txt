@@ -487,12 +487,27 @@ fr:table {
     tui_navigation_focus { "Basculer le focus entre listes et pistes" }
     tui_navigation_return { "{key} pistes" }
     tui_navigation_search { "/ rechercher" }
-    tui_navigation_keys { "Shift+←/→ largeur · ↑↓ déplacer · ←→ arbre · Entrée ouvrir · Échap pistes" }
+    tui_navigation_keys { "↑↓ déplacer · ←→ arbre · Entrée ouvrir · {edit, select, none {} other {{editKey} modifier · }}Suppr supprimer · Shift+←/→ largeur · Échap pistes" }
     tui_layout_save_failed { "Impossible d’enregistrer la disposition : {detail}" }
     tui_navigation_open_failed { "Impossible d’ouvrir la liste : {detail}" }
     tui_navigation_sync_failed { "Impossible d’afficher la liste active : {detail}" }
     tui_list_search_hint { "/ rechercher · Esc effacer" }
     tui_list_search_empty { "Aucun résultat" }
+    tui_list_editor_new_title { "Nouvelle liste" }
+    tui_list_editor_edit_title { "Modifier la liste" }
+    tui_list_field_name { "Nom" }
+    tui_list_field_description { "Description" }
+    tui_list_field_expression { "Expression de filtre" }
+    tui_list_inherited_expression { "Hérité" }
+    tui_list_effective_expression { "Effectif" }
+    tui_list_save_action { "Enregistrer" }
+    tui_list_status_saving { "Enregistrement…" }
+    tui_list_status_deleting { "Suppression…" }
+    tui_list_delete_more { "+{count, plural, one {# autre liste} other {# autres listes}}" }
+    tui_list_delete_cancelled { "La suppression a été annulée ; rien n’a été supprimé" }
+    tui_list_virtual_target { "Impossible de modifier ou de supprimer « Tous les morceaux »" }
+    tui_list_open_unavailable { "Impossible d''ouvrir la liste" }
+    tui_list_expression_placeholder { "tapez $, @, # ou %" }
     tui_shell_command_palette_footer { "{completeKey} compléter  {runKey} exécuter  {cancelKey} annuler" }
     tui_shell_quick_filter_title { "Filtre rapide" }
     tui_shell_quick_filter_footer { "{acceptKey} accepter  {completeKey} compléter  {keepKey} conserver la saisie" }
@@ -631,6 +646,7 @@ fr:table {
     tui_editor_hint_accept { "accepter" }
     tui_editor_hint_close { "fermer" }
     tui_editor_hint_dismiss { "masquer" }
+    tui_editor_hint_cancel { "annuler" }
     tui_editor_status_submitting { "Application…" }
     tui_editor_status_stale { "La bibliothèque a changé ; rechargez pour reprendre l’édition" }
     tui_editor_summary_fields { "{count, plural, one {# champ} other {# champs}}" }

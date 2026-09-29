@@ -3,6 +3,7 @@
 
 #include "TrackMetadataEditor.h"
 
+#include "CompletionPopup.h"
 #include "MouseBindings.h"
 #include "SelectableList.h"
 #include "SelectionNavigation.h"
@@ -33,7 +34,6 @@ namespace ao::tui
   {
     using i18n::MessageId;
     constexpr std::int32_t kMaximumLabelColumns = 18;
-    constexpr std::size_t kCompletionPageSize = 6;
 
     bool isNumberRow(uimodel::TrackPropertiesFormRow const& row) noexcept
     {
@@ -166,8 +166,7 @@ namespace ao::tui
   {
     _candidateBoxes.clear();
     _optActiveCompletion.reset();
-    _selectedCandidate = 0;
-    _completionWindowStart = 0;
+    _completionSelection.reset();
   }
 
   bool TrackMetadataEditor::tryHandleCompletionEvent(ftxui::Event const& event)
@@ -185,7 +184,7 @@ namespace ao::tui
       {
         if (auto const optRow = mouseRowAt(_candidateBoxes, mouse); optRow)
         {
-          _selectedCandidate = *optRow;
+          _completionSelection.select(*optRow);
           return tryHandleCompletionEvent(ftxui::Event::Return);
         }
       }
@@ -193,18 +192,18 @@ namespace ao::tui
       return false;
     }
 
-    if (tryHandleCompletionNavigation(event, _optActiveCompletion->items.size()))
+    if (_completionSelection.tryNavigate(event, _optActiveCompletion->items.size()))
     {
       return true;
     }
 
     if (event == ftxui::Event::Return)
     {
-      if (_optActiveCompletion && _selectedCandidate < _optActiveCompletion->items.size() &&
+      if (_optActiveCompletion && _completionSelection.selectedCandidate() < _optActiveCompletion->items.size() &&
           _focusedMetadataRow < _metadataRows.size())
       {
         auto& row = _metadataRows[_focusedMetadataRow];
-        auto const& item = _optActiveCompletion->items[_selectedCandidate];
+        auto const& item = _optActiveCompletion->items[_completionSelection.selectedCandidate()];
 
         if (auto const beforeVal = row.input.value(); row.input.tryReplaceRange(
               _optActiveCompletion->replaceBegin, _optActiveCompletion->replaceEnd, item.insertText))
@@ -473,56 +472,7 @@ namespace ao::tui
     }
 
     _optActiveCompletion = std::move(optRes);
-    _selectedCandidate = 0;
-    _completionWindowStart = 0;
-  }
-
-  bool TrackMetadataEditor::tryHandleCompletionNavigation(ftxui::Event const& event, std::size_t const itemCount)
-  {
-    std::int32_t delta = 0;
-    auto const pageSize = static_cast<std::int32_t>(kCompletionPageSize);
-
-    if (event == ftxui::Event::ArrowUp)
-    {
-      delta = -1;
-    }
-    else if (event == ftxui::Event::ArrowDown)
-    {
-      delta = 1;
-    }
-    else if (event == ftxui::Event::PageUp)
-    {
-      delta = -pageSize;
-    }
-    else if (event == ftxui::Event::PageDown)
-    {
-      delta = pageSize;
-    }
-    else
-    {
-      return false;
-    }
-
-    _selectedCandidate =
-      static_cast<std::size_t>(moveSelection(static_cast<std::int32_t>(_selectedCandidate), delta, itemCount));
-
-    if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
-    {
-      auto const windowCount = itemCount - std::min(itemCount, kCompletionPageSize) + 1;
-      _completionWindowStart =
-        static_cast<std::size_t>(moveSelection(static_cast<std::int32_t>(_completionWindowStart), delta, windowCount));
-    }
-
-    if (_selectedCandidate < _completionWindowStart)
-    {
-      _completionWindowStart = _selectedCandidate;
-    }
-    else if (_selectedCandidate >= _completionWindowStart + kCompletionPageSize)
-    {
-      _completionWindowStart = _selectedCandidate - kCompletionPageSize + 1;
-    }
-
-    return true;
+    _completionSelection.reset();
   }
 
   ftxui::Element TrackMetadataEditor::renderFieldValue(MetadataRow const& row,
@@ -585,41 +535,17 @@ namespace ao::tui
 
       if (rowFocused && _optActiveCompletion)
       {
-        auto const totalItems = _optActiveCompletion->items.size();
-        auto const windowStart = _completionWindowStart;
-        auto const windowEnd = std::min(totalItems, windowStart + kCompletionPageSize);
         // The popup starts after the input and its top border. Scroll to the
         // selected candidate even when a short terminal cannot show it all.
-        focusLine += 2 + static_cast<std::int32_t>(_selectedCandidate - windowStart);
-
-        auto candidateElements = Elements{};
-
-        for (std::size_t candIndex = windowStart; candIndex < windowEnd; ++candIndex)
-        {
-          auto const& item = _optActiveCompletion->items[candIndex];
-          auto const isCandidateSelected = candIndex == _selectedCandidate;
-          auto indicatorPtr = text(isCandidateSelected ? "> " : "  ");
-          auto itemTextPtr = text(item.displayText);
-          auto itemRowPtr = hbox({std::move(indicatorPtr), std::move(itemTextPtr)});
-
-          if (isCandidateSelected)
-          {
-            itemRowPtr = std::move(itemRowPtr) | inverted;
-          }
-
-          candidateElements.push_back(std::move(itemRowPtr) | ftxui::reflect(_candidateBoxes[candIndex]));
-        }
-
-        auto popupBoxPtr = style::panelBody(vbox(std::move(candidateElements))) | border | clear_under;
-        auto const indentSize = static_cast<std::size_t>(labelColumns) + 5;
-        auto indentedPopupPtr = hbox({
-          text(std::string(indentSize, ' ')),
-          std::move(popupBoxPtr),
-        });
+        focusLine +=
+          2 + static_cast<std::int32_t>(_completionSelection.selectedCandidate() - _completionSelection.windowStart());
 
         rowElementPtr = vbox({
           std::move(rowElementPtr),
-          std::move(indentedPopupPtr),
+          renderCompletionPopup(_optActiveCompletion->items,
+                                _completionSelection,
+                                labelColumns + static_cast<std::int32_t>(kCompletionPopupIndentColumns),
+                                _candidateBoxes),
         });
       }
 

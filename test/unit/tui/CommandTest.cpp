@@ -68,9 +68,20 @@ namespace ao::tui::test
     CHECK(requiredCommand("select visual").action == CommandAction::SelectVisual);
     CHECK(requiredCommand("select all").action == CommandAction::SelectAll);
     CHECK(requiredCommand("select clear").action == CommandAction::SelectClear);
+    CHECK(requiredCommand(":order up").action == CommandAction::OrderMoveUp);
+    CHECK(requiredCommand(":order down").action == CommandAction::OrderMoveDown);
+    CHECK(requiredCommand("order top").action == CommandAction::OrderMoveToTop);
+    CHECK(requiredCommand("order bottom").action == CommandAction::OrderMoveToBottom);
+    CHECK(requiredCommand(":order reset").action == CommandAction::OrderReset);
     CHECK(requiredCommand("settings").action == CommandAction::OpenSettings);
     CHECK(requiredCommand("config").action == CommandAction::OpenSettings);
     CHECK(requiredCommand("tags").action == CommandAction::EditTags);
+    CHECK(requiredCommand(":list new").action == CommandAction::CreateList);
+    CHECK(requiredCommand("list edit").action == CommandAction::EditList);
+    CHECK(requiredCommand(":list delete").action == CommandAction::DeleteList);
+    CHECK_FALSE(parseCommand(":list"));
+    CHECK_FALSE(parseCommand("list"));
+    CHECK_FALSE(parseCommand("list new extra"));
     CHECK(requiredCommand("edit").action == CommandAction::EditProperties);
     CHECK(requiredCommand("properties").action == CommandAction::EditProperties);
     CHECK(requiredCommand("play").action == CommandAction::Play);
@@ -119,6 +130,10 @@ namespace ao::tui::test
       {CommandAction::SelectVisual, KeyAction::SelectVisual},
       {CommandAction::SelectAll, KeyAction::SelectAll},
       {CommandAction::SelectClear, KeyAction::SelectClear},
+      {CommandAction::OrderMoveUp, KeyAction::OrderMoveUp},
+      {CommandAction::OrderMoveDown, KeyAction::OrderMoveDown},
+      {CommandAction::OrderMoveToTop, KeyAction::OrderMoveToTop},
+      {CommandAction::OrderMoveToBottom, KeyAction::OrderMoveToBottom},
       {CommandAction::OpenSettings, KeyAction::OpenSettings},
       {CommandAction::EditProperties, KeyAction::EditProperties},
       {CommandAction::EditTags, KeyAction::EditTags},
@@ -141,6 +156,10 @@ namespace ao::tui::test
     CHECK_FALSE(shortcutActionForCommand(CommandAction::QuickFilter));
     CHECK_FALSE(shortcutActionForCommand(CommandAction::CloseOverlay));
     CHECK_FALSE(shortcutActionForCommand(CommandAction::SetPresentation));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::OrderReset));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::CreateList));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::EditList));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::DeleteList));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::OpenCommandPalette));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::OpenQuickFilter));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::PreviousSection));
@@ -155,6 +174,8 @@ namespace ao::tui::test
     CHECK_FALSE(parseCommand("scan foo"));
     CHECK_FALSE(parseCommand("scan  cancel"));
     CHECK_FALSE(parseCommand("select"));
+    CHECK_FALSE(parseCommand("order sideways"));
+    CHECK_FALSE(parseCommand("order"));
     CHECK_FALSE(parseCommand("  "));
 
     auto command = requiredCommand(":filter live acoustic");

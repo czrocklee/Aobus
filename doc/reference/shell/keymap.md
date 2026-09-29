@@ -131,6 +131,10 @@ The defaults below use canonical chord spelling: `C` is lowercase `c`, and `Shif
 | `tui.library.editProperties` | `E` |
 | `tui.library.editTags` | `T` |
 | `tui.library.playSelection` | `Enter` |
+| `track.orderMoveUp` | `Alt+Up` |
+| `track.orderMoveDown` | `Alt+Down` |
+| `track.orderMoveToTop` | `Alt+Home` |
+| `track.orderMoveToBottom` | `Alt+End` |
 | `tui.library.previousRow` | `K` |
 | `tui.library.nextRow` | `J` |
 | `tui.library.previousSection` | `{` |
@@ -158,7 +162,7 @@ The TUI workspace focus action `tui.workspace.switchFocus` defaults to Tab and S
 | `playback.*` transport, keyboard chords | installed | Play/Pause, Stop, Previous, Next, Shuffle, Repeat descriptors | installed |
 | `playback.*` transport, media chords | installed | omitted | system media controls |
 | `workspace.revealCurrentTrack` | installed | installed | installed |
-| `track.orderMove*` | installed | no descriptor | installed |
+| `track.orderMove*` | installed | installed | installed |
 | `tui.*` | no handler | installed when projectable | no handler |
 
 The Windows shell installs an accelerator only when it has a handler for the action, the action does not present from an anchor, the chord is not a media key, and Windows has a key for the chord; anything else is skipped and logged rather than installed dead.
@@ -179,10 +183,12 @@ The terminal adapter's current representation whitelist projects:
 - unmodified printable ASCII characters;
 - unmodified `Enter`, `Escape`, `Space`, `Tab`, `Backspace`, `Insert`, `Delete`, arrows, `Home`, `End`, `PageUp`, `PageDown`, and `F1` through `F12`;
 - Shift plus an ASCII letter, and `Shift+Tab`;
-- Ctrl plus any ASCII letter, plus Ctrl-modified arrows and `Ctrl+[`.
+- Ctrl plus any ASCII letter, plus Ctrl-modified arrows and `Ctrl+[`;
+- Alt plus `Up`, `Down`, `Home`, or `End`.
 
 Terminal protocol aliases project to the event the terminal actually reports: `Ctrl+I` is Tab, `Ctrl+H` is Backspace, `Ctrl+J` and `Ctrl+M` are Return, `Ctrl+[` is Escape, and `Ctrl+C` is the terminal Ctrl-C event.
-Alt, Super, media, Unicode, mixed-modifier, and other ambiguous or unsupported chords are omitted and diagnosed without discarding valid sibling bindings.
+An Alt navigation key projects onto the modified-key CSI sequence the terminal reports for it, such as `ESC [ 1 ; 3 A` for `Alt+Up`, the same encoding the Ctrl-modified arrows already use.
+Other Alt chords, Super, media, Unicode, mixed-modifier, and other ambiguous or unsupported chords are omitted and diagnosed without discarding valid sibling bindings.
 
 Representation is not installation.
 The executable root plan never retains Ctrl-C, Escape or its `Ctrl+[` alias, Up/Down, Home/End, or Page Up/Down because the shell's fixed root protocol consumes those events first.

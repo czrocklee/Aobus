@@ -853,7 +853,9 @@ aobus_target_test_sources(ao_tui_test "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
     unit/tui/LibraryControllerTest.cpp
     unit/tui/LibraryNavigationTest.cpp
     unit/tui/LibraryScanControllerTest.cpp
+    unit/tui/ListAuthoringControllerTest.cpp
     unit/tui/ListNavigationModelTest.cpp
+    unit/tui/ListOrderControllerTest.cpp
     unit/tui/NavigationPanelTest.cpp
     unit/tui/PinnedNavigationTest.cpp
     unit/tui/DetailSectionsTest.cpp
@@ -871,6 +873,7 @@ aobus_target_test_sources(ao_tui_test "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
     unit/tui/TrackPropertiesEditorCompletionTest.cpp
     unit/tui/TrackTagPopoverTest.cpp
     unit/tui/TrackPropertiesEditorTagsTest.cpp
+    unit/tui/SmartListEditorTest.cpp
     unit/tui/TrackSectionTest.cpp
     unit/tui/OutputDeviceControllerTest.cpp
     unit/tui/PlaybackNavigationTest.cpp

@@ -87,8 +87,16 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `select visual` | start a visual selection at the focused track, or confirm the running one |
 | `select all` | mark every track in the current view |
 | `select clear` | clear marked tracks |
+| `order up` | move the focused selection one unselected position up in the active saved List's manual order |
+| `order down` | move the focused selection one unselected position down in the active saved List's manual order |
+| `order top` | move the focused selection to the top of the active saved List's manual order |
+| `order bottom` | move the focused selection to the bottom of the active saved List's manual order |
+| `order reset` | clear the active saved List's saved manual order |
 | `edit`, `properties` | open the Track Properties editor over the current selection |
 | `tags` | open the quick tag popover over the current selection |
+| `list new` | open the Saved-List editor for a new List under the target List |
+| `list edit` | open the Saved-List editor over the target List's definition |
+| `list delete` | preview and confirm deletion of the target List |
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop` | stop playback |
@@ -98,6 +106,8 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `back`, `forward` | navigate workspace history, including the view left by reveal |
 | `settings`, `config` | open global TUI Settings |
 | `quit` | request normal checkpoint-and-stop exit |
+
+The `list` commands draft against the Lists-navigation cursor while the docked Lists pane owns focus, otherwise the active List; `list edit` and `list delete` refuse All Tracks, while `list new` parents a new List at the library root instead. Inside the docked Lists pane, the `tui.library.editProperties` key (`e` by default) edits the List under the cursor and the fixed `Delete` key starts its deletion; creating a List has no key because it has no focused object. The [TUI List-authoring specification](../../system/frontend/tui-list-authoring.md) owns their workflow.
 
 ### Workspace keys
 
@@ -137,6 +147,8 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `v` | start a visual selection at the focus, or confirm the running one | configurable |
 | `Shift+A` | mark every track in the current view | configurable |
 | `u` | clear marked tracks | configurable |
+| `Alt+Up` / `Alt+Down` | move the focused selection one unselected position up/down in the active saved List's manual order | configurable |
+| `Alt+Home` / `Alt+End` | move the focused selection to the top/bottom of the active saved List's manual order | configurable |
 | `e` | open the Track Properties editor over the current selection | configurable |
 | `t` | open the quick tag popover over the current selection | configurable |
 | `/` | open an empty live Quick Filter input | configurable |
@@ -251,7 +263,7 @@ Pickers and read-only modal pages accept Up/Down or j/k, viewport-sized PageUp/P
 
 Press `/` inside Lists, Views, or Settings Keyboard to search within that panel. Up/Down and page keys navigate matches; Return activates one. Escape clears the query before closing the panel. Empty results cannot activate the previously selected row. Settings searches localized labels and stable action ids. Queries do not alter the workspace filter. Views and Settings clear their query on panel/page changes; Lists retains search while a stronger surface suspends it. Lists searches names and ancestor paths, displays context-only ancestors without activation, and uses Left/Right for tree navigation outside search. Tab/Shift-Tab is a fixed search-local exit to Tracks; a printable custom focus binding remains text during search.
 
-Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked, otherwise it toggles the separate chooser popup above the track frame's List/current-list button. The button is hidden only while the pane is docked. `L` / `:sidebar` toggles pinning independently, and closes an open chooser before showing the tree. The tree docks when its requested width (26 columns in automatic mode) leaves at least 72 track-content columns after Detail. At narrower widths, the pin preference is retained and the chooser remains available. Tab/Shift-Tab switches between docked Lists and Tracks; Escape returns to Tracks without unpinning. Enter returns to Tracks after navigation; a docked row click keeps Lists focused, while a chooser row click closes the popup. Clicking the active List preserves its current filtered view and marks. Outside chooser clicks dismiss and consume; docked Tracks clicks operate immediately.
+Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked, otherwise it toggles the separate chooser popup above the track frame's List/current-list button. The button is hidden only while the pane is docked. `L` / `:sidebar` toggles pinning independently, and closes an open chooser before showing the tree. The tree docks when its requested width (26 columns in automatic mode) leaves at least 72 track-content columns after Detail. At narrower widths, the pin preference is retained and the chooser remains available. Tab/Shift-Tab switches between docked Lists and Tracks; Escape returns to Tracks without unpinning. Outside search, the Edit key and `Delete` act on the List under the docked cursor as the `list edit` and `list delete` commands do. Enter returns to Tracks after navigation; a docked row click keeps Lists focused, while a chooser row click closes the popup. Clicking the active List preserves its current filtered view and marks. Outside chooser clicks dismiss and consume; docked Tracks clicks operate immediately.
 
 ### Overlay-specific keys
 
@@ -318,6 +330,7 @@ All track-table gestures below remain available while the detail inspector is op
 - A duration-zero seek rail is inert.
 - A supported override affects root dispatch and every configurable hint for that action; an empty sequence removes both.
 - Unsupported terminal chords and later projected collisions omit only those entries, while fixed protocol and unrelated supported actions remain available.
+- Manual-order commands and keys use the shared `ListOrderAuthoringSession` contract: they need the active view to be a saved List in a flat unsorted presentation, they move the marked ids in current view order or the focused track when none are marked, and one command while a previous one is still in flight is dropped rather than queued. Disabled reasons and outcomes, including a busy library or a changed revision, are transient notifications; only a failed write is kept as a warning.
 - Fixed protocol takes precedence in its active scope, so rebinding Return, Escape, navigation, or a text-editing key cannot strand an input or modal overlay.
 
 ## Compatibility and versioning
@@ -345,6 +358,7 @@ Changing a default key, alias, option, or default path requires updating this re
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) routes command, presentation, and shared filter completion.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) applies the prepared root plan after fixed scoped protocol and maps mouse events.
 - [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single scan flight.
+- [`ListOrderController.cpp`](../../../app/tui/ListOrderController.cpp) owns the one-pending manual-order submission and its notification outcomes.
 - [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent graceful-exit gate.
 - [`TrackEditController.cpp`](../../../app/tui/TrackEditController.cpp) owns editor preparation, the retained authoring session, and submission; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns fixed modal keys and submission prompts. [`TrackMetadataEditor.cpp`](../../../app/tui/TrackMetadataEditor.cpp) owns metadata input and completion; [`TrackTagEditor.cpp`](../../../app/tui/TrackTagEditor.cpp) owns tag intents and search.
 
@@ -355,6 +369,7 @@ Changing a default key, alias, option, or default path requires updating this re
 - [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
 - [`CommandCompletionTest.cpp`](../../../test/unit/tui/CommandCompletionTest.cpp) protects completion routing, including multi-word exact aliases.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects scan start, cancel, and retirement.
+- [`ListOrderControllerTest.cpp`](../../../test/unit/tui/ListOrderControllerTest.cpp) protects order submission outcomes, blocking reasons, and the drop of a command that arrives while one is in flight.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects mark, range, select-all, and selection publication.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase transitions.
 - [`TrackEditControllerTest.cpp`](../../../test/unit/tui/TrackEditControllerTest.cpp) protects open refusal, batch submission, staleness, reload, and a submission outliving its editor.

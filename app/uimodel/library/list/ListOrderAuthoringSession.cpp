@@ -374,6 +374,16 @@ namespace ao::uimodel
 
     if (!orderRes)
     {
+      // Binding refuses on the writer's own availability, which can move
+      // ahead of the published snapshot the capabilities just read, as when
+      // another write has committed but not yet been announced. That is the
+      // same state the capability check reports, so it gets the same words.
+      if (orderRes.error().code == Error::Code::InvalidState)
+      {
+        return makeError(Error::Code::InvalidState,
+                         std::string{i18n::requiredText(textCatalog, i18n::MessageId::ListOrderAuthoringUnavailable)});
+      }
+
       return std::unexpected{orderRes.error()};
     }
 

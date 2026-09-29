@@ -7,7 +7,7 @@ id: tui.interaction
 
 This specification owns the terminal frontend's shell and interaction behavior.
 It defines workspace structure, modal text-input and overlay state, keyboard and mouse routing, panel mechanics, playback dock and seek rail, completion, notifications, selection, and terminal styling.
-The independent [TUI track-authoring specification](tui-track-authoring.md) owns the exact Properties and tags-only editor workflow after entry from this shell.
+The independent [TUI track-authoring specification](tui-track-authoring.md) owns the exact Properties and tags-only editor workflow after entry from this shell, and the [TUI List-authoring specification](tui-list-authoring.md) owns the Saved-List definition editor and deletion flow after the same entry.
 Exact startup options, keys, commands, and aliases belong to the [TUI command reference](../../reference/tui/command.md).
 
 ## Settings and live publication
@@ -79,6 +79,7 @@ The adapter lives under `app/systemmedia/linux/`; it adds no GTK dependency to t
 - The **seek rail** is only the reflected timeline/thumb segment, excluding elapsed/duration text.
 - A **visual row** includes group headers as well as selectable track rows.
 - The **Track Properties editor** is the exclusive-input modal entered from the workspace; its authoring workflow belongs to the [TUI track-authoring specification](tui-track-authoring.md), and it is not one of the overlays above.
+- The **List authoring surfaces** are the exclusive-input Saved-List editor and delete confirmation owned by the [TUI List-authoring specification](tui-list-authoring.md); they are not overlays either.
 
 ## Invariants
 
@@ -353,6 +354,7 @@ A plain track click clears marks and focuses the clicked track. Ctrl+click toggl
 The effective edit shortcut (shipped as `e`), `:edit`, and `:properties` open the full Properties editor over `selectedTrackIds()`.
 The quick tag entry (`t` / `:tags`) opens its tags-only surface over that same effective selection.
 The [TUI track-authoring specification](tui-track-authoring.md) owns target capture, coherent preparation, editor pages and validation, recovery, submission, and admitted-write lifetime.
+The `:list new`, `:list edit`, and `:list delete` commands open the Saved-List authoring surfaces; the [TUI List-authoring specification](tui-list-authoring.md) owns their target rule and workflow, and the same entry transition below applies.
 
 Opening either editor retires command and filter input, cancels the filter debounce and pointer gestures, rolls back a column preview, and commits a running visual range into the mark set; the Detail inspector's visibility preference is preserved rather than closed.
 The range's rows stay marked because they formed the effective selection at entry, but the anchor is retired so later motion cannot reshape that completed selection and a library change under the modal cannot re-derive the range against rows the edit itself reordered.
@@ -363,6 +365,7 @@ The editor is composed over the live workspace with exclusive input ownership; t
 The effective quit shortcut (shipped as `Shift+Q`), the `quit` command, terminal Ctrl-C, and handleable platform signals (POSIX SIGINT/SIGTERM/SIGHUP; Windows Ctrl-C/Ctrl-Break/close) request one App-owned `ExitController`.
 The [TUI track-authoring specification](tui-track-authoring.md#admitted-write-lifetime-and-exit) owns the handshake when an admitted Properties write is still settling.
 The exit gate otherwise retires scan and editor presentation and transient input before posting loop exit; input dispatch does not stop playback early.
+The gate waits the same way for a submitted List save or deletion: both authoring controllers' pending writes share one `hasPendingSubmittedWrite` answer.
 An accepted MPRIS root Quit first receives its D-Bus reply, then enters this same gate on a later owner-executor turn. The first request closes system-media command and artwork admission immediately, including while the gate waits for an already submitted metadata write; it does not create a second exit or write-wait policy.
 The private bus session attempts at most 250 milliseconds of asynchronous flush, closes locally before releasing its name, and joins independently of further TUI executor progress. This bounded transport teardown does not guarantee that a peer received the last reply.
 Normal teardown cancels pending Quick Filter debounce, seek/scrollbar/column gestures, cover work, and scan presentation before persistence captures state.
@@ -412,6 +415,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command and presentation completion plus explicit filter-argument routing; [`App.cpp`](../../../app/tui/App.cpp) composes the Command Palette and live Quick Filter callbacks.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch and transient-interaction cancellation, and forwards graceful exit without owning `ScreenInteractive`.
 - [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp) owns the single restartable scan task.
+- [`ListAuthoringController.cpp`](../../../app/tui/ListAuthoringController.cpp) and [`SmartListEditor.cpp`](../../../app/tui/SmartListEditor.cpp) own the Saved-List authoring flow; see the [TUI List-authoring specification](tui-list-authoring.md).
 - [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent graceful-exit gate; [`SignalExitWatcherPosix.cpp`](../../../app/tui/SignalExitWatcherPosix.cpp) and [`SignalExitWatcherWindows.cpp`](../../../app/tui/SignalExitWatcherWindows.cpp) post those requests from platform signals.
 - [`LibraryController.cpp`](../../../app/tui/LibraryController.cpp) owns exact runtime-view attachment, row materialization, preference-aware plain-list navigation, and reload fallback.
 - [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) projects the shared List preorder into chooser entries and labels; [`LibraryChooser.cpp`](../../../app/tui/LibraryChooser.cpp) paints the transient chooser independently of pinned-tree search and expansion.
@@ -441,6 +445,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`GoToMenuTest.cpp`](../../../test/unit/tui/GoToMenuTest.cpp) protects navigation suffixes, prefix rebinding, input ownership, history, menu/footer click parity, disabled targets, stale state, and localized hints at constrained widths.
 - [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase-before-output, reentrancy, and one exit publication.
 - [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects single-flight scan cancellation, late-result suppression, and the production eager-scan binding.
+- [`ListAuthoringControllerTest.cpp`](../../../test/unit/tui/ListAuthoringControllerTest.cpp) and [`SmartListEditorTest.cpp`](../../../test/unit/tui/SmartListEditorTest.cpp) protect Saved-List authoring targets, preview debouncing, submission and deletion lifetime, and the editor surface; see the [TUI List-authoring specification](tui-list-authoring.md).
 - [`MouseBindingsTest.cpp`](../../../test/unit/tui/MouseBindingsTest.cpp) protects painted shortcut bindings and clipped row hit regions.
 - [`TuiSignalProbeTest.cpp`](../../../test/unit/tui/TuiSignalProbeTest.cpp) drives [`ao_tui_signal_probe`](../../../test/fatal/TuiSignalProbeScenario.cpp) to protect watcher signal routing and previous-handler restoration outside the ordinary unit-test process.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects exact restored-view attachment, valid empty projections, reload preservation, restored custom presets, list-deletion recovery, and mark/range/select-all reconciliation.
@@ -459,5 +464,6 @@ The notification center can be opened explicitly even when compact status is not
 - [List-navigation tree](../presentation/list-tree.md)
 - [Activity status](../presentation/activity-status.md)
 - [TUI track authoring](tui-track-authoring.md)
+- [TUI List authoring](tui-list-authoring.md)
 - [TUI command reference](../../reference/tui/command.md)
 - [Linux MPRIS system-media integration](mpris.md)

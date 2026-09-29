@@ -21,6 +21,7 @@ GTK owns `TrackOrderDragController`, native row/drop controllers, autoscroll, in
 It does not submit row indexes to storage or call a core store directly.
 WinUI owns native row-context commands, selection adaptation, status presentation, and live action handlers in its window-owned List authoring coordinator.
 It currently exposes no order drag adapter.
+The TUI owns chord and command-alias dispatch, the one-pending submission gate, and notification outcomes in its List order controller; it exposes no drag or context menu.
 
 ## Terminology
 
@@ -95,6 +96,7 @@ The session does not silently rebind to newer rows.
 
 `begin(library, views, viewId)` reads one coherent view state, describes capability, obtains the complete effective saved-List source sequence, asks runtime for a revision-bound order binding, and retains the current projection.
 Failure returns a typed error with the capability reason where applicable.
+The writer can refuse a binding for availability that the published snapshot has not caught up with yet, such as a write that has committed but has not been announced; that refusal reports the same localized unavailable reason as the capability check instead of the runtime's diagnostic.
 
 The bound sequence is the complete base List sequence, not only quick-filter-visible projection rows.
 That distinction makes top/bottom movement unambiguous while a quick filter is active.
@@ -142,7 +144,12 @@ Holding a key therefore moves once; another committed step requires release and 
 
 WinUI registers the four movement action handlers outside its layout schema, so the ordinary Windows keymap plan installs the same shipped chords without making those ids authorable in layout documents.
 
+The TUI installs the same four shared action ids through its keymap plan, projecting each Alt navigation chord onto the modified-key escape sequence the terminal reports.
+Each key event is one command, matching terminal repeat semantics elsewhere in the shell; a command arriving while a previous submission is still in flight is dropped rather than queued, and the next key press starts a fresh binding.
+Modal overlays and text input do not admit the chords.
+
 Reset and Forget Hidden Positions remain menu/action commands without shipped global shortcuts.
+The TUI exposes the four movement commands and Reset Order through the command palette aliases `:order up`, `:order down`, `:order top`, `:order bottom`, and `:order reset`, which use the same session contract as the chords.
 
 ## Failure and cancellation
 
@@ -179,7 +186,13 @@ With a quick filter, the submenu keeps Move Up and Move Down visibly disabled be
 WinUI exposes Move Up, Move Down, Move to Top, Move to Bottom, and Reset Order in the selected-row context menu according to the same independent capability flags.
 It has no drag handle or Forget Hidden Positions command in this version.
 The four movement commands use the shared default accelerators and the same handlers as the menu; Reset remains menu-only.
-Both frontends preserve stable-ID operands, complete-sequence semantics, revision-bound submission, and explicit unavailable states.
+
+The TUI has no drag or context menu.
+Its List order commands are palette aliases and configurable root chords, each submitting the marked ids in current view order or the focused track when none are marked.
+Each command begins its own session, matching the other frontends' keyboard paths, and reports Applied, NoOp, Busy, Stale, Unavailable, and blocking reasons through the notification feed using the same shared texts.
+The focused track and marks follow the moved ids through the ordinary change-publication reload, and the Help pane lists the five commands under the Manual Order group.
+
+All frontends preserve stable-ID operands, complete-sequence semantics, revision-bound submission, and explicit unavailable states.
 
 ## Implementation map
 
@@ -190,17 +203,19 @@ Both frontends preserve stable-ID operands, complete-sequence semantics, revisio
 - [`TrackViewPage.cpp`](../../../app/linux-gtk/track/TrackViewPage.cpp) adapts capabilities and order commands.
 - [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) suppresses native order-key auto-repeat.
 - WinUI [`ListAuthoringCoordinator.cpp`](../../../app/windows-winui/list/ListAuthoringCoordinator.cpp) owns session creation and result presentation; [`TrackTable.cpp`](../../../app/windows-winui/layout/component/track/TrackTable.cpp) owns the native menu, and [`ShellBuilder.cpp`](../../../app/windows-winui/layout/ShellBuilder.cpp) registers its four keymap handlers.
+- TUI [`ListOrderController.cpp`](../../../app/tui/ListOrderController.cpp) owns per-command session submission and notification outcomes; [`Keymap.cpp`](../../../app/tui/Keymap.cpp) projects the four Alt navigation chords, and [`Command.cpp`](../../../app/tui/Command.cpp) registers the `:order` aliases.
 
 ## Test map
 
 - [`ListOrderCapabilitiesTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, selection/gap normalization, and invalid TrackId rejection.
-- [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, movement, invalidation, move-only facade semantics, and pending submission after moved and destroyed facades.
+- [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, the localized refusal of a binding that outruns published availability, movement, invalidation, move-only facade semantics, and pending submission after moved and destroyed facades.
 - [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects maintenance admission, including rejection of List-order binding while authoring is unavailable.
 - [`KeyRepeatGuardTest.cpp`](../../../test/unit/uimodel/input/KeyRepeatGuardTest.cpp) protects physical-key repeat suppression.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects GTK eligibility and command adaptation.
 - [`TagEditControllerTest.cpp`](../../../test/unit/linux-gtk/tag/TagEditControllerTest.cpp) protects the visible Manual Order menu capability split.
 - [`TrackSelectionControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackSelectionControllerTest.cpp) protects the blank-area right-click no-menu contract.
 - [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects installation of the four native-only WinUI movement actions without adding layout-action descriptors; native Windows smoke covers context-menu eligibility and command dispatch.
+- [`ListOrderControllerTest.cpp`](../../../test/unit/tui/ListOrderControllerTest.cpp) protects the TUI submission outcomes, including a stale binding as transient guidance and a rejected command as a lasting warning that releases the gate, blocking reasons, and the drop of a command that arrives while one is in flight; [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects Alt navigation projection and chord editing, and [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects chord and `:order` dispatch, focus follow, virtual-source refusal, and overlay suppression.
 
 ## Related documents
 

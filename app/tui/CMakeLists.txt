@@ -2,6 +2,7 @@ add_library(aobus-tui-lib STATIC
     AnchoredOverlay.cpp
     Command.cpp
     CommandCompletion.cpp
+    CompletionPopup.cpp
     CommandPalettePanel.cpp
     CommandCompletionState.cpp
     EventController.cpp
@@ -19,6 +20,8 @@ add_library(aobus-tui-lib STATIC
     LibraryNavigation.cpp
     LibraryController.cpp
     LibraryScanController.cpp
+    ListAuthoringController.cpp
+    ListOrderController.cpp
     MouseBindings.cpp
     NotificationCenterPanel.cpp
     OutputDeviceController.cpp
@@ -56,6 +59,7 @@ add_library(aobus-tui-lib STATIC
     TextFieldModel.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp
+    SmartListEditor.cpp
     TextCell.cpp
     CoverArt.cpp
     CoverArtLoader.cpp

@@ -4,6 +4,7 @@
 #include "tui/EventController.h"
 
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
@@ -18,6 +19,7 @@
 #include "tui/Keymap.h"
 #include "tui/LibraryController.h"
 #include "tui/LibraryScanController.h"
+#include "tui/ListAuthoringController.h"
 #include "tui/MouseBindings.h"
 #include "tui/NavigationPanel.h"
 #include "tui/NotificationCenterPanel.h"
@@ -28,6 +30,7 @@
 #include "tui/PresentationPanel.h"
 #include "tui/SettingsEditor.h"
 #include "tui/ShellInteractionModel.h"
+#include "tui/SmartListEditor.h"
 #include "tui/StatusBar.h"
 #include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackEditController.h"
@@ -47,6 +50,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -54,6 +58,7 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -81,6 +86,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -159,6 +165,51 @@ namespace ao::tui::test
         .replaceEnd = draft.size(),
         .items = {rt::CompletionItem{.displayText = "宇多田光", .insertText = "\"宇多田光\""}},
       };
+    }
+
+    std::string lastNotification(EventControllerFixture const& fixture)
+    {
+      auto const feed = fixture.runtimePtr->notifications().feed();
+      REQUIRE_FALSE(feed.entries.empty());
+      return std::get<std::string>(feed.entries.back().message);
+    }
+
+    std::size_t notificationCount(EventControllerFixture const& fixture)
+    {
+      return fixture.runtimePtr->notifications().feed().entries.size();
+    }
+
+    /// Prepares a manual-membership saved List with the library's tracks in
+    /// the flat unsorted Manual Order presentation, opened as the active view.
+    void openManualOrderList(EventControllerFixture& fixture, LibraryController& library)
+    {
+      auto const listId =
+        ao::test::requireValue(rt::test::runRuntimeTask(*fixture.runtimePtr,
+                                                        fixture.runtimePtr->library().commands().createListAsync(
+                                                          rt::ListDraft{.name = "Manual", .expression = "#manual"})));
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(library.tracks().size());
+
+      for (auto const& entry : library.tracks())
+      {
+        trackIds.push_back(entry.id);
+      }
+
+      auto targetsRes = fixture.runtimePtr->library().bindTrackTargets(trackIds);
+      REQUIRE(targetsRes);
+      REQUIRE(rt::test::runRuntimeTask(
+        *fixture.runtimePtr,
+        fixture.runtimePtr->library().commands().addTracksToListAsync(listId, std::move(*targetsRes))));
+      fixture.executor->drain();
+
+      openList(library, listId);
+      REQUIRE(library.trySetSelectedPresentation(presentationIndex(library, rt::kListOrderTrackPresentationId)));
+      library.selectSelectedPresentation();
+      REQUIRE(library.activePresentationId() == rt::kListOrderTrackPresentationId);
+
+      // The projection replacement the presentation switch schedules is queued
+      // on the callback executor; settle it before the test drives the shell.
+      fixture.executor->drain();
     }
   } // namespace
 
@@ -255,6 +306,70 @@ namespace ao::tui::test
     enterCommand(controller, "scan cancel");
     CHECK(fixture.libraryScanPtr->phase() == LibraryScanController::Phase::Cancelling);
     fixture.executor->drain();
+  }
+
+  TEST_CASE("EventController - order keys and commands move the focused selection of a manual-order list",
+            "[tui][unit][event][list-order]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const firstId = library.tracks()[0].id;
+    auto const secondId = library.tracks()[1].id;
+
+    openManualOrderList(fixture, library);
+    auto const listId = library.currentListId();
+    REQUIRE(library.tracks().size() == 2);
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3B")));
+    REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 1; }));
+
+    CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
+
+    // The focus stayed on the moved track while the view adopted the new order.
+    REQUIRE(library.tracks().size() == 2);
+    CHECK(library.tracks()[library.selectedTrack()].id == firstId);
+
+    enterCommand(controller, "order up");
+    REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 2; }));
+
+    CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{firstId, secondId});
+  }
+
+  TEST_CASE("EventController - an order key on a virtual source reports the blocking reason",
+            "[tui][unit][event][list-order]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    REQUIRE(library.currentListId() == rt::kAllTracksListId);
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3A")));
+    REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return notificationCount(fixture) == 1; }));
+
+    CHECK(lastNotification(fixture) == "Manual ordering is available for saved Lists only.");
+  }
+
+  TEST_CASE("EventController - an open overlay does not admit order keys", "[tui][unit][event][list-order]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    openManualOrderList(fixture, library);
+    auto const listId = library.currentListId();
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("?")));
+    REQUIRE(fixture.shell.overlay() == Overlay::Help);
+
+    // A modal overlay answers every key, so the order chord reaches nothing.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3B")));
+    fixture.executor->drain();
+
+    CHECK(notificationCount(fixture) == 0);
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId).empty());
   }
 
   TEST_CASE("EventController - select commands mark and clear tracks", "[tui][unit][event][selection]")
@@ -464,6 +579,246 @@ namespace ao::tui::test
     // Ctrl-C is still the way out, which is what the footer advertises.
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlC));
     CHECK(fixture.exitRequestCount == 1);
+  }
+
+  TEST_CASE("EventController - the list new command opens the authoring modal over the active list",
+            "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    std::ignore = fixture.addList("Roadsongs");
+
+    enterCommand(controller, "list new");
+
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    auto const* const editor = fixture.listAuthoringPtr->activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->mode() == ListEditorMode::New);
+    // The active List is All Tracks, so the new List parents at the root.
+    CHECK(editor->parentListId() == kInvalidListId);
+    // Opening retires the command line it was launched from.
+    CHECK_FALSE(fixture.shell.isInputActive());
+
+    // The open editor owns every event, so the workspace behind it cannot act.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().empty());
+
+    // The consumed key edited the draft, so Escape asks before it closes.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE(fixture.listAuthoringPtr->activeEditor()->isConfirmingDiscard());
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().size() == 1);
+  }
+
+  TEST_CASE("EventController - list edit drafts the Lists cursor while Lists owns focus",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    [[maybe_unused]] auto const firstId = fixture.addList("First");
+    auto const secondId = fixture.addList("Second");
+    library.navigation().reveal(secondId);
+    fixture.shell.focusNavigation();
+
+    enterCommand(controller, "list edit");
+
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    auto const* const editor = fixture.listAuthoringPtr->activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->mode() == ListEditorMode::Edit);
+    CHECK(editor->editListId() == secondId);
+    CHECK(editor->draft().name == "Second");
+  }
+
+  TEST_CASE("EventController - list edit without Lists focus drafts the active list",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const listId = fixture.addList("Roadsongs");
+    REQUIRE(library.openList(listId));
+
+    enterCommand(controller, "list edit");
+
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    CHECK(fixture.listAuthoringPtr->activeEditor()->editListId() == listId);
+  }
+
+  TEST_CASE("EventController - a list save behind an in-flight order write keeps its draft for retry",
+            "[tui][integration][event][editor][list-order]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const firstId = library.tracks()[0].id;
+    auto const secondId = library.tracks()[1].id;
+    openManualOrderList(fixture, library);
+    auto const listId = library.currentListId();
+
+    // The order key leaves its write in flight; the editor then opens over
+    // the same List and submits a rename behind it.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3B")));
+    enterCommand(controller, "list edit");
+    REQUIRE(fixture.listAuthoringPtr->activeEditor() != nullptr);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("x")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
+    REQUIRE(fixture.listAuthoringPtr->hasPendingSubmission());
+
+    REQUIRE(fixture.executor->tryDrainUntil(
+      [&] { return !fixture.listAuthoringPtr->hasPendingSubmission() && notificationCount(fixture) == 1; }));
+
+    // The order landed; the library refused the overlapping save, and the
+    // editor keeps the draft with the runtime's reason instead of losing it.
+    CHECK(lastNotification(fixture) == "Moved 1 track in Manual Order.");
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
+    auto const* const editor = fixture.listAuthoringPtr->activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->status() == ListEditorStatus::Ready);
+    CHECK(editor->diagnostic().ends_with(" is busy"));
+    CHECK(editor->draft().name == "Manualx");
+    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId)->name == "Manual");
+
+    // The ordinary Save key retries it once the library is free.
+    CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !fixture.listAuthoringPtr->hasPendingSubmission(); }));
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId)->name == "Manualx");
+    CHECK(fixture.runtimePtr->library().snapshot().listOrderTrackIds(listId) == std::vector{secondId, firstId});
+  }
+
+  TEST_CASE("EventController - list authoring refuses the virtual All Tracks target", "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    enterCommand(controller, "list edit");
+
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(std::get<std::string>(feed.entries.back().message) == "All Tracks cannot be edited or deleted");
+  }
+
+  TEST_CASE("EventController - the list delete question holds the shell from the command on",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const listId = fixture.addList("Roadsongs");
+    REQUIRE(library.openList(listId));
+
+    // A running visual range commits at entry, exactly as the definition
+    // editors' entry does; the marks it reached survive the flow.
+    controller.tryHandleEvent(ftxui::Event::Character("v"));
+    controller.tryHandleEvent(ftxui::Event::Character("j"));
+    REQUIRE(library.isVisualSelectionActive());
+    auto const committed = library.selectedTrackIds();
+
+    enterCommand(controller, "list delete");
+
+    CHECK_FALSE(library.isVisualSelectionActive());
+    CHECK(library.selectedTrackIds() == committed);
+
+    // The question is on screen while the preview runs, so nothing typed in
+    // that window reaches the workspace: no mark, no visual range, no
+    // Settings, no palette, no playback, and no manual-order write.
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    auto const markedBefore = library.markedIds();
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("v")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character(",")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character(":")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3A")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK(library.markedIds() == markedBefore);
+    CHECK_FALSE(library.isVisualSelectionActive());
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK_FALSE(fixture.listAuthoringPtr->hasPendingSubmission());
+
+    REQUIRE(fixture.executor->tryDrainUntil(
+      [&]
+      {
+        auto const* const pending = fixture.listAuthoringPtr->activeDeleteConfirmation();
+        return pending == nullptr || pending->previewReady;
+      }));
+    auto const* const confirmation = fixture.listAuthoringPtr->activeDeleteConfirmation();
+    REQUIRE(confirmation != nullptr);
+    CHECK(confirmation->listId == listId);
+
+    // The confirmation owns every event until it is answered.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("x")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId).has_value());
+  }
+
+  TEST_CASE("EventController - the Lists pane edits and deletes the List under its cursor",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    [[maybe_unused]] auto const firstId = fixture.addList("First");
+    auto const secondId = fixture.addList("Second");
+    library.navigation().reveal(secondId);
+    fixture.shell.focusNavigation();
+
+    // The workspace's Edit key keeps its verb and follows focus to the List.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("e")));
+    REQUIRE(fixture.listAuthoringPtr->activeEditor() != nullptr);
+    CHECK(fixture.listAuthoringPtr->activeEditor()->editListId() == secondId);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE_FALSE(fixture.listAuthoringPtr->isActive());
+
+    // Delete asks about the List under the cursor.
+    fixture.shell.focusNavigation();
+    CHECK(controller.tryHandleEvent(ftxui::Event::Delete));
+    REQUIRE(fixture.listAuthoringPtr->activeDeleteConfirmation() != nullptr);
+    CHECK(fixture.listAuthoringPtr->activeDeleteConfirmation()->listId == secondId);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.runtimePtr->library().snapshot().listNode(secondId).has_value());
+  }
+
+  TEST_CASE("EventController - deleting the open List falls back to a live view", "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const listId = fixture.addList("Roadsongs");
+    REQUIRE(library.openList(listId));
+    REQUIRE(library.currentListId() == listId);
+
+    enterCommand(controller, "list delete");
+    REQUIRE(fixture.executor->tryDrainUntil(
+      [&]
+      {
+        auto const* const pending = fixture.listAuthoringPtr->activeDeleteConfirmation();
+        return pending == nullptr || pending->previewReady;
+      }));
+    REQUIRE(fixture.listAuthoringPtr->activeDeleteConfirmation() != nullptr);
+    std::ignore = renderElement(fixture.listAuthoringPtr->activeModal(80, 24), 80, 24);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !fixture.listAuthoringPtr->hasPendingSubmission(); }));
+
+    // The workspace closed the deleted List's view, and the track surface
+    // followed it to a live view instead of keeping a dangling one.
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK_FALSE(fixture.runtimePtr->library().snapshot().listNode(listId).has_value());
+    CHECK(library.currentListId() != listId);
+    CHECK(library.currentListId() != kInvalidListId);
+    CHECK(library.emptyStateText().empty());
+
+    // The shell answers the workspace again.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().size() == 1);
   }
 
   TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")

@@ -198,6 +198,39 @@ namespace ao::uimodel::test
     }
   }
 
+  TEST_CASE("ListOrderAuthoringSession - a write not yet announced refuses binding with the localized reason",
+            "[uimodel][integration][list][list-order][concurrency]")
+  {
+    auto fixture = PendingSessionFixture{};
+    auto const viewId = fixture.open();
+    REQUIRE(fixture.commandsFixture.library().authoringAvailability().state == rt::LibraryAuthoringState::Available);
+
+    // Another write is admitted while the availability it will publish still
+    // waits on the callback executor, so the snapshot the capabilities read
+    // says Available and only the writer knows otherwise. The window rests on
+    // the write lane's order: it refuses new bindings from admission on and
+    // announces only on the callback executor, which this test has not run.
+    // Were that order to change, the binding below would succeed and the test
+    // would fail loudly rather than pass on the capability path.
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = fixture.commandsFixture.runtime().spawn(rt::test::flagCompletionAsync(
+      completedPtr, fixture.commandsFixture.commands().createListAsync(rt::ListDraft{.name = "Concurrent"})));
+    REQUIRE(fixture.executor.tryWaitUntilQueued());
+    REQUIRE(fixture.commandsFixture.library().authoringAvailability().state == rt::LibraryAuthoringState::Available);
+
+    auto const sessionRes = ListOrderAuthoringSession::begin(
+      fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog());
+
+    REQUIRE_FALSE(sessionRes);
+    CHECK(sessionRes.error().code == Error::Code::InvalidState);
+    CHECK(sessionRes.error().message == "Library authoring is unavailable.");
+
+    REQUIRE(fixture.executor.tryDrainUntil([&completedPtr] { return completedPtr->load(); }));
+    REQUIRE(future.get());
+    CHECK(ListOrderAuthoringSession::begin(
+      fixture.commandsFixture.library(), fixture.service, viewId, ao::test::englishMessageCatalog()));
+  }
+
   TEST_CASE("ListOrderAuthoringSession - NoOp replays invalidation observed while submission is pending",
             "[uimodel][integration][list][list-order][concurrency]")
   {

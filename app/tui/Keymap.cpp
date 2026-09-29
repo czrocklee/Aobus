@@ -52,6 +52,10 @@ namespace ao::tui
     constexpr auto kSelectVisualDefaults = std::to_array<std::string_view>({"V"});
     constexpr auto kSelectAllDefaults = std::to_array<std::string_view>({"Shift+A"});
     constexpr auto kSelectClearDefaults = std::to_array<std::string_view>({"U"});
+    constexpr auto kOrderMoveUpDefaults = std::to_array<std::string_view>({"Alt+Up"});
+    constexpr auto kOrderMoveDownDefaults = std::to_array<std::string_view>({"Alt+Down"});
+    constexpr auto kOrderMoveToTopDefaults = std::to_array<std::string_view>({"Alt+Home"});
+    constexpr auto kOrderMoveToBottomDefaults = std::to_array<std::string_view>({"Alt+End"});
     constexpr auto kEditTagsDefaults = std::to_array<std::string_view>({"T"});
     constexpr auto kEditPropertiesDefaults = std::to_array<std::string_view>({"E"});
     constexpr auto kPlaySelectionDefaults = std::to_array<std::string_view>({"Enter"});
@@ -186,6 +190,16 @@ namespace ao::tui
         {.actionId = "tui.workspace.togglePinnedLists",
          .action = KeyAction::TogglePinnedLists,
          .defaultChords = kTogglePinnedListsDefaults},
+        {.actionId = "track.orderMoveUp", .action = KeyAction::OrderMoveUp, .defaultChords = kOrderMoveUpDefaults},
+        {.actionId = "track.orderMoveDown",
+         .action = KeyAction::OrderMoveDown,
+         .defaultChords = kOrderMoveDownDefaults},
+        {.actionId = "track.orderMoveToTop",
+         .action = KeyAction::OrderMoveToTop,
+         .defaultChords = kOrderMoveToTopDefaults},
+        {.actionId = "track.orderMoveToBottom",
+         .action = KeyAction::OrderMoveToBottom,
+         .defaultChords = kOrderMoveToBottomDefaults},
       };
     }
 
@@ -262,6 +276,54 @@ namespace ao::tui
              event == ftxui::Event::ArrowDown || event == ftxui::Event::Home || event == ftxui::Event::End ||
              event == ftxui::Event::PageUp || event == ftxui::Event::PageDown;
     }
+
+    std::optional<ftxui::Event> plainEvent(std::string_view const key)
+    {
+      if (auto optEvent = namedEvent(key); optEvent)
+      {
+        return optEvent;
+      }
+
+      if (key.size() != 1)
+      {
+        return std::nullopt;
+      }
+
+      auto value = key.front();
+
+      if (utility::isAsciiAlpha(value))
+      {
+        value = utility::toAsciiLower(value);
+      }
+
+      return ftxui::Event::Character(std::string{value});
+    }
+
+    // Only the navigation keys that terminals encode as one complete CSI
+    // modified-key sequence are safe: the terminal reports Alt+Up as
+    // "ESC [ 1 ; 3 A", the same protocol FTXUI already models for the
+    // Ctrl-modified arrows. Alt plus a letter stays unsupported because its
+    // ESC-prefixed encoding is indistinguishable from Escape followed by the
+    // letter.
+    std::optional<ftxui::Event> altNavigationEvent(std::string_view const key)
+    {
+      constexpr auto kAltNavigationEvents = std::to_array<std::pair<std::string_view, std::string_view>>({
+        {"Up", "\x1b[1;3A"},
+        {"Down", "\x1b[1;3B"},
+        {"Home", "\x1b[1;3H"},
+        {"End", "\x1b[1;3F"},
+      });
+
+      for (auto const& [name, input] : kAltNavigationEvents)
+      {
+        if (key == name)
+        {
+          return ftxui::Event::Special(std::string{input});
+        }
+      }
+
+      return std::nullopt;
+    }
   } // namespace
 
   std::span<ActionDescriptor const> actionDescriptors()
@@ -303,24 +365,7 @@ namespace ao::tui
 
     if (chord.modifiers.isEmpty())
     {
-      if (auto optEvent = namedEvent(chord.key); optEvent)
-      {
-        return optEvent;
-      }
-
-      if (chord.key.size() == 1)
-      {
-        auto value = chord.key.front();
-
-        if (utility::isAsciiAlpha(value))
-        {
-          value = utility::toAsciiLower(value);
-        }
-
-        return ftxui::Event::Character(std::string{value});
-      }
-
-      return std::nullopt;
+      return plainEvent(chord.key);
     }
 
     if (hasOnly(chord, KeyModifier::Shift))
@@ -373,6 +418,11 @@ namespace ao::tui
       }
 
       return std::nullopt;
+    }
+
+    if (hasOnly(chord, KeyModifier::Alt))
+    {
+      return altNavigationEvent(chord.key);
     }
 
     return std::nullopt;
