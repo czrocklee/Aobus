@@ -1825,8 +1825,14 @@ namespace ao::rt
     // the player rather than restart the restored track from scratch.
     if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
     {
-      auto deferred = std::move(*impl->optDeferredResume);
-      impl->optDeferredResume.reset();
+      // The token stays armed across the attempt: commitStagedPlayback() clears
+      // it once the start commits, and a rejected start (for example a restored
+      // file that no longer opens) must keep the restored idle state reportable
+      // and retryable. elapsed(), session snapshots, and a later resume() then
+      // keep the restored offset instead of collapsing the position to zero.
+      // play() copies what staging needs, so a reentrant command that resets the
+      // armed token cannot dangle this request copy.
+      auto const deferred = *impl->optDeferredResume;
       std::ignore = play(deferred.request, deferred.sourceListId, deferred.elapsed);
       return;
     }
