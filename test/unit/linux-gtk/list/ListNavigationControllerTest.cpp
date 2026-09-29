@@ -210,6 +210,43 @@ namespace ao::gtk::test
         treeRowPtr != nullptr ? std::dynamic_pointer_cast<ListTreeItem>(treeRowPtr->get_item()) : nullptr;
       return itemPtr != nullptr ? itemPtr->listId() : kInvalidListId;
     }
+
+    // The flat-model row for @p listId, or an empty refptr when an ancestor is
+    // collapsed and the row is not materialized.
+    Glib::RefPtr<Gtk::TreeListRow> findNavigationTreeRow(ListNavigationController& controller, ListId listId)
+    {
+      auto* const scrolledWindow = dynamic_cast<Gtk::ScrolledWindow*>(&controller.widget());
+      auto* const listView =
+        scrolledWindow != nullptr ? dynamic_cast<Gtk::ListView*>(scrolledWindow->get_child()) : nullptr;
+      auto const selectionPtr =
+        listView != nullptr ? std::dynamic_pointer_cast<Gtk::SingleSelection>(listView->get_model()) : nullptr;
+
+      if (selectionPtr == nullptr)
+      {
+        return {};
+      }
+
+      auto const itemCount = selectionPtr->get_n_items();
+
+      for (guint index = 0; index < itemCount; ++index)
+      {
+        auto treeRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(selectionPtr->get_object(index));
+
+        if (treeRowPtr == nullptr)
+        {
+          continue;
+        }
+
+        auto const itemPtr = std::dynamic_pointer_cast<ListTreeItem>(treeRowPtr->get_item());
+
+        if (itemPtr != nullptr && itemPtr->listId() == listId)
+        {
+          return treeRowPtr;
+        }
+      }
+
+      return {};
+    }
   } // namespace
 
   TEST_CASE("ListNavigationController - routes saved-list selection", "[gtk][unit][list]")
@@ -257,6 +294,135 @@ namespace ao::gtk::test
 
       CHECK(selectedNavigationListId(state.controller) == rt::kAllTracksListId);
       CHECK(newActionPtr->get_enabled());
+    }
+  }
+
+  TEST_CASE("ListNavigationController - follows the workspace into collapsed list subtrees", "[gtk][unit][list]")
+  {
+    SECTION("workspace navigation expands the collapsed parent of the focused list")
+    {
+      auto state = NavigationFixture{};
+
+      auto const parentId = createList(state.runtimeFixture.runtime(), "Collapsed Parent");
+      auto const childId = createList(state.runtimeFixture.runtime(), "Nested Child", parentId);
+
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      auto registration = state.controller.addActionsTo(*groupPtr);
+      auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
+      auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
+      auto const deleteSubtreeActionPtr = simpleAction(*groupPtr, "list-delete-subtree");
+      REQUIRE(editActionPtr);
+      REQUIRE(deleteActionPtr);
+      REQUIRE(deleteSubtreeActionPtr);
+
+      state.controller.rebuildTree(state.cache);
+      drainGtkEvents();
+
+      auto const parentRowPtr = findNavigationTreeRow(state.controller, parentId);
+      REQUIRE(parentRowPtr);
+      REQUIRE(parentRowPtr->get_expanded());
+      parentRowPtr->set_expanded(false);
+      drainGtkEvents();
+      CHECK_FALSE(findNavigationTreeRow(state.controller, childId));
+      CHECK_FALSE(editActionPtr->get_enabled());
+
+      REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = childId}));
+      drainGtkEvents();
+
+      CHECK(selectedNavigationListId(state.controller) == childId);
+      CHECK(editActionPtr->get_enabled());
+      CHECK(deleteActionPtr->get_enabled());
+      CHECK_FALSE(deleteSubtreeActionPtr->get_enabled());
+      CHECK(findNavigationTreeRow(state.controller, parentId)->get_expanded());
+    }
+
+    SECTION("workspace navigation leaves an unrelated materialized subtree collapsed")
+    {
+      auto state = NavigationFixture{};
+
+      auto const firstParentId = createList(state.runtimeFixture.runtime(), "First Parent");
+      auto const firstChildId = createList(state.runtimeFixture.runtime(), "First Child", firstParentId);
+      auto const secondParentId = createList(state.runtimeFixture.runtime(), "Second Parent");
+      auto const secondChildId = createList(state.runtimeFixture.runtime(), "Second Child", secondParentId);
+
+      state.controller.rebuildTree(state.cache);
+      drainGtkEvents();
+
+      auto const firstParentRowPtr = findNavigationTreeRow(state.controller, firstParentId);
+      auto const secondParentRowPtr = findNavigationTreeRow(state.controller, secondParentId);
+      REQUIRE(firstParentRowPtr);
+      REQUIRE(secondParentRowPtr);
+      firstParentRowPtr->set_expanded(false);
+      secondParentRowPtr->set_expanded(false);
+      drainGtkEvents();
+
+      REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = firstChildId}));
+      drainGtkEvents();
+
+      CHECK(selectedNavigationListId(state.controller) == firstChildId);
+      CHECK(findNavigationTreeRow(state.controller, firstParentId)->get_expanded());
+      CHECK_FALSE(findNavigationTreeRow(state.controller, secondParentId)->get_expanded());
+      CHECK_FALSE(findNavigationTreeRow(state.controller, secondChildId));
+    }
+
+    SECTION("workspace sync stays silent when ancestor expansion inserts rows above the selection")
+    {
+      auto state = NavigationFixture{};
+      auto const parentId = createList(state.runtimeFixture.runtime(), "Upper Parent");
+      auto const childId = createList(state.runtimeFixture.runtime(), "Upper Child", parentId);
+      auto const lowerRootId = createList(state.runtimeFixture.runtime(), "Lower Root");
+      state.controller.rebuildTree(state.cache);
+      REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = lowerRootId}));
+      drainGtkEvents();
+      REQUIRE(selectedNavigationListId(state.controller) == lowerRootId);
+
+      auto const parentRowPtr = findNavigationTreeRow(state.controller, parentId);
+      auto const lowerRowPtr = findNavigationTreeRow(state.controller, lowerRootId);
+      REQUIRE(parentRowPtr);
+      REQUIRE(lowerRowPtr);
+      REQUIRE(parentRowPtr->get_position() < lowerRowPtr->get_position());
+      parentRowPtr->set_expanded(false);
+      drainGtkEvents();
+      REQUIRE(selectedNavigationListId(state.controller) == lowerRootId);
+      REQUIRE_FALSE(findNavigationTreeRow(state.controller, childId));
+      auto const lowerPositionBefore = lowerRowPtr->get_position();
+      auto const selectionAttemptsBefore = state.selectionAttemptCount;
+
+      REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = childId}));
+      drainGtkEvents();
+
+      CHECK(parentRowPtr->get_expanded());
+      CHECK(lowerRowPtr->get_position() > lowerPositionBefore);
+      CHECK(selectedNavigationListId(state.controller) == childId);
+      CHECK(state.selectionAttemptCount == selectionAttemptsBefore);
+    }
+
+    SECTION("workspace navigation expands a mid-chain collapsed ancestor")
+    {
+      auto state = NavigationFixture{};
+
+      auto const parentId = createList(state.runtimeFixture.runtime(), "Expanded Ancestor");
+      auto const childId = createList(state.runtimeFixture.runtime(), "Mid Collapsed Ancestor", parentId);
+      auto const grandchildId = createList(state.runtimeFixture.runtime(), "Deep Focus", childId);
+
+      state.controller.rebuildTree(state.cache);
+      drainGtkEvents();
+
+      auto const parentRowPtr = findNavigationTreeRow(state.controller, parentId);
+      auto const childRowPtr = findNavigationTreeRow(state.controller, childId);
+      REQUIRE(parentRowPtr);
+      REQUIRE(childRowPtr);
+      REQUIRE(parentRowPtr->get_expanded());
+      childRowPtr->set_expanded(false);
+      drainGtkEvents();
+      CHECK_FALSE(findNavigationTreeRow(state.controller, grandchildId));
+
+      REQUIRE(state.runtimeFixture.runtime().workspace().navigate({.target = grandchildId}));
+      drainGtkEvents();
+
+      CHECK(selectedNavigationListId(state.controller) == grandchildId);
+      CHECK(findNavigationTreeRow(state.controller, childId)->get_expanded());
+      CHECK(findNavigationTreeRow(state.controller, parentId)->get_expanded());
     }
   }
 
