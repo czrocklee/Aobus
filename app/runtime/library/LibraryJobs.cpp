@@ -563,7 +563,33 @@ namespace ao::rt
     }
 
     auto backgroundTask = std::move(*backgroundTaskRes);
-    auto maintenanceRes = co_await LibraryWriteLane::beginMaintenanceAsync(_implPtr->writeLane.captureSubmission());
+    auto optMaintenanceRes = std::optional<Result<LibraryWriteLane::MaintenanceGuard>>{};
+    auto maintenanceAdmissionFailure = std::exception_ptr{};
+
+    try
+    {
+      auto maintenanceRes = co_await LibraryWriteLane::beginMaintenanceAsync(_implPtr->writeLane.captureSubmission());
+      optMaintenanceRes.emplace(std::move(maintenanceRes));
+    }
+    catch (...)
+    {
+      maintenanceAdmissionFailure = std::current_exception();
+    }
+
+    // Lane closing retires a queued or suspended maintenance admission and
+    // cancels this job before the guarded region below exists. The progress
+    // conversation has already published, so this exit settles it and the
+    // background lease over the same finalization hop as the post-work exit
+    // before the cancel propagates; cancellation posts no error notification.
+    if (maintenanceAdmissionFailure)
+    {
+      co_await _implPtr->resumeOnCallbackExecutorForFinalizationAsync();
+      backgroundTask.finish();
+      _implPtr->notifyProgressFinished(progressConversation.id);
+      async::rethrowException(maintenanceAdmissionFailure);
+    }
+
+    auto maintenanceRes = std::move(*optMaintenanceRes);
 
     if (!maintenanceRes)
     {
@@ -687,7 +713,33 @@ namespace ao::rt
     }
 
     auto backgroundTask = std::move(*backgroundTaskRes);
-    auto maintenanceRes = co_await LibraryWriteLane::beginMaintenanceAsync(_implPtr->writeLane.captureSubmission());
+    auto optMaintenanceRes = std::optional<Result<LibraryWriteLane::MaintenanceGuard>>{};
+    auto maintenanceAdmissionFailure = std::exception_ptr{};
+
+    try
+    {
+      auto maintenanceRes = co_await LibraryWriteLane::beginMaintenanceAsync(_implPtr->writeLane.captureSubmission());
+      optMaintenanceRes.emplace(std::move(maintenanceRes));
+    }
+    catch (...)
+    {
+      maintenanceAdmissionFailure = std::current_exception();
+    }
+
+    // Lane closing retires a queued or suspended maintenance admission and
+    // cancels this job before the guarded region below exists. The progress
+    // conversation has already published, so this exit settles it and the
+    // background lease over the same finalization hop as the post-work exit
+    // before the cancel propagates; cancellation posts no error notification.
+    if (maintenanceAdmissionFailure)
+    {
+      co_await _implPtr->resumeOnCallbackExecutorForFinalizationAsync();
+      backgroundTask.finish();
+      _implPtr->notifyProgressFinished(progressConversation.id);
+      async::rethrowException(maintenanceAdmissionFailure);
+    }
+
+    auto maintenanceRes = std::move(*optMaintenanceRes);
 
     if (!maintenanceRes)
     {

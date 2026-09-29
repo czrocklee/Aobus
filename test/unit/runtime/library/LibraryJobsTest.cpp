@@ -20,6 +20,7 @@
 #include <ao/async/TaskFuture.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
@@ -152,6 +153,109 @@ namespace ao::rt::test
         executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout));
       REQUIRE(future.get());
     }
+
+    // Shared contract for the queued-maintenance-admission retirement: the job's
+    // MaintenanceEnter command queues behind an earlier Interactive command
+    // whose committed publication delivery is left unpumped, and lane closing
+    // retires both the queued admission and the unclaimed publication. The
+    // retired job must settle its published progress conversation over the
+    // finalization hop before the cancellation reaches its caller.
+    template<typename JobTask>
+    void requireQueuedMaintenanceAdmissionRetiredByClosing(library::MusicLibrary& storage,
+                                                           LibraryChanges& changes,
+                                                           Library& library,
+                                                           async::Runtime& runtime,
+                                                           ManualExecutor& executor,
+                                                           TrackId parkedTarget,
+                                                           JobTask jobTask)
+    {
+      auto bindingRes = library.bindTrackTargets(std::array{parkedTarget});
+      REQUIRE(bindingRes);
+      auto& jobs = library.jobs();
+      auto const storageRevision = [&storage]
+      {
+        auto transaction = storage.readTransaction();
+        return storage.libraryRevision(transaction);
+      };
+
+      auto publishedIds = std::vector<LibraryTaskProgressId>{};
+      auto finishedIds = std::vector<LibraryTaskProgressId>{};
+      auto availabilityStates = std::vector<LibraryAuthoringState>{};
+      auto observedChanges = std::vector<LibraryChangeSet>{};
+      auto progressSub =
+        jobs.onProgress([&publishedIds](LibraryTaskProgressUpdated const& event) { publishedIds.push_back(event.id); });
+      auto finishedSub = jobs.onProgressFinished([&finishedIds](LibraryTaskProgressFinished const& event)
+                                                 { finishedIds.push_back(event.id); });
+      auto availabilitySub =
+        library.onAuthoringAvailabilityChanged([&availabilityStates](LibraryAuthoringAvailability const& availability)
+                                               { availabilityStates.push_back(availability.state); });
+      auto changedSub = changes.onChanged([&observedChanges](LibraryChangeSet const& changeSet)
+                                          { observedChanges.push_back(changeSet); });
+
+      auto const initialAvailability = library.authoringAvailability();
+      REQUIRE(initialAvailability.state == LibraryAuthoringState::Available);
+      auto const initialStorageRevision = storageRevision();
+
+      // The job task spawns first, so its single callback-executor admission hop
+      // queues ahead of the interactive publication delivery below; pumping
+      // that hop later cannot consume the earlier publication.
+      auto jobCompletedPtr = std::make_shared<std::atomic_bool>(false);
+      auto jobFuture = spawnFuture(runtime, std::move(jobTask), jobCompletedPtr);
+      REQUIRE(executor.tryWaitUntilQueued(kBackgroundTaskSettlementTimeout));
+      REQUIRE(executor.queuedCount() == 1);
+
+      // The interactive command commits on a worker and parks with its changeset
+      // delivery queued: the durable storage revision is committed while the
+      // published revision and authoring state stay put, so the interactive
+      // command owns the lane in AwaitingPublication.
+      auto parkedPatch = MetadataPatch{.optTitle = "Retitled during queued admission"};
+      auto interactiveCompletedPtr = std::make_shared<std::atomic_bool>(false);
+      auto interactiveFuture = spawnFuture(
+        runtime, library.commands().updateMetadataAsync(*bindingRes, std::move(parkedPatch)), interactiveCompletedPtr);
+      REQUIRE(executor.tryWaitUntilQueuedCount(2, kBackgroundTaskSettlementTimeout));
+      REQUIRE(executor.queuedCount() == 2);
+      CHECK(storageRevision() == initialStorageRevision + 1);
+      auto const parkedAvailability = library.authoringAvailability();
+      CHECK(parkedAvailability.state == LibraryAuthoringState::Available);
+      CHECK(parkedAvailability.libraryRevision == initialAvailability.libraryRevision);
+      CHECK_FALSE(isReady(jobCompletedPtr));
+      CHECK_FALSE(isReady(interactiveCompletedPtr));
+
+      // The job's own admission hop publishes its progress conversation and
+      // enqueues its MaintenanceEnter command behind the active interactive
+      // command. The lane stays Available because the maintenance admission is
+      // queued, not granted, and neither queued delivery is consumed.
+      REQUIRE(executor.tryRunOne());
+      REQUIRE(executor.queuedCount() == 2);
+      CHECK(library.authoringAvailability().state == LibraryAuthoringState::Available);
+      CHECK(publishedIds.empty());
+      CHECK(observedChanges.empty());
+      CHECK_FALSE(isReady(jobCompletedPtr));
+      CHECK_FALSE(isReady(interactiveCompletedPtr));
+
+      // Closing retires the queued MaintenanceEnter command request and the
+      // unclaimed interactive publication together.
+      library.beginClosing();
+
+      REQUIRE(executor.tryDrainUntil(
+        [&jobCompletedPtr] { return isReady(jobCompletedPtr); }, kBackgroundTaskSettlementTimeout));
+      CHECK_THROWS_AS(std::ignore = jobFuture.get(), async::OperationCancelled);
+
+      REQUIRE(executor.tryDrainUntil(
+        [&interactiveCompletedPtr] { return isReady(interactiveCompletedPtr); }, kBackgroundTaskSettlementTimeout));
+      CHECK_THROWS_AS(std::ignore = interactiveFuture.get(), async::OperationCancelled);
+
+      // The one published conversation id received exactly its status-free
+      // finished pulse before the cancellation reached the caller; no
+      // availability transition fired and the retired publication never
+      // reached change observers.
+      REQUIRE(publishedIds.size() == 1);
+      REQUIRE(finishedIds.size() == 1);
+      CHECK(finishedIds.front() == publishedIds.front());
+      CHECK(availabilityStates.empty());
+      CHECK(observedChanges.empty());
+      CHECK(storageRevision() == initialStorageRevision + 1);
+    }
   } // namespace
 
   TEST_CASE("LibraryJobs - prepareLibraryImportAsync returns failure for invalid path", "[runtime][unit][library-task]")
@@ -263,6 +367,174 @@ namespace ao::rt::test
     CHECK(availabilityCount == 0);
     CHECK(finishedCount == 0);
     CHECK(Library::prepare(libraryFixture.library()));
+  }
+
+  TEST_CASE("LibraryJobs - lane closing settles import progress when maintenance admission is retired",
+            "[runtime][unit][library-task][library-import][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& runtime = runtimeFixture.runtime();
+    auto& library = runtimeFixture.library();
+    auto& jobs = library.jobs();
+
+    auto publishedIds = std::vector<LibraryTaskProgressId>{};
+    auto finishedIds = std::vector<LibraryTaskProgressId>{};
+    auto progressSub =
+      jobs.onProgress([&publishedIds](LibraryTaskProgressUpdated const& event) { publishedIds.push_back(event.id); });
+    auto finishedSub = jobs.onProgressFinished([&finishedIds](LibraryTaskProgressFinished const& event)
+                                               { finishedIds.push_back(event.id); });
+
+    // The import is driven exactly to its suspended maintenance admission: the
+    // write lane grants the MaintenanceEnter and queues its control delivery,
+    // and the coroutine parks inside admission before the guarded region runs.
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = spawnFuture(
+      runtime, jobs.prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge), completedPtr);
+
+    REQUIRE(executor.tryWaitUntilQueued(kBackgroundTaskSettlementTimeout));
+    REQUIRE(executor.tryRunOne());
+    REQUIRE(executor.tryWaitUntilQueuedCount(2, kBackgroundTaskSettlementTimeout));
+    REQUIRE(library.authoringAvailability().state == LibraryAuthoringState::Maintenance);
+    REQUIRE(executor.tryRunOne());
+    REQUIRE(publishedIds.size() == 1);
+    // The one remaining queued turn is the unrun control delivery; running it
+    // would carry the import past the admission under test.
+    REQUIRE(executor.queuedCount() == 1);
+    CHECK_FALSE(isReady(completedPtr));
+
+    // Closing retires the suspended control delivery, cancelling the import
+    // from inside admission. Its published progress conversation must settle
+    // over the settlement hop instead of leaking into the activity feed.
+    library.beginClosing();
+
+    REQUIRE(
+      executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout));
+    CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
+
+    REQUIRE(finishedIds.size() == publishedIds.size());
+
+    for (auto const id : publishedIds)
+    {
+      CHECK(std::ranges::contains(finishedIds, id));
+    }
+  }
+
+  TEST_CASE("LibraryJobs - lane closing settles apply progress when maintenance admission is retired",
+            "[runtime][unit][library-task][library-import][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& runtime = runtimeFixture.runtime();
+    auto& library = runtimeFixture.library();
+    auto& jobs = library.jobs();
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Planned");
+
+    // One prepared plan is needed up front; the retirement scenario below
+    // parks the apply inside maintenance admission before the plan is consumed.
+    auto prepareCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto prepareFuture =
+      spawnFuture(runtime, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore), prepareCompletedPtr);
+    REQUIRE(executor.tryDrainUntil(
+      [&prepareCompletedPtr] { return isReady(prepareCompletedPtr); }, kBackgroundTaskSettlementTimeout));
+    auto planRes = prepareFuture.get();
+    REQUIRE(planRes);
+    auto plan = std::move(*planRes);
+    REQUIRE(library.authoringAvailability().state == LibraryAuthoringState::Available);
+
+    auto publishedIds = std::vector<LibraryTaskProgressId>{};
+    auto finishedIds = std::vector<LibraryTaskProgressId>{};
+    auto progressSub =
+      jobs.onProgress([&publishedIds](LibraryTaskProgressUpdated const& event) { publishedIds.push_back(event.id); });
+    auto finishedSub = jobs.onProgressFinished([&finishedIds](LibraryTaskProgressFinished const& event)
+                                               { finishedIds.push_back(event.id); });
+
+    // The apply is driven exactly to its suspended maintenance admission, like
+    // the import case above.
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = spawnFuture(runtime, jobs.applyLibraryImportPlanAsync(std::move(plan)), completedPtr);
+
+    REQUIRE(executor.tryWaitUntilQueued(kBackgroundTaskSettlementTimeout));
+    REQUIRE(executor.tryRunOne());
+    REQUIRE(executor.tryWaitUntilQueuedCount(2, kBackgroundTaskSettlementTimeout));
+    REQUIRE(library.authoringAvailability().state == LibraryAuthoringState::Maintenance);
+    REQUIRE(executor.tryRunOne());
+    REQUIRE(publishedIds.size() == 1);
+    REQUIRE(executor.queuedCount() == 1);
+    CHECK_FALSE(isReady(completedPtr));
+
+    library.beginClosing();
+
+    REQUIRE(
+      executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }, kBackgroundTaskSettlementTimeout));
+    CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
+
+    REQUIRE(finishedIds.size() == publishedIds.size());
+
+    for (auto const id : publishedIds)
+    {
+      CHECK(std::ranges::contains(finishedIds, id));
+    }
+  }
+
+  TEST_CASE("LibraryJobs - lane closing settles import progress from a queued maintenance admission",
+            "[runtime][unit][library-task][library-import][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const parkedTarget = libraryFixture.addTrack("Interactive parking target");
+    auto executor = ManualExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& runtime = runtimeFixture.runtime();
+    auto& library = runtimeFixture.library();
+
+    requireQueuedMaintenanceAdmissionRetiredByClosing(
+      libraryFixture.library(),
+      changes,
+      library,
+      runtime,
+      executor,
+      parkedTarget,
+      library.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge));
+  }
+
+  TEST_CASE("LibraryJobs - lane closing settles apply progress from a queued maintenance admission",
+            "[runtime][unit][library-task][library-import][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const parkedTarget = libraryFixture.addTrack("Interactive parking target");
+    auto executor = ManualExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& runtime = runtimeFixture.runtime();
+    auto& library = runtimeFixture.library();
+    auto& jobs = library.jobs();
+
+    // One prepared plan is needed up front; the queued-admission scenario
+    // below parks the apply before the plan is consumed.
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Planned");
+    auto prepareCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto prepareFuture =
+      spawnFuture(runtime, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore), prepareCompletedPtr);
+    REQUIRE(executor.tryDrainUntil(
+      [&prepareCompletedPtr] { return isReady(prepareCompletedPtr); }, kBackgroundTaskSettlementTimeout));
+    auto planRes = prepareFuture.get();
+    REQUIRE(planRes);
+    REQUIRE(library.authoringAvailability().state == LibraryAuthoringState::Available);
+
+    requireQueuedMaintenanceAdmissionRetiredByClosing(libraryFixture.library(),
+                                                      changes,
+                                                      library,
+                                                      runtime,
+                                                      executor,
+                                                      parkedTarget,
+                                                      jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
   }
 
   TEST_CASE("LibraryJobs - import plans bind preview bytes and target state",
