@@ -3,8 +3,8 @@
 
 #include "SmartListEditor.h"
 
+#include "CompletionPopup.h"
 #include "MouseBindings.h"
-#include "SelectionNavigation.h"
 #include "Style.h"
 #include "TextCell.h"
 #include "TextField.h"
@@ -29,11 +29,7 @@ namespace ao::tui
   {
     using i18n::MessageId;
 
-    constexpr std::size_t kCompletionPageSize = 6;
     constexpr std::int32_t kMaximumLabelColumns = 16;
-    /// Cells before a completion popup: the focus marker, the changed marker,
-    /// and the label gutter, matching the anchored track-editor popup.
-    constexpr std::size_t kCompletionPopupIndentColumns = 5;
   } // namespace
 
   SmartListEditor::SmartListEditor(i18n::MessageCatalog textCatalog,
@@ -311,8 +307,7 @@ namespace ao::tui
     }
 
     _optActiveCompletion = std::move(optResult);
-    _selectedCandidate = 0;
-    _completionWindowStart = 0;
+    _completionSelection.reset();
   }
 
   void SmartListEditor::acceptSelectedCompletion()
@@ -322,14 +317,14 @@ namespace ao::tui
     // dismissed while the replacement runs.
     auto const optCompletion = _optActiveCompletion;
 
-    if (!optCompletion || _selectedCandidate >= optCompletion->items.size())
+    if (!optCompletion || _completionSelection.selectedCandidate() >= optCompletion->items.size())
     {
       return;
     }
 
     auto& field = focusedField();
 
-    if (auto const& item = optCompletion->items[_selectedCandidate];
+    if (auto const& item = optCompletion->items[_completionSelection.selectedCandidate()];
         field.input.tryReplaceRange(optCompletion->replaceBegin, optCompletion->replaceEnd, item.insertText))
     {
       noteFieldEdited();
@@ -343,25 +338,7 @@ namespace ao::tui
       return false;
     }
 
-    if (event.is_mouse())
-    {
-      auto mouseEvent = event;
-
-      if (auto const& mouse = mouseEvent.mouse(); isLeftPress(mouse))
-      {
-        if (auto const optRow = mouseRowAt(_candidateBoxes, mouse); optRow)
-        {
-          _selectedCandidate = *optRow;
-          acceptSelectedCompletion();
-          closeCompletion();
-          return true;
-        }
-      }
-
-      return false;
-    }
-
-    if (tryHandleCompletionNavigation(event))
+    if (_completionSelection.tryNavigate(event, _optActiveCompletion->items.size()))
     {
       return true;
     }
@@ -396,55 +373,6 @@ namespace ao::tui
     return false;
   }
 
-  bool SmartListEditor::tryHandleCompletionNavigation(ftxui::Event const& event)
-  {
-    std::int32_t delta = 0;
-    auto const itemCount = _optActiveCompletion ? _optActiveCompletion->items.size() : 0;
-    auto const pageSize = static_cast<std::int32_t>(kCompletionPageSize);
-
-    if (event == ftxui::Event::ArrowUp)
-    {
-      delta = -1;
-    }
-    else if (event == ftxui::Event::ArrowDown)
-    {
-      delta = 1;
-    }
-    else if (event == ftxui::Event::PageUp)
-    {
-      delta = -pageSize;
-    }
-    else if (event == ftxui::Event::PageDown)
-    {
-      delta = pageSize;
-    }
-    else
-    {
-      return false;
-    }
-
-    _selectedCandidate =
-      static_cast<std::size_t>(moveSelection(static_cast<std::int32_t>(_selectedCandidate), delta, itemCount));
-
-    if (event == ftxui::Event::PageUp || event == ftxui::Event::PageDown)
-    {
-      auto const windowCount = itemCount - std::min(itemCount, kCompletionPageSize) + 1;
-      _completionWindowStart =
-        static_cast<std::size_t>(moveSelection(static_cast<std::int32_t>(_completionWindowStart), delta, windowCount));
-    }
-
-    if (_selectedCandidate < _completionWindowStart)
-    {
-      _completionWindowStart = _selectedCandidate;
-    }
-    else if (_selectedCandidate >= _completionWindowStart + kCompletionPageSize)
-    {
-      _completionWindowStart = _selectedCandidate - kCompletionPageSize + 1;
-    }
-
-    return true;
-  }
-
   bool SmartListEditor::tryHandleDiscardConfirmation(ftxui::Event const& event)
   {
     // A confirmation owns the keyboard until it is answered, so a stray key
@@ -471,8 +399,7 @@ namespace ao::tui
   {
     _candidateBoxes.clear();
     _optActiveCompletion.reset();
-    _selectedCandidate = 0;
-    _completionWindowStart = 0;
+    _completionSelection.reset();
   }
 
   void SmartListEditor::handleFieldEvent(ftxui::Event const& event)
@@ -532,8 +459,9 @@ namespace ao::tui
     {
       if (auto const optRow = mouseRowAt(_candidateBoxes, mouse); optRow)
       {
-        _selectedCandidate = *optRow;
-        std::ignore = tryHandleCompletionEvent(ftxui::Event::Return);
+        _completionSelection.select(*optRow);
+        acceptSelectedCompletion();
+        closeCompletion();
       }
     }
   }
@@ -557,32 +485,14 @@ namespace ao::tui
 
     if (focused && _optActiveCompletion)
     {
-      auto const totalItems = _optActiveCompletion->items.size();
-      auto const windowStart = _completionWindowStart;
-      auto const windowEnd = std::min(totalItems, windowStart + kCompletionPageSize);
-      auto candidateElements = Elements{};
-
-      for (std::size_t candIndex = windowStart; candIndex < windowEnd; ++candIndex)
-      {
-        auto const& item = _optActiveCompletion->items[candIndex];
-        auto const isSelected = candIndex == _selectedCandidate;
-        auto itemRowPtr = hbox({text(isSelected ? "> " : "  "), text(item.displayText)});
-
-        if (isSelected)
-        {
-          itemRowPtr = std::move(itemRowPtr) | inverted;
-        }
-
-        candidateElements.push_back(std::move(itemRowPtr) | ftxui::reflect(_candidateBoxes[candIndex]));
-      }
-
       // The popup starts after the input row and floats above the preview
-      // beneath it, exactly like the track editor's candidate popup.
-      auto popupBoxPtr = style::panelBody(vbox(std::move(candidateElements))) | border | clear_under;
+      // beneath it, sharing the track editor's candidate rendering.
       rowElementPtr = vbox({
         std::move(rowElementPtr),
-        hbox({text(std::string(static_cast<std::size_t>(kMaximumLabelColumns) + kCompletionPopupIndentColumns, ' ')),
-              std::move(popupBoxPtr)}),
+        renderCompletionPopup(_optActiveCompletion->items,
+                              _completionSelection,
+                              kMaximumLabelColumns + static_cast<std::int32_t>(kCompletionPopupIndentColumns),
+                              _candidateBoxes),
       });
     }
 

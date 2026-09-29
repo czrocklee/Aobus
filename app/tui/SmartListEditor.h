@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "CompletionPopup.h"
 #include "MouseBindings.h"
 #include "TextFieldModel.h"
 #include <ao/CoreIds.h>
@@ -131,7 +132,6 @@ namespace ao::tui
     void noteFieldEdited();
     void maybeTriggerCompletion(bool explicitRequest);
     bool tryHandleCompletionEvent(ftxui::Event const& event);
-    bool tryHandleCompletionNavigation(ftxui::Event const& event);
     /// Replaces the focused field's completion range with the selected candidate.
     void acceptSelectedCompletion();
     bool tryHandleDiscardConfirmation(ftxui::Event const& event);
@@ -150,8 +150,7 @@ namespace ao::tui
     std::size_t _focusedField = 0;
     CompletionProvider _completionProvider;
     std::optional<rt::CompletionResult> _optActiveCompletion{};
-    std::size_t _selectedCandidate = 0;
-    std::size_t _completionWindowStart = 0;
+    CompletionPopupSelection _completionSelection{};
     uimodel::SmartListEditorViewState _viewState{};
     std::vector<std::string> _previewTracks{};
     ListEditorStatus _status = ListEditorStatus::Ready;
