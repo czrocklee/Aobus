@@ -96,6 +96,7 @@ The session does not silently rebind to newer rows.
 
 `begin(library, views, viewId)` reads one coherent view state, describes capability, obtains the complete effective saved-List source sequence, asks runtime for a revision-bound order binding, and retains the current projection.
 Failure returns a typed error with the capability reason where applicable.
+The writer can refuse a binding for availability that the published snapshot has not caught up with yet, such as a write that has committed but has not been announced; that refusal reports the same localized unavailable reason as the capability check instead of the runtime's diagnostic.
 
 The bound sequence is the complete base List sequence, not only quick-filter-visible projection rows.
 That distinction makes top/bottom movement unambiguous while a quick filter is active.
@@ -207,7 +208,7 @@ All frontends preserve stable-ID operands, complete-sequence semantics, revision
 ## Test map
 
 - [`ListOrderCapabilitiesTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, selection/gap normalization, and invalid TrackId rejection.
-- [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, movement, invalidation, move-only facade semantics, and pending submission after moved and destroyed facades.
+- [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, the localized refusal of a binding that outruns published availability, movement, invalidation, move-only facade semantics, and pending submission after moved and destroyed facades.
 - [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects maintenance admission, including rejection of List-order binding while authoring is unavailable.
 - [`KeyRepeatGuardTest.cpp`](../../../test/unit/uimodel/input/KeyRepeatGuardTest.cpp) protects physical-key repeat suppression.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects GTK eligibility and command adaptation.
