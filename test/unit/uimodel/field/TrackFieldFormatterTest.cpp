@@ -3,17 +3,31 @@
 
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
+#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
+#include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <runtime/library/ScanApplyOperation.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <format>
+#include <ratio>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -28,6 +42,23 @@ namespace ao::uimodel::test
     TrackDetailSnapshot makeTrackDetailSnapshot()
     {
       return TrackDetailSnapshot{};
+    }
+
+    std::string expectedLocalTime(std::chrono::sys_seconds const time)
+    {
+      try
+      {
+        return std::format("{:%Y-%m-%d %H:%M}", std::chrono::zoned_time{std::chrono::current_zone(), time});
+      }
+      catch (std::runtime_error const&)
+      {
+        return std::format("{:%Y-%m-%d %H:%M}", time);
+      }
+    }
+
+    bool isDigits(std::string_view const text)
+    {
+      return std::ranges::all_of(text, [](char c) { return c >= '0' && c <= '9'; });
     }
   } // namespace
 
@@ -56,6 +87,98 @@ namespace ao::uimodel::test
     CHECK(formatFileSize(1024) == "1.0 KB");
     CHECK(formatFileSize(1048576) == "1.0 MB");
     CHECK(formatFileSize(5242880) == "5.0 MB");
+  }
+
+  TEST_CASE("TrackFieldFormatter - modified time formatting", "[uimodel][unit][field][formatter]")
+  {
+    CHECK(formatTime(0).empty());
+
+    // The manifest count uses the file-clock epoch, not the Unix epoch. Noon UTC
+    // in mid-2024 keeps the rendered year the same across local zone offsets.
+    auto const modificationTime =
+      std::chrono::sys_days{std::chrono::year{2024} / std::chrono::July / std::chrono::day{1}} + std::chrono::hours{12};
+    auto const fileTime = std::chrono::clock_cast<std::chrono::file_clock>(modificationTime);
+    auto const mtime =
+      std::chrono::duration_cast<std::chrono::duration<std::uint64_t, std::nano>>(fileTime.time_since_epoch()).count();
+
+    auto const text = formatTime(mtime);
+
+    REQUIRE(text.size() == 16);
+    CHECK(text.substr(0, 4) == "2024");
+    CHECK(text[4] == '-');
+    CHECK(text[7] == '-');
+    CHECK(text[10] == ' ');
+    CHECK(text[13] == ':');
+
+    auto const month = text.substr(5, 2);
+    auto const day = text.substr(8, 2);
+    auto const hour = text.substr(11, 2);
+    auto const minute = text.substr(14, 2);
+
+    CHECK(isDigits(month));
+    CHECK(isDigits(day));
+    CHECK(isDigits(hour));
+    CHECK(isDigits(minute));
+    CHECK((month >= "01" && month <= "12"));
+    CHECK((day >= "01" && day <= "31"));
+    CHECK(hour <= "23");
+    CHECK(minute <= "59");
+
+    CHECK(text == expectedLocalTime(modificationTime));
+  }
+
+  TEST_CASE("TrackFieldFormatter - wrapped file-clock nanoseconds preserve dates before 1970",
+            "[uimodel][unit][field][formatter]")
+  {
+    auto const modificationTime =
+      std::chrono::sys_days{std::chrono::year{1938} / std::chrono::July / std::chrono::day{1}} + std::chrono::hours{12};
+    auto const fileTime = std::chrono::clock_cast<std::chrono::file_clock>(modificationTime);
+    auto const mtime =
+      std::chrono::duration_cast<std::chrono::duration<std::uint64_t, std::nano>>(fileTime.time_since_epoch()).count();
+    CHECK(formatTime(mtime) == expectedLocalTime(modificationTime));
+  }
+
+  TEST_CASE("TrackFieldFormatter - file-clock epoch conversion does not overflow Unix nanoseconds",
+            "[uimodel][unit][field][formatter]")
+  {
+    // This count fits signed file-clock nanoseconds, but its Unix-epoch image
+    // need not: on libstdc++ this is a legitimate date beyond 2262.
+    constexpr std::uint64_t kMtime = 9000000000000000000;
+    auto const fileTime = std::chrono::file_time<std::chrono::seconds>{std::chrono::seconds{9000000000}};
+    auto const modificationTime = std::chrono::clock_cast<std::chrono::system_clock>(fileTime);
+    CHECK(formatTime(kMtime) == expectedLocalTime(modificationTime));
+  }
+
+  TEST_CASE("TrackFieldFormatter - scanned manifest modification time renders the file's local date",
+            "[uimodel][integration][field][formatter]")
+  {
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    auto const audioPath = libraryFixture.root() / "song.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), audioPath);
+    // A fractional instant just before a minute boundary also detects truncation
+    // toward zero of a negative file-clock count instead of flooring it.
+    auto const modificationTime =
+      std::chrono::sys_days{std::chrono::year{2024} / std::chrono::July / std::chrono::day{1}} +
+      std::chrono::hours{12} + std::chrono::seconds{59} + std::chrono::milliseconds{500};
+    auto const fileTime =
+      std::filesystem::file_time_type{std::chrono::clock_cast<std::chrono::file_clock>(modificationTime)};
+    std::filesystem::last_write_time(audioPath, fileTime);
+    INFO("Stamped file time: " << ao::test::formatFileTime(fileTime));
+    REQUIRE(std::filesystem::last_write_time(audioPath) == fileTime);
+
+    auto planRes = rt::LibraryScan{libraryFixture.library()}.buildPlan();
+    REQUIRE(planRes);
+    REQUIRE(planRes->size() == 1);
+    auto applyRes = rt::ScanApplyOperation{libraryFixture.library(), std::move(*planRes), {}, {}}.run();
+    REQUIRE(applyRes);
+    REQUIRE(applyRes->insertedIds.size() == 1);
+
+    auto transaction = libraryFixture.library().readTransaction();
+    auto const optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    REQUIRE(optManifest->status() == FileStatus::Available);
+    CHECK(formatTime(optManifest->mtime()) ==
+          expectedLocalTime(std::chrono::floor<std::chrono::seconds>(modificationTime)));
   }
 
   TEST_CASE("TrackFieldFormatter - sample rate formatting", "[uimodel][unit][field][formatter]")

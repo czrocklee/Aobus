@@ -30,6 +30,9 @@ namespace ao::uimodel
   std::string formatDuration(std::chrono::milliseconds duration);
   std::string formatUint16(std::uint16_t value);
   std::string formatFileSize(std::uint64_t fileSize);
+  // mtime is the manifest's same-host file-clock nanosecond count, not Unix time.
+  // Use the local zone when available, otherwise UTC. Zero or an unavailable
+  // file-clock conversion renders empty; no durable timestamp is rewritten.
   std::string formatTime(std::uint64_t mtime);
   std::string formatSampleRate(std::uint32_t sampleRate);
   std::string formatBitrate(std::uint32_t bitrate);

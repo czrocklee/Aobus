@@ -13,11 +13,13 @@
 
 #include <chrono>
 #include <cstdint>
-#include <ctime>
 #include <format>
 #include <iterator>
+#include <ratio>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <variant>
 
 namespace ao::uimodel
@@ -121,9 +123,39 @@ namespace ao::uimodel
       return {};
     }
 
-    auto const sysTime = std::chrono::system_clock::from_time_t(static_cast<std::time_t>(mtime));
+    using FileDuration = std::chrono::file_clock::duration;
+    using StoredNanoseconds = std::conditional_t<std::ratio_equal_v<FileDuration::period, std::nano>,
+                                                 std::chrono::nanoseconds,
+                                                 std::chrono::duration<std::uint64_t, std::nano>>;
+    // Restore signed nanosecond ticks before widening; coarser clocks scale the
+    // unsigned stored count before narrowing to their native ticks.
+    auto const fileTime =
+      std::chrono::file_time<FileDuration>{std::chrono::duration_cast<FileDuration>(StoredNanoseconds{mtime})};
+    auto sysTime = std::chrono::sys_seconds{};
 
-    return std::format("{:%Y-%m-%d %H:%M}", sysTime);
+    try
+    {
+      // Shift epochs in seconds, not signed nanoseconds: a valid file timestamp
+      // can be outside the representable range of Unix-epoch nanoseconds.
+      sysTime = std::chrono::clock_cast<std::chrono::system_clock>(std::chrono::floor<std::chrono::seconds>(fileTime));
+    }
+    catch (std::runtime_error const&)
+    {
+      // Some file clocks also need timezone data to produce a system-clock instant.
+      return {};
+    }
+
+    try
+    {
+      auto const zonedTime = std::chrono::zoned_time{std::chrono::current_zone(), sysTime};
+
+      return std::format("{:%Y-%m-%d %H:%M}", zonedTime);
+    }
+    catch (std::runtime_error const&)
+    {
+      // The instant is usable even when the local zone is unavailable; fall back to UTC.
+      return std::format("{:%Y-%m-%d %H:%M}", sysTime);
+    }
   }
 
   std::string formatSampleRate(std::uint32_t sampleRate)

@@ -95,6 +95,9 @@ Each track is a closed map.
 | `fileSize` | No. | Unsigned 64-bit integer. | Emitted in `full`; `0` when no manifest row exists. |
 | `mtime` | No. | Unsigned 64-bit integer. | Emitted in `full`; `0` when no manifest row exists. |
 
+`mtime` preserves the manifest's host file-clock nanosecond count verbatim, including its unsigned representation; it is not a Unix-epoch timestamp.
+Display interprets that count using the current host's file clock. Transfer performs no epoch conversion or migration, so cross-host timestamp equivalence is not guaranteed.
+
 Track `id` values need not match target-library IDs.
 Duplicate nonzero IDs reject the document; `0` and omitted IDs create no ID mapping for list references.
 Duplicate canonical track URIs also reject the document, including records whose input spellings normalize to the same URI.
