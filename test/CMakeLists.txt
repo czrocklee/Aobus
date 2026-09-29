@@ -413,6 +413,7 @@ add_executable(ao_core_test
     unit/audio/detail/TimeConversionTest.cpp
     unit/audio/AudioTimeTest.cpp
     unit/audio/detail/StreamingBufferPolicyTest.cpp
+    unit/audio/detail/TrackSessionTest.cpp
     unit/audio/DecoderErrorTest.cpp
     unit/audio/AacDecoderSessionTest.cpp
     unit/audio/AacDecoderMalformedMp4Test.cpp
@@ -429,7 +430,8 @@ add_executable(ao_core_test
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/StreamingPrerollTest.cpp
-    unit/audio/PcmRingBufferTest.cpp
+    unit/audio/StreamingRenderAlignmentTest.cpp
+    unit/audio/PcmFrameRingTest.cpp
     unit/audio/backend/detail/AudioBackendRenderBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
     unit/audio/backend/detail/AudioBackendDrainTailTest.cpp

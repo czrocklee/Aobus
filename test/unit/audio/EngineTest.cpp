@@ -25,6 +25,7 @@
 #include <fakeit.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -325,6 +326,9 @@ namespace ao::audio::test
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
     auto const successorNativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    constexpr std::size_t kBlockByteCount = 4002;
+    REQUIRE(kBlockByteCount % frameBytes(currentNativeFormat) == 0);
+    REQUIRE(kBlockByteCount % frameBytes(successorNativeFormat) == 0);
     auto decoderRequests = std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>{};
     auto decoderFactory = [currentNativeFormat, successorNativeFormat, &decoderRequests](
                             std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
@@ -340,7 +344,7 @@ namespace ao::audio::test
         .codec = AudioCodec::Flac,
       });
       decoderPtr->setReadScript(
-        {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+        {{.data = std::vector<std::byte>(kBlockByteCount, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
       return decoderPtr;
     };
     auto engine = Engine{std::make_unique<FakeCapturingBackend>(), makeEngineTestDevice(), std::move(decoderFactory)};
@@ -369,8 +373,13 @@ namespace ao::audio::test
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto const paddedFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24In32Le};
+    constexpr std::size_t kBlockByteCount = 4008;
+    REQUIRE(kBlockByteCount % frameBytes(nativeFormat) == 0);
+    REQUIRE(kBlockByteCount % frameBytes(paddedFormat) == 0);
     auto decoderRequests = std::vector<std::optional<SampleEncoding>>{};
-    auto decoderFactory = [nativeFormat, &decoderRequests](
+    auto stagedPackedDecoderDestroyCountPtr = std::make_shared<std::atomic<std::size_t>>(0);
+    auto decoderFactory = [nativeFormat, &decoderRequests, stagedPackedDecoderDestroyCountPtr](
                             std::filesystem::path const&, std::optional<SampleEncoding> optOutputEncoding)
     {
       decoderRequests.push_back(optOutputEncoding);
@@ -382,8 +391,14 @@ namespace ao::audio::test
         .isLossy = false,
         .codec = AudioCodec::Flac,
       });
+
+      if (optOutputEncoding == SampleEncoding::Signed24PackedLe)
+      {
+        decoderPtr->setDestroyCounter(stagedPackedDecoderDestroyCountPtr);
+      }
+
       decoderPtr->setReadScript(
-        {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+        {{.data = std::vector<std::byte>(kBlockByteCount, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
       return decoderPtr;
     };
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -394,6 +409,7 @@ namespace ao::audio::test
     REQUIRE(decoderRequests.size() == 2);
     CHECK_FALSE(decoderRequests[0]);
     CHECK(decoderRequests[1] == SampleEncoding::Signed24PackedLe);
+    CHECK(stagedPackedDecoderDestroyCountPtr->load() == 0);
 
     auto committedRes = engine.commitPlayback(std::move(*stagedRes));
 
@@ -401,6 +417,7 @@ namespace ao::audio::test
     CHECK(committedRes->playbackStarted);
     REQUIRE(decoderRequests.size() == 3);
     CHECK(decoderRequests[2] == SampleEncoding::Signed24In32Le);
+    CHECK(stagedPackedDecoderDestroyCountPtr->load() == 1);
     CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed24In32Le);
     engine.stop();
   }

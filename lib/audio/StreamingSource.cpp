@@ -50,10 +50,11 @@ namespace ao::audio
                                    std::chrono::milliseconds prerollDuration,
                                    std::chrono::milliseconds decodeHighWatermarkThreshold)
     : _decoderPtr{std::move(decoderPtr)}
+    , _frameRing{frameBytes(streamInfo.outputFormat)}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
     , _prerollDuration{prerollDuration}
     , _decodeHighWatermarkByteCount{
-        detail::bufferByteCountForDuration(_bytesPerSecond, decodeHighWatermarkThreshold, _ringBuffer.capacity())}
+        detail::bufferByteCountForDuration(_bytesPerSecond, decodeHighWatermarkThreshold, _frameRing.byteCapacity())}
   {
   }
 
@@ -111,17 +112,17 @@ namespace ao::audio
 
   std::size_t StreamingSource::read(std::span<std::byte> output) noexcept
   {
-    return _ringBuffer.read(output);
+    return _frameRing.read(output);
   }
 
   bool StreamingSource::isDrained() const noexcept
   {
-    return _decoderReachedEof.load(std::memory_order_relaxed) && _ringBuffer.size() == 0;
+    return _decoderReachedEof.load(std::memory_order_relaxed) && _frameRing.readableByteCount() == 0;
   }
 
   std::chrono::milliseconds StreamingSource::bufferedDuration() const noexcept
   {
-    return calculateBufferedDuration(_ringBuffer.size(), _bytesPerSecond);
+    return calculateBufferedDuration(_frameRing.readableByteCount(), _bytesPerSecond);
   }
 
   // Result error materialization and decoder-thread startup may allocate; the
@@ -142,7 +143,7 @@ namespace ao::audio
       _failed.store(false, std::memory_order_relaxed);
     }
     _decoderReachedEof = false;
-    _ringBuffer.clear();
+    _frameRing.clear();
     _previousBlockByteCount = 0;
     _optPendingBlock.reset();
 
@@ -231,8 +232,8 @@ namespace ao::audio
         // An already decoded block must finish before admission of another
         // read, even when its original size exceeds the remaining capacity.
         if (!_optPendingBlock && !detail::canDecode(_decodeHighWatermarkByteCount,
-                                                    _ringBuffer.size(),
-                                                    _ringBuffer.availableToWrite(),
+                                                    _frameRing.readableByteCount(),
+                                                    _frameRing.writableByteCount(),
                                                     _previousBlockByteCount))
         {
           std::this_thread::sleep_for(kDecodeBackoffInterval);
@@ -267,12 +268,12 @@ namespace ao::audio
   void StreamingSource::fillUntil(std::chrono::milliseconds targetBufferedThreshold, std::stop_token const& seekToken)
   {
     auto const targetByteCount =
-      detail::bufferByteCountForDuration(_bytesPerSecond, targetBufferedThreshold, _ringBuffer.capacity());
+      detail::bufferByteCountForDuration(_bytesPerSecond, targetBufferedThreshold, _frameRing.byteCapacity());
 
-    while (
-      !_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
-      !seekToken.stop_requested() &&
-      detail::canDecode(targetByteCount, _ringBuffer.size(), _ringBuffer.availableToWrite(), _previousBlockByteCount))
+    while (!_failed.load(std::memory_order_relaxed) && !_decoderReachedEof.load(std::memory_order_relaxed) &&
+           !seekToken.stop_requested() &&
+           detail::canDecode(
+             targetByteCount, _frameRing.readableByteCount(), _frameRing.writableByteCount(), _previousBlockByteCount))
     {
       if (auto const status = decodeNextBlock(seekToken, nullptr);
           status == StreamingSource::DecodeBlockStatus::Stopped)
@@ -314,9 +315,14 @@ namespace ao::audio
         detail::throwDecoderError(blockRes.error());
       }
 
-      if (blockRes->bytes.size() > _ringBuffer.capacity())
+      if (blockRes->bytes.size() > _frameRing.byteCapacity())
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "Decoded PCM block exceeds streaming buffer capacity");
+      }
+
+      if (blockRes->bytes.size() % _frameRing.frameByteCount() != 0)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Decoded PCM block is not a whole number of frames");
       }
 
       if (!blockRes->bytes.empty())
@@ -355,7 +361,7 @@ namespace ao::audio
 
     while (!bytes.empty() && !stopRequested())
     {
-      auto const written = _ringBuffer.write(bytes);
+      auto const written = _frameRing.write(bytes);
       bytes = bytes.subspan(written);
 
       if (!bytes.empty())

@@ -4,7 +4,7 @@
 #include "lib/audio/StreamingSource.h"
 
 #include "ScriptedDecoderSession.h"
-#include "lib/audio/PcmRingBuffer.h"
+#include "lib/audio/PcmFrameRing.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmFormat.h>
@@ -63,8 +63,6 @@ namespace ao::audio::test
     auto block = silenceBlock(400); // 200ms
     decoderPtr->setReadScript({{block, false}, {{}, true}});
 
-    // StreamingSource contains a ~2MB inline ring buffer; heap allocation keeps
-    // ASAN stack usage below the default 8MB limit.
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, std::chrono::milliseconds{100}, std::chrono::milliseconds{500});
     REQUIRE(sourcePtr->prepare());
@@ -136,7 +134,7 @@ namespace ao::audio::test
     auto const info = testStreamInfo();
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
-    decoderPtr->setReadScript({{silenceBlock(kRingBufferCapacity + 1), false}});
+    decoderPtr->setReadScript({{silenceBlock(kPcmFrameRingByteCapacity + 1), false}});
 
     auto sourcePtr = std::make_unique<StreamingSource>(
       std::move(decoderPtr), info, std::chrono::milliseconds{1}, std::chrono::milliseconds{500});
@@ -144,6 +142,23 @@ namespace ao::audio::test
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::DecodeFailed);
+  }
+
+  TEST_CASE("StreamingSource - preparation rejects a decoded block that is not a whole number of frames synchronously",
+            "[audio][unit][streaming-source]")
+  {
+    auto const info = testStreamInfo();
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    decoderPtr->setReadScript({{silenceBlock(frameBytes(info.outputFormat) + 1), false}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, std::chrono::milliseconds{1}, std::chrono::milliseconds{500});
+    auto const res = sourcePtr->prepare();
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::DecodeFailed);
+    CHECK(res.error().message == "Decoded PCM block is not a whole number of frames");
   }
 
   TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset",
@@ -227,6 +242,34 @@ namespace ao::audio::test
     sourcePtr.reset();
     REQUIRE(errors.size() == 1);
     CHECK(errors.front().message == "async fail");
+  }
+
+  TEST_CASE("StreamingSource - background non-whole-frame decoded block notifies the error callback once",
+            "[audio][unit][streaming-source][concurrency]")
+  {
+    auto const info = testStreamInfo();
+    auto errors = std::vector<Error>{};
+    auto errorReady = std::counting_semaphore{0};
+    auto onError = [&](Error const& error)
+    {
+      errors.push_back(error);
+      errorReady.release();
+    };
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto block = silenceBlock(200); // 100ms, enough for the 50ms preroll
+    decoderPtr->setReadScript({{block, false}, {silenceBlock(frameBytes(info.outputFormat) + 1), false}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, std::chrono::milliseconds{50}, std::chrono::milliseconds{500});
+    REQUIRE(sourcePtr->prepare());
+    sourcePtr->activate(onError);
+
+    REQUIRE(errorReady.try_acquire_for(std::chrono::seconds{5}));
+    sourcePtr.reset();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors.front().code == Error::Code::DecodeFailed);
+    CHECK(errors.front().message == "Decoded PCM block is not a whole number of frames");
   }
 
   TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming-source]")

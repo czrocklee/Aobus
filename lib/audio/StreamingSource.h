@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "PcmRingBuffer.h"
+#include "PcmFrameRing.h"
 #include "PcmSource.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -75,7 +75,7 @@ namespace ao::audio
 
     std::unique_ptr<DecoderSession> _decoderPtr;
     std::function<void(Error const&)> _onError;
-    PcmRingBuffer _ringBuffer;
+    PcmFrameRing _frameRing;
     std::jthread _decodeThread;
     mutable std::mutex _decoderMutex;
     std::stop_source _seekStopSource;

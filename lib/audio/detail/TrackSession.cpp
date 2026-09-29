@@ -94,6 +94,12 @@ namespace ao::audio::detail
         throwDecoderError(Error::Code::FormatRejected, "Decoder did not produce the PCM format selected by backend");
       }
 
+      // Keeps PcmFrameRing's nonzero frame-size precondition unreachable.
+      if (frameBytes(info.outputFormat) == 0)
+      {
+        throwDecoderError(Error::Code::FormatRejected, "Decoder output format has no whole PCM frame");
+      }
+
       if (initialOffset > std::chrono::milliseconds{0})
       {
         if (auto const seekRes = decoderPtr->seek(initialOffset); !seekRes)
