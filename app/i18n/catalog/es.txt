@@ -492,6 +492,17 @@ es:table {
     tui_navigation_sync_failed { "No se pudo mostrar la lista activa: {detail}" }
     tui_list_search_hint { "/ buscar · Esc borrar" }
     tui_list_search_empty { "Sin coincidencias" }
+    tui_list_editor_new_title { "Nueva lista" }
+    tui_list_editor_edit_title { "Editar lista" }
+    tui_list_field_name { "Nombre" }
+    tui_list_field_description { "Descripción" }
+    tui_list_field_expression { "Expresión de filtro" }
+    tui_list_inherited_expression { "Heredado" }
+    tui_list_effective_expression { "Efectivo" }
+    tui_list_save_action { "Guardar" }
+    tui_list_status_saving { "Guardando…" }
+    tui_list_virtual_target { "No se puede editar ni eliminar \"Todas las pistas\"" }
+    tui_list_open_unavailable { "No se pudo abrir la lista" }
     tui_shell_command_palette_footer { "{completeKey} autocompletar  {runKey} ejecutar  {cancelKey} cancelar" }
     tui_shell_quick_filter_title { "Filtro rápido" }
     tui_shell_quick_filter_footer { "{acceptKey} aceptar  {completeKey} autocompletar  {keepKey} conservar texto" }

@@ -493,6 +493,17 @@ zh_Hans:table {
     tui_navigation_sync_failed { "无法显示当前列表：{detail}" }
     tui_list_search_hint { "/ 搜索 · Esc 清除" }
     tui_list_search_empty { "无匹配项" }
+    tui_list_editor_new_title { "新建列表" }
+    tui_list_editor_edit_title { "编辑列表" }
+    tui_list_field_name { "名称" }
+    tui_list_field_description { "描述" }
+    tui_list_field_expression { "筛选表达式" }
+    tui_list_inherited_expression { "继承" }
+    tui_list_effective_expression { "实际" }
+    tui_list_save_action { "保存" }
+    tui_list_status_saving { "正在保存…" }
+    tui_list_virtual_target { "“所有曲目”无法编辑或删除" }
+    tui_list_open_unavailable { "无法打开列表" }
     tui_shell_command_palette_footer { "{completeKey} 补全  {runKey} 运行  {cancelKey} 取消" }
     tui_shell_quick_filter_title { "快速筛选" }
     tui_shell_quick_filter_footer { "{acceptKey} 接受  {completeKey} 补全  {keepKey} 保留输入" }

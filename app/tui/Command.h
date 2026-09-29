@@ -41,6 +41,8 @@ namespace ao::tui
     SelectClear,
     EditProperties,
     EditTags,
+    CreateList,
+    EditList,
     OpenSettings,
     Play,
     TogglePlayback,

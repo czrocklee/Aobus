@@ -19,6 +19,7 @@ add_library(aobus-tui-lib STATIC
     LibraryNavigation.cpp
     LibraryController.cpp
     LibraryScanController.cpp
+    ListAuthoringController.cpp
     MouseBindings.cpp
     NotificationCenterPanel.cpp
     OutputDeviceController.cpp
@@ -56,6 +57,7 @@ add_library(aobus-tui-lib STATIC
     TextFieldModel.cpp
     ShellInteractionModel.cpp
     SoulButton.cpp
+    SmartListEditor.cpp
     TextCell.cpp
     CoverArt.cpp
     CoverArtLoader.cpp

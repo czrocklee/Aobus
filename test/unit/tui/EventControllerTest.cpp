@@ -18,6 +18,7 @@
 #include "tui/Keymap.h"
 #include "tui/LibraryController.h"
 #include "tui/LibraryScanController.h"
+#include "tui/ListAuthoringController.h"
 #include "tui/MouseBindings.h"
 #include "tui/NavigationPanel.h"
 #include "tui/NotificationCenterPanel.h"
@@ -28,6 +29,7 @@
 #include "tui/PresentationPanel.h"
 #include "tui/SettingsEditor.h"
 #include "tui/ShellInteractionModel.h"
+#include "tui/SmartListEditor.h"
 #include "tui/StatusBar.h"
 #include "tui/TerminalTrackColumnLayout.h"
 #include "tui/TrackEditController.h"
@@ -54,6 +56,7 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -81,6 +84,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -464,6 +468,88 @@ namespace ao::tui::test
     // Ctrl-C is still the way out, which is what the footer advertises.
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlC));
     CHECK(fixture.exitRequestCount == 1);
+  }
+
+  TEST_CASE("EventController - the list new command opens the authoring modal over the active list",
+            "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    std::ignore = fixture.addList("Roadsongs");
+
+    enterCommand(controller, "list new");
+
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    auto const* const editor = fixture.listAuthoringPtr->activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->mode() == ListEditorMode::New);
+    // The active List is All Tracks, so the new List parents at the root.
+    CHECK(editor->parentListId() == kInvalidListId);
+    // Opening retires the command line it was launched from.
+    CHECK_FALSE(fixture.shell.isInputActive());
+
+    // The open editor owns every event, so the workspace behind it cannot act.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().empty());
+
+    // The consumed key edited the draft, so Escape asks before it closes.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE(fixture.listAuthoringPtr->activeEditor()->isConfirmingDiscard());
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().size() == 1);
+  }
+
+  TEST_CASE("EventController - list edit drafts the Lists cursor while Lists owns focus",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    [[maybe_unused]] auto const firstId = fixture.addList("First");
+    auto const secondId = fixture.addList("Second");
+    library.navigation().reveal(secondId);
+    fixture.shell.focusNavigation();
+
+    enterCommand(controller, "list edit");
+
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    auto const* const editor = fixture.listAuthoringPtr->activeEditor();
+    REQUIRE(editor != nullptr);
+    CHECK(editor->mode() == ListEditorMode::Edit);
+    CHECK(editor->editListId() == secondId);
+    CHECK(editor->draft().name == "Second");
+  }
+
+  TEST_CASE("EventController - list edit without Lists focus drafts the active list",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const listId = fixture.addList("Roadsongs");
+    REQUIRE(library.openList(listId));
+
+    enterCommand(controller, "list edit");
+
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    CHECK(fixture.listAuthoringPtr->activeEditor()->editListId() == listId);
+  }
+
+  TEST_CASE("EventController - list authoring refuses the virtual All Tracks target", "[tui][unit][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+
+    enterCommand(controller, "list edit");
+
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    auto const feed = fixture.runtimePtr->notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(std::get<std::string>(feed.entries.back().message) == "All Tracks cannot be edited or deleted");
   }
 
   TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")

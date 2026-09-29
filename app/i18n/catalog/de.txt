@@ -492,6 +492,17 @@ de:table {
     tui_navigation_sync_failed { "Aktive Liste konnte nicht angezeigt werden: {detail}" }
     tui_list_search_hint { "/ suchen · Esc löschen" }
     tui_list_search_empty { "Keine Treffer" }
+    tui_list_editor_new_title { "Neue Liste" }
+    tui_list_editor_edit_title { "Liste bearbeiten" }
+    tui_list_field_name { "Name" }
+    tui_list_field_description { "Beschreibung" }
+    tui_list_field_expression { "Filterausdruck" }
+    tui_list_inherited_expression { "Geerbt" }
+    tui_list_effective_expression { "Wirksam" }
+    tui_list_save_action { "Speichern" }
+    tui_list_status_saving { "Wird gespeichert…" }
+    tui_list_virtual_target { "\"Alle Titel\" kann nicht bearbeitet oder gelöscht werden" }
+    tui_list_open_unavailable { "Die Liste konnte nicht geöffnet werden" }
     tui_shell_command_palette_footer { "{completeKey} ergänzen  {runKey} ausführen  {cancelKey} abbrechen" }
     tui_shell_quick_filter_title { "Schnellfilter" }
     tui_shell_quick_filter_footer { "{acceptKey} übernehmen  {completeKey} ergänzen  {keepKey} Eingabe behalten" }

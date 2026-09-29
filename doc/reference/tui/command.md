@@ -89,6 +89,8 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `select clear` | clear marked tracks |
 | `edit`, `properties` | open the Track Properties editor over the current selection |
 | `tags` | open the quick tag popover over the current selection |
+| `list new` | open the Saved-List editor for a new List under the target List |
+| `list edit` | open the Saved-List editor over the target List's definition |
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop` | stop playback |

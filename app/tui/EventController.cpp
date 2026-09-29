@@ -11,6 +11,7 @@
 #include "LibraryController.h"
 #include "LibraryNavigation.h"
 #include "LibraryScanController.h"
+#include "ListAuthoringController.h"
 #include "MouseBindings.h"
 #include "NotificationCenterPanel.h"
 #include "OutputDeviceController.h"
@@ -179,6 +180,7 @@ namespace ao::tui
     , _notifications{bindings.notifications}
     , _libraryScan{bindings.libraryScan}
     , _trackEdit{bindings.trackEdit}
+    , _listAuthoring{bindings.listAuthoring}
     , _settings{bindings.settings}
     , _preferences{bindings.preferences}
     , _requestExit{std::move(bindings.requestExit)}
@@ -255,7 +257,7 @@ namespace ao::tui
 
     // An open editor owns the whole surface, including keys and mouse events
     // it has no use for, so nothing behind it can act on stale geometry.
-    if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event))
+    if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event) || _listAuthoring.tryHandleEvent(event))
     {
       return true;
     }
@@ -480,8 +482,47 @@ namespace ao::tui
     openOverlay(Overlay::Notifications);
   }
 
+  ListId EventController::listAuthoringTargetId() const
+  {
+    // The Lists pane names its own cursor while it owns focus, whether that
+    // cursor sits in the docked tree or the chooser; every other focus drafts
+    // against the List the workspace is actually showing.
+    if (_shell.isNavigationFocused() || _shell.overlay() == Overlay::ListChooser)
+    {
+      return _library.navigation().cursor();
+    }
+
+    return _library.currentListId();
+  }
+
+  void EventController::openListAuthoring(ListEditorMode const mode)
+  {
+    auto const targetId = listAuthoringTargetId();
+    auto const opened =
+      mode == ListEditorMode::New ? _listAuthoring.tryOpenNew(targetId) : _listAuthoring.tryOpenEdit(targetId);
+
+    if (!opened)
+    {
+      return;
+    }
+
+    // The editor captured its target the moment it opened, so the same entry
+    // protocol as the track editors applies: retire transient gestures, commit
+    // a running visual range, and take the shell's text input away.
+    cancelTransientInteractions();
+    _library.commitVisualSelection();
+    _shell.closeInput();
+  }
+
   void EventController::editSelectedTrackProperties(TrackEditorMode const mode)
   {
+    // A List save is still settling, and its surface can
+    // still appear; the track editor must not open over that arrival.
+    if (_listAuthoring.isBusy())
+    {
+      return;
+    }
+
     if (!_trackEdit.tryOpen(_library.selectedTrackIds(), mode))
     {
       return;
@@ -749,6 +790,8 @@ namespace ao::tui
       case CommandAction::SelectClear: _library.clearMarks(); break;
       case CommandAction::EditProperties: editSelectedTrackProperties(TrackEditorMode::Properties); break;
       case CommandAction::EditTags: editSelectedTrackProperties(TrackEditorMode::Tags); break;
+      case CommandAction::CreateList: openListAuthoring(ListEditorMode::New); break;
+      case CommandAction::EditList: openListAuthoring(ListEditorMode::Edit); break;
       case CommandAction::OpenSettings:
         cancelTransientInteractions();
         _library.commitVisualSelection();

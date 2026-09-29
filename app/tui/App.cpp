@@ -19,6 +19,7 @@
 #include "LibraryChooser.h"
 #include "LibraryController.h"
 #include "LibraryScanController.h"
+#include "ListAuthoringController.h"
 #include "MouseBindings.h"
 #include "NavigationPanel.h"
 #include "NotificationCenterPanel.h"
@@ -633,6 +634,7 @@ namespace ao::tui
       uimodel::ActivityStatusViewModel& activityStatusViewModel;
       EventController& events;
       TrackEditController& trackEdit;
+      ListAuthoringController& listAuthoring;
       SettingsEditor& settings;
       Preferences const& preferences;
       ExitController& exitController;
@@ -663,7 +665,19 @@ namespace ao::tui
           return editor->renderModal(columns, rows);
         }
 
+        if (auto modalPtr = listAuthoring.activeModal(columns, rows); modalPtr != nullptr)
+        {
+          return modalPtr;
+        }
+
         return nullptr;
+      }
+
+      /// Whether a full-surface editor or an unfinished exit must keep Kitty artwork unpainted.
+      bool isKittyArtworkSuppressed() const
+      {
+        return settings.isActive() || trackEdit.isActive() || listAuthoring.isActive() ||
+               exitController.phase() != ExitController::Phase::Running;
       }
 
       void syncNavigationList()
@@ -863,7 +877,7 @@ namespace ao::tui
 
         // Artwork nobody can see is still a resource read and a transform, so
         // the request follows what the frame will actually show.
-        if (coverArtVisible && !trackEdit.isActive() && !settings.isActive())
+        if (coverArtVisible && !trackEdit.isActive() && !listAuthoring.isActive() && !settings.isActive())
         {
           coverArt.request(selectedTrackView.coverArtId);
         }
@@ -917,8 +931,9 @@ namespace ao::tui
         detailPanelColumns = hitRegions.navigationLayout.detailColumns;
         auto const& navigationLayout = hitRegions.navigationLayout;
         shell.reconcileNavigationLayout(navigationLayout.canDock);
-        auto const navigationSuspended = settings.isActive() || trackEdit.isActive() || shell.isInputActive() ||
-                                         isModalOverlay(shell.overlay()) || exitController.isWaitingForSubmittedWrite();
+        auto const navigationSuspended = settings.isActive() || trackEdit.isActive() || listAuthoring.isActive() ||
+                                         shell.isInputActive() || isModalOverlay(shell.overlay()) ||
+                                         exitController.isWaitingForSubmittedWrite();
         auto const availableTrackColumns = navigationLayout.trackColumns;
 
         syncNavigationList();
@@ -1211,6 +1226,48 @@ namespace ao::tui
       }
 
       return *std::move(dirRes);
+    }
+
+    /// The exit gate's one answer for "is a submitted write still settling?".
+    std::function<bool()> makeSubmittedWriteGate(TrackEditController& trackEdit, ListAuthoringController& listAuthoring)
+    {
+      return [&trackEdit, &listAuthoring]
+      { return trackEdit.hasPendingSubmission() || listAuthoring.hasPendingSubmission(); };
+    }
+
+    /**
+     * @brief Builds the Saved-List authoring controller over its late-bound exit hook.
+     *
+     * The exit gate is constructed after this controller, so its settlement
+     * output reaches it through the same pointer indirection the track
+     * editor's settlement callback uses.
+     */
+    ListAuthoringController makeListAuthoringController(rt::AppRuntime& appRuntime,
+                                                        uimodel::ListPresentations& listPresentations,
+                                                        i18n::MessageCatalog const& textCatalog,
+                                                        std::function<void()> requestRefresh,
+                                                        ExitController*& activeExit)
+    {
+      return ListAuthoringController{appRuntime.async(),
+                                     appRuntime.library(),
+                                     appRuntime.views(),
+                                     appRuntime.sources(),
+                                     appRuntime.workspace(),
+                                     appRuntime.completion(),
+                                     appRuntime.notifications(),
+                                     listPresentations,
+                                     textCatalog,
+                                     ListAuthoringController::Outputs{
+                                       .requestRefresh = std::move(requestRefresh),
+                                       .notifySubmittedWriteSettled =
+                                         [&activeExit]
+                                       {
+                                         if (activeExit != nullptr)
+                                         {
+                                           activeExit->notifySubmittedWriteSettled();
+                                         }
+                                       },
+                                     }};
     }
 
     /// Records the exact route a user picked, so the next session can ask for it again.
@@ -1514,6 +1571,8 @@ namespace ao::tui
                                          },
                                          runtime.completion(),
                                          runtime.textOrderingPolicy()};
+    auto listAuthoring = makeListAuthoringController(
+      runtime, listPresentations, textCatalog, requestRefresh, activeExit);
     auto signalExitPtr = std::unique_ptr<SignalExitWatcher>{};
     auto onSignalExit = std::function<void()>{};
     auto titlePreview = TerminalTitleFormatter{runtime.library()};
@@ -1585,12 +1644,13 @@ namespace ao::tui
         retireSystemMedia.reset();
         libraryScan.retire();
         trackEdit.retire();
+        listAuthoring.retire();
         settings.retire();
         activeEvents->cancelTransientInteractions();
         shell.closeInput();
       },
       .postExit = [&screen] { screen.Post(screen.ExitLoopClosure()); },
-      .hasPendingSubmittedWrite = [&trackEdit] { return trackEdit.hasPendingSubmission(); },
+      .hasPendingSubmittedWrite = makeSubmittedWriteGate(trackEdit, listAuthoring),
     }};
     activeExit = &exitController;
     auto requestGracefulExit = [&exitController] { exitController.requestExit(); };
@@ -1609,6 +1669,7 @@ namespace ao::tui
         .notifications = runtime.notifications(),
         .libraryScan = libraryScan,
         .trackEdit = trackEdit,
+        .listAuthoring = listAuthoring,
         .settings = settings,
         .preferences = preferences,
         .requestExit = requestGracefulExit,
@@ -1661,6 +1722,7 @@ namespace ao::tui
       .activityStatusViewModel = activityStatusViewModel,
       .events = events,
       .trackEdit = trackEdit,
+      .listAuthoring = listAuthoring,
       .settings = settings,
       .preferences = preferences,
       .exitController = exitController,
@@ -1732,9 +1794,7 @@ namespace ao::tui
         syncKittyCoverArt(kittyPaintState,
                           coverArt,
                           hitRegions.coverBox,
-                          settings.isActive() || trackEdit.isActive() ||
-                            exitController.phase() != ExitController::Phase::Running ||
-                            isCoverObstructed(hitRegions, shell));
+                          frameRenderer.isKittyArtworkSuppressed() || isCoverObstructed(hitRegions, shell));
       }
     }
 
@@ -1753,6 +1813,7 @@ namespace ao::tui
     coverArt.cancel();
     libraryScan.retire();
     trackEdit.retire();
+    listAuthoring.retire();
     settings.retire();
     events.cancelTransientInteractions();
     shell.closeInput();

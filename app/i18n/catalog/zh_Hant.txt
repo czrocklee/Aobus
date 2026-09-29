@@ -492,6 +492,17 @@ zh_Hant:table {
     tui_navigation_sync_failed { "無法顯示目前列表：{detail}" }
     tui_list_search_hint { "/ 搜尋 · Esc 清除" }
     tui_list_search_empty { "無符合項目" }
+    tui_list_editor_new_title { "新建列表" }
+    tui_list_editor_edit_title { "編輯列表" }
+    tui_list_field_name { "名稱" }
+    tui_list_field_description { "描述" }
+    tui_list_field_expression { "篩選表示式" }
+    tui_list_inherited_expression { "繼承" }
+    tui_list_effective_expression { "實際" }
+    tui_list_save_action { "儲存" }
+    tui_list_status_saving { "正在儲存…" }
+    tui_list_virtual_target { "“所有曲目”無法編輯或刪除" }
+    tui_list_open_unavailable { "無法開啟列表" }
     tui_shell_command_palette_footer { "{completeKey} 補全  {runKey} 執行  {cancelKey} 取消" }
     tui_shell_quick_filter_title { "快速篩選" }
     tui_shell_quick_filter_footer { "{acceptKey} 接受  {completeKey} 補全  {keepKey} 保留輸入" }

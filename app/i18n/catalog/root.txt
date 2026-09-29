@@ -494,6 +494,17 @@ root:table {
     tui_navigation_sync_failed { "Could not display the active list: {detail}" }
     tui_list_search_hint { "/ search · Esc clear" }
     tui_list_search_empty { "No matches" }
+    tui_list_editor_new_title { "New List" }
+    tui_list_editor_edit_title { "Edit List" }
+    tui_list_field_name { "Name" }
+    tui_list_field_description { "Description" }
+    tui_list_field_expression { "Expression" }
+    tui_list_inherited_expression { "Inherited" }
+    tui_list_effective_expression { "Effective" }
+    tui_list_save_action { "Save" }
+    tui_list_status_saving { "Saving…" }
+    tui_list_virtual_target { "All Tracks cannot be edited or deleted" }
+    tui_list_open_unavailable { "The List could not be opened" }
     tui_shell_command_palette_footer { "{completeKey} complete  {runKey} run  {cancelKey} cancel" }
     tui_shell_quick_filter_title { "Quick Filter" }
     tui_shell_quick_filter_footer { "{acceptKey} accept  {completeKey} complete  {keepKey} keep typed" }

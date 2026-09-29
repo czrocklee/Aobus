@@ -9,7 +9,7 @@ This page routes platform-specific behavior rather than duplicating runtime or U
 | GTK | [Active library](gtk/active-library-lifecycle.md), [dialogs](gtk/dialog-lifecycle.md), [track detail](gtk/track-detail.md), [Linux MPRIS](mpris.md), and [shared shell](../shell/README.md) | [GTK lifetime](../../development/gtk-lifetime.md), [GTK style](../../development/gtk-style.md), [get started](../../user/get-started.md) |
 | WinUI | [Windows desktop](windows.md), [library workflows](windows-library-workflows.md), [layout schema](../../reference/windows/layout-schema.md), [desktop state](../../reference/windows/desktop-state.md) | [Windows development](../../development/windows.md), [use the desktop](../../user/use-windows-desktop.md) |
 | AppKit | [Native shell composition](../shell/README.md#appkit-shell-owner), [shared desktop lifecycle](../desktop-library-lifecycle.md), and [session lifecycle](../session-lifecycle.md) | [macOS development](../../development/macos.md) |
-| TUI | [Interaction](tui.md), [track authoring](tui-track-authoring.md), [Linux MPRIS](mpris.md), and [commands](../../reference/tui/command.md) | [Use the TUI](../../user/use-tui.md) |
+| TUI | [Interaction](tui.md), [track authoring](tui-track-authoring.md), [List authoring](tui-list-authoring.md), [Linux MPRIS](mpris.md), and [commands](../../reference/tui/command.md) | [Use the TUI](../../user/use-tui.md) |
 | CLI | [Execution](cli.md) and [commands/output](../../reference/cli/command.md) | [Use the CLI](../../user/use-cli.md) |
 
 ## Native target and test boundaries

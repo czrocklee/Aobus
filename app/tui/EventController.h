@@ -54,9 +54,11 @@ namespace ao::rt
 namespace ao::tui
 {
   class LibraryScanController;
+  class ListAuthoringController;
   class SettingsEditor;
   class TrackEditController;
   enum class TrackEditorMode : std::uint8_t;
+  enum class ListEditorMode : std::uint8_t;
 
   using InputCompletionCallback =
     std::function<std::optional<rt::CompletionResult>(std::string_view draft, std::size_t cursor)>;
@@ -82,6 +84,7 @@ namespace ao::tui
     rt::NotificationService& notifications;
     LibraryScanController& libraryScan;
     TrackEditController& trackEdit;
+    ListAuthoringController& listAuthoring;
     SettingsEditor& settings;
     Preferences const& preferences;
     std::function<void()> requestExit;
@@ -140,6 +143,9 @@ namespace ao::tui
     void togglePresentationPanel();
     void toggleNotificationCenter();
     void editSelectedTrackProperties(TrackEditorMode mode);
+    /// The List the next authoring command targets: the Lists cursor while Lists owns focus, else the active List.
+    ListId listAuthoringTargetId() const;
+    void openListAuthoring(ListEditorMode mode);
     void selectOutputDevice();
     void selectPresentation();
     void revealCurrentTrack();
@@ -261,6 +267,7 @@ namespace ao::tui
     rt::NotificationService& _notifications;
     LibraryScanController& _libraryScan;
     TrackEditController& _trackEdit;
+    ListAuthoringController& _listAuthoring;
     SettingsEditor& _settings;
     Preferences const& _preferences;
     std::function<void()> _requestExit;
