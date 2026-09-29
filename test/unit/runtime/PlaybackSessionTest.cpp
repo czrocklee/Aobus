@@ -76,6 +76,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -1588,6 +1589,11 @@ namespace ao::rt::test
       auto const feed = runtimePtr->notifications().feed();
       REQUIRE(feed.entries.size() == 1);
       CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+      // A rejected stage reports a route-activation failure (see
+      // PlaybackTransport::stagePlayback), so kind drift is caught here.
+      REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+      CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+            NotificationReportTemplate::PlaybackRouteActivationFailed);
 
       // The session snapshot still contains the restored position.
       REQUIRE(runtimePtr->savePlaybackSession());
@@ -1615,7 +1621,8 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackSession - stop while deferred freezes the restored position", "[runtime][unit][playback-session]")
+  TEST_CASE("PlaybackSession - stop while deferred freezes the restored position",
+            "[runtime][unit][playback-session][async]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
