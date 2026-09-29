@@ -94,6 +94,8 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `order reset` | clear the active saved List's saved manual order |
 | `edit`, `properties` | open the Track Properties editor over the current selection |
 | `tags` | open the quick tag popover over the current selection |
+| `list new` | open the Saved-List editor for a new List under the target List |
+| `list edit` | open the Saved-List editor over the target List's definition |
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop` | stop playback |
@@ -103,6 +105,8 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `back`, `forward` | navigate workspace history, including the view left by reveal |
 | `settings`, `config` | open global TUI Settings |
 | `quit` | request normal checkpoint-and-stop exit |
+
+The `list` commands draft against the Lists-navigation cursor while the docked Lists pane owns focus, otherwise the active List; `list edit` refuses All Tracks, while `list new` parents a new List at the library root instead. Inside the docked Lists pane, the `tui.library.editProperties` key (`e` by default) edits the List under the cursor; creating a List has no key because it has no focused object. The [TUI List-authoring specification](../../system/frontend/tui-list-authoring.md) owns their workflow.
 
 ### Workspace keys
 
@@ -258,7 +262,7 @@ Pickers and read-only modal pages accept Up/Down or j/k, viewport-sized PageUp/P
 
 Press `/` inside Lists, Views, or Settings Keyboard to search within that panel. Up/Down and page keys navigate matches; Return activates one. Escape clears the query before closing the panel. Empty results cannot activate the previously selected row. Settings searches localized labels and stable action ids. Queries do not alter the workspace filter. Views and Settings clear their query on panel/page changes; Lists retains search while a stronger surface suspends it. Lists searches names and ancestor paths, displays context-only ancestors without activation, and uses Left/Right for tree navigation outside search. Tab/Shift-Tab is a fixed search-local exit to Tracks; a printable custom focus binding remains text during search.
 
-Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked, otherwise it toggles the separate chooser popup above the track frame's List/current-list button. The button is hidden only while the pane is docked. `L` / `:sidebar` toggles pinning independently, and closes an open chooser before showing the tree. The tree docks when its requested width (26 columns in automatic mode) leaves at least 72 track-content columns after Detail. At narrower widths, the pin preference is retained and the chooser remains available. Tab/Shift-Tab switches between docked Lists and Tracks; Escape returns to Tracks without unpinning. Enter returns to Tracks after navigation; a docked row click keeps Lists focused, while a chooser row click closes the popup. Clicking the active List preserves its current filtered view and marks. Outside chooser clicks dismiss and consume; docked Tracks clicks operate immediately.
+Lists has two presentations. `l` / `:lists` focuses the pinned tree when docked, otherwise it toggles the separate chooser popup above the track frame's List/current-list button. The button is hidden only while the pane is docked. `L` / `:sidebar` toggles pinning independently, and closes an open chooser before showing the tree. The tree docks when its requested width (26 columns in automatic mode) leaves at least 72 track-content columns after Detail. At narrower widths, the pin preference is retained and the chooser remains available. Tab/Shift-Tab switches between docked Lists and Tracks; Escape returns to Tracks without unpinning. Outside search, the Edit key acts on the List under the docked cursor as the `list edit` command does. Enter returns to Tracks after navigation; a docked row click keeps Lists focused, while a chooser row click closes the popup. Clicking the active List preserves its current filtered view and marks. Outside chooser clicks dismiss and consume; docked Tracks clicks operate immediately.
 
 ### Overlay-specific keys
 

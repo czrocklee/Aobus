@@ -163,6 +163,8 @@ namespace ao::tui
       {.groupId = i18n::MessageId::TuiKeyGroupPanels,
        .descriptionId = i18n::MessageId::TuiShellHelpChooseList,
        .command = ":lists"},
+      {.descriptionId = i18n::MessageId::ListNew, .command = ":list new"},
+      {.descriptionId = i18n::MessageId::ListEdit, .command = ":list edit"},
       {.descriptionId = i18n::MessageId::TuiNavigationPin, .command = ":sidebar"},
       {.descriptionId = i18n::MessageId::TuiShellHelpTrackDetail, .command = ":detail"},
       {.descriptionId = i18n::MessageId::TuiDetailFocus},

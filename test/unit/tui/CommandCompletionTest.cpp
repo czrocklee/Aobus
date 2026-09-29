@@ -178,6 +178,19 @@ namespace ao::tui::test
     CHECK(optReset->items.front().displayText == "Reset Order");
   }
 
+  TEST_CASE("CommandCompletion - offers every List authoring alias with its action label", "[tui][unit][completion]")
+  {
+    auto const optList = completeDraft(ao::test::englishMessageCatalog(), "list ", CommandCompletionContext{});
+
+    REQUIRE(optList);
+    CHECK(insertTexts(*optList) == std::vector<std::string>{"list new", "list edit"});
+    CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optList->items.front().detail) == ":list new");
+
+    auto const optEdit = completeDraft(ao::test::englishMessageCatalog(), "list e", CommandCompletionContext{});
+    REQUIRE(optEdit);
+    CHECK(insertTexts(*optEdit) == std::vector<std::string>{"list edit"});
+  }
+
   TEST_CASE("CommandCompletion - finds quick tags by command prefix", "[tui][unit][completion]")
   {
     auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "tag", CommandCompletionContext{});

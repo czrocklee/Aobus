@@ -16,6 +16,7 @@
 #include "tui/Keymap.h"
 #include "tui/LibraryController.h"
 #include "tui/LibraryScanController.h"
+#include "tui/ListAuthoringController.h"
 #include "tui/ListOrderController.h"
 #include "tui/Preferences.h"
 #include "tui/SettingsEditor.h"
@@ -115,6 +116,20 @@ namespace ao::tui::test
                                                            runtimePtr->textOrderingPolicy());
     }
 
+    if (listAuthoringPtr == nullptr)
+    {
+      listAuthoringPtr = std::make_unique<ListAuthoringController>(runtimePtr->async(),
+                                                                   runtimePtr->library(),
+                                                                   runtimePtr->views(),
+                                                                   runtimePtr->sources(),
+                                                                   runtimePtr->workspace(),
+                                                                   runtimePtr->completion(),
+                                                                   runtimePtr->notifications(),
+                                                                   listPresentations,
+                                                                   ao::test::englishMessageCatalog(),
+                                                                   ListAuthoringController::Outputs{});
+    }
+
     settingsPtr = std::make_unique<SettingsEditor>(
       ao::test::englishMessageCatalog(),
       preferences,
@@ -158,6 +173,7 @@ namespace ao::tui::test
                              .libraryScan = *libraryScanPtr,
                              .listOrder = *listOrderPtr,
                              .trackEdit = *trackEditPtr,
+                             .listAuthoring = *listAuthoringPtr,
                              .settings = *settingsPtr,
                              .preferences = preferences,
                              .requestExit = [this] { ++exitRequestCount; },

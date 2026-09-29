@@ -46,6 +46,8 @@ namespace ao::tui
     OrderReset,
     EditProperties,
     EditTags,
+    CreateList,
+    EditList,
     OpenSettings,
     Play,
     TogglePlayback,

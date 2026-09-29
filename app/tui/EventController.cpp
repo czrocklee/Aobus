@@ -11,6 +11,7 @@
 #include "LibraryController.h"
 #include "LibraryNavigation.h"
 #include "LibraryScanController.h"
+#include "ListAuthoringController.h"
 #include "ListOrderController.h"
 #include "MouseBindings.h"
 #include "NotificationCenterPanel.h"
@@ -181,6 +182,7 @@ namespace ao::tui
     , _libraryScan{bindings.libraryScan}
     , _listOrder{bindings.listOrder}
     , _trackEdit{bindings.trackEdit}
+    , _listAuthoring{bindings.listAuthoring}
     , _settings{bindings.settings}
     , _preferences{bindings.preferences}
     , _requestExit{std::move(bindings.requestExit)}
@@ -215,8 +217,8 @@ namespace ao::tui
   {
     syncWorkspaceGeometry();
 
-    if (hasWorkspaceGesture() &&
-        (_settings.isActive() || _trackEdit.isActive() || _shell.isInputActive() || isModalOverlay(_shell.overlay())))
+    if (hasWorkspaceGesture() && (_settings.isActive() || _trackEdit.isActive() || _listAuthoring.isActive() ||
+                                  _shell.isInputActive() || isModalOverlay(_shell.overlay())))
     {
       cancelWorkspaceGestures();
     }
@@ -257,7 +259,7 @@ namespace ao::tui
 
     // An open editor owns the whole surface, including keys and mouse events
     // it has no use for, so nothing behind it can act on stale geometry.
-    if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event))
+    if (_settings.tryHandleEvent(event) || _trackEdit.tryHandleEvent(event) || _listAuthoring.tryHandleEvent(event))
     {
       return true;
     }
@@ -351,7 +353,7 @@ namespace ao::tui
       _optLastMouse->x,
       _optLastMouse->y,
       {.isTextInputActive = _shell.isInputActive() || _settings.isActive() || _trackEdit.isActive() ||
-                            !_preferences.mouseEnabled || isExitWaiting(),
+                            _listAuthoring.isActive() || !_preferences.mouseEnabled || isExitWaiting(),
        .isOverlayActive = isOverlayActive(_shell.overlay())});
 
     if (hit.hoveredButton != _hoveredButton || hit.isQualityHoverVisible != _qualityHoverVisible)
@@ -480,6 +482,39 @@ namespace ao::tui
     }
 
     openOverlay(Overlay::Notifications);
+  }
+
+  ListId EventController::listAuthoringTargetId() const
+  {
+    // The docked Lists pane names its own cursor while it owns focus; every
+    // other focus drafts against the List the workspace is actually showing.
+    // The chooser overlay is modal, so no list command can run while it is
+    // open, and its highlighted entry is not the docked tree's cursor anyway.
+    if (_shell.isNavigationFocused())
+    {
+      return _library.navigation().cursor();
+    }
+
+    return _library.currentListId();
+  }
+
+  void EventController::openListAuthoring(ListEditorMode const mode)
+  {
+    auto const targetId = listAuthoringTargetId();
+    auto const opened =
+      mode == ListEditorMode::New ? _listAuthoring.tryOpenNew(targetId) : _listAuthoring.tryOpenEdit(targetId);
+
+    if (!opened)
+    {
+      return;
+    }
+
+    // The editor captured its target the moment it opened, so the same entry
+    // protocol as the track editors applies: retire transient gestures, commit
+    // a running visual range, and take the shell's text input away.
+    cancelTransientInteractions();
+    _library.commitVisualSelection();
+    _shell.closeInput();
   }
 
   void EventController::editSelectedTrackProperties(TrackEditorMode const mode)
@@ -765,6 +800,8 @@ namespace ao::tui
       case CommandAction::OrderReset: applyListOrderCommand(ListOrderCommand::Reset); break;
       case CommandAction::EditProperties: editSelectedTrackProperties(TrackEditorMode::Properties); break;
       case CommandAction::EditTags: editSelectedTrackProperties(TrackEditorMode::Tags); break;
+      case CommandAction::CreateList: openListAuthoring(ListEditorMode::New); break;
+      case CommandAction::EditList: openListAuthoring(ListEditorMode::Edit); break;
       case CommandAction::OpenSettings:
         cancelTransientInteractions();
         _library.commitVisualSelection();

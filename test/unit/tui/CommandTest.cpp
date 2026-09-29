@@ -76,6 +76,11 @@ namespace ao::tui::test
     CHECK(requiredCommand("settings").action == CommandAction::OpenSettings);
     CHECK(requiredCommand("config").action == CommandAction::OpenSettings);
     CHECK(requiredCommand("tags").action == CommandAction::EditTags);
+    CHECK(requiredCommand(":list new").action == CommandAction::CreateList);
+    CHECK(requiredCommand("list edit").action == CommandAction::EditList);
+    CHECK_FALSE(parseCommand(":list"));
+    CHECK_FALSE(parseCommand("list"));
+    CHECK_FALSE(parseCommand("list new extra"));
     CHECK(requiredCommand("edit").action == CommandAction::EditProperties);
     CHECK(requiredCommand("properties").action == CommandAction::EditProperties);
     CHECK(requiredCommand("play").action == CommandAction::Play);
@@ -151,6 +156,8 @@ namespace ao::tui::test
     CHECK_FALSE(shortcutActionForCommand(CommandAction::CloseOverlay));
     CHECK_FALSE(shortcutActionForCommand(CommandAction::SetPresentation));
     CHECK_FALSE(shortcutActionForCommand(CommandAction::OrderReset));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::CreateList));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::EditList));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::OpenCommandPalette));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::OpenQuickFilter));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::PreviousSection));

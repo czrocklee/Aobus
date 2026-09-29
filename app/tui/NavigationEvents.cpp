@@ -8,6 +8,7 @@
 #include "MouseBindings.h"
 #include "SelectionNavigation.h"
 #include "ShellInteractionModel.h"
+#include "SmartListEditor.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
@@ -192,6 +193,14 @@ namespace ao::tui
 
     if (auto const optAction = _keymapPlan.actionFor(event); optAction)
     {
+      // The workspace's Edit key keeps its verb and follows focus to the List
+      // under the cursor.
+      if (*optAction == KeyAction::EditProperties)
+      {
+        openListAuthoring(ListEditorMode::Edit);
+        return true;
+      }
+
       if (isPlaybackControl(*optAction))
       {
         executeKeyAction(*optAction);

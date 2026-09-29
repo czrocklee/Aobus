@@ -13,6 +13,7 @@
 #include "tui/Keymap.h"
 #include "tui/LibraryController.h"
 #include "tui/LibraryScanController.h"
+#include "tui/ListAuthoringController.h"
 #include "tui/ListOrderController.h"
 #include "tui/OutputDeviceController.h"
 #include "tui/Preferences.h"
@@ -71,6 +72,7 @@ namespace ao::tui::test
     std::unique_ptr<LibraryScanController> libraryScanPtr{};
     std::unique_ptr<ListOrderController> listOrderPtr{};
     std::unique_ptr<TrackEditController> trackEditPtr{};
+    std::unique_ptr<ListAuthoringController> listAuthoringPtr{};
     Preferences preferences{};
     uimodel::KeymapModel settingsKeymap{defaultKeymap()};
     std::unique_ptr<SettingsEditor> settingsPtr;
