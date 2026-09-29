@@ -57,15 +57,16 @@ Exactly one top-level command is required.
 | `lib verify` | none |
 | `lib relink` | `[--from <old-uri> --to <new-uri>] [--dry-run]` |
 | `lib fingerprint` | `--pending [--verbose]` |
-| `lib export` | `(<output> | -o, --output <file>) [-m, --mode delta|metadata|full|listOnly]`; default mode is `full` |
+| `lib export` | `(<output> | -o, --output-file <file>) [-m, --mode delta|metadata|full|listOnly]`; default mode is `full` |
 | `lib import` | `(<input> | -i, --input <file>) [-m, --mode restore|merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
 | `lib dump` | `[--dict] [--manifest] [--meta] [--resources] [--raw]` |
 | `lib resource list` | none |
-| `lib resource export` | `<id> -o, --output <file>` |
+| `lib resource export` | `<id> -o, --output-file <file>` |
 
 `--from` and `--to` must be supplied together.
 `--pending` is required by `lib fingerprint`.
 `--raw` dump modes support only plain output.
+`--output` is reserved by the global format option, so file-destination options are `-o, --output-file`.
 
 Track update field options are:
 
@@ -204,6 +205,7 @@ There is no separate CLI protocol version or migration layer.
 aobus -C /music track show --filter '$artist == "Miles Davis"' -O json
 aobus track update 42 --composer "J. S. Bach" --set source=manual --dry-run
 aobus lib export backup.yaml --mode full
+aobus lib resource export 3 --output-file cover.jpg
 aobus -O json lib import backup.yaml --mode restore --dry-run
 aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 ```

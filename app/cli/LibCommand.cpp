@@ -1427,7 +1427,7 @@ namespace ao::cli
       });
 
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
-    auto* exportPath = exportCmd->add_option("output,-o,--output", "Output YAML file path")->required();
+    auto* exportPath = exportCmd->add_option("output,-o,--output-file", "Output YAML file path")->required();
     auto* exportMode =
       exportCmd->add_option("-m,--mode", "Export mode (delta, metadata, full, listOnly)")->default_val("full");
     exportCmd->callback(
@@ -1483,7 +1483,7 @@ namespace ao::cli
 
     auto* resourceExport = resource->add_subcommand("export", "Export a resource to a file");
     auto* resourceExportId = resourceExport->add_option("id", "resource id")->required();
-    auto* resourceExportPath = resourceExport->add_option("-o,--output", "output file path")->required();
+    auto* resourceExportPath = resourceExport->add_option("-o,--output-file", "output file path")->required();
     resourceExport->callback(
       [&cli, resourceExportId, resourceExportPath]
       {

@@ -313,7 +313,7 @@ namespace ao::cli::test
     // The row holds no bytes, so export reads them from the file that references
     // the resource.
     auto const outputPath = fixture.root() / "cover.bin";
-    result = fixture.run({"lib", "resource", "export", idText, "--output", outputPath.string()});
+    result = fixture.run({"lib", "resource", "export", idText, "--output-file", outputPath.string()});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     CHECK(contains(result.out, "exported resource:"));
@@ -343,7 +343,7 @@ namespace ao::cli::test
     CHECK(optCached->size() == exported.size());
 
     checkDomainFailure(
-      fixture.run({"lib", "resource", "export", "999999", "--output", (fixture.root() / "missing.bin").string()}),
+      fixture.run({"lib", "resource", "export", "999999", "--output-file", (fixture.root() / "missing.bin").string()}),
       "resource not found: 999999");
 
     // The bytes are installed through the same replacement the library export
@@ -351,7 +351,7 @@ namespace ao::cli::test
     // rather than becoming a tree the command invented.
     auto const missingDirectory = fixture.root() / "missing";
     checkDomainFailure(
-      fixture.run({"lib", "resource", "export", idText, "--output", (missingDirectory / "cover.bin").string()}),
+      fixture.run({"lib", "resource", "export", idText, "--output-file", (missingDirectory / "cover.bin").string()}),
       "failed to open resource output:");
     CHECK_FALSE(fs::exists(missingDirectory));
   }
@@ -372,9 +372,79 @@ namespace ao::cli::test
 
     auto const outputPath = fixture.root() / "orphan.bin";
     checkDomainFailure(
-      fixture.run({"lib", "resource", "export", std::to_string(resourceId.raw()), "--output", outputPath.string()}),
+      fixture.run(
+        {"lib", "resource", "export", std::to_string(resourceId.raw()), "--output-file", outputPath.string()}),
       std::format("resource not available: {}", resourceId.raw()));
     CHECK_FALSE(fs::exists(outputPath));
+  }
+
+  TEST_CASE("CLI - lib export reserves --output for the global format option", "[cli][integration][lib][import-export]")
+  {
+    auto source = CliFixture{};
+    source.copyAudio("basic_metadata.flac", "track.flac");
+    REQUIRE(source.run({"init"}).status == 0);
+
+    // --output-file names the destination; the short form keeps that meaning.
+    auto const exportPath = source.root() / "library.yaml";
+    auto result = source.run({"lib", "export", "--output-file", exportPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(fs::exists(exportPath));
+
+    auto const shortPath = source.root() / "short.yaml";
+    result = source.run({"lib", "export", "-o", shortPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(fs::exists(shortPath));
+
+    // --output reaches the global format option and never names a file.
+    result = source.run({"lib", "export", exportPath.string(), "--output", "json"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    requireJsonLineParses(result.out);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["action"]) == "export");
+    CHECK(yaml::scalarView(tree.rootref()["path"]) == exportPath.string());
+    CHECK_FALSE(fs::exists(source.root() / "json"));
+  }
+
+  TEST_CASE("CLI - lib resource export reserves --output for the global format option",
+            "[cli][integration][lib][resource]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("with_cover.flac", "cover.flac");
+    REQUIRE(fixture.run({"init"}).status == 0);
+
+    auto result = fixture.run({"-O", "yaml", "lib", "resource", "list"});
+    REQUIRE(result.status == 0);
+    auto const listing = parseYaml(result.out);
+    REQUIRE(listing.rootref()["resources"].num_children() == 1);
+    auto const idText = std::string{yaml::scalarView(listing.rootref()["resources"][0]["id"])};
+
+    auto const outputPath = fixture.root() / "cover.bin";
+    result = fixture.run({"lib", "resource", "export", idText, "--output-file", outputPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "exported resource:"));
+    CHECK(fs::exists(outputPath));
+
+    // The short form -o keeps the destination meaning.
+    auto const shortPath = fixture.root() / "short.bin";
+    result = fixture.run({"lib", "resource", "export", idText, "-o", shortPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(fs::exists(shortPath));
+
+    // --output selects the report format; --output-file stays the destination.
+    auto const againPath = fixture.root() / "again.bin";
+    result =
+      fixture.run({"lib", "resource", "export", idText, "--output-file", againPath.string(), "--output", "json"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    requireJsonLineParses(result.out);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["id"]) == idText);
+    CHECK(yaml::scalarView(tree.rootref()["output"]) == againPath.string());
+    CHECK(fs::exists(againPath));
+    CHECK_FALSE(fs::exists(fixture.root() / "json"));
   }
 
   TEST_CASE("CLI - lib export and import round-trip library data", "[cli][integration][lib][import-export]")
