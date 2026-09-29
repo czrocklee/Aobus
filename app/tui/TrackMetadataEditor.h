@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "CompletionPopup.h"
 #include "MouseBindings.h"
 #include "TextFieldModel.h"
 #include <ao/i18n/MessageCatalog.h>
@@ -80,7 +81,7 @@ namespace ao::tui
     void noteRowEdited(MetadataRow& row);
     void revalidate(MetadataRow& row);
     void maybeTriggerCompletion(MetadataRow const& row, bool explicitRequest);
-    bool tryHandleCompletionNavigation(ftxui::Event const& event, std::size_t itemCount);
+
     ftxui::Element renderFieldValue(MetadataRow const& row, bool focused, ftxui::Box& inputBox) const;
     ftxui::Element renderRows(std::int32_t labelColumns) const;
 
@@ -93,8 +94,7 @@ namespace ao::tui
     std::size_t _focusedMetadataRow = 0;
     std::size_t _readonlyRow = 0;
     std::optional<rt::CompletionResult> _optActiveCompletion{};
-    std::size_t _selectedCandidate = 0;
-    std::size_t _completionWindowStart = 0;
+    CompletionPopupSelection _completionSelection{};
     mutable ftxui::Box _metadataViewport = kEmptyMouseBox;
     mutable ftxui::Box _propertiesViewport = kEmptyMouseBox;
     mutable std::vector<ftxui::Box> _rowBoxes;
