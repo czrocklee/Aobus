@@ -181,6 +181,10 @@ namespace ao::gtk::layout::editor
     ModelColumns _columns;
     Glib::RefPtr<Gtk::TreeStore> _treeStorePtr;
     Gtk::TreeView _treeView;
+    // Disconnected at the start of ~LayoutEditorDialog: the callback reaches
+    // members declared after this connection, so a selection change during
+    // teardown must not rely on member declaration order.
+    sigc::scoped_connection _selectionChangedConn;
     Gtk::ScrolledWindow _treeScroll;
 
     Gtk::Box _treeBox{Gtk::Orientation::VERTICAL};

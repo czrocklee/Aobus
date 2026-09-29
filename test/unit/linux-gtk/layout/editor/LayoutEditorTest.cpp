@@ -386,6 +386,18 @@ namespace ao::gtk::layout::editor::test
       return ids;
     }
 
+    std::vector<std::string> nodeChildIds(uimodel::LayoutNode const& node)
+    {
+      auto ids = std::vector<std::string>{};
+
+      for (auto const& child : node.children)
+      {
+        ids.push_back(child.id);
+      }
+
+      return ids;
+    }
+
     std::string selectedNodeId(LayoutEditorDialog& dialog)
     {
       // The properties panel renders the selected node's id in its first entry.
@@ -570,6 +582,151 @@ namespace ao::gtk::layout::editor::test
       CHECK(selectedRowName(*treeView) == "outer");
       CHECK(findLabelByText(dialog, "No selection") == nullptr);
       CHECK(selectedNodeId(dialog) == "outer");
+      dialog.close();
+    }
+  }
+
+  TEST_CASE("LayoutEditorDialog - structural mutations keep a nested node selected within its non-root parent",
+            "[gtk][unit][layout-editor]")
+  {
+    auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_nested_selection_test");
+
+    auto const tempDir = ao::test::TempDir{};
+    std::unique_ptr<rt::AppRuntime> runtimePtr = ao::gtk::test::makeRuntime(tempDir);
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+
+    auto registry = ComponentRegistry{};
+    LayoutRuntime::registerStandardComponents(
+      registry,
+      *runtimePtr,
+      ShellLayoutCollaborators{
+        .textCatalog = textCatalog, .outputDeviceIntent = uimodel::OutputDeviceIntent::discarded()});
+    auto actionRegistry = ActionRegistry{registry.schema()};
+
+    auto window = Gtk::Window{};
+    auto const stubLoader = [](std::string_view) { return uimodel::LayoutDocument{}; };
+
+    auto const makeDocument = []
+    {
+      auto doc = LayoutDocument{};
+      doc.root.id = "editor-root";
+      doc.root.type = "box";
+      auto outer = LayoutNode{.id = "outer", .type = "box"};
+      outer.children = {
+        LayoutNode{.id = "inner-a", .type = "spacer"},
+        LayoutNode{.id = "inner-b", .type = "spacer"},
+        LayoutNode{.id = "inner-c", .type = "spacer"},
+      };
+      doc.root.children.push_back(std::move(outer));
+      doc.root.children.push_back(LayoutNode{.id = "sibling", .type = "spacer"});
+      return doc;
+    };
+
+    SECTION("move up on a nested node keeps it selected within its non-root parent")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "inner-b");
+
+      emitToolbarClick(dialog, "Move Up");
+
+      // The root ordering is unchanged; only the nested parent's children move.
+      CHECK(childIds(dialog) == std::vector<std::string>{"outer", "sibling"});
+      REQUIRE(dialog.document().root.children.front().children.size() == 3);
+      CHECK(nodeChildIds(dialog.document().root.children.front()) ==
+            std::vector<std::string>{"inner-b", "inner-a", "inner-c"});
+      CHECK(selectedRowName(*treeView) == "inner-b");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "inner-b");
+      dialog.close();
+    }
+
+    SECTION("move down on a nested node keeps it selected within its non-root parent")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "inner-b");
+
+      emitToolbarClick(dialog, "Move Down");
+
+      CHECK(childIds(dialog) == std::vector<std::string>{"outer", "sibling"});
+      REQUIRE(dialog.document().root.children.front().children.size() == 3);
+      CHECK(nodeChildIds(dialog.document().root.children.front()) ==
+            std::vector<std::string>{"inner-a", "inner-c", "inner-b"});
+      CHECK(selectedRowName(*treeView) == "inner-b");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "inner-b");
+      dialog.close();
+    }
+
+    SECTION("add child to a non-root parent selects the new nested child")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "outer");
+
+      CHECK(dialog.activate_action("editor.add_spacer"));
+
+      CHECK(childIds(dialog) == std::vector<std::string>{"outer", "sibling"});
+      REQUIRE(dialog.document().root.children.front().children.size() == 4);
+      CHECK(nodeChildIds(dialog.document().root.children.front()) ==
+            std::vector<std::string>{"inner-a", "inner-b", "inner-c", "spacer-new"});
+      CHECK(selectedRowName(*treeView) == "spacer-new");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "spacer-new");
+      dialog.close();
+    }
+
+    SECTION("wrap a nested node whose parent is not the root selects the wrapper")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "inner-b");
+
+      CHECK(dialog.activate_action("editor.wrap_box"));
+
+      CHECK(childIds(dialog) == std::vector<std::string>{"outer", "sibling"});
+      REQUIRE(dialog.document().root.children.front().children.size() == 3);
+      CHECK(nodeChildIds(dialog.document().root.children.front()) ==
+            std::vector<std::string>{"inner-a", "box-wrap", "inner-c"});
+      REQUIRE(dialog.document().root.children.front().children[1].children.size() == 1);
+      CHECK(dialog.document().root.children.front().children[1].children.front().id == "inner-b");
+      CHECK(selectedRowName(*treeView) == "box-wrap");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "box-wrap");
+      dialog.close();
+    }
+
+    SECTION("remove of a middle nested child selects the next nested sibling")
+    {
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, textCatalog, makeDocument(), "classic", "modern", stubLoader};
+
+      auto* const treeView = findWidget<Gtk::TreeView>(dialog);
+      REQUIRE(treeView != nullptr);
+      selectRowByNodeName(*treeView, "inner-b");
+
+      emitToolbarClick(dialog, "Remove Node");
+
+      // Only the nested parent's children change; the root ordering is untouched.
+      CHECK(childIds(dialog) == std::vector<std::string>{"outer", "sibling"});
+      REQUIRE(dialog.document().root.children.front().children.size() == 2);
+      CHECK(nodeChildIds(dialog.document().root.children.front()) == std::vector<std::string>{"inner-a", "inner-c"});
+      CHECK(selectedRowName(*treeView) == "inner-c");
+      CHECK(findLabelByText(dialog, "No selection") == nullptr);
+      CHECK(selectedNodeId(dialog) == "inner-c");
       dialog.close();
     }
   }
