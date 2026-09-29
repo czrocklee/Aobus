@@ -504,6 +504,8 @@ root:table {
     tui_list_save_action { "Save" }
     tui_list_status_saving { "Saving…" }
     tui_list_status_deleting { "Deleting…" }
+    tui_list_delete_more { "+{count, plural, one {# more List} other {# more Lists}}" }
+    tui_list_delete_cancelled { "The deletion was cancelled; nothing was removed" }
     tui_list_virtual_target { "All Tracks cannot be edited or deleted" }
     tui_list_open_unavailable { "The List could not be opened" }
     tui_shell_command_palette_footer { "{completeKey} complete  {runKey} run  {cancelKey} cancel" }

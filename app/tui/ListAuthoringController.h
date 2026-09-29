@@ -13,11 +13,13 @@
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/node.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <stop_token>
 #include <string>
+#include <vector>
 
 namespace ftxui
 {
@@ -54,9 +56,14 @@ namespace ao::tui
   {
     ListId listId = kInvalidListId;
     bool includeDescendants = false;
-    /// Localized confirmation heading and body, built from the settled preview.
+    /// Localized confirmation heading, built from the settled preview.
     std::string title{};
+    /// The single-List question, localized; a subtree question is rendered
+    /// from @ref deletedListNames instead.
     std::string question{};
+    /// Every removed List's name, in deletion-preview order; the subtree
+    /// question renders a bounded leading window of these.
+    std::vector<std::string> deletedListNames{};
     /// The tag-removal offer; empty when the preview reported no writable membership tag.
     std::string tagImpactQuestion{};
     /// The shared warning about other Lists referencing that tag; empty when none do.
@@ -176,6 +183,11 @@ namespace ao::tui
     void schedulePreview();
     void cancelPreviewDebounce();
     void handleDeleteConfirmationEvent(ftxui::Event const& event);
+    /// The bounded entry text of the subtree question: leading names, one
+    /// localized count line for the rest, and never more rows than @p entryBudget.
+    std::string buildSubtreeEntries(ListDeleteConfirmation const& confirmation,
+                                    std::ptrdiff_t entryBudget,
+                                    std::int32_t entryColumns) const;
     ftxui::Element renderDeleteConfirmation(ListDeleteConfirmation const& confirmation,
                                             std::int32_t terminalColumns,
                                             std::int32_t terminalRows) const;

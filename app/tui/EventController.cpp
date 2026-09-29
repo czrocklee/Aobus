@@ -523,7 +523,11 @@ namespace ao::tui
 
     // The confirmation arrives asynchronously, so the gestures the command can
     // still see are retired now and its arrival retires whatever began since.
+    // The running visual range commits exactly as the definition editors'
+    // entry does: the deletion reorders rows beneath a mark set that must
+    // not keep reshaping.
     cancelTransientInteractions();
+    _library.commitVisualSelection();
     _shell.closeInput();
   }
 

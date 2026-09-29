@@ -31,10 +31,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -246,10 +248,10 @@ namespace ao::tui::test
   {
     auto fixture = AuthoringFixture{};
     auto const parentId = fixture.addList("Tours", "#tour");
-    auto const childId = ao::test::requireValue(rt::test::runRuntimeTask(
-      *fixture.runtimePtr,
-      fixture.runtimePtr->library().commands().createListAsync(
-        rt::ListDraft{.parentId = parentId, .name = "Roadsongs", .expression = "#live"})));
+    auto const childId = ao::test::requireValue(
+      rt::test::runRuntimeTask(*fixture.runtimePtr,
+                               fixture.runtimePtr->library().commands().createListAsync(
+                                 rt::ListDraft{.parentId = parentId, .name = "Roadsongs", .expression = "#live"})));
     auto controller = fixture.makeController();
 
     REQUIRE(controller.tryOpenEdit(childId));
@@ -352,8 +354,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->library().snapshot().lists().size() == 1);
   }
 
-  TEST_CASE("ListAuthoringController - an edit keeps the stored presentation choice",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - an edit keeps the stored presentation choice", "[tui][integration][editor]")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
@@ -525,9 +526,15 @@ namespace ao::tui::test
     REQUIRE(confirmation != nullptr);
     CHECK(confirmation->includeDescendants);
     CHECK(confirmation->title == "Delete List and Descendants?");
-    CHECK(confirmation->question.contains('2'));
-    CHECK(confirmation->question.contains("Tours"));
-    CHECK(confirmation->question.contains("2026"));
+    REQUIRE(confirmation->deletedListNames.size() == 2);
+    CHECK(confirmation->deletedListNames[0] == "Tours");
+    CHECK(confirmation->deletedListNames[1] == "2026");
+
+    // The subtree question names both removed Lists through the modal.
+    auto const rendered = renderElement(controller.activeModal(80, 24), 80, 24);
+    CHECK(findTextCells(rendered.screen, "Delete 2 Lists in this derived subtree?"));
+    CHECK(findTextCells(rendered.screen, "Tours"));
+    CHECK(findTextCells(rendered.screen, "2026"));
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Return));
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
@@ -562,6 +569,84 @@ namespace ao::tui::test
     CHECK_FALSE(fixture.listNode(listId).has_value());
     auto const spec = rt::test::runtimeTrackSpec(*fixture.runtimePtr, trackId);
     CHECK(spec.tags.empty());
+  }
+
+  TEST_CASE("ListAuthoringController - a large subtree confirmation keeps its footer on screen",
+            "[tui][integration][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const parentId = fixture.addList("Tours");
+
+    for (std::size_t index = 0; index < 12; ++index)
+    {
+      auto const childDraft = rt::ListDraft{.parentId = parentId, .name = std::format("Stop {:02d}", index)};
+      std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
+        *fixture.runtimePtr, fixture.runtimePtr->library().commands().createListAsync(childDraft)));
+    }
+
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.tryDelete(parentId));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.isActive(); }));
+    REQUIRE(controller.activeDeleteConfirmation()->deletedListNames.size() == 13);
+
+    // A normal terminal shows the bounded leading window plus the count line,
+    // never one row per removed List.
+    auto const normal = renderElement(controller.activeModal(80, 24), 80, 24);
+    CHECK(findTextCells(normal.screen, "Tours"));
+    CHECK(findTextCells(normal.screen, "Stop 00"));
+    CHECK(findTextCells(normal.screen, "Stop 04"));
+    CHECK_FALSE(findTextCells(normal.screen, "Stop 05"));
+    CHECK(findTextCells(normal.screen, "+7 more Lists"));
+
+    // A short terminal shrinks the window further, and the footer chips stay
+    // on screen behind whatever rows remain.
+    auto const small = renderElement(controller.activeModal(80, 16), 80, 16);
+    CHECK(findTextCells(small.screen, "Tours"));
+    CHECK(findTextCells(small.screen, "Stop 01"));
+    CHECK_FALSE(findTextCells(small.screen, "Stop 02"));
+    CHECK(findTextCells(small.screen, "+10 more Lists"));
+    CHECK(findTextCells(small.screen, "Delete All"));
+    CHECK(findTextCells(small.screen, "close"));
+  }
+
+  TEST_CASE("ListAuthoringController - the confirmation footer chips accept mouse clicks", "[tui][unit][mouse][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const listId = fixture.addList("Roadsongs");
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.tryDelete(listId));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.isActive(); }));
+
+    // The close chip follows the Escape protocol through the bound event.
+    auto const cancelRendered = renderElement(controller.activeModal(80, 24), 80, 24);
+    auto const optCloseChip = findTextCells(cancelRendered.screen, "close");
+    REQUIRE(optCloseChip);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("",
+                                                          ftxui::Mouse{.button = ftxui::Mouse::Left,
+                                                                       .motion = ftxui::Mouse::Pressed,
+                                                                       .x = optCloseChip->x_min,
+                                                                       .y = optCloseChip->y_min})));
+    CHECK_FALSE(controller.isActive());
+    CHECK(fixture.listNode(listId).has_value());
+
+    // The confirm chip admits the deletion through its bound event.
+    REQUIRE(controller.tryDelete(listId));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.isActive(); }));
+    auto const confirmRendered = renderElement(controller.activeModal(80, 24), 80, 24);
+    auto const optDeleteChip = findTextCells(confirmRendered.screen, "Enter");
+    REQUIRE(optDeleteChip);
+    REQUIRE(controller.tryHandleEvent(ftxui::Event::Mouse("",
+                                                          ftxui::Mouse{.button = ftxui::Mouse::Left,
+                                                                       .motion = ftxui::Mouse::Pressed,
+                                                                       .x = optDeleteChip->x_min,
+                                                                       .y = optDeleteChip->y_min})));
+
+    CHECK(controller.activeDeleteConfirmation()->deleting);
+    CHECK(controller.hasPendingSubmission());
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+    CHECK_FALSE(fixture.listNode(listId).has_value());
   }
 
   TEST_CASE("ListAuthoringController - a failed delete preview reports the runtime error", "[tui][integration][editor]")

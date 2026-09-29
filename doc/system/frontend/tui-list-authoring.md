@@ -57,7 +57,7 @@ Retirement suppresses late presentation but never cancels the write.
 Nothing is on screen while the preview runs; the shell remains usable, and a second authoring command or track-editor open is refused while the flow is in flight.
 When the preview settles, the confirmation modal appears, and its asynchronous arrival retires workspace gestures and transient input itself, because no keypress opened it.
 
-The confirmation shows the shared deletion question for the previewed scope: a plain List asks the single-list question, and a List with descendants asks the subtree question with each removed List named.
+The confirmation shows the shared deletion question for the previewed scope: a plain List asks the single-list question, and a List with descendants asks the subtree question naming a bounded leading window of removed Lists and counting the rest with one localized line. The window shrinks further on short terminals so the question and its footer always fit; each entry keeps one row.
 A directly editable single-tag List additionally offers the shared tag-removal question as a `Space`-toggled row and warns when other Lists still reference that tag; the toggle decides the deletion's `removeWritableTagFromTracks` option.
 `Enter` confirms with the shared Delete or Delete-all label, `Esc` cancels without changing anything, and both footer controls are clickable.
 A confirmed deletion keeps the confirmation visible in a deleting state that consumes every event until the write settles.

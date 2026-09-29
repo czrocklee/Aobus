@@ -560,7 +560,17 @@ namespace ao::tui::test
     auto const listId = fixture.addList("Roadsongs");
     REQUIRE(library.openList(listId));
 
+    // A running visual range commits at entry, exactly as the definition
+    // editors' entry does; the marks it reached survive the flow.
+    controller.tryHandleEvent(ftxui::Event::Character("v"));
+    controller.tryHandleEvent(ftxui::Event::Character("j"));
+    REQUIRE(library.isVisualSelectionActive());
+    auto const committed = library.selectedTrackIds();
+
     enterCommand(controller, "list delete");
+
+    CHECK_FALSE(library.isVisualSelectionActive());
+    CHECK(library.selectedTrackIds() == committed);
 
     // Nothing is on screen while the preview runs; the shell stays usable.
     CHECK_FALSE(fixture.listAuthoringPtr->isActive());

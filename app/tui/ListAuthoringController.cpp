@@ -7,6 +7,7 @@
 #include "Render.h"
 #include "SmartListEditor.h"
 #include "Style.h"
+#include "TextCell.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -45,7 +46,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <format>
 #include <memory>
 #include <optional>
 #include <source_location>
@@ -62,6 +62,8 @@ namespace ao::tui
     using i18n::MessageId;
 
     constexpr auto kPreviewDebounceInterval = std::chrono::milliseconds{200};
+    /// Removed Lists a delete confirmation names before counting the rest.
+    constexpr std::size_t kDeleteEntryRowLimit = 6;
 
     /// Everything one preview recomputation produced for the open editor.
     struct ListPreview final
@@ -81,6 +83,23 @@ namespace ao::tui
     std::string displayedTag(std::string_view const tag)
     {
       return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
+    }
+
+    /// The shared question embeds its own line structure, so each line wraps
+    /// as its own paragraph instead of feeding the breaks to one block.
+    void appendQuestionLines(std::vector<ftxui::Element>& body, std::string_view const question)
+    {
+      std::size_t lineBreak = question.find('\n');
+      std::size_t lineStart = 0;
+
+      while (lineBreak != std::string::npos)
+      {
+        body.push_back(ftxui::paragraph(std::string{question.substr(lineStart, lineBreak - lineStart)}));
+        lineStart = lineBreak + 1;
+        lineBreak = question.find('\n', lineStart);
+      }
+
+      body.push_back(ftxui::paragraph(std::string{question.substr(lineStart)}));
     }
 
     /**
@@ -256,8 +275,8 @@ namespace ao::tui
         parentExpression = optParent->expression;
       }
 
-      auto editor =
-        SmartListEditor{textCatalog, mode, std::move(baseline), std::move(parentExpression), std::move(completionProvider)};
+      auto editor = SmartListEditor{
+        textCatalog, mode, std::move(baseline), std::move(parentExpression), std::move(completionProvider)};
       refreshPreviewFor(editor);
       optEditor.emplace(std::move(editor));
       requestRefresh();
@@ -333,8 +352,8 @@ namespace ao::tui
       // the Auto presentation from the expression that was just written.
       auto const& localExpression = optEditor ? optEditor->draft().expression : std::string{};
       auto const isEdit = optEditor && optEditor->mode() == ListEditorMode::Edit;
-      auto const optStored = isEdit ? listPresentations.presentationIdForList(listId)
-                                    : std::optional<std::string_view>{};
+      auto const optStored =
+        isEdit ? listPresentations.presentationIdForList(listId) : std::optional<std::string_view>{};
       auto presentationId = std::string{};
 
       if (optStored)
@@ -371,22 +390,12 @@ namespace ao::tui
 
       if (includeDescendants)
       {
-        auto entries = std::string{};
+        confirmation.deletedListNames.reserve(previewRes->deletedLists.size());
 
         for (auto const& list : previewRes->deletedLists)
         {
-          if (!entries.empty())
-          {
-            entries.append("\n");
-          }
-
-          entries.append(std::format("• {}", list.name));
+          confirmation.deletedListNames.push_back(list.name);
         }
-
-        confirmation.question =
-          i18n::requiredFormat(textCatalog,
-                               MessageId::ListDeleteSubtreeQuestion,
-                               {{"count", previewRes->deletedLists.size()}, {"entries", entries}});
       }
       else
       {
@@ -457,7 +466,7 @@ namespace ao::tui
           // The deletion never landed, so the question returns to its
           // answerable state rather than claiming anything was removed.
           optDeleteConfirmation->deleting = false;
-          postText(rt::NotificationSeverity::Warning, MessageId::TuiEditorOpenUnavailable);
+          postText(rt::NotificationSeverity::Warning, MessageId::TuiListDeleteCancelled);
           requestRefresh();
         }
 
@@ -981,6 +990,54 @@ namespace ao::tui
     return nullptr;
   }
 
+  std::string ListAuthoringController::buildSubtreeEntries(ListDeleteConfirmation const& confirmation,
+                                                           std::ptrdiff_t const entryBudget,
+                                                           std::int32_t const entryColumns) const
+  {
+    using i18n::MessageId;
+
+    auto& state = *_statePtr;
+
+    // The subtree question names its entries inside the shared pattern, so
+    // the modal owns how many fit: a bounded leading window, one localized
+    // count line for the rest, and never more rows than the terminal can
+    // hold together with the question and its footer.
+    auto const budget = static_cast<std::size_t>(std::max<std::ptrdiff_t>(1, entryBudget));
+    auto visible = std::min(confirmation.deletedListNames.size(), kDeleteEntryRowLimit);
+    auto hidden = confirmation.deletedListNames.size() - visible;
+
+    if (auto const entryRows = visible + (hidden > 0 ? 1 : 0); entryRows > budget)
+    {
+      auto const excess = entryRows - budget;
+      visible = visible > excess ? visible - excess : 0;
+      hidden = confirmation.deletedListNames.size() - visible;
+    }
+
+    auto entries = std::string{};
+
+    for (std::size_t index = 0; index < visible; ++index)
+    {
+      if (!entries.empty())
+      {
+        entries.append("\n");
+      }
+
+      entries.append("• ").append(fitCellText(confirmation.deletedListNames[index], entryColumns));
+    }
+
+    if (hidden > 0)
+    {
+      if (!entries.empty())
+      {
+        entries.append("\n");
+      }
+
+      entries.append(i18n::requiredFormat(state.textCatalog, MessageId::TuiListDeleteMore, {{"count", hidden}}));
+    }
+
+    return entries;
+  }
+
   ftxui::Element ListAuthoringController::renderDeleteConfirmation(ListDeleteConfirmation const& confirmation,
                                                                    std::int32_t const terminalColumns,
                                                                    std::int32_t const terminalRows) const
@@ -991,21 +1048,33 @@ namespace ao::tui
     state.confirmationMouseBindings.clear();
     state.confirmationMouseReady = true;
 
+    auto const modalCols = std::min(terminalColumns, std::clamp(terminalColumns - 4, 60, 80));
+    auto const availableRows = std::max(1, terminalRows - 2);
+
+    // Rows the modal needs around the entry lines: border, title, the
+    // question's own fixed lines, the tag offer, and the footer that must
+    // stay on screen. The warning wraps at constrained widths, so it counts
+    // double to keep the budget honest.
+    auto const tagRows =
+      (confirmation.tagImpactQuestion.empty() ? 0 : 2) + (confirmation.tagReferencesWarning.empty() ? 0 : 2);
+    auto const fixedRows = 2 + 1 + 1 + 2 + 2 + tagRows + 1 + 1;
+
     auto body = Elements{text(confirmation.title) | bold, text("")};
 
-    // The shared question embeds its own line structure, so each line wraps
-    // as its own paragraph instead of feeding the breaks to one block.
-    std::size_t lineBreak = confirmation.question.find('\n');
-    std::size_t lineStart = 0;
-
-    while (lineBreak != std::string::npos)
+    if (confirmation.includeDescendants)
     {
-      body.push_back(paragraph(confirmation.question.substr(lineStart, lineBreak - lineStart)));
-      lineStart = lineBreak + 1;
-      lineBreak = confirmation.question.find('\n', lineStart);
+      appendQuestionLines(
+        body,
+        i18n::requiredFormat(
+          state.textCatalog,
+          MessageId::ListDeleteSubtreeQuestion,
+          {{"count", confirmation.deletedListNames.size()},
+           {"entries", buildSubtreeEntries(confirmation, availableRows - fixedRows, modalCols - 2 - 2)}}));
     }
-
-    body.push_back(paragraph(confirmation.question.substr(lineStart)));
+    else
+    {
+      appendQuestionLines(body, confirmation.question);
+    }
 
     if (!confirmation.tagImpactQuestion.empty())
     {
@@ -1057,13 +1126,13 @@ namespace ao::tui
 
     body.push_back(hbox(std::move(footer)));
 
-    auto const modalCols = std::min(terminalColumns, std::clamp(terminalColumns - 4, 60, 80));
-    auto const availableRows = std::max(1, terminalRows - 2);
     auto const contentRows = static_cast<std::int32_t>(body.size()) + 2;
     auto const modalRows = std::min(availableRows, std::max(12, contentRows));
 
-    auto boxPtr = vbox(std::move(body)) | border | size(WIDTH, EQUAL, modalCols) |
-                  size(HEIGHT, GREATER_THAN, modalRows) | clear_under;
+    // EQUAL sizing keeps the bounded body the whole modal: the footer can
+    // never be pushed past the rows the terminal actually has.
+    auto boxPtr =
+      vbox(std::move(body)) | border | size(WIDTH, EQUAL, modalCols) | size(HEIGHT, EQUAL, modalRows) | clear_under;
 
     return vbox({
       filler(),

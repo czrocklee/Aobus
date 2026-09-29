@@ -502,6 +502,8 @@ zh_Hant:table {
     tui_list_save_action { "儲存" }
     tui_list_status_saving { "正在儲存…" }
     tui_list_status_deleting { "正在刪除…" }
+    tui_list_delete_more { "+{count, plural, other {#個列表}}" }
+    tui_list_delete_cancelled { "刪除已取消；未移除任何內容" }
     tui_list_virtual_target { "“所有曲目”無法編輯或刪除" }
     tui_list_open_unavailable { "無法開啟列表" }
     tui_shell_command_palette_footer { "{completeKey} 補全  {runKey} 執行  {cancelKey} 取消" }
