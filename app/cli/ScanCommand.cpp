@@ -206,6 +206,11 @@ namespace ao::cli
                      result.missingCount == 1 ? "" : "s",
                      result.missingCount == 1 ? "s" : "");
       }
+
+      if (result.failureCount > 0)
+      {
+        std::println(os, "{} item{} failed to apply", result.failureCount, result.failureCount == 1 ? "" : "s");
+      }
     }
 
     std::string_view scanApplyProgressLabel(rt::ScanApplyProgressStage stage)
@@ -280,15 +285,30 @@ namespace ao::cli
       auto const& error = applyRes.error();
       throwCommandError(error, "scan apply failed: {}", error.message);
     }
-    else if (cli.options().format == OutputFormat::Plain)
+    else
     {
-      printApplySummary(*applyRes, cli.io().out);
-
-      if (deferFingerprint)
+      if (cli.options().format == OutputFormat::Plain)
       {
-        std::println(
-          cli.io().out,
-          "Audio identity fingerprinting was deferred; run `aobus lib fingerprint --pending` to finish indexing.");
+        printApplySummary(*applyRes, cli.io().out);
+
+        if (deferFingerprint)
+        {
+          std::println(
+            cli.io().out,
+            "Audio identity fingerprinting was deferred; run `aobus lib fingerprint --pending` to finish indexing.");
+        }
+      }
+
+      // Per-item failures are already diagnostic rows on stderr; the command
+      // still fails so automation does not read a partial apply as success.
+      // Structured reports are emitted before apply, so the failure reaches
+      // callers through this error and the exit status, not the document.
+      if (applyRes->failureCount != 0)
+      {
+        throwCommandError(Error::Code::IoError,
+                          "scan apply failed: {} item{} could not be applied",
+                          applyRes->failureCount,
+                          applyRes->failureCount == 1 ? "" : "s");
       }
     }
   }

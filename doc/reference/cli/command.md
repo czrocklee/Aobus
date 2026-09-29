@@ -153,6 +153,9 @@ Scan summary is:
 new N  changed C  moved R  missing M  unchanged U  errors E
 ```
 
+A non-dry-run `scan` or `init` follows the plan summary with apply lines for skipped, relinked, and missing-review counts, plus an `N items failed to apply` line (`1 item failed to apply` for one item) when items failed.
+Any apply failure also fails the command with `scan apply failed: ...` on stderr and exit `1`, for plain and structured output alike.
+
 Fingerprint summary is `fingerprinted N  skipped N  failed N`.
 Tag list is descending frequency then name.
 `tag show` returns the intersection across all supplied tracks.
