@@ -20,6 +20,7 @@ add_library(aobus-tui-lib STATIC
     LibraryNavigation.cpp
     LibraryController.cpp
     LibraryScanController.cpp
+    ListOrderController.cpp
     MouseBindings.cpp
     NotificationCenterPanel.cpp
     OutputDeviceController.cpp

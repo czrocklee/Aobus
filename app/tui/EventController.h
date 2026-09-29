@@ -8,6 +8,7 @@
 #include "HitRegions.h"
 #include "Keymap.h"
 #include "LibraryController.h"
+#include "ListOrderController.h"
 #include "MouseBindings.h"
 #include "NavigationPanel.h"
 #include "OutputDeviceController.h"
@@ -81,6 +82,7 @@ namespace ao::tui
     uimodel::ActivityStatusViewModel& activityStatusViewModel;
     rt::NotificationService& notifications;
     LibraryScanController& libraryScan;
+    ListOrderController& listOrder;
     TrackEditController& trackEdit;
     SettingsEditor& settings;
     Preferences const& preferences;
@@ -148,6 +150,7 @@ namespace ao::tui
     void navigateCurrentMetadata(bool album);
     void playSelectedTrack();
     void reportPlaybackControlUnavailable();
+    void applyListOrderCommand(ListOrderCommand command);
     void executePlaybackCommand(uimodel::PlaybackCommand command);
     void executeKeyAction(KeyAction action);
     void runCommand(Command const& command);
@@ -260,6 +263,7 @@ namespace ao::tui
     uimodel::ActivityStatusViewModel& _activityStatusViewModel;
     rt::NotificationService& _notifications;
     LibraryScanController& _libraryScan;
+    ListOrderController& _listOrder;
     TrackEditController& _trackEdit;
     SettingsEditor& _settings;
     Preferences const& _preferences;
