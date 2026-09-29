@@ -346,17 +346,13 @@ namespace ao::cli
       auto const ids = effectiveListTrackIds(cli, listId);
       auto const rows = resolveRows(snapshot, ids);
       auto const order = snapshot.listOrderTrackIds(listId);
-      auto const dto = toListDetailDto(*optNode, order, rows);
 
-      if (cli.options().format == OutputFormat::Yaml)
+      // YAML and JSON share one detail document shape: a `list` payload key,
+      // mirroring the `lists` key of the collection document.
+      if (cli.options().format != OutputFormat::Plain)
       {
+        auto const dto = toListDetailDto(*optNode, order, rows);
         emitDocument(cli.io().out, cli.options().format, ListDetailDocumentDto{.list = dto});
-        return;
-      }
-
-      if (cli.options().format == OutputFormat::Json)
-      {
-        emitDocument(cli.io().out, cli.options().format, dto);
         return;
       }
 
