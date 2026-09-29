@@ -4,6 +4,7 @@
 #include "test/unit/media/wav/TestWav.h"
 
 #include "lib/media/file/mpeg/id3v2/Layout.h"
+#include "test/unit/media/file/id3v2/TestId3v2.h"
 
 #include <array>
 #include <cstddef>
@@ -19,23 +20,7 @@ namespace ao::test::wav
   {
     namespace id3v2 = ao::media::file::mpeg::id3v2;
 
-    // Counts the bytes a stored body shrinks to once FF 00 escape pairs
-    // collapse, which is the size an unsynchronised v2.3 frame header declares.
-    std::size_t deunsynchronisedSize(std::span<std::uint8_t const> const bytes)
-    {
-      auto size = bytes.size();
-
-      for (std::size_t index = 0; index + 1 < bytes.size(); ++index)
-      {
-        if (bytes[index] == 0xFFU && bytes[index + 1] == 0x00U)
-        {
-          --size;
-          ++index;
-        }
-      }
-
-      return size;
-    }
+    using ao::test::id3v2::deunsynchronisedSize;
 
     void appendV23Frame(std::vector<std::uint8_t>& data,
                         std::string_view const id,

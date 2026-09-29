@@ -6,6 +6,7 @@
 #include "lib/media/file/detail/Content.h"
 #include "lib/media/file/mpeg/id3v2/Frame.h"
 #include "lib/media/file/mpeg/id3v2/Layout.h"
+#include "test/unit/media/file/id3v2/TestId3v2.h"
 #include <ao/PictureType.h>
 #include <ao/utility/ByteView.h>
 
@@ -25,6 +26,8 @@ namespace ao::media::file::mpeg::id3v2::test
   namespace
   {
     using Bytes = std::vector<std::byte>;
+
+    using ao::test::id3v2::deunsynchronisedSize;
 
     std::span<std::byte const> byteSpan(Bytes const& bytes)
     {
@@ -99,25 +102,6 @@ namespace ao::media::file::mpeg::id3v2::test
       appendByte(body, 0); // status flags
       appendByte(body, formatFlags);
       body.insert(body.end(), content.begin(), content.end());
-    }
-
-    // Models the encoder-side authoring rule used to build these fixtures:
-    // v2.3 frame headers declare the deunsynchronised content size, so
-    // unsynchronised frames pass the post-deunsynchronisation length.
-    std::size_t deunsynchronisedSize(Bytes const& content)
-    {
-      auto size = content.size();
-
-      for (std::size_t index = 0; index + 1 < content.size(); ++index)
-      {
-        if (content[index] == std::byte{0xFF} && content[index + 1] == std::byte{})
-        {
-          --size;
-          ++index;
-        }
-      }
-
-      return size;
     }
 
     Bytes textContent(Encoding encoding, std::string_view text)
@@ -477,6 +461,36 @@ namespace ao::media::file::mpeg::id3v2::test
       REQUIRE(optFrames);
       CHECK(optFrames->metadata().title() == "A\xFF"
                                              "B");
+      CHECK(optFrames->metadata().artist() == "Artist");
+    }
+
+    SECTION("grouping identity with empty content")
+    {
+      // The grouping flag on a frame with no content must not crash on the
+      // empty guard and must leave the field unset; the tag walk continues.
+      auto body = Bytes{};
+      appendFrame(body, "TIT2", true, 0x40, Bytes{});
+      appendFrame(body, "TPE1", true, 0x00, textContent(Encoding::Utf8, "Artist"));
+
+      auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
+
+      REQUIRE(optFrames);
+      CHECK(optFrames->metadata().title().empty());
+      CHECK(optFrames->metadata().artist() == "Artist");
+    }
+
+    SECTION("grouping identity with only the group id")
+    {
+      // The single content byte is the group id; dropping it leaves empty
+      // content, so the field stays unset and the tag walk continues.
+      auto body = Bytes{};
+      appendFrame(body, "TIT2", true, 0x40, Bytes{std::byte{0x42}});
+      appendFrame(body, "TPE1", true, 0x00, textContent(Encoding::Utf8, "Artist"));
+
+      auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
+
+      REQUIRE(optFrames);
+      CHECK(optFrames->metadata().title().empty());
       CHECK(optFrames->metadata().artist() == "Artist");
     }
   }
