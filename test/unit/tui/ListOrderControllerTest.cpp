@@ -104,6 +104,13 @@ namespace ao::tui::test
         return std::get<std::string>(feed.entries.back().message);
       }
 
+      rt::NotificationSeverity lastSeverity() const
+      {
+        auto const feed = runtimePtr->notifications().feed();
+        REQUIRE_FALSE(feed.entries.empty());
+        return feed.entries.back().severity;
+      }
+
       ListOrderController makeController() const
       {
         return ListOrderController{
@@ -219,5 +226,28 @@ namespace ao::tui::test
 
     CHECK(fixture.lastMessage() == "Moved 1 track in Manual Order.");
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.third, fixture.first});
+  }
+
+  TEST_CASE("ListOrderController - a submission outlives its destroyed controller",
+            "[tui][integration][list-order][concurrency]")
+  {
+    auto fixture = OrderFixture{};
+    auto const viewId = fixture.openManualOrderView();
+
+    {
+      auto controller = fixture.makeController();
+      controller.apply(ListOrderCommand::MoveDown, viewId, {fixture.first});
+
+      // The write commits before its outcome settles, so the controller is
+      // destroyed below while the submission is still in flight.
+      REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return !fixture.storedOrder().empty(); }));
+    }
+
+    REQUIRE(fixture.executor->tryDrainUntil([&fixture] { return fixture.hasNotifications(); }));
+
+    CHECK(fixture.notificationCount() == 1);
+    CHECK(fixture.lastMessage() == "Moved 1 track in Manual Order.");
+    CHECK(fixture.lastSeverity() == rt::NotificationSeverity::Info);
+    CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.first, fixture.third});
   }
 } // namespace ao::tui::test
