@@ -27,7 +27,7 @@ namespace ao::gtk::layout
     registerTransportButtonComponent(registry, runtime.playback(), playbackActions, textCatalog);
     registerVolumeControlComponent(registry, runtime.playback(), textCatalog);
     registerNowPlayingFieldComponent(registry, runtime.playback(), runtime.workspace(), textCatalog);
-    registerSeekSliderComponent(registry, runtime.playback());
+    registerSeekSliderComponent(registry, runtime.playback(), textCatalog);
     registerTimeLabelComponent(registry, runtime.playback());
     registerQualityIndicatorComponent(registry, runtime.playback());
     registerAudioPipelinePanelComponent(registry, runtime.playback(), textCatalog);

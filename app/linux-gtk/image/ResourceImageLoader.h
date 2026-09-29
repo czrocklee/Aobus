@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <functional>
 #include <stop_token>
+#include <unordered_set>
 
 namespace ao::rt
 {
@@ -90,5 +91,12 @@ namespace ao::gtk
     async::Runtime& _runtime;
     async::LifetimeScope _scope;
     Requests _requests;
+    // Callback-executor-confined set of resources already logged as undecodable,
+    // so repeated requests for corrupt art (for example while scrolling) do not
+    // flood the log. The set grows monotonically by at most one entry per corrupt
+    // resource id and is never cleared: no existing cache or library reset path
+    // touches this loader (ImageCache::clear() is unused), so the bound is one id
+    // per distinct corrupt resource loaded during the loader's lifetime.
+    std::unordered_set<ResourceId> _decodeFailureLog;
   };
 } // namespace ao::gtk

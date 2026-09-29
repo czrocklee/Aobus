@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/ByteView.h>
@@ -20,8 +21,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <optional>
 #include <span>
 #include <stop_token>
+#include <string>
 #include <utility>
 
 namespace ao::gtk
@@ -42,15 +46,27 @@ namespace ao::gtk
       return static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) <= kMaximumDecodedPixels;
     }
 
-    Glib::RefPtr<Gdk::Pixbuf> decodePixbuf(std::span<std::byte const> const bytes, ImageCacheKey const key)
+    // A decode that ends without a pixbuf carries the reason it was refused,
+    // so the caller can log it like a thrown decode error.
+    struct DecodedImage final
+    {
+      Glib::RefPtr<Gdk::Pixbuf> pixbufPtr{};
+      std::optional<std::string> optRejectReason{};
+    };
+
+    DecodedImage decodePixbuf(std::span<std::byte const> const bytes, ImageCacheKey const key)
     {
       auto loaderPtr = Gdk::PixbufLoader::create();
       bool sizePrepared = false;
       bool rejected = false;
+      std::int32_t preparedWidth = 0;
+      std::int32_t preparedHeight = 0;
       [[maybe_unused]] auto sizeConnection = loaderPtr->signal_size_prepared().connect(
         [&](std::int32_t const width, std::int32_t const height)
         {
           sizePrepared = true;
+          preparedWidth = width;
+          preparedHeight = height;
 
           if (!isWithinDimensionLimits(width, height))
           {
@@ -103,7 +119,22 @@ namespace ao::gtk
         }
       }
 
-      return rejected || !sizePrepared ? Glib::RefPtr<Gdk::Pixbuf>{} : loaderPtr->get_pixbuf();
+      auto optRejectReason = std::optional<std::string>{};
+
+      if (rejected)
+      {
+        optRejectReason =
+          std::format("rejected {}x{} beyond the decode dimension limits", preparedWidth, preparedHeight);
+      }
+      else if (!sizePrepared)
+      {
+        optRejectReason = std::string{"no image dimensions were prepared"};
+      }
+
+      return DecodedImage{
+        .pixbufPtr = rejected || !sizePrepared ? Glib::RefPtr<Gdk::Pixbuf>{} : loaderPtr->get_pixbuf(),
+        .optRejectReason = std::move(optRejectReason),
+      };
     }
   } // namespace
 
@@ -268,22 +299,38 @@ namespace ao::gtk
                                                      std::stop_token const stopToken)
   {
     auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+    auto optDecodeError = std::optional<std::string>{};
 
     co_await runtime->resumeOnWorkerAsync(stopToken);
 
+    // Empty bytes are the byte cache's legitimate result for a resource
+    // without image content, not a decode failure: the request settles
+    // empty without caching and stays silent.
     if (!bytes.empty())
     {
       try
       {
-        decodedPtr = decodePixbuf(bytes.view(), key);
+        auto const decoded = decodePixbuf(bytes.view(), key);
+        decodedPtr = std::move(decoded.pixbufPtr);
+        optDecodeError = std::move(decoded.optRejectReason);
       }
-      catch (Glib::Error const&)
+      catch (Glib::Error const& e)
       {
         decodedPtr.reset();
+        optDecodeError = e.what();
       }
     }
 
     co_await runtime->resumeOnCallbackExecutorAsync(stopToken);
+
+    // Failed decodes are not cached, so a corrupt or refused resource would
+    // re-decode on every request (for example while scrolling). Log the first
+    // failure per resource — a thrown error or a soft dimension reject — to
+    // surface broken art without flooding.
+    if (optDecodeError && loader->_decodeFailureLog.insert(key.resourceId).second)
+    {
+      APP_LOG_WARN("ResourceImageLoader: Failed to decode resource {}: {}", key.resourceId.raw(), *optDecodeError);
+    }
 
     if (decodedPtr && !loader->get(key))
     {
@@ -310,9 +357,14 @@ namespace ao::gtk
       renderedPixbufPtr =
         sourcePixbufPtr->scale_simple(renderedSize.width, renderedSize.height, Gdk::InterpType::HYPER);
     }
-    catch (Glib::Error const&)
+    catch (Glib::Error const& e)
     {
+      // Render failures are not deduplicated by design: the render task has
+      // no resource identity to key on, and renders re-run per resize rather
+      // than per scroll request, so the log stays bounded by the failure rate.
       renderedPixbufPtr.reset();
+      APP_LOG_WARN(
+        "ResourceImageLoader: Failed to render image to {}x{}: {}", renderedSize.width, renderedSize.height, e.what());
     }
 
     co_await runtime->resumeOnCallbackExecutorAsync(stopToken);

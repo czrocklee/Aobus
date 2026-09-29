@@ -33,9 +33,11 @@
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -102,7 +104,16 @@ namespace ao::gtk::layout::editor
     };
 
     void buildUi();
-    void populateTree();
+
+    /** Rebuilds the tree store from the document.
+     *
+     * optSelectedNodePath is a child-index path from the document root (an empty
+     * path is the root node). When present, the matching row is re-expanded and
+     * selected after the rebuild so structural mutations keep a meaningful node
+     * selected by its document child-index path instead of a rebuild-invalidated pointer.
+     */
+    void populateTree(std::optional<std::vector<std::size_t>> optSelectedNodePath = std::nullopt);
+    void selectRowByDocumentPath(std::vector<std::size_t> const& documentPath);
     void appendNodeToTree(Gtk::TreeModel::Row parentRow, uimodel::LayoutNode* node);
     void handleSelectionChanged();
     void updatePropertiesPanel(uimodel::LayoutNode* node);
@@ -170,6 +181,10 @@ namespace ao::gtk::layout::editor
     ModelColumns _columns;
     Glib::RefPtr<Gtk::TreeStore> _treeStorePtr;
     Gtk::TreeView _treeView;
+    // Disconnected at the start of ~LayoutEditorDialog: the callback reaches
+    // members declared after this connection, so a selection change during
+    // teardown must not rely on member declaration order.
+    sigc::scoped_connection _selectionChangedConn;
     Gtk::ScrolledWindow _treeScroll;
 
     Gtk::Box _treeBox{Gtk::Orientation::VERTICAL};
