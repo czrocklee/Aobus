@@ -377,6 +377,39 @@ namespace ao::gtk::test
       CHECK_FALSE(loader.getThumbnail(resourceId, kPixelSize));
     }
 
+    SECTION("corrupt full-size bytes complete empty across repeated requests")
+    {
+      auto const resourceId = malformedResourceId;
+      std::int32_t firstCount = 0;
+      std::int32_t secondCount = 0;
+      bool firstEmpty = false;
+      bool secondEmpty = false;
+
+      auto firstRequest = loader.requestFull(resourceId,
+                                             [&](Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+                                             {
+                                               ++firstCount;
+                                               firstEmpty = !pixbufPtr;
+                                             });
+      REQUIRE(firstRequest);
+      REQUIRE(tryPumpGtkEventsUntil([&] { return firstCount == 1; }));
+      CHECK(firstEmpty);
+      CHECK_FALSE(loader.getFull(resourceId));
+
+      // A failed decode is not cached, so the corrupt resource decodes again;
+      // the request must still complete empty rather than hang or throw.
+      auto secondRequest = loader.requestFull(resourceId,
+                                              [&](Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+                                              {
+                                                ++secondCount;
+                                                secondEmpty = !pixbufPtr;
+                                              });
+      REQUIRE(secondRequest);
+      REQUIRE(tryPumpGtkEventsUntil([&] { return secondCount == 1; }));
+      CHECK(secondEmpty);
+      CHECK_FALSE(loader.getFull(resourceId));
+    }
+
     SECTION("source dimensions above the interactive limit are rejected before full decode")
     {
       bool completed = false;
