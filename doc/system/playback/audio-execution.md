@@ -225,14 +225,18 @@ render signal before control restarts and settles it.
 This makes a high-rate target reachable even when its requested duration represents more data than the ring can hold.
 Initial preroll, post-seek preroll, and the background decode loop all use this byte policy.
 
+The PCM ring is frame-aware: writes and reads move whole output frames only, a truncated write parks its remainder at a frame boundary, and a partial-frame read request leaves the fragment buffered.
+Ring content is therefore always a whole number of frames, and the realtime consumer yields whole frames to the RenderTarget frame contract by construction.
+
 Before reading another decoder block, the sole producer checks both that buffered bytes remain below the target and that writable capacity can hold the previous nonempty block.
 For stable or decreasing decoder block sizes this prevents a predictable partial write and its timed retry.
 The previous size is predictive rather than a decoder maximum.
-If a later block grows, synchronous initial or post-seek preroll writes only the available capacity and returns without waiting for a consumer.
+If a later block grows, synchronous initial or post-seek preroll writes only the available whole-frame capacity and returns without waiting for a consumer.
 The source retains the decoder-owned span for the unwritten remainder, and the background producer finishes that block before admitting another decoder read.
 Background partial writes remain stop-token-aware.
 An end-of-stream block publishes EOF only after all of its PCM has entered the ring, so pending PCM cannot appear drained or suppress worker startup.
 A decoded block larger than the entire ring fails with `DecodeFailed` instead of entering an impossible write wait.
+A decoded block that is not a whole number of output frames fails the same way instead of parking a tail that can never complete.
 
 The predictive size is producer-confined.
 For an active Engine seek, backend `stop()` first establishes render quiescence and Engine control serialization excludes complete `status()` queue observation.

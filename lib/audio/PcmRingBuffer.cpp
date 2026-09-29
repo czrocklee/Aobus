@@ -3,13 +3,14 @@
 
 #include "PcmRingBuffer.h"
 
-#ifndef NDEBUG
 #include <ao/Contract.h>
 
+#ifndef NDEBUG
 #include <atomic>
 #include <cstdint>
 #endif
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <span>
@@ -24,8 +25,20 @@ namespace ao::audio
   } // namespace
 #endif
 
-  PcmRingBuffer::PcmRingBuffer()
-    : _queuePtr{std::make_unique<Queue>()}
+  namespace
+  {
+    // Runs inside the constructor's member initializer, before the members that
+    // divide by the frame size are initialized.
+    std::size_t frameCapacityFor(std::size_t frameSize)
+    {
+      AO_EXPECTS(frameSize > 0, "PCM ring frame size must be nonzero");
+      AO_EXPECTS(frameSize <= kRingBufferCapacity, "PCM ring frame size must fit the ring capacity");
+      return kRingBufferCapacity / frameSize;
+    }
+  } // namespace
+
+  PcmRingBuffer::PcmRingBuffer(std::size_t frameSize)
+    : _queuePtr{std::make_unique<Queue>()}, _frameSize{frameSize}, _frameCapacity{frameCapacityFor(frameSize)}
   {
   }
 
@@ -35,7 +48,12 @@ namespace ao::audio
     beginDebugAccess();
 #endif
 
-    auto const written = input.empty() ? 0 : _queuePtr->push(input.data(), input.size());
+    // The sole producer can only observe writable space grow or stay equal,
+    // because only the consumer frees it, so pushing this floored amount always
+    // commits fully and never splits a frame across the ring tail.
+    auto const writableFrames = _queuePtr->write_available() / _frameSize;
+    auto const requestedFrames = std::min(input.size() / _frameSize, writableFrames);
+    auto const written = requestedFrames == 0 ? 0 : _queuePtr->push(input.data(), requestedFrames * _frameSize);
 
 #ifndef NDEBUG
     endDebugAccess();
@@ -50,7 +68,13 @@ namespace ao::audio
     beginDebugAccess();
 #endif
 
-    auto const bytesRead = output.empty() ? 0 : _queuePtr->pop(output.data(), output.size());
+    // The sole consumer can only observe content grow or stay equal, because
+    // only the producer fills it, so popping this floored amount always commits
+    // fully. A sub-frame fragment stays buffered instead of escaping the ring
+    // as the partial read the RenderTarget contract forbids.
+    auto const readableFrames = _queuePtr->read_available() / _frameSize;
+    auto const requestedFrames = std::min(output.size() / _frameSize, readableFrames);
+    auto const bytesRead = requestedFrames == 0 ? 0 : _queuePtr->pop(output.data(), requestedFrames * _frameSize);
 
 #ifndef NDEBUG
     endDebugAccess();
@@ -70,6 +94,8 @@ namespace ao::audio
 #ifndef NDEBUG
     endDebugClear();
 #endif
+
+    // Emptiness satisfies the frame invariant.
   }
 
   std::size_t PcmRingBuffer::size() const noexcept
@@ -93,13 +119,15 @@ namespace ao::audio
     beginDebugAccess();
 #endif
 
-    auto const available = _queuePtr->write_available();
+    // Report whole-frame writable bytes only: the frame-aware producer parks
+    // anything that cannot fit as complete frames.
+    auto const availableFrames = _queuePtr->write_available() / _frameSize;
 
 #ifndef NDEBUG
     endDebugAccess();
 #endif
 
-    return available;
+    return availableFrames * _frameSize;
   }
 
 #ifndef NDEBUG

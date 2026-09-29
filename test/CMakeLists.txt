@@ -423,6 +423,7 @@ add_executable(ao_core_test
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/StreamingPrerollTest.cpp
+    unit/audio/StreamingRenderAlignmentTest.cpp
     unit/audio/PcmRingBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderBufferTest.cpp
     unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp

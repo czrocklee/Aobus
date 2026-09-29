@@ -146,6 +146,25 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::DecodeFailed);
   }
 
+  TEST_CASE("StreamingSource - preparation rejects a decoded block that is not a whole number of frames synchronously",
+            "[audio][unit][streaming-source]")
+  {
+    auto const info = testStreamInfo();
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    // 3 bytes cannot form whole frames of the 2-byte output format, and the
+    // block is far below capacity, so only the whole-frame contract can reject it.
+    decoderPtr->setReadScript({{silenceBlock(3), false}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, std::chrono::milliseconds{1}, std::chrono::milliseconds{500});
+    auto const res = sourcePtr->prepare();
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::DecodeFailed);
+    CHECK(res.error().message == "Decoded PCM block is not a whole number of frames");
+  }
+
   TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset",
             "[audio][unit][streaming-source]")
   {
@@ -227,6 +246,39 @@ namespace ao::audio::test
     sourcePtr.reset();
     REQUIRE(errors.size() == 1);
     CHECK(errors.front().message == "async fail");
+  }
+
+  TEST_CASE("StreamingSource - background non-whole-frame decoded block notifies the error callback once",
+            "[audio][unit][streaming-source][concurrency]")
+  {
+    auto const info = testStreamInfo();
+    auto errors = std::vector<Error>{};
+    auto errorReady = std::counting_semaphore{0};
+    auto onError = [&](Error const& error)
+    {
+      errors.push_back(error);
+      errorReady.release();
+    };
+
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto block = silenceBlock(200); // 100ms, enough for the 50ms preroll
+    // The second block holds 1.5 frames of the 2-byte output format; the
+    // decode worker must reject it instead of parking its tail forever.
+    decoderPtr->setReadScript({{block, false}, {silenceBlock(3), false}});
+
+    auto sourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, std::chrono::milliseconds{50}, std::chrono::milliseconds{500});
+    REQUIRE(sourcePtr->prepare());
+    sourcePtr->activate(onError);
+
+    // A bounded wait keeps the case free of Catch assertions in the callback;
+    // teardown joins a decode thread that honors its stop token, so even a
+    // regression that parks the malformed tail cannot hang this case.
+    REQUIRE(errorReady.try_acquire_for(std::chrono::seconds{5}));
+    sourcePtr.reset(); // Join the decode thread before asserting callback payloads.
+    REQUIRE(errors.size() == 1);
+    CHECK(errors.front().code == Error::Code::DecodeFailed);
+    CHECK(errors.front().message == "Decoded PCM block is not a whole number of frames");
   }
 
   TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming-source]")

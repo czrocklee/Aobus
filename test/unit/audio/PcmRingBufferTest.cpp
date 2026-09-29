@@ -6,14 +6,19 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <optional>
+#include <semaphore>
 #include <span>
+#include <stop_token>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace ao::audio::test
@@ -22,17 +27,29 @@ namespace ao::audio::test
   {
     constexpr auto kConcurrentCompletionTimeout = std::chrono::seconds{5};
 
+    // 8-bit mono PCM: a one-byte frame keeps the byte-FIFO mechanics directly
+    // observable in the mechanics cases below.
+    constexpr std::size_t kSingleByteFrameSize = 1;
+
     struct ByteMismatch final
     {
       std::int32_t index{};
       std::byte expected{};
       std::byte actual{};
     };
+
+    // Producer outcome recorded when the concurrent frame case aborts at its
+    // deadline or a stop request instead of committing every frame.
+    struct ProducerStall final
+    {
+      std::size_t committedFrames{};
+      std::size_t parkedBytes{};
+    };
   } // namespace
 
   TEST_CASE("PcmRingBuffer - reads preserve FIFO bytes and clear resets state", "[audio][unit][ring-buffer]")
   {
-    auto buffer = PcmRingBuffer{};
+    auto buffer = PcmRingBuffer{kSingleByteFrameSize};
 
     SECTION("Empty read and write are no-ops")
     {
@@ -128,7 +145,7 @@ namespace ao::audio::test
 
   TEST_CASE("PcmRingBuffer - capacity limit causes short write instead of overflow", "[audio][unit][ring-buffer]")
   {
-    auto buffer = PcmRingBuffer{};
+    auto buffer = PcmRingBuffer{kSingleByteFrameSize};
     auto const capacity = buffer.capacity();
     REQUIRE(capacity > 0);
     auto const largeData = std::vector(capacity + 64, std::byte{0xCC});
@@ -156,10 +173,75 @@ namespace ao::audio::test
     CHECK(recovered == extra);
   }
 
+  TEST_CASE("PcmRingBuffer - frame-aligned ring parks partial frames at frame boundaries", "[audio][unit][ring-buffer]")
+  {
+    // 24-bit stereo frames (6 bytes) do not divide the 2 MiB capacity, so
+    // space pressure can only resolve at whole-frame boundaries.
+    constexpr std::size_t kFrameSize = 6;
+    auto const usableCapacity = (kRingBufferCapacity / kFrameSize) * kFrameSize;
+    auto const fillBytes = (usableCapacity / kFrameSize / 2) * kFrameSize;
+
+    SECTION("capacity and writable space floor to whole frames")
+    {
+      auto buffer = PcmRingBuffer{kFrameSize};
+      CHECK(buffer.frameSize() == kFrameSize);
+      CHECK(buffer.capacity() == usableCapacity);
+      CHECK(buffer.capacity() % kFrameSize == 0);
+      CHECK(buffer.availableToWrite() == usableCapacity);
+
+      auto const block = std::vector(kRingBufferCapacity, std::byte{0x33});
+      CHECK(buffer.write(block) == usableCapacity);
+      CHECK(buffer.size() == usableCapacity);
+      CHECK(buffer.availableToWrite() == 0);
+    }
+
+    SECTION("truncated write parks whole frames and reads lose no bytes")
+    {
+      auto buffer = PcmRingBuffer{kFrameSize};
+      auto const fill = std::vector(fillBytes, std::byte{0x11});
+      REQUIRE(buffer.write(fill) == fillBytes);
+
+      // Larger than the remaining free space: only whole frames are accepted
+      // and the remainder stays parked with the producer.
+      auto const blockBytes = ((usableCapacity - fillBytes) + (kFrameSize * 2));
+      auto const block = std::vector(blockBytes, std::byte{0x22});
+      auto const written = buffer.write(block);
+      CHECK(written == usableCapacity - fillBytes);
+      CHECK(written % kFrameSize == 0);
+      CHECK(buffer.size() == usableCapacity);
+      CHECK(buffer.availableToWrite() == 0);
+
+      // Partial-frame read requests return nothing; larger requests floor to
+      // whole frames and consume only previously accepted bytes.
+      auto partial = std::array<std::byte, 32>{};
+      CHECK(buffer.read(std::span{partial}.first(4)) == 0);
+      CHECK(buffer.read(std::span{partial}.first(7)) == kFrameSize);
+      CHECK(buffer.read(std::span{partial}.first(13)) == kFrameSize * 2);
+      CHECK(std::ranges::all_of(
+        std::span{partial}.first(kFrameSize * 2), [](std::byte value) { return value == std::byte{0x11}; }));
+      CHECK(buffer.size() == usableCapacity - (kFrameSize * 3));
+
+      // Freed space admits the parked frames; they become visible in order.
+      REQUIRE(buffer.write(std::span{block}.subspan(written)) == kFrameSize * 2);
+      CHECK(buffer.size() == usableCapacity - kFrameSize);
+
+      // Draining yields the exact FIFO stream: no bytes lost, none duplicated.
+      auto drained = std::vector<std::byte>(usableCapacity);
+      REQUIRE(buffer.read(drained) == usableCapacity - kFrameSize);
+      CHECK(buffer.size() == 0);
+      CHECK(buffer.availableToWrite() == usableCapacity);
+      CHECK((kFrameSize * 3) + (usableCapacity - kFrameSize) == fillBytes + blockBytes);
+      CHECK(std::ranges::all_of(std::span{drained}.first(fillBytes - (kFrameSize * 3)),
+                                [](std::byte value) { return value == std::byte{0x11}; }));
+      CHECK(std::ranges::all_of(std::span{drained}.subspan(fillBytes - (kFrameSize * 3), blockBytes),
+                                [](std::byte value) { return value == std::byte{0x22}; }));
+    }
+  }
+
   TEST_CASE("PcmRingBuffer - single producer and consumer preserve byte order",
             "[audio][unit][ring-buffer][concurrency][stress]")
   {
-    auto buffer = PcmRingBuffer{};
+    auto buffer = PcmRingBuffer{kSingleByteFrameSize};
     std::int32_t const iterations = 10000;
 
     auto progressMutex = std::mutex{};
@@ -283,6 +365,171 @@ namespace ao::audio::test
     }
 
     CHECK(consumed == iterations);
+    CHECK(buffer.size() == 0);
+  }
+
+  TEST_CASE("PcmRingBuffer - concurrent frame-aligned producer and consumer park whole frames",
+            "[audio][unit][ring-buffer][concurrency][stress]")
+  {
+    // 24-bit stereo frames do not divide the capacity; the producer total
+    // exceeds the whole-frame capacity, so a parked partial write across
+    // threads is guaranteed while the consumer is held back.
+    constexpr std::size_t kFrameSize = 6;
+    constexpr std::size_t kTotalFrames = 400000;
+    constexpr std::size_t kProducerBurstFrames = 1024;
+    constexpr std::size_t kConsumerBurstFrames = 97;
+    constexpr std::size_t kNoMismatchSentinel = kTotalFrames;
+
+    auto buffer = PcmRingBuffer{kFrameSize};
+    auto writeMisaligned = std::atomic<std::size_t>{0};
+    auto readMisaligned = std::atomic<std::size_t>{0};
+    auto orderMismatchAt = std::atomic<std::size_t>{kNoMismatchSentinel};
+    auto producerParked = std::atomic<bool>{false};
+    auto producerStart = std::binary_semaphore{0};
+    auto optProducerStall = std::optional<ProducerStall>{};
+    auto optConsumerTimeoutAt = std::optional<std::size_t>{};
+    std::size_t consumedFrames = 0;
+    auto const deadline = std::chrono::steady_clock::now() + kConcurrentCompletionTimeout;
+
+    auto const frameValue = [](std::size_t frameIndex) { return static_cast<std::byte>((frameIndex % 251) + 1); };
+
+    auto producer = std::jthread{
+      [&](std::stop_token const& stopToken)
+      {
+        auto burst = std::vector<std::byte>(kProducerBurstFrames * kFrameSize);
+        std::size_t producedFrames = 0;
+
+        while (producedFrames < kTotalFrames)
+        {
+          if (std::chrono::steady_clock::now() >= deadline || stopToken.stop_requested())
+          {
+            optProducerStall = ProducerStall{.committedFrames = producedFrames, .parkedBytes = 0};
+            break;
+          }
+
+          auto const burstFrames = std::min(kProducerBurstFrames, kTotalFrames - producedFrames);
+
+          for (std::size_t frame = 0; frame < burstFrames; ++frame)
+          {
+            std::ranges::fill(
+              std::span{burst}.subspan(frame * kFrameSize, kFrameSize), frameValue(producedFrames + frame));
+          }
+
+          auto pending = std::span<std::byte const>{burst}.first(burstFrames * kFrameSize);
+
+          while (!pending.empty())
+          {
+            auto const written = buffer.write(pending);
+
+            if (written % kFrameSize != 0)
+            {
+              writeMisaligned.fetch_add(1, std::memory_order_relaxed);
+            }
+
+            pending = pending.subspan(written);
+
+            if (pending.empty())
+            {
+              break;
+            }
+
+            // One-shot startup signal: only the first park releases, so
+            // park retries never accumulate past the binary maximum.
+            if (!producerParked.exchange(true, std::memory_order_relaxed))
+            {
+              producerStart.release();
+            }
+
+            // Only the consumer can clear the parked tail, so leaving the
+            // park requires the deadline or the stop request of unwinding.
+            if (std::chrono::steady_clock::now() >= deadline || stopToken.stop_requested())
+            {
+              auto const committedFrames = producedFrames + burstFrames - (pending.size() / kFrameSize);
+              optProducerStall = ProducerStall{.committedFrames = committedFrames, .parkedBytes = pending.size()};
+              break;
+            }
+
+            std::this_thread::yield();
+          }
+
+          if (optProducerStall)
+          {
+            break;
+          }
+
+          producedFrames += burstFrames;
+        }
+
+        // Exit fallback keeps the startup signal one-shot: it fires only
+        // when no park released it first, whatever ended the run.
+        if (!producerParked.load(std::memory_order_relaxed))
+        {
+          producerStart.release();
+        }
+      }};
+
+    REQUIRE(producerStart.try_acquire_for(kConcurrentCompletionTimeout));
+
+    auto consumer =
+      std::jthread{[&]
+                   {
+                     auto output = std::vector<std::byte>(kConsumerBurstFrames * kFrameSize);
+
+                     while (consumedFrames < kTotalFrames && std::chrono::steady_clock::now() < deadline)
+                     {
+                       auto const bytesRead = buffer.read(output);
+
+                       if (bytesRead % kFrameSize != 0)
+                       {
+                         readMisaligned.fetch_add(1, std::memory_order_relaxed);
+                       }
+
+                       for (std::size_t frame = 0; frame < bytesRead / kFrameSize; ++frame)
+                       {
+                         auto const expected = frameValue(consumedFrames + frame);
+                         auto const actual = std::span{output}.subspan(frame * kFrameSize, kFrameSize);
+
+                         if (!std::ranges::all_of(actual, [&](std::byte value) { return value == expected; }))
+                         {
+                           auto sentinel = kNoMismatchSentinel;
+                           std::ignore = orderMismatchAt.compare_exchange_strong(sentinel, consumedFrames + frame);
+                         }
+                       }
+
+                       consumedFrames += bytesRead / kFrameSize;
+
+                       if (bytesRead == 0)
+                       {
+                         std::this_thread::sleep_for(std::chrono::microseconds{100});
+                       }
+                     }
+
+                     if (consumedFrames < kTotalFrames)
+                     {
+                       optConsumerTimeoutAt = consumedFrames;
+                     }
+                   }};
+
+    producer.join();
+    consumer.join();
+
+    if (optProducerStall)
+    {
+      FAIL("Producer stalled with " << optProducerStall->committedFrames << " of " << kTotalFrames
+                                    << " frames committed and " << optProducerStall->parkedBytes
+                                    << " bytes parked at the deadline or stop request");
+    }
+
+    if (optConsumerTimeoutAt)
+    {
+      FAIL("Consumer timed out after " << *optConsumerTimeoutAt << " of " << kTotalFrames << " frames");
+    }
+
+    REQUIRE(producerParked.load());
+    CHECK(writeMisaligned.load() == 0);
+    CHECK(readMisaligned.load() == 0);
+    CHECK(orderMismatchAt.load() == kNoMismatchSentinel);
+    CHECK(consumedFrames == kTotalFrames);
     CHECK(buffer.size() == 0);
   }
 } // namespace ao::audio::test

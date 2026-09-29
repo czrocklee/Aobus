@@ -25,6 +25,7 @@
 #include <fakeit.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -339,8 +340,10 @@ namespace ao::audio::test
         .isLossy = false,
         .codec = AudioCodec::Flac,
       });
+      // 4002 bytes is a whole number of frames for both the 3-byte packed
+      // 24-bit source and the 2-byte 16-bit successor.
       decoderPtr->setReadScript(
-        {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+        {{.data = std::vector<std::byte>(4002, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
       return decoderPtr;
     };
     auto engine = Engine{std::make_unique<FakeCapturingBackend>(), makeEngineTestDevice(), std::move(decoderFactory)};
@@ -370,7 +373,10 @@ namespace ao::audio::test
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
     auto decoderRequests = std::vector<std::optional<SampleEncoding>>{};
-    auto decoderFactory = [nativeFormat, &decoderRequests](
+    // Observes the reclaim of the staged decoder only: a healthy staged source
+    // keeps it alive across stage, and commit's mode change must retire it.
+    auto stagedDecoderDestroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
+    auto decoderFactory = [nativeFormat, &decoderRequests, stagedDecoderDestroyedPtr](
                             std::filesystem::path const&, std::optional<SampleEncoding> optOutputEncoding)
     {
       decoderRequests.push_back(optOutputEncoding);
@@ -382,8 +388,16 @@ namespace ao::audio::test
         .isLossy = false,
         .codec = AudioCodec::Flac,
       });
+      // Only the staged decoder is pinned: the first request inspects with a
+      // null encoding hint and the commit-time request selects the padded mode.
+      if (optOutputEncoding == SampleEncoding::Signed24PackedLe)
+      {
+        decoderPtr->setDestroyCounter(stagedDecoderDestroyedPtr);
+      }
+      // 4008 bytes is a whole number of frames for both the 3-byte packed
+      // 24-bit staged decoder and the 4-byte padded decoder commit selects.
       decoderPtr->setReadScript(
-        {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+        {{.data = std::vector<std::byte>(4008, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
       return decoderPtr;
     };
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -394,6 +408,10 @@ namespace ao::audio::test
     REQUIRE(decoderRequests.size() == 2);
     CHECK_FALSE(decoderRequests[0]);
     CHECK(decoderRequests[1] == SampleEncoding::Signed24PackedLe);
+    // The staged decoder prerolled into a healthy prepared source and stays
+    // alive until commit; a script that cannot form whole packed frames would
+    // already be discarded by failed preroll here.
+    CHECK(stagedDecoderDestroyedPtr->load() == 0);
 
     auto committedRes = engine.commitPlayback(std::move(*stagedRes));
 
@@ -401,6 +419,9 @@ namespace ao::audio::test
     CHECK(committedRes->playbackStarted);
     REQUIRE(decoderRequests.size() == 3);
     CHECK(decoderRequests[2] == SampleEncoding::Signed24In32Le);
+    // Commit chose the padded mode, so the healthy staged packed decoder was
+    // retired rather than reused.
+    CHECK(stagedDecoderDestroyedPtr->load() == 1);
     CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed24In32Le);
     engine.stop();
   }

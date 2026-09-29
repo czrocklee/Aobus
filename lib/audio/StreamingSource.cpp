@@ -50,6 +50,7 @@ namespace ao::audio
                                    std::chrono::milliseconds prerollDuration,
                                    std::chrono::milliseconds decodeHighWatermarkThreshold)
     : _decoderPtr{std::move(decoderPtr)}
+    , _ringBuffer{frameBytes(streamInfo.outputFormat)}
     , _bytesPerSecond{bytesPerSecond(streamInfo.outputFormat)}
     , _prerollDuration{prerollDuration}
     , _decodeHighWatermarkByteCount{
@@ -317,6 +318,14 @@ namespace ao::audio
       if (blockRes->bytes.size() > _ringBuffer.capacity())
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "Decoded PCM block exceeds streaming buffer capacity");
+      }
+
+      // The ring commits whole frames only; a block that is not a whole number
+      // of frames could never finish and would park its tail forever. Fail the
+      // decode loudly instead of letting the misalignment reach the renderer.
+      if (blockRes->bytes.size() % _ringBuffer.frameSize() != 0)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Decoded PCM block is not a whole number of frames");
       }
 
       if (!blockRes->bytes.empty())
