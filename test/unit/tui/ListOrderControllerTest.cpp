@@ -24,6 +24,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -58,7 +59,8 @@ namespace ao::tui::test
           rt::test::runRuntimeTask(*runtimePtr,
                                    runtimePtr->library().commands().createListAsync(
                                      rt::ListDraft{.name = "Ordered", .expression = "#ordered"})));
-        auto targetsRes = runtimePtr->library().bindTrackTargets({first, second, third});
+        auto const trackIds = std::array{first, second, third};
+        auto targetsRes = runtimePtr->library().bindTrackTargets(trackIds);
         REQUIRE(targetsRes);
         ao::test::requireValue(rt::test::runRuntimeTask(
           *runtimePtr, runtimePtr->library().commands().addTracksToListAsync(listId, std::move(*targetsRes))));
