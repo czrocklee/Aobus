@@ -61,9 +61,6 @@ namespace ao::tui
   {
     using i18n::MessageId;
 
-    /// The shared smart-list preview status names this many leading matches
-    /// when a source has more, so the rendered rows and the status agree.
-    constexpr std::size_t kPreviewRowLimit = 10;
     constexpr auto kPreviewDebounceInterval = std::chrono::milliseconds{200};
 
     /// Everything one preview recomputation produced for the open editor.
@@ -139,7 +136,7 @@ namespace ao::tui
         // saved List will show, and only its bounded leading rows are read.
         auto projectionPtr = views.createTransientTrackListProjection(lease, rt::TrackOrderSpec{});
         auto const snapshot = library.snapshot();
-        auto const visibleCount = std::min(projectionPtr->size(), kPreviewRowLimit);
+        auto const visibleCount = std::min(projectionPtr->size(), uimodel::kSmartListPreviewLimit);
         tracks.reserve(visibleCount);
 
         for (std::size_t index = 0; index < visibleCount; ++index)

@@ -7,6 +7,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/list/SmartListEditing.h>
 
 #include <array>
 #include <cstddef>
@@ -246,15 +247,13 @@ namespace ao::uimodel
       return std::string{requiredText(catalog, MessageId::SmartListNoMatches)};
     }
 
-    constexpr std::size_t kMaxPreview = 10;
-
-    if (count <= kMaxPreview)
+    if (count <= kSmartListPreviewLimit)
     {
       return requiredFormat(catalog, MessageId::SmartListShowingAllMatches, {{"count", count}});
     }
 
     return requiredFormat(
-      catalog, MessageId::SmartListShowingFirstMatches, {{"visible", kMaxPreview}, {"count", count}});
+      catalog, MessageId::SmartListShowingFirstMatches, {{"visible", kSmartListPreviewLimit}, {"count", count}});
   }
 
   std::string trackChannelText(MessageCatalog const& catalog, std::uint8_t const channels)
