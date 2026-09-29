@@ -24,8 +24,8 @@ namespace ao::gtk::layout
     class SeekSliderComponent final : public LayoutComponent
     {
     public:
-      explicit SeekSliderComponent(rt::PlaybackService& playback)
-        : _control{playback}
+      SeekSliderComponent(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
+        : _control{playback, textCatalog}
       {
       }
 
@@ -36,10 +36,13 @@ namespace ao::gtk::layout
     };
   } // namespace
 
-  void registerSeekSliderComponent(ComponentRegistry& registry, rt::PlaybackService& playback)
+  void registerSeekSliderComponent(ComponentRegistry& registry,
+                                   rt::PlaybackService& playback,
+                                   i18n::MessageCatalog const& textCatalog)
   {
-    registry.registerSharedComponent("playback.seekSlider",
-                                     [&playback](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
-                                     { return std::make_unique<SeekSliderComponent>(playback); });
+    registry.registerSharedComponent(
+      "playback.seekSlider",
+      [&playback, textCatalog](LayoutBuildContext const& /*ctx*/, LayoutNode const& /*node*/)
+      { return std::make_unique<SeekSliderComponent>(playback, textCatalog); });
   }
 } // namespace ao::gtk::layout

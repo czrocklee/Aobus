@@ -3,6 +3,9 @@
 
 #include "playback/SeekControlWidget.h"
 
+#include "common/AccessibleLabel.h"
+#include "i18n/GtkText.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
@@ -33,7 +36,7 @@ namespace ao::gtk
     constexpr auto kSeekDebounceInterval = std::chrono::milliseconds{50};
   } // namespace
 
-  SeekControlWidget::SeekControlWidget(rt::PlaybackService& playback)
+  SeekControlWidget::SeekControlWidget(rt::PlaybackService& playback, i18n::MessageCatalog const& textCatalog)
     : _seekViewModel{playback, [this](ao::uimodel::PlaybackPositionViewState const& view) { applyState(view); }}
   {
     _scale.set_halign(Gtk::Align::FILL);
@@ -41,6 +44,10 @@ namespace ao::gtk
     _scale.set_valign(Gtk::Align::CENTER);
     _scale.set_draw_value(false);
     _scale.add_css_class("ao-seekbar");
+
+    // The scale has no visible label of its own; give assistive technology a name
+    // and a hover tooltip consistent with the volume control.
+    setTooltipAndAccessibleLabel(_scale, gtkText(textCatalog, i18n::MessageId::GtkPlaybackPosition));
 
     _valueChangedConnection =
       _scale.signal_value_changed().connect(sigc::mem_fun(*this, &SeekControlWidget::handleScaleValueChanged));

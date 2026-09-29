@@ -336,6 +336,7 @@ root:table {
     gtk_playback_toggle_mute { "Toggle Mute" }
     gtk_playback_show_current_album { "Show current album" }
     gtk_playback_now_playing_cover_art { "Now playing cover art" }
+    gtk_playback_position { "Playback position" }
     gtk_library_quick_filter_placeholder { "Search songs, artists, albums, tags..." }
     gtk_library_clear_filter { "Clear filter" }
     gtk_library_create_list_from_filter { "Create List from current filter" }

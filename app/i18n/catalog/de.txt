@@ -334,6 +334,7 @@ de:table {
     gtk_playback_toggle_mute { "Stumm ein-/ausschalten" }
     gtk_playback_show_current_album { "Aktuelles Album anzeigen" }
     gtk_playback_now_playing_cover_art { "Cover der aktuellen Wiedergabe" }
+    gtk_playback_position { "Wiedergabeposition" }
     gtk_library_quick_filter_placeholder { "Titel, Interpreten, Alben und Tags durchsuchen..." }
     gtk_library_clear_filter { "Filter löschen" }
     gtk_library_create_list_from_filter { "Liste aus aktuellem Filter erstellen" }

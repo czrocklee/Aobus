@@ -135,7 +135,9 @@ namespace ao::gtk::layout
                                         rt::PlaybackService& playback,
                                         rt::WorkspaceService& workspace,
                                         i18n::MessageCatalog const& textCatalog);
-  void registerSeekSliderComponent(ComponentRegistry& registry, rt::PlaybackService& playback);
+  void registerSeekSliderComponent(ComponentRegistry& registry,
+                                   rt::PlaybackService& playback,
+                                   i18n::MessageCatalog const& textCatalog);
   void registerTimeLabelComponent(ComponentRegistry& registry, rt::PlaybackService& playback);
   void registerQualityIndicatorComponent(ComponentRegistry& registry, rt::PlaybackService& playback);
   void registerAudioPipelinePanelComponent(ComponentRegistry& registry,
