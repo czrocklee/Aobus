@@ -39,6 +39,27 @@ namespace ao::media::file::test
     }
   }
 
+  TEST_CASE("Media File - isSupported accepts mixed-case extensions", "[media][unit][file][factory]")
+  {
+    // isSupported normalizes the path extension to ASCII lowercase before the
+    // supported-extension lookup, so uppercase and mixed-case spellings match.
+    constexpr auto kMixedCaseExtensions = std::to_array<std::string_view>({
+      ".FLAC",
+      ".FlAc",
+      ".MP3",
+      ".M4A",
+      ".WAV",
+      ".OPUS",
+    });
+
+    for (auto const extension : kMixedCaseExtensions)
+    {
+      CAPTURE(extension);
+      auto const temp = TempFile{extension};
+      CHECK(File::isSupported(temp.path));
+    }
+  }
+
   TEST_CASE("Media File - rejects unsupported extensions", "[media][unit][file][factory]")
   {
     SECTION("unknown extension")

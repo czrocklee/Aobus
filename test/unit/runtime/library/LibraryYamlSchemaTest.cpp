@@ -5,20 +5,26 @@
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryTransfer.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <string_view>
+#include <tuple>
 
 namespace ao::rt::test
 {
@@ -309,6 +315,195 @@ library:
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::FormatRejected);
     CHECK(res.error().message.contains("resolves outside the library root"));
+  }
+
+  TEST_CASE("LibraryYaml - import rejects a track URI that is not a supported audio file",
+            "[runtime][unit][import-export][uri]")
+  {
+    auto const mode = GENERATE(ImportMode::Restore, ImportMode::Merge);
+    CAPTURE(mode);
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto importer = LibraryYamlImporter{ml};
+    auto const yamlPath = temp.path() / "unsupported.yaml";
+
+    auto const writePayload = [&yamlPath](std::string_view const tracksYaml)
+    {
+      auto output = std::ofstream{yamlPath};
+      output << "version: " << kYamlFormatVersion << "\nexport_mode: metadata\nlibrary:\n  tracks:\n"
+             << tracksYaml << "  lists: []\n";
+    };
+
+    // Both referenced files exist on disk. Rejection of the unsupported
+    // extension therefore proves admission policy rather than a missing file.
+    auto const supportedPath = temp.path() / "song.flac";
+    auto const unsupportedPath = temp.path() / "notes.txt";
+    {
+      auto output = std::ofstream{supportedPath};
+      output << "dummy";
+    }
+    {
+      auto output = std::ofstream{unsupportedPath};
+      output << "text";
+    }
+    REQUIRE(std::filesystem::is_regular_file(supportedPath));
+    REQUIRE(std::filesystem::is_regular_file(unsupportedPath));
+
+    SECTION("mixed payload is refused whole and admits no track")
+    {
+      writePayload(R"(    - uri: song.flac
+      title: Supported
+    - uri: notes.txt
+      title: Unsupported
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring("notes.txt"));
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring("unsupported media file extension"));
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.tracks().reader(transaction).entryCount() == 0);
+      CHECK_FALSE(ml.manifest().reader(transaction).get("song.flac"));
+      CHECK_FALSE(ml.manifest().reader(transaction).get("notes.txt"));
+    }
+
+    SECTION("payload with only the supported track imports it")
+    {
+      writePayload(R"(    - uri: song.flac
+      title: Supported
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE(res);
+      CHECK(res->tracksCreated == 1);
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.tracks().reader(transaction).entryCount() == 1);
+      REQUIRE(ml.manifest().reader(transaction).get("song.flac"));
+    }
+
+    SECTION("mixed payload leaves a populated baseline untouched")
+    {
+      writePayload(R"(    - uri: song.flac
+      title: Baseline
+)");
+      REQUIRE(importer.importFromYamlOffline(yamlPath, mode));
+
+      auto const [baselineTrackId, baselineFileSize, baselineMtime, baselineRevision] = [&ml]
+      {
+        auto transaction = ml.readTransaction();
+        auto const optBaseline = ml.manifest().reader(transaction).get("song.flac");
+        REQUIRE(optBaseline);
+        return std::tuple<TrackId, std::uint64_t, std::uint64_t, std::uint64_t>{
+          optBaseline->trackId(), optBaseline->fileSize(), optBaseline->mtime(), ml.libraryRevision(transaction)};
+      }();
+      // Own the baseline facts before importing again; the read transaction
+      // and its borrowed manifest view must not become the post-import oracle.
+      CHECK(baselineFileSize == 5);
+      CHECK(baselineMtime);
+      REQUIRE(baselineRevision > 0);
+
+      writePayload(R"(    - uri: song.flac
+      title: Supported
+    - uri: notes.txt
+      title: Unsupported
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring("notes.txt"));
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring("unsupported media file extension"));
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.libraryRevision(transaction) == baselineRevision);
+      CHECK(ml.tracks().reader(transaction).entryCount() == 1);
+      auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(optManifest);
+      CHECK(optManifest->trackId() == baselineTrackId);
+      CHECK(optManifest->fileSize() == baselineFileSize);
+      CHECK(optManifest->mtime() == baselineMtime);
+      auto const optView = ml.tracks().reader(transaction).get(baselineTrackId, TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      CHECK(optView->property().uri() == "song.flac");
+      CHECK(optView->metadata().title() == "Baseline");
+      CHECK_FALSE(ml.manifest().reader(transaction).get("notes.txt"));
+    }
+
+    SECTION("supported extension with an absent file imports and commits its facts")
+    {
+      auto const absentPath = temp.path() / "absent.flac";
+      REQUIRE_FALSE(std::filesystem::exists(absentPath));
+      writePayload(R"(    - uri: absent.flac
+      title: Absent
+      fileSize: 345
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE(res);
+      CHECK(res->tracksCreated == 1);
+
+      CHECK_FALSE(std::filesystem::exists(absentPath));
+
+      auto transaction = ml.readTransaction();
+      auto const optManifest = ml.manifest().reader(transaction).get("absent.flac");
+      REQUIRE(optManifest);
+      CHECK(optManifest->fileSize() == 345);
+      CHECK_FALSE(optManifest->mtime());
+      auto const absentTrackId = optManifest->trackId();
+      auto const optView = ml.tracks().reader(transaction).get(absentTrackId, TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      CHECK(optView->property().uri() == "absent.flac");
+      CHECK(optView->metadata().title() == "Absent");
+    }
+
+    SECTION("uppercase extension is admitted and preserved verbatim")
+    {
+      writePayload(R"(    - uri: song.FLAC
+      title: Upper
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE(res);
+      CHECK(res->tracksCreated == 1);
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.tracks().reader(transaction).entryCount() == 1);
+      auto const optManifest = ml.manifest().reader(transaction).get("song.FLAC");
+      REQUIRE(optManifest);
+      auto const optView =
+        ml.tracks().reader(transaction).get(optManifest->trackId(), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      CHECK(optView->property().uri() == "song.FLAC");
+      CHECK(optView->metadata().title() == "Upper");
+    }
+
+    SECTION("backslash-spelled unsupported URI is rejected under its canonical form")
+    {
+      writePayload(R"(    - uri: .\notes.txt
+      title: Unsupported
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      // Admission sees the canonical URI, so the raw backslash spelling never
+      // reaches the error or a manifest key.
+      CHECK_THAT(
+        res.error().message, Catch::Matchers::ContainsSubstring("'notes.txt' has an unsupported media file extension"));
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.tracks().reader(transaction).entryCount() == 0);
+      CHECK_FALSE(ml.manifest().reader(transaction).get("notes.txt"));
+    }
   }
 
   TEST_CASE("LibraryYaml - version 5 rejects duplicate semantic keys", "[runtime][unit][import-export][schema]")
