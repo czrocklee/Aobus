@@ -101,6 +101,7 @@ Display interprets that count using the current host's file clock. Transfer perf
 Track `id` values need not match target-library IDs.
 Duplicate nonzero IDs reject the document; `0` and omitted IDs create no ID mapping for list references.
 Duplicate canonical track URIs also reject the document, including records whose input spellings normalize to the same URI.
+A track record must name a supported audio file from the [supported audio files reference](../../media/audio-file.md): a URI with any other extension rejects the document, matching the admission rule of manual track creation.
 Keys in one `custom` map must be unique both as YAML keys and after NFC normalization.
 
 ### Text metadata
@@ -231,6 +232,7 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - an unsupported version, mode, codec, or cover type;
 - an unknown or duplicate field in any closed map;
 - a malformed UUID, Library URI, scalar, sequence, or numeric width;
+- a track record whose URI is not a supported audio file;
 - malformed UTF-8 in library text or a normalized text value beyond its core storage limit;
 - duplicate nonzero track IDs, duplicate canonical track URIs, raw or canonically equivalent duplicate custom keys, or missing, zero, or duplicate list IDs;
 - an invalid non-empty filter, a known parent cycle, or an ambiguous list-order reference map;

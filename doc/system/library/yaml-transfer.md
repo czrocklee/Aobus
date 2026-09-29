@@ -35,7 +35,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - One export observes metadata, tracks, lists, resources, dictionary values, and manifest facts through one read transaction.
 - Version 5 uses the closed schema and explicit collection scope defined by the format reference.
 - Every URI crossing YAML, manifest, Writer, or scan boundaries becomes a `LibraryUri`; playback, read-model, fingerprint, export/import baseline, and scan-apply access resolve it again beneath the weakly canonical root and reject escaping or unresolved symlinks. An absent root or ordinary missing suffix remains valid for first-run metadata restore.
-- Import validates the complete document before applying any persistent mutation.
+- Import validates the complete document before applying any persistent mutation. In both restore and merge, every track record must name a supported audio file, as [manual creation](mutation.md#create-from-file) does; an unsupported extension rejects the whole document as `FormatRejected`. Supported-extension files may still be absent or unreadable for offline restoration.
 - Track metadata, tags, custom keys and values, and List display text must be scalar-valid UTF-8; canonically decomposed input is accepted and normalized to NFC by core library preparation before persistence.
 - List filter source is scalar-valid UTF-8 but remains byte-exact so URI literals retain filesystem identity.
 - Library URI bytes retain their separate path identity and are never Unicode-normalized by transfer.
@@ -240,6 +240,7 @@ Adding a limit must preserve the guarantee that the current exporter cannot prod
 Version 5 is a portable interchange format, not the physical database format.
 Restore and merge always write current `MusicLibrary` records.
 An accepted version-5 document may use a canonically decomposed spelling, but export from physical database version 7 emits NFC because that is the current library admission invariant.
+Existing libraries can retain unsupported-extension rows admitted by earlier version-5 importers. Export does not filter those rows, but current whole-document admission rejects their reimport; no migration, purge, or grandfathering is performed.
 The importer accepts no earlier interchange version, including version 4, and provides no migration or legacy-restore path.
 A version-3 document's embedded cover bytes are therefore never read: the import fails and changes nothing, so recovering that library means exporting it again from a version-5 build, or scanning the music files it describes.
 

@@ -25,6 +25,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/media/file/File.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompilation.h>
 #include <ao/rt/TrackField.h>
@@ -1504,6 +1505,16 @@ namespace ao::rt
       {
         return makeError(
           Error::Code::FormatRejected, std::format("Duplicate canonical track URI '{}' in payload", track.uri));
+      }
+
+      // Manual track creation admits only supported audio files, and library
+      // scanning ignores unsupported ones entirely. The interchange entry point
+      // applies the same admission rule, avoiding unsupported-file rows that
+      // scanning cannot reconcile. Supported but absent files remain restorable.
+      if (!media::file::File::isSupported(utility::pathFromUtf8(track.uri)))
+      {
+        return makeError(Error::Code::FormatRejected,
+                         std::format("Track record.uri '{}' has an unsupported media file extension", track.uri));
       }
 
       if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())

@@ -6,11 +6,14 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include <ao/Error.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryTransfer.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -309,6 +312,75 @@ library:
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::FormatRejected);
     CHECK(res.error().message.contains("resolves outside the library root"));
+  }
+
+  TEST_CASE("LibraryYaml - import rejects a track URI that is not a supported audio file",
+            "[runtime][unit][import-export][uri]")
+  {
+    auto const mode = GENERATE(ImportMode::Restore, ImportMode::Merge);
+    CAPTURE(mode);
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto importer = LibraryYamlImporter{ml};
+    auto const yamlPath = temp.path() / "unsupported.yaml";
+
+    auto const writePayload = [&yamlPath](std::string_view const tracksYaml)
+    {
+      auto output = std::ofstream{yamlPath};
+      output << "version: 5\nexport_mode: metadata\nlibrary:\n  tracks:\n" << tracksYaml << "  lists: []\n";
+    };
+
+    // Both referenced files exist on disk. Rejection of the unsupported
+    // extension therefore proves admission policy rather than a missing file.
+    auto const supportedPath = temp.path() / "song.flac";
+    auto const unsupportedPath = temp.path() / "notes.txt";
+    {
+      auto output = std::ofstream{supportedPath};
+      output << "dummy";
+    }
+    {
+      auto output = std::ofstream{unsupportedPath};
+      output << "text";
+    }
+    REQUIRE(std::filesystem::is_regular_file(supportedPath));
+    REQUIRE(std::filesystem::is_regular_file(unsupportedPath));
+
+    SECTION("mixed payload is refused whole and admits no track")
+    {
+      writePayload(R"(    - uri: song.flac
+      title: Supported
+    - uri: notes.txt
+      title: Unsupported
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring("notes.txt"));
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring("unsupported media file extension"));
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.tracks().reader(transaction).entryCount() == 0);
+      CHECK_FALSE(ml.manifest().reader(transaction).get("song.flac"));
+      CHECK_FALSE(ml.manifest().reader(transaction).get("notes.txt"));
+    }
+
+    SECTION("payload with only the supported track imports it")
+    {
+      writePayload(R"(    - uri: song.flac
+      title: Supported
+)");
+
+      auto const res = importer.importFromYamlOffline(yamlPath, mode);
+
+      REQUIRE(res);
+      CHECK(res->tracksCreated == 1);
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.tracks().reader(transaction).entryCount() == 1);
+      REQUIRE(ml.manifest().reader(transaction).get("song.flac"));
+    }
   }
 
   TEST_CASE("LibraryYaml - version 5 rejects duplicate semantic keys", "[runtime][unit][import-export][schema]")
