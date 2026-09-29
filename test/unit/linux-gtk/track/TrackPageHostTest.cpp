@@ -14,12 +14,14 @@
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
+#include <ao/CoreIds.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
@@ -32,6 +34,7 @@
 #include <gtkmm/stack.h>
 #include <gtkmm/window.h>
 
+#include <cstddef>
 #include <utility>
 #include <vector>
 
@@ -94,6 +97,86 @@ namespace ao::gtk::test
       CHECK(current->viewId == viewId);
       CHECK(current->pagePtr->listId() == rt::kAllTracksListId);
       CHECK(host.activeListId() == rt::kAllTracksListId);
+    }
+
+    SECTION("rebuild restores the runtime selection into the new page generation")
+    {
+      auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored selection"});
+      runtime.sources().reloadAllTracks();
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+
+      REQUIRE(runtime.views().setSelection(viewId, {trackId}));
+
+      host.rebuild(cache);
+      drainGtkEvents();
+
+      auto* const context = host.find(viewId);
+      REQUIRE(context != nullptr);
+      REQUIRE(context->pagePtr != nullptr);
+      CHECK(context->pagePtr->selectionController().selectedTrackIds() == std::vector<TrackId>{trackId});
+      CHECK(runtime.views().trackListState(viewId).selection == std::vector<TrackId>{trackId});
+    }
+
+    SECTION("rebuild restores mixed selections without publishing or changing workspace focus")
+    {
+      auto const firstTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "A restored track"});
+      auto const secondTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Z restored track"});
+      auto const absentTrackId = TrackId{9999};
+      runtime.sources().reloadAllTracks();
+      auto const listId = ao::test::requireValue(
+        runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Other page"})));
+      auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
+      REQUIRE(firstViewId != secondViewId);
+      auto const storedSelection = std::vector{firstTrackId, absentTrackId, secondTrackId};
+      REQUIRE(runtime.views().setSelection(firstViewId, storedSelection));
+      REQUIRE(runtime.views().setSelection(secondViewId, {secondTrackId}));
+      REQUIRE(runtime.workspace().focusView(firstViewId));
+      host.rebuild(cache);
+      drainGtkEvents();
+
+      REQUIRE(runtime.workspace().focusView(firstViewId));
+      drainGtkEvents();
+      auto const workspaceBefore = runtime.workspace().snapshot();
+      std::size_t selectionChangeCount = 0;
+      std::size_t workspaceChangeCount = 0;
+      auto selectionSubscription =
+        runtime.views().onSelectionChanged([&](rt::ViewService::SelectionChanged const&) { ++selectionChangeCount; });
+      auto workspaceSubscription =
+        runtime.workspace().onChanged([&](rt::WorkspaceChanged const&) { ++workspaceChangeCount; });
+
+      host.rebuild(cache);
+      drainGtkEvents();
+
+      auto const* const firstPage = host.find(firstViewId);
+      auto const* const secondPage = host.find(secondViewId);
+      REQUIRE(firstPage != nullptr);
+      REQUIRE(secondPage != nullptr);
+      CHECK(firstPage->pagePtr->selectionController().selectedTrackIds() ==
+            std::vector<TrackId>{firstTrackId, secondTrackId});
+      CHECK(secondPage->pagePtr->selectionController().selectedTrackIds() == std::vector<TrackId>{secondTrackId});
+      CHECK(runtime.views().trackListState(firstViewId).selection == storedSelection);
+      CHECK(selectionChangeCount == 0);
+      CHECK(workspaceChangeCount == 0);
+      CHECK(runtime.workspace().snapshot().activeViewId == workspaceBefore.activeViewId);
+      CHECK(runtime.workspace().snapshot().revision == workspaceBefore.revision);
+    }
+
+    SECTION("rebuild tolerates a selection naming a track absent from the projection")
+    {
+      auto const absentTrackId = TrackId{9999};
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+
+      REQUIRE(runtime.views().setSelection(viewId, {absentTrackId}));
+
+      host.rebuild(cache);
+      drainGtkEvents();
+
+      auto* const context = host.find(viewId);
+      REQUIRE(context != nullptr);
+      REQUIRE(context->pagePtr != nullptr);
+      CHECK(context->pagePtr->selectionController().selectedTrackIds().empty());
+      CHECK(runtime.views().trackListState(viewId).selection == std::vector<TrackId>{absentTrackId});
     }
 
     SECTION("group placeholder style reaches future and existing page generations")

@@ -150,6 +150,23 @@ namespace ao::gtk::test
         CHECK(ids == std::vector<TrackId>{trackId2, trackId4});
       }
 
+      SECTION("restoreSelection adopts live ids in one notification without clearing existing rows")
+      {
+        selectionModelPtr->select_item(1, true);
+        std::size_t selectionChangeCount = 0;
+        auto subscription =
+          sigc::scoped_connection{controller.signalSelectionChanged().connect([&] { ++selectionChangeCount; })};
+
+        auto const restoredIds = std::vector<TrackId>{trackId4, TrackId{9999}, trackId1, trackId4};
+        controller.restoreSelection(restoredIds);
+
+        CHECK(controller.selectedTrackIds() == std::vector<TrackId>{trackId1, trackId2, trackId4});
+        CHECK(selectionChangeCount == 1);
+
+        controller.restoreSelection(restoredIds);
+        CHECK(selectionChangeCount == 1);
+      }
+
       SECTION("selectTrack helper")
       {
         controller.selectTrack(trackId2);

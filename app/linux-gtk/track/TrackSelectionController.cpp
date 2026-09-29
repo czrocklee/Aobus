@@ -15,6 +15,7 @@
 #include <glib-object.h>
 #include <glib.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/bitset.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
@@ -362,6 +363,27 @@ namespace ao::gtk
     }
 
     _columnView.scroll_to(rowPosition, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
+  }
+
+  void TrackSelectionController::restoreSelection(std::vector<TrackId> const& trackIds)
+  {
+    auto positionsPtr = Gtk::Bitset::create();
+
+    for (auto const trackId : trackIds)
+    {
+      auto const optIndex = _modelPtr->indexOf(trackId);
+
+      if (!optIndex || *optIndex >= _selectionModelPtr->get_n_items())
+      {
+        continue;
+      }
+
+      positionsPtr->add(static_cast<guint>(*optIndex));
+    }
+
+    // Mask only the restored rows: existing selections remain selected, and
+    // MultiSelection publishes the entire adoption in one notification.
+    _selectionModelPtr->set_selection(positionsPtr, positionsPtr);
   }
 
   void TrackSelectionController::scrollToTrack(TrackId trackId)
