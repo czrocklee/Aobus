@@ -103,24 +103,29 @@ namespace ao::cli
     std::vector<TrackId> resolveUpdateTargets(library::MusicLibrary const& ml,
                                               rt::LibrarySnapshot& snapshot,
                                               std::vector<std::uint32_t> const& rawIds,
-                                              std::string const& filter)
+                                              std::optional<std::string> const& optFilter)
     {
-      if (!rawIds.empty() && !filter.empty())
+      if (!rawIds.empty() && optFilter)
       {
         throwCommandError(Error::Code::InvalidInput, "track update accepts either explicit ids or --filter, not both");
       }
 
-      if (rawIds.empty() && filter.empty())
+      if (!rawIds.empty())
+      {
+        return requireTrackIds(snapshot, rawIds);
+      }
+
+      if (!optFilter)
       {
         throwCommandError(Error::Code::InvalidInput, "track update requires track ids or --filter");
       }
 
-      if (!filter.empty())
+      if (optFilter->empty())
       {
-        return queryMatchingTrackIds(ml, filter);
+        throwCommandError(Error::Code::InvalidInput, "track update requires a non-empty --filter expression");
       }
 
-      return requireTrackIds(snapshot, rawIds);
+      return queryMatchingTrackIds(ml, *optFilter);
     }
 
     std::vector<TrackId> resolveShowTargets(library::MusicLibrary const& ml,
@@ -146,7 +151,6 @@ namespace ao::cli
       // Without ids or a filter, show walks every track.
       return queryMatchingTrackIds(ml, optFilter.value_or(std::string{}));
     }
-
   } // namespace
 
   struct TrackCreateReportDto final
@@ -166,6 +170,7 @@ namespace ao::cli
     std::uint64_t updated = 0;
     std::vector<TrackId> trackIds{};
     std::vector<rt::TrackChangeRecord> changes{};
+    std::optional<std::vector<rt::TrackTagsChange>> optTagChanges{};
   };
 
   struct TrackDeleteReportDto final
@@ -193,39 +198,107 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackCreateReportDto>
   }
 };
 
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::TrackUpdateReportDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optTagChanges")
+    {
+      return "tagChanges";
+    }
+
+    return memberName;
+  }
+};
+
 namespace ao::cli
 {
   namespace
   {
+    void printPlainTagChanges(rt::EditTrackTagsReply const& reply, std::ostream& os)
+    {
+      auto addedCounts = std::map<std::string, std::uint64_t>{};
+      auto removedCounts = std::map<std::string, std::uint64_t>{};
+
+      for (auto const& change : reply.changes)
+      {
+        for (auto const& tag : change.addedTags)
+        {
+          ++addedCounts[tag];
+        }
+
+        for (auto const& tag : change.removedTags)
+        {
+          ++removedCounts[tag];
+        }
+      }
+
+      for (auto const& [name, count] : addedCounts)
+      {
+        std::println(os, "added tag: {} to {} track(s)", name, count);
+      }
+
+      for (auto const& [name, count] : removedCounts)
+      {
+        std::println(os, "removed tag: {} from {} track(s)", name, count);
+      }
+    }
+
     void formatUpdateReply(rt::UpdateTrackMetadataReply const& reply,
                            bool dryRun,
                            std::uint64_t matched,
                            OutputFormat format,
-                           std::ostream& os)
+                           std::ostream& os,
+                           rt::EditTrackTagsReply const* tagsReply = nullptr)
     {
-      auto const updated = reply.changes.size();
+      // When a tag edit is part of the mutation, updated and trackIds cover the
+      // union of tracks mutated by metadata or tag changes; changes stays
+      // metadata-only and tagChanges carries the per-track tag records.
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(reply.changes.size());
 
-      if (format != OutputFormat::Plain)
+      for (auto const& change : reply.changes)
       {
-        auto trackIds = std::vector<TrackId>{};
-        trackIds.reserve(reply.changes.size());
+        trackIds.push_back(change.trackId);
+      }
 
-        for (auto const& change : reply.changes)
+      if (tagsReply != nullptr)
+      {
+        for (auto const& change : tagsReply->changes)
         {
           trackIds.push_back(change.trackId);
         }
 
-        emitDocument(os,
-                     format,
-                     TrackUpdateReportDto{.dryRun = dryRun,
-                                          .matched = matched,
-                                          .updated = static_cast<std::uint64_t>(updated),
-                                          .trackIds = std::move(trackIds),
-                                          .changes = reply.changes});
+        std::ranges::sort(trackIds);
+        trackIds.erase(std::ranges::unique(trackIds).begin(), trackIds.end());
+      }
+
+      auto const updated = static_cast<std::uint64_t>(trackIds.size());
+
+      if (format != OutputFormat::Plain)
+      {
+        auto report = TrackUpdateReportDto{.dryRun = dryRun,
+                                           .matched = matched,
+                                           .updated = updated,
+                                           .trackIds = std::move(trackIds),
+                                           .changes = reply.changes};
+
+        if (tagsReply != nullptr)
+        {
+          report.optTagChanges = tagsReply->changes;
+        }
+
+        emitDocument(os, format, report);
         return;
       }
 
       std::println(os, "updated {} of {} matched track(s){}", updated, matched, dryRun ? " (dry-run)" : "");
+
+      if (tagsReply != nullptr)
+      {
+        printPlainTagChanges(*tagsReply, os);
+      }
     }
 
     void formatTrackCreate(std::optional<TrackId> optTrackId,
@@ -278,13 +351,22 @@ namespace ao::cli
 
     void updateTracks(CliRuntime& cli,
                       std::vector<std::uint32_t> const& rawIds,
-                      std::string const& filter,
+                      std::optional<std::string> const& optFilter,
                       rt::MetadataPatch const& patch,
                       bool dryRun)
     {
       auto const& ml = cli.musicLibrary();
       auto snapshot = cli.library().snapshot();
-      auto const targetIds = resolveUpdateTargets(ml, snapshot, rawIds, filter);
+      auto const targetIds = resolveUpdateTargets(ml, snapshot, rawIds, optFilter);
+
+      // A filter that matches nothing is a successful no-op, not an authoring
+      // error: the runtime refuses to bind an empty target set, so report zero
+      // counts without submitting a mutation.
+      if (targetIds.empty())
+      {
+        formatUpdateReply(rt::UpdateTrackMetadataReply{}, dryRun, 0, cli.options().format, cli.io().out);
+        return;
+      }
 
       if (dryRun)
       {
@@ -327,6 +409,59 @@ namespace ao::cli
 
       formatUpdateReply(
         replyRes->reply, false, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
+    }
+
+    // Applies one atomic metadata-and-tag edit. There is no preview form for
+    // the combined properties mutation, so the caller rejects --dry-run first.
+    void updateTrackProperties(CliRuntime& cli,
+                               std::vector<std::uint32_t> const& rawIds,
+                               std::optional<std::string> const& optFilter,
+                               rt::TrackPropertiesPatch const& patch)
+    {
+      auto const& ml = cli.musicLibrary();
+      auto snapshot = cli.library().snapshot();
+      auto const targetIds = resolveUpdateTargets(ml, snapshot, rawIds, optFilter);
+
+      // Same zero-match rule as the metadata path; the tag side reports an
+      // empty-but-present tagChanges because tag options were requested.
+      if (targetIds.empty())
+      {
+        auto const noTagChanges = rt::EditTrackTagsReply{};
+        formatUpdateReply(rt::UpdateTrackMetadataReply{}, false, 0, cli.options().format, cli.io().out, &noTagChanges);
+        return;
+      }
+
+      auto const bindingRes = cli.library().bindTrackTargets(targetIds);
+
+      if (!bindingRes)
+      {
+        throwCommandError(bindingRes.error());
+      }
+
+      auto const replyRes = cli.runTask(cli.library().commands().updatePropertiesAsync(*bindingRes, patch));
+
+      if (!replyRes)
+      {
+        throwCommandError(replyRes.error());
+      }
+
+      switch (replyRes->status)
+      {
+        case rt::AuthoringStatus::Applied:
+        case rt::AuthoringStatus::NoOp: break;
+        case rt::AuthoringStatus::Stale:
+          throwCommandError(Error::Code::Conflict, "library changed while preparing the track update");
+        case rt::AuthoringStatus::Busy:
+        case rt::AuthoringStatus::Unavailable:
+          throwCommandError(Error::Code::Conflict, "library authoring is unavailable");
+      }
+
+      formatUpdateReply(replyRes->reply.metadata,
+                        false,
+                        static_cast<std::uint64_t>(targetIds.size()),
+                        cli.options().format,
+                        cli.io().out,
+                        &replyRes->reply.tags);
     }
   } // namespace
 
@@ -1053,9 +1188,13 @@ namespace ao::cli
       CLI::Option* movementTotal = nullptr;
       CLI::Option* set = nullptr;
       CLI::Option* unset = nullptr;
+      CLI::Option* addTag = nullptr;
+      CLI::Option* removeTag = nullptr;
       CLI::Option* dryRun = nullptr;
       std::shared_ptr<std::vector<std::string>> setsPtr;
       std::shared_ptr<std::vector<std::string>> unsetsPtr;
+      std::shared_ptr<std::vector<std::string>> addTagsPtr;
+      std::shared_ptr<std::vector<std::string>> removeTagsPtr;
     };
 
     bool tryApplyTrackUpdateFieldOptions(TrackUpdateCliOptions const& options, rt::MetadataPatch& patch)
@@ -1111,23 +1250,60 @@ namespace ao::cli
       bool hasPatch = tryApplyTrackUpdateFieldOptions(options, patch);
       hasPatch = tryApplyTrackUpdateCustomOptions(options, patch) || hasPatch;
 
-      if (!hasPatch)
+      auto tagsToAdd = std::vector<std::string>{};
+      auto tagsToRemove = std::vector<std::string>{};
+
+      if (options.addTag->count() > 0)
       {
-        throwCommandError(Error::Code::InvalidInput, "track update requires at least one field option");
+        tagsToAdd = *options.addTagsPtr;
+      }
+
+      if (options.removeTag->count() > 0)
+      {
+        tagsToRemove = *options.removeTagsPtr;
+      }
+
+      bool const hasTags = !tagsToAdd.empty() || !tagsToRemove.empty();
+
+      if (!hasPatch && !hasTags)
+      {
+        throwCommandError(Error::Code::InvalidInput, "track update requires at least one field or tag option");
+      }
+
+      auto const dryRun = isDryRun(options.dryRun);
+
+      if (hasTags && dryRun)
+      {
+        throwCommandError(Error::Code::InvalidInput, "--dry-run does not support tag changes yet");
       }
 
       auto const rawIds =
         options.ids->count() > 0 ? options.ids->as<std::vector<std::uint32_t>>() : std::vector<std::uint32_t>{};
-      auto const filter = options.filter->count() > 0 ? options.filter->as<std::string>() : std::string{};
-      updateTracks(cli, rawIds, filter, patch, isDryRun(options.dryRun));
+      auto const optFilter =
+        options.filter->count() > 0 ? std::optional{options.filter->as<std::string>()} : std::nullopt;
+
+      if (!hasTags)
+      {
+        updateTracks(cli, rawIds, optFilter, patch, dryRun);
+        return;
+      }
+
+      updateTrackProperties(
+        cli,
+        rawIds,
+        optFilter,
+        rt::TrackPropertiesPatch{
+          .metadata = patch, .tagsToAdd = std::move(tagsToAdd), .tagsToRemove = std::move(tagsToRemove)});
     }
 
     void configureTrackUpdateCommand(CLI::App& track, CliRuntime& cli)
     {
-      auto* update = track.add_subcommand("update", "Update track metadata");
+      auto* update = track.add_subcommand("update", "Update track metadata and tags");
       update->footer(trackUpdateHelpFooter());
       auto updateSetsPtr = std::make_shared<std::vector<std::string>>();
       auto updateUnsetsPtr = std::make_shared<std::vector<std::string>>();
+      auto updateAddTagsPtr = std::make_shared<std::vector<std::string>>();
+      auto updateRemoveTagsPtr = std::make_shared<std::vector<std::string>>();
       auto options = TrackUpdateCliOptions{
         .ids = update->add_option("id", "track id to update")->expected(0, -1),
         .filter = update->add_option("-f,--filter", "track filter expression"),
@@ -1151,9 +1327,13 @@ namespace ao::cli
         .movementTotal = update->add_option("--movement-total", "movement total"),
         .set = update->add_option("--set", *updateSetsPtr, "set custom metadata key=value"),
         .unset = update->add_option("--unset", *updateUnsetsPtr, "unset custom metadata key"),
+        .addTag = update->add_option("--add-tag", *updateAddTagsPtr, "tag to add"),
+        .removeTag = update->add_option("--remove-tag", *updateRemoveTagsPtr, "tag to remove"),
         .dryRun = addDryRunFlag(*update),
         .setsPtr = updateSetsPtr,
         .unsetsPtr = updateUnsetsPtr,
+        .addTagsPtr = updateAddTagsPtr,
+        .removeTagsPtr = updateRemoveTagsPtr,
       };
 
       update->callback([&cli, options] { runTrackUpdateCommand(cli, options); });

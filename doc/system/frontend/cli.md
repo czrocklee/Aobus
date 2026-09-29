@@ -57,6 +57,7 @@ Create previews omit ids allocated only by the aborted transaction.
 
 Track show/update and tag show/add/remove may select explicit ids or a predicate expression.
 An explicitly empty `--filter` expression is rejected instead of silently selecting every track.
+A filter that matches no tracks is a successful no-op for the mutating commands, which report zero counts and exit 0.
 Predicate selection uses the shared query compiler/evaluator; formatted track output uses the scalar format-expression compiler.
 Format expressions are plain-output only and cannot be combined with YAML/JSON output.
 
@@ -67,6 +68,9 @@ The returned `tracks` sequence is effective membership in effective order; the s
 
 Writer-backed dry-run commands invoke the corresponding `preview*` runtime method.
 The writer performs normal validation and mutation logic inside the write transaction, constructs the ordinary reply, suppresses change publication, and aborts instead of committing.
+
+`track update` with tag options routes the whole edit through the shared properties mutation as one commit.
+The runtime exposes no preview form for that combined mutation, so the CLI rejects `--dry-run` in that combination with an InvalidInput command error instead of previewing a partial edit.
 
 `list add` and `list remove` delegate to the shared writable-tag List operation.
 Add mutates the List's positive tag on the selected tracks; Remove mutates that tag and atomically forgets their saved List positions.

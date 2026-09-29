@@ -35,7 +35,7 @@ Exactly one top-level command is required.
 | `scan` | `[--dry-run] [--verbose] [--defer-fingerprint]` |
 | `track show` | `[<id>...] [-f, --filter <expr>] [-l, --limit N] [-o, --offset N] [--format <expr>]` |
 | `track create` | `<path> [--dry-run]` |
-| `track update` | `(<id>... | -f, --filter <expr>) <field-option>... [--dry-run]` |
+| `track update` | `(<id>... | -f, --filter <expr>) [<field-option>...] [--add-tag <tag>...] [--remove-tag <tag>...] [--dry-run]` |
 | `track delete` | `<id> [--dry-run]` |
 | `track dump` | `[--id <id>] [--raw]` |
 | `list show` | `[<id>]` |
@@ -68,6 +68,7 @@ Exactly one top-level command is required.
 `--raw` dump modes support only plain output.
 `--output` is reserved by the global format option, so file-destination options are `-o, --output-file`.
 An explicitly empty `--filter` expression is rejected instead of silently selecting every track.
+A `--filter` that matches no track is a successful no-op for the mutating commands, which report zero counts.
 
 Track update field options are:
 
@@ -79,8 +80,11 @@ Track update field options are:
 --set key=value --unset key
 ```
 
-`--set` and `--unset` are repeatable.
-At least one field option is required.
+`--set`, `--unset`, `--add-tag`, and `--remove-tag` are repeatable.
+At least one field or tag option is required.
+When any tag option is present, metadata fields and tag changes commit as one atomic edit through the runtime properties mutation.
+The same tag in both `--add-tag` and `--remove-tag` is rejected with an InvalidInput error.
+`--dry-run` does not support tag changes yet; combined with tag options it is rejected with an InvalidInput error.
 An explicitly empty `list update --filter ''` installs the identity predicate, so the List inherits all parent members.
 It does not change a persisted List kind because no such kind exists.
 
@@ -110,7 +114,7 @@ Mutation/administrative shapes:
 | --- | --- |
 | `scan` | `dryRun, new, changed, moved, missing, unchanged, errors`; dry-run adds `items[{type,uri,message?}]` |
 | `track create` | `action, dryRun, trackId?, uri, title, artist` |
-| `track update` | `dryRun, matched, updated, trackIds, changes` |
+| `track update` | `dryRun, matched, updated, trackIds, changes, tagChanges?` |
 | `track delete` | `action, dryRun, trackId, uri, title, removedFromListIds` |
 | `list show` | collection rows use `id,name,description,parentId,filter,order`; the detail document wraps one row in `list` and additionally uses effective `tracks[{id,title,artist,album}]` |
 | `list create` | `action, dryRun, listId?, name, parentId, filter` |
@@ -135,6 +139,10 @@ Mutation/administrative shapes:
 | `lib dump` | selected optional `meta`, `dictionary`, `manifest`, `resources` sections |
 
 Change-record nested fields are defined by the runtime mutation reply types and are emitted without CLI reinterpretation.
+`track update` emits `tagChanges` only when tag options were supplied; it uses the same per-track records as `tag add`/`tag remove` changes.
+In that path `updated` and `trackIds` are the sorted, deduplicated union of tracks mutated by metadata or tag changes, while `changes` stays metadata-only.
+Plain output appends `added tag: <tag> to N track(s)` and `removed tag: <tag> from N track(s)` lines with the `tag add`/`tag remove` wording.
+When no tag option is supplied, `updated` and `trackIds` report metadata field changes only, as before.
 For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `listOnly`, and `targetScope` uses exact lowercase `library` or `lists`.
 
 `lib stats` reports `resources` as the number of descriptor rows and `resourceBytes` as the summed described length of the descriptors tracks currently reference, counting each reachable descriptor once however many tracks name it.
@@ -179,6 +187,7 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 ## Validation rules
 
 - `track show --format` is mutually exclusive with YAML/JSON.
+- `track update` applies field options and tag options as one atomic edit; the same tag in `--add-tag` and `--remove-tag` is rejected, and `--dry-run` is rejected when tag options are present.
 - Explicit missing ids fail before mutation.
 - List parent existence, self-parenting, and cycles are rejected.
 - `list add/remove` require a List whose complete local expression is one positive tag predicate; compound, negated, or non-tag predicates are not directly writable.
@@ -208,6 +217,7 @@ There is no separate CLI protocol version or migration layer.
 ```bash
 aobus -C /music track show --filter '$artist == "Miles Davis"' -O json
 aobus track update 42 --composer "J. S. Bach" --set source=manual --dry-run
+aobus track update 12 --genre Jazz --add-tag favourite --remove-tag inbox
 aobus lib export backup.yaml --mode full
 aobus lib resource export 3 --output-file cover.jpg
 aobus -O json lib import backup.yaml --mode restore --dry-run
