@@ -9,8 +9,10 @@
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
+#include <glibmm/refptr.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/dropdown.h>
@@ -20,15 +22,19 @@
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
 
+#include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace Gtk
 {
   class Button;
   class ListBoxRow;
+  class StringList;
 }
 
 namespace ao::rt
@@ -58,6 +64,7 @@ namespace ao::gtk
                     rt::ViewService& views,
                     rt::TrackSourceCache& sources,
                     rt::CompletionService& completion,
+                    std::span<rt::CustomTrackPresentationPreset const> customPresets,
                     i18n::MessageCatalog textCatalog,
                     ListId parentListId,
                     TrackRowCache const& provider);
@@ -77,7 +84,9 @@ namespace ao::gtk
     // Returns a ListDraft populated from the dialog fields
     rt::ListDraft draft() const;
 
-    // Returns the selected presentation ID. Auto is resolved to a concrete ID.
+    // Returns the selected presentation ID. Auto is absence of a preference
+    // (empty id); a still-selected unavailable option returns its retained
+    // opaque id unchanged.
     std::string presentationId() const;
 
     void configurePlaylistTemplate(std::string_view initialName = {}, std::string_view initialTag = {});
@@ -94,6 +103,9 @@ namespace ao::gtk
 
   private:
     void buildUi();
+    void installUnavailablePresentationOption(std::string_view unavailableId);
+    void removeUnavailablePresentationOption();
+    std::uint32_t unavailablePresentationRow() const;
     void buildPreview();
     void configurePreviewColumns();
     void rebuildPreviewSource();
@@ -109,6 +121,7 @@ namespace ao::gtk
     Gtk::Entry _membershipTagEntry;
     QueryExpressionBox _exprBox;
     Gtk::DropDown _presentationDropDown;
+    Glib::RefPtr<Gtk::StringList> _presentationOptionsPtr;
     Gtk::Button* _okButton = nullptr;
     Gtk::Button* _cancelButton = nullptr;
     Gtk::Box _leftPanel;
@@ -129,6 +142,10 @@ namespace ao::gtk
     rt::ViewService& _views;
     rt::TrackSourceCache& _sources;
     i18n::MessageCatalog _textCatalog;
+    // Snapshot at construction: the presentation option list and the id
+    // round-trip both read from here, so the dialog stays internally consistent
+    // even if the workspace's custom presets change while it is open.
+    std::vector<rt::CustomTrackPresentationPreset> _customPresets;
     ListId _parentListId;
     TrackRowCache const& _trackRowCache;
     std::optional<rt::TrackSourceLease> _optPreviewSourceLease;
@@ -136,6 +153,10 @@ namespace ao::gtk
 
     // Edit mode state
     ListId _editListId{kInvalidListId};
+    /// The opaque id of a stored presentation no longer present in the option
+    /// snapshot, retained while the dialog's unavailable option exists so a
+    /// filter-only or rename edit keeps the user's original preference.
+    std::optional<std::string> _optUnavailablePresentationId;
     bool _playlistTemplate = false;
     bool _membershipTagEdited = false;
     bool _syncingMembershipTag = false;

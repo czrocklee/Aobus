@@ -44,6 +44,7 @@ It also borrows the presentation catalog used to resolve built-in and custom ids
 `presentationIdForList()` returns a borrowed view into that map. The view remains valid only while the owner and that entry remain unchanged; replacement, clearing, effective restore, library reset, or deletion of the same List invalidates it. Callers copy the id before a reentrant callback, coroutine suspension, or any such mutation.
 
 Setting an empty id clears that list's preference.
+An empty id is Auto: absence of a saved preference, not today's concrete recommendation. The recommendation is resolved when a view opens, so no migration reinterprets an already stored concrete builtin id.
 Setting a preference for the invalid list id has no effect.
 Bulk state replacement emits one general change only when the map actually differs.
 
@@ -135,6 +136,10 @@ Presentation pickers resolve labels and specs through the shared catalog.
 The active view observes the selected `TrackPresentationSpec`; frontends do not read or write list storage to remember the choice.
 
 Quick-filter controls and List editors may display the current presentation, but filter editing remains independent from preference mutation.
+
+The GTK Saved-List editor shows an unavailable stored id as an explicit selected option, labeled with the retained opaque id, while list opening uses recommendation fallback. A rename or filter-only edit preserves that preference; only choosing another presentation replaces it, and choosing Auto clears it. The editor's option catalog is a construction-time snapshot, so display and save use the same identities even if the workspace presets change while the dialog is open. Opening the List resolves the retained id through the live catalog, which may now contain a changed preset or require fallback.
+
+The TUI editor has no presentation picker, so its saves never write the preference map: a new List stays Auto and an edit keeps whatever the List already stores, including a dangling opaque id.
 
 ## Implementation map
 

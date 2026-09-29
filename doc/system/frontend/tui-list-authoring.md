@@ -48,7 +48,7 @@ The submission task is created before any in-flight flag is armed, one submissio
 
 The outcomes are presented as follows:
 
-- Success closes the editor. A new List resolves the Auto track presentation from the saved expression, records it in the per-List presentation preferences, and is opened, as the GTK sidebar selects it, so the created List on screen confirms the save; an edit keeps its stored presentation and leaves the workspace where it was. No extra notification claims the change.
+- Success closes the editor. A new List stays Auto, absence of a per-List presentation preference, and is opened, as the GTK sidebar selects it, so the created List on screen confirms the save; the opened view resolves the recommendation then. An edit never rewrites the List's stored preference, including absence or a dangling opaque id, and leaves the workspace where the user was. No preference write or extra notification claims the change.
 - A recoverable `Result` error keeps the draft and its binding and shows the runtime's diagnostic in the editor footer; `Ctrl-S` retries, because a List save carries no retained session that could go stale.
 - Cancellation restores the editable draft and reports the same retryable diagnostic; retirement suppresses all late presentation.
 
@@ -78,7 +78,7 @@ A failed preview or deletion reports the runtime's own diagnostic through the no
 
 ## Test map
 
-- [`ListAuthoringControllerTest.cpp`](../../../test/unit/tui/ListAuthoringControllerTest.cpp) protects target admission, preview debounce generations, fast-save revalidation in both directions, create and update outcomes, the Auto presentation record, opening a created List, retryable failures, admitted save and deletion lifetime through retirement, and the delete flow's immediate ownership, drawn-before-confirm gate, late-preview cancellation, confirmation, subtree scope, and tag cleanup.
+- [`ListAuthoringControllerTest.cpp`](../../../test/unit/tui/ListAuthoringControllerTest.cpp) protects target admission, preview debounce generations, fast-save revalidation in both directions, create and update outcomes, the absent Auto preference and the untouched stored preference through a save, opening a created List, retryable failures, admitted save and deletion lifetime through retirement, and the delete flow's immediate ownership, drawn-before-confirm gate, late-preview cancellation, confirmation, subtree scope, and tag cleanup.
 - [`SmartListEditorTest.cpp`](../../../test/unit/tui/SmartListEditorTest.cpp) protects field editing, submit requests, completion placement and completed-token dismissal, the expression guidance, discard confirmation, submitting inertia, column alignment, the shrinking sample, rendering, and mouse ownership.
 - [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects the exact command aliases; [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects command routing, the Lists-cursor target rule, a save refused behind an in-flight order write, the Lists pane's Edit and `Delete` keys, the confirmation's input ownership while its preview runs, and the fallback after deleting the open List.
 

@@ -34,6 +34,7 @@
 #include <giomm/simpleactiongroup.h>
 #include <gtkmm/checkbutton.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/dropdown.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listview.h>
@@ -45,6 +46,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -169,30 +171,40 @@ namespace ao::gtk::test
       std::size_t selectionAttemptCount = 0;
       ListId savedPresentationListId = kInvalidListId;
       std::string savedPresentationId;
+      /// Seeded per-list preference the production edit path reads through
+      /// listPresentationCallback, mirroring MainWindow's ListPresentations
+      /// wiring; absence is Auto.
+      std::map<ListId, std::string> presentationPreferences;
       ThemeCoordinator themeCoordinator;
-      ListNavigationController controller{window,
-                                          runtimeFixture.runtime(),
-                                          ao::test::englishMessageCatalog(),
-                                          {.onListSelected =
-                                             [this](ListId id)
-                                           {
-                                             ++selectionAttemptCount;
+      ListNavigationController controller{
+        window,
+        runtimeFixture.runtime(),
+        ao::test::englishMessageCatalog(),
+        {.onListSelected =
+           [this](ListId id)
+         {
+           ++selectionAttemptCount;
 
-                                             if (rejectSelection)
-                                             {
-                                               return false;
-                                             }
+           if (rejectSelection)
+           {
+             return false;
+           }
 
-                                             selectedId = id;
-                                             return true;
-                                           },
-                                           .onListPresentationSaved =
-                                             [this](ListId id, std::string presentationId)
-                                           {
-                                             savedPresentationListId = id;
-                                             savedPresentationId = std::move(presentationId);
-                                           }},
-                                          themeCoordinator};
+           selectedId = id;
+           return true;
+         },
+         .onListPresentationSaved =
+           [this](ListId id, std::string presentationId)
+         {
+           savedPresentationListId = id;
+           savedPresentationId = std::move(presentationId);
+         },
+         .listPresentationCallback = [this](ListId id) -> std::optional<std::string>
+         {
+           auto const it = presentationPreferences.find(id);
+           return it != presentationPreferences.end() ? std::optional<std::string>{it->second} : std::nullopt;
+         }},
+        themeCoordinator};
       utility::ScopedRegistration widgetRetirement = retireNavigationWidgets(window);
     };
 
@@ -675,6 +687,92 @@ namespace ao::gtk::test
 
       CHECK(state.selectedId != rejectedListId);
       CHECK(state.selectionAttemptCount == attemptsBeforeRebuild);
+    }
+  }
+
+  TEST_CASE("ListNavigationController - edit saves the seeded presentation preference unchanged", "[gtk][unit][list]")
+  {
+    auto state = NavigationFixture{};
+    auto const listId = createList(state.runtimeFixture.runtime(), "Seeded Name");
+    auto groupPtr = Gio::SimpleActionGroup::create();
+    auto registration = state.controller.addActionsTo(*groupPtr);
+    auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
+    REQUIRE(editActionPtr);
+
+    // The production open-edit path: select the row, activate the edit action,
+    // and let the controller seed the dialog through listPresentationCallback.
+    auto const openEditor = [&]
+    {
+      state.controller.rebuildTree(state.cache);
+      drainGtkEvents();
+      state.controller.select(listId);
+      drainGtkEvents();
+      editActionPtr->activate();
+      drainGtkEvents();
+      return dynamic_cast<SmartListDialog*>(findAppDialogByTitle("Edit List"));
+    };
+
+    auto const saveWithRename = [&](SmartListDialog& dialog)
+    {
+      auto* const nameEntry = listNameEntry(dialog);
+      REQUIRE(nameEntry != nullptr);
+      nameEntry->set_text("Renamed");
+      drainGtkEvents();
+      auto const savedId = dialog.presentationId();
+      dialog.response(Gtk::ResponseType::OK);
+      REQUIRE(tryPumpGtkEventsUntil([] { return findAppDialogByTitle("Edit List") == nullptr; }));
+      return savedId;
+    };
+
+    SECTION("a valid custom preference survives a rename")
+    {
+      auto preset = rt::CustomTrackPresentationPreset{};
+      preset.label = "Road View";
+      preset.spec.id = "custom-road-view";
+      REQUIRE(state.runtimeFixture.runtime().workspace().addCustomPreset(preset));
+      state.presentationPreferences[listId] = "custom-road-view";
+
+      auto* const dialog = openEditor();
+      REQUIRE(dialog != nullptr);
+      CHECK(saveWithRename(*dialog) == "custom-road-view");
+
+      CHECK(state.savedPresentationListId == listId);
+      CHECK(state.savedPresentationId == "custom-road-view");
+    }
+
+    SECTION("a dangling preference is saved back unchanged")
+    {
+      state.presentationPreferences[listId] = "custom-deleted";
+
+      auto* const dialog = openEditor();
+      REQUIRE(dialog != nullptr);
+      CHECK(saveWithRename(*dialog) == "custom-deleted");
+
+      CHECK(state.savedPresentationListId == listId);
+      CHECK(state.savedPresentationId == "custom-deleted");
+    }
+
+    SECTION("selecting Auto clears a dangling preference")
+    {
+      state.presentationPreferences[listId] = "custom-deleted";
+      auto* const dialog = openEditor();
+      REQUIRE(dialog != nullptr);
+      auto const dropDowns = collectAll<Gtk::DropDown>(*dialog);
+      REQUIRE(dropDowns.size() == 1);
+      dropDowns.front()->set_selected(0U);
+      CHECK(saveWithRename(*dialog).empty());
+      CHECK(state.savedPresentationListId == listId);
+      CHECK(state.savedPresentationId.empty());
+    }
+
+    SECTION("an absent preference saves back Auto as an empty id")
+    {
+      auto* const dialog = openEditor();
+      REQUIRE(dialog != nullptr);
+      CHECK(saveWithRename(*dialog).empty());
+
+      CHECK(state.savedPresentationListId == listId);
+      CHECK(state.savedPresentationId.empty());
     }
   }
 

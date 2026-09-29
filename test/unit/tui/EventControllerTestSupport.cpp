@@ -122,10 +122,8 @@ namespace ao::tui::test
                                                                    runtimePtr->library(),
                                                                    runtimePtr->views(),
                                                                    runtimePtr->sources(),
-                                                                   runtimePtr->workspace(),
                                                                    runtimePtr->completion(),
                                                                    runtimePtr->notifications(),
-                                                                   listPresentations,
                                                                    ao::test::englishMessageCatalog(),
                                                                    ListAuthoringController::Outputs{});
     }

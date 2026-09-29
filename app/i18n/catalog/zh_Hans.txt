@@ -363,6 +363,7 @@ zh_Hans:table {
     gtk_smart_list_effective_filter { "实际筛选条件" }
     gtk_smart_list_membership { "成员资格" }
     gtk_smart_list_auto_presentation { "自动" }
+    gtk_smart_list_unavailable_presentation { "不可用：{id}（自动）" }
     gtk_smart_list_presentation { "视图" }
     gtk_smart_list_preview { "预览" }
     gtk_smart_list_waiting_for_filter { "等待输入筛选条件..." }

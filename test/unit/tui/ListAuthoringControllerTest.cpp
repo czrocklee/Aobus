@@ -75,10 +75,8 @@ namespace ao::tui::test
           runtimePtr->library(),
           runtimePtr->views(),
           runtimePtr->sources(),
-          runtimePtr->workspace(),
           runtimePtr->completion(),
           runtimePtr->notifications(),
-          listPresentations,
           ao::test::englishMessageCatalog(),
           ListAuthoringController::Outputs{
             .requestRefresh = [this] { ++refreshCount; },
@@ -294,17 +292,16 @@ namespace ao::tui::test
     CHECK(controller.activeEditor()->parentListId() == kInvalidListId);
   }
 
-  TEST_CASE("ListAuthoringController - create commits the draft and records the Auto presentation",
-            "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - create keeps the presentation preference absent", "[tui][integration][editor]")
   {
     auto fixture = AuthoringFixture{};
     fixture.addTrack({.title = "Roadsongs", .uri = "road.flac", .tags = {"live"}});
     auto controller = fixture.makeController();
 
     REQUIRE(controller.tryOpenNew(rt::kAllTracksListId));
-    draftNamedList(controller, "Live set");
+    draftNamedList(controller, "Queen set");
     focusField(controller, 2);
-    typeText(controller, "#live");
+    typeText(controller, "$albumArtist = 'Queen'");
     REQUIRE(controller.activeEditor()->canSubmit());
 
     CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
@@ -318,20 +315,26 @@ namespace ao::tui::test
     auto const optNode = fixture.runtimePtr->library().snapshot().lists();
     REQUIRE_FALSE(optNode.empty());
 
-    auto savedIt = std::ranges::find_if(optNode, [](rt::ListNode const& node) { return node.name == "Live set"; });
+    auto savedIt = std::ranges::find_if(optNode, [](rt::ListNode const& node) { return node.name == "Queen set"; });
     REQUIRE(savedIt != optNode.end());
-    CHECK(savedIt->expression == "#live");
+    CHECK(savedIt->expression == "$albumArtist = 'Queen'");
     CHECK(savedIt->parentId == kInvalidListId);
 
-    // The Auto resolution is what the saved List's presentation preference holds.
-    auto const optPresentationId = fixture.listPresentations.presentationIdForList(savedIt->id);
-    REQUIRE(optPresentationId);
-    CHECK(*optPresentationId ==
-          uimodel::resolveSmartListTrackPresentationId(uimodel::kSmartListAutoTrackPresentationIndex,
-                                                       true,
-                                                       "#live",
-                                                       rt::builtinTrackPresentationPresets(),
-                                                       fixture.runtimePtr->workspace().customPresets()));
+    // The save shows the created List, exactly as before the preference change.
+    REQUIRE_FALSE(fixture.openedLists.empty());
+    CHECK(fixture.openedLists.back() == savedIt->id);
+
+    // Auto is absence of a preference: the TUI save writes no map entry.
+    CHECK_FALSE(fixture.listPresentations.presentationIdForList(savedIt->id));
+
+    // The saved Auto view still opens with a recommendation, asserted against
+    // the literal builtin artists preset rather than the recommendation
+    // algorithm: an album-artist query recommends the artists presentation.
+    auto const recommended =
+      fixture.listPresentations.presentationForList({.listId = savedIt->id,
+                                                     .sourceKind = uimodel::ListPresentationSourceKind::SavedList,
+                                                     .listExpression = "$albumArtist = 'Queen'"});
+    CHECK(recommended.id == "artists");
   }
 
   TEST_CASE("ListAuthoringController - update rewrites the definition and keeps the List identity",
@@ -340,6 +343,9 @@ namespace ao::tui::test
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
     auto controller = fixture.makeController();
+    std::size_t changeCount = 0;
+    auto const changeSubscription =
+      fixture.listPresentations.signalChanged().connect([&changeCount](ListId) { ++changeCount; });
 
     REQUIRE(controller.tryOpenEdit(listId));
     draftNamedList(controller, "Roadsongs 2026");
@@ -355,25 +361,51 @@ namespace ao::tui::test
     CHECK(optNode->name == "Roadsongs 2026");
     CHECK(optNode->expression == "#live and #bootleg");
 
-    // An edit without a stored choice resolves the Auto presentation.
-    auto const optPresentationId = fixture.listPresentations.presentationIdForList(listId);
-    REQUIRE(optPresentationId);
-    CHECK(*optPresentationId ==
-          uimodel::resolveSmartListTrackPresentationId(uimodel::kSmartListAutoTrackPresentationIndex,
-                                                       true,
-                                                       "#live and #bootleg",
-                                                       rt::builtinTrackPresentationPresets(),
-                                                       fixture.runtimePtr->workspace().customPresets()));
+    // An edit never rewrites the preference map: an absent preference stays
+    // absent instead of the save recording today's recommendation, and the
+    // save emits no presentation-change notification.
+    CHECK_FALSE(fixture.listPresentations.presentationIdForList(listId));
+    CHECK(changeCount == 0);
 
     // Editing rewrote exactly one List; no sibling appeared beside it.
     CHECK(fixture.runtimePtr->library().snapshot().lists().size() == 1);
   }
 
-  TEST_CASE("ListAuthoringController - an edit keeps the stored presentation choice", "[tui][integration][editor]")
+  TEST_CASE("ListAuthoringController - an edit never rewrites the stored presentation preference",
+            "[tui][integration][editor]")
   {
     auto fixture = AuthoringFixture{};
     auto const listId = fixture.addList("Roadsongs", "#live");
     fixture.listPresentations.setPresentationIdForList(listId, "albums");
+    auto controller = fixture.makeController();
+
+    std::size_t changeCount = 0;
+    auto const changeSubscription =
+      fixture.listPresentations.signalChanged().connect([&changeCount](ListId) { ++changeCount; });
+
+    REQUIRE(controller.tryOpenEdit(listId));
+    draftNamedList(controller, "Roadsongs 2026");
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::CtrlS));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+    CHECK_FALSE(controller.isActive());
+
+    // The stored choice survives the save instead of the Auto recommendation,
+    // without a change notification for the untouched preference.
+    auto const optPresentationId = fixture.listPresentations.presentationIdForList(listId);
+    REQUIRE(optPresentationId);
+    CHECK(*optPresentationId == "albums");
+    CHECK(changeCount == 0);
+  }
+
+  TEST_CASE("ListAuthoringController - an edit keeps a dangling stored presentation id untouched",
+            "[tui][integration][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const listId = fixture.addList("Roadsongs", "#live");
+    // The saved id names no live preset, exactly like a preference left over
+    // from a deleted custom presentation.
+    fixture.listPresentations.setPresentationIdForList(listId, "custom-deleted");
     auto controller = fixture.makeController();
 
     REQUIRE(controller.tryOpenEdit(listId));
@@ -383,10 +415,11 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
     CHECK_FALSE(controller.isActive());
 
-    // The stored choice survives the save instead of the Auto recommendation.
+    // The TUI editor has no picker, so even a dangling opaque id stays exactly
+    // as stored instead of being rewritten or dropped.
     auto const optPresentationId = fixture.listPresentations.presentationIdForList(listId);
     REQUIRE(optPresentationId);
-    CHECK(*optPresentationId == "albums");
+    CHECK(*optPresentationId == "custom-deleted");
   }
 
   TEST_CASE("ListAuthoringController - a save failure keeps the draft for retry", "[tui][integration][editor]")

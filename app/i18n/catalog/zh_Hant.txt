@@ -362,6 +362,7 @@ zh_Hant:table {
     gtk_smart_list_effective_filter { "實際篩選條件" }
     gtk_smart_list_membership { "成員資格" }
     gtk_smart_list_auto_presentation { "自動" }
+    gtk_smart_list_unavailable_presentation { "無法使用：{id}（自動）" }
     gtk_smart_list_presentation { "檢視" }
     gtk_smart_list_preview { "預覽" }
     gtk_smart_list_waiting_for_filter { "等待輸入篩選條件..." }
