@@ -501,6 +501,7 @@ ja:table {
     tui_list_effective_expression { "有効" }
     tui_list_save_action { "保存" }
     tui_list_status_saving { "保存中…" }
+    tui_list_status_deleting { "削除中…" }
     tui_list_virtual_target { "「すべての曲」は編集・削除できません" }
     tui_list_open_unavailable { "リストを開けませんでした" }
     tui_shell_command_palette_footer { "{completeKey} 補完  {runKey} 実行  {cancelKey} キャンセル" }

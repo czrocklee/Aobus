@@ -6,7 +6,7 @@ id: tui.list-authoring
 
 ## Scope
 
-This specification owns the terminal frontend's Saved-List authoring surface after the shell chooses a target List: the definition editor for `new` and `edit`, preview recomputation, submission outcomes, and the lifetime of an admitted save through graceful exit.
+This specification owns the terminal frontend's Saved-List authoring surfaces after the shell chooses a target List: the definition editor for `new` and `edit`, the deletion preview and its confirmation, preview recomputation, submission outcomes, and the lifetime of an admitted save or deletion through graceful exit.
 
 The [TUI interaction specification](tui.md) owns command parsing, editor entry, exclusive-input precedence, workspace gesture retirement, and general exit checkpoint ordering.
 Exact user-facing commands belong to the [TUI command reference](../../reference/tui/command.md).
@@ -14,9 +14,9 @@ Frontend-neutral List mutation, draft, and deletion semantics belong to [library
 
 ## Targets and actions
 
-`:list new` and `:list edit` are palette-discoverable command aliases with no default keys.
+`:list new`, `:list edit`, and `:list delete` are palette-discoverable command aliases with no default keys.
 The target is the Lists-navigation cursor while the docked Lists pane owns keyboard focus or the chooser popup is open, otherwise the active List.
-The shared `describeListActions` contract decides admissibility: a virtual target refuses edit with one localized warning and changes nothing, while `new` parents at the library root through `parentForNewSmartList`.
+The shared `describeListActions` contract decides admissibility: a virtual target refuses edit and delete with one localized warning and changes nothing, while `new` parents at the library root through `parentForNewSmartList`.
 Opening any surface runs the same entry transition as the track editors: transient gestures and pointer input retire, a running visual range commits into the mark set, and shell text input closes; the Detail inspector's visibility preference is preserved.
 
 ## Definition editor
@@ -51,17 +51,30 @@ The outcomes are presented as follows:
 A submitted save outlives the editor that started it: closing or retiring the surface keeps the shared controller state alive until the write settles, and `ExitController` waits for it exactly as it waits for a submitted track write.
 Retirement suppresses late presentation but never cancels the write.
 
+## Deletion
+
+`:list delete` starts with a runtime preview of what deletion would remove.
+Nothing is on screen while the preview runs; the shell remains usable, and a second authoring command or track-editor open is refused while the flow is in flight.
+When the preview settles, the confirmation modal appears, and its asynchronous arrival retires workspace gestures and transient input itself, because no keypress opened it.
+
+The confirmation shows the shared deletion question for the previewed scope: a plain List asks the single-list question, and a List with descendants asks the subtree question with each removed List named.
+A directly editable single-tag List additionally offers the shared tag-removal question as a `Space`-toggled row and warns when other Lists still reference that tag; the toggle decides the deletion's `removeWritableTagFromTracks` option.
+`Enter` confirms with the shared Delete or Delete-all label, `Esc` cancels without changing anything, and both footer controls are clickable.
+A confirmed deletion keeps the confirmation visible in a deleting state that consumes every event until the write settles.
+
+A failed preview or deletion reports the runtime's own diagnostic through the notification feed; the published change set retires the deleted List's presentation preference and rebuilds navigation, including when the deleted List was active.
+
 ## Implementation map
 
-- [`ListAuthoringController.h`](../../../app/tui/ListAuthoringController.h) defines the single-flow controller and its outputs; [`ListAuthoringController.cpp`](../../../app/tui/ListAuthoringController.cpp) owns target admission, preview recomputation, and submission lifetime.
+- [`ListAuthoringController.h`](../../../app/tui/ListAuthoringController.h) defines the single-flow controller, its outputs, and the delete confirmation; [`ListAuthoringController.cpp`](../../../app/tui/ListAuthoringController.cpp) owns target admission, preview recomputation, submission and deletion lifetime, and the confirmation modal.
 - [`SmartListEditor.h`](../../../app/tui/SmartListEditor.h) defines the modal editor's modes, status, and requests; [`SmartListEditor.cpp`](../../../app/tui/SmartListEditor.cpp) owns field rows, expression completion, discard confirmation, and preview rendering.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns the command aliases' target rule and the entry transition; [`App.cpp`](../../../app/tui/App.cpp) composes the controller, its modal, and the exit gate.
 
 ## Test map
 
-- [`ListAuthoringControllerTest.cpp`](../../../test/unit/tui/ListAuthoringControllerTest.cpp) protects target admission, preview debounce generations, create and update outcomes, the Auto presentation record, retryable failures, and admitted-write lifetime.
+- [`ListAuthoringControllerTest.cpp`](../../../test/unit/tui/ListAuthoringControllerTest.cpp) protects target admission, preview debounce generations, create and update outcomes, the Auto presentation record, retryable failures, admitted-write lifetime, and the delete flow's preview, confirmation, subtree scope, and tag cleanup.
 - [`SmartListEditorTest.cpp`](../../../test/unit/tui/SmartListEditorTest.cpp) protects field editing, submit gating, completion, discard confirmation, submitting inertia, rendering, and mouse ownership.
-- [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects the exact command aliases; [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects command routing and the Lists-cursor target rule.
+- [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects the exact command aliases; [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects command routing, the Lists-cursor target rule, and the asynchronous confirmation's input ownership.
 
 ## Related documents
 

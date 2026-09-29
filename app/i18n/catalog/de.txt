@@ -501,6 +501,7 @@ de:table {
     tui_list_effective_expression { "Wirksam" }
     tui_list_save_action { "Speichern" }
     tui_list_status_saving { "Wird gespeichert…" }
+    tui_list_status_deleting { "Wird gelöscht…" }
     tui_list_virtual_target { "\"Alle Titel\" kann nicht bearbeitet oder gelöscht werden" }
     tui_list_open_unavailable { "Die Liste konnte nicht geöffnet werden" }
     tui_shell_command_palette_footer { "{completeKey} ergänzen  {runKey} ausführen  {cancelKey} abbrechen" }

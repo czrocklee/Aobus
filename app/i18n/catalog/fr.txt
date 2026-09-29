@@ -501,6 +501,7 @@ fr:table {
     tui_list_effective_expression { "Effectif" }
     tui_list_save_action { "Enregistrer" }
     tui_list_status_saving { "Enregistrement…" }
+    tui_list_status_deleting { "Suppression…" }
     tui_list_virtual_target { "Impossible de modifier ou de supprimer « Tous les morceaux »" }
     tui_list_open_unavailable { "Impossible d''ouvrir la liste" }
     tui_shell_command_palette_footer { "{completeKey} compléter  {runKey} exécuter  {cancelKey} annuler" }

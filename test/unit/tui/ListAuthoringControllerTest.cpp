@@ -64,6 +64,7 @@ namespace ao::tui::test
       uimodel::ListPresentations listPresentations{presentationCatalog, runtimePtr->library().changes()};
       std::size_t refreshCount = 0;
       std::size_t settledCount = 0;
+      std::size_t interactionsCancelledCount = 0;
 
       ListAuthoringController makeController()
       {
@@ -79,6 +80,7 @@ namespace ao::tui::test
                                        ListAuthoringController::Outputs{
                                          .requestRefresh = [this] { ++refreshCount; },
                                          .notifySubmittedWriteSettled = [this] { ++settledCount; },
+                                         .cancelTransientInteractions = [this] { ++interactionsCancelledCount; },
                                        }};
       }
 
@@ -453,4 +455,130 @@ namespace ao::tui::test
     CHECK_FALSE(controller.tryHandleEvent(ftxui::Event::Escape));
   }
 
+  TEST_CASE("ListAuthoringController - delete previews the target before asking once", "[tui][integration][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const listId = fixture.addList("Roadsongs", "#live");
+    auto controller = fixture.makeController();
+
+    // Nothing is on screen while the preview runs, and one flow exists at a time.
+    REQUIRE(controller.tryDelete(listId));
+    CHECK_FALSE(controller.isActive());
+    CHECK(controller.isBusy());
+    CHECK_FALSE(controller.tryDelete(listId));
+    CHECK_FALSE(controller.tryOpenNew(rt::kAllTracksListId));
+
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.isActive(); }));
+
+    auto const* const confirmation = controller.activeDeleteConfirmation();
+    REQUIRE(confirmation != nullptr);
+    CHECK(confirmation->listId == listId);
+    CHECK_FALSE(confirmation->includeDescendants);
+    CHECK(confirmation->title == "Delete List?");
+    CHECK(confirmation->question.contains("\"Roadsongs\""));
+    CHECK(fixture.interactionsCancelledCount == 1);
+
+    // Escape cancels without deleting, and the flow is gone.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(controller.isActive());
+    CHECK_FALSE(controller.isBusy());
+    CHECK(fixture.listNode(listId).has_value());
+  }
+
+  TEST_CASE("ListAuthoringController - delete commits after one confirmation", "[tui][integration][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const listId = fixture.addList("Roadsongs");
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.tryDelete(listId));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.isActive(); }));
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK(controller.hasPendingSubmission());
+    CHECK(controller.activeDeleteConfirmation()->deleting);
+
+    // A confirming surface consumes everything until its write settles.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+
+    CHECK_FALSE(controller.isActive());
+    CHECK_FALSE(fixture.listNode(listId).has_value());
+    CHECK(fixture.settledCount == 1);
+  }
+
+  TEST_CASE("ListAuthoringController - a subtree deletion previews every descendant it will remove",
+            "[tui][integration][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const parentId = fixture.addList("Tours");
+    auto const childDraft = rt::ListDraft{.parentId = parentId, .name = "2026"};
+    auto const childId = ao::test::requireValue(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().createListAsync(childDraft)));
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.tryDelete(parentId));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.isActive(); }));
+
+    auto const* const confirmation = controller.activeDeleteConfirmation();
+    REQUIRE(confirmation != nullptr);
+    CHECK(confirmation->includeDescendants);
+    CHECK(confirmation->title == "Delete List and Descendants?");
+    CHECK(confirmation->question.contains('2'));
+    CHECK(confirmation->question.contains("Tours"));
+    CHECK(confirmation->question.contains("2026"));
+
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+
+    CHECK_FALSE(fixture.listNode(parentId).has_value());
+    CHECK_FALSE(fixture.listNode(childId).has_value());
+  }
+
+  TEST_CASE("ListAuthoringController - a writable membership tag offers track cleanup on delete",
+            "[tui][integration][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const trackId = fixture.addTrack({.title = "Roadsongs", .uri = "road.flac", .tags = {"live"}});
+    auto const listId = fixture.addList("Roadsongs", "#live");
+    auto controller = fixture.makeController();
+
+    REQUIRE(controller.tryDelete(listId));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.isActive(); }));
+
+    auto const* const confirmation = controller.activeDeleteConfirmation();
+    REQUIRE(confirmation != nullptr);
+    CHECK_FALSE(confirmation->tagImpactQuestion.empty());
+    CHECK(confirmation->tagImpactQuestion.contains("#live"));
+    CHECK_FALSE(confirmation->removeWritableTag);
+
+    // Space toggles the cleanup offer, and the deletion applies the choice.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character(" ")));
+    REQUIRE(controller.activeDeleteConfirmation()->removeWritableTag);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.hasPendingSubmission(); }));
+
+    CHECK_FALSE(fixture.listNode(listId).has_value());
+    auto const spec = rt::test::runtimeTrackSpec(*fixture.runtimePtr, trackId);
+    CHECK(spec.tags.empty());
+  }
+
+  TEST_CASE("ListAuthoringController - a failed delete preview reports the runtime error", "[tui][integration][editor]")
+  {
+    auto fixture = AuthoringFixture{};
+    auto const listId = fixture.addList("Vanishing");
+    auto controller = fixture.makeController();
+
+    // The target disappears between the command and its preview.
+    std::ignore = ao::test::requireValue(rt::test::runRuntimeTask(
+      *fixture.runtimePtr, fixture.runtimePtr->library().commands().deleteListAsync(listId, rt::DeleteListOptions{})));
+
+    REQUIRE(controller.tryDelete(listId));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !controller.isBusy(); }));
+
+    CHECK_FALSE(controller.isActive());
+    REQUIRE(fixture.hasNotifications());
+    CHECK_FALSE(fixture.lastMessage().empty());
+  }
 } // namespace ao::tui::test

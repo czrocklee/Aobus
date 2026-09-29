@@ -552,6 +552,33 @@ namespace ao::tui::test
     CHECK(std::get<std::string>(feed.entries.back().message) == "All Tracks cannot be edited or deleted");
   }
 
+  TEST_CASE("EventController - the list delete command confirms asynchronously", "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const listId = fixture.addList("Roadsongs");
+    REQUIRE(library.openList(listId));
+
+    enterCommand(controller, "list delete");
+
+    // Nothing is on screen while the preview runs; the shell stays usable.
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().size() == 1);
+
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return fixture.listAuthoringPtr->isActive(); }));
+    auto const* const confirmation = fixture.listAuthoringPtr->activeDeleteConfirmation();
+    REQUIRE(confirmation != nullptr);
+    CHECK(confirmation->listId == listId);
+
+    // The confirmation owns every event until it is answered.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("x")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId).has_value());
+  }
+
   TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")
   {
     auto fixture = EventControllerFixture{};

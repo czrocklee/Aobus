@@ -91,6 +91,7 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `tags` | open the quick tag popover over the current selection |
 | `list new` | open the Saved-List editor for a new List under the target List |
 | `list edit` | open the Saved-List editor over the target List's definition |
+| `list delete` | preview and confirm deletion of the target List |
 | `play` | play the focused track |
 | `pause`, `toggle`, `space` | toggle playback |
 | `stop` | stop playback |
@@ -100,6 +101,8 @@ The parser accepts only known prefixes and exact aliases. The palette also searc
 | `back`, `forward` | navigate workspace history, including the view left by reveal |
 | `settings`, `config` | open global TUI Settings |
 | `quit` | request normal checkpoint-and-stop exit |
+
+The `list` commands draft against the Lists-navigation cursor while the docked Lists pane owns focus or the chooser is open, otherwise the active List; `list edit` and `list delete` refuse All Tracks, while `list new` parents a new List at the library root instead. The [TUI List-authoring specification](../../system/frontend/tui-list-authoring.md) owns their workflow.
 
 ### Workspace keys
 

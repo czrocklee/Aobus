@@ -501,6 +501,7 @@ es:table {
     tui_list_effective_expression { "Efectivo" }
     tui_list_save_action { "Guardar" }
     tui_list_status_saving { "Guardando…" }
+    tui_list_status_deleting { "Eliminando…" }
     tui_list_virtual_target { "No se puede editar ni eliminar \"Todas las pistas\"" }
     tui_list_open_unavailable { "No se pudo abrir la lista" }
     tui_shell_command_palette_footer { "{completeKey} autocompletar  {runKey} ejecutar  {cancelKey} cancelar" }

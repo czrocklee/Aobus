@@ -514,9 +514,22 @@ namespace ao::tui
     _shell.closeInput();
   }
 
+  void EventController::deleteList()
+  {
+    if (!_listAuthoring.tryDelete(listAuthoringTargetId()))
+    {
+      return;
+    }
+
+    // The confirmation arrives asynchronously, so the gestures the command can
+    // still see are retired now and its arrival retires whatever began since.
+    cancelTransientInteractions();
+    _shell.closeInput();
+  }
+
   void EventController::editSelectedTrackProperties(TrackEditorMode const mode)
   {
-    // A List save is still settling, and its surface can
+    // A List deletion preview or save is still settling, and its surface can
     // still appear; the track editor must not open over that arrival.
     if (_listAuthoring.isBusy())
     {
@@ -792,6 +805,7 @@ namespace ao::tui
       case CommandAction::EditTags: editSelectedTrackProperties(TrackEditorMode::Tags); break;
       case CommandAction::CreateList: openListAuthoring(ListEditorMode::New); break;
       case CommandAction::EditList: openListAuthoring(ListEditorMode::Edit); break;
+      case CommandAction::DeleteList: deleteList(); break;
       case CommandAction::OpenSettings:
         cancelTransientInteractions();
         _library.commitVisualSelection();

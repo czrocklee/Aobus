@@ -73,6 +73,7 @@ namespace ao::tui::test
     CHECK(requiredCommand("tags").action == CommandAction::EditTags);
     CHECK(requiredCommand(":list new").action == CommandAction::CreateList);
     CHECK(requiredCommand("list edit").action == CommandAction::EditList);
+    CHECK(requiredCommand(":list delete").action == CommandAction::DeleteList);
     CHECK_FALSE(parseCommand(":list"));
     CHECK_FALSE(parseCommand("list"));
     CHECK_FALSE(parseCommand("list new extra"));
@@ -148,6 +149,7 @@ namespace ao::tui::test
     CHECK_FALSE(shortcutActionForCommand(CommandAction::SetPresentation));
     CHECK_FALSE(shortcutActionForCommand(CommandAction::CreateList));
     CHECK_FALSE(shortcutActionForCommand(CommandAction::EditList));
+    CHECK_FALSE(shortcutActionForCommand(CommandAction::DeleteList));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::OpenCommandPalette));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::OpenQuickFilter));
     CHECK_FALSE(commandActionForKeyAction(KeyAction::PreviousSection));

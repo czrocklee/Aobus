@@ -146,6 +146,7 @@ namespace ao::tui
     /// The List the next authoring command targets: the Lists cursor while Lists owns focus, else the active List.
     ListId listAuthoringTargetId() const;
     void openListAuthoring(ListEditorMode mode);
+    void deleteList();
     void selectOutputDevice();
     void selectPresentation();
     void revealCurrentTrack();

@@ -502,6 +502,7 @@ zh_Hans:table {
     tui_list_effective_expression { "实际" }
     tui_list_save_action { "保存" }
     tui_list_status_saving { "正在保存…" }
+    tui_list_status_deleting { "正在删除…" }
     tui_list_virtual_target { "“所有曲目”无法编辑或删除" }
     tui_list_open_unavailable { "无法打开列表" }
     tui_shell_command_palette_footer { "{completeKey} 补全  {runKey} 运行  {cancelKey} 取消" }

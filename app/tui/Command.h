@@ -43,6 +43,7 @@ namespace ao::tui
     EditTags,
     CreateList,
     EditList,
+    DeleteList,
     OpenSettings,
     Play,
     TogglePlayback,

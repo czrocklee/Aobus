@@ -1236,17 +1236,19 @@ namespace ao::tui
     }
 
     /**
-     * @brief Builds the Saved-List authoring controller over its late-bound exit hook.
+     * @brief Builds the Saved-List authoring controller over its late-bound shell hooks.
      *
-     * The exit gate is constructed after this controller, so its settlement
-     * output reaches it through the same pointer indirection the track
+     * The exit gate and event dispatcher are constructed after this controller,
+     * so its outputs reach them through the same pointer indirection the track
      * editor's settlement callback uses.
      */
     ListAuthoringController makeListAuthoringController(rt::AppRuntime& appRuntime,
                                                         uimodel::ListPresentations& listPresentations,
                                                         i18n::MessageCatalog const& textCatalog,
                                                         std::function<void()> requestRefresh,
-                                                        ExitController*& activeExit)
+                                                        ExitController*& activeExit,
+                                                        EventController*& activeEvents,
+                                                        ShellInteractionModel& shell)
     {
       return ListAuthoringController{appRuntime.async(),
                                      appRuntime.library(),
@@ -1266,6 +1268,16 @@ namespace ao::tui
                                          {
                                            activeExit->notifySubmittedWriteSettled();
                                          }
+                                       },
+                                       .cancelTransientInteractions =
+                                         [&activeEvents, &shell]
+                                       {
+                                         if (activeEvents != nullptr)
+                                         {
+                                           activeEvents->cancelTransientInteractions();
+                                         }
+
+                                         shell.closeInput();
                                        },
                                      }};
     }
@@ -1572,7 +1584,7 @@ namespace ao::tui
                                          runtime.completion(),
                                          runtime.textOrderingPolicy()};
     auto listAuthoring = makeListAuthoringController(
-      runtime, listPresentations, textCatalog, requestRefresh, activeExit);
+      runtime, listPresentations, textCatalog, requestRefresh, activeExit, activeEvents, shell);
     auto signalExitPtr = std::unique_ptr<SignalExitWatcher>{};
     auto onSignalExit = std::function<void()>{};
     auto titlePreview = TerminalTitleFormatter{runtime.library()};

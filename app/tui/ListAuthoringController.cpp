@@ -15,6 +15,8 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/NotificationService.h>
@@ -70,6 +72,19 @@ namespace ao::tui
       uimodel::SmartListEditorViewState viewState{};
       std::vector<std::string> tracks{};
     };
+
+    bool hasListChildren(rt::LibrarySnapshot const& snapshot, ListId const listId)
+    {
+      return std::ranges::any_of(
+        snapshot.lists(), [listId](rt::ListNode const& node) { return node.parentId == listId; });
+    }
+
+    /// The visible spelling of a membership tag, the same `#name` form the
+    /// expression language itself uses.
+    std::string displayedTag(std::string_view const tag)
+    {
+      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
+    }
 
     /**
      * @brief Recomputes one editor preview from a live source.
@@ -188,6 +203,15 @@ namespace ao::tui
       if (outputs.requestRefresh)
       {
         outputs.requestRefresh();
+      }
+    }
+
+    /// Ends any workspace gesture or transient input an asynchronously arrived surface would interrupt.
+    void cancelShellInteractions() const
+    {
+      if (outputs.cancelTransientInteractions)
+      {
+        outputs.cancelTransientInteractions();
       }
     }
 
@@ -336,6 +360,127 @@ namespace ao::tui
       requestRefresh();
     }
 
+    /// Installs the confirmation for one settled deletion preview.
+    void presentDeletePreview(bool const includeDescendants, Result<rt::DeleteListSubtreeReply> previewRes)
+    {
+      AO_INVARIANT(!previewRes->deletedLists.empty(), "A successful List deletion preview must contain its root List");
+
+      auto const& preview = previewRes->deletedLists.front();
+      auto confirmation = ListDeleteConfirmation{};
+      confirmation.listId = previewRes->rootListId;
+      confirmation.includeDescendants = includeDescendants;
+      confirmation.title = std::string{i18n::requiredText(
+        textCatalog, includeDescendants ? MessageId::ListDeleteSubtreeTitle : MessageId::ListDeleteTitle)};
+
+      if (includeDescendants)
+      {
+        auto entries = std::string{};
+
+        for (auto const& list : previewRes->deletedLists)
+        {
+          if (!entries.empty())
+          {
+            entries.append("\n");
+          }
+
+          entries.append(std::format("• {}", list.name));
+        }
+
+        confirmation.question =
+          i18n::requiredFormat(textCatalog,
+                               MessageId::ListDeleteSubtreeQuestion,
+                               {{"count", previewRes->deletedLists.size()}, {"entries", entries}});
+      }
+      else
+      {
+        confirmation.question =
+          i18n::requiredFormat(textCatalog, MessageId::ListDeleteQuestion, {{"name", preview.name}});
+      }
+
+      if (preview.optTagImpact)
+      {
+        confirmation.tagImpactQuestion = i18n::requiredFormat(
+          textCatalog,
+          MessageId::ListRemoveTag,
+          {{"tag", displayedTag(preview.optTagImpact->tag)}, {"count", preview.optTagImpact->taggedTrackCount}});
+
+        if (!preview.optTagImpact->otherListReferences.empty())
+        {
+          auto references = std::string{};
+
+          for (auto const& reference : preview.optTagImpact->otherListReferences)
+          {
+            if (!references.empty())
+            {
+              references.append(", ");
+            }
+
+            references.append(reference.name);
+          }
+
+          confirmation.tagReferencesWarning =
+            i18n::requiredFormat(textCatalog,
+                                 MessageId::ListTagReferences,
+                                 {{"tag", displayedTag(preview.optTagImpact->tag)}, {"references", references}});
+        }
+      }
+
+      optDeleteConfirmation.emplace(std::move(confirmation));
+
+      // The confirmation is the one surface that appears without a keypress,
+      // so the workspace gestures it interrupts are retired here rather than
+      // by the event that opened it.
+      cancelShellInteractions();
+      requestRefresh();
+    }
+
+    /// Reports the terminal result of one submitted deletion, on the callback executor.
+    void completeDeletion(bool const cancelled,
+                          Result<rt::DeleteListSubtreeReply> deleteRes,
+                          std::exception_ptr unexpected)
+    {
+      expectCallbackExecutor();
+
+      settleSubmission();
+
+      if (unexpected)
+      {
+        AO_FATAL_EXCEPTION(std::move(unexpected), "TUI List deletion");
+      }
+
+      if (retired)
+      {
+        return;
+      }
+
+      if (cancelled)
+      {
+        if (optDeleteConfirmation)
+        {
+          // The deletion never landed, so the question returns to its
+          // answerable state rather than claiming anything was removed.
+          optDeleteConfirmation->deleting = false;
+          postText(rt::NotificationSeverity::Warning, MessageId::TuiEditorOpenUnavailable);
+          requestRefresh();
+        }
+
+        return;
+      }
+
+      optDeleteConfirmation.reset();
+
+      if (!deleteRes)
+      {
+        post(rt::NotificationSeverity::Error, deleteRes.error().message);
+        requestRefresh();
+        return;
+      }
+
+      // The published change set retires the deleted List's presentation
+      // entry and rebuilds navigation; nothing else is claimed here.
+      requestRefresh();
+    }
+
     async::Runtime& runtime;
     rt::Library& library;
     rt::ViewService& views;
@@ -347,9 +492,13 @@ namespace ao::tui
     i18n::MessageCatalog const& textCatalog;
     Outputs outputs;
     std::optional<SmartListEditor> optEditor{};
+    std::optional<ListDeleteConfirmation> optDeleteConfirmation{};
+    bool deletePreviewPending = false;
     bool submissionPending = false;
     std::uint64_t previewGeneration = 0;
     async::TaskHandle previewTask{};
+    mutable MouseBindings confirmationMouseBindings;
+    mutable bool confirmationMouseReady = false;
     bool retired = false;
   };
 
@@ -384,6 +533,7 @@ namespace ao::tui
     // It dispatches nothing and calls no presentation code.
     _statePtr->retired = true;
     _statePtr->optEditor.reset();
+    _statePtr->optDeleteConfirmation.reset();
     _statePtr->previewTask.reset();
     ++_statePtr->previewGeneration;
     _statePtr->outputs = Outputs{};
@@ -394,7 +544,8 @@ namespace ao::tui
     auto& state = *_statePtr;
     state.expectCallbackExecutor();
 
-    if (state.retired || state.optEditor || state.submissionPending)
+    if (state.retired || state.optEditor || state.optDeleteConfirmation || state.deletePreviewPending ||
+        state.submissionPending)
     {
       return false;
     }
@@ -411,7 +562,8 @@ namespace ao::tui
     auto& state = *_statePtr;
     state.expectCallbackExecutor();
 
-    if (state.retired || state.optEditor || state.submissionPending)
+    if (state.retired || state.optEditor || state.optDeleteConfirmation || state.deletePreviewPending ||
+        state.submissionPending)
     {
       return false;
     }
@@ -442,14 +594,49 @@ namespace ao::tui
     return false;
   }
 
+  bool ListAuthoringController::tryDelete(ListId const targetListId)
+  {
+    auto& state = *_statePtr;
+    state.expectCallbackExecutor();
+
+    if (state.retired || state.optEditor || state.optDeleteConfirmation || state.deletePreviewPending ||
+        state.submissionPending)
+    {
+      return false;
+    }
+
+    auto const snapshot = state.library.snapshot();
+    auto const actions = uimodel::describeListActions(targetListId, hasListChildren(snapshot, targetListId));
+
+    if (!actions.canDelete && !actions.canDeleteSubtree)
+    {
+      state.postText(rt::NotificationSeverity::Warning, MessageId::TuiListVirtualTarget);
+      return false;
+    }
+
+    // A List with descendants is deleted as its subtree; the preview and the
+    // confirmation both describe exactly that scope.
+    auto const includeDescendants = actions.canDeleteSubtree;
+    auto previewTask = uimodel::previewListDeletionAsync(&state.library, targetListId, includeDescendants);
+    state.deletePreviewPending = true;
+    state.runtime.spawnLogged(
+      runDeletePreviewAsync(_statePtr, includeDescendants, std::move(previewTask)), "TUI List deletion preview");
+    return true;
+  }
+
   SmartListEditor const* ListAuthoringController::activeEditor() const noexcept
   {
     return _statePtr->optEditor ? &*_statePtr->optEditor : nullptr;
   }
 
+  ListDeleteConfirmation const* ListAuthoringController::activeDeleteConfirmation() const noexcept
+  {
+    return _statePtr->optDeleteConfirmation ? &*_statePtr->optDeleteConfirmation : nullptr;
+  }
+
   bool ListAuthoringController::isActive() const noexcept
   {
-    return _statePtr->optEditor.has_value();
+    return _statePtr->optEditor || _statePtr->optDeleteConfirmation;
   }
 
   bool ListAuthoringController::hasPendingSubmission() const noexcept
@@ -459,7 +646,7 @@ namespace ao::tui
 
   bool ListAuthoringController::isBusy() const noexcept
   {
-    return _statePtr->submissionPending;
+    return _statePtr->deletePreviewPending || _statePtr->submissionPending;
   }
 
   bool ListAuthoringController::tryHandleEvent(ftxui::Event const& event)
@@ -473,6 +660,12 @@ namespace ao::tui
       serviceRequest();
       // An open editor answers for everything the terminal delivers, so the
       // workspace behind it never sees a key it would act on.
+      return true;
+    }
+
+    if (state.optDeleteConfirmation)
+    {
+      handleDeleteConfirmationEvent(event);
       return true;
     }
 
@@ -491,6 +684,7 @@ namespace ao::tui
       state.closeEditor();
     }
 
+    state.optDeleteConfirmation.reset();
     state.previewTask.reset();
     ++state.previewGeneration;
   }
@@ -560,6 +754,84 @@ namespace ao::tui
     ++state.previewGeneration;
   }
 
+  void ListAuthoringController::handleDeleteConfirmationEvent(ftxui::Event const& event)
+  {
+    auto& state = *_statePtr;
+
+    // The caller routes here only while a confirmation exists, but the flow
+    // owns its own guard so a raced reset cannot dereference absence.
+    if (!state.optDeleteConfirmation)
+    {
+      return;
+    }
+
+    auto& confirmation = *state.optDeleteConfirmation;
+
+    // A deletion in flight cannot be confirmed twice or cancelled, so the
+    // question stays visible and inert until its result arrives.
+    if (confirmation.deleting)
+    {
+      return;
+    }
+
+    if (event.is_mouse())
+    {
+      auto mouseEvent = event;
+      auto const& mouse = mouseEvent.mouse();
+
+      if (!isLeftPress(mouse) || !std::exchange(state.confirmationMouseReady, false))
+      {
+        return;
+      }
+
+      if (auto const optEvent = state.confirmationMouseBindings.eventAt(mouse); optEvent)
+      {
+        state.confirmationMouseBindings.clear();
+        handleDeleteConfirmationEvent(*optEvent);
+      }
+
+      return;
+    }
+
+    state.confirmationMouseReady = false;
+
+    if (event == ftxui::Event::Escape)
+    {
+      state.optDeleteConfirmation.reset();
+      state.requestRefresh();
+      return;
+    }
+
+    if (event == ftxui::Event::Return)
+    {
+      auto const listId = confirmation.listId;
+      auto const includeDescendants = confirmation.includeDescendants;
+      auto options = rt::DeleteListOptions{};
+      options.removeWritableTagFromTracks = confirmation.removeWritableTag;
+
+      // The task is built before the in-flight flag is armed, so a refused
+      // spawn can never leave a pending write nobody settles.
+      auto deletion = uimodel::deleteListAsync(&state.library, listId, includeDescendants, options);
+      confirmation.deleting = true;
+      state.submissionPending = true;
+      state.requestRefresh();
+      state.runtime.spawnLogged(runDeleteAsync(_statePtr, std::move(deletion)), "TUI List deletion");
+      return;
+    }
+
+    if (event == ftxui::Event::Character(" "))
+    {
+      // Only a writable membership tag offers the extra cleanup step.
+      if (!confirmation.tagImpactQuestion.empty())
+      {
+        confirmation.removeWritableTag = !confirmation.removeWritableTag;
+        state.requestRefresh();
+      }
+
+      return;
+    }
+  }
+
   async::Task<void> ListAuthoringController::runSaveAsync(std::shared_ptr<State> const statePtr,
                                                           async::Task<Result<ListId>> submission)
   {
@@ -593,6 +865,90 @@ namespace ao::tui
     statePtr->completeSave(cancelled, std::move(saveRes), unexpected);
   }
 
+  async::Task<void> ListAuthoringController::runDeletePreviewAsync(
+    std::shared_ptr<State> const statePtr,
+    bool const includeDescendants,
+    async::Task<Result<rt::DeleteListSubtreeReply>> preview)
+  {
+    auto previewRes = Result<rt::DeleteListSubtreeReply>{};
+    auto unexpected = std::exception_ptr{};
+    bool cancelled = false;
+
+    try
+    {
+      co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
+      previewRes = co_await std::move(preview);
+    }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
+      {
+        cancelled = true;
+      }
+      else
+      {
+        unexpected = std::current_exception();
+      }
+    }
+    catch (...)
+    {
+      unexpected = std::current_exception();
+    }
+
+    co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
+    statePtr->deletePreviewPending = false;
+
+    if (unexpected)
+    {
+      AO_FATAL_EXCEPTION(std::move(unexpected), "TUI List deletion preview");
+    }
+
+    if (statePtr->retired || cancelled)
+    {
+      co_return;
+    }
+
+    if (!previewRes)
+    {
+      statePtr->post(rt::NotificationSeverity::Error, previewRes.error().message);
+      co_return;
+    }
+
+    statePtr->presentDeletePreview(includeDescendants, std::move(previewRes));
+  }
+
+  async::Task<void> ListAuthoringController::runDeleteAsync(std::shared_ptr<State> const statePtr,
+                                                            async::Task<Result<rt::DeleteListSubtreeReply>> deletion)
+  {
+    auto deleteRes = Result<rt::DeleteListSubtreeReply>{};
+    auto unexpected = std::exception_ptr{};
+    bool cancelled = false;
+
+    try
+    {
+      co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
+      deleteRes = co_await std::move(deletion);
+    }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
+      {
+        cancelled = true;
+      }
+      else
+      {
+        unexpected = std::current_exception();
+      }
+    }
+    catch (...)
+    {
+      unexpected = std::current_exception();
+    }
+
+    co_await statePtr->runtime.resumeOnCallbackExecutorAsync();
+    statePtr->completeDeletion(cancelled, std::move(deleteRes), unexpected);
+  }
+
   async::Task<void> ListAuthoringController::runPreviewDebounceAsync(async::Runtime* const runtime,
                                                                      std::shared_ptr<State> const statePtr,
                                                                      std::uint64_t const generation,
@@ -620,7 +976,106 @@ namespace ao::tui
       return editor->renderModal(terminalColumns, terminalRows);
     }
 
+    if (auto const* const confirmation = activeDeleteConfirmation(); confirmation != nullptr)
+    {
+      return renderDeleteConfirmation(*confirmation, terminalColumns, terminalRows);
+    }
+
     return nullptr;
   }
 
+  ftxui::Element ListAuthoringController::renderDeleteConfirmation(ListDeleteConfirmation const& confirmation,
+                                                                   std::int32_t const terminalColumns,
+                                                                   std::int32_t const terminalRows) const
+  {
+    using namespace ftxui;
+
+    auto& state = *_statePtr;
+    state.confirmationMouseBindings.clear();
+    state.confirmationMouseReady = true;
+
+    auto body = Elements{text(confirmation.title) | bold, text("")};
+
+    // The shared question embeds its own line structure, so each line wraps
+    // as its own paragraph instead of feeding the breaks to one block.
+    std::size_t lineBreak = confirmation.question.find('\n');
+    std::size_t lineStart = 0;
+
+    while (lineBreak != std::string::npos)
+    {
+      body.push_back(paragraph(confirmation.question.substr(lineStart, lineBreak - lineStart)));
+      lineStart = lineBreak + 1;
+      lineBreak = confirmation.question.find('\n', lineStart);
+    }
+
+    body.push_back(paragraph(confirmation.question.substr(lineStart)));
+
+    if (!confirmation.tagImpactQuestion.empty())
+    {
+      body.push_back(text(""));
+      body.push_back(hbox({
+        text(confirmation.removeWritableTag ? "[x] " : "[ ] ") | bold,
+        text(confirmation.tagImpactQuestion) | flex,
+      }));
+    }
+
+    if (!confirmation.tagReferencesWarning.empty())
+    {
+      body.push_back(text(""));
+      body.push_back(paragraph(confirmation.tagReferencesWarning) | style::warning());
+    }
+
+    body.push_back(filler());
+
+    auto footer = Elements{};
+
+    if (confirmation.deleting)
+    {
+      footer.push_back(text(std::string{i18n::requiredText(state.textCatalog, MessageId::TuiListStatusDeleting)}) |
+                       bold);
+    }
+    else
+    {
+      footer.push_back(state.confirmationMouseBindings.bind(
+        style::shortcutChip(
+          "Enter",
+          std::string{i18n::requiredText(
+            state.textCatalog,
+            confirmation.includeDescendants ? MessageId::ListDeleteAllAction : MessageId::ListDeleteAction)}),
+        Event::Return));
+      footer.push_back(style::mutedSeparator());
+
+      if (!confirmation.tagImpactQuestion.empty())
+      {
+        footer.push_back(state.confirmationMouseBindings.bind(
+          style::shortcutChip("Space", i18n::requiredText(state.textCatalog, MessageId::TuiEditorHintToggle)),
+          Event::Character(" ")));
+        footer.push_back(style::mutedSeparator());
+      }
+
+      footer.push_back(state.confirmationMouseBindings.bind(
+        style::shortcutChip("Esc", i18n::requiredText(state.textCatalog, MessageId::TuiEditorHintClose)),
+        Event::Escape));
+    }
+
+    body.push_back(hbox(std::move(footer)));
+
+    auto const modalCols = std::min(terminalColumns, std::clamp(terminalColumns - 4, 60, 80));
+    auto const availableRows = std::max(1, terminalRows - 2);
+    auto const contentRows = static_cast<std::int32_t>(body.size()) + 2;
+    auto const modalRows = std::min(availableRows, std::max(12, contentRows));
+
+    auto boxPtr = vbox(std::move(body)) | border | size(WIDTH, EQUAL, modalCols) |
+                  size(HEIGHT, GREATER_THAN, modalRows) | clear_under;
+
+    return vbox({
+      filler(),
+      hbox({
+        filler(),
+        std::move(boxPtr),
+        filler(),
+      }),
+      filler(),
+    });
+  }
 } // namespace ao::tui
