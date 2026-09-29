@@ -6,6 +6,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+
 namespace ao::cli::test
 {
   TEST_CASE("CLI - init and dump commands run against fixture library", "[cli][integration][command-dispatch]")
@@ -60,6 +62,14 @@ namespace ao::cli::test
     CHECK(result.out.empty());
     CHECK(result.err.empty());
 
+    result = fixture.run({"tag", "add", "smoke", "--filter", "$title ~ \"Test\""});
+    REQUIRE(result.status == 0);
+
+    // tag show accepts the same target selection as tag add and tag remove.
+    result = fixture.run({"tag", "show", "--filter", "$title ~ \"Test\""});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "smoke"));
+
     result = fixture.run({"track", "dump", "--id", "1"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Title:"));
@@ -113,12 +123,34 @@ namespace ao::cli::test
     auto createTree = parseYaml(result.out);
     CHECK(yaml::scalarView(createTree.rootref()["action"]) == "create");
     CHECK(yaml::scalarView(createTree.rootref()["name"]) == "Machine");
+    auto const listId = std::string{yaml::scalarView(createTree.rootref()["listId"])};
+
+    // The detail document wraps one row in `list`, in JSON as in YAML.
+    result = fixture.run({"-O", "json", "list", "show", listId});
+    REQUIRE(result.status == 0);
+    requireJsonLineParses(result.out);
+    auto showTree = parseYaml(result.out);
+    CHECK(yaml::scalarView(showTree.rootref()["list"]["name"]) == "Machine");
+
+    result = fixture.run({"-O", "json", "track", "update", "1", "--title", "Renamed", "--add-tag", "fav"});
+    REQUIRE(result.status == 0);
+    requireJsonLineParses(result.out);
+    auto updateTree = parseYaml(result.out);
+    CHECK(yaml::scalarView(updateTree.rootref()["updated"]) == "1");
+    CHECK(yaml::scalarView(updateTree.rootref()["tagChanges"][0]["addedTags"][0]) == "fav");
 
     result = fixture.run({"-O", "yaml", "track", "delete", "1"});
     REQUIRE(result.status == 0);
     auto deleteTree = parseYaml(result.out);
     CHECK(yaml::scalarView(deleteTree.rootref()["action"]) == "delete");
     CHECK(yaml::scalarView(deleteTree.rootref()["trackId"]) == "1");
+
+    // lib export writes its destination through --output-file; the format
+    // option and JSON shape depth live in LibCommandTest.
+    result = fixture.run({"lib", "export", "--output-file", (fixture.root() / "library.yaml").string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(std::filesystem::exists(fixture.root() / "library.yaml"));
   }
 
   TEST_CASE("CLI - empty YAML collections are sequences", "[cli][unit][output]")

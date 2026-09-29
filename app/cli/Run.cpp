@@ -78,6 +78,9 @@ namespace ao::cli
     }
     catch (CommandError const& e)
     {
+      // Flush any buffered stdout summary before the stderr diagnostic so a
+      // merged stream keeps the summary ahead of the error.
+      out.flush();
       std::println(err, "{}", e.what());
       return 1;
     }

@@ -98,6 +98,7 @@ namespace ao::cli
   {
     return "\nExamples:\n"
            "  aobus track update 12 13 --genre Jazz --dry-run\n"
+           "  aobus track update 12 --genre Jazz --add-tag favourite --remove-tag inbox\n"
            "  aobus track update --filter 'not $genre?' --genre Jazz";
   }
 

@@ -149,6 +149,78 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "Favorite"));
   }
 
+  TEST_CASE("CLI - tag show resolves filter targets with add and remove semantics", "[cli][integration][tag]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
+    fixture.copyAudio("hires.flac", "hires.flac");
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "json", "tag", "add", "fav", "--filter", "$title ~ \"Test\""});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    REQUIRE(tree.rootref()["trackIds"].num_children() == 1);
+    auto const favTrackId = std::string{yaml::scalarView(tree.rootref()["trackIds"][0])};
+
+    result = fixture.run({"tag", "add", "chill", "--filter", "$title ~ \"HiRes\""});
+    REQUIRE(result.status == 0);
+
+    // --filter resolves the same targets tag add and tag remove accept.
+    result = fixture.run({"tag", "show", "--filter", "$title ~ \"Test\""});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "fav"));
+    CHECK_FALSE(contains(result.out, "chill"));
+
+    result = fixture.run({"-O", "json", "tag", "show", "--filter", "$title ~ \"Test\""});
+    REQUIRE(result.status == 0);
+    requireJsonLineParses(result.out);
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["trackId"]) == favTrackId);
+    REQUIRE(tree.rootref()["tags"].is_seq());
+    REQUIRE(tree.rootref()["tags"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["tags"][0]) == "fav");
+
+    // The intersection rule is unchanged: tracks that share no tag report none.
+    result = fixture.run({"-O", "json", "tag", "show", "--filter", "$title ~ \"Title\""});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    REQUIRE(tree.rootref()["trackIds"].is_seq());
+    CHECK(tree.rootref()["trackIds"].num_children() == 2);
+    REQUIRE(tree.rootref()["tags"].is_seq());
+    CHECK(tree.rootref()["tags"].num_children() == 0);
+
+    // The mutual-exclusion and requirement rules match tag add and tag remove.
+    checkDomainFailure(fixture.run({"tag", "show", "1", "--filter", "$title ~ \"Test\""}),
+                       "tag command accepts either explicit ids or --filter, not both");
+    checkDomainFailure(fixture.run({"tag", "show"}), "tag command requires track ids or --filter");
+  }
+
+  TEST_CASE("CLI - tag mutations on a zero-match filter are no-ops", "[cli][integration][tag]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    auto const noMatch = std::string{"$year > 2030"};
+
+    result = fixture.run({"tag", "add", "fav", "--filter", noMatch});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "added tag: fav to 0 track(s)"));
+
+    result = fixture.run({"tag", "remove", "fav", "--filter", noMatch, "--dry-run"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "removed tag: fav from 0 track(s) (dry-run)"));
+
+    result = fixture.run({"tag", "show", "--filter", noMatch});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "no tags"));
+  }
+
   TEST_CASE("CLI - tag domain failures use stderr and exit non-zero", "[cli][unit][tag][contract]")
   {
     auto fixture = CliFixture{};
@@ -160,6 +232,13 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"tag", "add", "fav", "999"}), "track not found: 999");
     checkDomainFailure(fixture.run({"tag", "add", "fav"}), "tag command requires track ids");
     checkDomainFailure(fixture.run({"tag", "add", "fav", "--filter", "("}), "filter error:");
+    checkDomainFailure(fixture.run({"tag", "show", "--filter", "("}), "filter error:");
     checkDomainFailure(fixture.run({"tag", "show", "999"}), "track not found: 999");
+    checkDomainFailure(
+      fixture.run({"tag", "show", "--filter", ""}), "tag command requires a non-empty --filter expression");
+    checkDomainFailure(
+      fixture.run({"tag", "add", "fav", "--filter", ""}), "tag command requires a non-empty --filter expression");
+    checkDomainFailure(fixture.run({"tag", "show", "1", "--filter", ""}),
+                       "tag command accepts either explicit ids or --filter, not both");
   }
 } // namespace ao::cli::test

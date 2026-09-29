@@ -87,25 +87,30 @@ namespace ao::cli
   {
     std::vector<TrackId> resolveTargets(CliRuntime& cli,
                                         std::vector<std::uint32_t> const& rawIds,
-                                        std::string const& filter)
+                                        std::optional<std::string> const& optFilter)
     {
-      if (!rawIds.empty() && !filter.empty())
+      if (!rawIds.empty() && optFilter)
       {
         throwCommandError(Error::Code::InvalidInput, "tag command accepts either explicit ids or --filter, not both");
       }
 
-      if (rawIds.empty() && filter.empty())
+      if (!rawIds.empty())
+      {
+        auto reader = cli.library().snapshot();
+        return requireTrackIds(reader, rawIds);
+      }
+
+      if (!optFilter)
       {
         throwCommandError(Error::Code::InvalidInput, "tag command requires track ids or --filter");
       }
 
-      if (!filter.empty())
+      if (optFilter->empty())
       {
-        return queryMatchingTrackIds(cli.musicLibrary(), filter);
+        throwCommandError(Error::Code::InvalidInput, "tag command requires a non-empty --filter expression");
       }
 
-      auto reader = cli.library().snapshot();
-      return requireTrackIds(reader, rawIds);
+      return queryMatchingTrackIds(cli.musicLibrary(), *optFilter);
     }
 
     void printTags(std::span<TrackId const> trackIds,
@@ -143,10 +148,12 @@ namespace ao::cli
       std::println(os);
     }
 
-    void printSelectedTags(CliRuntime& cli, std::vector<std::uint32_t> const& rawIds)
+    void printSelectedTags(CliRuntime& cli,
+                           std::vector<std::uint32_t> const& rawIds,
+                           std::optional<std::string> const& optFilter)
     {
+      auto const trackIds = resolveTargets(cli, rawIds, optFilter);
       auto reader = cli.library().snapshot();
-      auto const trackIds = requireTrackIds(reader, rawIds);
       auto const tags = reader.selectionTags(trackIds);
       printTags(trackIds, tags, cli.options().format, cli.io().out);
     }
@@ -192,10 +199,21 @@ namespace ao::cli
                   bool add,
                   std::string const& tagName,
                   std::vector<std::uint32_t> const& rawIds,
-                  std::string const& filter,
+                  std::optional<std::string> const& optFilter,
                   bool dryRun)
     {
-      auto const trackIds = resolveTargets(cli, rawIds, filter);
+      auto const trackIds = resolveTargets(cli, rawIds, optFilter);
+
+      // A filter that matches nothing is a successful no-op, not an authoring
+      // error: the runtime refuses to bind an empty target set, so report zero
+      // counts without submitting a mutation.
+      if (trackIds.empty())
+      {
+        formatMutation(
+          add ? "add" : "remove", tagName, rt::EditTrackTagsReply{}, dryRun, cli.options().format, cli.io().out);
+        return;
+      }
+
       auto const tags = std::vector{tagName};
 
       if (dryRun)
@@ -283,8 +301,8 @@ namespace ao::cli
       [&cli, addTagName, addIdsPtr, addFilter, addDryRun]
       {
         auto const tagName = addTagName->as<std::string>();
-        auto const filter = addFilter->count() > 0 ? addFilter->as<std::string>() : std::string{};
-        editTags(cli, true, tagName, *addIdsPtr, filter, isDryRun(addDryRun));
+        auto const optFilter = addFilter->count() > 0 ? std::optional{addFilter->as<std::string>()} : std::nullopt;
+        editTags(cli, true, tagName, *addIdsPtr, optFilter, isDryRun(addDryRun));
       });
 
     auto* remove = tag->add_subcommand("remove", "Remove a tag from tracks");
@@ -297,13 +315,19 @@ namespace ao::cli
       [&cli, remTagName, remIdsPtr, remFilter, remDryRun]
       {
         auto const tagName = remTagName->as<std::string>();
-        auto const filter = remFilter->count() > 0 ? remFilter->as<std::string>() : std::string{};
-        editTags(cli, false, tagName, *remIdsPtr, filter, isDryRun(remDryRun));
+        auto const optFilter = remFilter->count() > 0 ? std::optional{remFilter->as<std::string>()} : std::nullopt;
+        editTags(cli, false, tagName, *remIdsPtr, optFilter, isDryRun(remDryRun));
       });
 
     auto* show = tag->add_subcommand("show", "Show tags shared by selected tracks");
     auto showIdsPtr = std::make_shared<std::vector<std::uint32_t>>();
-    show->add_option("id", *showIdsPtr, "track id")->required();
-    show->callback([&cli, showIdsPtr] { printSelectedTags(cli, *showIdsPtr); });
+    show->add_option("id", *showIdsPtr, "track id");
+    auto* showFilter = show->add_option("-f,--filter", "track filter expression");
+    show->callback(
+      [&cli, showIdsPtr, showFilter]
+      {
+        auto const optFilter = showFilter->count() > 0 ? std::optional{showFilter->as<std::string>()} : std::nullopt;
+        printSelectedTags(cli, *showIdsPtr, optFilter);
+      });
   }
 } // namespace ao::cli

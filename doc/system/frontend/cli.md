@@ -55,7 +55,9 @@ Create previews omit ids allocated only by the aborted transaction.
 
 ### Selection and query
 
-Track show/update and tag add/remove may select explicit ids or a predicate expression.
+Track show/update and tag show/add/remove may select explicit ids or a predicate expression.
+An explicitly empty `--filter` expression is rejected instead of silently selecting every track.
+A filter that matches no tracks is a successful no-op for the mutating commands, which report zero counts and exit 0.
 Predicate selection uses the shared query compiler/evaluator; formatted track output uses the scalar format-expression compiler.
 Format expressions are plain-output only and cannot be combined with YAML/JSON output.
 
@@ -67,6 +69,9 @@ The returned `tracks` sequence is effective membership in effective order; the s
 Writer-backed dry-run commands invoke the corresponding `preview*` runtime method.
 The writer performs normal validation and mutation logic inside the write transaction, constructs the ordinary reply, suppresses change publication, and aborts instead of committing.
 
+`track update` with tag options routes the whole edit through the shared properties mutation as one commit.
+The runtime exposes no preview form for that combined mutation, so the CLI rejects `--dry-run` in that combination with an InvalidInput command error instead of previewing a partial edit.
+
 `list add` and `list remove` delegate to the shared writable-tag List operation.
 Add mutates the List's positive tag on the selected tracks; Remove mutates that tag and atomically forgets their saved List positions.
 Saved-order moves bind the current effective sequence and committed revision before asking the writer to apply stable-ID movement, so an intervening mutation is reported instead of applying stale row coordinates.
@@ -77,6 +82,7 @@ Library import dry-run decodes and applies through the import transaction, then 
 `lib fingerprint --pending` is bounded maintenance with no dry-run mode because completed identity batches are its unit of progress.
 It runs worker work through `CliRuntime::runTask()` so callback-executor continuations and terminal completion return through the invocation-thread executor without deadlocking a future wait.
 Its current progress and item-failure callbacks remain worker-produced and are serialized by the indexer.
+Per-item fingerprint failures are diagnostic rows in a report-and-continue run, so the command still exits `0` when some items fail, unlike scan and init apply.
 Successful structured output contains completed, skipped, and per-item-failure counts only.
 Cancellation propagates through the task cancellation channel and emits no successful partial-count document; already published batches remain durable and a later invocation resumes pending rows.
 
@@ -84,7 +90,7 @@ Cancellation propagates through the task cancellation channel and emits no succe
 
 Scan builds a runtime `ScanPlan`, emits summary/optional item output, then applies unless dry-run.
 `--defer-fingerprint` imports new metadata and leaves new manifest identity pending for later fingerprinting.
-Per-item apply failures are diagnostic rows; a transaction-level failure rejects the command.
+Per-item apply failures are diagnostic rows and fail the command with exit `1`, because a partial apply is not a successful scan; plain output also counts them in the apply summary. A transaction-level failure rejects the command.
 
 Verify builds but does not apply a scan plan.
 Changed and moved rows are reported; missing or error rows make verification fail.
