@@ -70,7 +70,6 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
 
     TrackId _playingTrackId{kInvalidTrackId};
-    bool _suppressNextTrackActivation = false;
 
     sigc::scoped_connection _selectionChangedConnection;
 

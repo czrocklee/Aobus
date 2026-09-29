@@ -7,6 +7,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkNativeInputTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
@@ -21,23 +22,15 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
-#include <X11/X.h>
-#include <X11/Xlib.h>
-#include <X11/extensions/XTest.h>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-#include <gdk/gdk.h>
-#include <gdk/x11/gdkx.h>
-#include <glib-object.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
-#include <graphene.h>
 #include <gtk/gtk.h>
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
-#include <gtkmm/eventcontroller.h>
 #include <gtkmm/label.h>
 #include <gtkmm/scale.h>
 #include <gtkmm/window.h>
@@ -47,9 +40,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
+#include <optional>
 #include <string>
-#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -91,21 +83,16 @@ namespace ao::gtk::test
       CHECK(actualElapsed >= requestedElapsed - std::chrono::milliseconds{1});
     }
 
-    void requireOwnedGtkDisplay()
-    {
-      auto const* const marker = std::getenv("AOBUS_OWNED_GTK_DISPLAY");
-
-      if (marker == nullptr || std::string_view{marker} != "1")
-      {
-        SKIP("native GTK input requires the portal-owned Xvfb display");
-      }
-    }
-
+    // Scale-specific pointer choreography over the shared native input
+    // fixture: it owns only the window host, the thumb targeting, and the
+    // seek-scale arbitration observations. Coordinate translation, XTest
+    // injection, delivery observation, and held-button teardown live in
+    // GtkNativeInputTestSupport.
     class NativeScaleMouseFixture final
     {
     public:
       explicit NativeScaleMouseFixture(Gtk::Scale& scale, std::uint32_t const button = 1U)
-        : _scale{scale}, _button{button}
+        : _scale{scale}
       {
         _scale.set_size_request(640, 70);
         _scale.set_hexpand(true);
@@ -113,42 +100,12 @@ namespace ao::gtk::test
         _window.window().set_default_size(720, 100);
         _window.mount(_ancestor);
         _window.present();
-
-        auto* const gdkDisplay = ::gtk_widget_get_display(GTK_WIDGET(_scale.gobj()));
-        REQUIRE(GDK_IS_X11_DISPLAY(gdkDisplay));
-        // This fixture deliberately targets the portal's isolated Xvfb backend.
-        G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-        _display = ::gdk_x11_display_get_xdisplay(gdkDisplay);
-        G_GNUC_END_IGNORE_DEPRECATIONS
-        REQUIRE(_display != nullptr);
-
-        int eventBase = 0;
-        int errorBase = 0;
-        int majorVersion = 0;
-        int minorVersion = 0;
-        REQUIRE(::XTestQueryExtension(_display, &eventBase, &errorBase, &majorVersion, &minorVersion) != False);
-
-        _observer = ::gtk_event_controller_legacy_new();
-        ::gtk_event_controller_set_propagation_phase(_observer, GTK_PHASE_CAPTURE);
-        ::g_signal_connect_data(
-          _observer, "event", G_CALLBACK(&NativeScaleMouseFixture::observeEvent), this, nullptr, G_CONNECT_DEFAULT);
-        ::gtk_widget_add_controller(GTK_WIDGET(_scale.gobj()), _observer);
+        _optPointer.emplace(_scale, button);
       }
 
       ~NativeScaleMouseFixture()
       {
-        if (_buttonDown && _display != nullptr)
-        {
-          std::ignore = ::XTestFakeButtonEvent(_display, _button, False, CurrentTime);
-          std::ignore = ::XSync(_display, False);
-        }
-
-        if (_observer != nullptr)
-        {
-          ::g_signal_handlers_disconnect_matched(_observer, G_SIGNAL_MATCH_DATA, 0, 0, nullptr, nullptr, this);
-          ::gtk_widget_remove_controller(GTK_WIDGET(_scale.gobj()), _observer);
-        }
-
+        _optPointer.reset();
         _window.unmount();
         _ancestor.remove(_scale);
       }
@@ -160,35 +117,35 @@ namespace ao::gtk::test
 
       void pressThumb()
       {
-        REQUIRE_FALSE(_buttonDown);
         auto const [x, y] = thumbPoint();
-        movePointer(x, y);
-        auto const deliveredBefore = _pressCount;
-        REQUIRE(::XTestFakeButtonEvent(_display, _button, True, CurrentTime) != False);
-        std::ignore = ::XSync(_display, False);
-        _buttonDown = true;
-        REQUIRE(tryPumpGtkEventsUntil([&] { return _pressCount > deliveredBefore; }));
+        _optPointer->movePointerTo(x, y);
+        _optPointer->press();
       }
 
       std::chrono::milliseconds moveHeldToPosition(double const fraction)
       {
-        REQUIRE(_buttonDown);
+        REQUIRE(_optPointer->isButtonDown());
         auto const previousValue = _scale.get_value();
-        auto const deliveredBefore = _motionCount;
+        auto const deliveredBefore = _optPointer->motionCount();
         auto const width = ::gtk_widget_get_width(GTK_WIDGET(_scale.gobj()));
         auto const height = ::gtk_widget_get_height(GTK_WIDGET(_scale.gobj()));
         REQUIRE(width > 4);
         REQUIRE(height > 0);
         auto const x = std::clamp(fraction * static_cast<double>(width), 2.0, static_cast<double>(width - 2));
-        movePointer(x, static_cast<double>(height) / 2.0);
-        REQUIRE(
-          tryPumpGtkEventsUntil([&] { return _motionCount > deliveredBefore && _scale.get_value() != previousValue; }));
+        _optPointer->movePointerTo(x, static_cast<double>(height) / 2.0);
+        REQUIRE(tryPumpGtkEventsUntil(
+          [&] { return _optPointer->motionCount() > deliveredBefore && _scale.get_value() != previousValue; }));
         return scaleElapsed();
       }
 
-      void release() { release(true); }
+      void release() { _optPointer->release(); }
 
-      void releaseOutsideWidget() { release(false); }
+      void releaseOutsideWidget()
+      {
+        auto const deliveredBefore = _optPointer->releaseCount();
+        _optPointer->release(false);
+        CHECK(_optPointer->releaseCount() == deliveredBefore);
+      }
 
       void unmap() { _window.unmount(); }
 
@@ -205,19 +162,6 @@ namespace ao::gtk::test
       }
 
     private:
-      static gboolean observeEvent([[maybe_unused]] GtkEventController* controller, GdkEvent* event, gpointer data)
-      {
-        switch (auto& fixture = *static_cast<NativeScaleMouseFixture*>(data); ::gdk_event_get_event_type(event))
-        {
-          case GDK_BUTTON_PRESS: ++fixture._pressCount; break;
-          case GDK_MOTION_NOTIFY: ++fixture._motionCount; break;
-          case GDK_BUTTON_RELEASE: ++fixture._releaseCount; break;
-          default: break;
-        }
-
-        return FALSE;
-      }
-
       std::pair<double, double> thumbPoint() const
       {
         int sliderStart = 0;
@@ -229,80 +173,15 @@ namespace ao::gtk::test
         return {static_cast<double>(sliderStart + sliderEnd) / 2.0, static_cast<double>(height) / 2.0};
       }
 
-      std::pair<std::int32_t, std::int32_t> rootPoint(double const widgetX, double const widgetY) const
-      {
-        auto* const native = ::gtk_widget_get_native(GTK_WIDGET(_scale.gobj()));
-        REQUIRE(native != nullptr);
-        auto const widgetPoint = graphene_point_t{static_cast<float>(widgetX), static_cast<float>(widgetY)};
-        auto nativePoint = graphene_point_t{};
-        REQUIRE(::gtk_widget_compute_point(GTK_WIDGET(_scale.gobj()), GTK_WIDGET(native), &widgetPoint, &nativePoint) !=
-                FALSE);
-        auto* const surface = ::gtk_native_get_surface(native);
-        REQUIRE(surface != nullptr);
-        REQUIRE(GDK_IS_X11_SURFACE(surface));
-        // GTK deprecates X11 access, but native Xvfb input requires its public ID.
-        G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-        auto const surfaceId = ::gdk_x11_surface_get_xid(surface);
-        G_GNUC_END_IGNORE_DEPRECATIONS
-        double surfaceX = 0.0;
-        double surfaceY = 0.0;
-        ::gtk_native_get_surface_transform(native, &surfaceX, &surfaceY);
-
-        int rootX = 0;
-        int rootY = 0;
-        ::Window child = None;
-        REQUIRE(::XTranslateCoordinates(_display,
-                                        surfaceId,
-                                        DefaultRootWindow(_display),
-                                        static_cast<std::int32_t>(std::lround(nativePoint.x - surfaceX)),
-                                        static_cast<std::int32_t>(std::lround(nativePoint.y - surfaceY)),
-                                        &rootX,
-                                        &rootY,
-                                        &child) != False);
-        return {rootX, rootY};
-      }
-
-      void movePointer(double const widgetX, double const widgetY)
-      {
-        auto const [rootX, rootY] = rootPoint(widgetX, widgetY);
-        REQUIRE(::XTestFakeMotionEvent(_display, DefaultScreen(_display), rootX, rootY, CurrentTime) != False);
-        std::ignore = ::XSync(_display, False);
-      }
-
-      void release(bool const expectDelivery)
-      {
-        REQUIRE(_buttonDown);
-        auto const deliveredBefore = _releaseCount;
-        REQUIRE(::XTestFakeButtonEvent(_display, _button, False, CurrentTime) != False);
-        std::ignore = ::XSync(_display, False);
-        _buttonDown = false;
-
-        if (expectDelivery)
-        {
-          REQUIRE(tryPumpGtkEventsUntil([&] { return _releaseCount > deliveredBefore; }));
-        }
-        else
-        {
-          drainGtkEventsFor(std::chrono::milliseconds{20});
-          CHECK(_releaseCount == deliveredBefore);
-        }
-      }
-
       std::chrono::milliseconds scaleElapsed() const
       {
         return std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(std::llround(_scale.get_value()))};
       }
 
       Gtk::Scale& _scale;
-      std::uint32_t _button;
       Gtk::Box _ancestor{Gtk::Orientation::HORIZONTAL};
       GtkWindowFixture _window;
-      ::Display* _display = nullptr;
-      GtkEventController* _observer = nullptr;
-      std::int32_t _pressCount = 0;
-      std::int32_t _motionCount = 0;
-      std::int32_t _releaseCount = 0;
-      bool _buttonDown = false;
+      std::optional<GtkNativePointerFixture> _optPointer;
     };
   } // namespace
 

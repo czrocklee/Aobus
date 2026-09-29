@@ -196,6 +196,8 @@ target_link_libraries(ao_test_support_i18n
 )
 
 if(AOBUS_BUILD_GTK)
+  pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst x11 xi)
+
   add_executable(ao_gapplication_probe
       integration/linux-gtk/GApplicationReplacementProbeMain.cpp
   )
@@ -204,12 +206,14 @@ if(AOBUS_BUILD_GTK)
   add_library(ao_test_support_gtk STATIC
       unit/linux-gtk/GtkApplicationTestSupport.cpp
       unit/linux-gtk/GtkLayoutTestSupport.cpp
+      unit/linux-gtk/GtkNativeInputTestSupport.cpp
       unit/linux-gtk/GtkRuntimeTestSupport.cpp
       unit/linux-gtk/GtkWidgetTestSupport.cpp
       unit/linux-gtk/image/ImageTestSupport.cpp
       unit/linux-gtk/layout/LayoutTestSupport.cpp
       unit/linux-gtk/layout/components/ContainerTestHelpers.cpp
       unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.cpp
+      unit/linux-gtk/track/TrackSelectionControllerTestSupport.cpp
   )
   target_link_libraries(ao_test_support_gtk
       PUBLIC
@@ -221,6 +225,7 @@ if(AOBUS_BUILD_GTK)
         ao_test_support_runtime
         ao_test_support_library
         ao_test_support_common
+        PkgConfig::XTEST
         Catch2::Catch2
   )
 endif()
@@ -996,7 +1001,6 @@ aobus_target_test_sources(ao_integration_test "${APPLE}" "non-macOS host"
 
 if(AOBUS_BUILD_GTK)
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
-pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst x11 xi)
 add_executable(ao_gtk_test
     unit/linux-gtk/GtkTestMain.cpp
 )
@@ -1072,6 +1076,7 @@ aobus_target_test_sources(ao_gtk_test "${AOBUS_BUILD_GTK}" "AOBUS_BUILD_GTK=OFF"
     unit/linux-gtk/preference/PreferencesWindowTest.cpp
     unit/linux-gtk/track/TrackListModelTest.cpp
     unit/linux-gtk/track/TrackSelectionControllerTest.cpp
+    unit/linux-gtk/track/TrackSelectionControllerNativeInputTest.cpp
     unit/linux-gtk/track/TrackPageHostTest.cpp
     unit/linux-gtk/track/TrackViewPageTest.cpp
     unit/linux-gtk/track/TrackColumnControllerTest.cpp

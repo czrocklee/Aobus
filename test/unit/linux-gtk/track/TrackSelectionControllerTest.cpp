@@ -8,6 +8,7 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/unit/linux-gtk/track/TrackSelectionControllerTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowBinding.h"
@@ -23,20 +24,26 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdk/gdk.h>
+#include <gdk/gdkkeysyms.h>
+#include <gdkmm/enums.h>
 #include <glib-object.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gestureclick.h>
+#include <gtkmm/gesturelongpress.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/multiselection.h>
 #include <gtkmm/object.h>
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/window.h>
 #include <sigc++/scoped_connection.h>
 
-#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <memory>
@@ -46,39 +53,60 @@ namespace ao::gtk::test
 {
   namespace
   {
-    void appendTestColumn(Gtk::ColumnView& columnView)
+    // One-consumer editable cell factory for the long-press section: each cell
+    // is a Gtk::Stack whose "display" page is a label bound to the row's track
+    // id and whose "edit" page is an entry, mirroring the inline-edit stack the
+    // production long-press handler switches. Local to this test because only
+    // the long-press regression exercises it.
+    Glib::RefPtr<Gtk::SignalListItemFactory> createEditableCellFactory()
     {
       auto const factoryPtr = Gtk::SignalListItemFactory::create();
-      factoryPtr->signal_setup().connect([](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
-                                         { itemPtr->set_child(*Gtk::make_managed<Gtk::Label>()); });
+
+      factoryPtr->signal_setup().connect(
+        [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+        {
+          auto* const stack = Gtk::make_managed<Gtk::Stack>();
+          stack->add(*Gtk::make_managed<Gtk::Label>(), "display");
+          stack->add(*Gtk::make_managed<Gtk::Entry>(), "edit");
+          itemPtr->set_child(*stack);
+        });
 
       factoryPtr->signal_bind().connect(
         [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
         {
-          auto* const label = dynamic_cast<Gtk::Label*>(itemPtr->get_child());
+          auto* const stack = dynamic_cast<Gtk::Stack*>(itemPtr->get_child());
           auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(itemPtr->get_item());
 
-          if (label != nullptr && rowPtr != nullptr)
+          if (stack == nullptr || rowPtr == nullptr)
           {
-            label->set_text("track");
-            ::g_object_set_data(G_OBJECT(label->gobj()),
+            return;
+          }
+
+          if (auto* const display = dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display")); display != nullptr)
+          {
+            display->set_text("title");
+            ::g_object_set_data(G_OBJECT(display->gobj()),
                                 kBoundTrackIdDataKey,
                                 GUINT_TO_POINTER(static_cast<guint>(rowPtr->trackId().raw())));
           }
+
+          stack->set_visible_child("display");
         });
 
       factoryPtr->signal_unbind().connect(
         [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
         {
-          if (auto* const child = itemPtr->get_child(); child != nullptr)
+          if (auto* const stack = dynamic_cast<Gtk::Stack*>(itemPtr->get_child()); stack != nullptr)
           {
-            ::g_object_set_data(G_OBJECT(child->gobj()), kBoundTrackIdDataKey, nullptr);
+            if (auto* const display = dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display"));
+                display != nullptr)
+            {
+              ::g_object_set_data(G_OBJECT(display->gobj()), kBoundTrackIdDataKey, nullptr);
+            }
           }
         });
 
-      auto const columnPtr = Gtk::ColumnViewColumn::create("Track", factoryPtr);
-      columnPtr->set_fixed_width(160);
-      columnView.append_column(columnPtr);
+      return factoryPtr;
     }
   } // namespace
 
@@ -157,7 +185,7 @@ namespace ao::gtk::test
         auto subscription =
           sigc::scoped_connection{controller.signalSelectionChanged().connect([&] { ++selectionChangeCount; })};
 
-        auto const restoredIds = std::vector<TrackId>{trackId4, TrackId{9999}, trackId1, trackId4};
+        auto const restoredIds = std::vector{trackId4, TrackId{9999}, trackId1, trackId4};
         controller.restoreSelection(restoredIds);
 
         CHECK(controller.selectedTrackIds() == std::vector<TrackId>{trackId1, trackId2, trackId4});
@@ -236,27 +264,10 @@ namespace ao::gtk::test
           columnView, [](Gtk::GestureClick const& gesture) { return gesture.get_button() == GDK_BUTTON_SECONDARY; });
         REQUIRE(secondaryClickPtr);
 
-        auto const labels = collectAll<Gtk::Label>(columnView);
-        auto const rowLabelIter = std::ranges::find_if(
-          labels,
-          [trackId1](Gtk::Label* label)
-          {
-            return label->get_text() == "track" && GPOINTER_TO_UINT(::g_object_get_data(
-                                                     G_OBJECT(label->gobj()), kBoundTrackIdDataKey)) == trackId1.raw();
-          });
-        REQUIRE(rowLabelIter != labels.end());
-        auto* const rowLabel = *rowLabelIter;
-        REQUIRE(rowLabel->get_mapped());
-        REQUIRE(rowLabel->get_width() > 0);
-        REQUIRE(rowLabel->get_height() > 0);
         REQUIRE(controller.selectedTrackIds().empty());
-        auto const optPoint =
-          rowLabel->compute_point(columnView,
-                                  Gdk::Graphene::Point{static_cast<float>(rowLabel->get_width()) / 2.0F,
-                                                       static_cast<float>(rowLabel->get_height()) / 2.0F});
-        REQUIRE(optPoint);
-        auto const xPosition = static_cast<double>(optPoint->get_x());
-        auto const yPosition = static_cast<double>(optPoint->get_y());
+        auto const point = cellCenterInView(columnView, "track", trackId1);
+        auto const xPosition = static_cast<double>(point.get_x());
+        auto const yPosition = static_cast<double>(point.get_y());
 
         // Direct signal emission proves the installed GTK binding and semantic
         // pick result, not native pointer delivery or gesture arbitration.
@@ -289,6 +300,132 @@ namespace ao::gtk::test
           secondaryClickPtr->gobj(), "released", 1, 10.0, static_cast<double>(columnView.get_height() - 1));
 
         CHECK(requestCount == 0);
+      }
+
+      SECTION("tags-cell double-click does not swallow the next activation")
+      {
+        appendTagsTestColumn(columnView);
+        controller.configureActivation();
+        selectionModelPtr->select_item(0, true);
+        drainGtkEvents();
+
+        std::size_t tagEditRequestCount = 0;
+        auto tagEditIds = std::vector<TrackId>{};
+        auto tagEditSubscription = sigc::scoped_connection{controller.signalTagEditRequested().connect(
+          [&](std::vector<TrackId> const& ids, Gtk::Widget*)
+          {
+            ++tagEditRequestCount;
+            tagEditIds = ids;
+          })};
+        auto activatedIds = std::vector<TrackId>{};
+        auto activatedSubscription = sigc::scoped_connection{
+          controller.signalTrackActivated().connect([&](TrackId trackId) { activatedIds.push_back(trackId); })};
+
+        auto host = GtkWindowFixture{};
+        host.window().set_default_size(400, 400);
+        host.mount(columnView);
+        host.present();
+        auto const primaryClickPtr = findControllerIf<Gtk::GestureClick>(
+          columnView, [](Gtk::GestureClick const& gesture) { return gesture.get_button() == GDK_BUTTON_PRIMARY; });
+        REQUIRE(primaryClickPtr);
+
+        auto const point = cellCenterInView(columnView, "tags", trackId1);
+
+        // Direct gesture-signal emission proves only the pressed handler
+        // binding. It carries no real GDK sequence, so the CLAIMED state is
+        // inert here and this case cannot witness same-interaction gesture
+        // arbitration; the native pointer test in
+        // TrackSelectionControllerNativeInputTest.cpp proves that boundary.
+        ::g_signal_emit_by_name(primaryClickPtr->gobj(),
+                                "pressed",
+                                2,
+                                static_cast<double>(point.get_x()),
+                                static_cast<double>(point.get_y()));
+        CHECK(tagEditRequestCount == 1);
+        CHECK(tagEditIds == std::vector<TrackId>{trackId1});
+        CHECK(activatedIds.empty());
+
+        // The claim already keeps that interaction's own activation from
+        // firing, so no suppression may outlive it: the user's next activation
+        // must play, whether it targets a row or the current selection.
+        auto const optSecondIndex = modelPtr->indexOf(trackId2);
+        REQUIRE(optSecondIndex);
+        ::g_signal_emit_by_name(columnView.gobj(), "activate", static_cast<guint>(*optSecondIndex));
+        CHECK(activatedIds == std::vector<TrackId>{trackId2});
+
+        auto const keyControllerPtr = findController<Gtk::EventControllerKey>(columnView);
+        REQUIRE(keyControllerPtr);
+        gboolean handled = FALSE;
+        ::g_signal_emit_by_name(keyControllerPtr->gobj(),
+                                "key-pressed",
+                                GDK_KEY_Return,
+                                0U,
+                                static_cast<GdkModifierType>(Gdk::ModifierType{}),
+                                &handled);
+        CHECK(activatedIds == std::vector<TrackId>{trackId2, trackId1});
+      }
+
+      SECTION("long-press on an editable cell switches to edit without suppressing later activation")
+      {
+        auto const editableColumnPtr = Gtk::ColumnViewColumn::create("Title", createEditableCellFactory());
+        editableColumnPtr->set_fixed_width(160);
+        columnView.append_column(editableColumnPtr);
+        controller.configureActivation();
+        selectionModelPtr->select_item(0, true);
+        drainGtkEvents();
+
+        auto activatedIds = std::vector<TrackId>{};
+        auto activatedSubscription = sigc::scoped_connection{
+          controller.signalTrackActivated().connect([&](TrackId trackId) { activatedIds.push_back(trackId); })};
+
+        auto host = GtkWindowFixture{};
+        host.window().set_default_size(400, 400);
+        host.mount(columnView);
+        host.present();
+        auto const longPressPtr = findController<Gtk::GestureLongPress>(columnView);
+        REQUIRE(longPressPtr);
+
+        auto const point = cellCenterInView(columnView, "title", trackId1);
+        auto* const display = columnView.pick(point.get_x(), point.get_y(), Gtk::PickFlags::NON_TARGETABLE);
+        REQUIRE(display != nullptr);
+        auto* const stack = dynamic_cast<Gtk::Stack*>(display->get_parent());
+        REQUIRE(stack != nullptr);
+
+        // Synthetic pressed emission proves the installed handler switches
+        // the inline edit stack. It carries no real GDK hold sequence, so it
+        // cannot witness native long-press arbitration.
+        ::g_signal_emit_by_name(
+          longPressPtr->gobj(), "pressed", static_cast<double>(point.get_x()), static_cast<double>(point.get_y()));
+        drainGtkEvents();
+
+        CHECK(stack->get_visible_child_name() == "edit");
+        auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit"));
+        REQUIRE(entry != nullptr);
+        auto* const focus = host.window().get_focus();
+        REQUIRE(focus != nullptr);
+        CHECK((focus == entry || focus->is_ancestor(*entry)));
+
+        stack->set_visible_child("display");
+        columnView.grab_focus();
+        drainGtkEvents();
+
+        // After the editor closes, the column-view activation and key-handler
+        // bindings stay live; no suppression state survives the long press.
+        auto const optTrack2Index = modelPtr->indexOf(trackId2);
+        REQUIRE(optTrack2Index);
+        ::g_signal_emit_by_name(columnView.gobj(), "activate", static_cast<guint>(*optTrack2Index));
+        CHECK(activatedIds == std::vector<TrackId>{trackId2});
+
+        auto const keyControllerPtr = findController<Gtk::EventControllerKey>(columnView);
+        REQUIRE(keyControllerPtr);
+        gboolean handled = FALSE;
+        ::g_signal_emit_by_name(keyControllerPtr->gobj(),
+                                "key-pressed",
+                                GDK_KEY_Return,
+                                0U,
+                                static_cast<GdkModifierType>(Gdk::ModifierType{}),
+                                &handled);
+        CHECK(activatedIds == std::vector<TrackId>{trackId2, trackId1});
       }
 
       columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
