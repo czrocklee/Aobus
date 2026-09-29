@@ -60,7 +60,8 @@ The planner recursively walks the configured music root, skips unsupported and n
 | `Unchanged` | URI and file facts match the manifest. |
 | `Error` | The item could not be inspected or classified. |
 
-A missing root or root-level walk failure is a plan-building error.
+A missing root or a walk that cannot start or advance to the next entry is a
+plan-building error; the walk iteration cannot continue past a failed advance.
 Per-entry problems may appear as error items without erasing other classifications.
 These item errors describe external filesystem, path-resolution, or media inspection failures.
 A malformed manifest cannot enter a live planner through supported storage: open rejects persisted corruption, while a later point-read or iterator breach aborts through the fatal facility because continuing would make invalid storage look like an ordinary missing file.
