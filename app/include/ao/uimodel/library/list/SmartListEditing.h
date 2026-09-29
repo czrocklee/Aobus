@@ -77,6 +77,11 @@ namespace ao::uimodel
 
   // Preview
 
+  /// The bounded number of leading matches a frontend preview shows. The
+  /// preview status names this count when a source has more matches, so the
+  /// rendered rows and the status text agree.
+  inline constexpr std::size_t kSmartListPreviewLimit = 10;
+
   std::string formatSmartListPreviewStatusText(i18n::MessageCatalog const& textCatalog,
                                                bool expressionValid,
                                                std::size_t count,
