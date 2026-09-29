@@ -67,6 +67,30 @@ namespace ao::rt::test
       f << "dummy";
     }
 
+    // The walk failure reproduced below needs a filesystem that reports entry
+    // types during enumeration: std::filesystem then opens a reported directory
+    // for descent without re-inspecting it, so a directory that vanished after
+    // it was reported fails the walk increment. Hosts that do not report entry
+    // types re-inspect the entry instead and cannot reproduce the failure.
+    bool supportsEntryTypesDuringEnumeration(std::filesystem::path const& probeRoot)
+    {
+      std::filesystem::create_directories(probeRoot);
+      auto const probeDir = probeRoot / "typed_dir";
+      std::filesystem::create_directories(probeDir);
+      auto entry = std::filesystem::directory_entry{};
+
+      {
+        auto it = std::filesystem::directory_iterator{probeRoot};
+        entry = *it;
+      }
+
+      std::filesystem::remove(probeDir);
+      std::filesystem::remove(probeRoot);
+      // A cached type means recursive_directory_iterator descends from the reported entry without re-inspecting it,
+      // mirroring the vanish race.
+      return entry.is_directory();
+    }
+
     Result<ScanPlan> attemptRelink(ScanPlan& plan, std::string_view oldUri, std::string_view newUri)
     {
       return std::move(plan).makeRelinkPlan(oldUri, newUri);
@@ -318,6 +342,42 @@ namespace ao::rt::test
     CHECK(foundOk);
     CHECK(foundAnother);
     CHECK(foundRestricted);
+  }
+
+  TEST_CASE("ScanPlan - fails the plan when the filesystem walk cannot continue",
+            "[runtime][unit][library-scan][error]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const& root = temp.path();
+    auto const musicRoot = std::filesystem::path{root} / "music";
+    std::filesystem::create_directories(musicRoot / "removed_dir");
+    createFile(musicRoot / "song.flac");
+
+    if (!supportsEntryTypesDuringEnumeration(std::filesystem::path{root} / "type_probe"))
+    {
+      SKIP("the filesystem does not report entry types during enumeration");
+    }
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
+    auto scanner = LibraryScan{ml};
+
+    // Removing the directory while the walk reports it leaves the visited
+    // entry naming a directory that no longer exists. The walk increment then
+    // fails to open the entry for descent, and the walk can neither continue
+    // nor skip the failed subtree, so the complete plan must fail instead of
+    // silently classifying only the entries visited so far.
+    auto const res = scanner.buildPlan(
+      [](std::filesystem::path const& path)
+      {
+        if (path.filename() == "removed_dir")
+        {
+          std::filesystem::remove(path);
+        }
+      });
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
+    CHECK(res.error().message.contains("removed_dir"));
   }
 
   TEST_CASE("ScanPlan - handles empty roots", "[runtime][unit][library-scan]")

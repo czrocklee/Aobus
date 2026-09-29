@@ -47,6 +47,13 @@ namespace ao::test::wav
 
   std::vector<std::uint8_t> makeId3WithPicture(std::span<std::uint8_t const> imageData);
 
+  // Builds a v2.3 ID3 payload with the tag-level unsynchronisation flag set,
+  // carrying a TIT2 frame and a front-cover APIC frame. Both the title and the
+  // image data are stored bytes: FF 00 escape pairs stay in, and frame header
+  // sizes declare the deunsynchronised body size.
+  std::vector<std::uint8_t> makeUnsyncId3WithPictureAndTitle(std::span<std::uint8_t const> imageData,
+                                                             std::string_view storedTitle);
+
   void appendId(std::vector<std::uint8_t>& output, std::array<char, 4> const& id);
 
   void appendId(std::vector<std::uint8_t>& output, std::string_view id);

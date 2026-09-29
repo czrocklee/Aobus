@@ -225,6 +225,112 @@ namespace ao::rt
       items.push_back(std::move(item));
       return {};
     }
+
+    // Classifies one entry visited by the filesystem walk against the manifest
+    // snapshot. An entry whose relative path does not form a library URI
+    // becomes an Error-classified item without a blocked prefix: no manifest
+    // entry can live under a name that cannot form a URI, so those rows stay
+    // eligible for Missing classification. An entry that resolves or
+    // inspects unsafely becomes an Error-classified item whose URI prefix is
+    // blocked from Missing classification. Either way the result reports
+    // false so the walk does not descend into the entry; a true result allows
+    // descent.
+    Result<bool> classifyWalkEntry(std::filesystem::path const& entryPath,
+                                   std::filesystem::path const& root,
+                                   std::filesystem::path const& resolvedRoot,
+                                   ManifestSnapshot const& manifest,
+                                   std::unordered_set<std::string>& seenUris,
+                                   std::unordered_set<std::string>& blockedUriPrefixes,
+                                   std::vector<ScanItem>& items)
+    {
+      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(entryPath.lexically_relative(root)));
+
+      if (!uriRes)
+      {
+        auto item = ScanItem{.uri = utility::pathToGenericUtf8(entryPath.filename()),
+                             .fullPath = entryPath,
+                             .classification = ScanClassification::Error,
+                             .errorMessage = uriRes.error().message};
+        items.push_back(std::move(item));
+        return false;
+      }
+
+      auto resolvedPathRes = uriRes->resolveUnder(root);
+
+      if (!resolvedPathRes)
+      {
+        blockedUriPrefixes.insert(std::string{uriRes->value()});
+        auto item = ScanItem{.uri = std::string{uriRes->value()},
+                             .fullPath = entryPath,
+                             .classification = ScanClassification::Error,
+                             .errorMessage = resolvedPathRes.error().message};
+        items.push_back(std::move(item));
+        return false;
+      }
+
+      auto canonicalUriRes =
+        library::LibraryUri::parse(utility::pathToGenericUtf8(resolvedPathRes->lexically_relative(resolvedRoot)));
+
+      if (!canonicalUriRes)
+      {
+        blockedUriPrefixes.insert(std::string{uriRes->value()});
+        auto item = ScanItem{.uri = std::string{uriRes->value()},
+                             .fullPath = *resolvedPathRes,
+                             .classification = ScanClassification::Error,
+                             .errorMessage = canonicalUriRes.error().message};
+        items.push_back(std::move(item));
+        return false;
+      }
+
+      // Proactively check if this is a directory we can't enter
+      if (auto entryEc = std::error_code{}; std::filesystem::is_directory(*resolvedPathRes, entryEc))
+      {
+        auto testEc = std::error_code{};
+        {
+          [[maybe_unused]] auto const testIt = std::filesystem::directory_iterator{*resolvedPathRes, testEc};
+        }
+
+        if (testEc)
+        {
+          blockedUriPrefixes.insert(std::string{canonicalUriRes->value()});
+          auto item = ScanItem{.uri = std::string{canonicalUriRes->value()},
+                               .fullPath = *resolvedPathRes,
+                               .classification = ScanClassification::Error,
+                               .errorMessage = testEc.message()};
+          items.push_back(std::move(item));
+          return false;
+        }
+      }
+
+      if (auto res = scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, manifest, seenUris, items);
+          !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      return true;
+    }
+
+    // Advances the walk to the next entry. The entry path is taken by value
+    // because an increment replaces the visited entry. A failed increment
+    // leaves the recursive iterator at its end value, so the walk can neither
+    // continue nor skip the failed subtree and the error is reported to the
+    // caller.
+    Result<> advanceWalk(std::filesystem::recursive_directory_iterator& it, std::filesystem::path entryPath)
+    {
+      auto ec = std::error_code{};
+      it.increment(ec);
+
+      if (ec)
+      {
+        return makeError(
+          Error::Code::IoError,
+          "Failed to continue filesystem walk at " + utility::pathToUtf8(entryPath) + ": " + ec.message());
+      }
+
+      return {};
+    }
+
     bool hasBlockedUriPrefix(std::string_view uri, std::unordered_set<std::string> const& blockedUriPrefixes)
     {
       while (!uri.empty())
@@ -455,10 +561,8 @@ namespace ao::rt
     }
 
     while (it != std::filesystem::recursive_directory_iterator{})
-
     {
       async::throwIfStopRequested(stopToken);
-      auto entryEc = std::error_code{};
       auto const& entry = *it;
 
       if (progress)
@@ -467,95 +571,24 @@ namespace ao::rt
         async::throwIfStopRequested(stopToken);
       }
 
-      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(entry.path().lexically_relative(root)));
+      // The returned bool is the descent permission: false means the entry
+      // was classified as unsafe, so the walk must not descend into it.
+      auto const canDescendRes =
+        classifyWalkEntry(entry.path(), root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, items);
 
-      if (!uriRes)
+      if (!canDescendRes)
       {
-        auto item = ScanItem{.uri = utility::pathToGenericUtf8(entry.path().filename()),
-                             .fullPath = entry.path(),
-                             .classification = ScanClassification::Error,
-                             .errorMessage = uriRes.error().message};
-        items.push_back(std::move(item));
+        return std::unexpected{canDescendRes.error()};
+      }
+
+      if (!*canDescendRes)
+      {
         it.disable_recursion_pending();
-        it.increment(ec);
-        ec.clear();
-        continue;
       }
 
-      auto resolvedPathRes = uriRes->resolveUnder(root);
-
-      if (!resolvedPathRes)
+      if (auto const advanceRes = advanceWalk(it, entry.path()); !advanceRes)
       {
-        blockedUriPrefixes.insert(std::string{uriRes->value()});
-        auto item = ScanItem{.uri = std::string{uriRes->value()},
-                             .fullPath = entry.path(),
-                             .classification = ScanClassification::Error,
-                             .errorMessage = resolvedPathRes.error().message};
-        items.push_back(std::move(item));
-        it.disable_recursion_pending();
-        it.increment(ec);
-        ec.clear();
-        continue;
-      }
-
-      auto canonicalUriRes =
-        library::LibraryUri::parse(utility::pathToGenericUtf8(resolvedPathRes->lexically_relative(resolvedRoot)));
-
-      if (!canonicalUriRes)
-      {
-        blockedUriPrefixes.insert(std::string{uriRes->value()});
-        auto item = ScanItem{.uri = std::string{uriRes->value()},
-                             .fullPath = *resolvedPathRes,
-                             .classification = ScanClassification::Error,
-                             .errorMessage = canonicalUriRes.error().message};
-        items.push_back(std::move(item));
-        it.disable_recursion_pending();
-        it.increment(ec);
-        ec.clear();
-        continue;
-      }
-
-      // Proactively check if this is a directory we can't enter
-      if (std::filesystem::is_directory(*resolvedPathRes, entryEc))
-      {
-        auto testEc = std::error_code{};
-        {
-          [[maybe_unused]] auto const testIt = std::filesystem::directory_iterator{*resolvedPathRes, testEc};
-        }
-
-        if (testEc)
-        {
-          blockedUriPrefixes.insert(std::string{canonicalUriRes->value()});
-          auto item = ScanItem{.uri = std::string{canonicalUriRes->value()},
-                               .fullPath = *resolvedPathRes,
-                               .classification = ScanClassification::Error,
-                               .errorMessage = testEc.message()};
-          items.push_back(std::move(item));
-
-          it.disable_recursion_pending();
-          it.increment(ec);
-
-          if (ec)
-          {
-            ec.clear();
-          }
-
-          continue;
-        }
-      }
-
-      if (auto res =
-            scanEntry(*resolvedPathRes, std::string{canonicalUriRes->value()}, snapshot.manifest, seenUris, items);
-          !res)
-      {
-        return std::unexpected{res.error()};
-      }
-
-      it.increment(ec);
-
-      if (ec)
-      {
-        ec.clear();
+        return std::unexpected{advanceRes.error()};
       }
     }
 

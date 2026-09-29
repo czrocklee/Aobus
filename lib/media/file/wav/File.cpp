@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -164,7 +165,9 @@ namespace ao::media::file::wav
       }
     }
 
-    void copyId3Content(detail::ContentBuilder& target, detail::ContentBuilder const& source)
+    void copyId3Content(detail::ContentBuilder& target,
+                        detail::ContentBuilder const& source,
+                        std::span<std::byte const> fileBacked)
     {
       auto const& metadata = source.metadata();
       auto copyText = [&target](std::string_view value, auto setter)
@@ -224,7 +227,25 @@ namespace ao::media::file::wav
 
       for (auto const& picture : source.coverArt().entries())
       {
-        target.coverArt().add(picture.type, picture.bytes);
+        // Pictures deunsynchronised by the ID3 reader point into the source
+        // builder's storage, which dies with it; only pictures inside the
+        // file-backed chunk bytes stay zero-copy, the rest are copied into
+        // the target's owned storage.
+        // std::less gives a total order even for pointers into unrelated storage.
+        auto const before = std::less<std::byte const*>{};
+        auto const* const start = picture.bytes.data();
+        auto const* const fileEnd = fileBacked.data() + fileBacked.size();
+        auto const inFileBytes = !before(start, fileBacked.data()) && !before(fileEnd, start + picture.bytes.size());
+
+        if (inFileBytes)
+        {
+          target.coverArt().add(picture.type, picture.bytes);
+        }
+        else
+        {
+          auto const owned = target.own(std::string{utility::bytes::stringView(picture.bytes)});
+          target.coverArt().add(picture.type, utility::bytes::view(owned));
+        }
       }
     }
 
@@ -259,7 +280,7 @@ namespace ao::media::file::wav
 
       if (auto optId3Builder = mpeg::id3v2::readFrames(*header, frames); optId3Builder)
       {
-        copyId3Content(builder, *optId3Builder);
+        copyId3Content(builder, *optId3Builder, frames);
       }
     }
   } // namespace

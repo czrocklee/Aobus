@@ -34,6 +34,8 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
@@ -74,6 +76,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -131,6 +134,33 @@ namespace ao::rt::test
                              std::uint16_t const year = 2020)
     {
       return addPlayableTrack(runtime, std::move(title), year, [&executor] { settlePublication(executor); });
+    }
+
+    // Creates a track whose media file stays at a test-chosen path under the
+    // music root, so a test can withdraw and restore that exact file around a
+    // playback attempt.
+    template<typename ExecutorT>
+    TrackId addTrackWithOwnedMedia(AppRuntime& runtime,
+                                   ExecutorT& executor,
+                                   std::string_view const mediaName,
+                                   std::string title)
+    {
+      audio::test::installAudioFixture(runtime.musicRoot(), "basic_metadata.flac", mediaName);
+      auto const createdRes =
+        runRuntimeTask(runtime, runtime.library().commands().createTrackFromFileAsync(runtime.musicRoot() / mediaName));
+      REQUIRE(createdRes);
+      auto const trackId = createdRes->trackId;
+      auto const targetsRes = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
+      REQUIRE(targetsRes);
+      auto const patchRes = runRuntimeTask(
+        runtime,
+        runtime.library().commands().updateMetadataAsync(
+          *targetsRes,
+          metadataPatch(library::test::TrackSpec{.title = std::move(title), .duration = std::chrono::seconds{10}})));
+      REQUIRE(patchRes);
+      REQUIRE((patchRes->status == AuthoringStatus::Applied || patchRes->status == AuthoringStatus::NoOp));
+      settlePublication(executor);
+      return trackId;
     }
 
     ViewId createView(AppRuntime& runtime, std::string filterExpression = {}, std::vector<TrackSortTerm> sortBy = {})
@@ -1507,6 +1537,129 @@ namespace ao::rt::test
     CHECK(playback.snapshot().transport.nowPlaying.trackId == current);
     CHECK(playback.snapshot().transport.occurrenceId != restored.occurrenceId);
     CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{0});
+  }
+
+  TEST_CASE("PlaybackSession - a failed deferred resume keeps the restored position retryable",
+            "[runtime][unit][playback-session][async]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
+    addReadyAudioProvider(*runtimePtr);
+    executor->runUntilIdle();
+    auto const current = addTrackWithOwnedMedia(*runtimePtr, *executor, "session-resume.flac", "Deferred resume");
+    runtimePtr->sources().reloadAllTracks();
+    storeSession(runtimePtr->workspaceConfigStore(),
+                 PlaybackSessionState{
+                   .sourceListId = kAllTracksListId,
+                   .currentTrackId = current,
+                   .positionMs = 250,
+                 });
+
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    auto& playback = runtimePtr->playback();
+    auto const restored = playback.snapshot().transport;
+    REQUIRE(restored.transport == audio::Transport::Idle);
+    REQUIRE(restored.elapsed == std::chrono::milliseconds{250});
+
+    // The media file behind the restored track is the exact file the deferred
+    // start opens, so the test can withdraw and restore the failure cause.
+    auto const mediaPath = runtimePtr->musicRoot() / "session-resume.flac";
+    REQUIRE(std::filesystem::is_regular_file(mediaPath));
+
+    SECTION("a rejected start keeps the restorable position")
+    {
+      // The restored media disappears, so the deferred start cannot open the
+      // track and must leave the idle-restorable state untouched.
+      REQUIRE(std::filesystem::remove(mediaPath));
+      playback.commands().resume();
+      executor->runUntilIdle();
+
+      auto const afterFailure = playback.snapshot().transport;
+      CHECK(afterFailure.transport == audio::Transport::Idle);
+      CHECK(afterFailure.nowPlaying.trackId == current);
+      CHECK(afterFailure.elapsed == std::chrono::milliseconds{250});
+      CHECK(afterFailure.occurrenceId == restored.occurrenceId);
+
+      // The rejected start is reported through the ordinary playback failure
+      // feed, exactly like any other rejected start.
+      auto const feed = runtimePtr->notifications().feed();
+      REQUIRE(feed.entries.size() == 1);
+      CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+      // A rejected stage reports a route-activation failure (see
+      // PlaybackTransport::stagePlayback), so kind drift is caught here.
+      REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+      CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+            NotificationReportTemplate::PlaybackRouteActivationFailed);
+
+      // The session snapshot still contains the restored position.
+      REQUIRE(runtimePtr->savePlaybackSession());
+      CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 250);
+    }
+
+    SECTION("a later resume retries from the same offset")
+    {
+      REQUIRE(std::filesystem::remove(mediaPath));
+      playback.commands().resume();
+      executor->runUntilIdle();
+      REQUIRE(playback.snapshot().transport.transport == audio::Transport::Idle);
+      REQUIRE(playback.snapshot().transport.elapsed == std::chrono::milliseconds{250});
+
+      // The cause is repaired; the same command retries from the retained
+      // offset instead of resuming an idle pipeline as a no-op.
+      REQUIRE(std::filesystem::copy_file(
+        audio::test::requireAudioFixture("basic_metadata.flac"), mediaPath, std::filesystem::copy_options::none));
+      playback.commands().resume();
+      REQUIRE(
+        executor->tryDrainUntil([&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+      CHECK(playback.snapshot().transport.nowPlaying.trackId == current);
+      CHECK(playback.snapshot().transport.occurrenceId != restored.occurrenceId);
+      CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{250});
+    }
+  }
+
+  TEST_CASE("PlaybackSession - stop while deferred freezes the restored position",
+            "[runtime][unit][playback-session][async]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
+    addReadyAudioProvider(*runtimePtr);
+    executor->runUntilIdle();
+    auto const current = addPlayableTrack(*runtimePtr, *executor, "Stopped while deferred");
+    runtimePtr->sources().reloadAllTracks();
+    storeSession(runtimePtr->workspaceConfigStore(),
+                 PlaybackSessionState{
+                   .sourceListId = kAllTracksListId,
+                   .currentTrackId = current,
+                   .positionMs = 250,
+                 });
+
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    auto& playback = runtimePtr->playback();
+    auto const restored = playback.snapshot().transport;
+    REQUIRE(restored.transport == audio::Transport::Idle);
+    REQUIRE(restored.elapsed == std::chrono::milliseconds{250});
+
+    playback.commands().stop();
+    executor->runUntilIdle();
+
+    auto const stopped = playback.snapshot().transport;
+    CHECK(stopped.transport == audio::Transport::Idle);
+    CHECK(stopped.nowPlaying.trackId == kInvalidTrackId);
+
+    // Stop discards the deferred token but freezes the restored subject and
+    // position for the resulting idle checkpoint.
+    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const stored = storedSession(runtimePtr->workspaceConfigStore());
+    CHECK(stored.currentTrackId == current);
+    CHECK(stored.positionMs == 250);
   }
 
   TEST_CASE("PlaybackSession - volume and mute restore reports the first failure and publishes actual state",
