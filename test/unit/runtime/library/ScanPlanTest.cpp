@@ -86,6 +86,8 @@ namespace ao::rt::test
 
       std::filesystem::remove(probeDir);
       std::filesystem::remove(probeRoot);
+      // A cached type means recursive_directory_iterator descends from the reported entry without re-inspecting it,
+      // mirroring the vanish race.
       return entry.is_directory();
     }
 

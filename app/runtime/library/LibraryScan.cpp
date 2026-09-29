@@ -567,15 +567,17 @@ namespace ao::rt
         async::throwIfStopRequested(stopToken);
       }
 
-      auto const descentRes =
+      // The returned bool is the descent permission: false means the entry
+      // was classified as unsafe, so the walk must not descend into it.
+      auto const canDescendRes =
         classifyWalkEntry(entry.path(), root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, items);
 
-      if (!descentRes)
+      if (!canDescendRes)
       {
-        return std::unexpected{descentRes.error()};
+        return std::unexpected{canDescendRes.error()};
       }
 
-      if (!*descentRes)
+      if (!*canDescendRes)
       {
         it.disable_recursion_pending();
       }
