@@ -489,7 +489,7 @@ root:table {
     tui_navigation_focus { "Switch Lists / tracks focus" }
     tui_navigation_return { "{key} tracks" }
     tui_navigation_search { "/ search" }
-    tui_navigation_keys { "↑↓ move · ←→ tree · Enter open · {edit, select, none {} other {{editKey} edit · }}Shift+←/→ resize · Esc tracks" }
+    tui_navigation_keys { "↑↓ move · ←→ tree · Enter open · {edit, select, none {} other {{editKey} edit · }}Del delete · Shift+←/→ resize · Esc tracks" }
     tui_layout_save_failed { "Could not save workspace layout: {detail}" }
     tui_navigation_open_failed { "Could not open list: {detail}" }
     tui_navigation_sync_failed { "Could not display the active list: {detail}" }
@@ -504,6 +504,9 @@ root:table {
     tui_list_effective_expression { "Effective" }
     tui_list_save_action { "Save" }
     tui_list_status_saving { "Saving…" }
+    tui_list_status_deleting { "Deleting…" }
+    tui_list_delete_more { "+{count, plural, one {# more List} other {# more Lists}}" }
+    tui_list_delete_cancelled { "The deletion was cancelled; nothing was removed" }
     tui_list_virtual_target { "All Tracks cannot be edited or deleted" }
     tui_list_open_unavailable { "The List could not be opened" }
     tui_list_expression_placeholder { "type $, @, #, or %" }
@@ -645,6 +648,7 @@ root:table {
     tui_editor_hint_accept { "accept" }
     tui_editor_hint_close { "close" }
     tui_editor_hint_dismiss { "dismiss" }
+    tui_editor_hint_cancel { "cancel" }
     tui_editor_status_submitting { "Applying…" }
     tui_editor_status_stale { "The library changed; reload to edit again" }
     tui_editor_summary_fields { "{count, plural, one {# field} other {# fields}}" }

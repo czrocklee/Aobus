@@ -488,7 +488,7 @@ zh_Hans:table {
     tui_navigation_focus { "切换列表与曲目焦点" }
     tui_navigation_return { "{key} 返回曲目" }
     tui_navigation_search { "/ 搜索" }
-    tui_navigation_keys { "↑↓ 移动 · ←→ 展开/折叠 · Enter 打开 · {edit, select, none {} other {{editKey} 编辑 · }}Shift+←/→ 调整宽度 · Esc 返回曲目" }
+    tui_navigation_keys { "↑↓ 移动 · ←→ 展开/折叠 · Enter 打开 · {edit, select, none {} other {{editKey} 编辑 · }}Del 删除 · Shift+←/→ 调整宽度 · Esc 返回曲目" }
     tui_layout_save_failed { "无法保存工作区布局：{detail}" }
     tui_navigation_open_failed { "无法打开列表：{detail}" }
     tui_navigation_sync_failed { "无法显示当前列表：{detail}" }
@@ -503,6 +503,9 @@ zh_Hans:table {
     tui_list_effective_expression { "实际" }
     tui_list_save_action { "保存" }
     tui_list_status_saving { "正在保存…" }
+    tui_list_status_deleting { "正在删除…" }
+    tui_list_delete_more { "{count, plural, other {另外 # 个列表}}" }
+    tui_list_delete_cancelled { "删除已取消；未移除任何内容" }
     tui_list_virtual_target { "“所有曲目”无法编辑或删除" }
     tui_list_open_unavailable { "无法打开列表" }
     tui_list_expression_placeholder { "输入 $、@、# 或 %" }
@@ -644,6 +647,7 @@ zh_Hans:table {
     tui_editor_hint_accept { "采用" }
     tui_editor_hint_close { "关闭" }
     tui_editor_hint_dismiss { "收起" }
+    tui_editor_hint_cancel { "取消" }
     tui_editor_status_submitting { "正在应用…" }
     tui_editor_status_stale { "音乐库已变更；重新加载后可继续编辑" }
     tui_editor_summary_fields { "{count, plural, other {# 个字段}}" }

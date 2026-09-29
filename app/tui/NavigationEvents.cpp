@@ -191,6 +191,14 @@ namespace ao::tui
       return true;
     }
 
+    // Delete is a fixed pane key that asks before removing the List under
+    // the cursor.
+    if (event == ftxui::Event::Delete)
+    {
+      deleteList();
+      return true;
+    }
+
     if (auto const optAction = _keymapPlan.actionFor(event); optAction)
     {
       // The workspace's Edit key keeps its verb and follows focus to the List

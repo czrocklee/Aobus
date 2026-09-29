@@ -598,8 +598,8 @@ namespace ao::tui
         text(std::string(static_cast<std::size_t>(kFocusMarkerColumns), ' ')),
         text(fitCellText(label, labelColumns())) | style::muted(),
         text(std::string(static_cast<std::size_t>(kLabelGapColumns), ' ')),
-        text(ellipsizeToCellWidth(uimodel::formatSmartListExpressionDisplayText(_textCatalog, expressionText),
-                                  valueColumns)) |
+        text(ellipsizeToCellWidth(
+          uimodel::formatSmartListExpressionDisplayText(_textCatalog, expressionText), valueColumns)) |
           flex,
       });
     };

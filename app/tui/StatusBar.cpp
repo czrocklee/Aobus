@@ -493,8 +493,8 @@ namespace ao::tui
       else
       {
         // The pane keeps the workspace's Edit key, so the hint names the key
-        // that reaches it after the pane's own movement and open keys, and
-        // drops the verb when none does.
+        // that reaches it after the pane's own movement, open, and delete
+        // keys, and drops the verb when none does.
         auto const paneKeys = std::to_array({Event::ArrowUp,
                                              Event::ArrowDown,
                                              Event::ArrowLeft,
@@ -505,6 +505,7 @@ namespace ao::tui
                                              Event::End,
                                              Event::Return,
                                              Event::Escape,
+                                             Event::Delete,
                                              Event::Character("j"),
                                              Event::Character("k"),
                                              Event::Character("/")});

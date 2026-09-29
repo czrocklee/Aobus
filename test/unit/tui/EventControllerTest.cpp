@@ -634,24 +634,6 @@ namespace ao::tui::test
     CHECK(editor->draft().name == "Second");
   }
 
-  TEST_CASE("EventController - the Lists pane edits the List under its cursor", "[tui][integration][event][editor]")
-  {
-    auto fixture = EventControllerFixture{};
-    auto library = fixture.makeLibrary();
-    auto controller = fixture.makeEvents(library);
-    [[maybe_unused]] auto const firstId = fixture.addList("First");
-    auto const secondId = fixture.addList("Second");
-    library.navigation().reveal(secondId);
-    fixture.shell.focusNavigation();
-
-    // The workspace's Edit key keeps its verb and follows focus to the List.
-    CHECK(controller.tryHandleEvent(ftxui::Event::Character("e")));
-    REQUIRE(fixture.listAuthoringPtr->activeEditor() != nullptr);
-    CHECK(fixture.listAuthoringPtr->activeEditor()->editListId() == secondId);
-    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
-    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
-  }
-
   TEST_CASE("EventController - list edit without Lists focus drafts the active list",
             "[tui][integration][event][editor]")
   {
@@ -721,6 +703,122 @@ namespace ao::tui::test
     auto const feed = fixture.runtimePtr->notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(std::get<std::string>(feed.entries.back().message) == "All Tracks cannot be edited or deleted");
+  }
+
+  TEST_CASE("EventController - the list delete question holds the shell from the command on",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const listId = fixture.addList("Roadsongs");
+    REQUIRE(library.openList(listId));
+
+    // A running visual range commits at entry, exactly as the definition
+    // editors' entry does; the marks it reached survive the flow.
+    controller.tryHandleEvent(ftxui::Event::Character("v"));
+    controller.tryHandleEvent(ftxui::Event::Character("j"));
+    REQUIRE(library.isVisualSelectionActive());
+    auto const committed = library.selectedTrackIds();
+
+    enterCommand(controller, "list delete");
+
+    CHECK_FALSE(library.isVisualSelectionActive());
+    CHECK(library.selectedTrackIds() == committed);
+
+    // The question is on screen while the preview runs, so nothing typed in
+    // that window reaches the workspace: no mark, no visual range, no
+    // Settings, no palette, no playback, and no manual-order write.
+    REQUIRE(fixture.listAuthoringPtr->isActive());
+    auto const markedBefore = library.markedIds();
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("v")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character(",")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character(":")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Special("\x1b[1;3A")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    CHECK(library.markedIds() == markedBefore);
+    CHECK_FALSE(library.isVisualSelectionActive());
+    CHECK_FALSE(fixture.settingsPtr->isActive());
+    CHECK_FALSE(fixture.shell.isInputActive());
+    CHECK_FALSE(fixture.listAuthoringPtr->hasPendingSubmission());
+
+    REQUIRE(fixture.executor->tryDrainUntil(
+      [&]
+      {
+        auto const* const pending = fixture.listAuthoringPtr->activeDeleteConfirmation();
+        return pending == nullptr || pending->previewReady;
+      }));
+    auto const* const confirmation = fixture.listAuthoringPtr->activeDeleteConfirmation();
+    REQUIRE(confirmation != nullptr);
+    CHECK(confirmation->listId == listId);
+
+    // The confirmation owns every event until it is answered.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("x")));
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK(fixture.runtimePtr->library().snapshot().listNode(listId).has_value());
+  }
+
+  TEST_CASE("EventController - the Lists pane edits and deletes the List under its cursor",
+            "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    [[maybe_unused]] auto const firstId = fixture.addList("First");
+    auto const secondId = fixture.addList("Second");
+    library.navigation().reveal(secondId);
+    fixture.shell.focusNavigation();
+
+    // The workspace's Edit key keeps its verb and follows focus to the List.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("e")));
+    REQUIRE(fixture.listAuthoringPtr->activeEditor() != nullptr);
+    CHECK(fixture.listAuthoringPtr->activeEditor()->editListId() == secondId);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    REQUIRE_FALSE(fixture.listAuthoringPtr->isActive());
+
+    // Delete asks about the List under the cursor.
+    fixture.shell.focusNavigation();
+    CHECK(controller.tryHandleEvent(ftxui::Event::Delete));
+    REQUIRE(fixture.listAuthoringPtr->activeDeleteConfirmation() != nullptr);
+    CHECK(fixture.listAuthoringPtr->activeDeleteConfirmation()->listId == secondId);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Escape));
+    CHECK(fixture.runtimePtr->library().snapshot().listNode(secondId).has_value());
+  }
+
+  TEST_CASE("EventController - deleting the open List falls back to a live view", "[tui][integration][event][editor]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = fixture.makeEvents(library);
+    auto const listId = fixture.addList("Roadsongs");
+    REQUIRE(library.openList(listId));
+    REQUIRE(library.currentListId() == listId);
+
+    enterCommand(controller, "list delete");
+    REQUIRE(fixture.executor->tryDrainUntil(
+      [&]
+      {
+        auto const* const pending = fixture.listAuthoringPtr->activeDeleteConfirmation();
+        return pending == nullptr || pending->previewReady;
+      }));
+    REQUIRE(fixture.listAuthoringPtr->activeDeleteConfirmation() != nullptr);
+    std::ignore = renderElement(fixture.listAuthoringPtr->activeModal(80, 24), 80, 24);
+    CHECK(controller.tryHandleEvent(ftxui::Event::Return));
+    REQUIRE(fixture.executor->tryDrainUntil([&] { return !fixture.listAuthoringPtr->hasPendingSubmission(); }));
+
+    // The workspace closed the deleted List's view, and the track surface
+    // followed it to a live view instead of keeping a dangling one.
+    CHECK_FALSE(fixture.listAuthoringPtr->isActive());
+    CHECK_FALSE(fixture.runtimePtr->library().snapshot().listNode(listId).has_value());
+    CHECK(library.currentListId() != listId);
+    CHECK(library.currentListId() != kInvalidListId);
+    CHECK(library.emptyStateText().empty());
+
+    // The shell answers the workspace again.
+    CHECK(controller.tryHandleEvent(ftxui::Event::Character("m")));
+    CHECK(library.markedIds().size() == 1);
   }
 
   TEST_CASE("EventController - Enter on bare select remains an unknown command", "[tui][unit][event][shell]")

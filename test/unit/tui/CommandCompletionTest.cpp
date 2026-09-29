@@ -183,7 +183,7 @@ namespace ao::tui::test
     auto const optList = completeDraft(ao::test::englishMessageCatalog(), "list ", CommandCompletionContext{});
 
     REQUIRE(optList);
-    CHECK(insertTexts(*optList) == std::vector<std::string>{"list new", "list edit"});
+    CHECK(insertTexts(*optList) == std::vector<std::string>{"list new", "list edit", "list delete"});
     CHECK(uimodel::completionDetail(ao::test::englishMessageCatalog(), optList->items.front().detail) == ":list new");
 
     auto const optEdit = completeDraft(ao::test::englishMessageCatalog(), "list e", CommandCompletionContext{});

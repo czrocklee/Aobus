@@ -6,7 +6,7 @@ id: tui.list-authoring
 
 ## Scope
 
-This specification owns the terminal frontend's Saved-List authoring surface after the shell chooses a target List: the definition editor for `new` and `edit`, preview recomputation, submission outcomes, and the lifetime of an admitted save through graceful exit.
+This specification owns the terminal frontend's Saved-List authoring surfaces after the shell chooses a target List: the definition editor for `new` and `edit`, the deletion preview and its confirmation, preview recomputation, submission outcomes, and the lifetime of an admitted save or deletion through graceful exit.
 
 The [TUI interaction specification](tui.md) owns command parsing, editor entry, exclusive-input precedence, workspace gesture retirement, and general exit checkpoint ordering.
 Exact user-facing commands belong to the [TUI command reference](../../reference/tui/command.md).
@@ -14,10 +14,10 @@ Frontend-neutral List mutation, draft, and deletion semantics belong to [library
 
 ## Targets and actions
 
-`:list new` and `:list edit` are palette-discoverable command aliases, also listed in the shell help.
+`:list new`, `:list edit`, and `:list delete` are palette-discoverable command aliases, also listed in the shell help.
 The target is the Lists-navigation cursor while the docked Lists pane owns keyboard focus, otherwise the active List.
-Inside the docked pane, outside search, the workspace's Edit key keeps its verb and edits the List under the cursor; creation has no pane key because it has no focused object, and `n` stays the global notifications key.
-The shared `describeListActions` contract decides admissibility: a virtual target refuses edit with one localized warning and changes nothing, while `new` parents at the library root through `parentForNewSmartList`.
+Inside the docked pane, outside search, the workspace's Edit key keeps its verb and edits the List under the cursor, and the fixed `Delete` key starts that List's deletion; creation has no pane key because it has no focused object, and `n` stays the global notifications key.
+The shared `describeListActions` contract decides admissibility: a virtual target refuses edit and delete with one localized warning and changes nothing, while `new` parents at the library root through `parentForNewSmartList`.
 Opening any surface runs the same entry transition as the track editors: transient gestures and pointer input retire, a running visual range commits into the mark set, and shell text input closes; the Detail inspector's visibility preference is preserved.
 
 ## Definition editor
@@ -55,17 +55,32 @@ The outcomes are presented as follows:
 A submitted save outlives the editor that started it: closing or retiring the surface keeps the shared controller state alive until the write settles, and `ExitController` waits for it exactly as it waits for a submitted track write.
 Retirement suppresses late presentation but never cancels the write.
 
+## Deletion
+
+`:list delete` installs the confirmation at once and starts a runtime preview of what deletion would remove.
+The confirmation owns input from the command on, so no key typed while the preview runs reaches the workspace, the palette, Settings, or a manual-order write; the entry transition runs once, at the command.
+Until the preview lands the question shows only its title and `Esc`, which cancels and leaves the late preview unmatched; a failed preview closes the question and reports the runtime's diagnostic.
+A filled question can be confirmed only after it has been drawn once, so a key buffered before the question was visible, such as a second Return after the command, cannot answer it.
+
+The confirmation shows the shared deletion question for the previewed scope: a plain List asks the single-list question, and a List with descendants asks the subtree question naming a bounded leading window of removed Lists and counting the rest with one localized line. The window shrinks further on short terminals so the question and its footer always fit; each entry keeps one row, and a name too wide for it, like a List named in the tag-reference warning, ends in an ellipsis.
+A directly editable single-tag List additionally offers the shared tag-removal question as a `Space`-toggled row and warns when other Lists still reference that tag; the toggle decides the deletion's `removeWritableTagFromTracks` option.
+`Enter` confirms with the shared Delete or Delete-all label in the danger color, `Esc` is labelled Cancel and changes nothing, and both footer controls are clickable.
+The confirmation is a titled popover with the command palette's cleared halo; its height follows its wrapped content, and the question yields rows before the footer does.
+A confirmed deletion keeps the confirmation visible in a deleting state that consumes every event until the write settles.
+
+A failed preview or deletion reports the runtime's own diagnostic through the notification feed; the published change set retires the deleted List's presentation preference and rebuilds navigation, including when the deleted List was active.
+
 ## Implementation map
 
-- [`ListAuthoringController.h`](../../../app/tui/ListAuthoringController.h) defines the single-flow controller and its outputs; [`ListAuthoringController.cpp`](../../../app/tui/ListAuthoringController.cpp) owns target admission, preview recomputation, and submission lifetime.
+- [`ListAuthoringController.h`](../../../app/tui/ListAuthoringController.h) defines the single-flow controller, its outputs, and the delete confirmation; [`ListAuthoringController.cpp`](../../../app/tui/ListAuthoringController.cpp) owns target admission, preview recomputation, submission and deletion lifetime, and the confirmation modal.
 - [`SmartListEditor.h`](../../../app/tui/SmartListEditor.h) defines the modal editor's modes, status, and requests; [`SmartListEditor.cpp`](../../../app/tui/SmartListEditor.cpp) owns field rows, expression completion, discard confirmation, and preview rendering.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns the command aliases' target rule and the entry transition; [`App.cpp`](../../../app/tui/App.cpp) composes the controller, its modal, and the exit gate.
 
 ## Test map
 
-- [`ListAuthoringControllerTest.cpp`](../../../test/unit/tui/ListAuthoringControllerTest.cpp) protects target admission, preview debounce generations, fast-save revalidation in both directions, create and update outcomes, the Auto presentation record, opening a created List, retryable failures, and admitted-write lifetime through retirement.
+- [`ListAuthoringControllerTest.cpp`](../../../test/unit/tui/ListAuthoringControllerTest.cpp) protects target admission, preview debounce generations, fast-save revalidation in both directions, create and update outcomes, the Auto presentation record, opening a created List, retryable failures, admitted save and deletion lifetime through retirement, and the delete flow's immediate ownership, drawn-before-confirm gate, late-preview cancellation, confirmation, subtree scope, and tag cleanup.
 - [`SmartListEditorTest.cpp`](../../../test/unit/tui/SmartListEditorTest.cpp) protects field editing, submit requests, completion placement and completed-token dismissal, the expression guidance, discard confirmation, submitting inertia, column alignment, the shrinking sample, rendering, and mouse ownership.
-- [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects the exact command aliases; [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects command routing, the Lists-cursor target rule, the Lists pane's Edit key, and a save refused behind an in-flight order write.
+- [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects the exact command aliases; [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects command routing, the Lists-cursor target rule, a save refused behind an in-flight order write, the Lists pane's Edit and `Delete` keys, the confirmation's input ownership while its preview runs, and the fallback after deleting the open List.
 
 ## Related documents
 

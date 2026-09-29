@@ -13,11 +13,13 @@
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/node.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <stop_token>
 #include <string>
+#include <vector>
 
 namespace ftxui
 {
@@ -48,14 +50,44 @@ namespace ao::rt
 namespace ao::tui
 {
   /**
+   * @brief The delete flow's confirmation surface: preview facts plus the user's pending answer.
+   */
+  struct ListDeleteConfirmation final
+  {
+    ListId listId = kInvalidListId;
+    bool includeDescendants = false;
+    /// Localized confirmation heading, built from the settled preview.
+    std::string title{};
+    /// The single-List question, localized; a subtree question is rendered
+    /// from @ref deletedListNames instead.
+    std::string question{};
+    /// Every removed List's name, in deletion-preview order; the subtree
+    /// question renders a bounded leading window of these.
+    std::vector<std::string> deletedListNames{};
+    /// The tag-removal offer; empty when the preview reported no writable membership tag.
+    std::string tagImpactQuestion{};
+    /// The shared warning about other Lists referencing that tag; empty when none do.
+    std::string tagReferencesWarning{};
+    /// Whether the user asked to also remove the writable tag from its tracks.
+    bool removeWritableTag = false;
+    /// The runtime preview landed and filled the question; until then only Escape answers.
+    bool previewReady = false;
+    /// A deletion was admitted and is settling; every further input is consumed.
+    bool deleting = false;
+  };
+
+  /**
    * @brief Owns the terminal shell's single Saved-List authoring flow.
    *
    * Opening, preview recomputation, submission bookkeeping, and retirement all
    * run on the callback executor, the same serialized lane as TUI event
    * dispatch. The controller drafts one List definition at a time: `new` and
-   * `edit` install a modal editor over a coherent snapshot read.
+   * `edit` install a modal editor over a coherent snapshot read, while
+   * `delete` installs its confirmation at once and fills the bounded question
+   * when the runtime preview lands, so no input reaches the workspace between
+   * the command and the answer.
    *
-   * A submitted save outlives the surface that started it, which
+   * A submitted save or deletion outlives the surface that started it, which
    * is what lets exit wait for it: @ref hasPendingSubmission stays true until
    * the write settles, whether or not anything is still on screen.
    */
@@ -101,13 +133,26 @@ namespace ao::tui
     /// Opens an editor over the saved definition of @p targetListId, reporting whether one was installed.
     bool tryOpenEdit(ListId targetListId);
 
+    /**
+     * @brief Starts the deletion flow for @p targetListId with a runtime preview.
+     *
+     * A virtual target is refused through the notification feed. The
+     * confirmation surface is installed at once and owns input while the
+     * preview runs; it can be confirmed only after the landed preview has
+     * been rendered, so no keystroke typed before the question was visible
+     * can answer it.
+     */
+    bool tryDelete(ListId targetListId);
+
     /// The editor to render and route input to, or null when none is installed.
     SmartListEditor const* activeEditor() const noexcept;
+    /// The delete flow's confirmation, or null when no deletion is being confirmed.
+    ListDeleteConfirmation const* activeDeleteConfirmation() const noexcept;
     /// The active surface's modal element, or null when nothing is on screen.
     ftxui::Element activeModal(std::int32_t terminalColumns, std::int32_t terminalRows) const;
     /// Whether any authoring surface is on screen and owns input.
     bool isActive() const noexcept;
-    /// Whether a submitted save is still settling, surface visible or not.
+    /// Whether a submitted save or deletion is still settling, surface visible or not.
     bool hasPendingSubmission() const noexcept;
 
     /// Routes @p event to the open surface; reports false when none is open.
@@ -120,6 +165,11 @@ namespace ao::tui
     struct State;
 
     static async::Task<void> runSaveAsync(std::shared_ptr<State> statePtr, async::Task<Result<ListId>> submission);
+    static async::Task<void> runDeletePreviewAsync(std::shared_ptr<State> statePtr,
+                                                   std::uint64_t generation,
+                                                   async::Task<Result<rt::DeleteListSubtreeReply>> preview);
+    static async::Task<void> runDeleteAsync(std::shared_ptr<State> statePtr,
+                                            async::Task<Result<rt::DeleteListSubtreeReply>> deletion);
     static async::Task<void> runPreviewDebounceAsync(async::Runtime* runtime,
                                                      std::shared_ptr<State> statePtr,
                                                      std::uint64_t generation,
@@ -130,6 +180,20 @@ namespace ao::tui
     void submit();
     void schedulePreview();
     void cancelPreviewDebounce();
+    void handleDeleteConfirmationEvent(ftxui::Event const& event);
+    /// The bounded entry text of the subtree question: leading names, one
+    /// localized count line for the rest, and never more rows than @p entryBudget.
+    std::string buildSubtreeEntries(ListDeleteConfirmation const& confirmation,
+                                    std::ptrdiff_t entryBudget,
+                                    std::int32_t entryColumns) const;
+    /// The confirmation's question, tag offer, and warning, wrapped to @p columns
+    /// and shortened to @p rowBudget rows through the subtree entry window.
+    ftxui::Elements renderDeleteQuestion(ListDeleteConfirmation const& confirmation,
+                                         std::int32_t columns,
+                                         std::int32_t rowBudget) const;
+    ftxui::Element renderDeleteConfirmation(ListDeleteConfirmation const& confirmation,
+                                            std::int32_t terminalColumns,
+                                            std::int32_t terminalRows) const;
 
     std::shared_ptr<State> _statePtr;
   };

@@ -487,7 +487,7 @@ fr:table {
     tui_navigation_focus { "Basculer le focus entre listes et pistes" }
     tui_navigation_return { "{key} pistes" }
     tui_navigation_search { "/ rechercher" }
-    tui_navigation_keys { "↑↓ déplacer · ←→ arbre · Entrée ouvrir · {edit, select, none {} other {{editKey} modifier · }}Shift+←/→ largeur · Échap pistes" }
+    tui_navigation_keys { "↑↓ déplacer · ←→ arbre · Entrée ouvrir · {edit, select, none {} other {{editKey} modifier · }}Suppr supprimer · Shift+←/→ largeur · Échap pistes" }
     tui_layout_save_failed { "Impossible d’enregistrer la disposition : {detail}" }
     tui_navigation_open_failed { "Impossible d’ouvrir la liste : {detail}" }
     tui_navigation_sync_failed { "Impossible d’afficher la liste active : {detail}" }
@@ -502,6 +502,9 @@ fr:table {
     tui_list_effective_expression { "Effectif" }
     tui_list_save_action { "Enregistrer" }
     tui_list_status_saving { "Enregistrement…" }
+    tui_list_status_deleting { "Suppression…" }
+    tui_list_delete_more { "+{count, plural, one {# autre liste} other {# autres listes}}" }
+    tui_list_delete_cancelled { "La suppression a été annulée ; rien n’a été supprimé" }
     tui_list_virtual_target { "Impossible de modifier ou de supprimer « Tous les morceaux »" }
     tui_list_open_unavailable { "Impossible d''ouvrir la liste" }
     tui_list_expression_placeholder { "tapez $, @, # ou %" }
@@ -643,6 +646,7 @@ fr:table {
     tui_editor_hint_accept { "accepter" }
     tui_editor_hint_close { "fermer" }
     tui_editor_hint_dismiss { "masquer" }
+    tui_editor_hint_cancel { "annuler" }
     tui_editor_status_submitting { "Application…" }
     tui_editor_status_stale { "La bibliothèque a changé ; rechargez pour reprendre l’édition" }
     tui_editor_summary_fields { "{count, plural, one {# champ} other {# champs}}" }

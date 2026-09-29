@@ -487,7 +487,7 @@ ja:table {
     tui_navigation_focus { "リストと曲のフォーカスを切り替え" }
     tui_navigation_return { "{key} 曲へ" }
     tui_navigation_search { "/ 検索" }
-    tui_navigation_keys { "↑↓ 移動 · ←→ ツリー · Enter 開く · {edit, select, none {} other {{editKey} 編集 · }}Shift+←/→ 幅を調整 · Esc 曲へ" }
+    tui_navigation_keys { "↑↓ 移動 · ←→ ツリー · Enter 開く · {edit, select, none {} other {{editKey} 編集 · }}Del 削除 · Shift+←/→ 幅を調整 · Esc 曲へ" }
     tui_layout_save_failed { "ワークスペースのレイアウトを保存できませんでした: {detail}" }
     tui_navigation_open_failed { "リストを開けませんでした: {detail}" }
     tui_navigation_sync_failed { "アクティブなリストを表示できませんでした: {detail}" }
@@ -502,6 +502,9 @@ ja:table {
     tui_list_effective_expression { "有効" }
     tui_list_save_action { "保存" }
     tui_list_status_saving { "保存中…" }
+    tui_list_status_deleting { "削除中…" }
+    tui_list_delete_more { "{count, plural, other {ほか # 件のリスト}}" }
+    tui_list_delete_cancelled { "削除がキャンセルされました。何も削除されていません" }
     tui_list_virtual_target { "「すべての曲」は編集・削除できません" }
     tui_list_open_unavailable { "リストを開けませんでした" }
     tui_list_expression_placeholder { "$、@、#、% を入力" }
@@ -643,6 +646,7 @@ ja:table {
     tui_editor_hint_accept { "確定" }
     tui_editor_hint_close { "閉じる" }
     tui_editor_hint_dismiss { "候補を閉じる" }
+    tui_editor_hint_cancel { "キャンセル" }
     tui_editor_status_submitting { "適用中…" }
     tui_editor_status_stale { "ライブラリが変更されました。再読み込みして編集を続けてください" }
     tui_editor_summary_fields { "{count, plural, other {#項目}}" }

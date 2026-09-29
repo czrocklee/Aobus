@@ -487,7 +487,7 @@ zh_Hant:table {
     tui_navigation_focus { "切換列表與曲目焦點" }
     tui_navigation_return { "{key} 返回曲目" }
     tui_navigation_search { "/ 搜尋" }
-    tui_navigation_keys { "↑↓ 移動 · ←→ 展開/摺疊 · Enter 開啟 · {edit, select, none {} other {{editKey} 編輯 · }}Shift+←/→ 調整寬度 · Esc 返回曲目" }
+    tui_navigation_keys { "↑↓ 移動 · ←→ 展開/摺疊 · Enter 開啟 · {edit, select, none {} other {{editKey} 編輯 · }}Del 刪除 · Shift+←/→ 調整寬度 · Esc 返回曲目" }
     tui_layout_save_failed { "無法儲存工作區版面配置：{detail}" }
     tui_navigation_open_failed { "無法開啟列表：{detail}" }
     tui_navigation_sync_failed { "無法顯示目前列表：{detail}" }
@@ -502,6 +502,9 @@ zh_Hant:table {
     tui_list_effective_expression { "實際" }
     tui_list_save_action { "儲存" }
     tui_list_status_saving { "正在儲存…" }
+    tui_list_status_deleting { "正在刪除…" }
+    tui_list_delete_more { "{count, plural, other {另外 # 個列表}}" }
+    tui_list_delete_cancelled { "刪除已取消；未移除任何內容" }
     tui_list_virtual_target { "「所有曲目」無法編輯或刪除" }
     tui_list_open_unavailable { "無法開啟列表" }
     tui_list_expression_placeholder { "輸入 $、@、# 或 %" }
@@ -643,6 +646,7 @@ zh_Hant:table {
     tui_editor_hint_accept { "採用" }
     tui_editor_hint_close { "關閉" }
     tui_editor_hint_dismiss { "收合" }
+    tui_editor_hint_cancel { "取消" }
     tui_editor_status_submitting { "正在套用…" }
     tui_editor_status_stale { "音樂庫已變更；重新載入後可繼續編輯" }
     tui_editor_summary_fields { "{count, plural, other {# 個欄位}}" }

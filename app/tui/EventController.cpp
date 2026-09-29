@@ -517,6 +517,23 @@ namespace ao::tui
     _shell.closeInput();
   }
 
+  void EventController::deleteList()
+  {
+    if (!_listAuthoring.tryDelete(listAuthoringTargetId()))
+    {
+      return;
+    }
+
+    // The confirmation owns input from this moment, while the runtime preview
+    // fills it, so this is the one entry transition: gestures retire and the
+    // running visual range commits exactly as the definition editors' entry
+    // does, because the deletion reorders rows beneath a mark set that must
+    // not keep reshaping.
+    cancelTransientInteractions();
+    _library.commitVisualSelection();
+    _shell.closeInput();
+  }
+
   void EventController::editSelectedTrackProperties(TrackEditorMode const mode)
   {
     if (!_trackEdit.tryOpen(_library.selectedTrackIds(), mode))
@@ -802,6 +819,7 @@ namespace ao::tui
       case CommandAction::EditTags: editSelectedTrackProperties(TrackEditorMode::Tags); break;
       case CommandAction::CreateList: openListAuthoring(ListEditorMode::New); break;
       case CommandAction::EditList: openListAuthoring(ListEditorMode::Edit); break;
+      case CommandAction::DeleteList: deleteList(); break;
       case CommandAction::OpenSettings:
         cancelTransientInteractions();
         _library.commitVisualSelection();
