@@ -13,6 +13,7 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
@@ -56,6 +57,7 @@
 #include <format>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -371,35 +373,35 @@ namespace ao::gtk::layout::editor
 
       _treeStorePtr->clear();
 
-    auto row = *(_treeStorePtr->append());
-    auto const optComponentSchema = _registry.schema().component(_document.root.type);
+      auto row = *(_treeStorePtr->append());
+      auto const optComponentSchema = _registry.schema().component(_document.root.type);
 
-    auto displayName = _document.root.id;
+      auto displayName = _document.root.id;
 
-    if (displayName.empty())
-    {
-      displayName = optComponentSchema ? layoutEditorVocabularyText(_textCatalog, optComponentSchema->displayName)
-                                       : _document.root.type;
-    }
-
-    if (_document.root.type == "template")
-    {
-      if (auto const templateId = _document.root.propertyOr<std::string>("templateId", ""); !templateId.empty())
+      if (displayName.empty())
       {
-        displayName += " [" + templateId + "]";
+        displayName = optComponentSchema ? layoutEditorVocabularyText(_textCatalog, optComponentSchema->displayName)
+                                         : _document.root.type;
       }
-    }
 
-    row[_columns.displayName] = displayName;
-    row[_columns.type] = _document.root.type;
-    row[_columns.nodePtr] = &_document.root;
+      if (_document.root.type == "template")
+      {
+        if (auto const templateId = _document.root.propertyOr<std::string>("templateId", ""); !templateId.empty())
+        {
+          displayName += " [" + templateId + "]";
+        }
+      }
 
-    for (auto& child : _document.root.children)
-    {
-      appendNodeToTree(row, &child);
-    }
+      row[_columns.displayName] = displayName;
+      row[_columns.type] = _document.root.type;
+      row[_columns.nodePtr] = &_document.root;
 
-    _treeView.expand_all();
+      for (auto& child : _document.root.children)
+      {
+        appendNodeToTree(row, &child);
+      }
+
+      _treeView.expand_all();
 
       if (optSelectedNodePath)
       {
@@ -427,6 +429,14 @@ namespace ao::gtk::layout::editor
 
     for (auto const childIndex : documentPath)
     {
+      // Gtk::TreeModel::Path indices are int32; a document path this deep
+      // cannot be expressed, so bail out rather than narrowing a wrapped value.
+      if (childIndex > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+      {
+        APP_LOG_WARN("LayoutEditorDialog: document child index {} exceeds the tree row index range", childIndex);
+        return;
+      }
+
       rowPath.push_back(static_cast<std::int32_t>(childIndex));
     }
 
@@ -440,6 +450,12 @@ namespace ao::gtk::layout::editor
       {
         _treeView.scroll_to_row(rowPath);
       }
+    }
+    else
+    {
+      // The store mirrors the document the caller just mutated, so a missing
+      // row means the rebuild and the path computation drifted.
+      APP_LOG_WARN("LayoutEditorDialog: no tree row matches the document child-index path");
     }
   }
 
@@ -493,21 +509,37 @@ namespace ao::gtk::layout::editor
 
   namespace
   {
-    // Returns the child-index path of target within root, or std::nullopt when absent.
-    std::optional<std::vector<std::size_t>> findNodePath(LayoutNode const& root, LayoutNode const& target)
+    // Descends the tree appending each child index to path (top-down) and reports
+    // success when target is reached. Building the path by appending avoids the
+    // O(depth^2) insert-at-front work the prior prepend-each-level recursion did.
+    bool tryAppendNodePath(LayoutNode const& root, LayoutNode const& target, std::vector<std::size_t>& path)
     {
       if (&root == &target)
       {
-        return std::vector<std::size_t>{};
+        return true;
       }
 
       for (std::size_t index = 0; index < root.children.size(); ++index)
       {
-        if (auto optPath = findNodePath(root.children[index], target); optPath)
+        path.push_back(index);
+
+        if (tryAppendNodePath(root.children[index], target, path))
         {
-          optPath->insert(optPath->begin(), index);
-          return optPath;
+          return true;
         }
+
+        path.pop_back();
+      }
+
+      return false;
+    }
+
+    // Returns the child-index path of target within root, or std::nullopt when absent.
+    std::optional<std::vector<std::size_t>> findNodePath(LayoutNode const& root, LayoutNode const& target)
+    {
+      if (auto path = std::vector<std::size_t>{}; tryAppendNodePath(root, target, path))
+      {
+        return path;
       }
 
       return std::nullopt;
