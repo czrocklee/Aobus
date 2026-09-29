@@ -55,6 +55,7 @@
 #include <format>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -398,6 +399,13 @@ namespace ao::gtk::layout::editor
 
     for (auto const childIndex : documentPath)
     {
+      // Gtk::TreeModel::Path indices are int32; a document path this deep
+      // cannot be expressed, so bail out rather than narrowing a wrapped value.
+      if (childIndex > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+      {
+        return;
+      }
+
       rowPath.push_back(static_cast<std::int32_t>(childIndex));
     }
 
@@ -464,21 +472,37 @@ namespace ao::gtk::layout::editor
 
   namespace
   {
-    // Returns the child-index path of target within root, or std::nullopt when absent.
-    std::optional<std::vector<std::size_t>> findNodePath(LayoutNode const& root, LayoutNode const& target)
+    // Descends the tree appending each child index to path (top-down) and reports
+    // success when target is reached. Building the path by appending avoids the
+    // O(depth^2) insert-at-front work the prior prepend-each-level recursion did.
+    bool tryAppendNodePath(LayoutNode const& root, LayoutNode const& target, std::vector<std::size_t>& path)
     {
       if (&root == &target)
       {
-        return std::vector<std::size_t>{};
+        return true;
       }
 
       for (std::size_t index = 0; index < root.children.size(); ++index)
       {
-        if (auto optPath = findNodePath(root.children[index], target); optPath)
+        path.push_back(index);
+
+        if (tryAppendNodePath(root.children[index], target, path))
         {
-          optPath->insert(optPath->begin(), index);
-          return optPath;
+          return true;
         }
+
+        path.pop_back();
+      }
+
+      return false;
+    }
+
+    // Returns the child-index path of target within root, or std::nullopt when absent.
+    std::optional<std::vector<std::size_t>> findNodePath(LayoutNode const& root, LayoutNode const& target)
+    {
+      if (auto path = std::vector<std::size_t>{}; tryAppendNodePath(root, target, path))
+      {
+        return path;
       }
 
       return std::nullopt;
