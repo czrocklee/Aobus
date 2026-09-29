@@ -54,7 +54,9 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <iterator>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -330,7 +332,7 @@ namespace ao::gtk::layout::editor
     setContentWidget(_paned);
   }
 
-  void LayoutEditorDialog::populateTree()
+  void LayoutEditorDialog::populateTree(std::optional<std::vector<std::size_t>> optSelectedNodePath)
   {
     _treeStorePtr->clear();
 
@@ -363,6 +365,34 @@ namespace ao::gtk::layout::editor
     }
 
     _treeView.expand_all();
+
+    if (optSelectedNodePath)
+    {
+      selectRowByDocumentPath(*optSelectedNodePath);
+    }
+  }
+
+  void LayoutEditorDialog::selectRowByDocumentPath(std::vector<std::size_t> const& documentPath)
+  {
+    // The store mirrors the document tree, with the document root as the only top-level row.
+    auto rowPath = Gtk::TreeModel::Path{};
+    rowPath.push_back(std::int32_t{0});
+
+    for (auto const childIndex : documentPath)
+    {
+      rowPath.push_back(static_cast<std::int32_t>(childIndex));
+    }
+
+    if (auto const rowIt = _treeStorePtr->get_iter(rowPath); rowIt)
+    {
+      _treeView.expand_to_path(rowPath);
+      _treeView.get_selection()->select(rowIt);
+
+      if (_treeView.get_mapped())
+      {
+        _treeView.scroll_to_row(rowPath);
+      }
+    }
   }
 
   void LayoutEditorDialog::appendNodeToTree(Gtk::TreeModel::Row parentRow, LayoutNode* node)
@@ -415,6 +445,26 @@ namespace ao::gtk::layout::editor
 
   namespace
   {
+    // Returns the child-index path of target within root, or std::nullopt when absent.
+    std::optional<std::vector<std::size_t>> findNodePath(LayoutNode const& root, LayoutNode const& target)
+    {
+      if (&root == &target)
+      {
+        return std::vector<std::size_t>{};
+      }
+
+      for (std::size_t index = 0; index < root.children.size(); ++index)
+      {
+        if (auto optPath = findNodePath(root.children[index], target); optPath)
+        {
+          optPath->insert(optPath->begin(), index);
+          return optPath;
+        }
+      }
+
+      return std::nullopt;
+    }
+
     LayoutNode* findNodeById(LayoutNode* root, std::string_view id)
     {
       if (root->id == id)
@@ -484,9 +534,16 @@ namespace ao::gtk::layout::editor
     newNode.id = uimodel::makeUniqueLayoutNodeId(_document, newNode.type, "new");
 
     markEdited();
+    // The parent path is unchanged by the insertion; the new child takes the last slot.
+    auto optSelectedNodePath = findNodePath(_document.root, *parentNode);
     parentNode->children.push_back(std::move(newNode));
 
-    populateTree();
+    if (optSelectedNodePath)
+    {
+      optSelectedNodePath->push_back(parentNode->children.size() - 1);
+    }
+
+    populateTree(std::move(optSelectedNodePath));
     notifyPreview();
   }
 
@@ -520,13 +577,21 @@ namespace ao::gtk::layout::editor
         containerNode.id = uimodel::makeUniqueLayoutNodeId(_document, containerNode.type, "wrap");
 
         markEdited();
+        // The wrapper occupies the wrapped node's slot, so it is the follow-up selection target.
+        auto optSelectedNodePath = findNodePath(_document.root, *parentNode);
+        auto const targetIndex = static_cast<std::size_t>(std::distance(parentNode->children.begin(), it));
         // Move the target node into the new container
         containerNode.children.push_back(std::move(*it));
 
         // Replace the target node in the parent with the container
         *it = std::move(containerNode);
 
-        populateTree();
+        if (optSelectedNodePath)
+        {
+          optSelectedNodePath->push_back(targetIndex);
+        }
+
+        populateTree(std::move(optSelectedNodePath));
         notifyPreview();
       }
     }
@@ -570,8 +635,23 @@ namespace ao::gtk::layout::editor
       if (it != parentNode->children.end())
       {
         markEdited();
+        auto const targetIndex = static_cast<std::size_t>(std::distance(parentNode->children.begin(), it));
+        auto const optParentNodePath = findNodePath(_document.root, *parentNode);
         parentNode->children.erase(it);
-        populateTree();
+
+        // Select the neighbor that took the removed slot, else the previous sibling, else the parent.
+        auto optSelectedNodePath = optParentNodePath;
+
+        if (optSelectedNodePath && targetIndex < parentNode->children.size())
+        {
+          optSelectedNodePath->push_back(targetIndex);
+        }
+        else if (optSelectedNodePath && targetIndex > 0)
+        {
+          optSelectedNodePath->push_back(targetIndex - 1);
+        }
+
+        populateTree(std::move(optSelectedNodePath));
         notifyPreview();
       }
     }
@@ -596,8 +676,19 @@ namespace ao::gtk::layout::editor
       if (it != parentNode->children.end() && it != parentNode->children.begin())
       {
         markEdited();
+        auto const optParentNodePath = findNodePath(_document.root, *parentNode);
+        auto const targetIndex = static_cast<std::size_t>(std::distance(parentNode->children.begin(), it));
         std::iter_swap(it, it - 1);
-        populateTree();
+
+        // The moved node now occupies the previous slot within its parent.
+        auto optSelectedNodePath = optParentNodePath;
+
+        if (optSelectedNodePath)
+        {
+          optSelectedNodePath->push_back(targetIndex - 1);
+        }
+
+        populateTree(std::move(optSelectedNodePath));
         notifyPreview();
       }
     }
@@ -622,8 +713,19 @@ namespace ao::gtk::layout::editor
       if (it != parentNode->children.end() && (it + 1) != parentNode->children.end())
       {
         markEdited();
+        auto const optParentNodePath = findNodePath(_document.root, *parentNode);
+        auto const targetIndex = static_cast<std::size_t>(std::distance(parentNode->children.begin(), it));
         std::iter_swap(it, it + 1);
-        populateTree();
+
+        // The moved node now occupies the next slot within its parent.
+        auto optSelectedNodePath = optParentNodePath;
+
+        if (optSelectedNodePath)
+        {
+          optSelectedNodePath->push_back(targetIndex + 1);
+        }
+
+        populateTree(std::move(optSelectedNodePath));
         notifyPreview();
       }
     }
