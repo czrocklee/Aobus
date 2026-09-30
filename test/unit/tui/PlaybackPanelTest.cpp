@@ -179,9 +179,9 @@ namespace ao::tui::test
 
     auto const early = renderAt(std::chrono::milliseconds{0});
     auto const late = renderAt(std::chrono::milliseconds{5120});
-    CHECK(early.PixelAt(0, 0).character == "⠚");
-    CHECK(early.PixelAt(1, 0).character == "⠉");
-    CHECK(early.PixelAt(2, 0).character == "⠓");
+    CHECK(early.PixelAt(0, 0).character == "⢤");
+    CHECK(early.PixelAt(1, 0).character == "⣀");
+    CHECK(early.PixelAt(2, 0).character == "⡠");
     CHECK(late.PixelAt(0, 0).character == early.PixelAt(0, 0).character);
     CHECK(late.PixelAt(1, 0).character == early.PixelAt(1, 0).character);
     CHECK(late.PixelAt(2, 0).character == early.PixelAt(2, 0).character);
