@@ -6,9 +6,10 @@
 #
 # Deliberately does NOT trust IN_NIX_SHELL: direnv and long-lived shells carry stale
 # environments that silently diverge from the current shell.nix (e.g. missing pkg-config
-# entries for recently added dependencies). The portal always re-enters through the
-# pinned shell.nix and uses its own sentinel to stop the recursion; export
-# AO_IN_NIX_PORTAL=1 yourself only if you know your shell matches shell.nix exactly.
+# entries for recently added dependencies). The portal re-enters through the pinned
+# shell.nix unless the entered shell's AO_NIX_SHELL_FINGERPRINT matches the current
+# files and GTK debug mode, and uses its own sentinel to stop the recursion.
+# Export AO_IN_NIX_PORTAL=1 yourself only if your shell matches shell.nix exactly.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,6 +43,30 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     exit $?
 fi
 
+# The same inputs and hashing as portalFingerprint in shell.nix.
+aobus_nix_shell_fingerprint() {
+    local input
+    {
+        for input in shell.nix nixpkgs.json script/ao/toolchain.json script/ao/compiler-cache.json; do
+            sha256sum "$ROOT/$input" | cut -c1-64
+        done
+        if [[ "${AOBUS_NIX_UNSTRIPPED_GTK:-}" == "1" ]]; then
+            printf 'gtk-unstripped=1\n'
+        else
+            printf 'gtk-unstripped=0\n'
+        fi
+    } | sha256sum | cut -c1-64
+}
+
+# An entered shell (direnv, CI) built from the current inputs is not stale.
+# Reuse it: nesting nix-shell appends a second copy of NIX_CFLAGS_COMPILE,
+# NIX_LDFLAGS, and CPLUS_INCLUDE_PATH to every compiler invocation.
+if [[ -z "${AO_IN_NIX_PORTAL:-}" && -n "${AO_NIX_SHELL_FINGERPRINT:-}" &&
+      -n "${AO_NIX_PORTAL_PYTHON:-}" &&
+      "$AO_NIX_SHELL_FINGERPRINT" == "$(aobus_nix_shell_fingerprint)" ]]; then
+    AO_IN_NIX_PORTAL=1
+fi
+
 if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
     # Do not let Python modules from a previously entered project shell shadow
     # the versions selected by the current shell.nix.
@@ -56,5 +81,8 @@ if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
     exec nix-shell "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
 fi
 
-export PYTHONPATH="$ROOT/script${PYTHONPATH:+:$PYTHONPATH}"
-exec python3 -m ao "$@"
+# Reuse must not adopt a subsequently activated virtualenv or ambient packages.
+# The Nix Python environment carries Ruff and mypy without ambient PYTHONPATH.
+unset PYTHONHOME PYTHONPATH
+export PYTHONPATH="$ROOT/script"
+exec "${AO_NIX_PORTAL_PYTHON:-python3}" -m ao "$@"

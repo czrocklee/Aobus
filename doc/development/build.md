@@ -5,7 +5,12 @@ The portal owns CMake, dependencies, tool selection, and build trees; use `./ao 
 
 ## Linux
 
-The portal re-enters the pinned `nix-shell` automatically.
+The portal enters the pinned `nix-shell` automatically. It reuses an already entered
+shell, such as a direnv `use nix` environment, only when that shell's
+`AO_NIX_SHELL_FINGERPRINT` matches the current `shell.nix` inputs and
+`AOBUS_NIX_UNSTRIPPED_GTK` mode; nesting another `nix-shell` would pass every
+compiler flag twice. Reuse still selects the pinned Python environment and
+ignores ambient Python packages or an activated virtualenv.
 
 ```bash
 ./ao build

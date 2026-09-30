@@ -129,9 +129,13 @@ jobs:
       - name: Show initial disk usage
         run: df -h
 
+      # Enter the shell the way ./ao does, so the inner ./ao check reuses it
+      # through AO_NIX_SHELL_FINGERPRINT instead of nesting a second nix-shell.
       - name: Build and test with private PipeWire
         id: build
         run: |
+          NIX_BUILD_SHELL="$(nix-build shell.nix -A portalShell --no-out-link)/bin/bash"
+          export NIX_BUILD_SHELL
           nix-shell --run 'bash -euo pipefail' <<'BASH'
           runtime=$(mktemp -d)
           trap 'rm -rf "$runtime"' EXIT

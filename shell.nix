@@ -6,6 +6,20 @@ let
   }) { };
   toolchain = builtins.fromJSON (builtins.readFile ./script/ao/toolchain.json);
   compilerCache = builtins.fromJSON (builtins.readFile ./script/ao/compiler-cache.json);
+  # ./ao hashes these local inputs and the normalized GTK debug mode to reuse
+  # a matching shell without duplicating the stdenv compiler and linker flags.
+  portalInputs = [
+    ./shell.nix
+    ./nixpkgs.json
+    ./script/ao/toolchain.json
+    ./script/ao/compiler-cache.json
+  ];
+  portalFingerprint = builtins.hashString "sha256" (
+    pkgs.lib.concatMapStrings (file: builtins.hashFile "sha256" file + "\n") portalInputs
+    + "gtk-unstripped=${if useUnstrippedGtk then "1" else "0"}\n"
+  );
+  # Keep the portal's interpreter and tools independent of ambient Python paths.
+  portalPython = pkgs.python3.withPackages (packages: [ packages.ruff packages.mypy ]);
   requireToolVersion = name: expected: actual:
     if expected == actual then true else throw (
       "Aobus requires ${name} ${expected}, but pinned Nixpkgs resolves ${actual}. "
@@ -147,6 +161,8 @@ pkgs.mkShell {
   name = "cpp-dev-env";
   passthru.portalShell = pkgs.bashInteractive;
   AOBUS_NIX_DEPENDENCY_REPORT = dependencyReport;
+  AO_NIX_SHELL_FINGERPRINT = portalFingerprint;
+  AO_NIX_PORTAL_PYTHON = "${portalPython}/bin/python3";
   buildInputs =
     with pkgs;
     [
@@ -159,9 +175,7 @@ pkgs.mkShell {
       pkg-config
       ninja
       llvmPackages_22.clang
-      python3 # runs the ./ao development portal (script/ao)
-      python3Packages.ruff
-      python3Packages.mypy
+      portalPython # runs ./ao with the pinned Ruff and mypy packages
       llvmPackages_22.clang-tools
       llvmPackages_22.llvm.dev
       llvmPackages_22.clang-unwrapped.dev
