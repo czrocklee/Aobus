@@ -55,8 +55,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_VERSION: aobus-linux-v1
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
 
     steps:
@@ -95,6 +93,33 @@ jobs:
           --github-env "$GITHUB_ENV"
           --state-root "$RUNNER_TEMP/aobus-state"
           --platform Linux
+
+      # Export the R2 backend only when credentials exist: sccache selects
+      # the S3 backend whenever SCCACHE_BUCKET is set and does not fall back
+      # to the disk cache when credentials are empty, so secretless runs
+      # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
+      # secrets context is not allowed in steps.if, so the guard runs in
+      # the step body.
+      - name: Activate R2 compiler cache backend
+        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+        run: |
+          if [[ -z "$R2_ENDPOINT" || -z "$R2_ACCESS_KEY_ID" || -z "$R2_SECRET_ACCESS_KEY" ]]; then
+            echo 'R2 credentials unavailable; keeping the local disk backend.'
+            exit 0
+          fi
+          {
+            echo "SCCACHE_BUCKET=aobus-sccache"
+            echo "SCCACHE_ENDPOINT=$R2_ENDPOINT"
+            echo "SCCACHE_REGION=auto"
+            echo "SCCACHE_S3_KEY_PREFIX=linux-v1"
+            echo "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
+            echo "AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
+          } >> "$GITHUB_ENV"
 
       - name: Reset compiler cache statistics
         if: ${{ steps.compiler-cache.outcome == 'success' }}
@@ -199,8 +224,6 @@ jobs:
     env:
       AOBUS_CHECKOUT_ID: github-actions-macos-${{ matrix.cache_arch }}
       HOMEBREW_NO_AUTO_UPDATE: "1"
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_VERSION: aobus-macos-${{ matrix.cache_arch }}-v1
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
 
     steps:
@@ -295,6 +318,33 @@ jobs:
           --github-env "$GITHUB_ENV"
           --state-root "$AOBUS_STATE_ROOT"
           --platform Darwin
+
+      # Export the R2 backend only when credentials exist: sccache selects
+      # the S3 backend whenever SCCACHE_BUCKET is set and does not fall back
+      # to the disk cache when credentials are empty, so secretless runs
+      # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
+      # secrets context is not allowed in steps.if, so the guard runs in
+      # the step body.
+      - name: Activate R2 compiler cache backend
+        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+        run: |
+          if [[ -z "$R2_ENDPOINT" || -z "$R2_ACCESS_KEY_ID" || -z "$R2_SECRET_ACCESS_KEY" ]]; then
+            echo 'R2 credentials unavailable; keeping the local disk backend.'
+            exit 0
+          fi
+          {
+            echo "SCCACHE_BUCKET=aobus-sccache"
+            echo "SCCACHE_ENDPOINT=$R2_ENDPOINT"
+            echo "SCCACHE_REGION=auto"
+            echo "SCCACHE_S3_KEY_PREFIX=macos-${{ matrix.cache_arch }}-v1"
+            echo "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
+            echo "AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
+          } >> "$GITHUB_ENV"
 
       - name: Restore managed macOS tools
         id: macos-state
@@ -417,8 +467,6 @@ jobs:
       # restored tools contain the same absolute paths used when created.
       AOBUS_STATE_ROOT: C:\aobus-state
       AOBUS_CHECKOUT_ID: github-actions-windows-x64
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_VERSION: aobus-windows-v1
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       # vcpkg 2026 removed x-gha. Keep its ABI-addressed archives in a local
       # files backend and let actions/cache move that directory between VMs.
@@ -457,6 +505,33 @@ jobs:
           --github-env $env:GITHUB_ENV
           --state-root "$env:RUNNER_TEMP\aobus-state"
           --platform Windows
+
+      # Export the R2 backend only when credentials exist: sccache selects
+      # the S3 backend whenever SCCACHE_BUCKET is set and does not fall back
+      # to the disk cache when credentials are empty, so secretless runs
+      # (fork PRs, Dependabot) must not see SCCACHE_BUCKET at all. The
+      # secrets context is not allowed in steps.if, so the guard runs in
+      # the step body.
+      - name: Activate R2 compiler cache backend
+        if: ${{ steps.compiler-cache.outcome == 'success' }}
+        shell: bash
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_SCCACHE_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_SCCACHE_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SCCACHE_SECRET_ACCESS_KEY }}
+        run: |
+          if [[ -z "$R2_ENDPOINT" || -z "$R2_ACCESS_KEY_ID" || -z "$R2_SECRET_ACCESS_KEY" ]]; then
+            echo 'R2 credentials unavailable; keeping the local disk backend.'
+            exit 0
+          fi
+          {
+            echo "SCCACHE_BUCKET=aobus-sccache"
+            echo "SCCACHE_ENDPOINT=$R2_ENDPOINT"
+            echo "SCCACHE_REGION=auto"
+            echo "SCCACHE_S3_KEY_PREFIX=windows-v1"
+            echo "AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
+            echo "AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
+          } >> "$GITHUB_ENV"
 
       - name: Capture Windows image version
         id: windows-image
