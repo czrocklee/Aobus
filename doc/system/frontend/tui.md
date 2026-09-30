@@ -191,6 +191,7 @@ Visible workspace status shortcuts also activate their displayed action on click
 Mouse targets are valid only for painted cells. Editors invalidate their targets after an event until the next render; runtime-backed row targets carry identity as well as position so a refreshed list cannot activate a different row through old geometry. The mouse preference gates editor input as well as the workspace.
 
 Track navigation moves focus by row/page/endpoints; group navigation focuses the first track in the previous/next section.
+At the first or last section boundary, an unavailable group step leaves focus, marks, and an active visual range unchanged; it does not reselect the current section's first track.
 Mouse wheel over the track table moves focus by the configured wheel step (three tracks by default).
 Dragging the table scrollbar maps its visual position to a focused track.
 Clicking a section header focuses its first track; dragging a header edge previews a width in terminal cells and releasing it commits canonical state for the current base list.

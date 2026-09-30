@@ -27,7 +27,9 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -848,11 +850,103 @@ namespace ao::tui::test
     REQUIRE(controller.setPresentation("albums") == "View: albums");
     REQUIRE(controller.sections().size() == 2);
 
+    controller.setSelectedTrackIndex(1);
     CHECK(controller.jumpToAdjacentSection(1) == "Section: Album B");
     CHECK(controller.selectedTrack() == 2);
 
     CHECK(controller.jumpToAdjacentSection(-1) == "Section: Album A");
     CHECK(controller.selectedTrack() == 0);
+  }
+
+  TEST_CASE("LibraryController - section-boundary jumps preserve focus and effective selection",
+            "[tui][unit][library][selection]")
+  {
+    auto const delta = GENERATE(-1, 1);
+    CAPTURE(delta);
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "A 1", .album = "Album A", .albumArtist = "Artist"});
+    auto const firstBoundaryId =
+      fixture.addTrack(library::test::TrackSpec{.title = "A 2", .album = "Album A", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{.title = "B 1", .album = "Album B", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{.title = "B 2", .album = "Album B", .albumArtist = "Artist"});
+    auto const lastBoundaryId =
+      fixture.addTrack(library::test::TrackSpec{.title = "B 3", .album = "Album B", .albumArtist = "Artist"});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 2);
+    REQUIRE(controller.sections()[0].rowBegin == 0);
+    REQUIRE(controller.sections()[0].rowCount == 2);
+    REQUIRE(controller.sections()[1].rowBegin == 2);
+    REQUIRE(controller.sections()[1].rowCount == 3);
+    auto const selectedIndex = delta < 0 ? 1 : 4;
+    auto const expectedId = delta < 0 ? firstBoundaryId : lastBoundaryId;
+    controller.setSelectedTrackIndex(selectedIndex);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    REQUIRE(controller.selectedTrackView().track->id == expectedId);
+
+    SECTION("unmarked focus is the effective selection")
+    {
+      REQUIRE(controller.markedIds().empty());
+      REQUIRE_FALSE(controller.isVisualSelectionActive());
+    }
+
+    SECTION("independent marks survive the boundary")
+    {
+      controller.setSelectedTrackIndex(0);
+      controller.toggleFocusedMark();
+      controller.setSelectedTrackIndex(selectedIndex);
+      REQUIRE(controller.markedIds().size() == 1);
+    }
+
+    SECTION("an active visual range survives the boundary")
+    {
+      controller.setSelectedTrackIndex(selectedIndex - 1);
+      controller.toggleVisualSelection();
+      controller.setSelectedTrackIndex(selectedIndex);
+      REQUIRE(controller.isVisualSelectionActive());
+      REQUIRE(controller.selectedTrackIds().size() == 2);
+    }
+
+    auto const marksBefore = controller.markedIds();
+    auto const selectionBefore = controller.selectedTrackIds();
+    auto const visualBefore = controller.isVisualSelectionActive();
+    auto const publishedBefore = fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection;
+    REQUIRE(publishedBefore == selectionBefore);
+
+    for (std::int32_t attempt = 0; attempt < 2; ++attempt)
+    {
+      CAPTURE(attempt);
+      CHECK(controller.jumpToAdjacentSection(delta) == (delta < 0 ? "Section: Album A" : "Section: Album B"));
+      CHECK(controller.selectedTrack() == selectedIndex);
+      REQUIRE(controller.selectedTrackView().track != nullptr);
+      CHECK(controller.selectedTrackView().track->id == expectedId);
+      CHECK(controller.markedIds() == marksBefore);
+      CHECK(controller.selectedTrackIds() == selectionBefore);
+      CHECK(controller.isVisualSelectionActive() == visualBefore);
+      CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection == publishedBefore);
+    }
+  }
+
+  TEST_CASE("LibraryController - single-section jumps preserve an interior row", "[tui][unit][library]")
+  {
+    auto const delta = GENERATE(-1, 1);
+    CAPTURE(delta);
+    auto fixture = LibraryControllerFixture{};
+    fixture.addTrack(library::test::TrackSpec{.title = "One", .album = "Only Album", .albumArtist = "Artist"});
+    auto const secondId =
+      fixture.addTrack(library::test::TrackSpec{.title = "Two", .album = "Only Album", .albumArtist = "Artist"});
+    auto controller = fixture.makeController();
+    REQUIRE(controller.setPresentation("albums") == "View: albums");
+    REQUIRE(controller.sections().size() == 1);
+    REQUIRE(controller.sections()[0].rowCount == 2);
+    controller.setSelectedTrackIndex(1);
+    REQUIRE(controller.selectedTrackView().track != nullptr);
+    REQUIRE(controller.selectedTrackView().track->id == secondId);
+    REQUIRE(controller.jumpToAdjacentSection(delta) == "Section: Only Album");
+    CHECK(controller.selectedTrack() == 1);
+    CHECK(controller.selectedTrackIds() == std::vector<TrackId>{secondId});
+    CHECK(fixture.runtimePtr->views().trackListState(controller.activeViewId()).selection ==
+          std::vector<TrackId>{secondId});
   }
 
   TEST_CASE("LibraryController - section selection reports empty and invalid states", "[tui][unit][library]")

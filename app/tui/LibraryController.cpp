@@ -452,6 +452,12 @@ namespace ao::tui
       return optPreviousSection.value_or(optNextSection.value_or(0));
     }();
 
+    if (optContainingSection && nextSection == *optContainingSection)
+    {
+      auto const& section = _sections[static_cast<std::size_t>(nextSection)];
+      return librarySection(_textCatalog, trackSectionDisplayName(_textCatalog, section));
+    }
+
     return selectSection(nextSection);
   }
 
