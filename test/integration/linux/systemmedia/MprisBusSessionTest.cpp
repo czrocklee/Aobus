@@ -738,25 +738,21 @@ namespace ao::systemmedia::test
       executor, bus.address(), kBusName, false, testNodeInfo(), pingOutputs(state, executor));
     awaitAcquisition(state, executor);
     REQUIRE(state.acquiredConnectionPtr);
+    // NameLost precedes the ReleaseName reply, so retirement may close this
+    // connection before that reply arrives. The NameLost output below proves
+    // release succeeded without awaiting a reply on the retiring connection.
+    auto const releaseMessagePtr = utility::makeUniquePtr<::g_object_unref>(::g_dbus_message_new_method_call(
+      "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ReleaseName"));
+    REQUIRE(releaseMessagePtr);
+    ::g_dbus_message_set_body(releaseMessagePtr.get(), ::g_variant_new("(s)", state.acquiredName.c_str()));
+    ::g_dbus_message_set_flags(releaseMessagePtr.get(), G_DBUS_MESSAGE_FLAGS_NO_REPLY_EXPECTED);
     ::GError* error = nullptr;
-    auto const replyPtr = utility::makeUniquePtr<::g_variant_unref>(
-      ::g_dbus_connection_call_sync(state.acquiredConnectionPtr->gobj(),
-                                    "org.freedesktop.DBus",
-                                    "/org/freedesktop/DBus",
-                                    "org.freedesktop.DBus",
-                                    "ReleaseName",
-                                    ::g_variant_new("(s)", state.acquiredName.c_str()),
-                                    G_VARIANT_TYPE("(u)"),
-                                    G_DBUS_CALL_FLAGS_NONE,
-                                    2000,
-                                    nullptr,
-                                    &error));
+    auto const sent = ::g_dbus_connection_send_message(
+      state.acquiredConnectionPtr->gobj(), releaseMessagePtr.get(), G_DBUS_SEND_MESSAGE_FLAGS_NONE, nullptr, &error);
     auto const errorPtr = utility::makeUniquePtr<::g_error_free>(error);
-    REQUIRE(replyPtr);
+    INFO((errorPtr ? errorPtr->message : "ReleaseName send returned no GError"));
+    REQUIRE(sent != 0);
     REQUIRE(error == nullptr);
-    ::guint32 result = 0;
-    ::g_variant_get(replyPtr.get(), "(u)", &result);
-    REQUIRE(result == 1);
     REQUIRE(executor.tryDrainUntil([&state] { return !state.unavailableMessage.empty(); }));
     CHECK(state.unavailableMessage == "Lost MPRIS bus name " + state.acquiredName);
 
