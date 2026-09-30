@@ -998,16 +998,16 @@ namespace ao::systemmedia::test
     state.nowPlaying.trackId = TrackId{1};
     state.occurrenceId = rt::PlaybackOccurrenceId{.value = 1};
 
-    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional{false});
+    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional<bool>{false});
     state.duration = std::chrono::milliseconds{-1};
-    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional{false});
+    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional<bool>{false});
     state.duration = std::chrono::seconds{1};
-    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional{true});
+    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional<bool>{true});
     state.occurrenceId = {};
-    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional{false});
+    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional<bool>{false});
     state.occurrenceId = rt::PlaybackOccurrenceId{.value = 1};
     state.nowPlaying.trackId = kInvalidTrackId;
-    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional{false});
+    CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional<bool>{false});
   }
 
   TEST_CASE("MprisPlaybackEndpoint - volume setter delegates to playback service normalization",

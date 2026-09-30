@@ -19,7 +19,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSessionYamlSchema - repeated YAML round trips preserve unity and near-unity volume exactly",
             "[runtime][unit][playback-session]")
   {
-    for (float const volume : std::array{1.0F, std::nextafter(1.0F, 0.0F), 0.999F})
+    for (float const volume : std::to_array<float>({1.0F, std::nextafter(1.0F, 0.0F), 0.999F}))
     {
       auto state =
         PlaybackSessionState{.sourceListId = ListId{1}, .currentTrackId = TrackId{42}, .volume = volume, .muted = true};

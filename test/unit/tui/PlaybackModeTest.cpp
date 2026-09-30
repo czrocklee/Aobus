@@ -185,7 +185,8 @@ namespace ao::tui::test
   {
     auto const catalog = ao::test::messageCatalog("de");
 
-    for (auto const& [width, mutedLabel] : std::array{std::pair{48, "Stummgescha…"}, std::pair{140, "Stummgeschaltet"}})
+    for (auto const& [width, mutedLabel] : std::array{
+           std::pair<int, char const*>{48, "Stummgescha…"}, std::pair<int, char const*>{140, "Stummgeschaltet"}})
     {
       CAPTURE(width);
       auto state = rt::PlaybackTransportSnapshot{.nowPlaying = {.title = "Sample song"}};

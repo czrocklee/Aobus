@@ -234,7 +234,7 @@ namespace ao::audio::backend::detail::test
            AlsaMixerLevelRange{.min = std::numeric_limits<long>::max() - 2L, .max = std::numeric_limits<long>::max()},
            AlsaMixerLevelRange{.min = std::numeric_limits<long>::min(), .max = std::numeric_limits<long>::min() + 2L}})
     {
-      for (bool const decibels : std::array{false, true})
+      for (bool const decibels : std::to_array<bool>({false, true}))
       {
         CAPTURE(range.min, range.max, decibels);
         auto fixture = MixerFixture{};
@@ -574,7 +574,7 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("AlsaMixerSession - mute publication refreshes external switches without writing them",
             "[audio][unit][alsa-mixer]")
   {
-    for (bool const initiallyMuted : std::array{false, true})
+    for (bool const initiallyMuted : std::to_array<bool>({false, true}))
     {
       CAPTURE(initiallyMuted);
       auto fixture = MixerFixture{};

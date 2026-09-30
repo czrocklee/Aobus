@@ -45,6 +45,6 @@ namespace ao::audio::test
   std::vector<std::uint8_t> readFileBytes(std::filesystem::path const& path)
   {
     auto ifs = std::ifstream{path, std::ios::binary};
-    return {std::istreambuf_iterator{ifs}, std::istreambuf_iterator<char>{}};
+    return {std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
   }
 } // namespace ao::audio::test

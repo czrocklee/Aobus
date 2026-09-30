@@ -310,7 +310,7 @@ namespace ao::audio::test
     auto endedLatch = CallbackLatch{};
     auto routeEntered = CallbackLatch{};
     auto releaseRoute = std::binary_semaphore{0};
-    auto parkOnce = std::atomic{true};
+    auto parkOnce = std::atomic<bool>{true};
 
     auto engine =
       Engine{std::move(backendPtr),
@@ -457,7 +457,7 @@ namespace ao::audio::test
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const data = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
-    auto decoderFactoryCallCount = std::atomic{std::size_t{0}};
+    auto decoderFactoryCallCount = std::atomic<std::size_t>{0};
     auto engine = Engine{std::move(backendPtr),
                          device,
                          [&](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
@@ -867,8 +867,8 @@ namespace ao::audio::test
     auto engine = Engine{std::move(backendPtr),
                          makeEngineTestDevice(),
                          makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate)};
-    auto failureCount = std::atomic{std::size_t{0}};
-    auto endedCount = std::atomic{std::size_t{0}};
+    auto failureCount = std::atomic<std::size_t>{0};
+    auto endedCount = std::atomic<std::size_t>{0};
     engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const&)
                                 { failureCount.fetch_add(1, std::memory_order_relaxed); });
     engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedCount.fetch_add(1, std::memory_order_relaxed); });
@@ -959,7 +959,7 @@ namespace ao::audio::test
                            {.path = "explicit.flac", .info = makeScriptedStreamInfo(format), .data = explicitData},
                          })};
     auto releaseGuard = WorkerReleaseGuard{workerRelease};
-    auto advancedCount = std::atomic{std::size_t{0}};
+    auto advancedCount = std::atomic<std::size_t>{0};
     engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&)
                               { advancedCount.fetch_add(1, std::memory_order_relaxed); });
 

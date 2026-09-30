@@ -126,6 +126,6 @@ namespace ao::test
   std::string readFile(std::filesystem::path const& path)
   {
     auto input = std::ifstream{path, std::ios::binary};
-    return {std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
+    return {std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
   }
 } // namespace ao::test

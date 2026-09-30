@@ -1247,7 +1247,7 @@ namespace ao::rt::test
         }
 
         auto const end = std::chrono::steady_clock::now();
-        return std::pair{
+        return std::pair<std::chrono::microseconds, std::size_t>{
           std::chrono::duration_cast<std::chrono::microseconds>(end - start),
           matches,
         };

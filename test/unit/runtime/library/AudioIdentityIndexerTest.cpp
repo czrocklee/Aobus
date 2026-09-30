@@ -306,7 +306,7 @@ namespace ao::rt::test
     constexpr std::size_t kTrackCount = 257;
     addPendingManifestRows(ml, kTrackCount);
 
-    auto fingerprintCount = std::atomic{std::size_t{0}};
+    auto fingerprintCount = std::atomic<std::size_t>{0};
     auto options = AudioIdentityIndexer::Options{
       .maxConcurrency = 4,
       .fingerprint = [&fingerprintCount](std::filesystem::path const&,
@@ -381,7 +381,7 @@ namespace ao::rt::test
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
 
     auto mutationMutex = std::mutex{};
-    auto lockWasFreeDuringFingerprint = std::atomic{false};
+    auto lockWasFreeDuringFingerprint = std::atomic<bool>{false};
     auto options =
       AudioIdentityIndexer::Options{.fingerprint = [&mutationMutex, &lockWasFreeDuringFingerprint](
                                                      std::filesystem::path const&,

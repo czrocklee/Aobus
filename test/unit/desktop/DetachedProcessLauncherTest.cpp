@@ -71,7 +71,7 @@ namespace ao::desktop::test
     decltype(::write(gateDescriptor, nullptr, 0)) gateWriteSize = -1;
     auto releaseChild = utility::ScopedRegistration{[&] noexcept
                                                     {
-                                                      auto const gateByte = std::array{'g'};
+                                                      auto const gateByte = std::to_array<char>({'g'});
 
                                                       for (;;)
                                                       {

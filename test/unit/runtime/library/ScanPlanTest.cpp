@@ -457,8 +457,9 @@ namespace ao::rt::test
     auto const retaggedFile = musicRoot / "retagged.flac";
     writeBinaryFile(retaggedFile, createRetaggableFlac("Retagged Title", audioPayload));
 
-    auto const identity = AudioIdentity{.payloadLength = static_cast<std::uint64_t>(audioPayload.size()),
-                                        .signature = utility::xxh3Hash128(std::as_bytes(std::span{audioPayload}))};
+    auto const identity =
+      AudioIdentity{.payloadLength = static_cast<std::uint64_t>(audioPayload.size()),
+                    .signature = utility::xxh3Hash128(std::as_bytes(std::span<std::uint8_t const>{audioPayload}))};
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     auto const trackId = putManifestEntry(ml, "old-title.flac", identity);

@@ -350,7 +350,7 @@ namespace ao::audio
 
         auto const offset = static_cast<std::size_t>(dropped) * channels;
         auto const count = static_cast<std::size_t>(usable) * channels;
-        auto const nativeBytes = std::as_bytes(std::span{_implPtr->pcmBuffer}.subspan(offset, count));
+        auto const nativeBytes = std::as_bytes(std::span<opus_int16 const>{_implPtr->pcmBuffer}.subspan(offset, count));
         auto convertedRes = _implPtr->outputAdapter.convert(nativeBytes);
 
         if (!convertedRes)

@@ -29,7 +29,7 @@ namespace ao::audio::backend::test
   TEST_CASE("WasapiProvider - shared-mode wiring retires on repeated shutdown without a render endpoint",
             "[audio][unit][wasapi][provider][concurrency]")
   {
-    auto deviceSnapshotCount = std::atomic{std::size_t{0}};
+    auto deviceSnapshotCount = std::atomic<std::size_t>{0};
     auto provider = WasapiProvider{};
     auto const status = provider.status();
 
@@ -161,7 +161,7 @@ namespace ao::audio::backend::test
 
     auto const callerThread = std::this_thread::get_id();
     auto callbackThread = std::thread::id{};
-    auto callbackCount = std::atomic{std::size_t{0}};
+    auto callbackCount = std::atomic<std::size_t>{0};
     auto providerPtr = std::make_unique<WasapiProvider>(hooksPtr);
     auto sub = providerPtr->subscribeDevices(
       [&](std::vector<Device> const&)
@@ -234,9 +234,9 @@ namespace ao::audio::backend::test
     { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };
     hooksPtr->onRefreshComplete = [&] { refreshCompleted.release(); };
     auto provider = WasapiProvider{hooksPtr};
-    auto cancelSecond = std::atomic{false};
-    auto firstCalls = std::atomic{std::size_t{0}};
-    auto secondCalls = std::atomic{std::size_t{0}};
+    auto cancelSecond = std::atomic<bool>{false};
+    auto firstCalls = std::atomic<std::size_t>{0};
+    auto secondCalls = std::atomic<std::size_t>{0};
     auto secondSub = utility::ScopedRegistration{};
     auto firstSub = provider.subscribeDevices(
       [&](std::vector<Device> const&)
@@ -349,7 +349,7 @@ namespace ao::audio::backend::test
     hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     auto provider = WasapiProvider{hooksPtr};
-    auto callbackCount = std::atomic{std::size_t{0}};
+    auto callbackCount = std::atomic<std::size_t>{0};
     auto sub = provider.subscribeDevices(
       [&](std::vector<Device> const&)
       {
@@ -446,7 +446,7 @@ namespace ao::audio::backend::test
     auto monitorExited = std::binary_semaphore{0};
     auto startSubscription = std::binary_semaphore{0};
     auto subscriptionAttempted = std::binary_semaphore{0};
-    auto racedCalls = std::atomic{std::size_t{0}};
+    auto racedCalls = std::atomic<std::size_t>{0};
     auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
     hooksPtr->enumerateDevices = []
     { return std::vector<Device>{{.id = DeviceId{"synthetic-endpoint"}, .backendId = kBackendWasapi}}; };

@@ -95,10 +95,10 @@ namespace ao::audio::test
   TEST_CASE("Engine - controls refresh volume capability while preserving valid intent",
             "[audio][unit][engine][property]")
   {
-    for (auto const& [propertyId, controlFails] : std::array{std::pair{PropertyId::Volume, false},
-                                                             std::pair{PropertyId::Volume, true},
-                                                             std::pair{PropertyId::Muted, false},
-                                                             std::pair{PropertyId::Muted, true}})
+    for (auto const& [propertyId, controlFails] : std::array{std::pair<PropertyId, bool>{PropertyId::Volume, false},
+                                                             std::pair<PropertyId, bool>{PropertyId::Volume, true},
+                                                             std::pair<PropertyId, bool>{PropertyId::Muted, false},
+                                                             std::pair<PropertyId, bool>{PropertyId::Muted, true}})
     {
       CAPTURE(propertyId, controlFails);
       auto spy = SpyBackend<>{};

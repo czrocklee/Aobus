@@ -1003,7 +1003,7 @@ namespace ao::cli
         auto const optFilter =
           updateFilter->count() > 0 ? std::optional{updateFilter->as<std::string>()} : std::nullopt;
         auto const optParent =
-          updateParent->count() > 0 ? std::optional{updateParent->as<std::uint32_t>()} : std::nullopt;
+          updateParent->count() > 0 ? std::optional<std::uint32_t>{updateParent->as<std::uint32_t>()} : std::nullopt;
         updateList(cli,
                    ListId{updateId->as<std::uint32_t>()},
                    optName,
@@ -1049,7 +1049,7 @@ namespace ao::cli
       [&cli, moveListId, moveTrackIdsPtr, beforeTrackId]
       {
         auto const optBeforeTrackId =
-          beforeTrackId->count() > 0 ? std::optional{beforeTrackId->as<std::uint32_t>()} : std::nullopt;
+          beforeTrackId->count() > 0 ? std::optional<std::uint32_t>{beforeTrackId->as<std::uint32_t>()} : std::nullopt;
         moveListOrder(cli, ListId{moveListId->as<std::uint32_t>()}, *moveTrackIdsPtr, optBeforeTrackId);
       });
 

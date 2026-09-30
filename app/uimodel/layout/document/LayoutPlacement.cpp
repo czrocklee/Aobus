@@ -41,7 +41,7 @@ namespace ao::uimodel
       }
 
       auto const value = it->second.asDouble();
-      return value < 0.0 ? std::nullopt : std::optional{value};
+      return value < 0.0 ? std::nullopt : std::optional<double>{value};
     }
 
     bool hasNumber(LayoutValueMap const& layout, std::string_view const name)

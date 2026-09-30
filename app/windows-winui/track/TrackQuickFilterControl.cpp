@@ -366,7 +366,7 @@ namespace ao::winui
     }
 
     auto const index = static_cast<std::size_t>(property.GetUInt32());
-    return index < _suggestionRows.size() ? std::optional{index} : std::nullopt;
+    return index < _suggestionRows.size() ? std::optional<std::size_t>{index} : std::nullopt;
   }
 
   bool TrackQuickFilterControl::tryAcceptSuggestion(std::size_t const index)

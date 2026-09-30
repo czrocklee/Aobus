@@ -67,7 +67,7 @@ namespace ao::media::file::mpeg
         totalSize += kId3v2FooterSize;
       }
 
-      return totalSize <= bytes.size() ? std::optional{totalSize} : std::nullopt;
+      return totalSize <= bytes.size() ? std::optional<std::size_t>{totalSize} : std::nullopt;
     }
 
     bool hasId3v1Tag(std::span<std::byte const> bytes, std::size_t endOffset) noexcept
@@ -236,24 +236,24 @@ namespace ao::media::file::mpeg
 
   Result<detail::Content> File::readContent() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
     auto builder = detail::ContentBuilder::makeEmpty();
 
-    if (indexResult->id3Header != nullptr)
+    if (indexRes->id3Header != nullptr)
     {
-      if (auto optTagBuilder = id3v2::readFrames(*indexResult->id3Header, indexResult->id3Body); optTagBuilder)
+      if (auto optTagBuilder = id3v2::readFrames(*indexRes->id3Header, indexRes->id3Body); optTagBuilder)
       {
         builder = std::move(*optTagBuilder);
       }
     }
 
-    auto const& frame = indexResult->firstFrame;
+    auto const& frame = indexRes->firstFrame;
     auto bitrate = frame.bitrate();
     builder.property()
       .sampleRate(SampleRate{frame.sampleRate()})
@@ -262,7 +262,7 @@ namespace ao::media::file::mpeg
       .bitDepth(BitDepth{16})
       .codec(AudioCodec::Mp3);
 
-    auto const duration = calculateDuration(frame, indexResult->payload.bytes.size());
+    auto const duration = calculateDuration(frame, indexRes->payload.bytes.size());
     builder.property().duration(duration);
 
     if (auto const optXing = frame.xingInfo(); optXing && optXing->bytes > 0 && duration > std::chrono::milliseconds{0})
@@ -276,13 +276,13 @@ namespace ao::media::file::mpeg
 
   Result<PayloadView> File::audioPayload() const
   {
-    auto const& indexResult = index();
+    auto const& indexRes = index();
 
-    if (!indexResult)
+    if (!indexRes)
     {
-      return std::unexpected{indexResult.error()};
+      return std::unexpected{indexRes.error()};
     }
 
-    return indexResult->payload;
+    return indexRes->payload;
   }
 } // namespace ao::media::file::mpeg

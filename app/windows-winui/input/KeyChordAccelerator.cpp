@@ -79,7 +79,7 @@ namespace ao::winui
       // MSVC's STL, so spelling it as a pointer does not compile on Windows.
       // NOLINTNEXTLINE(readability-qualified-auto)
       auto const it = std::ranges::find(kNamedKeys, token, &std::pair<std::string_view, std::uint32_t>::first);
-      return it == kNamedKeys.end() ? std::nullopt : std::optional{it->second};
+      return it == kNamedKeys.end() ? std::nullopt : std::optional<std::uint32_t>{it->second};
     }
 
     std::optional<std::uint32_t> functionKey(std::string_view const token)

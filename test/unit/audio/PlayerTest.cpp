@@ -900,7 +900,7 @@ namespace ao::audio::test
     }
     REQUIRE(target != nullptr);
 
-    auto teardownRequested = std::atomic{false};
+    auto teardownRequested = std::atomic<bool>{false};
     playerPtr->setOnStateChanged(
       [&teardownRequested, callbackLifetimePtr]
       {
@@ -932,7 +932,7 @@ namespace ao::audio::test
     auto probePtr = std::make_shared<SynchronousGraphProbe>();
     auto executor = QueuedExecutor{};
     auto playerPtr = std::make_unique<Player>(executor);
-    auto routeSettledSignaled = std::atomic{false};
+    auto routeSettledSignaled = std::atomic<bool>{false};
     playerPtr->setOnQualityChanged(
       [&](QualityResult const&, bool)
       {
@@ -949,7 +949,7 @@ namespace ao::audio::test
       [&] { return probePtr->subscriptionCount() >= 1 && routeSettledSignaled.load(std::memory_order_acquire); },
       std::chrono::seconds{5}));
 
-    auto teardownRequested = std::atomic{false};
+    auto teardownRequested = std::atomic<bool>{false};
     playerPtr->setOnQualityChanged([&](QualityResult const&, bool)
                                    { teardownRequested.store(true, std::memory_order_release); });
 

@@ -41,7 +41,7 @@ namespace ao::audio::test
     auto workerFlushed = std::binary_semaphore{0};
     auto failures = std::vector<Engine::PlaybackFailure>{};
     auto endings = std::vector<Engine::TrackEnded>{};
-    auto seekCount = std::atomic{std::size_t{0}};
+    auto seekCount = std::atomic<std::size_t>{0};
     auto registryPtr = std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>();
     auto const format = makeEngineTestFormat();
     auto const failedData = std::vector<std::byte>(4096, std::byte{0x11});

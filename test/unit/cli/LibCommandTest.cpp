@@ -320,12 +320,12 @@ namespace ao::cli::test
 
     auto in = std::ifstream{outputPath, std::ios::binary};
     REQUIRE(in);
-    auto const exported = std::vector<char>{std::istreambuf_iterator{in}, std::istreambuf_iterator<char>{}};
+    auto const exported = std::vector<char>{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
     CHECK(std::to_string(exported.size()) == sizeText);
 
     // Those bytes are the resource because they hash to the digest the row
     // names, which the dump prints.
-    auto const digest = utility::computeSha256(std::as_bytes(std::span{exported}));
+    auto const digest = utility::computeSha256(std::as_bytes(std::span<char const>{exported}));
     result = fixture.run({"lib", "dump", "--resources"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, utility::sha256Hex(digest)));

@@ -86,7 +86,7 @@ namespace ao::rt::test
     REQUIRE(fixture.executor.tryRunOne());
     CHECK(fixture.deadline.isRestartAvailable());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
-    CHECK(fixture.availabilityEvents == std::vector{true});
+    CHECK(fixture.availabilityEvents == std::vector<bool>{true});
   }
 
   TEST_CASE("PlaybackRestartDeadline - cancellation suppresses a queued callback from an older deadline",
@@ -114,7 +114,7 @@ namespace ao::rt::test
     REQUIRE(fixture.executor.tryRunOne());
     CHECK(fixture.liveElapsedReadCount == 1);
     CHECK(fixture.deadline.isRestartAvailable());
-    CHECK(fixture.availabilityEvents == std::vector{true});
+    CHECK(fixture.availabilityEvents == std::vector<bool>{true});
   }
 
   TEST_CASE("PlaybackRestartDeadline - destruction cancels a callback already queued for delivery",
@@ -167,7 +167,7 @@ namespace ao::rt::test
 
     deadlinePtr->start(Elapsed{3001});
 
-    CHECK(availabilityEvents == std::vector{true, false});
+    CHECK(availabilityEvents == std::vector<bool>{true, false});
     CHECK_FALSE(deadlinePtr->isRestartAvailable());
     CHECK(deadlinePtr->hasScheduledDeadline());
     REQUIRE(scheduler.tryWaitForCallCount(1));
@@ -200,14 +200,14 @@ namespace ao::rt::test
     CHECK(fixture.scheduler.call(1).cancelled);
     CHECK(fixture.deadline.isRestartAvailable());
     CHECK_FALSE(fixture.deadline.hasScheduledDeadline());
-    CHECK(fixture.availabilityEvents == std::vector{true});
+    CHECK(fixture.availabilityEvents == std::vector<bool>{true});
 
     fixture.deadline.seek(Elapsed{3000});
     CHECK_FALSE(fixture.deadline.isRestartAvailable());
     CHECK(fixture.deadline.hasScheduledDeadline());
     REQUIRE(fixture.scheduler.tryWaitForCallCount(3));
     CHECK(fixture.scheduler.call(2).delay == Elapsed{1});
-    CHECK(fixture.availabilityEvents == std::vector{true, false});
+    CHECK(fixture.availabilityEvents == std::vector<bool>{true, false});
   }
 
   TEST_CASE("PlaybackRestartDeadline - current and session replacement cancel obsolete schedules",

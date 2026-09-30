@@ -58,7 +58,7 @@ namespace ao::rt::test
     std::string readFileText(std::filesystem::path const& path)
     {
       auto stream = std::ifstream{path, std::ios::binary};
-      return std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+      return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
 
     void writeFileText(std::filesystem::path const& path, std::string_view const text)

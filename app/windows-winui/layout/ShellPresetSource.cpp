@@ -70,7 +70,7 @@ namespace ao::winui::layout
           "The shipped shell document '{}' is missing from {}", resource, utility::pathToUtf8(path.parent_path())));
     }
 
-    auto yaml = std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+    auto yaml = std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
 
     if (stream.bad())
     {

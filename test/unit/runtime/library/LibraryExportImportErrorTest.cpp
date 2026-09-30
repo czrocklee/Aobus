@@ -41,7 +41,7 @@ namespace ao::rt::test
     std::string readAll(std::filesystem::path const& path)
     {
       auto ifs = std::ifstream{path, std::ios::binary};
-      auto const begin = std::istreambuf_iterator{ifs};
+      auto const begin = std::istreambuf_iterator<char>{ifs};
       return std::string{begin, decltype(begin){}};
     }
   } // namespace

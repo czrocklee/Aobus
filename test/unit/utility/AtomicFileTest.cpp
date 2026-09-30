@@ -314,7 +314,7 @@ namespace ao::utility::test
     REQUIRE(std::filesystem::exists(targetPath));
 
     auto in = std::ifstream{targetPath};
-    auto const content = std::string{std::istreambuf_iterator{in}, std::istreambuf_iterator<char>{}};
+    auto const content = std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
     CHECK(content == "version: 1\n");
 
     CHECK(ao::test::hasPrivateManagedFileAccess(targetPath));
@@ -342,7 +342,7 @@ namespace ao::utility::test
     CHECK(writeAtomically(targetPath, "new").has_value());
 
     auto in = std::ifstream{targetPath};
-    auto const content = std::string{std::istreambuf_iterator{in}, std::istreambuf_iterator<char>{}};
+    auto const content = std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
     CHECK(content == "new");
   }
 
@@ -421,7 +421,7 @@ namespace ao::utility::test
     REQUIRE(res);
 
     auto input = std::ifstream{extendedWindowsPath(targetPath), std::ios::binary};
-    auto const content = std::string{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
+    auto const content = std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     CHECK(content == "long path content");
     input.close();
 
@@ -459,7 +459,7 @@ namespace ao::utility::test
     for (std::size_t index = 0; index < kWriterCount; ++index)
     {
       auto input = std::ifstream{targets[index], std::ios::binary};
-      auto const content = std::string{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
+      auto const content = std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
       CHECK(content == contents[index]);
     }
 

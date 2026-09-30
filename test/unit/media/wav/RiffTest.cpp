@@ -21,7 +21,7 @@ namespace ao::media::wav::test
   {
     std::span<std::byte const> asBytes(std::vector<std::uint8_t> const& bytes) noexcept
     {
-      return utility::bytes::view(std::span{bytes});
+      return utility::bytes::view(std::span<std::uint8_t const>{bytes});
     }
   } // namespace
 

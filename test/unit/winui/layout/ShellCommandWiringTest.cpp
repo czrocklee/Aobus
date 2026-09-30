@@ -24,7 +24,7 @@ namespace ao::winui::layout::test
     {
       auto stream = std::ifstream{path, std::ios::binary};
       REQUIRE(stream.is_open());
-      return std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+      return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
 
     // Ignore commented-out wiring and formatting, not arbitrary C++ syntax;

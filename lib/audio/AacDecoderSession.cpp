@@ -96,7 +96,7 @@ namespace ao::audio
       auto const configRes = [&]
       {
         auto configData = std::array{inputBuffer.data()};
-        auto configSize = std::array{static_cast<UINT>(inputBuffer.size())};
+        auto configSize = std::to_array<UINT>({static_cast<UINT>(inputBuffer.size())});
         return ::aacDecoder_ConfigRaw(decoder, configData.data(), configSize.data());
       }();
 
@@ -255,7 +255,7 @@ namespace ao::audio
       auto const fillRes = [&]
       {
         auto inputData = std::array{_implPtr->inputBuffer.data()};
-        auto inputSize = std::array{static_cast<UINT>(_implPtr->inputBuffer.size())};
+        auto inputSize = std::to_array<UINT>({static_cast<UINT>(_implPtr->inputBuffer.size())});
         return ::aacDecoder_Fill(_implPtr->decoder, inputData.data(), inputSize.data(), &bytesValid);
       }();
 
@@ -326,7 +326,7 @@ namespace ao::audio
       _implPtr->pcmBuffer.resize(samples);
       _implPtr->packetSource.advance();
 
-      auto const nativeBytes = std::as_bytes(std::span{_implPtr->pcmBuffer});
+      auto const nativeBytes = std::as_bytes(std::span<INT_PCM const>{_implPtr->pcmBuffer});
       auto convertedRes = _implPtr->outputAdapter.convert(nativeBytes);
 
       if (!convertedRes)

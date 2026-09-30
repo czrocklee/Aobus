@@ -307,11 +307,11 @@ namespace ao::rt::test
     }
 
     for (auto const& [backendLevel, expectedLevel] :
-         std::array{std::pair{0.42F, 0.42F},
-                    std::pair{-0.5F, 0.0F},
-                    std::pair{1.5F, 1.0F},
-                    std::pair{std::numeric_limits<float>::quiet_NaN(), 1.0F},
-                    std::pair{std::numeric_limits<float>::infinity(), 1.0F}})
+         std::array{std::pair<float, float>{0.42F, 0.42F},
+                    std::pair<float, float>{-0.5F, 0.0F},
+                    std::pair<float, float>{1.5F, 1.0F},
+                    std::pair<float, float>{std::numeric_limits<float>::quiet_NaN(), 1.0F},
+                    std::pair<float, float>{std::numeric_limits<float>::infinity(), 1.0F}})
     {
       CAPTURE(backendLevel, muted);
       auto fixture = PlaybackTransportFixture<InlineExecutor>{};

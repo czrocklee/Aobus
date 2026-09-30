@@ -57,7 +57,7 @@ namespace ao::audio::test
         std::int64_t granulePosition = 0;
       };
 
-      auto demuxerRes = media::ogg::Demuxer::parse(std::as_bytes(std::span{fileBytes}));
+      auto demuxerRes = media::ogg::Demuxer::parse(std::as_bytes(std::span<std::uint8_t const>{fileBytes}));
       REQUIRE(demuxerRes);
       auto const& demuxer = *demuxerRes;
       auto pages = std::vector<PageGranule>{};
@@ -79,7 +79,7 @@ namespace ao::audio::test
       }
 
       REQUIRE_FALSE(pages.empty());
-      auto bytes = std::as_writable_bytes(std::span{fileBytes});
+      auto bytes = std::as_writable_bytes(std::span<std::uint8_t>{fileBytes});
 
       for (auto const& page : pages)
       {
@@ -91,7 +91,7 @@ namespace ao::audio::test
     std::vector<std::uint8_t> makeZeroFrameStream()
     {
       auto const source = readFileBytes(requireAudioFixture("basic_metadata.opus"));
-      auto const demuxerRes = media::ogg::Demuxer::parse(std::as_bytes(std::span{source}));
+      auto const demuxerRes = media::ogg::Demuxer::parse(std::as_bytes(std::span<std::uint8_t const>{source}));
       REQUIRE(demuxerRes);
       REQUIRE(demuxerRes->packetCount() > media::opus::kFirstAudioPacketIndex);
 

@@ -40,7 +40,7 @@ namespace ao::media::file::mp4::test
       layout.type = 1;
 
       auto const* ptr = reinterpret_cast<std::uint8_t const*>(&layout);
-      auto atom = std::vector(ptr, ptr + sizeof(layout));
+      auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(layout));
       atom.insert(atom.end(), text.begin(), text.end());
       return atom;
     }
@@ -58,7 +58,7 @@ namespace ao::media::file::mp4::test
       layout.type = (static_cast<std::uint32_t>(version) << 24U) | dataType;
 
       auto const* ptr = reinterpret_cast<std::uint8_t const*>(&layout);
-      auto atom = std::vector(ptr, ptr + sizeof(layout));
+      auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(layout));
       atom.insert(atom.end(), payload.begin(), payload.end());
       return atom;
     }
@@ -188,7 +188,7 @@ namespace ao::media::file::mp4::test
         trkn.trackTotal = 10;
 
         auto const* ptr = reinterpret_cast<std::uint8_t const*>(&trkn);
-        auto atom = std::vector(ptr, ptr + sizeof(trkn));
+        auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(trkn));
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       }
 
@@ -203,7 +203,7 @@ namespace ao::media::file::mp4::test
         disk.discTotal = 5;
 
         auto const* ptr = reinterpret_cast<std::uint8_t const*>(&disk);
-        auto atom = std::vector(ptr, ptr + sizeof(disk));
+        auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(disk));
         ilstBody.insert(ilstBody.end(), atom.begin(), atom.end());
       }
 
@@ -313,7 +313,7 @@ namespace ao::media::file::mp4::test
 
       if (optBaseline)
       {
-        ilstChildren = makeIntegerMetadataAtom(atomType, std::array{*optBaseline});
+        ilstChildren = makeIntegerMetadataAtom(atomType, std::to_array<std::uint8_t>({*optBaseline}));
       }
 
       auto const candidate = makeIntegerMetadataAtom(atomType, payload, dataType, version);

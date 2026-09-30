@@ -20,8 +20,8 @@ namespace ao::audio::backend::detail::test
     auto fence = CallbackFence{};
     auto entered = std::binary_semaphore{0};
     auto release = std::binary_semaphore{0};
-    auto closeReturned = std::atomic{false};
-    auto enteredFence = std::atomic{false};
+    auto closeReturned = std::atomic<bool>{false};
+    auto enteredFence = std::atomic<bool>{false};
     fence.open();
 
     auto callbackThread = std::jthread{};
