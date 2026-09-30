@@ -22,6 +22,7 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/pixel.hpp>
@@ -179,7 +180,7 @@ namespace ao::tui::test
     {
       auto const catalog = ao::test::messageCatalog(locale);
 
-      for (std::int32_t const columns : {140, 80, 48, 24})
+      for (std::int32_t const columns : {140, 80, 48, 40, 35, 24})
       {
         CAPTURE(locale, columns);
         auto shell = ShellInteractionModel{};
@@ -195,19 +196,27 @@ namespace ao::tui::test
 
         auto const suffixes = std::string{"tab[]"};
         std::size_t suffixIndex = 0;
+        std::int32_t previousEnd = -1;
+        REQUIRE_FALSE(hit.cancelBox.IsEmpty());
+        REQUIRE(hit.cancelBox.x_min >= 0);
+        REQUIRE(hit.cancelBox.x_max < columns);
+        REQUIRE(hit.cancelBox.x_max - hit.cancelBox.x_min + 1 >= 3);
+        CHECK(hit.cancelBox.x_max == columns - 1);
 
         for (auto const& row : hit.rows)
         {
           REQUIRE_FALSE(row.box.IsEmpty());
+          REQUIRE(row.box.x_min >= 0);
+          REQUIRE(row.box.x_max < columns);
+          CHECK(row.box.x_min > previousEnd);
+          CHECK(row.box.x_max < hit.cancelBox.x_min);
           CHECK(rendered.screen.PixelAt(row.box.x_min, row.box.y_min).character ==
                 std::string(1, suffixes[suffixIndex++]));
-          CHECK(row.box.x_min >= 0);
-          CHECK(row.box.x_max < columns);
           CHECK_FALSE(canActivateGoTo(hit.state, row.action));
+          previousEnd = row.box.x_max;
         }
 
         CHECK(rendered.text.contains("Esc"));
-        REQUIRE_FALSE(hit.cancelBox.IsEmpty());
         CHECK(rendered.screen.PixelAt(hit.cancelBox.x_min, hit.cancelBox.y_min).character == "E");
         CHECK(rendered.screen.PixelAt(hit.cancelBox.x_min + 1, hit.cancelBox.y_min).character == "s");
         CHECK(rendered.screen.PixelAt(hit.cancelBox.x_min + 2, hit.cancelBox.y_min).character == "c");
@@ -221,6 +230,124 @@ namespace ao::tui::test
         CHECK(hit.cancelBox.IsEmpty());
       }
     }
+  }
+
+  TEST_CASE("GoToMenu - constrained status hints paint only whole targets", "[tui][unit][goto]")
+  {
+    auto const [columns, expectedRows] = GENERATE(Catch::Generators::table<std::int32_t, std::size_t>({{1, 0},
+                                                                                                       {2, 0},
+                                                                                                       {3, 0},
+                                                                                                       {6, 0},
+                                                                                                       {7, 1},
+                                                                                                       {10, 1},
+                                                                                                       {11, 2},
+                                                                                                       {14, 2},
+                                                                                                       {15, 3},
+                                                                                                       {18, 3},
+                                                                                                       {19, 4},
+                                                                                                       {22, 4},
+                                                                                                       {23, 5}}));
+    auto const* locale = GENERATE("en", "zh-Hans", "ja", "de", "fr", "es", "zh-Hant");
+    CAPTURE(locale, columns);
+    auto shell = ShellInteractionModel{};
+    auto hit = GoToMenuHitRegions{};
+    shell.openOverlay(Overlay::GoTo);
+    auto const rendered = renderElement(statusBar(ao::test::messageCatalog(locale),
+                                                  {.terminalColumns = columns, .shell = &shell, .goToHitRegions = &hit},
+                                                  defaultKeymapPlan()),
+                                        columns,
+                                        1);
+    INFO(rendered.text);
+    REQUIRE(hit.rows.size() == expectedRows);
+
+    if (columns < 3)
+    {
+      CHECK(hit.cancelBox.IsEmpty());
+      CHECK(rendered.text.find_first_not_of(" \n\r") == std::string::npos);
+    }
+    else
+    {
+      REQUIRE_FALSE(hit.cancelBox.IsEmpty());
+      REQUIRE(hit.cancelBox.x_min >= 0);
+      REQUIRE(hit.cancelBox.x_max < columns);
+      CHECK(hit.cancelBox.x_max == columns - 1);
+      CHECK(hit.cancelBox.x_max - hit.cancelBox.x_min + 1 >= 3);
+      CHECK(rendered.screen.PixelAt(hit.cancelBox.x_min, 0).character == "E");
+      CHECK(rendered.screen.PixelAt(hit.cancelBox.x_min + 1, 0).character == "s");
+      CHECK(rendered.screen.PixelAt(hit.cancelBox.x_min + 2, 0).character == "c");
+      auto const suffixes = std::string{"tab[]"};
+      std::int32_t previousEnd = -1;
+      std::size_t suffixIndex = 0;
+
+      for (auto const& row : hit.rows)
+      {
+        REQUIRE_FALSE(row.box.IsEmpty());
+        REQUIRE(row.box.x_min >= 0);
+        REQUIRE(row.box.x_max < columns);
+        CHECK(row.box.x_min > previousEnd);
+        CHECK(row.box.x_max < hit.cancelBox.x_min);
+        CHECK(row.box.x_min == row.box.x_max);
+        CHECK(rendered.screen.PixelAt(row.box.x_min, 0).character == std::string(1, suffixes[suffixIndex++]));
+        CHECK(rendered.screen.PixelAt(row.box.x_min, 0).dim);
+        CHECK_FALSE(canActivateGoTo(hit.state, row.action));
+        previousEnd = row.box.x_max;
+      }
+    }
+  }
+
+  TEST_CASE("GoToMenu - resize retires omitted footer targets and retains cancellation", "[tui][unit][goto]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    REQUIRE(library.navigateToArtist("Artist"));
+    auto const previous = library.activeViewId();
+    press(events, 'g');
+    // A painted popover panel away from the status row turns an unmatched status press into an outside dismissal.
+    fixture.hitRegions.overlayPanel.box = {.x_min = 0, .x_max = 19, .y_min = 1, .y_max = 4};
+    auto& hit = fixture.hitRegions.goToStatus;
+    renderElement(goToHintBar(ao::test::englishMessageCatalog(), events.goToMenuState(), 80, &hit), 80, 1);
+    REQUIRE(hit.rows.size() == 5);
+    auto const narrow =
+      renderElement(goToHintBar(ao::test::englishMessageCatalog(), events.goToMenuState(), 20, &hit), 20, 1);
+    INFO(narrow.text);
+    REQUIRE(hit.rows.size() == 4);
+    CHECK(std::ranges::none_of(hit.rows, [](auto const& row) { return row.action == CommandAction::Forward; }));
+    REQUIRE_FALSE(hit.cancelBox.IsEmpty());
+    REQUIRE(hit.cancelBox.x_min >= 0);
+    REQUIRE(hit.cancelBox.x_max < 20);
+    REQUIRE(narrow.screen.PixelAt(hit.cancelBox.x_min, 0).character == "E");
+    // The leading chip is disabled, so a retained copy of its target would swallow a press and keep Go to open.
+    REQUIRE(hit.rows.front().action == CommandAction::RevealCurrentTrack);
+    REQUIRE_FALSE(canActivateGoTo(hit.state, hit.rows.front().action));
+    auto const formerTrackBox = hit.rows.front().box;
+    REQUIRE(formerTrackBox.x_min == 1);
+    REQUIRE(narrow.screen.PixelAt(formerTrackBox.x_min, 0).character == "t");
+
+    SECTION("the visible cancel chip closes without navigation")
+    {
+      REQUIRE(events.tryHandleEvent(clickBox(hit.cancelBox)));
+    }
+
+    SECTION("an admitted disabled chip remains inert")
+    {
+      REQUIRE(events.tryHandleEvent(clickBox(formerTrackBox)));
+      CHECK(fixture.shell.overlay() == Overlay::GoTo);
+      CHECK(library.activeViewId() == previous);
+      REQUIRE(events.tryHandleEvent(clickBox(hit.cancelBox)));
+    }
+
+    SECTION("a second resize retires the former track target")
+    {
+      renderElement(goToHintBar(ao::test::englishMessageCatalog(), events.goToMenuState(), 2, &hit), 2, 1);
+      CHECK(hit.rows.empty());
+      CHECK(hit.cancelBox.IsEmpty());
+      // The same cell now misses every footer target and dismisses as an outside press.
+      REQUIRE(events.tryHandleEvent(clickBox(formerTrackBox)));
+    }
+
+    CHECK(fixture.shell.overlay() == Overlay::None);
+    CHECK(library.activeViewId() == previous);
   }
 
   TEST_CASE("GoToMenu - footer targets navigate or cancel and reject stale state", "[tui][unit][goto]")

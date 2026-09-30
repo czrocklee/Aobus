@@ -59,24 +59,40 @@ namespace ao::tui
                              GoToMenuHitRegions* const hitRegions)
   {
     using namespace ftxui;
-    auto const commands = goToCommands();
-    // Reserve every suffix, Escape, and separators before budgeting translated labels.
-    auto keyColumns = cellWidth("Esc");
-
-    for (auto const& command : commands)
-    {
-      keyColumns += cellWidth(command.goToKey);
-    }
-
-    auto const itemCount = static_cast<std::int32_t>(commands.size()) + 1;
-    auto const separatorColumns = (itemCount - 1) * cellWidth(" · ");
-    auto const labelColumns = std::max(0, ((columns - keyColumns - separatorColumns) / itemCount) - 1);
-    auto parts = Elements{filler() | xflex};
 
     if (hitRegions != nullptr)
     {
       *hitRegions = {.state = state};
     }
+
+    auto const commands = goToCommands();
+    auto fixedColumns = cellWidth("Esc");
+
+    if (columns < fixedColumns)
+    {
+      return filler() | clear_under;
+    }
+
+    // Reserve Escape, then admit only whole suffixes and their separators.
+    auto visibleCommands = commands.first(0);
+    auto const separatorColumns = cellWidth(" · ");
+
+    for (auto const& command : commands)
+    {
+      auto const optionColumns = cellWidth(command.goToKey) + separatorColumns;
+
+      if (optionColumns > columns - fixedColumns)
+      {
+        break;
+      }
+
+      fixedColumns += optionColumns;
+      visibleCommands = commands.first(visibleCommands.size() + 1);
+    }
+
+    auto const itemCount = static_cast<std::int32_t>(visibleCommands.size()) + 1;
+    auto const labelColumns = std::max(0, ((columns - fixedColumns) / itemCount) - 1);
+    auto parts = Elements{filler() | xflex};
 
     auto chip = [&](std::string const& key, i18n::MessageId const labelId)
     {
@@ -98,7 +114,7 @@ namespace ao::tui
       }
     };
 
-    for (auto const& command : commands)
+    for (auto const& command : visibleCommands)
     {
       auto chipPtr = chip(std::string{command.goToKey}, shortLabel(command));
 
