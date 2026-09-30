@@ -634,6 +634,21 @@ namespace
   }
 }
 
+- (BOOL)soulNeedsFrames
+{
+  return static_cast<BOOL>(_detached == NO && [_soul needsFrames] != NO);
+}
+
+- (void)settleSoul
+{
+  if (_detached != NO)
+  {
+    return;
+  }
+
+  [_soul settleAnimation];
+}
+
 - (void)toggleVolumePopover
 {
   if (_detached != NO)

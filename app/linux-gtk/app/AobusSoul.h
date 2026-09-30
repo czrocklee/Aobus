@@ -74,6 +74,7 @@ namespace ao::gtk
 
     void startTickIfNeeded();
     void stopTick();
+    void syncTick();
 
     std::unique_ptr<Impl> _implPtr;
   };

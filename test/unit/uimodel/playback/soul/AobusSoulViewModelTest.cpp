@@ -12,10 +12,10 @@
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_approx.hpp>
-#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 
 namespace ao::uimodel::test
 {
@@ -174,48 +174,122 @@ namespace ao::uimodel::test
     CHECK(aobusSoulMotionMode(audio::Transport::Paused) == AobusSoulMotionMode::Frozen);
     CHECK(aobusSoulMotionMode(audio::Transport::Idle) == AobusSoulMotionMode::Dormant);
     CHECK(aobusSoulMotionMode(audio::Transport::Seeking) == AobusSoulMotionMode::Dormant);
-
-    CHECK(shouldAnimateAobusSoul(AobusSoulMotionMode::Animating, true, false));
-    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Frozen, true, false));
-    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Dormant, true, false));
-    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Animating, false, false));
-    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Animating, true, true));
   }
 
-  TEST_CASE("AobusSoul - frozen animation retains the exact sampled frame while aura changes",
-            "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - resume eases motion in and pause coasts it to a held frame", "[uimodel][unit][playback][soul]")
   {
+    // Speed follows smoothstep across the transition, so each ramp covers half
+    // of the span's full-speed travel.
+    auto const halfRampDuration = kAobusSoulTransitionDuration / 2.0;
     auto animation = AobusSoulAnimationState{};
     animation.setMotionMode(AobusSoulMotionMode::Animating);
-    animation.advance(kAobusSoulHuePeriod / 4.0);
-    auto const animated = animation.visualFrame(kAobusSoulTurbulent);
+    animation.advance(kAobusSoulTransitionDuration);
+    CHECK(animation.elapsed().count() == Catch::Approx{halfRampDuration.count()});
 
+    animation.advance(std::chrono::seconds{1});
+    CHECK(animation.elapsed().count() == Catch::Approx{halfRampDuration.count() + 1.0});
+
+    auto const pausedElapsed = animation.elapsed();
     animation.setMotionMode(AobusSoulMotionMode::Frozen);
+    REQUIRE(animation.needsFrames());
     animation.advance(std::chrono::seconds{5});
-    auto const frozen = animation.visualFrame(kAobusSoulTurbulent);
+    CHECK((animation.elapsed() - pausedElapsed).count() == Catch::Approx{halfRampDuration.count()});
+    CHECK_FALSE(animation.needsFrames());
 
-    CHECK(frozen == animated);
-
-    auto const recolored = animation.visualFrame(kAobusSoulRadiant);
-    CHECK(recolored.motion == frozen.motion);
-    CAPTURE(frozen.motion.hueShiftDegrees);
-    CHECK(recolored.gradientColors.core.red == 0x00);
-    CHECK(recolored.gradientColors.core.green == 0xBA);
-    CHECK(recolored.gradientColors.core.blue == 0xFF);
-    CHECK(recolored.gradientColors.body.red == 0x8D);
-    CHECK(recolored.gradientColors.body.green == 0x55);
-    CHECK(recolored.gradientColors.body.blue == 0xF7);
-    CHECK_FALSE(recolored.gradientColors.body == frozen.gradientColors.body);
+    auto const held = animation.motionFrame();
+    animation.advance(std::chrono::seconds{5});
+    CHECK(animation.motionFrame() == held);
 
     auto const frozenElapsed = animation.elapsed();
     animation.setMotionMode(AobusSoulMotionMode::Animating);
     animation.advance(std::chrono::milliseconds{20});
     CHECK(animation.elapsed() > frozenElapsed);
-    CHECK_FALSE(animation.motionFrame() == frozen.motion);
+    CHECK_FALSE(animation.motionFrame() == held);
 
     animation.setMotionMode(AobusSoulMotionMode::Dormant);
     CHECK(animation.elapsed() == std::chrono::duration<double>::zero());
     CHECK(animation.motionFrame() == AobusSoulMotionFrame{});
+    CHECK_FALSE(animation.needsFrames());
+  }
+
+  TEST_CASE("AobusSoul - motion transitions travel the same phase at any frame rate", "[uimodel][unit][playback][soul]")
+  {
+    auto coarse = AobusSoulAnimationState{};
+    auto fine = AobusSoulAnimationState{};
+    constexpr auto kFineInterval = std::chrono::milliseconds{16};
+    constexpr std::int32_t kFineSteps = 30;
+
+    for (auto* const animation : {&coarse, &fine})
+    {
+      animation->setMotionMode(AobusSoulMotionMode::Animating);
+    }
+
+    coarse.advance(kFineInterval * kFineSteps);
+
+    for (std::int32_t step = 0; step < kFineSteps; ++step)
+    {
+      fine.advance(kFineInterval);
+    }
+
+    CHECK(fine.elapsed().count() == Catch::Approx{coarse.elapsed().count()});
+
+    for (auto* const animation : {&coarse, &fine})
+    {
+      animation->setMotionMode(AobusSoulMotionMode::Frozen);
+    }
+
+    coarse.advance(std::chrono::milliseconds{250});
+
+    for (std::int32_t step = 0; step < kFineSteps; ++step)
+    {
+      fine.advance(kFineInterval);
+    }
+
+    coarse.advance(kFineInterval * kFineSteps - std::chrono::milliseconds{250});
+    CHECK(fine.elapsed().count() == Catch::Approx{coarse.elapsed().count()});
+  }
+
+  TEST_CASE("AobusSoul - aura changes cross-fade from the shown color", "[uimodel][unit][playback][soul]")
+  {
+    auto animation = AobusSoulAnimationState{};
+    animation.setAura(kAobusSoulTurbulent);
+    CHECK(animation.visualFrame().gradientColors.body == kAobusSoulTurbulent);
+    CHECK_FALSE(animation.needsFrames());
+
+    animation.setAura(kAobusSoulRadiant);
+    REQUIRE(animation.needsFrames());
+    CHECK(animation.visualFrame().gradientColors.body == kAobusSoulTurbulent);
+
+    animation.advance(kAobusSoulTransitionDuration / 2.0);
+    auto const midpoint = animation.visualFrame().gradientColors.body;
+    CHECK_FALSE(midpoint == kAobusSoulTurbulent);
+    CHECK_FALSE(midpoint == kAobusSoulRadiant);
+    // A per-channel sRGB mix of these hues passes through a darker, muddier color.
+    CHECK_FALSE(midpoint == aobusSoulMixRgb(kAobusSoulTurbulent, kAobusSoulRadiant, 0.5));
+
+    animation.setAura(kAobusSoulFlowing);
+    CHECK(animation.visualFrame().gradientColors.body == midpoint);
+
+    animation.advance(kAobusSoulTransitionDuration);
+    CHECK(animation.visualFrame().gradientColors.body == kAobusSoulFlowing);
+    CHECK_FALSE(animation.needsFrames());
+  }
+
+  TEST_CASE("AobusSoul - settling completes transitions without moving the sample", "[uimodel][unit][playback][soul]")
+  {
+    auto animation = AobusSoulAnimationState{};
+    animation.setAura(kAobusSoulTurbulent);
+    animation.setMotionMode(AobusSoulMotionMode::Animating);
+    animation.advance(std::chrono::seconds{2});
+    auto const sampled = animation.motionFrame();
+
+    animation.setMotionMode(AobusSoulMotionMode::Frozen);
+    animation.setAura(kAobusSoulRadiant);
+    animation.settle();
+
+    CHECK_FALSE(animation.needsFrames());
+    CHECK(animation.motionFrame() == sampled);
+    CHECK(animation.visualFrame() == aobusSoulVisualFrame(kAobusSoulRadiant, sampled));
   }
 
   TEST_CASE("AobusSoul - motion recipe exposes the shared GTK and TUI timing phases", "[uimodel][unit][playback][soul]")

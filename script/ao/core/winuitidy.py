@@ -13,6 +13,7 @@ from .proc import die
 _WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
 _AUXILIARY_SOURCE_PROJECTS = {
     "test/helper/WinUiLocalizationProbe.cpp": "app/windows-winui/ao_winui_localization_probe.vcxproj",
+    "test/integration/windows/WinUiSoulProbe.cpp": "app/windows-winui/ao_winui_soul_probe.vcxproj",
 }
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx"))
 _INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^">]+)[">]', re.MULTILINE)

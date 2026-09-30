@@ -47,6 +47,7 @@ if(APPLE)
     integration/macos/AppKitPresentationScenario.mm
     integration/macos/AppKitPlaybackScenario.mm
     integration/macos/AppKitPlaybackScenario.h
+    integration/macos/AppKitSoulScenario.mm
     unit/media/wav/TestWav.cpp
     unit/media/wav/TestWav.h
   )

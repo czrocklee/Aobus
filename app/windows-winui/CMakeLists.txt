@@ -232,6 +232,29 @@ target_link_libraries(ao_winui_localization_probe PRIVATE
   ao_app_i18n
   runtimeobject.lib)
 
+# A real XAML unload/reload probe: built by native checks, run only in an
+# interactive desktop session. The shipping executable has no test switches.
+add_executable(ao_winui_soul_probe WIN32
+  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiSoulProbe.cpp)
+aobus_enable_windows_utf8_manifest(ao_winui_soul_probe)
+target_include_directories(ao_winui_soul_probe PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")
+target_link_libraries(ao_winui_soul_probe PRIVATE aobus-winui-lib runtimeobject.lib)
+# The linked WinUI library contributes the shipping wWinMain object, so the
+# probe must select its own console entry point explicitly.
+target_link_options(ao_winui_soul_probe PRIVATE /ENTRY:mainCRTStartup)
+
+set_target_properties(ao_winui_soul_probe PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/soul-probe"
+  VS_GLOBAL_AppContainerApplication false
+  VS_GLOBAL_ApplicationType "Windows Store"
+  VS_GLOBAL_ApplicationTypeRevision 10.0
+  VS_GLOBAL_DesktopCompatible true
+  VS_GLOBAL_RootNamespace AobusSoulProbe
+  VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
+  WindowsTargetPlatformVersion 10.0.26100.0)
+aobus_enable_windows_app_sdk(ao_winui_soul_probe APPLICATION)
+
 aobus_verify_windows_utf8_manifest(aobus-winui)
 target_include_directories(aobus-winui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-winui PRIVATE
@@ -242,7 +265,10 @@ target_link_libraries(aobus-winui PRIVATE
 # entry explicitly so the linker extracts that object without /WHOLEARCHIVE,
 # which would also extract and duplicate generated XAML metadata providers.
 target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
-add_dependencies(aobus-winui ao_winui_localization_probe)
+# Keep the GUI probe a build-only dependency: referencing its application
+# project directly would import its copied WinMD/PRI closure into the product.
+add_custom_target(ao_winui_soul_probe_build DEPENDS ao_winui_soul_probe)
+add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_soul_probe_build)
 # The static-library project emits the XBF files at its output root, while
 # MSBuild's project-reference copy namespaces them under Aobus. The merged
 # application PRI retains the root-relative XBF paths, so deploy those exact
@@ -254,6 +280,15 @@ add_custom_command(TARGET aobus-winui POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E copy_if_different
           "$<TARGET_FILE_DIR:aobus-winui-lib>/MainWindow.xbf"
           "$<TARGET_FILE_DIR:aobus-winui>/MainWindow.xbf"
+  # The Soul probe parses the same shipping App.xaml, so it needs the
+  # root-relative XBF and the merged application PRI that maps the ms-appx
+  # locator. This build depends on the probe and owns both artifacts.
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
+          "$<TARGET_FILE_DIR:ao_winui_soul_probe>/App.xbf"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
+          "$<TARGET_FILE_DIR:ao_winui_soul_probe>/ao_winui_soul_probe.pri"
   COMMAND $<TARGET_FILE:ao_winui_localization_probe>
   COMMENT "Deploying compiled XAML and verifying WinUI/ICU localization parity"
   VERBATIM)

@@ -49,7 +49,7 @@ namespace ao::tui
     rt::PlaybackSuccessionSnapshot const* succession = nullptr;
     std::chrono::milliseconds displayElapsed{};
     std::chrono::milliseconds animationElapsed{};
-    uimodel::AobusSoulMotionFrame soulMotion{};
+    uimodel::AobusSoulVisualFrame soulVisual{};
     uimodel::OutputDeviceViewState const* outputView = nullptr;
     ftxui::Box* outputDeviceBox = nullptr;
     ftxui::Box* soulButtonBox = nullptr;

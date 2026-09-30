@@ -104,8 +104,8 @@ Shared palette values and usage guidance live with the [brand recipe](../../../a
 ## Soul aura and motion
 
 UIModel owns the `Animating`, `Frozen`, and `Dormant` motion policy, accumulated active elapsed time, motion sampling, and aura-plus-motion visual-frame composition. Soul maintains sampled motion separately from the current quality color.
-Playing advances active elapsed time; paused playback freezes the exact sampled breath, rotation, luminance, and hue phase. Idle, opening, buffering, seeking, stopping, and error states are dormant and reset elapsed time and the sample.
-While frozen, new readiness or quality can recolor the frame without changing its motion. Resume continues from the retained phase.
+Playing advances active elapsed time. Resume eases motion speed from rest to full over the shared transition span (1/φ, about 0.618 s), and pause eases it back to rest over the same span before holding the sampled breath, rotation, luminance, and hue phase. The phase a transition travels depends on elapsed time, not frame rate. Idle, opening, buffering, seeking, stopping, and error states are dormant and reset elapsed time and the sample at once.
+The first aura is adopted directly; later aura changes cross-fade in OKLab from the color currently shown over the same span. While frozen, new readiness or quality recolors the frame without changing its motion. Resume continues from the retained phase.
 
 For Playing and Paused, aura selection uses the first matching rule:
 
@@ -120,7 +120,7 @@ For Playing and Paused, aura selection uses the first matching rule:
 | 7 | Pipeline quality is lossy/unknown | `Veiled` |
 
 Other transport states select `Dormant` regardless of retained quality evidence.
-Frontend adapters provide frame deltas and own clocks, frame registration, visibility/minimization gates, concrete geometry, and rendering. They may quantize the shared visual frame for their medium without changing aura or freeze semantics.
+Frontend adapters provide frame deltas and own clocks, frame registration, visibility/minimization gates, concrete geometry, and rendering. They keep supplying frames while the shared state still needs them, and settle pending transitions at once when they stop early, as under reduced motion, while hidden or unmapped, or when their frame source stops with playback. Time that passes while settled, before the next frame arrives, does not count as motion. They may quantize the shared visual frame for their medium without changing aura or freeze semantics.
 
 ## Compatibility and evidence
 

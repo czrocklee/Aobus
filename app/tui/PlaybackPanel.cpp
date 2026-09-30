@@ -15,7 +15,6 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
@@ -313,10 +312,8 @@ namespace ao::tui
     auto const minimumVolumeColumns =
       std::max(cellWidth(levelVolume), cellWidth(playbackVolume(textCatalog, kMaximumVolumePercent)));
     auto volumeColumns = std::max(minimumVolumeColumns, cellWidth(mutedVolume));
-    auto const soulAura = uimodel::resolveSoulAura(state.transport, state.ready, state.quality);
-    auto const soulVisual = uimodel::aobusSoulVisualFrame(uimodel::aobusSoulAuraRgb(soulAura), view.soulMotion);
     auto outputElementPtr = outputDeviceBadge(view.outputView, view.outputDeviceHovered);
-    auto soulButtonElementPtr = soulButtonElement(state.transport, soulVisual, view.animationElapsed);
+    auto soulButtonElementPtr = soulButtonElement(state.transport, view.soulVisual, view.animationElapsed);
     outputElementPtr->ComputeRequirement();
     soulButtonElementPtr->ComputeRequirement();
     auto const fixedColumnsWithoutVolume = outputElementPtr->requirement().min_x +

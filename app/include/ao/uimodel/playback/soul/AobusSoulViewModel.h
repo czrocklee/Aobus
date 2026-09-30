@@ -101,6 +101,9 @@ namespace ao::uimodel
   inline constexpr double kAobusSoulOpacityVariance = (1.0 - kAobusSoulOpacityFloor) / 2.0;
   inline constexpr double kAobusSoulCoreGradientStop = 0.382;
   inline constexpr double kAobusSoulMaxHueShiftDegrees = 10.0;
+  // Resume ramps motion up and pause coasts it to rest over this span; aura
+  // changes cross-fade over the same span.
+  inline constexpr auto kAobusSoulTransitionDuration = std::chrono::duration<double>{1.0 / kAobusSoulGoldenRatio};
   inline constexpr auto kAobusSoulGeometry = AobusSoulGeometry{};
 
   inline constexpr auto kAobusSoulUiCyan = AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF};
@@ -126,23 +129,37 @@ namespace ao::uimodel
   AobusSoulMotionFrame aobusSoulMotionAt(std::chrono::duration<double> elapsed) noexcept;
   AobusSoulVisualFrame aobusSoulVisualFrame(AobusSoulRgb aura, AobusSoulMotionFrame const& motion) noexcept;
   AobusSoulMotionMode aobusSoulMotionMode(audio::Transport transport) noexcept;
-  bool shouldAnimateAobusSoul(AobusSoulMotionMode motionMode, bool visible, bool minimized) noexcept;
 
   class AobusSoulAnimationState final
   {
   public:
     void setMotionMode(AobusSoulMotionMode motionMode) noexcept;
+    // The first aura is adopted as-is; later changes cross-fade from the aura
+    // currently shown.
+    void setAura(AobusSoulRgb aura) noexcept;
     void advance(std::chrono::duration<double> delta) noexcept;
+    // Completes pending speed and aura transitions without moving the sample,
+    // for adapters that stop supplying frames.
+    void settle() noexcept;
 
     AobusSoulMotionMode motionMode() const noexcept;
+    // True while motion runs or a speed or aura transition is still settling.
+    bool needsFrames() const noexcept;
     std::chrono::duration<double> elapsed() const noexcept;
     AobusSoulMotionFrame const& motionFrame() const noexcept;
-    AobusSoulVisualFrame visualFrame(AobusSoulRgb aura) const noexcept;
+    AobusSoulVisualFrame visualFrame() const noexcept;
 
   private:
+    AobusSoulRgb currentAura() const noexcept;
+
     AobusSoulMotionMode _motionMode = AobusSoulMotionMode::Dormant;
     std::chrono::duration<double> _elapsed{};
     AobusSoulMotionFrame _motionFrame{};
+    double _vitality = 0.0;
+    AobusSoulRgb _auraFrom = kAobusSoulUiCyan;
+    AobusSoulRgb _auraTo = kAobusSoulUiCyan;
+    double _auraProgress = 1.0;
+    bool _hasAura = false;
   };
 
   class AobusSoulViewModel final

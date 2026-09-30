@@ -712,7 +712,14 @@ namespace ao::appkit::test
     exerciseSeekGesture(session, playback, target, window, kInvalidTrackId);
     session.runtime().playback().commands().stop();
     settleNativeCallbacks();
+    [soul presentState:{.aura = uimodel::SoulAura::Radiant, .motionMode = uimodel::AobusSoulMotionMode::Animating}
+               playing:YES
+                modern:YES];
     [playback detach];
+    soul.needsDisplay = NO;
+    [playback settleSoul];
+    AO_INVARIANT([playback soulNeedsFrames] == NO && [soul needsFrames] != NO && soul.needsDisplay == NO,
+                 "Late frame-stop callbacks must not mutate or schedule redraws on a detached playback bar");
     AO_INVARIANT(modernSeek.target == nil && modernSeek.action == nullptr && classicVolume.target == nil &&
                    classicVolume.action == nullptr,
                  "playback detach must revoke native action targets");
