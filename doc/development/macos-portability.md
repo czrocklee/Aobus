@@ -43,6 +43,7 @@ repository. None of them is a design choice.
 | 6 | `StringMaker<file_time_type>` | `test/unit/FilesystemTestSupport.h` | Catch2 can stringify `__int128`, or Darwin stops using it for the file clock |
 | 7 | c4core `C4_CPP=17` header mode | `cmake/Dependencies.cmake` | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
 | 8 | Objective-C++26 compiler flag mapping | root `CMakeLists.txt` | CMake supplies Clang's Objective-C++26 standard flags |
+| 9 | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/unit/FilesystemTestSupport.h` | libc++ defines `__cpp_lib_chrono` as at least `201907L` |
 
 ### 1-3: standard-library seams
 
@@ -183,6 +184,25 @@ To retire it: remove the conditional mapping from the root `CMakeLists.txt`,
 configure a clean native build with the supported CMake version, and build the
 AppKit target in Debug and Release. The source language assertion must continue
 to pass.
+
+### 9: `__cpp_lib_chrono` clock-conversion branches
+
+libc++ implements `std::chrono::file_clock::to_sys` and `from_sys` but not
+`std::chrono::utc_clock` or `std::chrono::clock_cast`, and reports
+`__cpp_lib_chrono` below `201907L`. The MSVC STL provides the other half:
+`file_clock` converts only through `to_utc` and `from_utc`, which the standard
+permits, so its UTC path is permanent rather than a compromise.
+
+`FileClockConversion.h` selects `to_sys` when the file clock has it. Its UTC
+branch names `utc_clock` directly, so it is compiled only when the feature macro
+reports it. The conversion is templated on the clock, and a test clock that has
+only `to_utc` drives the UTC branch and its leap-second handling on every
+standard library that provides `utc_clock`, not only on MSVC. The test helper
+`fileTimeFromSystemTime` uses `clock_cast` and falls back to `from_sys` for
+libc++.
+
+To retire it: remove both preprocessor conditions, keeping the UTC branch and
+the `clock_cast` spelling, and build the core suite on macOS.
 
 ## Permanent platform differences
 

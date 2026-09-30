@@ -358,6 +358,7 @@ add_executable(ao_core_test
     unit/library/TrackViewCustomMetadataTest.cpp
     unit/library/TrackViewValidationTest.cpp
     unit/library/FileManifestViewTest.cpp
+    unit/library/FileTimeConversionTest.cpp
     unit/library/FileManifestStoreTest.cpp
     unit/library/LibraryUriTest.cpp
     unit/library/FileManifestBuilderTest.cpp
