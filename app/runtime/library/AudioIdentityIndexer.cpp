@@ -4,12 +4,14 @@
 #include "AudioIdentityIndexer.h"
 
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileTimestamp.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
@@ -17,7 +19,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -44,46 +45,45 @@ namespace ao::rt
       std::filesystem::path fullPath{};
       std::string pathError{};
       std::uint64_t fileSize = 0;
-      std::uint64_t mtime = 0;
+      std::optional<FileTimestamp> optMtime;
     };
 
     struct FileStatSnapshot final
     {
       std::uint64_t fileSize = 0;
-      std::uint64_t mtime = 0;
+      std::optional<FileTimestamp> optMtime;
     };
-
-    std::uint64_t toManifestMtime(std::filesystem::file_time_type time)
-    {
-      return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count());
-    }
 
     bool matchesSnapshot(FileStatSnapshot const& stat, PendingIdentityRow const& row) noexcept
     {
-      return stat.fileSize == row.fileSize && stat.mtime == row.mtime;
+      return stat.fileSize == row.fileSize && stat.optMtime == row.optMtime;
     }
 
-    std::optional<FileStatSnapshot> readCurrentStat(std::filesystem::path const& path, std::string& errorMessage)
+    Result<FileStatSnapshot> readCurrentStat(std::filesystem::path const& path)
     {
       auto ec = std::error_code{};
       auto const fileSize = std::filesystem::file_size(path, ec);
 
       if (ec)
       {
-        errorMessage = ec.message();
-        return std::nullopt;
+        return makeError(Error::Code::IoError, ec.message());
       }
 
       auto const writeTime = std::filesystem::last_write_time(path, ec);
 
       if (ec)
       {
-        errorMessage = ec.message();
-        return std::nullopt;
+        return makeError(Error::Code::IoError, ec.message());
       }
 
-      return FileStatSnapshot{.fileSize = static_cast<std::uint64_t>(fileSize), .mtime = toManifestMtime(writeTime)};
+      auto const timestampRes = library::fileTimestampFromFileTime(writeTime);
+
+      if (!timestampRes)
+      {
+        return std::unexpected{timestampRes.error()};
+      }
+
+      return FileStatSnapshot{.fileSize = static_cast<std::uint64_t>(fileSize), .optMtime = *timestampRes};
     }
 
     std::vector<PendingIdentityRow> collectPendingRows(library::MusicLibrary& ml,
@@ -113,7 +113,7 @@ namespace ao::rt
         }
 
         auto uri = std::string{uriView};
-        auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .mtime = view.mtime()};
+        auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .optMtime = view.mtime()};
 
         if (auto parsedRes = library::LibraryUri::parse(uri); !parsedRes)
         {
@@ -286,16 +286,15 @@ namespace ao::rt
         return RowSlot{.status = RowStatus::Skipped};
       }
 
-      auto statError = std::string{};
-      auto optBeforeHashStat = readCurrentStat(row.fullPath, statError);
+      auto beforeHashStatRes = readCurrentStat(row.fullPath);
 
-      if (!optBeforeHashStat)
+      if (!beforeHashStatRes)
       {
-        reportFailure(batch, row.uri, "stat", statError);
+        reportFailure(batch, row.uri, "stat", beforeHashStatRes.error().message);
         return RowSlot{.status = RowStatus::Failed};
       }
 
-      if (!matchesSnapshot(*optBeforeHashStat, row))
+      if (!matchesSnapshot(*beforeHashStatRes, row))
       {
         return RowSlot{.status = RowStatus::Skipped};
       }
@@ -316,16 +315,15 @@ namespace ao::rt
         return RowSlot{.status = RowStatus::NotProcessed};
       }
 
-      statError.clear();
-      auto optAfterHashStat = readCurrentStat(row.fullPath, statError);
+      auto afterHashStatRes = readCurrentStat(row.fullPath);
 
-      if (!optAfterHashStat)
+      if (!afterHashStatRes)
       {
-        reportFailure(batch, row.uri, "stat", statError);
+        reportFailure(batch, row.uri, "stat", afterHashStatRes.error().message);
         return RowSlot{.status = RowStatus::Failed};
       }
 
-      if (!matchesSnapshot(*optAfterHashStat, row))
+      if (!matchesSnapshot(*afterHashStatRes, row))
       {
         return RowSlot{.status = RowStatus::Skipped};
       }
@@ -372,7 +370,7 @@ namespace ao::rt
 
         candidates.push_back(AudioIdentityWriteCandidate{.uri = rows[index].uri,
                                                          .fileSize = rows[index].fileSize,
-                                                         .mtime = rows[index].mtime,
+                                                         .optMtime = rows[index].optMtime,
                                                          .identity = slots[index].identity});
       }
 

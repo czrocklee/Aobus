@@ -4,12 +4,14 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
+#include <ao/FileTimestamp.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -30,10 +32,11 @@ namespace ao::uimodel
   std::string formatDuration(std::chrono::milliseconds duration);
   std::string formatUint16(std::uint16_t value);
   std::string formatFileSize(std::uint64_t fileSize);
-  // mtime is the manifest's same-host file-clock nanosecond count, not Unix time.
-  // Use the local zone when available, otherwise UTC. Zero or an unavailable
-  // file-clock conversion renders empty; no durable timestamp is rewritten.
-  std::string formatTime(std::uint64_t mtime);
+  // mtime is a Unix/POSIX modification instant; absence is distinct from the
+  // epoch-zero instant. Use the local zone when available, otherwise UTC. An
+  // absent or calendar-unrepresentable instant renders empty. The nanosecond
+  // fraction stays in the payload for exact equality and is not displayed.
+  std::string formatTime(std::optional<FileTimestamp> optMtime);
   std::string formatSampleRate(std::uint32_t sampleRate);
   std::string formatBitrate(std::uint32_t bitrate);
   std::string formatChannels(i18n::MessageCatalog const& textCatalog, std::uint8_t channels);

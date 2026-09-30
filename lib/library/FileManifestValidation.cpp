@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <expected>
 #include <format>
@@ -28,6 +29,8 @@ namespace ao::library
     {
       return (size + 3U) & ~std::size_t{3U};
     }
+
+    constexpr std::uint32_t kMtimeNanosecondsPerSecond = 1000000000U;
   } // namespace
 
   detail::PaddedFileManifestKey::PaddedFileManifestKey(std::string_view const uri)
@@ -79,6 +82,22 @@ namespace ao::library
     if (!std::ranges::all_of(header.padding, [](std::byte const value) { return value == std::byte{0}; }))
     {
       return makeError(Error::Code::CorruptData, "File manifest payload contains nonzero reserved bytes");
+    }
+
+    if (header.hasMtime > 1U)
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload contains an invalid mtime presence flag");
+    }
+
+    if (header.hasMtime == 0U &&
+        (header.mtimeSecondsLo != 0U || header.mtimeSecondsHi != 0U || header.mtimeNanoseconds != 0U))
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload contains a noncanonical absent mtime");
+    }
+
+    if (header.hasMtime == 1U && header.mtimeNanoseconds >= kMtimeNanosecondsPerSecond)
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload contains malformed mtime nanoseconds");
     }
 
     auto const lengthIsPending = header.audioPayloadLength() == 0;

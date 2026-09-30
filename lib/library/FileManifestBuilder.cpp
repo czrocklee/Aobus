@@ -7,6 +7,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/library/LibraryUri.h>
@@ -15,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -53,9 +55,9 @@ namespace ao::library
     return *this;
   }
 
-  FileManifestBuilder& FileManifestBuilder::mtime(std::uint64_t val)
+  FileManifestBuilder& FileManifestBuilder::mtime(std::optional<FileTimestamp> optVal)
   {
-    _header.mtime(val);
+    _header.mtime(optVal);
     return *this;
   }
 

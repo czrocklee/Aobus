@@ -5,6 +5,7 @@
 #include <ao/AudioCodecText.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackView.h>
@@ -118,7 +119,10 @@ namespace ao::rt
 
           if (optManifest)
           {
-            return TrackFieldRawValue{std::in_place_type<std::uint64_t>, optManifest->mtime()};
+            if (auto const optMtime = optManifest->mtime(); optMtime)
+            {
+              return TrackFieldRawValue{std::in_place_type<FileTimestamp>, *optMtime};
+            }
           }
         }
 

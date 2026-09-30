@@ -426,6 +426,7 @@ namespace ao::library::test
     constexpr std::uint32_t kPreviousColdLayoutLibraryVersion = 2;
     constexpr std::uint32_t kPreUnifiedListOrderingLibraryVersion = 4;
     constexpr std::uint32_t kPreNfcTextLibraryVersion = 6;
+    constexpr std::uint32_t kPreUnixMtimeLibraryVersion = 7;
 
     SECTION("future version")
     {
@@ -483,6 +484,16 @@ namespace ao::library::test
     {
       static_assert(kPreNfcTextLibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kPreNfcTextLibraryVersion);
+
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("version 7 before Unix-scale file timestamps")
+    {
+      static_assert(kPreUnixMtimeLibraryVersion != kLibraryVersion);
+      createLibraryMetadataHeader(temp.path(), kPreUnixMtimeLibraryVersion);
 
       auto const res = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(res);

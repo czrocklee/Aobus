@@ -27,6 +27,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - **Pending identity** is zero payload length plus an all-zero signature.
 - **Plan** is a move-only point-in-time classification bound to one persisted library id and carrying its planner revision as provenance.
 - **Relink** rebinds an existing track and manifest row from an old URI to a new URI.
+- **Modification time** is the manifest's portable Unix/POSIX instant defined by the [library database reference](../../reference/library/storage/database.md); a row without one stores absence, which is not a clock value.
 
 ## Invariants
 
@@ -43,6 +44,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - Cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
 - Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
+- A modification time crosses filesystem, manifest, plan, and backfill boundaries as one portable Unix/POSIX instant: the planner converts each inspected file's native clock to that scale, a conversion the native clock cannot express is a per-item failure, and comparisons include stored absence, so an absent stored time never equals a file's present instant.
 - Identity backfill never commits a hash for a row or file whose live size or modification time changed after snapshot.
 - Persisted manifest corruption present at open rejects the library with `CorruptData`; a post-open manifest integrity breach aborts through the fatal facility and delivers no partial plan or later row.
 - Before scan apply mutates any item, one transaction-internal preflight checks every actionable item's live manifest and Track evidence. Ordinary concurrent deletion or replacement becomes a stale-item skip; a later loss of already-admitted evidence inside that same write transaction remains an invariant breach.
@@ -195,6 +197,7 @@ through `LibraryChanges`; workflow completion performs no independent refresh.
 - [`LibraryWriteLane.cpp`](../../../app/runtime/library/LibraryWriteLane.cpp) owns background-task exclusion, command-lane admission, active-turn revalidation placement, and publication settlement.
 - [`LibraryScanWorkflow.cpp`](../../../app/uimodel/library/task/LibraryScanWorkflow.cpp) owns frontend-shared plan disposition, issue collection, identity policy, and build/apply orchestration.
 - [`AudioIdentity.h`](../../../include/ao/library/AudioIdentity.h) owns identity calculation.
+- [`FileTimestamp.h`](../../../include/ao/FileTimestamp.h) owns the portable modification-time instant, and [`FileTimestamp.h`](../../../include/ao/library/FileTimestamp.h) owns the independent native filesystem-clock converter.
 - [`AudioIdentityIndexer.cpp`](../../../app/runtime/library/AudioIdentityIndexer.cpp) owns concurrent backfill.
 
 ## Test map

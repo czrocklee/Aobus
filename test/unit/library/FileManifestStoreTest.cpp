@@ -8,6 +8,7 @@
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/utility/Xxh3.h>
@@ -19,6 +20,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -44,10 +46,11 @@ namespace ao::library::test
     auto wtxn = writeTransaction(library);
 
     auto const signature = utility::xxh3Hash128("stored payload");
+    constexpr auto kMtime = FileTimestamp{.seconds = 1719835200, .nanoseconds = 123456789};
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42})
       .fileSize(12345)
-      .mtime(67890)
+      .mtime(kMtime)
       .audioPayloadLength(55555)
       .audioSignature(signature)
       .status(FileStatus::Available);
@@ -62,11 +65,70 @@ namespace ao::library::test
     REQUIRE(optView);
     CHECK(optView->trackId() == TrackId{42});
     CHECK(optView->fileSize() == 12345);
-    CHECK(optView->mtime() == 67890);
+    CHECK(optView->mtime() == kMtime);
     CHECK(optView->audioPayloadLength() == 55555);
     CHECK(optView->audioSignature() == signature);
     CHECK(optView->status() == FileStatus::Available);
     CHECK(std::ranges::equal(optView->rawData(), payload));
+  }
+
+  TEST_CASE("FileManifestStore - preserves mtime presence and range across a durable roundtrip",
+            "[library][unit][manifest]")
+  {
+    struct RoundtripManifest final
+    {
+      std::string_view uri;
+      std::optional<FileTimestamp> optMtime{};
+    };
+
+    auto const manifests = std::array{
+      RoundtripManifest{.uri = "epoch-zero.flac", .optMtime = FileTimestamp{.seconds = 0, .nanoseconds = 0}},
+      RoundtripManifest{.uri = "absent.flac"},
+      RoundtripManifest{
+        .uri = "negative.flac", .optMtime = FileTimestamp{.seconds = -11644473600, .nanoseconds = 123456789}},
+      RoundtripManifest{
+        .uri = "wide.flac", .optMtime = FileTimestamp{.seconds = 987654321098765, .nanoseconds = 999999999}},
+    };
+
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto const& store = library.manifest();
+    auto wtxn = writeTransaction(library);
+
+    {
+      auto writer = physicalWriter(store, wtxn);
+
+      for (auto const& manifest : manifests)
+      {
+        auto builder = FileManifestBuilder::makeEmpty().mtime(manifest.optMtime);
+        auto const prepared = ao::test::requireValue(builder.validate(manifest.uri)).bind(TrackId{42});
+        REQUIRE(writer.put(prepared));
+      }
+    }
+
+    REQUIRE(wtxn.commit());
+
+    {
+      auto rtxn = library.readTransaction();
+      auto const reader = store.reader(rtxn);
+
+      for (auto const& manifest : manifests)
+      {
+        CAPTURE(manifest.uri);
+        auto const optView = reader.get(manifest.uri);
+        REQUIRE(optView);
+
+        if (auto const optMtime = optView->mtime(); manifest.optMtime)
+        {
+          REQUIRE(optMtime);
+          CHECK(*optMtime == *manifest.optMtime);
+        }
+        else
+        {
+          CHECK_FALSE(optMtime);
+        }
+      }
+    }
   }
 
   TEST_CASE("FileManifestStore - URI padding boundaries preserve read, write, and remove behavior",
@@ -80,7 +142,7 @@ namespace ao::library::test
     auto wtxn = writeTransaction(library);
 
     auto builder = FileManifestBuilder::makeEmpty();
-    builder.fileSize(12345).mtime(67890).status(FileStatus::Available);
+    builder.fileSize(12345).mtime(FileTimestamp{.seconds = 1719835200}).status(FileStatus::Available);
     {
       auto writer = physicalWriter(store, wtxn);
 
@@ -163,7 +225,8 @@ namespace ao::library::test
     auto const& store = library.manifest();
     auto wtxn = writeTransaction(library);
     auto writer = physicalWriter(store, wtxn);
-    auto builder = FileManifestBuilder::makeEmpty().fileSize(123).mtime(456).status(FileStatus::Available);
+    auto builder = FileManifestBuilder::makeEmpty();
+    builder.fileSize(123).mtime(FileTimestamp{.seconds = 1719835200}).status(FileStatus::Available);
 
     for (auto const uri : std::array<std::string_view, 3>{"alpha.flac", "delta.flac", "omega.flac"})
     {
@@ -203,7 +266,7 @@ namespace ao::library::test
     auto wtxn = writeTransaction(library);
 
     auto builder = FileManifestBuilder::makeEmpty();
-    builder.fileSize(12345).mtime(67890).status(FileStatus::Available);
+    builder.fileSize(12345).mtime(FileTimestamp{.seconds = 1719835200}).status(FileStatus::Available);
     auto const prepared = ao::test::requireValue(builder.validate("song.flac")).bind(TrackId{42});
 
     auto writer = physicalWriter(store, wtxn);
@@ -230,6 +293,14 @@ namespace ao::library::test
     nonzeroPadding.padding[1] = std::byte{1};
     auto zeroTrack = validHeader;
     zeroTrack.trackId = kInvalidTrackId;
+    auto invalidMtimeFlag = validHeader;
+    invalidMtimeFlag.hasMtime = 2;
+    auto noncanonicalAbsentSeconds = validHeader;
+    noncanonicalAbsentSeconds.mtimeSecondsLo = 1;
+    auto noncanonicalAbsentNanoseconds = validHeader;
+    noncanonicalAbsentNanoseconds.mtimeNanoseconds = 1;
+    auto malformedMtimeNanoseconds = validHeader;
+    malformedMtimeNanoseconds.mtime(FileTimestamp{.seconds = 1, .nanoseconds = 1000000000});
 
     struct InvalidPayloadCase final
     {
@@ -242,6 +313,10 @@ namespace ao::library::test
       InvalidPayloadCase{.name = "long", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) + 1)},
       InvalidPayloadCase{.name = "padding", .payload = serialize(nonzeroPadding)},
       InvalidPayloadCase{.name = "zero-track", .payload = serialize(zeroTrack)},
+      InvalidPayloadCase{.name = "mtime-flag", .payload = serialize(invalidMtimeFlag)},
+      InvalidPayloadCase{.name = "mtime-absent-seconds", .payload = serialize(noncanonicalAbsentSeconds)},
+      InvalidPayloadCase{.name = "mtime-absent-nanoseconds", .payload = serialize(noncanonicalAbsentNanoseconds)},
+      InvalidPayloadCase{.name = "mtime-nanoseconds", .payload = serialize(malformedMtimeNanoseconds)},
     };
 
     for (auto const& invalid : invalidPayloads)
@@ -258,6 +333,8 @@ namespace ao::library::test
       std::pair{"status", FileManifestBuilder::makeEmpty().status(static_cast<FileStatus>(0xff))},
       std::pair{"length", FileManifestBuilder::makeEmpty().audioPayloadLength(1)},
       std::pair{"signature", FileManifestBuilder::makeEmpty().audioSignature(utility::xxh3Hash128("signature"))},
+      std::pair{"mtime-nanoseconds",
+                FileManifestBuilder::makeEmpty().mtime(FileTimestamp{.seconds = 1, .nanoseconds = 1000000000})},
     };
 
     auto fixture = LibraryStoreFixture{};

@@ -9,6 +9,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
@@ -254,6 +255,32 @@ namespace ao::rt
       {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth().raw(); }},
     });
 
+    /**
+     * @brief Emits `mtime`, the manifest's Unix/POSIX modification instant.
+     *
+     * The key is never omitted. A present instant is the map the library
+     * stores — signed seconds and the fraction within one second — and an
+     * unknown one is an explicit null: an omitted key tells an import to
+     * preserve its own facts, and the unknown state would then be rebuilt from
+     * the target filesystem instead of surviving the round trip. No timezone
+     * and no raw clock value travels with the document.
+     */
+    void emitTrackMtime(ryml::NodeRef& node, std::optional<FileTimestamp> const& optMtime)
+    {
+      auto mtimeNode = node.append_child();
+      yaml::setKey(mtimeNode, "mtime");
+
+      if (optMtime)
+      {
+        mtimeNode |= ryml::MAP;
+        mtimeNode.append_child() << ryml::key("seconds") << optMtime->seconds;
+        mtimeNode.append_child() << ryml::key("nanoseconds") << optMtime->nanoseconds;
+        return;
+      }
+
+      yaml::setValue(mtimeNode, "null");
+    }
+
     Result<> emitTrackProperties(ryml::NodeRef& node,
                                  library::TrackView::PropertyProxy const& property,
                                  library::FileManifestStore::Reader const& manifestReader)
@@ -283,16 +310,16 @@ namespace ao::rt
       }
 
       std::uint64_t fileSize = 0;
-      std::uint64_t mtime = 0;
+      auto optMtime = std::optional<FileTimestamp>{};
 
       if (auto const optManifest = manifestReader.get(property.uri()); optManifest)
       {
         fileSize = optManifest->fileSize();
-        mtime = optManifest->mtime();
+        optMtime = optManifest->mtime();
       }
 
       node.append_child() << ryml::key("fileSize") << fileSize;
-      node.append_child() << ryml::key("mtime") << mtime;
+      emitTrackMtime(node, optMtime);
       return {};
     }
 

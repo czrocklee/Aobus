@@ -21,6 +21,7 @@ add_library(ao_library STATIC
     FileManifestView.cpp
     FileManifestBuilder.cpp
     FileManifestLayout.cpp
+    FileTimestamp.cpp
     TrackBuilder.cpp
     TrackColdReader.cpp
     TrackRecordValidation.cpp

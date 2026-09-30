@@ -3,20 +3,46 @@
 
 #include <ao/library/FileManifestLayout.h>
 
+#include <ao/FileTimestamp.h>
+
 #include <cstdint>
+#include <optional>
 
 namespace ao::library
 {
+  std::optional<FileTimestamp> FileManifestHeader::mtime() const noexcept
+  {
+    if (hasMtime == 0U)
+    {
+      return std::nullopt;
+    }
+
+    auto const secondsBits = (static_cast<std::uint64_t>(mtimeSecondsHi) << 32) | mtimeSecondsLo;
+    return FileTimestamp{.seconds = static_cast<std::int64_t>(secondsBits), .nanoseconds = mtimeNanoseconds};
+  }
+
   void FileManifestHeader::fileSize(std::uint64_t val) noexcept
   {
     fileSizeLo = static_cast<std::uint32_t>(val);
     fileSizeHi = static_cast<std::uint32_t>(val >> 32);
   }
 
-  void FileManifestHeader::mtime(std::uint64_t val) noexcept
+  void FileManifestHeader::mtime(std::optional<FileTimestamp> optVal) noexcept
   {
-    mtimeLo = static_cast<std::uint32_t>(val);
-    mtimeHi = static_cast<std::uint32_t>(val >> 32);
+    if (!optVal)
+    {
+      hasMtime = 0U;
+      mtimeSecondsLo = 0U;
+      mtimeSecondsHi = 0U;
+      mtimeNanoseconds = 0U;
+      return;
+    }
+
+    auto const secondsBits = static_cast<std::uint64_t>(optVal->seconds);
+    hasMtime = 1U;
+    mtimeSecondsLo = static_cast<std::uint32_t>(secondsBits);
+    mtimeSecondsHi = static_cast<std::uint32_t>(secondsBits >> 32);
+    mtimeNanoseconds = optVal->nanoseconds;
   }
 
   void FileManifestHeader::audioPayloadLength(std::uint64_t val) noexcept

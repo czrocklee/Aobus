@@ -5,6 +5,7 @@
 
 #include "runtime/TrackFieldReaderInternal.h"
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
@@ -105,7 +106,7 @@ namespace ao::rt
       auto const classical = view.classical();
 
       std::uint64_t fileSize = 0;
-      std::uint64_t modifiedTime = 0;
+      auto optModifiedTime = std::optional<FileTimestamp>{};
       auto status = library::FileStatus::Available;
 
       if (auto const uri = property.uri(); !uri.empty())
@@ -115,7 +116,7 @@ namespace ao::rt
         if (auto optManifest = manifestReader.get(uri); optManifest)
         {
           fileSize = optManifest->fileSize();
-          modifiedTime = optManifest->mtime();
+          optModifiedTime = optManifest->mtime();
           status = optManifest->status();
         }
       }
@@ -153,7 +154,7 @@ namespace ao::rt
         .codec = property.codec(),
         .bitrate = property.bitrate().raw(),
         .fileSize = fileSize,
-        .modifiedTime = modifiedTime,
+        .optModifiedTime = optModifiedTime,
         .status = status,
       };
     }

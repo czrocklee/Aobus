@@ -88,7 +88,7 @@ namespace ao::gtk
                      row.codec,
                      row.bitrate,
                      row.fileSize,
-                     row.modifiedTime,
+                     row.optModifiedTime,
                      row.status);
 
     return rowPtr;

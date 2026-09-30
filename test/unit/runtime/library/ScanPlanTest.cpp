@@ -11,6 +11,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -34,6 +35,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -184,7 +186,9 @@ namespace ao::rt::test
       auto track = library::TrackBuilder::makeEmpty();
       track.property().uri(uri);
       auto manifest = library::FileManifestBuilder::makeEmpty();
-      manifest.audioPayloadLength(identity.payloadLength).audioSignature(identity.signature);
+      // The seeded row stores no modification time, so the derived evidence
+      // must carry absence rather than a timestamp value.
+      manifest.mtime(std::nullopt).audioPayloadLength(identity.payloadLength).audioSignature(identity.signature);
       auto const trackId = ao::test::requireValue(
         transaction.apply([&](library::LibraryWrite& write) { return write.tracks().create(track, manifest); }));
       REQUIRE(transaction.commit());
@@ -202,6 +206,12 @@ namespace ao::rt::test
     createFile(musicRoot / "new.flac");
     createFile(musicRoot / "unchanged.mp3");
     createFile(musicRoot / "changed.m4a");
+
+    // A pinned POSIX instant with a nonzero sub-second part: the Unchanged
+    // classification below must match the full seconds+nanoseconds pair.
+    std::filesystem::last_write_time(musicRoot / "unchanged.mp3",
+                                     std::chrono::file_clock::from_sys(std::chrono::sys_time<std::chrono::nanoseconds>{
+                                       std::chrono::nanoseconds{1750000000250000000}}));
 
     // Non-audio files and audio formats without a reader never reach the plan.
     constexpr auto kUnsupportedNames =
@@ -229,10 +239,7 @@ namespace ao::rt::test
           char const* const unchangedUri = "unchanged.mp3";
           auto builder1 = library::FileManifestBuilder::makeEmpty();
           builder1.fileSize(std::filesystem::file_size(musicRoot / unchangedUri))
-            .mtime(static_cast<std::uint64_t>(
-              std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::filesystem::last_write_time(musicRoot / unchangedUri).time_since_epoch())
-                .count()));
+            .mtime(FileTimestamp{.seconds = 1750000000, .nanoseconds = 250000000});
           auto track1 = library::TrackBuilder::makeEmpty();
           track1.property().uri(unchangedUri);
           REQUIRE(trackWriter.create(track1, builder1));
@@ -240,7 +247,9 @@ namespace ao::rt::test
           // Changed (different size)
           char const* const changedUri = "changed.m4a";
           auto builder2 = library::FileManifestBuilder::makeEmpty();
-          builder2.fileSize(99999).mtime(0);
+          // The stored row keeps no modification time, which stays distinct
+          // from the healthy file's engaged value.
+          builder2.fileSize(99999).mtime(std::nullopt);
           auto track2 = library::TrackBuilder::makeEmpty();
           track2.property().uri(changedUri);
           REQUIRE(trackWriter.create(track2, builder2));
@@ -286,6 +295,50 @@ namespace ao::rt::test
     }
 
     CHECK(foundMissing);
+  }
+
+  TEST_CASE("ScanPlan - classifies an absent stored modification time as changed", "[runtime][unit][library-scan]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const& root = temp.path();
+    auto const musicRoot = std::filesystem::path{root} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    createFile(musicRoot / "song.flac");
+    // The file carries a genuine Unix epoch zero instant, engaged by the
+    // healthy inspection below, while the stored row has no modification time
+    // at all. Equal sizes leave the timestamps as the only difference, so the
+    // plan must not conflate absence with the valid zero instant.
+    std::filesystem::last_write_time(
+      musicRoot / "song.flac", std::chrono::file_clock::from_sys(std::chrono::sys_seconds{std::chrono::seconds{0}}));
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
+
+    {
+      auto transaction = library::test::writeTransaction(ml);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto trackWriter = write.tracks();
+          auto track = library::TrackBuilder::makeEmpty();
+          track.property().uri("song.flac");
+          auto manifest = library::FileManifestBuilder::makeEmpty();
+          manifest.fileSize(std::filesystem::file_size(musicRoot / "song.flac")).mtime(std::nullopt);
+          REQUIRE(trackWriter.create(track, manifest));
+          return {};
+        }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const plan = LibraryScan{ml}.buildPlan().value();
+
+    REQUIRE(plan.size() == 1);
+    auto const& item = plan.items().front();
+    CHECK(item.classification == ScanClassification::Changed);
+    REQUIRE(item.optMtime);
+    CHECK(*item.optMtime == FileTimestamp{.seconds = 0, .nanoseconds = 0});
+    REQUIRE(item.optManifestEvidence);
+    CHECK_FALSE(item.optManifestEvidence->optMtime);
   }
 
   TEST_CASE("ScanPlan - reports IO errors while scanning", "[runtime][unit][library-scan][error]")
@@ -437,7 +490,7 @@ namespace ao::rt::test
     CHECK(item.audioSignature == identity.signature);
     REQUIRE(item.optManifestEvidence);
     CHECK(item.optManifestEvidence->fileSize == 0);
-    CHECK(item.optManifestEvidence->mtime == 0);
+    CHECK_FALSE(item.optManifestEvidence->optMtime);
     CHECK(item.optManifestEvidence->audioPayloadLength == identity.payloadLength);
     CHECK(item.optManifestEvidence->audioSignature == identity.signature);
     CHECK(item.optManifestEvidence->status == library::FileStatus::Available);

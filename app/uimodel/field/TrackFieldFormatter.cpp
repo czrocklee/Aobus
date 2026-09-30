@@ -5,6 +5,7 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
+#include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -15,11 +16,10 @@
 #include <cstdint>
 #include <format>
 #include <iterator>
-#include <ratio>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <variant>
 
 namespace ao::uimodel
@@ -64,6 +64,15 @@ namespace ao::uimodel
       }
 
       return {};
+    }
+    bool isInDisplayCalendarRange(std::chrono::seconds const elapsed)
+    {
+      constexpr auto kCalendarStart =
+        std::chrono::sys_days{std::chrono::year::min() / std::chrono::January / std::chrono::day{1}};
+      constexpr auto kCalendarEnd =
+        std::chrono::sys_days{std::chrono::year::max() / std::chrono::December / std::chrono::day{31}} +
+        std::chrono::days{1};
+      return elapsed >= kCalendarStart.time_since_epoch() && elapsed < kCalendarEnd.time_since_epoch();
     }
   } // namespace
 
@@ -116,38 +125,33 @@ namespace ao::uimodel
     return std::format("{:.1f} KB", static_cast<double>(fileSize) / kKB);
   }
 
-  std::string formatTime(std::uint64_t mtime)
+  std::string formatTime(std::optional<FileTimestamp> optMtime)
   {
-    if (mtime == 0)
+    if (!optMtime)
     {
       return {};
     }
 
-    using FileDuration = std::chrono::file_clock::duration;
-    using StoredNanoseconds = std::conditional_t<std::ratio_equal_v<FileDuration::period, std::nano>,
-                                                 std::chrono::nanoseconds,
-                                                 std::chrono::duration<std::uint64_t, std::nano>>;
-    // Restore signed nanosecond ticks before widening; coarser clocks scale the
-    // unsigned stored count before narrowing to their native ticks.
-    auto const fileTime =
-      std::chrono::file_time<FileDuration>{std::chrono::duration_cast<FileDuration>(StoredNanoseconds{mtime})};
-    auto sysTime = std::chrono::sys_seconds{};
+    // Unix seconds are the stored scale, so they need no epoch or file-clock
+    // decoding. The nanosecond fraction stays in the payload for exact equality;
+    // display keeps minute precision and never rounds the minute up.
+    auto const sysTime = std::chrono::sys_seconds{std::chrono::seconds{optMtime->seconds}};
 
-    try
+    // Storage supports all signed seconds; the display calendar does not. Gate
+    // before adding a zone offset or narrowing a year to the calendar type.
+    if (!isInDisplayCalendarRange(sysTime.time_since_epoch()))
     {
-      // Shift epochs in seconds, not signed nanoseconds: a valid file timestamp
-      // can be outside the representable range of Unix-epoch nanoseconds.
-      sysTime = std::chrono::clock_cast<std::chrono::system_clock>(std::chrono::floor<std::chrono::seconds>(fileTime));
-    }
-    catch (std::runtime_error const&)
-    {
-      // Some file clocks also need timezone data to produce a system-clock instant.
       return {};
     }
 
     try
     {
       auto const zonedTime = std::chrono::zoned_time{std::chrono::current_zone(), sysTime};
+
+      if (!isInDisplayCalendarRange(zonedTime.get_local_time().time_since_epoch()))
+      {
+        return {};
+      }
 
       return std::format("{:%Y-%m-%d %H:%M}", zonedTime);
     }
@@ -313,7 +317,13 @@ namespace ao::uimodel
         return {};
       case F::Bitrate: return readRawUint32(rawValue, formatBitrate);
       case F::FileSize: return readRawUint64(rawValue, formatFileSize);
-      case F::ModifiedTime: return readRawUint64(rawValue, formatTime);
+      case F::ModifiedTime:
+        if (auto const* mtime = std::get_if<FileTimestamp>(&rawValue); mtime != nullptr)
+        {
+          return formatTime(*mtime);
+        }
+
+        return {};
 
       case F::Quality: return {};
     }

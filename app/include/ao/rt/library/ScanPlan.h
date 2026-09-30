@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/utility/Hash128.h>
@@ -45,7 +46,9 @@ namespace ao::rt
   struct ScanManifestEvidence final
   {
     std::uint64_t fileSize = 0;
-    std::uint64_t mtime = 0;
+    // Nullopt when the manifest row stores no modification time; a Unix epoch
+    // zero instant is a valid value and stays distinct from absence.
+    std::optional<FileTimestamp> optMtime{};
     std::uint64_t audioPayloadLength = 0;
     utility::Hash128 audioSignature = {};
     library::FileStatus status = library::FileStatus::Available;
@@ -58,7 +61,9 @@ namespace ao::rt
     std::filesystem::path fullPath = {};
     ScanClassification classification = ScanClassification::Error;
     std::uint64_t fileSize = 0;
-    std::uint64_t mtime = 0;
+    // Destination-file POSIX modification time; engaged after a successful
+    // inspection, and nullopt for items that never reached one.
+    std::optional<FileTimestamp> optMtime{};
     std::uint64_t audioPayloadLength = 0;
     utility::Hash128 audioSignature = {};
     TrackId trackId = kInvalidTrackId;

@@ -8,12 +8,14 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileTimestamp.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
@@ -25,7 +27,6 @@
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -47,7 +48,7 @@ namespace ao::rt
     struct FileFacts final
     {
       std::uint64_t size = 0;
-      std::uint64_t mtime = 0;
+      std::optional<FileTimestamp> optMtime;
     };
 
     Result<FileFacts> inspectRegularFile(std::filesystem::path const& path)
@@ -79,10 +80,16 @@ namespace ao::rt
           Error::Code::IoError, "Failed to read modification time during scan revalidation: " + ec.message());
       }
 
+      auto const timestampRes = library::fileTimestampFromFileTime(lastWriteTime);
+
+      if (!timestampRes)
+      {
+        return std::unexpected{timestampRes.error()};
+      }
+
       return FileFacts{
         .size = size,
-        .mtime = static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()),
+        .optMtime = *timestampRes,
       };
     }
 
@@ -106,7 +113,7 @@ namespace ao::rt
       auto const& expected = *item.optManifestEvidence;
 
       if (optManifest->trackId() != item.trackId || optManifest->fileSize() != expected.fileSize ||
-          optManifest->mtime() != expected.mtime || optManifest->status() != expected.status)
+          optManifest->mtime() != expected.optMtime || optManifest->status() != expected.status)
       {
         return false;
       }
@@ -434,7 +441,7 @@ namespace ao::rt
       return;
     }
 
-    if (factsRes->size != item.fileSize || factsRes->mtime != item.mtime)
+    if (factsRes->size != item.fileSize || factsRes->optMtime != item.optMtime)
     {
       skipStaleItem(itemIndex);
     }
@@ -495,7 +502,7 @@ namespace ao::rt
       return;
     }
 
-    if (factsRes->size != item.fileSize || factsRes->mtime != item.mtime)
+    if (factsRes->size != item.fileSize || factsRes->optMtime != item.optMtime)
     {
       reportFailure(
         item.uri, "revalidate moved destination", "file size or modification time changed after preparation");
@@ -1072,7 +1079,7 @@ namespace ao::rt
     std::optional<library::AudioIdentity> const& optIdentity)
   {
     auto builder = library::FileManifestBuilder::makeEmpty();
-    builder.status(library::FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
+    builder.status(library::FileStatus::Available).fileSize(item.fileSize).mtime(item.optMtime);
 
     if (optIdentity)
     {

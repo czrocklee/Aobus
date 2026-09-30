@@ -101,13 +101,20 @@ namespace ao::rt::test
     auto const trackId = importOne(library);
     auto const moved = musicRoot / "renamed.flac";
     std::filesystem::rename(original, moved);
+    // A whole POSIX second, then a restamp within the same second: only the
+    // sub-second part changes, so the prepared evidence must be invalidated
+    // by the nanosecond component of the modification time alone.
+    auto const plannedTime = std::chrono::file_clock::from_sys(
+      std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{1600000000000000000}});
+    auto const restampedTime = std::chrono::file_clock::from_sys(
+      std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{1600000000100000000}});
+    std::filesystem::last_write_time(moved, plannedTime);
     auto plan = LibraryScan{library}.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::Moved) == 1);
     auto operation = ScanApplyOperation{library, std::move(plan), {}, {}};
     requirePrepared(operation);
 
-    auto const preparedTime = std::filesystem::last_write_time(moved);
-    std::filesystem::last_write_time(moved, preparedTime + std::chrono::seconds{10});
+    std::filesystem::last_write_time(moved, restampedTime);
     requireRevalidation(operation, 0, 1);
 
     auto res = operation.run();

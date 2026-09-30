@@ -9,6 +9,7 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileTimestamp.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
@@ -21,7 +22,6 @@
 #include <ao/utility/Path.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -311,10 +311,18 @@ namespace ao::rt
             "failed to read track file timestamp '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
       }
 
+      auto const timestampRes = library::fileTimestampFromFileTime(lastWriteTime);
+
+      if (!timestampRes)
+      {
+        auto error = timestampRes.error();
+        error.message = std::format(
+          "failed to convert track file timestamp '{}': {}", utility::pathToUtf8(target.fullPath), error.message);
+        return std::unexpected{std::move(error)};
+      }
+
       auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
-      manifestBuilder.fileSize(static_cast<std::uint64_t>(fileSize))
-        .mtime(static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
+      manifestBuilder.fileSize(static_cast<std::uint64_t>(fileSize)).mtime(*timestampRes);
 
       auto createRes = writer.create(builder, manifestBuilder);
 

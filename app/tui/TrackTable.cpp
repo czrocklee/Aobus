@@ -11,6 +11,7 @@
 #include "TrackListEntry.h"
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -117,7 +118,15 @@ namespace ao::tui
         case F::BitDepth: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.bitDepth};
         case F::Bitrate: return rt::TrackFieldRawValue{std::in_place_type<std::uint32_t>, row.bitrate};
         case F::FileSize: return rt::TrackFieldRawValue{std::in_place_type<std::uint64_t>, row.fileSize};
-        case F::ModifiedTime: return rt::TrackFieldRawValue{std::in_place_type<std::uint64_t>, row.modifiedTime};
+        case F::ModifiedTime:
+        {
+          if (row.optModifiedTime)
+          {
+            return rt::TrackFieldRawValue{std::in_place_type<FileTimestamp>, *row.optModifiedTime};
+          }
+
+          return rt::TrackFieldRawValue{};
+        }
         case F::DisplayTrackNumber:
           return rt::TrackFieldRawValue{
             std::in_place_type<std::string>,

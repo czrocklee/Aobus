@@ -5,9 +5,14 @@
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/LibraryWrite.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryTransfer.h>
 
@@ -18,6 +23,8 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -54,22 +61,37 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - version 4 is rejected before interpreting its payload",
+  TEST_CASE("LibraryYaml - unsupported versions are rejected before interpreting their payload",
             "[runtime][unit][import-export][schema]")
   {
     checkRejectedPayload({
-      .label = "previous version",
+      .label = "older version 4",
       .yaml = "version: 4\nlibrary: malformed\n",
       .error = "Unsupported YAML version 4",
     });
+
+    // Version 5 kept the mtime scalar, so its documents are not this format's;
+    // there is no migration and no fallback, only the one version this build
+    // writes.
+    checkRejectedPayload({
+      .label = "previous version 5",
+      .yaml = "version: 5\nlibrary: malformed\n",
+      .error = "Unsupported YAML version 5",
+    });
+
+    checkRejectedPayload({
+      .label = "future version 7",
+      .yaml = "version: 7\nlibrary: malformed\n",
+      .error = "Unsupported YAML version 7",
+    });
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects ambiguous or forward-unknown records",
+  TEST_CASE("LibraryYaml - version 6 rejects ambiguous or forward-unknown records",
             "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "library field",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -79,7 +101,7 @@ library:
 )",
        .error = "library contains unknown field 'future'"},
       {.label = "track field",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -90,7 +112,7 @@ library:
 )",
        .error = "Track record contains unknown field 'future'"},
       {.label = "duplicate track field",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -101,7 +123,7 @@ library:
 )",
        .error = "Track record contains duplicate field 'uri'"},
       {.label = "cover field",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -115,7 +137,7 @@ library:
 )",
        .error = "Track cover contains unknown field 'future'"},
       {.label = "cover payload",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -128,7 +150,7 @@ library:
 )",
        .error = "Track cover contains unknown field 'data'"},
       {.label = "list field",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -140,7 +162,7 @@ library:
 )",
        .error = "List record contains unknown field 'type'"},
       {.label = "list-reference field",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -156,7 +178,7 @@ library:
 )",
        .error = "List order reference contains unknown field 'future'"},
       {.label = "ambiguous list reference",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -172,7 +194,7 @@ library:
 )",
        .error = "exactly one of 'id' or 'uri'"},
       {.label = "unknown codec",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -183,7 +205,7 @@ library:
 )",
        .error = "Unknown codec 'VORBIS'"},
       {.label = "unknown cover type",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources:
@@ -205,12 +227,12 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 5 requires explicit scope and root-contained URIs",
+  TEST_CASE("LibraryYaml - version 6 requires explicit scope and root-contained URIs",
             "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "missing export mode",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 library:
   resources: []
   tracks: []
@@ -218,7 +240,7 @@ library:
 )",
        .error = "missing required 'export_mode'"},
       {.label = "missing tracks",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -226,7 +248,7 @@ library:
 )",
        .error = "missing required 'tracks'"},
       {.label = "missing lists",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -234,7 +256,7 @@ library:
 )",
        .error = "missing required 'lists'"},
       {.label = "tracks in list-only payload",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: listOnly
 library:
   tracks: []
@@ -242,13 +264,13 @@ library:
 )",
        .error = "library.tracks is forbidden"},
       {.label = "missing list-only lists",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: listOnly
 library: {}
 )",
        .error = "missing required 'lists'"},
       {.label = "absolute track URI",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -258,7 +280,7 @@ library:
 )",
        .error = "must be root-relative"},
       {.label = "parent traversal",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -268,7 +290,7 @@ library:
 )",
        .error = "escapes the library root"},
       {.label = "absolute list URI",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: listOnly
 library:
   lists:
@@ -299,7 +321,7 @@ library:
     auto const yamlPath = temp.path() / "outside.yaml";
     {
       auto output = std::ofstream{yamlPath};
-      output << R"(version: 5
+      output << R"(version: 6
 export_mode: metadata
 library:
   tracks:
@@ -327,7 +349,7 @@ library:
     auto const writePayload = [&yamlPath](std::string_view const tracksYaml)
     {
       auto output = std::ofstream{yamlPath};
-      output << "version: 5\nexport_mode: metadata\nlibrary:\n  tracks:\n" << tracksYaml << "  lists: []\n";
+      output << "version: 6\nexport_mode: metadata\nlibrary:\n  tracks:\n" << tracksYaml << "  lists: []\n";
     };
 
     // Both referenced files exist on disk. Rejection of the unsupported
@@ -383,11 +405,11 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects duplicate semantic keys", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 6 rejects duplicate semantic keys", "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "canonical track URI",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -398,7 +420,7 @@ library:
 )",
        .error = "Duplicate canonical track URI 'albums/song.flac'"},
       {.label = "custom metadata key",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -418,11 +440,11 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects invalid list semantics", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 6 rejects invalid list semantics", "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "invalid List filter",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: listOnly
 library:
   lists:
@@ -432,7 +454,7 @@ library:
 )",
        .error = "filter is invalid"},
       {.label = "parent cycle",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: listOnly
 library:
   lists:
@@ -452,12 +474,12 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects values beyond supported limits", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 6 rejects values beyond supported limits", "[runtime][unit][import-export][schema]")
   {
     auto overlongUri = std::string(LibraryUri::kMaxLength + 1U, 'a');
     checkRejectedPayload(RejectedPayload{
       .label = "overlong URI",
-      .yaml = std::string{"version: 5\nexport_mode: full\nlibrary:\n  tracks:\n    - uri: "} + overlongUri +
+      .yaml = std::string{"version: 6\nexport_mode: full\nlibrary:\n  tracks:\n    - uri: "} + overlongUri +
               "\n  lists: []\n",
       .error = "exceeds the maximum",
     });
@@ -465,14 +487,14 @@ library:
     auto const overlongListName = std::string(65536, 'n');
     checkRejectedPayload(RejectedPayload{
       .label = "overlong List name",
-      .yaml = std::string{"version: 5\nexport_mode: listOnly\nlibrary:\n  lists:\n    - id: 1\n      name: "} +
+      .yaml = std::string{"version: 6\nexport_mode: listOnly\nlibrary:\n  lists:\n    - id: 1\n      name: "} +
               overlongListName + "\n",
       .error = "exceeds the 65535-byte product limit",
     });
 
     constexpr auto kRejectedResourceRows = std::to_array<RejectedPayload>({
       {.label = "resource row without a length",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources:
@@ -482,7 +504,7 @@ library:
 )",
        .error = "Resource record missing required 'length' field"},
       {.label = "resource row without a digest",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources:
@@ -492,7 +514,7 @@ library:
 )",
        .error = "Resource record missing required 'digest' field"},
       {.label = "non-numeric length",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources:
@@ -503,7 +525,7 @@ library:
 )",
        .error = "Resource record.length must be a valid scalar"},
       {.label = "negative length",
-       .yaml = R"(version: 5
+       .yaml = R"(version: 6
 export_mode: full
 library:
   resources:
@@ -522,7 +544,7 @@ library:
 
     checkRejectedPayload(RejectedPayload{
       .label = "digest spelling",
-      .yaml = R"(version: 5
+      .yaml = R"(version: 6
 export_mode: full
 library:
   resources:
@@ -537,5 +559,226 @@ library:
 )",
       .error = "64 lowercase hexadecimal characters",
     });
+  }
+
+  TEST_CASE("LibraryYaml - version 6 rejects malformed mtime instants", "[runtime][unit][import-export][schema]")
+  {
+    constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
+      {.label = "nanoseconds beyond one second",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: 1719835259
+        nanoseconds: 1000000000
+  lists: []
+)",
+       .error = "mtime.nanoseconds must be below 1000000000"},
+      {.label = "negative nanoseconds",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: 1719835259
+        nanoseconds: -1
+  lists: []
+)",
+       .error = "mtime.nanoseconds must be a valid scalar"},
+      {.label = "missing seconds",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        nanoseconds: 500000000
+  lists: []
+)",
+       .error = "mtime missing required 'seconds' field"},
+      {.label = "missing nanoseconds",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: 1719835259
+  lists: []
+)",
+       .error = "mtime missing required 'nanoseconds' field"},
+      {.label = "unknown mtime field",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: 1719835259
+        nanoseconds: 500000000
+        epoch: unix
+  lists: []
+)",
+       .error = "mtime contains unknown field 'epoch'"},
+      {.label = "duplicate mtime field",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: 1719835259
+        seconds: 0
+        nanoseconds: 500000000
+  lists: []
+)",
+       .error = "mtime contains duplicate field 'seconds'"},
+      {.label = "scalar mtime",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime: 1719835259500000000
+  lists: []
+)",
+       .error = "mtime must be a map or null"},
+      {.label = "quoted null string",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime: "null"
+  lists: []
+)",
+       .error = "mtime must be a map or null"},
+      {.label = "seconds beyond the signed width",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: 9223372036854775808
+        nanoseconds: 0
+  lists: []
+)",
+       .error = "mtime.seconds must be a valid scalar"},
+      {.label = "nanoseconds beyond the unsigned width",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: 1719835259
+        nanoseconds: 4294967296
+  lists: []
+)",
+       .error = "mtime.nanoseconds must be a valid scalar"},
+      {.label = "non-numeric seconds",
+       .yaml = R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      mtime:
+        seconds: never
+        nanoseconds: 0
+  lists: []
+)",
+       .error = "mtime.seconds must be a valid scalar"},
+    });
+
+    for (auto const& payload : kRejectedPayloads)
+    {
+      checkRejectedPayload(payload);
+    }
+  }
+
+  TEST_CASE("LibraryYaml - a malformed mtime refuses the payload whole in both modes",
+            "[runtime][unit][import-export][schema]")
+  {
+    auto const mode = GENERATE(ImportMode::Restore, ImportMode::Merge);
+    CAPTURE(mode);
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const originalMtime = FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000};
+    auto const trackId =
+      library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("existing.flac"));
+
+    {
+      auto transaction = library::test::writeTransaction(ml);
+      auto builder = FileManifestBuilder::makeEmpty();
+      builder.mtime(originalMtime);
+      REQUIRE(transaction.apply([&](LibraryWrite& write) { return write.tracks().updateManifest(trackId, builder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    std::uint64_t originalRevision = 0;
+
+    {
+      auto transaction = ml.readTransaction();
+      originalRevision = ml.libraryRevision(transaction);
+    }
+
+    auto const yamlPath = temp.path() / "malformed-mtime.yaml";
+    {
+      auto output = std::ofstream{yamlPath};
+      output << R"(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: admitted.flac
+      title: Admitted
+    - uri: malformed.flac
+      mtime:
+        seconds: 1719835259
+        nanoseconds: 1000000000
+  lists: []
+)";
+    }
+
+    auto const res = LibraryYamlImporter{ml}.importFromYamlOffline(yamlPath, mode);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::FormatRejected);
+    CHECK(res.error().message.contains("nanoseconds must be below 1000000000"));
+
+    // The refusal happens during the document's preflight, before any record,
+    // list, or revision moves, whatever mode the caller asked for.
+    auto transaction = ml.readTransaction();
+    CHECK(ml.libraryRevision(transaction) == originalRevision);
+    CHECK(ml.tracks().reader(transaction).entryCount() == 1);
+    CHECK_FALSE(ml.manifest().reader(transaction).get("admitted.flac"));
+    CHECK_FALSE(ml.manifest().reader(transaction).get("malformed.flac"));
+    auto const optExisting = ml.manifest().reader(transaction).get("existing.flac");
+    REQUIRE(optExisting);
+    REQUIRE(optExisting->mtime());
+    CHECK(*optExisting->mtime() == originalMtime);
+
+    std::size_t listCount = 0;
+
+    for ([[maybe_unused]] auto const& [listId, listView] : ml.lists().reader(transaction))
+    {
+      ++listCount;
+    }
+
+    CHECK(listCount == 0);
   }
 } // namespace ao::rt::test

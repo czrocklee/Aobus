@@ -5,6 +5,7 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackFieldValue.h>
 
@@ -52,7 +53,9 @@ namespace ao::rt
     AudioCodec codec = AudioCodec::Unknown;
     std::uint32_t bitrate = 0;
     std::uint64_t fileSize = 0;
-    std::uint64_t modifiedTime = 0;
+    // Absence means no manifest modification time was recorded; the epoch-zero
+    // instant is a present value and stays distinct from absence.
+    std::optional<FileTimestamp> optModifiedTime{};
     library::FileStatus status = library::FileStatus::Available;
   };
 } // namespace ao::rt

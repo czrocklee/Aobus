@@ -8,6 +8,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/rt/TrackField.h>
@@ -24,7 +25,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
-#include <ratio>
+#include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -89,18 +91,29 @@ namespace ao::uimodel::test
     CHECK(formatFileSize(5242880) == "5.0 MB");
   }
 
-  TEST_CASE("TrackFieldFormatter - modified time formatting", "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - absent modification time renders empty while epoch zero renders its date",
+            "[uimodel][unit][field][formatter]")
   {
-    CHECK(formatTime(0).empty());
+    CHECK(formatTime(std::nullopt).empty());
 
-    // The manifest count uses the file-clock epoch, not the Unix epoch. Noon UTC
-    // in mid-2024 keeps the rendered year the same across local zone offsets.
-    auto const modificationTime =
-      std::chrono::sys_days{std::chrono::year{2024} / std::chrono::July / std::chrono::day{1}} + std::chrono::hours{12};
-    auto const fileTime = std::chrono::clock_cast<std::chrono::file_clock>(modificationTime);
-    auto const mtime =
-      std::chrono::duration_cast<std::chrono::duration<std::uint64_t, std::nano>>(fileTime.time_since_epoch()).count();
+    // A stored epoch-zero instant is present, not absent: 1970-01-01 00:00 UTC.
+    auto const epochInstant = FileTimestamp{};
+    CHECK(formatTime(epochInstant) == expectedLocalTime(std::chrono::sys_seconds{}));
+  }
 
+  TEST_CASE("TrackFieldFormatter - seconds outside the display calendar do not overflow or wrap years",
+            "[uimodel][unit][field][formatter]")
+  {
+    CHECK(formatTime(FileTimestamp{.seconds = std::numeric_limits<std::int64_t>::min()}).empty());
+    CHECK(formatTime(FileTimestamp{.seconds = std::numeric_limits<std::int64_t>::max()}).empty());
+  }
+
+  TEST_CASE("TrackFieldFormatter - Unix modification seconds render the local date",
+            "[uimodel][unit][field][formatter]")
+  {
+    // 2024-07-01 12:00:00 UTC stored as plain Unix seconds; noon UTC in mid-2024
+    // keeps the rendered year the same across local zone offsets.
+    auto const mtime = FileTimestamp{.seconds = 1719835200};
     auto const text = formatTime(mtime);
 
     REQUIRE(text.size() == 16);
@@ -124,29 +137,51 @@ namespace ao::uimodel::test
     CHECK(hour <= "23");
     CHECK(minute <= "59");
 
+    auto const modificationTime =
+      std::chrono::sys_days{std::chrono::year{2024} / std::chrono::July / std::chrono::day{1}} + std::chrono::hours{12};
     CHECK(text == expectedLocalTime(modificationTime));
   }
 
-  TEST_CASE("TrackFieldFormatter - wrapped file-clock nanoseconds preserve dates before 1970",
-            "[uimodel][unit][field][formatter]")
+  TEST_CASE("TrackFieldFormatter - negative Unix seconds render pre-epoch dates", "[uimodel][unit][field][formatter]")
   {
+    // 1938-07-01 12:00:00 UTC predates the Unix epoch.
+    auto const mtime = FileTimestamp{.seconds = -994161600};
     auto const modificationTime =
       std::chrono::sys_days{std::chrono::year{1938} / std::chrono::July / std::chrono::day{1}} + std::chrono::hours{12};
-    auto const fileTime = std::chrono::clock_cast<std::chrono::file_clock>(modificationTime);
-    auto const mtime =
-      std::chrono::duration_cast<std::chrono::duration<std::uint64_t, std::nano>>(fileTime.time_since_epoch()).count();
     CHECK(formatTime(mtime) == expectedLocalTime(modificationTime));
   }
 
-  TEST_CASE("TrackFieldFormatter - file-clock epoch conversion does not overflow Unix nanoseconds",
+  TEST_CASE("TrackFieldFormatter - Unix seconds beyond the nanosecond range render far-future dates",
             "[uimodel][unit][field][formatter]")
   {
-    // This count fits signed file-clock nanoseconds, but its Unix-epoch image
-    // need not: on libstdc++ this is a legitimate date beyond 2262.
-    constexpr std::uint64_t kMtime = 9000000000000000000;
-    auto const fileTime = std::chrono::file_time<std::chrono::seconds>{std::chrono::seconds{9000000000}};
-    auto const modificationTime = std::chrono::clock_cast<std::chrono::system_clock>(fileTime);
-    CHECK(formatTime(kMtime) == expectedLocalTime(modificationTime));
+    // 2459-07-01 12:00:00 UTC lies beyond 2262, the signed 64-bit nanosecond
+    // horizon; explicit Unix seconds keep the instant representable.
+    auto const mtime = FileTimestamp{.seconds = 15447067200};
+    auto const modificationTime =
+      std::chrono::sys_days{std::chrono::year{2459} / std::chrono::July / std::chrono::day{1}} + std::chrono::hours{12};
+    CHECK(formatTime(mtime) == expectedLocalTime(modificationTime));
+  }
+
+  TEST_CASE("TrackFieldFormatter - nanosecond fraction stays in the payload without shifting the minute",
+            "[uimodel][unit][field][formatter]")
+  {
+    // 2024-07-01 12:00:59.5 UTC: the fraction must not round the minute up.
+    auto const mtime = FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000};
+    auto const modificationTime =
+      std::chrono::sys_days{std::chrono::year{2024} / std::chrono::July / std::chrono::day{1}} +
+      std::chrono::hours{12} + std::chrono::seconds{59};
+    CHECK(formatTime(mtime) == expectedLocalTime(modificationTime));
+
+    // 1938-07-01 11:59:59.5 UTC: a negative second floors to 11:59, not 12:00.
+    auto const preEpochMtime = FileTimestamp{.seconds = -994161601, .nanoseconds = 500000000};
+    auto const preEpoch = std::chrono::sys_days{std::chrono::year{1938} / std::chrono::July / std::chrono::day{1}} +
+                          std::chrono::hours{11} + std::chrono::minutes{59} + std::chrono::seconds{59};
+    CHECK(formatTime(preEpochMtime) == expectedLocalTime(preEpoch));
+
+    // The fraction rides in the raw-value payload; equality compares both parts.
+    auto const withFraction = TrackFieldRawValue{std::in_place_type<FileTimestamp>, mtime};
+    CHECK(withFraction != TrackFieldRawValue{std::in_place_type<FileTimestamp>, FileTimestamp{.seconds = 1719835259}});
+    CHECK(withFraction == TrackFieldRawValue{std::in_place_type<FileTimestamp>, mtime});
   }
 
   TEST_CASE("TrackFieldFormatter - scanned manifest modification time renders the file's local date",
@@ -155,8 +190,8 @@ namespace ao::uimodel::test
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto const audioPath = libraryFixture.root() / "song.flac";
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), audioPath);
-    // A fractional instant just before a minute boundary also detects truncation
-    // toward zero of a negative file-clock count instead of flooring it.
+    // A fractional instant just before a minute boundary keeps the nanosecond
+    // fraction in the stored manifest.
     auto const modificationTime =
       std::chrono::sys_days{std::chrono::year{2024} / std::chrono::July / std::chrono::day{1}} +
       std::chrono::hours{12} + std::chrono::seconds{59} + std::chrono::milliseconds{500};
@@ -177,8 +212,13 @@ namespace ao::uimodel::test
     auto const optManifest = libraryFixture.library().manifest().reader(transaction).get("song.flac");
     REQUIRE(optManifest);
     REQUIRE(optManifest->status() == FileStatus::Available);
-    CHECK(formatTime(optManifest->mtime()) ==
-          expectedLocalTime(std::chrono::floor<std::chrono::seconds>(modificationTime)));
+
+    // The manifest stores the exact Unix instant: 2024-07-01T12:00:59.5Z.
+    auto const optMtime = optManifest->mtime();
+    REQUIRE(optMtime);
+    CHECK(*optMtime == FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000});
+
+    CHECK(formatTime(optMtime) == expectedLocalTime(std::chrono::floor<std::chrono::seconds>(modificationTime)));
   }
 
   TEST_CASE("TrackFieldFormatter - sample rate formatting", "[uimodel][unit][field][formatter]")
@@ -293,6 +333,17 @@ namespace ao::uimodel::test
                                    TrackField::FileSize,
                                    Raw{std::in_place_type<std::uint64_t>, static_cast<std::uint64_t>(1048576)}) ==
           "1.0 MB");
+    auto const modifiedTime = FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000};
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::ModifiedTime,
+                                   Raw{std::in_place_type<FileTimestamp>, modifiedTime}) == formatTime(modifiedTime));
+    // Only the FileTimestamp alternative formats a modification time; the raw
+    // uint64 count no longer carries one.
+    CHECK(formatTrackFieldRawValue(catalog,
+                                   TrackField::ModifiedTime,
+                                   Raw{std::in_place_type<std::uint64_t>, static_cast<std::uint64_t>(1719835259)})
+            .empty());
+    CHECK(formatTrackFieldRawValue(catalog, TrackField::ModifiedTime, Raw{std::monostate{}}).empty());
     CHECK(
       formatTrackFieldRawValue(catalog, TrackField::Quality, Raw{std::in_place_type<std::string>, "anything"}).empty());
   }

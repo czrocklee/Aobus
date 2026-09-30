@@ -15,6 +15,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -101,11 +102,14 @@ namespace ao::rt::test
                                  });
     }
 
-    std::uint64_t fileMtime(std::filesystem::path const& path)
+    /// Pins a POSIX instant with a nonzero sub-second part on a file so scan
+    /// and apply facts can be asserted against independent literal values.
+    void pinPosixMtime(std::filesystem::path const& path, std::int64_t seconds, std::uint32_t nanoseconds)
     {
-      return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(std::filesystem::last_write_time(path).time_since_epoch())
-          .count());
+      std::filesystem::last_write_time(
+        path,
+        std::chrono::file_clock::from_sys(std::chrono::sys_time<std::chrono::nanoseconds>{
+          std::chrono::nanoseconds{(seconds * 1'000'000'000) + nanoseconds}}));
     }
 
     std::vector<TrackId> changedTrackIds(ScanApplyResult const& result)
@@ -352,6 +356,7 @@ namespace ao::rt::test
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
+    pinPosixMtime(targetFile, 1750000000, 250000000);
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
@@ -379,7 +384,7 @@ namespace ao::rt::test
     REQUIRE(optManifest);
     CHECK(optManifest->status() == library::FileStatus::Available);
     CHECK(optManifest->fileSize() == std::filesystem::file_size(targetFile));
-    CHECK(optManifest->mtime() == fileMtime(targetFile));
+    CHECK(optManifest->mtime() == FileTimestamp{.seconds = 1750000000, .nanoseconds = 250000000});
     CHECK(optManifest->audioPayloadLength() == 0);
     CHECK(optManifest->audioSignature() == utility::Hash128{});
   }
@@ -410,7 +415,10 @@ namespace ao::rt::test
       REQUIRE(hotDatabase.writer(transaction).create(kLastTrackId, library::test::makeHotData({}, "Last Track")));
       REQUIRE(coldDatabase.writer(transaction).create(kLastTrackId, library::test::makeColdData({}, "missing.flac")));
       auto manifest = library::FileManifestBuilder::makeEmpty();
-      manifest.trackId(TrackId{kLastTrackId}).status(library::FileStatus::Available).fileSize(1).mtime(1);
+      manifest.trackId(TrackId{kLastTrackId})
+        .status(library::FileStatus::Available)
+        .fileSize(1)
+        .mtime(FileTimestamp{.seconds = 1700000000, .nanoseconds = 125000000});
       auto const manifestKey = library::detail::PaddedFileManifestKey{"missing.flac"};
       REQUIRE(manifestDatabase.writer(transaction).create(manifestKey.bytes(), manifest.serialize()));
       REQUIRE(transaction.commit());
@@ -760,6 +768,8 @@ namespace ao::rt::test
     auto const targetFile = musicRoot / "song.flac";
     std::filesystem::copy_file(sourceFile, targetFile);
 
+    pinPosixMtime(targetFile, 1750000000, 250000000);
+
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     // First scan to populate the manifest
@@ -788,6 +798,8 @@ namespace ao::rt::test
       out << "some extra garbage";
     }
     std::filesystem::last_write_time(targetFile, oldMTime + std::chrono::seconds{10});
+    // The pinned base keeps its sub-second part, so the applied manifest must
+    // store the advanced POSIX instant exactly.
 
     auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
@@ -810,11 +822,7 @@ namespace ao::rt::test
     auto transaction = ml.readTransaction();
     auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
     REQUIRE(optManifest);
-    auto const actualMtime =
-      static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                   std::filesystem::last_write_time(targetFile).time_since_epoch())
-                                   .count());
-    CHECK(optManifest->mtime() == actualMtime);
+    CHECK(optManifest->mtime() == FileTimestamp{.seconds = 1750000010, .nanoseconds = 250000000});
     CHECK(optManifest->audioPayloadLength() > oldPayloadLength);
     CHECK(optManifest->audioSignature() != oldSignature);
   }

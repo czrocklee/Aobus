@@ -22,7 +22,7 @@ namespace ao::rt
     {
       return view.status() == library::FileStatus::Available &&
              !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()) &&
-             view.fileSize() == candidate.fileSize && view.mtime() == candidate.mtime;
+             view.fileSize() == candidate.fileSize && view.mtime() == candidate.optMtime;
     }
   } // namespace
 

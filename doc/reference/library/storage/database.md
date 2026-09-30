@@ -5,7 +5,7 @@ id: library.database
 
 ## Scope and version
 
-This reference defines physical library format version `7`, gated by `ao::library::kLibraryVersion`.
+This reference defines physical library format version `8`, gated by `ao::library::kLibraryVersion`.
 It owns the LMDB environment, named databases, key encodings, record composition, size and alignment requirements, and version policy.
 
 Entity meaning belongs to the [track](../model/track.md) and [list](../model/list.md) references.
@@ -43,12 +43,12 @@ A mutation that exhausts the map rolls back and leaves the recorded peak untouch
 `Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
 It is for callers that need one known capacity, including tests that mean to reach the end of a map.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-7 schema only when that catalog is empty.
+It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-8 schema only when that catalog is empty.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
 Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
 The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.
 A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
-After the version gate accepts version 7, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
+After the version gate accepts version 8, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
 
 The database is host-local rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
@@ -75,7 +75,7 @@ A failure to begin a snapshot is fatal for an already admitted live library beca
 A separately acquired `WritableMusicLibrary` is the only authority that can create a write transaction, and production mutation receives only callback-scoped logical Track, List, and identity ports through `LibraryWrite`.
 Physical Store writers, native transaction handles, and mutable LMDB reservations remain inaccessible to production callers except for the source-private Track encoder described below.
 An active transaction keeps the non-blocking `<database-path>/.aobus-writer.lock` lease alive even if the originating writable capability is destroyed.
-The lock file has no governed payload and is not part of format version `7`; it must not be removed while a writable process is active.
+The lock file has no governed payload and is not part of format version `8`; it must not be removed while a writable process is active.
 
 The logical Track writer preserves the format's hot/cold, manifest, dictionary, and Resource relationships while it:
 
@@ -272,23 +272,31 @@ Dictionary rows created for a referencing record are written in the same LMDB tr
 
 ## Manifest records
 
-`FileManifestHeader` is 48 bytes and four-byte aligned:
+`FileManifestHeader` is 52 bytes and four-byte aligned:
 
-| Field | Representation |
-|---|---|
-| Track | `TrackId`. |
-| File size | Low/high unsigned 32-bit halves of one unsigned 64-bit value. |
-| Modification time | Low/high unsigned 32-bit halves of one unsigned 64-bit value. |
-| Audio payload length | Low/high unsigned 32-bit halves of one unsigned 64-bit value. |
-| Audio signature | 16-byte XXH128 canonical big-endian serialization. |
-| Status | `Available = 0`, `Missing = 1`, or `Error = 2`. |
-| Padding | Three zero bytes. |
+| Offset | Field | Representation |
+|---:|---|---|
+| `0` | Track | `TrackId`. |
+| `4` | File size | Low/high unsigned 32-bit halves of one unsigned 64-bit value. |
+| `12` | Modification-time seconds | Low/high 32-bit halves of one signed 64-bit seconds value. |
+| `20` | Modification-time nanoseconds | Unsigned 32-bit fraction of the same second, below `1000000000`. |
+| `24` | Audio payload length | Low/high unsigned 32-bit halves of one unsigned 64-bit value. |
+| `32` | Audio signature | 16-byte XXH128 canonical big-endian serialization. |
+| `48` | Status | `Available = 0`, `Missing = 1`, or `Error = 2`. |
+| `49` | `hasMtime` | `1` when a modification time is stored, `0` when it is absent. |
+| `50` | Padding | Two zero bytes. |
+
+The modification time is one 12-byte `FileTimestamp` instant: a signed 64-bit seconds count from the Unix/POSIX epoch `1970-01-01 00:00:00 UTC`, excluding leap seconds, plus a normalized nanoseconds fraction in `[0, 1000000000)`.
+The seconds value is stored in low/high 32-bit halves like the other 64-bit manifest fields, but it is a signed count, so instants before 1970 are representable.
+The stored value is a defined instant with no UTC-versus-local meaning; timezone is a display concern only.
+Absence is a separate state, not a clock value: `hasMtime = 0` requires both seconds halves and the nanoseconds word to be zero, while `hasMtime = 1` requires nanoseconds below `1000000000`.
+The epoch instant `seconds = 0, nanoseconds = 0` with `hasMtime = 1` is therefore a present value distinct from absence, and the C++ API represents the state as `std::optional<FileTimestamp>`.
 
 Zero payload length together with an all-zero signature means pending audio identity.
 
 Manifest point reads, lower-bound seeks, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
-Values must be exactly 48 bytes, carry a nonzero Track id, a declared status, three zero reserved bytes, and either both parts of an audio identity or neither.
+Values must be exactly 52 bytes, carry a nonzero Track id, a declared status, two zero padding bytes, either both parts of an audio identity or neither, and a modification-time state consistent with its `hasMtime` flag: an absent flag requires zero seconds and nanoseconds words, and a present flag requires nanoseconds below `1000000000`.
 Preparation is split because a creating write only allocates the owning Track id once its Track record exists.
 `FileManifestBuilder::validate()` parses the URI, applies the canonical key validator and every record fact that does not depend on that binding, and snapshots a zero-id header without allocating a serialized payload.
 `FileManifestBuilder::Unbound::bind()` supplies the nonzero owning Track id, cannot fail, and reapplies the complete payload validator as its postcondition, so every stored value still passes one exact validator.
@@ -310,9 +318,9 @@ Track encoders validate the bytes they fill with the same canonical local valida
 Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
 After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-7 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
+A valid non-current version returns `NotSupported` before version-8 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
 The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
-For version 7, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
+For version 8, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
 Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
 The typed `meta` token contains only header record `1` plus optional revision record `2`.
 
@@ -376,7 +384,8 @@ Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, 
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
-Version `7` gates scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excludes filesystem URI bytes and opaque List filter source.
+Version `8` gates the portable manifest modification-time record: the 12-byte `FileTimestamp` seconds/nanoseconds instant with its `hasMtime` absence flag replaces the unsigned host file-clock count.
+Version `7` gated scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excluded filesystem URI bytes and opaque List filter source.
 Version `6` gated the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` text remains syntactically opaque to database admission.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../system/query/predicate-evaluation.md).
 A grammar or predicate-semantic change does not by itself increment `kLibraryVersion`; stored text that no longer parses or compiles is an application expression error rather than corrupt storage.
@@ -384,14 +393,16 @@ A grammar or predicate-semantic change does not by itself increment `kLibraryVer
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
 An explicitly tested future migration may replace reset-and-rescan recovery for an old physical version only when it converts or validates every affected record atomically and updates the metadata version after the converted data is valid; no such migration exists today.
 There is no reader for an older physical version and no in-place migration.
-Opening a version-4, version-5, or version-6 environment returns `NotSupported`; recreating the library by rescanning the music root is the supported answer.
-Preserving user-authored curation instead requires a current version-5 portable export made before the physical upgrade.
+Opening a version-4 through version-7 environment returns `NotSupported`; the environment is neither migrated nor deleted automatically, and recreating the library by rescanning the music root is the supported answer.
+User-authored curation in an old library is not automatically recoverable across this upgrade: an old environment can no longer be opened to export, and the version-5 documents an older build produces are rejected by the current version-6 importer.
+Preserving user-authored curation requires a version-6 portable export or another usable backup made before the upgrade; a library the current build can no longer open can produce neither.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created host-local index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority
 
 - [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, version, and metadata sizes.
 - [`TrackLayout.h`](../../../../include/ao/library/TrackLayout.h), [`ListLayout.h`](../../../../include/ao/library/ListLayout.h), and [`FileManifestLayout.h`](../../../../include/ao/library/FileManifestLayout.h) own binary structs and static size checks.
+- [`FileTimestamp.h`](../../../../include/ao/FileTimestamp.h) owns the passive `ao::FileTimestamp` value type, while [`FileTimestamp.h`](../../../../include/ao/library/FileTimestamp.h) and [`FileTimestamp.cpp`](../../../../lib/library/FileTimestamp.cpp) own the independent native filesystem-clock converter.
 - [`TrackRecordValidation.cpp`](../../../../lib/library/TrackRecordValidation.cpp), [`ListRecordValidation.cpp`](../../../../lib/library/ListRecordValidation.cpp), [`FileManifestValidation.cpp`](../../../../lib/library/FileManifestValidation.cpp), and [`LibraryUriValidation.h`](../../../../lib/library/LibraryUriValidation.h) own the canonical persisted-record validation implementations.
 - [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) owns environment, named-database creation, the private version-before-flags admission sequence, and the complete open gate; [`UnvalidatedDatabase.h`](../../../../lib/lmdb/detail/UnvalidatedDatabase.h) owns its source-private one-DBI read-and-classify capability, while [`DictionaryStore.cpp`](../../../../lib/library/DictionaryStore.cpp) establishes the dictionary representation while loading it.
 - [`OpenValidationMetrics.cpp`](../../../../lib/library/OpenValidationMetrics.cpp)

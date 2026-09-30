@@ -5,6 +5,7 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
@@ -73,7 +74,7 @@ namespace ao::gtk
 
     std::uint32_t bitrate() const { return _bitrate; }
     std::uint64_t fileSize() const { return _fileSize; }
-    std::uint64_t modifiedTime() const { return _modifiedTime; }
+    std::optional<FileTimestamp> modifiedTime() const { return _optModifiedTime; }
     library::FileStatus status() const { return _status; }
 
     bool isPlaying() const { return _playing; }
@@ -106,7 +107,7 @@ namespace ao::gtk
                   AudioCodec codec,
                   std::uint32_t bitrate,
                   std::uint64_t fileSize,
-                  std::uint64_t modifiedTime,
+                  std::optional<FileTimestamp> optModifiedTime,
                   library::FileStatus status = library::FileStatus::Available);
 
   protected:
@@ -147,7 +148,7 @@ namespace ao::gtk
     AudioCodec _codec = AudioCodec::Unknown;
     std::uint32_t _bitrate = 0;
     std::uint64_t _fileSize = 0;
-    std::uint64_t _modifiedTime = 0;
+    std::optional<FileTimestamp> _optModifiedTime{};
     library::FileStatus _status = library::FileStatus::Available;
 
     // Plain bool: do not replace with Glib::Property<bool>. Nothing subscribes

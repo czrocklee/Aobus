@@ -11,9 +11,11 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/PictureType.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileTimestamp.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
@@ -301,6 +303,56 @@ namespace ao::rt
     constexpr auto kListFields =
       std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "order"});
     constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri"});
+    constexpr auto kMtimeFields = std::to_array<std::string_view>({"seconds", "nanoseconds"});
+
+    /**
+     * @brief Interprets a track record's `mtime` field.
+     *
+     * A present field is an explicit null, returned disengaged, or a map with
+     * both halves of a Unix/POSIX instant at their exact scalar widths and
+     * the fraction inside one second; anything else rejects. The field's
+     * absence is the caller's overlay decision.
+     */
+    Result<std::optional<FileTimestamp>> parseTrackMtime(ryml::ConstNodeRef const& mtimeNode)
+    {
+      if (mtimeNode.has_val() && mtimeNode.val_is_null())
+      {
+        return std::optional<FileTimestamp>{};
+      }
+
+      if (!mtimeNode.is_map())
+      {
+        return makeError(Error::Code::FormatRejected, "Track record.mtime must be a map or null");
+      }
+
+      if (auto res = rejectUnknownFields(mtimeNode, kMtimeFields, "Track record.mtime"); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      auto secondsRes = requireScalarFieldAs<std::int64_t>(mtimeNode, "seconds", "Track record.mtime");
+
+      if (!secondsRes)
+      {
+        return std::unexpected{secondsRes.error()};
+      }
+
+      auto nanosecondsRes = requireScalarFieldAs<std::uint32_t>(mtimeNode, "nanoseconds", "Track record.mtime");
+
+      if (!nanosecondsRes)
+      {
+        return std::unexpected{nanosecondsRes.error()};
+      }
+
+      constexpr std::uint32_t kNanosecondsPerSecond = 1'000'000'000;
+
+      if (*nanosecondsRes >= kNanosecondsPerSecond)
+      {
+        return makeError(Error::Code::FormatRejected, "Track record.mtime.nanoseconds must be below 1000000000");
+      }
+
+      return std::optional<FileTimestamp>{FileTimestamp{.seconds = *secondsRes, .nanoseconds = *nanosecondsRes}};
+    }
 
     Result<> validateTrackNestedSchema(ryml::ConstNodeRef const& trackNode)
     {
@@ -320,6 +372,18 @@ namespace ao::rt
             return makeError(
               Error::Code::FormatRejected, std::format("Track record.custom contains duplicate field '{}'", key));
           }
+        }
+      }
+
+      // The entire instant is validated here, in the document's preflight:
+      // a malformed one rejects the payload before any durable import
+      // effects, whatever the filesystem or the library happens to hold. The
+      // manifest overlay later reuses the same helper to apply it.
+      if (auto const mtime = yaml::findChild(trackNode, "mtime"); mtime.readable())
+      {
+        if (auto parsedRes = parseTrackMtime(mtime); !parsedRes)
+        {
+          return std::unexpected{parsedRes.error()};
         }
       }
 
@@ -1901,9 +1965,21 @@ namespace ao::rt
               "Failed to read modification time for '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
         }
 
+        // The native instant is converted, not narrowed: a filesystem clock
+        // that does not share Unix's epoch or precision keeps its exact value,
+        // and a conversion that cannot represent it is an input error here.
+        auto const mtimeRes = library::fileTimestampFromFileTime(lastWriteTime);
+
+        if (!mtimeRes)
+        {
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to read modification time for '{}': {}",
+                                       utility::pathToUtf8(fullPath),
+                                       mtimeRes.error().message));
+        }
+
         manifestBuilder.fileSize(fileSize);
-        manifestBuilder.mtime(static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
+        manifestBuilder.mtime(*mtimeRes);
       }
       else if (fileEc)
       {
@@ -1927,13 +2003,16 @@ namespace ao::rt
 
     if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
     {
-      auto mtimeRes = requireScalarAs<std::uint64_t>(mtimeNode, "Track record.mtime");
+      auto mtimeRes = parseTrackMtime(mtimeNode);
 
       if (!mtimeRes)
       {
         return std::unexpected{mtimeRes.error()};
       }
 
+      // The overlay is the rule the preflight already enforced: a map carries
+      // the document's instant, an explicit null clears the fact, and nothing
+      // here rebuilds an absent key from a filesystem the document never saw.
       manifestBuilder.mtime(*mtimeRes);
     }
 

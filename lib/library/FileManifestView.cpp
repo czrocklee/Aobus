@@ -4,12 +4,14 @@
 #include <ao/library/FileManifestView.h>
 
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 
 namespace ao::library
@@ -29,7 +31,7 @@ namespace ao::library
     return header().fileSize();
   }
 
-  std::uint64_t FileManifestView::mtime() const noexcept
+  std::optional<FileTimestamp> FileManifestView::mtime() const noexcept
   {
     return header().mtime();
   }
