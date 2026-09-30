@@ -10,6 +10,7 @@
 #include "ScanOutput.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
@@ -526,7 +527,7 @@ namespace ao::cli
     std::string uri{};
     TrackId trackId{};
     std::uint64_t fileSize = 0;
-    std::uint64_t mtime = 0;
+    std::optional<FileTimestamp> optMtime{};
     std::string status{};
   };
 
@@ -1162,6 +1163,20 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::LibraryDumpDto>
   }
 };
 
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::ManifestRecordDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optMtime")
+    {
+      return "mtime";
+    }
+
+    return memberName;
+  }
+};
+
 namespace ao::cli
 {
   namespace
@@ -1190,7 +1205,7 @@ namespace ao::cli
         records.push_back(ManifestRecordDto{.uri = std::string{uri},
                                             .trackId = view.trackId(),
                                             .fileSize = view.fileSize(),
-                                            .mtime = view.mtime(),
+                                            .optMtime = view.mtime(),
                                             .status = std::string{formatFileStatus(view.status())}});
       }
 
@@ -1276,7 +1291,18 @@ namespace ao::cli
         std::println(os, "  URI: {}", uri);
         std::println(os, "    Track ID: {}", view.trackId());
         std::println(os, "    File Size: {} bytes", view.fileSize());
-        std::println(os, "    MTime: {}", view.mtime());
+
+        if (auto const optMtime = view.mtime(); optMtime)
+        {
+          // Keep the normalized Unix instant numerical and explicit; never a
+          // formatted date and never a single ambiguous count.
+          std::println(os, "    MTime: seconds={} nanoseconds={}", optMtime->seconds, optMtime->nanoseconds);
+        }
+        else
+        {
+          std::println(os, "    MTime: unknown");
+        }
+
         std::println(os, "    Status: {}", formatFileStatus(view.status()));
       }
     }

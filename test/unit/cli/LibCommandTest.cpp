@@ -3,6 +3,7 @@
 
 #include "CliTestSupport.h"
 #include "runtime/resource/ResourceByteDiskCache.h"
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -71,6 +72,142 @@ namespace ao::cli::test
     CHECK(result.out.empty());
     CHECK(contains(result.err, "failed to open library"));
     CHECK(contains(result.err, "File manifest key has an invalid size"));
+  }
+
+  TEST_CASE("CLI - lib dump --manifest prints a scanned modification time as exact seconds and nanoseconds",
+            "[cli][integration][lib][manifest]")
+  {
+    auto fixture = CliFixture{};
+    auto const trackPath = fixture.root() / "track.flac";
+    fixture.copyAudio("basic_metadata.flac", trackPath.filename().string());
+
+    // The stamped instant is 2024-07-01T12:00:59.5Z: the scan stores it as the
+    // exact Unix instant, and the plain dump maps both halves verbatim.
+    auto const modificationTime =
+      std::chrono::sys_days{std::chrono::year{2024} / std::chrono::July / std::chrono::day{1}} +
+      std::chrono::hours{12} + std::chrono::seconds{59} + std::chrono::milliseconds{500};
+    auto const stampedTime = ao::test::fileTimeFromSystemTime(modificationTime);
+    fs::last_write_time(trackPath, stampedTime);
+    REQUIRE(fs::last_write_time(trackPath) == stampedTime);
+
+    auto result = fixture.run({"init"});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"lib", "dump", "--manifest"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "URI: track.flac"));
+    CHECK(contains(result.out, "MTime: seconds=1719835259 nanoseconds=500000000"));
+  }
+
+  TEST_CASE("CLI - lib dump --manifest reports an imported mtime verbatim and unknown for a stored null",
+            "[cli][integration][lib][manifest]")
+  {
+    auto fixture = CliFixture{};
+    // Both files exist, so a filesystem stat cannot explain either row: the
+    // document's explicit `mtime` is the only source the dump reflects.
+    fixture.copyAudio("basic_metadata.flac", "mapped.flac");
+    fixture.copyAudio("basic_metadata.flac", "song.flac");
+
+    auto const documentPath = fixture.root() / "mtime-overlay.yaml";
+    {
+      auto document = std::ofstream{documentPath};
+      document << R"yaml(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: mapped.flac
+      title: Mapped Mtime
+      mtime:
+        seconds: 1719835259
+        nanoseconds: 500000000
+    - uri: song.flac
+      title: Unknown Mtime
+      mtime: null
+  lists: []
+)yaml";
+    }
+
+    auto result = fixture.run({"lib", "import", documentPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+
+    result = fixture.run({"lib", "dump", "--manifest"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    CHECK(contains(result.out, "URI: mapped.flac"));
+    CHECK(contains(result.out, "MTime: seconds=1719835259 nanoseconds=500000000"));
+    CHECK(contains(result.out, "URI: song.flac"));
+    CHECK(contains(result.out, "MTime: unknown"));
+  }
+
+  TEST_CASE("CLI - lib dump --manifest machine output nests a known mtime and omits an absent one",
+            "[cli][integration][lib][manifest]")
+  {
+    auto fixture = CliFixture{};
+    // Both files exist, so a filesystem stat cannot explain either row: the
+    // document's explicit `mtime` values are the only source the dump reflects.
+    fixture.copyAudio("basic_metadata.flac", "mapped.flac");
+    fixture.copyAudio("basic_metadata.flac", "song.flac");
+
+    auto const documentPath = fixture.root() / "mtime-overlay.yaml";
+    {
+      auto document = std::ofstream{documentPath};
+      document << R"yaml(version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: mapped.flac
+      title: Mapped Mtime
+      mtime:
+        seconds: 1719835259
+        nanoseconds: 500000000
+    - uri: song.flac
+      title: Unknown Mtime
+      mtime: null
+  lists: []
+)yaml";
+    }
+
+    auto result = fixture.run({"lib", "import", documentPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+
+    auto const assertManifestRecords = [](ryml::ConstNodeRef const& manifest)
+    {
+      REQUIRE(manifest.is_seq());
+      REQUIRE(manifest.num_children() == 2);
+
+      // The manifest reader iterates in URI byte order, so the records appear
+      // in the order the import document named them.
+      auto const& mapped = manifest[0];
+      REQUIRE(yaml::scalarView(mapped["uri"]) == "mapped.flac");
+      CHECK(yaml::scalarView(mapped["mtime"]["seconds"]) == "1719835259");
+      CHECK(yaml::scalarView(mapped["mtime"]["nanoseconds"]) == "500000000");
+      // The persisted key is `mtime`, not the DTO member name.
+      CHECK_FALSE(mapped.has_child("optMtime"));
+
+      // An absent modification time omits the key entirely rather than
+      // serializing a null.
+      auto const& unknown = manifest[1];
+      REQUIRE(yaml::scalarView(unknown["uri"]) == "song.flac");
+      CHECK_FALSE(unknown.has_child("mtime"));
+    };
+
+    result = fixture.run({"-O", "yaml", "lib", "dump", "--manifest"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    auto tree = parseYaml(result.out);
+    assertManifestRecords(tree.rootref()["manifest"]);
+
+    result = fixture.run({"-O", "json", "lib", "dump", "--manifest"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    requireJsonLineParses(result.out);
+    auto jsonTree = parseYaml(result.out);
+    assertManifestRecords(jsonTree.rootref()["manifest"]);
   }
 
   TEST_CASE("CLI - lib stats reports known fixture counts", "[cli][integration][lib][stats]")
@@ -468,14 +605,14 @@ namespace ao::cli::test
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "5");
+    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "6");
     CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
     CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
 
     result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Payload: YAML v5, mode 'full', target scope 'library'."));
+    CHECK(contains(result.out, "Payload: YAML v6, mode 'full', target scope 'library'."));
     CHECK(contains(result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0."));
 
     result = target.run({"track", "show"});

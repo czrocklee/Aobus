@@ -14,6 +14,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/PictureType.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -128,7 +129,9 @@ namespace ao::rt::test
       trackBuilder.coverArt().add(PictureType::FrontCover, resourceId);
 
       auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
-      manifestBuilder.fileSize(123456789).mtime(987654321).status(library::FileStatus::Missing);
+      manifestBuilder.fileSize(123456789)
+        .mtime(FileTimestamp{.seconds = 987654321, .nanoseconds = 500000000})
+        .status(library::FileStatus::Missing);
       auto otherTrackBuilder = library::TrackBuilder::makeEmpty();
       otherTrackBuilder.metadata().title("Another Song");
       otherTrackBuilder.property().uri("other.flac");
@@ -235,8 +238,15 @@ namespace ao::rt::test
     CHECK(row.codec == AudioCodec::Flac);
     CHECK(row.bitrate == 960000);
     CHECK(row.fileSize == 123456789);
-    CHECK(row.modifiedTime == 987654321);
+    REQUIRE(row.optModifiedTime);
+    CHECK(*row.optModifiedTime == FileTimestamp{.seconds = 987654321, .nanoseconds = 500000000});
     CHECK(row.status == library::FileStatus::Missing);
+
+    // The other track's empty manifest records no modification time: absence,
+    // not the epoch-zero instant.
+    auto const optOtherRow = scope.trackRow(seeded.otherTrackId);
+    REQUIRE(optOtherRow);
+    CHECK_FALSE(optOtherRow->optModifiedTime);
 
     CHECK(scope.trackCoverArtId(seeded.trackId) == seeded.resourceId);
 
@@ -251,6 +261,13 @@ namespace ao::rt::test
     auto const fileSize = scope.trackField(seeded.trackId, TrackField::FileSize);
     REQUIRE(std::holds_alternative<std::uint64_t>(fileSize));
     CHECK(std::get<std::uint64_t>(fileSize) == 123456789);
+
+    auto const modifiedTime = scope.trackField(seeded.trackId, TrackField::ModifiedTime);
+    REQUIRE(std::holds_alternative<FileTimestamp>(modifiedTime));
+    CHECK(std::get<FileTimestamp>(modifiedTime) == FileTimestamp{.seconds = 987654321, .nanoseconds = 500000000});
+
+    auto const absentModifiedTime = scope.trackField(seeded.otherTrackId, TrackField::ModifiedTime);
+    CHECK(std::holds_alternative<std::monostate>(absentModifiedTime));
 
     auto const missingField = scope.trackField(TrackId{999999}, TrackField::Title);
     CHECK(std::holds_alternative<std::monostate>(missingField));

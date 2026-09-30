@@ -89,7 +89,7 @@ namespace winrt::Aobus::implementation
         case F::BitDepth: return formatBitDepth(row.bitDepth);
         case F::Bitrate: return formatBitrate(row.bitrate);
         case F::FileSize: return formatFileSize(row.fileSize);
-        case F::ModifiedTime: return formatTime(row.modifiedTime);
+        case F::ModifiedTime: return formatTime(row.optModifiedTime);
         case F::DisplayTrackNumber: return formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber);
         case F::TechnicalSummary: return formatTechnicalSummary(row.codec, row.sampleRate, row.bitDepth, row.bitrate);
         case F::Quality: return {};

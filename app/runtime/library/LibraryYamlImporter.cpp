@@ -11,9 +11,11 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/PictureType.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileTimeConversion.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
@@ -301,6 +303,105 @@ namespace ao::rt
     constexpr auto kListFields =
       std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "order"});
     constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri"});
+    constexpr auto kMtimeFields = std::to_array<std::string_view>({"seconds", "nanoseconds"});
+
+    /**
+     * @brief Interprets a track record's `mtime` field.
+     *
+     * A present field is an explicit null, returned disengaged, or a map with
+     * both halves of a Unix/POSIX instant at their exact scalar widths and
+     * the fraction inside one second; anything else rejects. The field's
+     * absence is the caller's overlay decision.
+     */
+    Result<std::optional<FileTimestamp>> parseTrackMtime(ryml::ConstNodeRef const& mtimeNode)
+    {
+      if (mtimeNode.has_val() && mtimeNode.val_is_null())
+      {
+        return std::optional<FileTimestamp>{};
+      }
+
+      if (!mtimeNode.is_map())
+      {
+        return makeError(Error::Code::FormatRejected, "Track record.mtime must be a map or null");
+      }
+
+      if (auto res = rejectUnknownFields(mtimeNode, kMtimeFields, "Track record.mtime"); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      auto secondsRes = requireScalarFieldAs<std::int64_t>(mtimeNode, "seconds", "Track record.mtime");
+
+      if (!secondsRes)
+      {
+        return std::unexpected{secondsRes.error()};
+      }
+
+      auto nanosecondsRes = requireScalarFieldAs<std::uint32_t>(mtimeNode, "nanoseconds", "Track record.mtime");
+
+      if (!nanosecondsRes)
+      {
+        return std::unexpected{nanosecondsRes.error()};
+      }
+
+      auto const mtime = FileTimestamp{.seconds = *secondsRes, .nanoseconds = *nanosecondsRes};
+
+      if (!mtime.isNormalized())
+      {
+        return makeError(
+          Error::Code::FormatRejected,
+          std::format("Track record.mtime.nanoseconds must be below {}", FileTimestamp::kNanosecondsPerSecond));
+      }
+
+      return std::optional<FileTimestamp>{mtime};
+    }
+
+    /**
+     * @brief Seeds manifest facts from an existing file.
+     *
+     * Only facts the track record leaves out are read, so a fact its overlay
+     * replaces is never read and cannot fail the import.
+     */
+    Result<> seedOmittedFileFacts(std::filesystem::path const& fullPath,
+                                  bool const seedFileSize,
+                                  bool const seedMtime,
+                                  library::FileManifestBuilder& manifestBuilder)
+    {
+      if (seedFileSize)
+      {
+        auto fileEc = std::error_code{};
+        auto const fileSize = std::filesystem::file_size(fullPath, fileEc);
+
+        if (fileEc)
+        {
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to read file size for '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
+        }
+
+        manifestBuilder.fileSize(fileSize);
+      }
+
+      if (seedMtime)
+      {
+        // The native instant is converted, not narrowed: a filesystem clock
+        // that does not share Unix's epoch or precision keeps its exact value,
+        // and a conversion that cannot represent it is an input error here.
+        auto const mtimeRes = library::lastWriteTimestamp(fullPath);
+
+        if (!mtimeRes)
+        {
+          return makeError(Error::Code::IoError,
+                           std::format("Failed to read modification time for '{}': {}",
+                                       utility::pathToUtf8(fullPath),
+                                       mtimeRes.error().message));
+        }
+
+        manifestBuilder.mtime(*mtimeRes);
+      }
+
+      return {};
+    }
 
     Result<> validateTrackNestedSchema(ryml::ConstNodeRef const& trackNode)
     {
@@ -320,6 +421,18 @@ namespace ao::rt
             return makeError(
               Error::Code::FormatRejected, std::format("Track record.custom contains duplicate field '{}'", key));
           }
+        }
+      }
+
+      // The entire instant is validated here, in the document's preflight:
+      // a malformed one rejects the payload before any durable import
+      // effects, whatever the filesystem or the library happens to hold. The
+      // manifest overlay later reuses the same helper to apply it.
+      if (auto const mtime = yaml::findChild(trackNode, "mtime"); mtime.readable())
+      {
+        if (auto parsedRes = parseTrackMtime(mtime); !parsedRes)
+        {
+          return std::unexpected{parsedRes.error()};
         }
       }
 
@@ -1856,6 +1969,9 @@ namespace ao::rt
                                                         library::FileManifestStore::Reader const& manifestReader,
                                                         library::FileManifestBuilder& manifestBuilder) const
   {
+    auto const fileSizeNode = yaml::findChild(trackNode, "fileSize");
+    auto const mtimeNode = yaml::findChild(trackNode, "mtime");
+
     if (auto const optManifest = manifestReader.get(uriStr); optManifest)
     {
       manifestBuilder.fileSize(optManifest->fileSize());
@@ -1880,30 +1996,18 @@ namespace ao::rt
         return makeError(code, fullPathRes.error().message);
       }
 
-      if (auto const& fullPath = *fullPathRes; std::filesystem::exists(fullPath, fileEc) && !fileEc)
+      auto const& fullPath = *fullPathRes;
+      auto const seedFileSize = !fileSizeNode.readable();
+
+      // A record that supplies both facts never inspects the file, so even an
+      // uninspectable path cannot fail its import.
+      if (auto const seedMtime = !mtimeNode.readable();
+          (seedFileSize || seedMtime) && std::filesystem::exists(fullPath, fileEc) && !fileEc)
       {
-        auto const fileSize = std::filesystem::file_size(fullPath, fileEc);
-
-        if (fileEc)
+        if (auto seedRes = seedOmittedFileFacts(fullPath, seedFileSize, seedMtime, manifestBuilder); !seedRes)
         {
-          return makeError(
-            Error::Code::IoError,
-            std::format("Failed to read file size for '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
+          return seedRes;
         }
-
-        auto const lastWriteTime = std::filesystem::last_write_time(fullPath, fileEc);
-
-        if (fileEc)
-        {
-          return makeError(
-            Error::Code::IoError,
-            std::format(
-              "Failed to read modification time for '{}': {}", utility::pathToUtf8(fullPath), fileEc.message()));
-        }
-
-        manifestBuilder.fileSize(fileSize);
-        manifestBuilder.mtime(static_cast<std::uint64_t>(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count()));
       }
       else if (fileEc)
       {
@@ -1913,7 +2017,7 @@ namespace ao::rt
       }
     }
 
-    if (auto fileSizeNode = yaml::findChild(trackNode, "fileSize"); fileSizeNode.readable())
+    if (fileSizeNode.readable())
     {
       auto fileSizeRes = requireScalarAs<std::uint64_t>(fileSizeNode, "Track record.fileSize");
 
@@ -1925,15 +2029,18 @@ namespace ao::rt
       manifestBuilder.fileSize(*fileSizeRes);
     }
 
-    if (auto mtimeNode = yaml::findChild(trackNode, "mtime"); mtimeNode.readable())
+    if (mtimeNode.readable())
     {
-      auto mtimeRes = requireScalarAs<std::uint64_t>(mtimeNode, "Track record.mtime");
+      auto mtimeRes = parseTrackMtime(mtimeNode);
 
       if (!mtimeRes)
       {
         return std::unexpected{mtimeRes.error()};
       }
 
+      // The overlay is the rule the preflight already enforced: a map carries
+      // the document's instant, an explicit null clears the fact, and nothing
+      // here rebuilds an absent key from a filesystem the document never saw.
       manifestBuilder.mtime(*mtimeRes);
     }
 

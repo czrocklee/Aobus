@@ -81,6 +81,10 @@ target_include_directories(ao_app_uimodel PUBLIC "${CMAKE_SOURCE_DIR}/app/includ
 target_include_directories(ao_app_uimodel PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_uimodel PUBLIC ao_app_runtime)
 target_link_libraries(ao_app_uimodel PRIVATE ao_app_i18n)
+if(APPLE)
+  # libc++ omits the C++20 time-zone database; see doc/development/macos-portability.md.
+  target_link_libraries(ao_app_uimodel PRIVATE PkgDateTz)
+endif()
 
 # Target visibility is the primary platform boundary; the source audit below is
 # regression insurance for dependencies CMake cannot express within one archive.

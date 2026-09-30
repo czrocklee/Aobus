@@ -14,6 +14,7 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
@@ -21,6 +22,7 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileTimeConversion.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
@@ -113,15 +115,6 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    void appendAndAdvanceMtime(std::filesystem::path const& path)
-    {
-      auto const oldMtimePoint = std::filesystem::last_write_time(path);
-      auto out = std::ofstream{path, std::ios::binary | std::ios::app};
-      out << "changed during backfill";
-      out.close();
-      std::filesystem::last_write_time(path, oldMtimePoint + std::chrono::seconds{10});
-    }
-
     async::Task<Result<AudioIdentityBatchCommitResult>> commitOfflineBatchAsync(
       library::MusicLibrary* musicLibrary,
       std::mutex* optCommitMutex,
@@ -170,7 +163,7 @@ namespace ao::rt::test
     {
       std::string uri{};
       std::uint64_t fileSize = 0;
-      std::uint64_t mtime = 0;
+      std::optional<FileTimestamp> optMtime;
     };
 
     void addPendingManifestRows(library::MusicLibrary& ml, std::size_t const count)
@@ -186,12 +179,13 @@ namespace ao::rt::test
         REQUIRE(output);
         output.close();
 
+        auto const timestampRes = library::fileTimestampFromFileTime(std::filesystem::last_write_time(path));
+        REQUIRE(timestampRes);
+
         fixtures.push_back(PendingManifestFixture{
           .uri = std::move(uri),
           .fileSize = std::filesystem::file_size(path),
-          .mtime = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                std::filesystem::last_write_time(path).time_since_epoch())
-                                                .count()),
+          .optMtime = *timestampRes,
         });
       }
 
@@ -207,7 +201,7 @@ namespace ao::rt::test
             auto const trackSpec = library::test::makeEmptyTrackSpec(fixture.uri);
             library::test::applyTrackSpec(track, trackSpec);
             auto manifest = library::FileManifestBuilder::makeEmpty();
-            manifest.fileSize(fixture.fileSize).mtime(fixture.mtime).status(library::FileStatus::Available);
+            manifest.fileSize(fixture.fileSize).mtime(fixture.optMtime).status(library::FileStatus::Available);
 
             if (auto createRes = writer.create(track, std::move(manifest)); !createRes)
             {
@@ -487,6 +481,14 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     auto const trackPath = musicRoot / "song.flac";
     copyFixture(musicRoot, "song.flac");
+    // A whole POSIX second so the mid-hash touch below changes only the
+    // sub-second part: the row's file size stays identical, so the skip must
+    // come from the nanosecond component of the modification time alone.
+    auto const touchedTime = ao::test::fileTimeFromSystemTime(
+      std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{1600000000100000000}});
+    std::filesystem::last_write_time(trackPath,
+                                     ao::test::fileTimeFromSystemTime(std::chrono::sys_time<std::chrono::nanoseconds>{
+                                       std::chrono::nanoseconds{1600000000000000000}}));
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
@@ -494,12 +496,12 @@ namespace ao::rt::test
     bool mutated = false;
     auto res = runIndexPending(ml,
                                {},
-                               [&mutated, &trackPath](AudioIdentityIndexProgress const& progress)
+                               [&mutated, &trackPath, touchedTime](AudioIdentityIndexProgress const& progress)
                                {
                                  if (!mutated && progress.itemFraction == 0.0)
                                  {
                                    mutated = true;
-                                   appendAndAdvanceMtime(trackPath);
+                                   std::filesystem::last_write_time(trackPath, touchedTime);
                                  }
                                });
 

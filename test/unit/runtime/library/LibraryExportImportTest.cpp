@@ -11,6 +11,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -373,7 +374,9 @@ namespace ao::rt::test
                                                                              .bitDepth = BitDepth{}});
       auto transaction = library::test::writeTransaction(ml1);
       auto builder = FileManifestBuilder::makeEmpty();
-      builder.mtime(123456789);
+      // A real instant before the Unix epoch, fraction included, so the full
+      // round trip below proves the seconds/nanoseconds pair travels exactly.
+      builder.mtime(FileTimestamp{.seconds = -994161601, .nanoseconds = 500000000});
       REQUIRE(transaction.apply([&](LibraryWrite& write) { return write.tracks().updateManifest(trackId, builder); }));
 
       REQUIRE(transaction.commit());
@@ -423,6 +426,11 @@ namespace ao::rt::test
       CHECK(std::string{dictionary.get(view.classical().soloistId())} == "Test Soloist");
       CHECK(view.classical().movementNumber() == 2);
       CHECK(view.classical().movementTotal() == 4);
+
+      auto const optManifest = ml2.manifest().reader(transaction).get("full-fields.flac");
+      REQUIRE(optManifest);
+      REQUIRE(optManifest->mtime());
+      CHECK(*optManifest->mtime() == FileTimestamp{.seconds = -994161601, .nanoseconds = 500000000});
     }
   }
 
@@ -456,7 +464,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "merge.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 5
+      yaml << R"(version: 6
 export_mode: delta
 library:
   tracks:
@@ -512,7 +520,7 @@ library:
     SECTION("omitted collections preserve the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 5
+      yaml << R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -540,7 +548,7 @@ library:
     SECTION("present empty collections clear the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 5
+      yaml << R"(version: 6
 export_mode: full
 library:
   resources: []
@@ -606,7 +614,7 @@ library:
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
       {
         auto yaml = std::ofstream{yamlPath};
-        yaml << R"(version: 5
+        yaml << R"(version: 6
 export_mode: delta
 library:
   tracks:
@@ -663,7 +671,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 5
+version: 6
 export_mode: full
 library:
   resources: []
@@ -712,7 +720,9 @@ library:
     auto optManifest = manifestReader.get("song.flac");
     REQUIRE(optManifest);
     CHECK(optManifest->fileSize() == 13);
-    CHECK(optManifest->mtime() > 0);
+    // The document omits mtime, so this is filesystem seeding: presence is the
+    // contract, not any ordering of the instant against zero.
+    REQUIRE(optManifest->mtime());
 
     auto optManifest2 = manifestReader.get("song2.flac");
     REQUIRE(optManifest2);
@@ -745,7 +755,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 5\n";
+      yaml << "version: 6\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
@@ -773,7 +783,7 @@ library:
     }
 
     REQUIRE(res);
-    CHECK(*res == ImportReport{.payloadVersion = 5,
+    CHECK(*res == ImportReport{.payloadVersion = 6,
                                .payloadMode = ExportMode::Metadata,
                                .tracksCreated = 2,
                                .listsCreated = 1,
@@ -813,7 +823,7 @@ library:
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
     {
       auto yaml = std::ofstream{yamlPathDelta};
-      yaml << "version: 5\n";
+      yaml << "version: 6\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: delta\n";
       yaml << "library:\n";
@@ -831,7 +841,7 @@ library:
 
     auto resultDeltaRes = importer.importFromYamlOffline(yamlPathDelta, ImportMode::Merge);
     REQUIRE(resultDeltaRes);
-    CHECK(*resultDeltaRes == ImportReport{.payloadVersion = 5,
+    CHECK(*resultDeltaRes == ImportReport{.payloadVersion = 6,
                                           .payloadMode = ExportMode::Delta,
                                           .tracksUpdated = 1,
                                           .listsCreated = 1,
@@ -869,7 +879,7 @@ library:
     CHECK(addedLists == 1);
   }
 
-  TEST_CASE("LibraryYaml - version 5 rejects aliases and extension fields", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 6 rejects aliases and extension fields", "[runtime][unit][import-export][schema]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -879,7 +889,7 @@ library:
     SECTION("legacy mode alias")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 5
+      yaml << R"(version: 6
 export_mode: minimum
 library:
   tracks: []
@@ -895,7 +905,7 @@ library:
     SECTION("unknown root field")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 5
+      yaml << R"(version: 6
 export_mode: full
 extension_root: future
 library:
@@ -923,7 +933,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 5\n";
+      yaml << "version: 6\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
@@ -946,5 +956,231 @@ library:
     CHECK(optView->classical().conductorId() == kInvalidDictionaryId);
     CHECK(optView->classical().ensembleId() == kInvalidDictionaryId);
     CHECK(optView->classical().soloistId() == kInvalidDictionaryId);
+  }
+
+  TEST_CASE("LibraryYaml - full transfer preserves modification instants exactly",
+            "[runtime][integration][import-export][yaml]")
+  {
+    struct StampedTrack final
+    {
+      std::string_view uri;
+      FileTimestamp mtime{};
+    };
+
+    // Real instants across the representable range: before the Unix epoch,
+    // the epoch instant itself, a full nanosecond fraction, a date beyond the
+    // horizon the old nanosecond count could not carry, and the signed width
+    // edge. The epoch instant stays a present value: absence is a different,
+    // documented fact.
+    constexpr auto kStampedTracks = std::to_array<StampedTrack>({
+      {.uri = "pre-epoch.flac", .mtime = {.seconds = -994161601, .nanoseconds = 500000000}},
+      {.uri = "epoch-zero.flac", .mtime = {.seconds = 0, .nanoseconds = 0}},
+      {.uri = "fraction.flac", .mtime = {.seconds = 1719835259, .nanoseconds = 999999999}},
+      {.uri = "wide-date.flac", .mtime = {.seconds = 253402300799, .nanoseconds = 1}},
+      {.uri = "signed-width.flac", .mtime = {.seconds = 9223372036854775807, .nanoseconds = 0}},
+    });
+
+    auto const sourceTemp = ao::test::TempDir{};
+    auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
+
+    for (auto const& stamped : kStampedTracks)
+    {
+      auto const trackId =
+        library::test::addTrackWithUniqueFixtureUri(source, library::test::makeEmptyTrackSpec(stamped.uri));
+
+      auto transaction = library::test::writeTransaction(source);
+      auto builder = FileManifestBuilder::makeEmpty();
+      builder.mtime(stamped.mtime);
+      REQUIRE(transaction.apply([&](LibraryWrite& write) { return write.tracks().updateManifest(trackId, builder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const yamlPath = std::filesystem::path{sourceTemp.path()} / "mtime.yaml";
+    REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
+
+    {
+      // The wire keeps the exact pair: no normalization of the negative half,
+      // no folding of the fraction into the seconds.
+      auto ifs = std::ifstream{yamlPath};
+      auto const begin = std::istreambuf_iterator<char>{ifs};
+      auto const end = decltype(begin){};
+      auto const exported = std::string{begin, end};
+      CHECK_THAT(exported, Catch::Matchers::ContainsSubstring("seconds: -994161601"));
+      CHECK_THAT(exported, Catch::Matchers::ContainsSubstring("nanoseconds: 999999999"));
+      CHECK_THAT(exported, Catch::Matchers::ContainsSubstring("seconds: 9223372036854775807"));
+    }
+
+    auto const targetTemp = ao::test::TempDir{};
+    auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
+    REQUIRE(LibraryYamlImporter{target}.importFromYamlOffline(yamlPath, ImportMode::Restore));
+
+    auto transaction = target.readTransaction();
+    auto const manifestReader = target.manifest().reader(transaction);
+
+    for (auto const& stamped : kStampedTracks)
+    {
+      CAPTURE(stamped.uri);
+      auto const optManifest = manifestReader.get(std::string{stamped.uri});
+      REQUIRE(optManifest);
+      REQUIRE(optManifest->mtime());
+      CHECK(*optManifest->mtime() == stamped.mtime);
+    }
+  }
+
+  TEST_CASE("LibraryYaml - full transfer records an unknown modification time as null",
+            "[runtime][integration][import-export][yaml]")
+  {
+    auto const sourceTemp = ao::test::TempDir{};
+    auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
+    std::ignore = library::test::addTrackWithUniqueFixtureUri(source, library::test::makeEmptyTrackSpec("song.flac"));
+
+    // The file exists, so the unknown instant is a library fact rather than a
+    // missing one, and only the document can carry it.
+    {
+      auto out = std::ofstream{std::filesystem::path{sourceTemp.path()} / "song.flac"};
+      out << "content";
+    }
+
+    auto const yamlPath = std::filesystem::path{sourceTemp.path()} / "unknown-mtime.yaml";
+    REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
+
+    {
+      // An explicit null, not an omitted key: an import must be able to keep
+      // this state instead of rebuilding it from its own filesystem.
+      auto ifs = std::ifstream{yamlPath};
+      auto const begin = std::istreambuf_iterator<char>{ifs};
+      auto const end = decltype(begin){};
+      auto const exported = std::string{begin, end};
+      CHECK_THAT(exported, Catch::Matchers::ContainsSubstring("mtime: null"));
+    }
+
+    auto const targetTemp = ao::test::TempDir{};
+    auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
+
+    // The target also holds the file, so seeding from the filesystem would
+    // produce an instant; the explicit null must clear it instead.
+    {
+      auto out = std::ofstream{std::filesystem::path{targetTemp.path()} / "song.flac"};
+      out << "content";
+    }
+
+    REQUIRE(LibraryYamlImporter{target}.importFromYamlOffline(yamlPath, ImportMode::Restore));
+
+    auto transaction = target.readTransaction();
+    auto const optManifest = target.manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->fileSize() == 0);
+    CHECK_FALSE(optManifest->mtime());
+  }
+
+  TEST_CASE("LibraryYaml - restore reads no filesystem fact the document supplies",
+            "[runtime][integration][import-export][yaml]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const yamlPath = std::filesystem::path{temp.path()} / "supplied-facts.yaml";
+
+    // A directory exists at the track path, so any size or time read from the
+    // filesystem would fail the import; the document supplies both facts.
+    std::filesystem::create_directory(std::filesystem::path{temp.path()} / "song.flac");
+
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(
+version: 6
+export_mode: full
+library:
+  resources: []
+  tracks:
+    - uri: song.flac
+      fileSize: 42
+      mtime:
+        seconds: 1719835259
+        nanoseconds: 500000000
+  lists: []
+)";
+    }
+
+    REQUIRE(LibraryYamlImporter{ml}.importFromYamlOffline(yamlPath, ImportMode::Restore));
+
+    auto transaction = ml.readTransaction();
+    auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->fileSize() == 42);
+    REQUIRE(optManifest->mtime());
+    CHECK(*optManifest->mtime() == FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000});
+  }
+
+  TEST_CASE("LibraryYaml - merge overlays modification instants by presence",
+            "[runtime][integration][import-export][yaml]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const baseline = FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000};
+    auto const replacement = FileTimestamp{.seconds = -994161601, .nanoseconds = 999999999};
+    auto const trackId =
+      library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("song.flac"));
+
+    {
+      auto transaction = library::test::writeTransaction(ml);
+      auto builder = FileManifestBuilder::makeEmpty();
+      builder.mtime(baseline);
+      REQUIRE(transaction.apply([&](LibraryWrite& write) { return write.tracks().updateManifest(trackId, builder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto importer = LibraryYamlImporter{ml};
+    auto const yamlPath = std::filesystem::path{temp.path()} / "mtime-overlay.yaml";
+
+    auto const overlayPayload = [&](std::string_view mtimeLines)
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << "version: 6\n";
+      yaml << "export_mode: full\n";
+      yaml << "library:\n";
+      yaml << "  resources: []\n";
+      yaml << "  tracks:\n";
+      yaml << "    - uri: song.flac\n";
+      yaml << mtimeLines;
+      yaml << "  lists: []\n";
+    };
+
+    SECTION("omitted mtime preserves the merge baseline")
+    {
+      overlayPayload("");
+
+      REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
+
+      auto transaction = ml.readTransaction();
+      auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(optManifest);
+      REQUIRE(optManifest->mtime());
+      CHECK(*optManifest->mtime() == baseline);
+    }
+
+    SECTION("explicit null clears the merge baseline")
+    {
+      overlayPayload("      mtime: null\n");
+
+      REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
+
+      auto transaction = ml.readTransaction();
+      auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(optManifest);
+      CHECK_FALSE(optManifest->mtime());
+    }
+
+    SECTION("a present instant replaces the merge baseline")
+    {
+      overlayPayload("      mtime:\n        seconds: -994161601\n        nanoseconds: 999999999\n");
+
+      REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
+
+      auto transaction = ml.readTransaction();
+      auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(optManifest);
+      REQUIRE(optManifest->mtime());
+      CHECK(*optManifest->mtime() == replacement);
+    }
   }
 } // namespace ao::rt::test

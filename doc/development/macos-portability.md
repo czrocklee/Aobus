@@ -44,6 +44,7 @@ repository. None of them is a design choice.
 | 7 | c4core `C4_CPP=17` header mode | `cmake/Dependencies.cmake` | c4core accepts C++26 consumers under Darwin Clang without invalid likelihood attributes |
 | 8 | Objective-C++26 compiler flag mapping | root `CMakeLists.txt` | CMake supplies Clang's Objective-C++26 standard flags |
 | 9 | `__cpp_lib_chrono` clock-conversion branches | `lib/library/FileClockConversion.h`, `test/unit/FilesystemTestSupport.h` | libc++ defines `__cpp_lib_chrono` as at least `201907L` |
+| 10 | `date` time-zone database | `vcpkg.json`, `cmake/Dependencies.cmake`, `app/uimodel/field/TrackFieldFormatter.cpp` | libc++ defines `__cpp_lib_chrono` as at least `201907L` with its time-zone database enabled |
 
 ### 1-3: standard-library seams
 
@@ -203,6 +204,25 @@ libc++.
 
 To retire it: remove both preprocessor conditions, keeping the UTC branch and
 the `clock_cast` spelling, and build the core suite on macOS.
+
+### 10: `date` time-zone database
+
+The Homebrew `llvm@22` libc++ is configured with
+`_LIBCPP_HAS_TIME_ZONE_DATABASE 0`, so `std::chrono::time_zone`,
+`current_zone`, and `zoned_time` do not exist, independently of what Apple's
+system library exports. Modification-time display needs the host's local zone.
+
+On macOS only, vcpkg supplies Howard Hinnant's `date` library with its default
+features. That build reads the operating system's zoneinfo instead of downloading
+tz data. `TrackFieldFormatter.cpp` names the database through one namespace alias
+and shifts the instant by the zone's offset, so the display code is identical
+for either database and formats only standard types. On macOS, the formatter
+tests derive their expected text from the C library's `localtime_r` rather than
+from `date`, so the substitute is checked against the operating system.
+
+To retire it: remove the alias and the conditional include, the `date` entry from
+`vcpkg.json`, the `PkgDateTz` target, and its link from `app/uimodel`, then run
+the full macOS check.
 
 ## Permanent platform differences
 

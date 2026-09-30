@@ -5,10 +5,12 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileTimeConversion.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
@@ -19,12 +21,12 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -44,7 +46,7 @@ namespace ao::rt
       std::string uri;
       TrackId trackId = kInvalidTrackId;
       std::uint64_t fileSize = 0;
-      std::uint64_t mtime = 0;
+      std::optional<FileTimestamp> optMtime;
       std::uint64_t audioPayloadLength = 0;
       utility::Hash128 audioSignature = {};
       library::FileStatus status = library::FileStatus::Available;
@@ -93,7 +95,7 @@ namespace ao::rt
         entries.push_back(ManifestSnapshotEntry{.uri = std::string{uri},
                                                 .trackId = view.trackId(),
                                                 .fileSize = view.fileSize(),
-                                                .mtime = view.mtime(),
+                                                .optMtime = view.mtime(),
                                                 .audioPayloadLength = view.audioPayloadLength(),
                                                 .audioSignature = view.audioSignature(),
                                                 .status = view.status()});
@@ -182,17 +184,16 @@ namespace ao::rt
         return {};
       }
 
-      auto const lastWriteTime = std::filesystem::last_write_time(path, entryEc);
+      auto const timestampRes = library::lastWriteTimestamp(path);
 
-      if (entryEc)
+      if (!timestampRes)
       {
-        item.errorMessage = entryEc.message();
+        item.errorMessage = timestampRes.error().message;
         items.push_back(std::move(item));
         return {};
       }
 
-      item.mtime = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(lastWriteTime.time_since_epoch()).count());
+      item.optMtime = *timestampRes;
 
       if (auto const* const manifestEntry = manifest.find(uri); manifestEntry == nullptr)
       {
@@ -205,14 +206,14 @@ namespace ao::rt
         item.audioSignature = manifestEntry->audioSignature;
         item.optManifestEvidence = ScanManifestEvidence{
           .fileSize = manifestEntry->fileSize,
-          .mtime = manifestEntry->mtime,
+          .optMtime = manifestEntry->optMtime,
           .audioPayloadLength = manifestEntry->audioPayloadLength,
           .audioSignature = manifestEntry->audioSignature,
           .status = manifestEntry->status,
         };
 
         if (manifestEntry->status != library::FileStatus::Missing && manifestEntry->fileSize == item.fileSize &&
-            manifestEntry->mtime == item.mtime)
+            manifestEntry->optMtime == item.optMtime)
         {
           item.classification = ScanClassification::Unchanged;
         }
@@ -368,13 +369,13 @@ namespace ao::rt
           auto item = ScanItem{.uri = entry.uri,
                                .classification = ScanClassification::Missing,
                                .fileSize = entry.fileSize,
-                               .mtime = entry.mtime,
+                               .optMtime = entry.optMtime,
                                .audioPayloadLength = entry.audioPayloadLength,
                                .audioSignature = entry.audioSignature,
                                .trackId = entry.trackId,
                                .optManifestEvidence = ScanManifestEvidence{
                                  .fileSize = entry.fileSize,
-                                 .mtime = entry.mtime,
+                                 .optMtime = entry.optMtime,
                                  .audioPayloadLength = entry.audioPayloadLength,
                                  .audioSignature = entry.audioSignature,
                                  .status = entry.status,

@@ -7,6 +7,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/TrackField.h>
@@ -18,6 +19,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 namespace ao::gtk
@@ -128,7 +130,7 @@ namespace ao::gtk
                                 AudioCodec codec,
                                 std::uint32_t bitrate,
                                 std::uint64_t fileSize,
-                                std::uint64_t modifiedTime,
+                                std::optional<FileTimestamp> optModifiedTime,
                                 library::FileStatus status)
   {
     _text[static_cast<std::size_t>(rt::TrackField::Title)] = std::move(title);
@@ -160,7 +162,7 @@ namespace ao::gtk
     _codec = codec;
     _bitrate = bitrate;
     _fileSize = fileSize;
-    _modifiedTime = modifiedTime;
+    _optModifiedTime = optModifiedTime;
     _status = status;
 
     // Drop computed strings whenever row data is populated.

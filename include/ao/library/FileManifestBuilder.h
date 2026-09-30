@@ -5,12 +5,14 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -35,7 +37,7 @@ namespace ao::library
     // from Unbound::bind().
     FileManifestBuilder& trackId(TrackId val);
     FileManifestBuilder& fileSize(std::uint64_t val);
-    FileManifestBuilder& mtime(std::uint64_t val);
+    FileManifestBuilder& mtime(std::optional<FileTimestamp> optVal);
     FileManifestBuilder& audioPayloadLength(std::uint64_t val);
     FileManifestBuilder& audioSignature(utility::Hash128 val);
     FileManifestBuilder& status(FileStatus val);

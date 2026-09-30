@@ -5,6 +5,7 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
+#include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -13,17 +14,30 @@
 
 #include <chrono>
 #include <cstdint>
-#include <ctime>
 #include <format>
 #include <iterator>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
+
+// NOLINTNEXTLINE(misc-include-cleaner) -- each standard library defines the macro in a different header.
+#if __cpp_lib_chrono < 201907L
+#include <date/tz.h>
+#endif
 
 namespace ao::uimodel
 {
   namespace
   {
+#if __cpp_lib_chrono >= 201907L
+    namespace tzdb = std::chrono;
+#else
+    // libc++ omits the C++20 time-zone database; see doc/development/macos-portability.md.
+    namespace tzdb = date;
+#endif
+
     std::string readRawText(rt::TrackFieldRawValue const& rawValue)
     {
       if (auto const* text = std::get_if<std::string>(&rawValue); text != nullptr)
@@ -62,6 +76,36 @@ namespace ao::uimodel
       }
 
       return {};
+    }
+
+    bool isInDisplayCalendarRange(std::chrono::seconds const elapsed)
+    {
+      constexpr auto kCalendarStart =
+        std::chrono::sys_days{std::chrono::year::min() / std::chrono::January / std::chrono::day{1}};
+      constexpr auto kCalendarEnd =
+        std::chrono::sys_days{std::chrono::year::max() / std::chrono::December / std::chrono::day{31}} +
+        std::chrono::days{1};
+      return elapsed >= kCalendarStart.time_since_epoch() && elapsed < kCalendarEnd.time_since_epoch();
+    }
+
+    // Resolved once per process because the zone lookup is too costly to repeat
+    // for every rendered cell; a later host zone change is not observed. Null
+    // selects UTC when the local zone is unavailable.
+    tzdb::time_zone const* localTimeZone()
+    {
+      static auto const* const kLocalZone = [] -> tzdb::time_zone const*
+      {
+        try
+        {
+          return tzdb::current_zone();
+        }
+        catch (std::runtime_error const&)
+        {
+          return nullptr;
+        }
+      }();
+
+      return kLocalZone;
     }
   } // namespace
 
@@ -114,16 +158,43 @@ namespace ao::uimodel
     return std::format("{:.1f} KB", static_cast<double>(fileSize) / kKB);
   }
 
-  std::string formatTime(std::uint64_t mtime)
+  std::string formatTime(std::optional<FileTimestamp> optMtime)
   {
-    if (mtime == 0)
+    if (!optMtime)
     {
       return {};
     }
 
-    auto const sysTime = std::chrono::system_clock::from_time_t(static_cast<std::time_t>(mtime));
+    // Unix seconds are the stored scale, so they need no epoch or file-clock
+    // decoding. The nanosecond fraction stays in the payload for exact equality;
+    // display keeps minute precision and never rounds the minute up.
+    auto const sysTime = std::chrono::sys_seconds{std::chrono::seconds{optMtime->seconds}};
 
-    return std::format("{:%Y-%m-%d %H:%M}", sysTime);
+    // Storage supports all signed seconds; the display calendar does not. Gate
+    // before adding a zone offset or narrowing a year to the calendar type.
+    if (!isInDisplayCalendarRange(sysTime.time_since_epoch()))
+    {
+      return {};
+    }
+
+    auto const* const zone = localTimeZone();
+
+    if (zone == nullptr)
+    {
+      // The instant is usable even when the local zone is unavailable.
+      return std::format("{:%Y-%m-%d %H:%M}", sysTime);
+    }
+
+    // Shifting by the zone offset keeps formatting on std::chrono types, which
+    // either time-zone database can supply.
+    auto const wallClockTime = sysTime + zone->get_info(sysTime).offset;
+
+    if (!isInDisplayCalendarRange(wallClockTime.time_since_epoch()))
+    {
+      return {};
+    }
+
+    return std::format("{:%Y-%m-%d %H:%M}", wallClockTime);
   }
 
   std::string formatSampleRate(std::uint32_t sampleRate)
@@ -281,7 +352,13 @@ namespace ao::uimodel
         return {};
       case F::Bitrate: return readRawUint32(rawValue, formatBitrate);
       case F::FileSize: return readRawUint64(rawValue, formatFileSize);
-      case F::ModifiedTime: return readRawUint64(rawValue, formatTime);
+      case F::ModifiedTime:
+        if (auto const* mtime = std::get_if<FileTimestamp>(&rawValue); mtime != nullptr)
+        {
+          return formatTime(*mtime);
+        }
+
+        return {};
 
       case F::Quality: return {};
     }

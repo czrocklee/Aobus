@@ -123,8 +123,8 @@ frontend fallback; they may not treat malformed bytes as a successful key.
 
 ## Persistence and versioning
 
-The facade persists nothing. Physical library schema version 7 uses a
-library-private admission seam around it: dictionary values, inline Track
+The facade persists nothing. The current physical library schema retains the
+library-private admission seam introduced in version 7: dictionary values, inline Track
 title and custom-metadata values, and List name and description are validated
 and normalized to NFC before persistence. Opaque List filter source is
 validated as scalar UTF-8 but retained byte-exact because it can contain URI

@@ -8,7 +8,7 @@ id: library.yaml-transfer
 This specification defines library YAML export and import behavior.
 It owns mode semantics, baselines, payload scope, overlays, preview-bound authorization, atomicity, reports, and change publication.
 
-The exact version 5 document shape is defined by the [library YAML format reference](../../reference/library/format/yaml.md).
+The exact version 6 document shape is defined by the [library YAML format reference](../../reference/library/format/yaml.md).
 Library ownership and the storage/change pipeline are defined by [library architecture](structure.md).
 CLI flags and output rendering belong to the [CLI command reference](../../reference/cli/command.md).
 
@@ -33,7 +33,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 ## Invariants
 
 - One export observes metadata, tracks, lists, resources, dictionary values, and manifest facts through one read transaction.
-- Version 5 uses the closed schema and explicit collection scope defined by the format reference.
+- Version 6 uses the closed schema and explicit collection scope defined by the format reference.
 - Every URI crossing YAML, manifest, Writer, or scan boundaries becomes a `LibraryUri`; playback, read-model, fingerprint, export/import baseline, and scan-apply access resolve it again beneath the weakly canonical root and reject escaping or unresolved symlinks. An absent root or ordinary missing suffix remains valid for first-run metadata restore.
 - Import validates the complete document before applying any persistent mutation. In both restore and merge, every track record must name a supported audio file, as [manual creation](mutation.md#create-from-file) does; an unsupported extension rejects the whole document as `FormatRejected`. Supported-extension files may still be absent or unreadable for offline restoration.
 - Track metadata, tags, custom keys and values, and List display text must be scalar-valid UTF-8; canonically decomposed input is accepted and normalized to NFC by core library preparation before persistence.
@@ -61,7 +61,7 @@ The application import path has two operations:
 prepare(path, import mode)
   -> enter sequenced Import Maintenance
   -> read exact source bytes
-  -> parse and validate version 5
+  -> parse and validate version 6
   -> prepare track/list data
   -> capture target runtime + library id + committed revision
   -> run exact preview in one generation-bound lane turn and abort
@@ -148,8 +148,9 @@ Collections use replacement semantics:
 - present empty sequence or map: clear the complete collection.
 
 A recognized codec token replaces the baseline codec; any other token rejects the payload.
-Manifest facts start from an existing manifest row, otherwise current filesystem facts when the path exists, otherwise zero.
-Present `fileSize` and `mtime` fields override those facts.
+Manifest facts start from an existing manifest row, otherwise current filesystem facts when the path exists, otherwise a zero file size and no stored modification time.
+A present `fileSize` field overrides that fact.
+A present `mtime` value overrides the modification-time fact: the map form stores its instant, and an explicit YAML null clears the stored modification time to absent; an omitted `mtime` preserves the baseline.
 
 ### Cover terminal state
 
@@ -188,7 +189,7 @@ Every import, preview, and plan returns an `ImportReport`:
 
 | Field | Meaning |
 |---|---|
-| `payloadVersion` | Accepted interchange version; currently `5`. |
+| `payloadVersion` | Accepted interchange version; currently `6`. |
 | `payloadMode` | `delta`, `metadata`, `full`, or `listOnly`. |
 | `targetScope` | `Library` for track-bearing payloads or `Lists` for `listOnly`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
@@ -231,18 +232,20 @@ Before commit, cancellation aborts or prevents the Maintenance mutation and the 
 After durable commit, the command must reach `Published` or coordinated-Closing retirement before cancellation can propagate; a durable import is never reported as rolled back.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
-Version 5 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
+Version 6 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
 No configurable prepared-memory ceiling, streaming path, or additional bounded-transfer proposal is currently defined.
 Adding a limit must preserve the guarantee that the current exporter cannot produce a file the importer rejects solely for size.
 
 ## Persistence and versioning
 
-Version 5 is a portable interchange format, not the physical database format.
+Version 6 is a portable interchange format, not the physical database format.
 Restore and merge always write current `MusicLibrary` records.
-An accepted version-5 document may use a canonically decomposed spelling, but export from physical database version 7 emits NFC because that is the current library admission invariant.
-Existing libraries can retain unsupported-extension rows admitted by earlier version-5 importers. Export does not filter those rows, but current whole-document admission rejects their reimport; no migration, purge, or grandfathering is performed.
-The importer accepts no earlier interchange version, including version 4, and provides no migration or legacy-restore path.
-A version-3 document's embedded cover bytes are therefore never read: the import fails and changes nothing, so recovering that library means exporting it again from a version-5 build, or scanning the music files it describes.
+An accepted version-6 document may use a canonically decomposed spelling, but export from physical database version 8 emits NFC because that is the current library admission invariant.
+Libraries admitted by earlier version-5 importers could retain unsupported-extension rows; that version-5 history stays visible across the version-5 to version-6 transition, and its export consequences remain policy: export does not filter those rows, while current whole-document admission rejects their reimport, with no migration, purge, or grandfathering performed.
+A fresh version-8 library cannot gain such a row, because current import admission rejects the document and no older physical version can be opened.
+The importer accepts no earlier interchange version, including version 5, and provides no migration or legacy-restore path.
+A version-3 document's embedded cover bytes are therefore never read: the import fails and changes nothing.
+No build can re-export an old physical library into a document the current importer accepts, because the current build opens only physical version 8 while older builds emit interchange versions this importer rejects; recovering such a library means scanning the music files it describes.
 
 ## Frontend observations
 

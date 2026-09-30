@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <optional>
 
 namespace ao::gtk::test
 {
@@ -47,7 +48,7 @@ namespace ao::gtk::test
                      AudioCodec::Unknown,
                      320000,
                      0,
-                     0);
+                     std::nullopt);
 
     CHECK(rowPtr->trySetStringField(rt::TrackField::Artist, "New Artist"));
     CHECK(rowPtr->fieldText(rt::TrackField::Artist) == "New Artist");
