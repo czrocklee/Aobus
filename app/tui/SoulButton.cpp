@@ -4,6 +4,8 @@
 #include "SoulButton.h"
 
 #include <ao/audio/Transport.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -349,5 +351,41 @@ namespace ao::tui
     }
 
     return ftxui::hbox(std::move(cells)) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, kSoulGlyphColumns);
+  }
+
+  void SoulAnimationClock::update(rt::PlaybackTransportSnapshot const& state,
+                                  bool const reducedMotion,
+                                  uimodel::FrameClock::TimePoint const frameTime) noexcept
+  {
+    _animation.setMotionMode(uimodel::aobusSoulMotionMode(state.transport));
+    _animation.setAura(
+      uimodel::aobusSoulAuraRgb(uimodel::resolveSoulAura(state.transport, state.ready, state.quality)));
+
+    if (reducedMotion || !_animation.needsFrames())
+    {
+      _animation.settle();
+      _optPreviousFrameTime.reset();
+      return;
+    }
+
+    if (_optPreviousFrameTime)
+    {
+      _animation.advance(frameTime - *_optPreviousFrameTime);
+    }
+
+    // The frame that settles the Soul is the last one requested, so the next
+    // transition starts a fresh interval instead of spanning the idle gap.
+    _optPreviousFrameTime =
+      _animation.needsFrames() ? std::optional{frameTime} : std::optional<uimodel::FrameClock::TimePoint>{};
+  }
+
+  bool SoulAnimationClock::isSettling() const noexcept
+  {
+    return _animation.needsFrames() && _animation.motionMode() != uimodel::AobusSoulMotionMode::Animating;
+  }
+
+  uimodel::AobusSoulAnimationState const& SoulAnimationClock::animation() const noexcept
+  {
+    return _animation;
   }
 } // namespace ao::tui

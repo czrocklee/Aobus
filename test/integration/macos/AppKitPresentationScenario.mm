@@ -766,6 +766,7 @@ namespace ao::appkit::test
     settleNativeCallbacks();
 
     exerciseActivityExpiration();
+    exerciseSoulOcclusion();
 
     {
       auto fixture = SessionFixture{musicRoot, stateRoot};

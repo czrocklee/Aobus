@@ -3,7 +3,11 @@
 
 #include "tui/SoulButton.h"
 
+#include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <catch2/catch_message.hpp>
@@ -77,6 +81,34 @@ namespace ao::tui::test
     ftxui::Color rgb(uimodel::AobusSoulRgb const color)
     {
       return ftxui::Color::RGB(color.red, color.green, color.blue);
+    }
+
+    rt::PlaybackTransportSnapshot verifiedTransport(audio::Transport const transport, audio::Quality const pipeline)
+    {
+      return rt::PlaybackTransportSnapshot{
+        .transport = transport,
+        .ready = true,
+        .quality = rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                    .pipelineQuality = pipeline,
+                                    .overall = pipeline,
+                                    .fullyVerified = true},
+      };
+    }
+
+    // Redraws at the TUI refresh cadence until a paused Soul stops asking for them.
+    uimodel::FrameClock::TimePoint pauseSettleTime(SoulAnimationClock& clock,
+                                                   rt::PlaybackTransportSnapshot const& state,
+                                                   uimodel::FrameClock::TimePoint frameTime)
+    {
+      constexpr auto kRefreshInterval = std::chrono::milliseconds{250};
+
+      while (clock.isSettling())
+      {
+        frameTime += kRefreshInterval;
+        clock.update(state, false, frameTime);
+      }
+
+      return frameTime;
     }
   } // namespace
 
@@ -204,5 +236,69 @@ namespace ao::tui::test
     CHECK(soulTitleText(audio::Transport::Error, motion, std::chrono::milliseconds{0}) == "⢎⣀⡱");
     CHECK(soulTitleText(audio::Transport::Buffering, motion, std::chrono::milliseconds{0}) !=
           soulTitleText(audio::Transport::Buffering, motion, std::chrono::milliseconds{700}));
+  }
+
+  TEST_CASE("SoulButton - animation clock resumes without counting a quiet pause as motion", "[tui][unit][soul]")
+  {
+    constexpr auto kRefreshInterval = std::chrono::milliseconds{250};
+    auto const playing = verifiedTransport(audio::Transport::Playing, audio::Quality::BitwisePerfect);
+    auto const paused = verifiedTransport(audio::Transport::Paused, audio::Quality::BitwisePerfect);
+    auto clock = SoulAnimationClock{};
+    auto frameTime = uimodel::FrameClock::fromMicros(0);
+
+    for (std::int32_t frame = 0; frame < 8; ++frame)
+    {
+      frameTime += kRefreshInterval;
+      clock.update(playing, false, frameTime);
+    }
+
+    clock.update(paused, false, frameTime);
+    REQUIRE(clock.isSettling());
+    frameTime = pauseSettleTime(clock, paused, frameTime);
+    auto const heldElapsed = clock.animation().elapsed();
+
+    // No redraw is requested while settled; the next one arrives on resume.
+    frameTime += std::chrono::seconds{10};
+    clock.update(playing, false, frameTime);
+    CHECK(clock.animation().elapsed() == heldElapsed);
+
+    clock.update(playing, false, frameTime + kRefreshInterval);
+    CHECK(clock.animation().elapsed() > heldElapsed);
+    CHECK(clock.animation().elapsed() - heldElapsed < kRefreshInterval);
+  }
+
+  TEST_CASE("SoulButton - animation clock cross-fades a recolor after a quiet pause", "[tui][unit][soul]")
+  {
+    auto const radiant = verifiedTransport(audio::Transport::Paused, audio::Quality::BitwisePerfect);
+    auto const turbulent = verifiedTransport(audio::Transport::Paused, audio::Quality::LinearIntervention);
+    auto clock = SoulAnimationClock{};
+    auto frameTime = uimodel::FrameClock::fromMicros(0);
+
+    clock.update(verifiedTransport(audio::Transport::Playing, audio::Quality::BitwisePerfect), false, frameTime);
+    clock.update(radiant, false, frameTime);
+    frameTime = pauseSettleTime(clock, radiant, frameTime);
+    auto const radiantBody = clock.animation().visualFrame().gradientColors.body;
+
+    frameTime += std::chrono::seconds{10};
+    clock.update(turbulent, false, frameTime);
+    CHECK(clock.isSettling());
+    CHECK(clock.animation().visualFrame().gradientColors.body == radiantBody);
+
+    pauseSettleTime(clock, turbulent, frameTime);
+    CHECK(clock.animation().visualFrame() ==
+          uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulTurbulent, clock.animation().motionFrame()));
+  }
+
+  TEST_CASE("SoulButton - animation clock settles at once under reduced motion", "[tui][unit][soul]")
+  {
+    auto clock = SoulAnimationClock{};
+    auto const frameTime = uimodel::FrameClock::fromMicros(0);
+
+    clock.update(verifiedTransport(audio::Transport::Playing, audio::Quality::BitwisePerfect), true, frameTime);
+    clock.update(verifiedTransport(audio::Transport::Paused, audio::Quality::LinearIntervention), true, frameTime);
+
+    CHECK_FALSE(clock.isSettling());
+    CHECK(clock.animation().elapsed() == std::chrono::duration<double>::zero());
+    CHECK(clock.animation().visualFrame().gradientColors.body == uimodel::kAobusSoulTurbulent);
   }
 } // namespace ao::tui::test

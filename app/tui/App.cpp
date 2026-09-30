@@ -73,6 +73,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
@@ -644,10 +645,10 @@ namespace ao::tui
       CoverArtLoader& coverArt;
       CoverArtDeliveryMode const& coverArtMode;
       std::int32_t coverColumns = kCoverArtDefaultColumns;
-      uimodel::AobusSoulAnimationState soulAnimation{};
+      std::atomic_bool& soulSettling;
+      SoulAnimationClock soulClock{};
       // Reuse the dock's last rendered sample for title updates between draws.
       std::chrono::milliseconds soulTransientElapsed{};
-      std::optional<uimodel::FrameClock::TimePoint> optPreviousSoulFrameTime;
       ListId observedList = kInvalidListId;
       TrackId observedDetailTrack = kInvalidTrackId;
 
@@ -883,22 +884,9 @@ namespace ao::tui
         library.navigation().search().invalidateMouseRegions();
         shell.listSearch().invalidateMouseRegions();
         auto const frameTime = monotonicFrameTime();
-        auto const soulMotionMode = uimodel::aobusSoulMotionMode(state.transport);
-        soulAnimation.setMotionMode(soulMotionMode);
-
-        if (!preferences.reducedMotion && soulMotionMode == uimodel::AobusSoulMotionMode::Animating)
-        {
-          if (optPreviousSoulFrameTime)
-          {
-            soulAnimation.advance(frameTime - *optPreviousSoulFrameTime);
-          }
-
-          optPreviousSoulFrameTime = frameTime;
-        }
-        else
-        {
-          optPreviousSoulFrameTime.reset();
-        }
+        soulClock.update(state, preferences.reducedMotion, frameTime);
+        // Pause coasting and aura cross-fades outlive the transport clock tick.
+        soulSettling.store(soulClock.isSettling());
 
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));
         auto const animationElapsed =
@@ -1032,7 +1020,7 @@ namespace ao::tui
                                            .succession = &playback.snapshot().succession,
                                            .displayElapsed = displayElapsed,
                                            .animationElapsed = animationElapsed,
-                                           .soulMotion = soulAnimation.motionFrame(),
+                                           .soulVisual = soulClock.animation().visualFrame(),
                                            .outputView = &outputDevices.viewState(),
                                            .outputDeviceBox = &hitRegions.outputDeviceButtonBox,
                                            .soulButtonBox = &hitRegions.soulButtonBox,
@@ -1433,6 +1421,7 @@ namespace ao::tui
       CoverArtLoader{runtime.resourceBytes(), runtime.async(), coverDeliveryMode, requestRefresh, coverColumns};
     auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.snapshot().transport.transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
+    auto soulSettling = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
     auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
     auto playbackTime = uimodel::PlaybackPositionViewModel{
@@ -1672,8 +1661,8 @@ namespace ao::tui
       .coverArt = coverArt,
       .coverArtMode = coverDeliveryMode,
       .coverColumns = coverColumns,
-      .soulAnimation = {},
-      .optPreviousSoulFrameTime = std::nullopt,
+      .soulSettling = soulSettling,
+      .soulClock = {},
     };
     auto rendererPtr = ftxui::Renderer([&frameRenderer] { return frameRenderer(); });
 
@@ -1688,10 +1677,11 @@ namespace ao::tui
     // FTXUI's bypass. Watcher destruction restores those handlers before
     // Loop::~Loop uninstalls terminal mode.
     auto loop = ftxui::Loop{&screen, componentPtr};
-    auto refreshTick = PeriodicRefresh{screen,
-                                       kPlaybackTickInterval,
-                                       [&clockTickActive, &activityAutoDismissActive]
-                                       { return clockTickActive.load() || activityAutoDismissActive.load(); }};
+    auto refreshTick =
+      PeriodicRefresh{screen,
+                      kPlaybackTickInterval,
+                      [&clockTickActive, &activityAutoDismissActive, &soulSettling]
+                      { return clockTickActive.load() || activityAutoDismissActive.load() || soulSettling.load(); }};
     onSignalExit = [&screen, requestGracefulExit] { screen.Post(requestGracefulExit); };
     signalExitPtr = std::make_unique<SignalExitWatcher>(onSignalExit);
     auto const signalExitRetirement = gsl_lite::finally([&signalExitPtr] { signalExitPtr.reset(); });
@@ -1711,7 +1701,7 @@ namespace ao::tui
       auto const& titleTransport = playback.snapshot().transport;
       auto const titleSoul = terminalSoulFrame(preferences,
                                                titleTransport.transport,
-                                               frameRenderer.soulAnimation.motionFrame(),
+                                               frameRenderer.soulClock.animation().motionFrame(),
                                                frameRenderer.soulTransientElapsed);
       terminalTitle.update(titleTransport.nowPlaying.trackId,
                            titleSoul,

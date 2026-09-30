@@ -29,6 +29,7 @@ namespace ao::appkit::test
   void editText(NSWindow* window, NSString* identifier, NSString* text);
   void captureView(NSView* view, std::filesystem::path const& path);
   void exerciseActivityExpiration();
+  void exerciseSoulOcclusion();
   void exerciseSelectedArtwork(LibrarySession& session, NSWindow* window, TrackId trackId);
 
   class SessionFixture final

@@ -9,4 +9,8 @@
 
 @interface AobusSoulButton : NSButton
 - (void)presentState:(ao::uimodel::AobusSoulViewState const&)state playing:(BOOL)playing modern:(BOOL)modern;
+/// True while motion runs or a pause coast or aura cross-fade still needs frames.
+- (BOOL)needsFrames;
+/// Lands pending transitions at once when frame delivery stops.
+- (void)settleAnimation;
 @end

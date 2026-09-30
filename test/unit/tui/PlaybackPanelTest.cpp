@@ -155,30 +155,27 @@ namespace ao::tui::test
     CHECK(text.contains("Vol 42%"));
   }
 
-  TEST_CASE("PlaybackPanel - paused soul retains its sampled frame while live quality changes",
+  TEST_CASE("PlaybackPanel - paused soul draws the supplied visual frame at any animation time",
             "[tui][unit][playback][soul]")
   {
-    auto state = rt::PlaybackTransportSnapshot{
-      .transport = audio::Transport::Paused,
-      .ready = true,
-      .quality = rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                                  .pipelineQuality = audio::Quality::BitwisePerfect,
-                                  .overall = audio::Quality::BitwisePerfect},
-    };
-    auto const renderAt = [&state](std::chrono::milliseconds const animationElapsed)
+    auto const state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Paused, .ready = true};
+    auto const motion = uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080});
+    auto const renderAt =
+      [&state](std::chrono::milliseconds const animationElapsed, uimodel::AobusSoulVisualFrame const& soulVisual)
     {
       auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
       ftxui::Render(screen,
                     englishPlaybackBar(PlaybackBarViewState{
                       .playbackState = &state,
                       .animationElapsed = animationElapsed,
-                      .soulMotion = uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080}),
+                      .soulVisual = soulVisual,
                     }));
       return screen;
     };
 
-    auto const early = renderAt(std::chrono::milliseconds{0});
-    auto const late = renderAt(std::chrono::milliseconds{5120});
+    auto const radiant = uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulRadiant, motion);
+    auto const early = renderAt(std::chrono::milliseconds{0}, radiant);
+    auto const late = renderAt(std::chrono::milliseconds{5120}, radiant);
     CHECK(early.PixelAt(0, 0).character == "⢤");
     CHECK(early.PixelAt(1, 0).character == "⣀");
     CHECK(early.PixelAt(2, 0).character == "⡠");
@@ -187,9 +184,8 @@ namespace ao::tui::test
     CHECK(late.PixelAt(2, 0).character == early.PixelAt(2, 0).character);
     CHECK(late.PixelAt(1, 0).foreground_color == early.PixelAt(1, 0).foreground_color);
 
-    state.quality.pipelineQuality = audio::Quality::LinearIntervention;
-    state.quality.overall = audio::Quality::LinearIntervention;
-    auto const changed = renderAt(std::chrono::milliseconds{5120});
+    auto const changed =
+      renderAt(std::chrono::milliseconds{5120}, uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulTurbulent, motion));
 
     CHECK(changed.PixelAt(0, 0).character == early.PixelAt(0, 0).character);
     CHECK(changed.PixelAt(1, 0).character == early.PixelAt(1, 0).character);

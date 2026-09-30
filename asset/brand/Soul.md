@@ -43,6 +43,7 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 - Rotation period: `8.282s`
 - Opacity period: `13.401s`
 - Aura flow period: `21.683s`
+- Transition span: `0.618s` (motion easing on resume and pause, and aura cross-fades)
 - Primary gradient direction: the state color begins at the lower-right of the soul ring and transitions toward cyan at the upper-left.
 
 ## Asset Set

@@ -173,7 +173,7 @@ namespace ao::gtk::test
     CHECK(soul.get_request_mode() == Gtk::SizeRequestMode::CONSTANT_SIZE);
   }
 
-  TEST_CASE("AobusSoul - tick lifecycle follows mapped breathing state", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - tick lifecycle follows mapped motion until it settles", "[gtk][unit][app][soul]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -190,8 +190,13 @@ namespace ao::gtk::test
     CHECK_FALSE(soul.isTickActive());
     windowFixture.present();
     CHECK(soul.isTickActive());
+    REQUIRE(tryPumpGtkEventsUntil([&soul] { return soul.visualFrame().motion.rotationDegrees > 0.1; }));
+
+    // Pause coasts to rest, then the tick retires itself.
     soul.setMotionMode(uimodel::AobusSoulMotionMode::Frozen);
-    CHECK_FALSE(soul.isTickActive());
+    CHECK(soul.isTickActive());
+    CHECK(tryPumpGtkEventsUntil([&soul] { return !soul.isTickActive(); }));
+
     soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
     CHECK(soul.isTickActive());
     windowFixture.unmount();
@@ -214,6 +219,52 @@ namespace ao::gtk::test
     auto const optRendered = renderedGradientBody(windowFixture.window(), soul);
     REQUIRE(optRendered);
     CHECK(*optRendered == rgbaFromSoulRgb(expected.gradientColors.body));
+  }
+
+  TEST_CASE("AobusSoul - first default aura is adopted before repeated requests are skipped", "[gtk][unit][app][soul]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto soul = AobusSoul{};
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(soul);
+    windowFixture.present();
+    auto const initial = soul.visualFrame();
+    soul.setAura(soul.aura());
+    CHECK(soul.visualFrame() == initial);
+    CHECK_FALSE(soul.isTickActive());
+
+    // A first request matching the default must still initialize the shared
+    // aura; otherwise the next color is adopted instead of cross-faded.
+    auto const target = Gdk::RGBA{"#F59E0B"};
+    soul.setAura(target);
+    REQUIRE(soul.isTickActive());
+    CHECK(soul.visualFrame() == initial);
+    soul.setAura(target);
+    CHECK(soul.visualFrame() == initial);
+    CHECK(soul.isTickActive());
+    REQUIRE(tryPumpGtkEventsUntil([&soul] { return !soul.isTickActive(); }));
+    CHECK(soul.visualFrame().gradientColors.body == uimodel::kAobusSoulTurbulent);
+  }
+
+  TEST_CASE("AobusSoul - unchanged RGB still updates rendered alpha", "[gtk][unit][app][soul]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto soul = AobusSoul{};
+    soul.set_size_request(65, 65);
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(soul);
+    windowFixture.present();
+    auto color = Gdk::RGBA{"#A855F7"};
+    soul.setAura(color);
+    color.set_alpha(0.5F);
+
+    soul.setAura(color);
+
+    CHECK_FALSE(soul.isTickActive());
+    auto const optRendered = renderedGradientBody(windowFixture.window(), soul);
+    REQUIRE(optRendered);
+    CHECK(optRendered->get_alpha() == 0.5F);
+    CHECK(soul.visualFrame().gradientColors.body == uimodel::kAobusSoulRadiant);
   }
 
   TEST_CASE("AobusSoul - geometry setters update rendered glyph strokes", "[gtk][unit][app][soul][geometry]")
@@ -283,8 +334,7 @@ namespace ao::gtk::test
     CHECK(restored[0].bounds.size.height == original[0].bounds.size.height);
   }
 
-  TEST_CASE("AobusSoul - paused motion freezes the drawn frame while quality aura remains live",
-            "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - paused motion coasts to a held frame while quality aura cross-fades", "[gtk][unit][app][soul]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -301,9 +351,9 @@ namespace ao::gtk::test
     soul.setMotionMode(uimodel::AobusSoulMotionMode::Frozen);
 
     REQUIRE(soul.motionMode() == uimodel::AobusSoulMotionMode::Frozen);
-    REQUIRE_FALSE(soul.isTickActive());
+    REQUIRE(tryPumpGtkEventsUntil([&soul] { return !soul.isTickActive(); }));
     auto const frozen = soul.visualFrame();
-    CHECK(frozen == animated);
+    CHECK(frozen.motion.rotationDegrees > animated.motion.rotationDegrees);
 
     auto const optRadiant = renderedGradientBody(windowFixture.window(), soul);
     REQUIRE(optRadiant);
@@ -312,7 +362,8 @@ namespace ao::gtk::test
     soul.setAura(Gdk::RGBA{"#F59E0B"});
 
     CHECK(soul.motionMode() == uimodel::AobusSoulMotionMode::Frozen);
-    CHECK_FALSE(soul.isTickActive());
+    CHECK(soul.isTickActive());
+    REQUIRE(tryPumpGtkEventsUntil([&soul] { return !soul.isTickActive(); }));
     auto const recolored = soul.visualFrame();
     CHECK(recolored == uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulTurbulent, frozen.motion));
     auto const optTurbulent = renderedGradientBody(windowFixture.window(), soul);
@@ -322,5 +373,55 @@ namespace ao::gtk::test
     soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
     REQUIRE(soul.isTickActive());
     CHECK(tryPumpGtkEventsUntil([&soul, frozen] { return soul.visualFrame().motion != frozen.motion; }));
+  }
+
+  TEST_CASE("AobusSoul - hiding mid-coast settles the held frame", "[gtk][unit][app][soul]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto soul = AobusSoul{};
+    soul.set_size_request(65, 65);
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(soul);
+    windowFixture.present();
+    soul.setAura(Gdk::RGBA{"#A855F7"});
+    soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
+    REQUIRE(tryPumpGtkEventsUntil([&soul] { return soul.visualFrame().motion.rotationDegrees > 0.1; }));
+
+    soul.setMotionMode(uimodel::AobusSoulMotionMode::Frozen);
+    soul.setAura(Gdk::RGBA{"#F59E0B"});
+    REQUIRE(soul.isTickActive());
+    windowFixture.unmount();
+    CHECK_FALSE(soul.isTickActive());
+    auto const held = soul.visualFrame();
+    CHECK(held == uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulTurbulent, held.motion));
+
+    windowFixture.mount(soul);
+    windowFixture.drain();
+    CHECK_FALSE(soul.isTickActive());
+    CHECK(soul.visualFrame() == held);
+  }
+
+  TEST_CASE("AobusSoul - quality changes while hidden land without a transition", "[gtk][unit][app][soul]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto soul = AobusSoul{};
+    soul.set_size_request(65, 65);
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(soul);
+    windowFixture.present();
+    soul.setAura(Gdk::RGBA{"#A855F7"});
+    windowFixture.unmount();
+
+    soul.setAura(Gdk::RGBA{"#F59E0B"});
+    CHECK_FALSE(soul.isTickActive());
+
+    windowFixture.mount(soul);
+    windowFixture.drain();
+    CHECK_FALSE(soul.isTickActive());
+    CHECK(soul.visualFrame().gradientColors.body == uimodel::kAobusSoulTurbulent);
+    REQUIRE(tryPumpGtkEventsUntil([&soul] { return soul.get_width() > 0; }));
+    auto const optRendered = renderedGradientBody(windowFixture.window(), soul);
+    REQUIRE(optRendered);
+    CHECK(*optRendered == rgbaFromSoulRgb(uimodel::kAobusSoulTurbulent));
   }
 } // namespace ao::gtk::test

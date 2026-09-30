@@ -714,9 +714,11 @@ namespace ao::appkit
 
 - (void)updateFrameTimer
 {
-  BOOL const soulAnimating = static_cast<BOOL>(
-    _sessionPtr && _sessionPtr->state().soul.motionMode == ao::uimodel::AobusSoulMotionMode::Animating &&
-    NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion == NO);
+  BOOL const soulAnimating =
+    static_cast<BOOL>(_sessionPtr &&
+                      (_sessionPtr->state().soul.motionMode == ao::uimodel::AobusSoulMotionMode::Animating ||
+                       [_playbackBar soulNeedsFrames] != NO) &&
+                      NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion == NO);
   BOOL const shouldRun = static_cast<BOOL>(_closing == NO && [self isWindowVisibleForRendering] != NO && _sessionPtr &&
                                            (_sessionPtr->state().position.isPlaying || soulAnimating != NO));
 
@@ -729,16 +731,23 @@ namespace ao::appkit
                                          repeats:YES];
     [NSRunLoop.mainRunLoop addTimer:_frameTimer forMode:NSRunLoopCommonModes];
   }
-  else if (shouldRun == NO && _frameTimer != nil)
+  else if (shouldRun == NO)
   {
-    [_frameTimer invalidate];
-    _frameTimer = nil;
+    // Frames stop here, so a pending Soul pause coast or aura cross-fade lands
+    // at once instead of replaying when frames resume.
+    [_playbackBar settleSoul];
 
-    if (_sessionPtr && _closing == NO)
+    if (_frameTimer != nil)
     {
-      auto const& state = _sessionPtr->state();
-      auto const elapsed = _sessionPtr->playbackElapsed();
-      [_playbackBar renderFrameForState:state elapsed:elapsed modern:_modern];
+      [_frameTimer invalidate];
+      _frameTimer = nil;
+
+      if (_sessionPtr && _closing == NO)
+      {
+        auto const& state = _sessionPtr->state();
+        auto const elapsed = _sessionPtr->playbackElapsed();
+        [_playbackBar renderFrameForState:state elapsed:elapsed modern:_modern];
+      }
     }
   }
 }
@@ -773,6 +782,8 @@ namespace ao::appkit
       }
 
       [self refreshPlaybackProgress];
+      // A settled Soul pause coast or aura cross-fade retires the timer.
+      [self updateFrameTimer];
     });
 }
 

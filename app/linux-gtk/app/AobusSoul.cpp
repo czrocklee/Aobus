@@ -159,8 +159,7 @@ namespace ao::gtk
 
   void AobusSoul::startTickIfNeeded()
   {
-    if (!_implPtr->isMapped || _implPtr->animation.motionMode() != uimodel::AobusSoulMotionMode::Animating ||
-        _implPtr->tickId != 0)
+    if (!_implPtr->isMapped || !_implPtr->animation.needsFrames() || _implPtr->tickId != 0)
     {
       return;
     }
@@ -176,9 +175,17 @@ namespace ao::gtk
         }
 
         _implPtr->optPreviousFrameTime = frameTime;
-
         queue_draw();
-        return true;
+
+        if (_implPtr->animation.needsFrames())
+        {
+          return true;
+        }
+
+        // Returning false retires this callback, so only the bookkeeping is reset.
+        _implPtr->tickId = 0;
+        _implPtr->optPreviousFrameTime.reset();
+        return false;
       });
   }
 
@@ -191,6 +198,27 @@ namespace ao::gtk
     }
 
     _implPtr->optPreviousFrameTime.reset();
+  }
+
+  void AobusSoul::syncTick()
+  {
+    // An unmapped widget receives no frames, so pending transitions land at
+    // once instead of replaying whenever it becomes visible again.
+    if (!_implPtr->isMapped)
+    {
+      stopTick();
+      _implPtr->animation.settle();
+      return;
+    }
+
+    if (_implPtr->animation.needsFrames())
+    {
+      startTickIfNeeded();
+    }
+    else
+    {
+      stopTick();
+    }
   }
 
   uimodel::AobusSoulMotionMode AobusSoul::motionMode() const
@@ -215,7 +243,7 @@ namespace ao::gtk
 
   uimodel::AobusSoulVisualFrame AobusSoul::visualFrame() const
   {
-    return _implPtr->animation.visualFrame(soulRgbFromRgba(_implPtr->aura));
+    return _implPtr->animation.visualFrame();
   }
 
   void AobusSoul::setMotionMode(uimodel::AobusSoulMotionMode const motionMode)
@@ -226,16 +254,7 @@ namespace ao::gtk
     }
 
     _implPtr->animation.setMotionMode(motionMode);
-
-    if (motionMode == uimodel::AobusSoulMotionMode::Animating)
-    {
-      startTickIfNeeded();
-    }
-    else
-    {
-      stopTick();
-    }
-
+    syncTick();
     queue_draw();
   }
 
@@ -243,13 +262,13 @@ namespace ao::gtk
   {
     Gtk::Widget::on_map();
     _implPtr->isMapped = true;
-    startTickIfNeeded();
+    syncTick();
   }
 
   void AobusSoul::on_unmap()
   {
-    stopTick();
     _implPtr->isMapped = false;
+    syncTick();
     Gtk::Widget::on_unmap();
   }
 
@@ -301,12 +320,17 @@ namespace ao::gtk
 
   void AobusSoul::setAura(Gdk::RGBA const& aura)
   {
+    // The first aura is adopted even when it matches the default, so the
+    // shared state cross-fades every later change.
+    _implPtr->animation.setAura(soulRgbFromRgba(aura));
+
     if (_implPtr->aura == aura)
     {
       return;
     }
 
     _implPtr->aura = aura;
+    syncTick();
     queue_draw();
   }
 
@@ -392,7 +416,7 @@ namespace ao::gtk
     }
 
     // 2. Draw 'o' (Soul)
-    auto const visual = _implPtr->animation.visualFrame(soulRgbFromRgba(aura));
+    auto const visual = _implPtr->animation.visualFrame();
     auto const rotationAngle = static_cast<float>(visual.motion.rotationDegrees);
     auto const currentStrokeBase =
       static_cast<float>(_implPtr->baseStrokeWidth + (strokeWidthVariance * visual.motion.breath));

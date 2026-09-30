@@ -10,8 +10,10 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <numbers>
@@ -120,6 +122,146 @@ namespace ao::uimodel
         .body = aobusSoulShiftRgb(aura, -hueShiftDegrees),
       };
     }
+
+    using ColorVector = std::array<double, 3>;
+    using ColorMatrix = std::array<ColorVector, 3>;
+
+    // Ottosson's OKLab transform from linear sRGB, and its inverse.
+    constexpr auto kLinearRgbToLms = ColorMatrix{{{0.4122214708, 0.5363325363, 0.0514459929},
+                                                  {0.2119034982, 0.6806995451, 0.1073969566},
+                                                  {0.0883024619, 0.2817188376, 0.6299787005}}};
+    constexpr auto kLmsToOklab = ColorMatrix{{{0.2104542553, 0.7936177850, -0.0040720468},
+                                              {1.9779984951, -2.4285922050, 0.4505937099},
+                                              {0.0259040371, 0.7827717662, -0.8086757660}}};
+    constexpr auto kOklabToLms = ColorMatrix{
+      {{1.0, 0.3963377774, 0.2158037573}, {1.0, -0.1055613458, -0.0638541728}, {1.0, -0.0894841775, -1.2914855480}}};
+    constexpr auto kLmsToLinearRgb = ColorMatrix{{{4.0767416621, -3.3077115913, 0.2309699292},
+                                                  {-1.2684380046, 2.6097574011, -0.3413193965},
+                                                  {-0.0041960863, -0.7034186147, 1.7076147010}}};
+
+    constexpr double kSrgbLinearThreshold = 0.04045;
+    constexpr double kLinearSrgbThreshold = 0.0031308;
+    constexpr double kSrgbLinearSlope = 12.92;
+    constexpr double kSrgbGammaOffset = 0.055;
+    constexpr double kSrgbGamma = 2.4;
+
+    ColorVector transform(ColorMatrix const& matrix, ColorVector const& vector) noexcept
+    {
+      auto result = ColorVector{};
+
+      for (std::size_t row = 0; row < matrix.size(); ++row)
+      {
+        result[row] = (matrix[row][0] * vector[0]) + (matrix[row][1] * vector[1]) + (matrix[row][2] * vector[2]);
+      }
+
+      return result;
+    }
+
+    ColorVector oklabFromRgb(AobusSoulRgb const color) noexcept
+    {
+      auto const linear = [](std::uint8_t const channel)
+      {
+        auto const encoded = static_cast<double>(channel) / kMaxChannelValue;
+        return encoded <= kSrgbLinearThreshold
+                 ? encoded / kSrgbLinearSlope
+                 : std::pow((encoded + kSrgbGammaOffset) / (1.0 + kSrgbGammaOffset), kSrgbGamma);
+      };
+
+      auto lms = transform(kLinearRgbToLms, {linear(color.red), linear(color.green), linear(color.blue)});
+
+      for (auto& component : lms)
+      {
+        component = std::cbrt(component);
+      }
+
+      return transform(kLmsToOklab, lms);
+    }
+
+    AobusSoulRgb rgbFromOklab(ColorVector const& oklab) noexcept
+    {
+      auto lms = transform(kOklabToLms, oklab);
+
+      for (auto& component : lms)
+      {
+        component = component * component * component;
+      }
+
+      auto const linearRgb = transform(kLmsToLinearRgb, lms);
+      auto const toChannel = [](double const linear)
+      {
+        auto const clamped = std::clamp(linear, 0.0, 1.0);
+        auto const encoded = clamped <= kLinearSrgbThreshold
+                               ? clamped * kSrgbLinearSlope
+                               : ((1.0 + kSrgbGammaOffset) * std::pow(clamped, 1.0 / kSrgbGamma)) - kSrgbGammaOffset;
+        return static_cast<std::uint8_t>(std::clamp(std::lround(encoded * kMaxChannelValue), 0L, kMaxChannelLong));
+      };
+
+      return AobusSoulRgb{
+        .red = toChannel(linearRgb[0]), .green = toChannel(linearRgb[1]), .blue = toChannel(linearRgb[2])};
+    }
+
+    // Perceptual interpolation keeps a cross-fade from dipping through a muddy
+    // midpoint, as a per-channel sRGB mix does between distant hues.
+    AobusSoulRgb aobusSoulMixOklab(AobusSoulRgb const from, AobusSoulRgb const to, double const fraction) noexcept
+    {
+      if (fraction <= 0.0)
+      {
+        return from;
+      }
+
+      if (fraction >= 1.0)
+      {
+        return to;
+      }
+
+      auto const fromLab = oklabFromRgb(from);
+      auto const toLab = oklabFromRgb(to);
+      auto mixed = ColorVector{};
+
+      for (std::size_t component = 0; component < mixed.size(); ++component)
+      {
+        mixed[component] = fromLab[component] + ((toLab[component] - fromLab[component]) * fraction);
+      }
+
+      return rgbFromOklab(mixed);
+    }
+
+    constexpr double kSmoothstepSquareWeight = 3.0;
+    constexpr double kSmoothstepCubeWeight = 2.0;
+
+    double smoothstep(double const value) noexcept
+    {
+      return value * value * (kSmoothstepSquareWeight - (kSmoothstepCubeWeight * value));
+    }
+
+    // Antiderivative of smoothstep, zero at zero: v^3 - v^4 / 2.
+    double smoothstepIntegral(double const value) noexcept
+    {
+      auto const cube = value * value * value;
+      return cube * (1.0 - (value / kSmoothstepCubeWeight));
+    }
+
+    struct VitalityStep final
+    {
+      double vitality = 0.0;
+      double motionSeconds = 0.0;
+    };
+
+    // Vitality moves linearly toward its target across the transition span
+    // while motion speed follows its smoothstep, so resume eases in and pause
+    // eases out. Integrating exactly keeps the travelled phase independent of
+    // the adapter's frame rate.
+    VitalityStep stepVitality(double const vitality, double const target, double const seconds) noexcept
+    {
+      auto const rate = 1.0 / kAobusSoulTransitionDuration.count();
+      auto const distance = target - vitality;
+      auto const reachSeconds = std::abs(distance) / rate;
+      auto const rampSeconds = std::min(seconds, reachSeconds);
+      auto const next = seconds >= reachSeconds ? target : vitality + std::copysign(seconds * rate, distance);
+      auto const rampMotion = std::abs(smoothstepIntegral(next) - smoothstepIntegral(vitality)) / rate;
+
+      return VitalityStep{.vitality = next, .motionSeconds = rampMotion + ((seconds - rampSeconds) * smoothstep(next))};
+    }
   } // namespace
 
   AobusSoulRgb aobusSoulAuraRgb(SoulAura const aura) noexcept
@@ -197,11 +339,6 @@ namespace ao::uimodel
     return AobusSoulMotionMode::Dormant;
   }
 
-  bool shouldAnimateAobusSoul(AobusSoulMotionMode const motionMode, bool const visible, bool const minimized) noexcept
-  {
-    return motionMode == AobusSoulMotionMode::Animating && visible && !minimized;
-  }
-
   void AobusSoulAnimationState::setMotionMode(AobusSoulMotionMode const motionMode) noexcept
   {
     if (_motionMode == motionMode)
@@ -216,6 +353,7 @@ namespace ao::uimodel
     {
       _elapsed = std::chrono::duration<double>::zero();
       _motionFrame = {};
+      _vitality = 0.0;
     }
     else if (_motionMode == AobusSoulMotionMode::Animating && previousMode == AobusSoulMotionMode::Dormant)
     {
@@ -223,20 +361,66 @@ namespace ao::uimodel
     }
   }
 
-  void AobusSoulAnimationState::advance(std::chrono::duration<double> const delta) noexcept
+  void AobusSoulAnimationState::setAura(AobusSoulRgb const aura) noexcept
   {
-    if (_motionMode != AobusSoulMotionMode::Animating || delta <= std::chrono::duration<double>::zero())
+    if (!_hasAura)
+    {
+      _auraFrom = aura;
+      _auraTo = aura;
+      _auraProgress = 1.0;
+      _hasAura = true;
+      return;
+    }
+
+    if (aura == _auraTo)
     {
       return;
     }
 
-    _elapsed += delta;
-    _motionFrame = aobusSoulMotionAt(_elapsed);
+    _auraFrom = currentAura();
+    _auraTo = aura;
+    _auraProgress = 0.0;
+  }
+
+  void AobusSoulAnimationState::advance(std::chrono::duration<double> const delta) noexcept
+  {
+    if (delta <= std::chrono::duration<double>::zero())
+    {
+      return;
+    }
+
+    _auraProgress = std::min(1.0, _auraProgress + (delta / kAobusSoulTransitionDuration));
+
+    if (_motionMode == AobusSoulMotionMode::Dormant)
+    {
+      return;
+    }
+
+    auto const target = _motionMode == AobusSoulMotionMode::Animating ? 1.0 : 0.0;
+    auto const step = stepVitality(_vitality, target, delta.count());
+    _vitality = step.vitality;
+
+    if (step.motionSeconds > 0.0)
+    {
+      _elapsed += std::chrono::duration<double>{step.motionSeconds};
+      _motionFrame = aobusSoulMotionAt(_elapsed);
+    }
+  }
+
+  void AobusSoulAnimationState::settle() noexcept
+  {
+    _vitality = _motionMode == AobusSoulMotionMode::Animating ? 1.0 : 0.0;
+    _auraProgress = 1.0;
   }
 
   AobusSoulMotionMode AobusSoulAnimationState::motionMode() const noexcept
   {
     return _motionMode;
+  }
+
+  bool AobusSoulAnimationState::needsFrames() const noexcept
+  {
+    return _motionMode == AobusSoulMotionMode::Animating || _vitality > 0.0 || _auraProgress < 1.0;
   }
 
   std::chrono::duration<double> AobusSoulAnimationState::elapsed() const noexcept
@@ -249,9 +433,14 @@ namespace ao::uimodel
     return _motionFrame;
   }
 
-  AobusSoulVisualFrame AobusSoulAnimationState::visualFrame(AobusSoulRgb const aura) const noexcept
+  AobusSoulVisualFrame AobusSoulAnimationState::visualFrame() const noexcept
   {
-    return aobusSoulVisualFrame(aura, _motionFrame);
+    return aobusSoulVisualFrame(currentAura(), _motionFrame);
+  }
+
+  AobusSoulRgb AobusSoulAnimationState::currentAura() const noexcept
+  {
+    return aobusSoulMixOklab(_auraFrom, _auraTo, smoothstep(_auraProgress));
   }
 
   SoulAura resolveSoulAura(audio::Transport const transport, bool const ready, rt::QualityState const& signal) noexcept

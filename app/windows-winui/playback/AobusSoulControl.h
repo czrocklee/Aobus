@@ -29,6 +29,10 @@ namespace winrt::Aobus::implementation
 
     void bind(ao::rt::PlaybackService& playback);
     void unbind() noexcept;
+    /// Present toolkit-neutral state directly; bind() feeds this same surface.
+    void presentState(ao::uimodel::AobusSoulViewState const& state);
+    bool needsFrames() const noexcept;
+    ao::uimodel::AobusSoulVisualFrame visualFrame() const noexcept;
     void setBaseStrokeWidth(double width);
     void setInnerGlyphScale(double scale);
     void setTransportIcon(ao::uimodel::TransportIcon icon);
@@ -36,10 +40,9 @@ namespace winrt::Aobus::implementation
     void setPresentationActive(bool active);
 
   private:
-    /// Blank the widget between bindings. Only a rebind has anything to show.
+    /// Reset cached playback state before a new binding adopts its first snapshot.
     void resetPresentation();
 
-    void applyViewState(ao::uimodel::AobusSoulViewState const& state);
     void updateAnimationRegistration();
     void updateGeometry();
     void renderFrame();
@@ -56,9 +59,7 @@ namespace winrt::Aobus::implementation
     Microsoft::UI::Xaml::Shapes::Polygon _playGlyph{nullptr};
     Microsoft::UI::Xaml::Controls::Grid _pauseGlyph{nullptr};
 
-    ao::uimodel::AobusSoulViewState _viewState{};
     ao::uimodel::AobusSoulAnimationState _animation{};
-    ao::uimodel::AobusSoulRgb _aura = ao::uimodel::kAobusSoulUiCyan;
     double _baseStrokeWidth = ao::uimodel::kAobusSoulGeometry.baseStrokeWidth;
     double _innerGlyphScale = 1.0;
     std::unique_ptr<ao::uimodel::AobusSoulViewModel> _viewModelPtr;

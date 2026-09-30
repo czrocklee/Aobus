@@ -28,7 +28,6 @@ namespace
 } // namespace
 
 @implementation AobusSoulButton {
-  ao::uimodel::AobusSoulViewState _soulState;
   ao::uimodel::AobusSoulAnimationState _animation;
   std::chrono::steady_clock::time_point _lastFrameTime;
   BOOL _playing;
@@ -37,17 +36,17 @@ namespace
 }
 - (void)presentState:(ao::uimodel::AobusSoulViewState const&)state playing:(BOOL)playing modern:(BOOL)modern
 {
-  auto const previousVisual = _animation.visualFrame(ao::uimodel::aobusSoulAuraRgb(_soulState.aura));
+  auto const previousVisual = _animation.visualFrame();
   auto const previousPlaying = _playing;
   auto const previousModern = _modern;
-  _soulState = state;
   _playing = playing;
   _modern = modern;
   _animation.setMotionMode(state.motionMode);
+  _animation.setAura(ao::uimodel::aobusSoulAuraRgb(state.aura));
   auto const now = std::chrono::steady_clock::now();
-  auto const animate =
-    (NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion == NO) && (NSApp.hidden == NO) &&
-    ao::uimodel::shouldAnimateAobusSoul(state.motionMode, self.window.visible != NO, self.window.miniaturized != NO);
+  auto const animate = (NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion == NO) &&
+                       (NSApp.hidden == NO) && (self.window.visible != NO) && (self.window.miniaturized == NO) &&
+                       ((self.window.occlusionState & NSWindowOcclusionStateVisible) != 0) && _animation.needsFrames();
   bool advanced = false;
 
   if (animate)
@@ -60,17 +59,18 @@ namespace
       advanced = _animation.elapsed() != previousElapsed;
     }
 
-    _lastFrameTime = now;
+    // The frame that settles the Soul is the last one requested, so a later
+    // transition starts a fresh interval instead of spanning the idle gap.
+    _lastFrameTime = _animation.needsFrames() ? now : std::chrono::steady_clock::time_point{};
   }
   else
   {
     _lastFrameTime = {};
+    _animation.settle();
   }
 
-  auto const visual = _animation.visualFrame(ao::uimodel::aobusSoulAuraRgb(state.aura));
-
-  if ((_hasPresentation == NO) || visual != previousVisual || playing != previousPlaying || modern != previousModern ||
-      advanced)
+  if (auto const visual = _animation.visualFrame(); (_hasPresentation == NO) || visual != previousVisual ||
+                                                    playing != previousPlaying || modern != previousModern || advanced)
   {
     self.needsDisplay = YES;
   }
@@ -78,11 +78,27 @@ namespace
   _hasPresentation = YES;
 }
 
+- (BOOL)needsFrames
+{
+  return static_cast<BOOL>(_animation.needsFrames());
+}
+
+- (void)settleAnimation
+{
+  if (_animation.needsFrames())
+  {
+    _animation.settle();
+    self.needsDisplay = YES;
+  }
+
+  _lastFrameTime = {};
+}
+
 - (void)drawRect:(NSRect) [[maybe_unused]] dirtyRect
 {
   auto const bounds = self.bounds;
   auto const center = NSPoint{.x = NSMidX(bounds), .y = NSMidY(bounds)};
-  auto const visual = _animation.visualFrame(ao::uimodel::aobusSoulAuraRgb(_soulState.aura));
+  auto const visual = _animation.visualFrame();
   auto const& geometry = ao::uimodel::kAobusSoulGeometry;
   auto const expandedStroke = geometry.baseStrokeWidth * ao::uimodel::kAobusSoulGoldenRatio;
   auto const available = std::min(bounds.size.width, bounds.size.height);

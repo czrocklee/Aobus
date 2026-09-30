@@ -302,10 +302,10 @@ An unfocused marked row therefore reverses the terminal's own colors and a focus
 The now-playing caret keeps its accent only on unfocused rows, because a cell that holds its own foreground over the interactive surface renders an unreadable pair.
 
 The playback Soul animation consumes shared UIModel aura/color/timing policy while terminal code chooses braille geometry.
-Its partial arc travels clockwise like the GTK and brand Soul, positioned by distance along the braille ring so each end advances at most one dot at a time.
+Its partial arc travels clockwise like the GTK and brand Soul, with its ends positioned by distance along the braille ring.
 Breathing lengthens the arc by the golden ratio, mirroring GTK's stroke expansion; the cyan core rides the arc head, the quality aura fills its tail, and a cell holding only a partly covered edge dot dims instead of popping.
 Transport errors draw a ring broken at its top in the dormant aura rather than a clipped-signal color.
-Opening, Buffering, Playing, and Seeking keep periodic animation refresh active; elapsed-time interpolation advances only in the transport states identified as playing by `PlaybackPositionViewModel`.
+Opening, Buffering, Playing, and Seeking keep periodic animation refresh active, and it continues while a shared pause coast or aura cross-fade settles; reduced motion settles them at once. Elapsed-time interpolation advances only in the transport states identified as playing by `PlaybackPositionViewModel`.
 Short terminals keep the dock to one row before reducing track-table height further.
 
 ## Failure and cancellation

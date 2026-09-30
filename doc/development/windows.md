@@ -196,6 +196,19 @@ link. Narrow `argv` and audited narrow process boundaries are UTF-8, but
 filesystem paths still require the project's explicit native/UTF-8 conversion
 facades.
 
+### Soul lifecycle probe
+
+The WinUI build also produces `ao_winui_soul_probe`, a separate native GUI
+executable built by `ao.bat check` but not run by unattended suites. From a
+logged-in desktop, run
+`<reported-build-dir>\app\windows-winui\soul-probe\Debug\ao_winui_soul_probe.exe`.
+It removes and reinserts the same Soul in a real XAML tree, checking that both a
+pause coast and an aura fade settle on `Unloaded` and do not replay on `Loaded`.
+Exit code 0 requires both cases to complete; a 20-second dispatcher timeout
+fails the probe. It uses the control's normal presentation API and no library,
+audio endpoint, or saved application settings. The shipping executable has no
+probe switches.
+
 ## Compiler cache
 
 Run `ao.bat setup compiler-cache` to install and verify governed ccache and

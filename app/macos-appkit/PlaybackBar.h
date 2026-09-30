@@ -47,6 +47,9 @@ namespace ao::i18n
 - (void)renderFrameForState:(ao::appkit::DesktopViewState const&)state
                     elapsed:(std::chrono::milliseconds)elapsed
                      modern:(BOOL)modern;
+/// True while the Soul still needs frames after playback stops.
+- (BOOL)soulNeedsFrames;
+- (void)settleSoul;
 - (void)toggleVolumePopover;
 - (void)presentOutputMenu:(NSMenu*)menu;
 - (void)presentPlaybackOptionsMenu:(NSMenu*)menu;

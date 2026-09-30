@@ -106,12 +106,12 @@ namespace winrt::Aobus::implementation
       [this](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&)
       {
         _loaded = false;
-        stopAnimation();
+        updateAnimationRegistration();
       });
     SizeChanged([this](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&)
                 { updateGeometry(); });
 
-    applyViewState({});
+    presentState({});
     setTransportIcon(ao::uimodel::TransportIcon::None);
   }
 
@@ -126,7 +126,7 @@ namespace winrt::Aobus::implementation
     unbind();
     resetPresentation();
     _viewModelPtr = std::make_unique<ao::uimodel::AobusSoulViewModel>(
-      playback, [this](ao::uimodel::AobusSoulViewState const& state) { applyViewState(state); });
+      playback, [this](ao::uimodel::AobusSoulViewState const& state) { presentState(state); });
   }
 
   void AobusSoulControl::unbind() noexcept
@@ -135,9 +135,27 @@ namespace winrt::Aobus::implementation
     stopAnimation();
   }
 
+  void AobusSoulControl::presentState(ao::uimodel::AobusSoulViewState const& state)
+  {
+    _animation.setMotionMode(state.motionMode);
+    _animation.setAura(ao::uimodel::aobusSoulAuraRgb(state.aura));
+    updateAnimationRegistration();
+    renderFrame();
+  }
+
+  bool AobusSoulControl::needsFrames() const noexcept
+  {
+    return _animation.needsFrames();
+  }
+
+  ao::uimodel::AobusSoulVisualFrame AobusSoulControl::visualFrame() const noexcept
+  {
+    return _animation.visualFrame();
+  }
+
   void AobusSoulControl::resetPresentation()
   {
-    applyViewState({});
+    presentState({});
   }
 
   void AobusSoulControl::setBaseStrokeWidth(double const width)
@@ -183,19 +201,10 @@ namespace winrt::Aobus::implementation
     updateAnimationRegistration();
   }
 
-  void AobusSoulControl::applyViewState(ao::uimodel::AobusSoulViewState const& state)
-  {
-    _viewState = state;
-    _animation.setMotionMode(state.motionMode);
-    _aura = ao::uimodel::aobusSoulAuraRgb(state.aura);
-    updateAnimationRegistration();
-    renderFrame();
-  }
-
   void AobusSoulControl::updateAnimationRegistration()
   {
-    auto const animate = ao::uimodel::shouldAnimateAobusSoul(
-      _viewState.motionMode, _loaded && _windowVisible && _presentationActive, _windowMinimized);
+    auto const animate =
+      _animation.needsFrames() && _loaded && _windowVisible && _presentationActive && !_windowMinimized;
 
     if (animate && !_rendering)
     {
@@ -207,7 +216,16 @@ namespace winrt::Aobus::implementation
     }
     else if (!animate)
     {
+      // Settling can change the shown frame, and nothing else repaints an
+      // inactive control, so present the settled frame now.
+      auto const wasSettling = _animation.needsFrames();
       stopAnimation();
+      _animation.settle();
+
+      if (wasSettling)
+      {
+        renderFrame();
+      }
     }
   }
 
@@ -245,7 +263,7 @@ namespace winrt::Aobus::implementation
 
   void AobusSoulControl::renderFrame()
   {
-    if (_rendering && _animation.motionMode() == ao::uimodel::AobusSoulMotionMode::Animating)
+    if (_rendering)
     {
       auto const frameTime = std::chrono::steady_clock::now();
 
@@ -257,7 +275,7 @@ namespace winrt::Aobus::implementation
       _optPreviousFrameTime = frameTime;
     }
 
-    auto const visual = _animation.visualFrame(_aura);
+    auto const visual = _animation.visualFrame();
     _cyanStop.Color(color(visual.gradientColors.core));
     _auraStop.Color(color(visual.gradientColors.body));
     _auraTailStop.Color(color(visual.gradientColors.body));
@@ -276,6 +294,12 @@ namespace winrt::Aobus::implementation
       auto const scale = available / ((geometry.radius + (expandedStroke / 2.0)) * 2.0);
       auto const stroke = _baseStrokeWidth + ((expandedStroke - _baseStrokeWidth) * visual.motion.breath);
       _ring.StrokeThickness(stroke * scale);
+    }
+
+    // A pause coast or aura cross-fade that just settled retires the frame callback.
+    if (_rendering && !_animation.needsFrames())
+    {
+      updateAnimationRegistration();
     }
   }
 } // namespace winrt::Aobus::implementation

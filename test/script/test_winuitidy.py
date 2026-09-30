@@ -227,7 +227,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                                 required_translation_units=(missing,),
                             )
 
-    def test_extracts_required_auxiliary_source_from_its_own_project(self):
+    def test_extracts_required_auxiliary_sources_from_their_own_projects(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             source_root = root / "repo"
@@ -239,7 +239,18 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             clang_cl = root / "llvm" / "bin" / "clang-cl.exe"
             main_source = source_root / "app" / "windows-winui" / "App.xaml.cpp"
             probe_source = source_root / "test" / "helper" / "WinUiLocalizationProbe.cpp"
-            for path in (msbuild, main_project, probe_project, clang_cl, main_source, probe_source):
+            soul_project = build_dir / "app" / "windows-winui" / "ao_winui_soul_probe.vcxproj"
+            soul_source = source_root / "test" / "integration" / "windows" / "WinUiSoulProbe.cpp"
+            for path in (
+                msbuild,
+                main_project,
+                probe_project,
+                soul_project,
+                clang_cl,
+                main_source,
+                probe_source,
+                soul_source,
+            ):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
             (build_dir / "CMakeCache.txt").write_text(
@@ -269,17 +280,20 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                     with mock.patch.object(
                         winuitidy.subprocess,
                         "run",
-                        side_effect=(payload(main_source), payload(probe_source)),
+                        side_effect=(payload(main_source), payload(probe_source), payload(soul_source)),
                     ) as run:
                         commands = winuitidy.compile_commands(
                             build_dir,
                             clang_cl,
-                            required_translation_units=(probe_source,),
+                            required_translation_units=(probe_source, soul_source),
                         )
-                    requires_context = winuitidy.requires_winui_compile_context(probe_source)
+                    requires_context = [
+                        winuitidy.requires_winui_compile_context(path) for path in (probe_source, soul_source)
+                    ]
 
-            self.assertEqual([Path(entry["file"]) for entry in commands], [main_source, probe_source])
-            self.assertEqual(run.call_count, 2)
+            self.assertEqual([Path(entry["file"]) for entry in commands], [main_source, probe_source, soul_source])
+            self.assertEqual(run.call_count, 3)
             self.assertIn(str(main_project), run.call_args_list[0].args[0])
             self.assertIn(str(probe_project), run.call_args_list[1].args[0])
-            self.assertTrue(requires_context)
+            self.assertIn(str(soul_project), run.call_args_list[2].args[0])
+            self.assertEqual(requires_context, [True, True])
