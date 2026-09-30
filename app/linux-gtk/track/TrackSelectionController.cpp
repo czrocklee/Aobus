@@ -15,6 +15,7 @@
 #include <glib-object.h>
 #include <glib.h>
 #include <glibmm/refptr.h>
+#include <gtkmm/bitset.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
@@ -128,12 +129,6 @@ namespace ao::gtk
     _columnView.signal_activate().connect(
       [this](std::uint32_t position)
       {
-        if (_suppressNextTrackActivation)
-        {
-          _suppressNextTrackActivation = false;
-          return;
-        }
-
         if (auto const trackId = trackIdAtPosition(position); trackId != kInvalidTrackId)
         {
           _trackActivated.emit(trackId);
@@ -179,7 +174,7 @@ namespace ao::gtk
     primaryClickControllerPtr->signal_pressed().connect(
       [this, primaryClickControllerPtr](std::int32_t nPress, double xPosition, double yPosition)
       {
-        if (nPress != 2)
+        if (nPress < 2)
         {
           return;
         }
@@ -191,16 +186,15 @@ namespace ao::gtk
           return;
         }
 
-        auto const selectedIds = selectedTrackIds();
-
-        if (selectedIds.empty())
-        {
-          return;
-        }
-
+        // Claim tags multi-clicks even when Ctrl deselected the row on the
+        // first press. An empty selection must not turn the edit gesture into play.
+        // Request editing only on the second press; later presses stay claimed.
         primaryClickControllerPtr->set_state(Gtk::EventSequenceState::CLAIMED);
-        _suppressNextTrackActivation = true;
-        _tagEditRequested.emit(selectedIds, dynamic_cast<Gtk::Widget*>(target));
+
+        if (auto const selectedIds = selectedTrackIds(); nPress == 2 && !selectedIds.empty())
+        {
+          _tagEditRequested.emit(selectedIds, dynamic_cast<Gtk::Widget*>(target));
+        }
       });
 
     _columnView.add_controller(primaryClickControllerPtr);
@@ -221,7 +215,6 @@ namespace ao::gtk
         }
 
         longPressControllerPtr->set_state(Gtk::EventSequenceState::CLAIMED);
-        _suppressNextTrackActivation = true;
         stack->set_visible_child("edit");
 
         if (auto* const entry = dynamic_cast<Gtk::Entry*>(stack->get_child_by_name("edit")); entry != nullptr)
@@ -243,12 +236,6 @@ namespace ao::gtk
 
   void TrackSelectionController::handleActivateCurrentSelection()
   {
-    if (_suppressNextTrackActivation)
-    {
-      _suppressNextTrackActivation = false;
-      return;
-    }
-
     if (auto const trackId = primarySelectedTrackId(); trackId != kInvalidTrackId)
     {
       _trackActivated.emit(trackId);
@@ -362,6 +349,27 @@ namespace ao::gtk
     }
 
     _columnView.scroll_to(rowPosition, nullptr, Gtk::ListScrollFlags::FOCUS | Gtk::ListScrollFlags::SELECT, nullptr);
+  }
+
+  void TrackSelectionController::restoreSelection(std::vector<TrackId> const& trackIds)
+  {
+    auto positionsPtr = Gtk::Bitset::create();
+
+    for (auto const trackId : trackIds)
+    {
+      auto const optIndex = _modelPtr->indexOf(trackId);
+
+      if (!optIndex || *optIndex >= _selectionModelPtr->get_n_items())
+      {
+        continue;
+      }
+
+      positionsPtr->add(static_cast<guint>(*optIndex));
+    }
+
+    // Mask only the restored rows: existing selections remain selected, and
+    // MultiSelection publishes the entire adoption in one notification.
+    _selectionModelPtr->set_selection(positionsPtr, positionsPtr);
   }
 
   void TrackSelectionController::scrollToTrack(TrackId trackId)

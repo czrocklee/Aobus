@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <vector>
 
 namespace Gio
 {
@@ -67,6 +68,10 @@ namespace ao::gtk
     void setupNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItemPtr);
     void bindNavListItem(Glib::RefPtr<Gtk::ListItem> const& listItemPtr);
     void handleListSelectionChanged(std::uint32_t position, std::uint32_t nItems) const;
+
+    guint findListPosition(ListId listId) const;
+    std::vector<ListId> collectAncestorIds(ListId listId) const;
+    void expandAncestorsOf(ListId listId);
 
     Callbacks _callbacks;
     i18n::MessageCatalog _textCatalog;

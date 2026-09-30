@@ -33,11 +33,13 @@
 #include <pangomm/layout.h>
 #include <sigc++/functors/mem_fun.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <format>
 #include <limits>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -126,25 +128,21 @@ namespace ao::gtk
       return;
     }
 
-    auto const itemCount = _treeListModelPtr->get_n_items();
+    auto position = findListPosition(listId);
 
-    for (guint index = 0; index < itemCount; ++index)
+    if (position == kInvalidListPosition)
     {
-      auto itemPtr = _treeListModelPtr->get_object(index);
-      auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(itemPtr);
+      // The target may be hidden under a collapsed ancestor. Expand its
+      // ancestors until the row is materialized. GTK's autoexpand also expands
+      // their recreated descendants; unrelated rows that remain materialized
+      // keep their collapse state.
+      expandAncestorsOf(listId);
+      position = findListPosition(listId);
+    }
 
-      if (!treeListRowPtr)
-      {
-        continue;
-      }
-
-      auto nodePtr = std::dynamic_pointer_cast<ListTreeItem>(treeListRowPtr->get_item());
-
-      if (nodePtr && nodePtr->listId() == listId)
-      {
-        _listSelectionModelPtr->set_selected(index);
-        break;
-      }
+    if (position != kInvalidListPosition)
+    {
+      _listSelectionModelPtr->set_selected(position);
     }
   }
 
@@ -348,6 +346,97 @@ namespace ao::gtk
     if (_callbacks.onSelectionChanged)
     {
       _callbacks.onSelectionChanged(selectedListId());
+    }
+  }
+
+  guint ListNavigationPanel::findListPosition(ListId listId) const
+  {
+    auto const itemCount = _treeListModelPtr->get_n_items();
+
+    for (guint index = 0; index < itemCount; ++index)
+    {
+      auto itemPtr = _treeListModelPtr->get_object(index);
+      auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(itemPtr);
+
+      if (!treeListRowPtr)
+      {
+        continue;
+      }
+
+      auto nodePtr = std::dynamic_pointer_cast<ListTreeItem>(treeListRowPtr->get_item());
+
+      if (nodePtr && nodePtr->listId() == listId)
+      {
+        return index;
+      }
+    }
+
+    return kInvalidListPosition;
+  }
+
+  std::vector<ListId> ListNavigationPanel::collectAncestorIds(ListId listId) const
+  {
+    auto ancestors = std::vector<ListId>{};
+    auto currentId = listId;
+
+    // The builder mirrors the single-parent, acyclic forest enforced by
+    // uimodel::buildListTreeProjection, so each step advances toward a root.
+    while (currentId != kInvalidListId)
+    {
+      auto const parentIt = std::ranges::find_if(_nodesById,
+                                                 [currentId](auto const& entry)
+                                                 {
+                                                   auto const& children = entry.second->children();
+
+                                                   for (guint index = 0; index < children->get_n_items(); ++index)
+                                                   {
+                                                     if (auto const childPtr = children->get_item(index);
+                                                         childPtr && childPtr->listId() == currentId)
+                                                     {
+                                                       return true;
+                                                     }
+                                                   }
+
+                                                   return false;
+                                                 });
+
+      if (parentIt == _nodesById.end())
+      {
+        break;
+      }
+
+      ancestors.push_back(parentIt->first);
+      currentId = parentIt->first;
+    }
+
+    // Start at the root-most ancestor so deeper rows are materialized before
+    // they are searched. Autoexpand may already have expanded those rows.
+    std::ranges::reverse(ancestors);
+    return ancestors;
+  }
+
+  void ListNavigationPanel::expandAncestorsOf(ListId listId)
+  {
+    for (auto const ancestorId : collectAncestorIds(listId))
+    {
+      auto const position = findListPosition(ancestorId);
+
+      if (position == kInvalidListPosition)
+      {
+        return;
+      }
+
+      auto treeListRowPtr = std::dynamic_pointer_cast<Gtk::TreeListRow>(_treeListModelPtr->get_object(position));
+
+      if (treeListRowPtr == nullptr)
+      {
+        return;
+      }
+
+      if (!treeListRowPtr->get_expanded())
+      {
+        treeListRowPtr->set_expanded(true);
+      }
     }
   }
 } // namespace ao::gtk

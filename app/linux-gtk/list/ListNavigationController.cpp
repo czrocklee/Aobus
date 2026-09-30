@@ -306,6 +306,7 @@ namespace ao::gtk
                                                       _runtime.views(),
                                                       _runtime.sources(),
                                                       _runtime.completion(),
+                                                      _runtime.workspace().customPresets(),
                                                       _textCatalog,
                                                       parentListId,
                                                       *_dataProvider);
@@ -338,6 +339,7 @@ namespace ao::gtk
                                                       _runtime.views(),
                                                       _runtime.sources(),
                                                       _runtime.completion(),
+                                                      _runtime.workspace().customPresets(),
                                                       _textCatalog,
                                                       parentListId,
                                                       *_dataProvider);
@@ -387,6 +389,7 @@ namespace ao::gtk
                                                         _runtime.views(),
                                                         _runtime.sources(),
                                                         _runtime.completion(),
+                                                        _runtime.workspace().customPresets(),
                                                         _textCatalog,
                                                         optNode->parentId,
                                                         *_dataProvider);

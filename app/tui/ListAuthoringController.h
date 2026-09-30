@@ -8,7 +8,6 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/uimodel/library/presentation/ListPresentations.h>
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/node.hpp>
@@ -44,7 +43,6 @@ namespace ao::rt
   class NotificationService;
   class TrackSourceCache;
   class ViewService;
-  class WorkspaceService;
 }
 
 namespace ao::tui
@@ -108,10 +106,8 @@ namespace ao::tui
                             rt::Library& library,
                             rt::ViewService& views,
                             rt::TrackSourceCache& sources,
-                            rt::WorkspaceService& workspace,
                             rt::CompletionService& completion,
                             rt::NotificationService& notifications,
-                            uimodel::ListPresentations& listPresentations,
                             i18n::MessageCatalog const& textCatalog,
                             Outputs outputs);
 

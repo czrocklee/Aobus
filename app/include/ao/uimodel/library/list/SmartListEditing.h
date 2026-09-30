@@ -101,12 +101,28 @@ namespace ao::uimodel
 
   inline constexpr std::size_t kSmartListAutoTrackPresentationIndex = 0;
 
+  /**
+   * The editor's presentation option order: index 0 is Auto, the next
+   * builtinPresets.size() indexes select the builtin presets in span order,
+   * and the indexes after that select the custom presets in span order.
+   * An absent, empty, or unknown stored id maps to Auto; an editor preserving
+   * an unknown id must represent that unavailable choice separately.
+   */
   std::size_t resolveSmartListTrackPresentationIndex(std::optional<std::string> const& optPresentationId,
-                                                     std::span<rt::TrackPresentationPreset const> builtinPresets);
+                                                     std::span<rt::TrackPresentationPreset const> builtinPresets,
+                                                     std::span<rt::CustomTrackPresentationPreset const> customPresets);
 
+  /**
+   * Maps a selected option index back to a presentation id using the option
+   * order documented on resolveSmartListTrackPresentationIndex. Auto and an
+   * invalid selection resolve to the empty id, absence of a preference; a
+   * builtin or custom index resolves to that preset's id; any other index
+   * falls back to the default presentation. The recommendation for a saved
+   * Auto list belongs to ListPresentations::presentationForList when the
+   * view opens, not to the editor's saved preference.
+   */
   std::string resolveSmartListTrackPresentationId(std::size_t selectedIndex,
                                                   bool selectedIndexValid,
-                                                  std::string_view localExpression,
                                                   std::span<rt::TrackPresentationPreset const> builtinPresets,
                                                   std::span<rt::CustomTrackPresentationPreset const> customPresets);
 } // namespace ao::uimodel

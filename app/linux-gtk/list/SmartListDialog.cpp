@@ -4,6 +4,7 @@
 #include "list/SmartListDialog.h"
 
 #include "app/FormBuilder.h"
+#include "common/AccessibleLabel.h"
 #include "i18n/GtkText.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
@@ -28,16 +29,19 @@
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
+#include <glibmm/binding.h>
 #include <glibmm/main.h>
 #include <glibmm/markup.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 #include <gtk/gtktypes.h>
+#include <gtkmm/accessible.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/image.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/object.h>
@@ -46,6 +50,7 @@
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/singleselection.h>
 #include <gtkmm/stringlist.h>
+#include <gtkmm/stringobject.h>
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
@@ -54,6 +59,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -73,6 +79,7 @@ namespace ao::gtk
                                    rt::ViewService& views,
                                    rt::TrackSourceCache& sources,
                                    rt::CompletionService& completion,
+                                   std::span<rt::CustomTrackPresentationPreset const> customPresets,
                                    i18n::MessageCatalog textCatalog,
                                    ListId parentListId,
                                    TrackRowCache const& provider)
@@ -81,6 +88,7 @@ namespace ao::gtk
     , _views{views}
     , _sources{sources}
     , _textCatalog{textCatalog}
+    , _customPresets{customPresets.begin(), customPresets.end()}
     , _parentListId{parentListId}
     , _trackRowCache{provider}
   {
@@ -109,9 +117,25 @@ namespace ao::gtk
     set_title(gtkText(_textCatalog, i18n::MessageId::GtkSmartListEditTitle));
     _okButton->set_label(gtkText(_textCatalog, i18n::MessageId::GtkCommonSave));
 
-    auto const presentationIndex =
-      uimodel::resolveSmartListTrackPresentationIndex(optPresentationId, rt::builtinTrackPresentationPresets());
-    _presentationDropDown.set_selected(static_cast<std::uint32_t>(presentationIndex));
+    // Repeated population is reset-safe: an unavailable option installed by
+    // a previous populate() is dropped before this stored id is resolved.
+    removeUnavailablePresentationOption();
+
+    auto const presentationIndex = uimodel::resolveSmartListTrackPresentationIndex(
+      optPresentationId, rt::builtinTrackPresentationPresets(), _customPresets);
+
+    // A nonempty stored id that resolves to Auto is unknown to the option
+    // snapshot: it stays the user's saved intent as an explicit unavailable
+    // option instead of silently becoming Auto. An empty stored id is Auto.
+    if (optPresentationId && !optPresentationId->empty() &&
+        presentationIndex == uimodel::kSmartListAutoTrackPresentationIndex)
+    {
+      installUnavailablePresentationOption(*optPresentationId);
+    }
+    else
+    {
+      _presentationDropDown.set_selected(static_cast<std::uint32_t>(presentationIndex));
+    }
 
     updateDialogState();
   }
@@ -123,11 +147,18 @@ namespace ao::gtk
 
   std::string SmartListDialog::presentationId() const
   {
+    // The unavailable option is still selected: the retained opaque id is
+    // the user's preference, so it round-trips unchanged. Any intentionally
+    // selected row resolves through the normal option order instead.
+    if (_optUnavailablePresentationId && _presentationDropDown.get_selected() == unavailablePresentationRow())
+    {
+      return *_optUnavailablePresentationId;
+    }
+
     auto const selected = _presentationDropDown.get_selected();
-    auto const localExpr = std::string{_exprBox.entry().get_text()};
 
     return uimodel::resolveSmartListTrackPresentationId(
-      selected, selected != GTK_INVALID_LIST_POSITION, localExpr, rt::builtinTrackPresentationPresets(), {});
+      selected, selected != GTK_INVALID_LIST_POSITION, rt::builtinTrackPresentationPresets(), _customPresets);
   }
 
   void SmartListDialog::configurePlaylistTemplate(std::string_view const initialName, std::string_view const initialTag)
@@ -287,7 +318,98 @@ namespace ao::gtk
       stringListPtr->append(optText ? std::string{optText->label} : preset.spec.id);
     }
 
+    // Custom presentations follow the builtins in the option list and keep
+    // their user-provided names, so a list already assigned one reopens with
+    // that presentation selected instead of silently falling back to Auto.
+    for (auto const& preset : _customPresets)
+    {
+      stringListPtr->append(preset.label.empty() ? preset.spec.id : preset.label);
+    }
+
+    _presentationOptionsPtr = stringListPtr;
     _presentationDropDown.set_model(stringListPtr);
+
+    // The selected option shares the fixed-width configuration pane with its
+    // field label, so it must be able to give up natural width instead of
+    // squeezing that label: its label ellipsizes, while the full option text
+    // stays reachable through tooltip and accessible label. The popup keeps a
+    // separate full-width factory, because the selected factory would
+    // otherwise populate the popup as well.
+    auto const selectedFactoryPtr = Gtk::SignalListItemFactory::create();
+    selectedFactoryPtr->signal_setup().connect(
+      [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+      {
+        auto* const label = Gtk::make_managed<Gtk::Label>();
+        label->set_ellipsize(Pango::EllipsizeMode::END);
+        itemPtr->set_child(*label);
+      });
+    selectedFactoryPtr->signal_bind().connect(
+      [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+      {
+        auto* const label = dynamic_cast<Gtk::Label*>(itemPtr->get_child());
+
+        if (label == nullptr)
+        {
+          return;
+        }
+
+        if (auto const stringPtr = std::dynamic_pointer_cast<Gtk::StringObject>(itemPtr->get_item()); stringPtr)
+        {
+          auto const text = stringPtr->get_string();
+          label->set_text(text);
+          setTooltipAndAccessibleLabel(*label, text.raw());
+        }
+      });
+
+    auto const popupFactoryPtr = Gtk::SignalListItemFactory::create();
+    popupFactoryPtr->signal_setup().connect(
+      [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+      {
+        // A popup row keeps its full option name leading and a trailing
+        // check on the selected row, mirroring the native default content a
+        // custom list factory would otherwise drop. The check is decorative,
+        // so it leaves the accessibility tree.
+        auto* const row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
+        auto* const label = Gtk::make_managed<Gtk::Label>();
+        label->set_halign(Gtk::Align::START);
+        label->set_hexpand(true);
+        label->set_xalign(0.0F);
+        auto* const check = Gtk::make_managed<Gtk::Image>();
+        check->set_from_icon_name("object-select-symbolic");
+        check->property_accessible_role() = Gtk::Accessible::Role::PRESENTATION;
+        row->append(*label);
+        row->append(*check);
+        itemPtr->set_child(*row);
+
+        // The check follows the row's selected state through a property
+        // binding, like the native default content. The binding is kept alive
+        // by its two endpoints and is released when the recycled list item or
+        // its content is finalized, so this factory owns no signal and keeps
+        // no binding reference.
+        std::ignore = Glib::Binding::bind_property(
+          itemPtr->property_selected(), check->property_visible(), Glib::Binding::Flags::SYNC_CREATE);
+      });
+    popupFactoryPtr->signal_bind().connect(
+      [](Glib::RefPtr<Gtk::ListItem> const& itemPtr)
+      {
+        auto* const row = dynamic_cast<Gtk::Box*>(itemPtr->get_child());
+
+        if (row == nullptr)
+        {
+          return;
+        }
+
+        if (auto* const label = dynamic_cast<Gtk::Label*>(row->get_first_child()); label != nullptr)
+        {
+          if (auto const stringPtr = std::dynamic_pointer_cast<Gtk::StringObject>(itemPtr->get_item()); stringPtr)
+          {
+            label->set_text(stringPtr->get_string());
+          }
+        }
+      });
+
+    _presentationDropDown.set_factory(selectedFactoryPtr);
+    _presentationDropDown.set_list_factory(popupFactoryPtr);
     _presentationDropDown.set_valign(Gtk::Align::CENTER);
     _presentationDropDown.set_halign(Gtk::Align::END);
     _presentationDropDown.property_selected().signal_changed().connect([this] { updatePreview(); });
@@ -338,6 +460,29 @@ namespace ao::gtk
     mainBox->append(_rightPanel);
 
     setContentWidget(*mainBox);
+  }
+
+  void SmartListDialog::installUnavailablePresentationOption(std::string_view const unavailableId)
+  {
+    _optUnavailablePresentationId = std::string{unavailableId};
+    _presentationOptionsPtr->append(i18n::requiredFormat(
+      _textCatalog, i18n::MessageId::GtkSmartListUnavailablePresentation, {{"id", unavailableId}}));
+    _presentationDropDown.set_selected(unavailablePresentationRow());
+  }
+
+  void SmartListDialog::removeUnavailablePresentationOption()
+  {
+    if (_optUnavailablePresentationId)
+    {
+      _presentationOptionsPtr->remove(unavailablePresentationRow());
+      _optUnavailablePresentationId.reset();
+    }
+  }
+
+  std::uint32_t SmartListDialog::unavailablePresentationRow() const
+  {
+    return 1U + static_cast<std::uint32_t>(rt::builtinTrackPresentationPresets().size()) +
+           static_cast<std::uint32_t>(_customPresets.size());
   }
 
   void SmartListDialog::buildPreview()

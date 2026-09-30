@@ -144,10 +144,15 @@ drag and cancel a separate click observer while the physical drag continues.
 Tests for that boundary must deliver actual input and assert the resulting
 application state.
 
-`PlaybackUiComponentsTest.cpp` keeps its X11/XTest mouse fixture local to the
-seek-control regressions. It uses public widget/surface coordinate transforms
-and bounded event-delivery waits. X11, XTest, and XInput development dependencies
-come from the pinned Linux shell and are linked only to the GTK test target.
+Native pointer injection lives in
+`test/unit/linux-gtk/GtkNativeInputTestSupport.h`, owned by the GTK
+test-support target and shared by the seek-control thumb regressions in
+`PlaybackUiComponentsTest.cpp` and the track-selection tags-cell arbitration
+test. It uses public widget/surface coordinate transforms and bounded
+event-delivery waits; consumers keep only their component-specific
+choreography. X11, XTest, and XInput development dependencies come from the
+pinned Linux shell and are linked only to the GTK test-support target and the
+GTK test target.
 
 The native mouse tests do not establish Wayland, touch, or grab-transfer behavior.
 

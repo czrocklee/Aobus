@@ -362,6 +362,7 @@ ja:table {
     gtk_smart_list_effective_filter { "有効なフィルター" }
     gtk_smart_list_membership { "メンバーシップ" }
     gtk_smart_list_auto_presentation { "自動" }
+    gtk_smart_list_unavailable_presentation { "利用不可: {id}（自動）" }
     gtk_smart_list_presentation { "表示" }
     gtk_smart_list_preview { "プレビュー" }
     gtk_smart_list_waiting_for_filter { "フィルターを待機中..." }

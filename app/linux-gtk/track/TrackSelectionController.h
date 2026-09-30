@@ -45,6 +45,14 @@ namespace ao::gtk
     void scrollToTrack(TrackId trackId);
     void setPlayingTrackId(TrackId trackId);
 
+    /// Adopts a runtime-published selection into this controller's selection
+    /// model. Ids absent from the current projection are skipped, so callers
+    /// do not need to intersect the ids with the rows first. Unlike
+    /// selectTrack(), this neither scrolls nor replaces other selected rows;
+    /// callers restore a rebuilt page generation before wiring its publish
+    /// path so the adopted selection is not echoed back to the runtime.
+    void restoreSelection(std::vector<TrackId> const& trackIds);
+
     // Exposed signals for TrackViewPage to wire to external handlers
     SelectionChangedSignal& signalSelectionChanged() noexcept { return _selectionChanged; }
     TrackActivatedSignal& signalTrackActivated() noexcept { return _trackActivated; }
@@ -62,7 +70,6 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
 
     TrackId _playingTrackId{kInvalidTrackId};
-    bool _suppressNextTrackActivation = false;
 
     sigc::scoped_connection _selectionChangedConnection;
 

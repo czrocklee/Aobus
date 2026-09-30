@@ -1244,7 +1244,6 @@ namespace ao::tui
      * editor's settlement callback uses.
      */
     ListAuthoringController makeListAuthoringController(rt::AppRuntime& appRuntime,
-                                                        uimodel::ListPresentations& listPresentations,
                                                         i18n::MessageCatalog const& textCatalog,
                                                         std::function<void()> requestRefresh,
                                                         ExitController*& activeExit,
@@ -1254,10 +1253,8 @@ namespace ao::tui
                                      appRuntime.library(),
                                      appRuntime.views(),
                                      appRuntime.sources(),
-                                     appRuntime.workspace(),
                                      appRuntime.completion(),
                                      appRuntime.notifications(),
-                                     listPresentations,
                                      textCatalog,
                                      ListAuthoringController::Outputs{
                                        .requestRefresh = std::move(requestRefresh),
@@ -1584,8 +1581,7 @@ namespace ao::tui
                                          },
                                          runtime.completion(),
                                          runtime.textOrderingPolicy()};
-    auto listAuthoring =
-      makeListAuthoringController(runtime, listPresentations, textCatalog, requestRefresh, activeExit, library);
+    auto listAuthoring = makeListAuthoringController(runtime, textCatalog, requestRefresh, activeExit, library);
     auto signalExitPtr = std::unique_ptr<SignalExitWatcher>{};
     auto onSignalExit = std::function<void()>{};
     auto titlePreview = TerminalTitleFormatter{runtime.library()};

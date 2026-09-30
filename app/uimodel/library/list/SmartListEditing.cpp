@@ -10,7 +10,6 @@
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WritableTagList.h>
-#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <algorithm>
@@ -157,7 +156,8 @@ namespace ao::uimodel
   }
 
   std::size_t resolveSmartListTrackPresentationIndex(std::optional<std::string> const& optPresentationId,
-                                                     std::span<rt::TrackPresentationPreset const> builtinPresets)
+                                                     std::span<rt::TrackPresentationPreset const> builtinPresets,
+                                                     std::span<rt::CustomTrackPresentationPreset const> customPresets)
   {
     if (!optPresentationId)
     {
@@ -167,33 +167,51 @@ namespace ao::uimodel
     auto const it =
       std::ranges::find(builtinPresets, *optPresentationId, [](auto const& preset) { return preset.spec.id; });
 
-    if (it == builtinPresets.end())
+    if (it != builtinPresets.end())
     {
-      return kSmartListAutoTrackPresentationIndex;
+      return static_cast<std::size_t>(std::ranges::distance(builtinPresets.begin(), it)) + 1;
     }
 
-    return static_cast<std::size_t>(std::ranges::distance(builtinPresets.begin(), it)) + 1;
+    // Custom presentations follow the builtins in the editor's option order,
+    // so a custom id maps past the builtin indexes instead of falling to Auto.
+    auto const customIt =
+      std::ranges::find(customPresets, *optPresentationId, [](auto const& preset) { return preset.spec.id; });
+
+    if (customIt != customPresets.end())
+    {
+      return builtinPresets.size() + static_cast<std::size_t>(std::ranges::distance(customPresets.begin(), customIt)) +
+             1;
+    }
+
+    return kSmartListAutoTrackPresentationIndex;
   }
 
   std::string resolveSmartListTrackPresentationId(
     std::size_t const selectedIndex,
     bool const selectedIndexValid,
-    std::string_view const localExpression,
     std::span<rt::TrackPresentationPreset const> const builtinPresets,
     std::span<rt::CustomTrackPresentationPreset const> const customPresets)
   {
+    // Auto and an invalid selection are absence of a preference, not today's
+    // concrete recommendation: the recommendation happens when a saved Auto
+    // list is opened through ListPresentations::presentationForList.
     if (!selectedIndexValid || selectedIndex == kSmartListAutoTrackPresentationIndex)
     {
-      auto const context = ListPresentationContext{
-        .sourceKind = ListPresentationSourceKind::SavedList,
-        .listExpression = localExpression,
-      };
-      return recommendListPresentation(context, builtinPresets, customPresets).id;
+      return {};
     }
 
     if (auto const presetIndex = selectedIndex - 1; presetIndex < builtinPresets.size())
     {
       return std::string{builtinPresets[presetIndex].spec.id};
+    }
+
+    // The option order places custom presentations after the builtins, so a
+    // manual selection there maps back to its custom id instead of the default.
+    auto const customIndex = selectedIndex - 1 - builtinPresets.size();
+
+    if (customIndex < customPresets.size())
+    {
+      return std::string{customPresets[customIndex].spec.id};
     }
 
     return std::string{rt::kDefaultTrackPresentationId};

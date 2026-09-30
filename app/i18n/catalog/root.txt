@@ -364,6 +364,7 @@ root:table {
     gtk_smart_list_effective_filter { "Effective Filter" }
     gtk_smart_list_membership { "Membership" }
     gtk_smart_list_auto_presentation { "Auto" }
+    gtk_smart_list_unavailable_presentation { "Unavailable: {id} (Auto)" }
     gtk_smart_list_presentation { "Presentation" }
     gtk_smart_list_preview { "Preview" }
     gtk_smart_list_waiting_for_filter { "Waiting for filter..." }

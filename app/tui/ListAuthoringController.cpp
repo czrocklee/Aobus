@@ -23,7 +23,6 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -36,7 +35,6 @@
 #include <ao/uimodel/library/list/ListActions.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/uimodel/library/list/SmartListEditing.h>
-#include <ao/uimodel/library/presentation/ListPresentations.h>
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/elements.hpp>
@@ -180,20 +178,16 @@ namespace ao::tui
           rt::Library& libraryIn,
           rt::ViewService& viewsIn,
           rt::TrackSourceCache& sourcesIn,
-          rt::WorkspaceService& workspaceIn,
           rt::CompletionService& completionIn,
           rt::NotificationService& notificationsIn,
-          uimodel::ListPresentations& listPresentationsIn,
           i18n::MessageCatalog const& textCatalogIn,
           Outputs outputsIn)
       : runtime{runtimeIn}
       , library{libraryIn}
       , views{viewsIn}
       , sources{sourcesIn}
-      , workspace{workspaceIn}
       , completion{completionIn}
       , notifications{notificationsIn}
-      , listPresentations{listPresentationsIn}
       , textCatalog{textCatalogIn}
       , outputs{std::move(outputsIn)}
     {
@@ -340,33 +334,14 @@ namespace ao::tui
 
     void presentSaved(ListId const listId)
     {
-      // An edit keeps the List's stored presentation choice, exactly as the
-      // other frontends reselect it in their editor; every other save resolves
-      // the Auto presentation from the expression that was just written.
-      auto const& localExpression = optEditor ? optEditor->draft().expression : std::string{};
-      auto const isEdit = optEditor && optEditor->mode() == ListEditorMode::Edit;
+      // The TUI editor has no presentation picker, so a save never rewrites
+      // the preference map: a new List stays Auto (no map entry) and an edit
+      // keeps whatever preference the List already has, including absence
+      // or a dangling opaque id. The recommendation for a saved Auto List
+      // happens when the view is opened, not in the save path.
       auto const isNew = optEditor && optEditor->mode() == ListEditorMode::New;
-      auto const optStored =
-        isEdit ? listPresentations.presentationIdForList(listId) : std::optional<std::string_view>{};
-      auto presentationId = std::string{};
-
-      if (optStored)
-      {
-        // The borrowed id is copied before the map entry it names can be
-        // replaced below.
-        presentationId = std::string{*optStored};
-      }
-      else
-      {
-        presentationId = uimodel::resolveSmartListTrackPresentationId(uimodel::kSmartListAutoTrackPresentationIndex,
-                                                                      true,
-                                                                      localExpression,
-                                                                      rt::builtinTrackPresentationPresets(),
-                                                                      workspace.customPresets());
-      }
 
       closeEditor();
-      listPresentations.setPresentationIdForList(listId, presentationId);
 
       // A new List is shown at once, as the GTK sidebar selects it: the
       // created List on screen is the save's confirmation. An edit keeps the
@@ -501,10 +476,8 @@ namespace ao::tui
     rt::Library& library;
     rt::ViewService& views;
     rt::TrackSourceCache& sources;
-    rt::WorkspaceService& workspace;
     rt::CompletionService& completion;
     rt::NotificationService& notifications;
-    uimodel::ListPresentations& listPresentations;
     i18n::MessageCatalog const& textCatalog;
     Outputs outputs;
     std::optional<SmartListEditor> optEditor{};
@@ -526,22 +499,12 @@ namespace ao::tui
                                                    rt::Library& library,
                                                    rt::ViewService& views,
                                                    rt::TrackSourceCache& sources,
-                                                   rt::WorkspaceService& workspace,
                                                    rt::CompletionService& completion,
                                                    rt::NotificationService& notifications,
-                                                   uimodel::ListPresentations& listPresentations,
                                                    i18n::MessageCatalog const& textCatalog,
                                                    Outputs outputs)
-    : _statePtr{std::make_shared<State>(runtime,
-                                        library,
-                                        views,
-                                        sources,
-                                        workspace,
-                                        completion,
-                                        notifications,
-                                        listPresentations,
-                                        textCatalog,
-                                        std::move(outputs))}
+    : _statePtr{std::make_shared<
+        State>(runtime, library, views, sources, completion, notifications, textCatalog, std::move(outputs))}
   {
   }
 

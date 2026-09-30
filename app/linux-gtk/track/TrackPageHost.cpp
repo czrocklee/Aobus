@@ -384,6 +384,13 @@ namespace ao::gtk
                                                         foundStateRes->presentation,
                                                         viewId);
     trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
+
+    // The runtime view state owns the selection, so a fresh page generation
+    // adopts it instead of starting empty. Restoring before the page is bound
+    // keeps the adoption off the publish path, which would echo the state back
+    // to the runtime; ids the projection no longer contains are skipped.
+    trackPagePtr->selectionController().restoreSelection(foundStateRes->selection);
+
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = gtkText(_textCatalog, i18n::MessageId::LibraryUnnamedList);

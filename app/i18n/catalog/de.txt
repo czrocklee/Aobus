@@ -362,6 +362,7 @@ de:table {
     gtk_smart_list_effective_filter { "Wirksamer Filter" }
     gtk_smart_list_membership { "Mitgliedschaft" }
     gtk_smart_list_auto_presentation { "Automatisch" }
+    gtk_smart_list_unavailable_presentation { "Nicht verfügbar: {id} (Automatisch)" }
     gtk_smart_list_presentation { "Ansicht" }
     gtk_smart_list_preview { "Vorschau" }
     gtk_smart_list_waiting_for_filter { "Warten auf Filter..." }
