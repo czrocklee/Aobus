@@ -78,7 +78,7 @@ namespace ao::audio::test
     {
       auto stream = std::ifstream{path, std::ios::binary};
       REQUIRE(stream);
-      return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+      return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
 
     /**

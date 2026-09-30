@@ -376,7 +376,7 @@ namespace ao::audio::backend::detail::test
     auto start = std::barrier{3};
     auto firstReturned = std::atomic_bool{false};
     auto secondReturned = std::atomic_bool{false};
-    auto firstReturnedIndex = std::atomic{std::int32_t{0}};
+    auto firstReturnedIndex = std::atomic<std::int32_t>{0};
     auto publishLatest = [&](std::int32_t const index, std::atomic_bool& returned)
     {
       start.arrive_and_wait();

@@ -852,7 +852,7 @@ namespace ao::lmdb
       return std::unexpected{std::move(dataRes.error())};
     }
 
-    return std::pair{id, *dataRes};
+    return std::pair<std::uint32_t, std::span<std::byte>>{id, *dataRes};
   }
 
   Result<> IntegerKeyDatabase::Writer::update(std::uint32_t const id, std::span<std::byte const> const data)

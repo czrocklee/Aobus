@@ -548,25 +548,25 @@ namespace ao::gtk::test
 
       CHECK(widget.hasImage());
       CHECK(controller.isImageAvailable());
-      CHECK(availability == std::vector{true});
+      CHECK(availability == std::vector<bool>{true});
 
       controller.load(kInvalidResourceId);
 
       CHECK(widget.isShowingPlaceholder());
       CHECK_FALSE(controller.isImageAvailable());
-      CHECK(availability == std::vector{true, false});
+      CHECK(availability == std::vector<bool>{true, false});
 
       controller.load(resourceId);
 
       CHECK(controller.isImageAvailable());
-      CHECK(availability == std::vector{true, false, true});
+      CHECK(availability == std::vector<bool>{true, false, true});
 
       // Reloading an already available resource reports no transition, so observers that
       // need the current state after every load must read it rather than latch the callback.
       controller.load(resourceId);
 
       CHECK(controller.isImageAvailable());
-      CHECK(availability == std::vector{true, false, true});
+      CHECK(availability == std::vector<bool>{true, false, true});
     }
 
     SECTION("full-size cache miss clears the placeholder and completes asynchronously")

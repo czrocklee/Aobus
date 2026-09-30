@@ -5,6 +5,7 @@
 #include <ao/Error.h>
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -99,10 +100,12 @@ public:
 template<typename View>
 StringInput(View const&) -> StringInput<DefaultEncoding>;
 
-template<typename T = int>
+// The deducibility fixtures use non-primitive arguments: explicit primitive
+// arguments are exempt before deducibility is considered.
+template<typename T = std::string>
 struct SameDefault
 {
-  SameDefault(int /*val*/) {}
+  SameDefault(std::string /*val*/) {}
 };
 
 template<typename T, int N = 10>
@@ -123,10 +126,10 @@ struct IdentityInput
   IdentityInput(std::type_identity_t<T> /*val*/) {}
 };
 
-template<typename T = int const>
+template<typename T = std::string const>
 struct CvDefault
 {
-  CvDefault(int /*val*/) {}
+  CvDefault(std::string /*val*/) {}
 };
 
 int g_global = 0;
@@ -141,42 +144,105 @@ void noopDelete(char* /*ptr*/)
 {
 }
 
+template<typename T>
+void deduceInTemplate(T value)
+{
+  // NEGATIVE - the dependent definition and its instantiations are not diagnosed.
+  [[maybe_unused]] auto const boxed = Box{value};
+}
+
 void ctadPositiveCases()
 {
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const v1 = std::vector{std::byte{1}};
+  // POSITIVE
   [[maybe_unused]] auto const v1 = std::vector<std::byte>{std::byte{1}};
 
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const v2 = std::vector{1, 2, 3};
-  [[maybe_unused]] auto const v2 = std::vector<int>{1, 2, 3};
-
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const p1 = std::pair{1, 2.0};
-  [[maybe_unused]] auto const p1 = std::pair<int, double>{1, 2.0};
-
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const p2 = std::pair{std::string{"key"}, std::string{"value"}};
+  // POSITIVE
   [[maybe_unused]] auto const p2 = std::pair<std::string, std::string>{std::string{"key"}, std::string{"value"}};
 
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const t1 = std::tuple{1, 2.0, 'a'};
-  [[maybe_unused]] auto const t1 = std::tuple<int, double, char>{1, 2.0, 'a'};
+  // POSITIVE
+  [[maybe_unused]] auto const b1 = Box<std::string>{std::string{"value"}};
 
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const b1 = Box{42};
-  [[maybe_unused]] auto const b1 = Box<int>{42};
+  // POSITIVE
+  [[maybe_unused]] auto const kv = KeyValue<std::string, std::byte>{std::string{"key"}, std::byte{1}};
 
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const kv = KeyValue{std::string{"key"}, 1};
-  [[maybe_unused]] auto const kv = KeyValue<std::string, int>{std::string{"key"}, 1};
-
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const s1 = std::set{1, 2, 3};
-  [[maybe_unused]] auto const s1 = std::set<int>{1, 2, 3};
-
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const rows = std::vector{Row{"Gamma", 1, 2}, Row{"Alpha", 1, 3}};
+  // POSITIVE
   [[maybe_unused]] auto const rows = std::vector<Row>{Row{"Gamma", 1, 2}, Row{"Alpha", 1, 3}};
 
   std::string_view sv = "hello";
 
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const defaultInput = StringInput{sv};
+  // POSITIVE
   [[maybe_unused]] auto const defaultInput = StringInput<DefaultEncoding>{sv};
 
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto const sameDefault = SameDefault{42};
-  [[maybe_unused]] auto const sameDefault = SameDefault<int>{42};
+  // POSITIVE
+  [[maybe_unused]] auto const sameDefault = SameDefault<std::string>{std::string{"value"}};
+}
+
+// CTAD must not deduce a primitive argument; the arguments are spelled instead.
+#define CTAD_FIXTURE_CHECK(expr) static_cast<void>(expr)
+#define CTAD_FIXTURE_DEDUCED_BODY() static_cast<void>(std::vector{1})
+
+void ctadPrimitiveDeductionCases()
+{
+  // POSITIVE
+  [[maybe_unused]] auto const v4 = std::vector{1, 2, 3};
+
+  // POSITIVE
+  [[maybe_unused]] auto const p1 = std::pair{1, 2.0};
+
+  // POSITIVE
+  [[maybe_unused]] auto const t1 = std::tuple{std::string{"key"}, 'a'};
+
+  // POSITIVE
+  [[maybe_unused]] auto const b1 = Box{42};
+
+  // POSITIVE
+  [[maybe_unused]] auto const b2 = Box(42);
+
+  // POSITIVE
+  [[maybe_unused]] Box const b3{42};
+
+  // POSITIVE
+  [[maybe_unused]] auto const count = std::atomic{std::size_t{0}};
+
+  // POSITIVE
+  [[maybe_unused]] auto const flag = std::atomic{false};
+
+  using Count = std::size_t;
+
+  // POSITIVE - an alias of a primitive is still primitive.
+  [[maybe_unused]] auto const aliasCount = std::atomic{Count{0}};
+
+  // POSITIVE
+  [[maybe_unused]] auto const maybe = std::optional{1};
+
+  // POSITIVE - the std::array finding points at std::to_array.
+  [[maybe_unused]] auto const values = std::array{1, 2, 3};
+
+  // POSITIVE
+  [[maybe_unused]] std::array const moreValues{1.0F, 2.0F};
+
+  // POSITIVE
+  [[maybe_unused]] auto const view = std::span{values};
+
+  // POSITIVE - macro arguments are written by the author.
+  CTAD_FIXTURE_CHECK((std::vector{1, 2} == std::vector<int>{1, 2}));
+
+  // NEGATIVE - macro bodies are not.
+  CTAD_FIXTURE_DEDUCED_BODY();
+
+  // NEGATIVE - every deduced argument is non-primitive.
+  [[maybe_unused]] auto const t2 = std::tuple{std::string{"key"}, std::byte{1}};
+
+  // NEGATIVE - explicit primitive arguments are the required spelling.
+  [[maybe_unused]] auto const explicitCount = std::atomic<std::size_t>{0};
+
+  // NEGATIVE - explicit alias of a primitive stays spelled.
+  [[maybe_unused]] auto const explicitAliasCount = std::atomic<Count>{0};
+
+  // NEGATIVE - std::to_array keeps the element type spelled and the size deduced.
+  [[maybe_unused]] auto const explicitValues = std::to_array<int>({1, 2, 3});
+
+  deduceInTemplate(1);
 }
 
 void ctadNegativeCases()
@@ -184,21 +250,28 @@ void ctadNegativeCases()
   [[maybe_unused]] auto const v1 = std::vector{std::byte{1}};
   [[maybe_unused]] auto const v2 = std::vector<int>{};
   [[maybe_unused]] auto const v3 = std::vector<int>();
-  [[maybe_unused]] auto const v4 = std::vector{1, 2, 3};
 
   [[maybe_unused]] Foo const f1{10};
   [[maybe_unused]] Foo const f2(10, 20);
 
-  [[maybe_unused]] auto const p1 = std::pair{1, 2.0};
   [[maybe_unused]] auto const p2 = std::pair<std::string, std::string>{"key", "value"};
-  [[maybe_unused]] auto const t1 = std::tuple{1, 2.0, 'a'};
-  [[maybe_unused]] auto const b1 = Box{42};
+  [[maybe_unused]] auto const b1 = Box{std::string{"value"}};
+
+  // NEGATIVE - explicit primitive arguments stay spelled.
+  [[maybe_unused]] auto const v2Explicit = std::vector<int>{1, 2, 3};
+  [[maybe_unused]] auto const p1Explicit = std::pair<int, double>{1, 2.0};
+  [[maybe_unused]] auto const t1Explicit = std::tuple<int, double, char>{1, 2.0, 'a'};
+  [[maybe_unused]] auto const b1Explicit = Box<int>{42};
+  [[maybe_unused]] auto const kvExplicit = KeyValue<std::string, int>{std::string{"key"}, 1};
+  [[maybe_unused]] auto const s1Explicit = std::set<int>{1, 2, 3};
+  [[maybe_unused]] auto const flag = std::atomic<bool>{false};
 
   [[maybe_unused]] auto const v5 = std::vector<int>(10, 0);
   [[maybe_unused]] auto const v6 = std::vector<std::byte>(100, std::byte{0});
   [[maybe_unused]] auto const v7 = std::vector<std::vector<int>>{10};
   [[maybe_unused]] auto const v8 =
     std::vector<std::shared_ptr<Sink>>{std::make_shared<ConsoleSink>(), std::make_shared<FileSink>()};
+  auto const v4 = std::vector<int>{1, 2, 3};
   [[maybe_unused]] auto const v9 = std::vector<int>{v4};
   [[maybe_unused]] auto const v10 = std::vector{std::pair<std::string, std::string>{"key", "value"}};
   [[maybe_unused]] auto const v11 = std::vector<Row>{{"Gamma", 1, 2}, {"Alpha", 1, 3}};
@@ -224,16 +297,16 @@ void ctadNegativeCases()
   [[maybe_unused]] auto const input = StringInput<Utf8Encoding>{sv};
 
   // NEGATIVE - explicit non-type argument not reachable from constructor parameters.
-  [[maybe_unused]] auto const nonType = NonTypeDefault<int, 5>{42};
+  [[maybe_unused]] auto const nonType = NonTypeDefault<std::string, 5>{std::string{"value"}};
 
   // NEGATIVE - explicit parameter pack not reachable from constructor parameters.
-  [[maybe_unused]] auto const packed = Packed<int, double>{42};
+  [[maybe_unused]] auto const packed = Packed<std::string, std::byte>{42};
 
   // NEGATIVE - type parameter only appears inside a non-deduced alias.
-  [[maybe_unused]] auto const identity = IdentityInput<int>{42};
+  [[maybe_unused]] auto const identity = IdentityInput<std::string>{std::string{"value"}};
 
   // NEGATIVE - explicit argument differs from the default by cv-qualifier only.
-  [[maybe_unused]] auto const cv = CvDefault<int>{42};
+  [[maybe_unused]] auto const cv = CvDefault<std::string>{std::string{"value"}};
 
   // NEGATIVE - explicit non-type argument of Declaration kind is not deducible.
   [[maybe_unused]] auto const refKey = RefKey<&g_global>{42};

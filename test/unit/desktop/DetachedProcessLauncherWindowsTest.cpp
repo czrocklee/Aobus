@@ -83,7 +83,7 @@ namespace ao::desktop::test
 
     auto output = std::ifstream{outputPath, std::ios::binary};
     REQUIRE(output);
-    auto const content = std::string{std::istreambuf_iterator{output}, std::istreambuf_iterator<char>{}};
+    auto const content = std::string{std::istreambuf_iterator<char>{output}, std::istreambuf_iterator<char>{}};
     CHECK(content == std::format("argc=8\n"
                                  "1={}\n"
                                  "2=Local\\AobusDetachedProcessProbe-{}\n"

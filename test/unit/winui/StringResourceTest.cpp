@@ -47,7 +47,7 @@ namespace ao::winui::test
     {
       auto stream = std::ifstream{path, std::ios::binary};
       REQUIRE(stream.is_open());
-      return std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+      return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
 
     /// The literal that follows every occurrence of @p call in @p source.

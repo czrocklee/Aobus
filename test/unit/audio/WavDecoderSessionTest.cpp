@@ -32,7 +32,7 @@ namespace ao::audio::test
   {
     std::span<std::byte const> asBytes(std::vector<std::uint8_t> const& bytes) noexcept
     {
-      return utility::bytes::view(std::span{bytes});
+      return utility::bytes::view(std::span<std::uint8_t const>{bytes});
     }
 
     struct ParsedWaveFixture final
@@ -218,11 +218,11 @@ namespace ao::audio::test
 
   TEST_CASE("WavDecoderSession - rejects float-to-integer output", "[audio][unit][wav]")
   {
-    auto const samples = std::vector{-1.0F, 0.0F, 1.0F, 0.5F};
+    auto const samples = std::vector<float>{-1.0F, 0.0F, 1.0F, 0.5F};
     auto data = ao::test::wav::makeWav({.sampleFormat = ao::test::wav::SampleFormat::IeeeFloat,
                                         .bitsPerSample = 32,
                                         .validBitsPerSample = 32,
-                                        .audioData = floatSamples(std::span{samples})});
+                                        .audioData = floatSamples(std::span<float const>{samples})});
     auto const temp = ao::test::TempFile{data, ".wav"};
     auto const res = WavDecoderSession::open(temp.path, SampleEncoding::Signed16Le);
     REQUIRE_FALSE(res);

@@ -461,7 +461,7 @@ namespace ao::uimodel::test
   {
     auto input = std::ifstream{std::filesystem::path{AOBUS_SOURCE_DIR} / "doc/reference/shell/component-vocabulary.md"};
     REQUIRE(input);
-    auto const document = std::string{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
+    auto const document = std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     auto const generated = generatedSharedSchemaReference();
     auto const begin = document.find("<!-- BEGIN GENERATED SHARED COMPONENT SCHEMA -->");
     REQUIRE(begin != std::string::npos);

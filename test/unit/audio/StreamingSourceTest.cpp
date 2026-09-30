@@ -56,7 +56,7 @@ namespace ao::audio::test
   TEST_CASE("StreamingSource - preparation fills the configured preroll target", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
-    auto errorCount = std::atomic{0};
+    auto errorCount = std::atomic<int>{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
@@ -78,7 +78,7 @@ namespace ao::audio::test
             "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
-    auto errorCount = std::atomic{0};
+    auto errorCount = std::atomic<int>{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
@@ -150,7 +150,7 @@ namespace ao::audio::test
             "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
-    auto errorCount = std::atomic{0};
+    auto errorCount = std::atomic<int>{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
     auto beforeSeekBlock = std::vector(400, std::byte{0x11});
     auto afterSeekBlock = std::vector(400, std::byte{0x22});
@@ -179,7 +179,7 @@ namespace ao::audio::test
   TEST_CASE("StreamingSource - seek reports decoder failure", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
-    auto errorCount = std::atomic{0};
+    auto errorCount = std::atomic<int>{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
     auto block = silenceBlock(400);
 
@@ -232,7 +232,7 @@ namespace ao::audio::test
   TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
-    auto errorCount = std::atomic{0};
+    auto errorCount = std::atomic<int>{0};
     auto onError = [&](Error const&) { errorCount.fetch_add(1); };
 
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);

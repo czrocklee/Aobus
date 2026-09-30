@@ -530,7 +530,7 @@ namespace ao::audio::backend
       auto const sbits = ::snd_pcm_hw_params_get_sbits(trial);
       evidence.push_back({.encoding = encoding,
                           .optSignificantBits = sbits > 0
-                                                  ? std::optional{static_cast<std::uint8_t>(std::min(
+                                                  ? std::optional<std::uint8_t>{static_cast<std::uint8_t>(std::min(
                                                       sbits, static_cast<std::int32_t>(encodingNominalBits(encoding))))}
                                                   : std::nullopt});
     }

@@ -428,7 +428,7 @@ namespace ao::tui::test
     REQUIRE(rt::saveAppPrefs(store, prefs));
 
     auto input = std::ifstream{configPath};
-    auto const contents = std::string{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
+    auto const contents = std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     CHECK(contents.contains("plugin.futureAction"));
     CHECK(contents.contains("Ctrl+"));
     CHECK(contents.contains("F2"));

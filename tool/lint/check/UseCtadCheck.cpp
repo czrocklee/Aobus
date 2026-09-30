@@ -17,7 +17,7 @@
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Lex/Lexer.h>
+#include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/StringRef.h>
 
 #include <algorithm>
@@ -65,14 +65,9 @@ namespace clang::tidy::readability
       return dyn_cast<ClassTemplateSpecializationDecl>(record);
     }
 
-    std::string getConstructedTemplateName(CXXConstructExpr const* construct)
+    std::string getConstructedTemplateName(QualType type)
     {
-      if (construct == nullptr)
-      {
-        return "";
-      }
-
-      auto const* spec = getTemplateSpecialization(construct->getType());
+      auto const* spec = getTemplateSpecialization(type);
 
       if (spec == nullptr)
       {
@@ -80,6 +75,11 @@ namespace clang::tidy::readability
       }
 
       return spec->getSpecializedTemplate()->getQualifiedNameAsString();
+    }
+
+    std::string getConstructedTemplateName(CXXConstructExpr const* construct)
+    {
+      return construct == nullptr ? "" : getConstructedTemplateName(construct->getType());
     }
 
     QualType getTemplateArgumentType(CXXConstructExpr const* construct, std::uint32_t index)
@@ -205,42 +205,53 @@ namespace clang::tidy::readability
       return lhs.getCanonicalType().getUnqualifiedType() == rhs.getCanonicalType().getUnqualifiedType();
     }
 
-    bool isFixedWidthIntegerTypeSpelling(llvm::StringRef spelling)
+    // Primitive template arguments stay spelled, matching the local-initialization rule
+    // that writes primitive types instead of deducing them. Enums such as std::byte are
+    // not primitive.
+    bool isPrimitiveTemplateArgumentType(QualType type)
     {
-      return spelling.contains("int8_t") || spelling.contains("int16_t") || spelling.contains("int32_t") ||
-             spelling.contains("int64_t") || spelling.contains("uint8_t") || spelling.contains("uint16_t") ||
-             spelling.contains("uint32_t") || spelling.contains("uint64_t");
+      auto const canonical = type.getCanonicalType();
+      return !canonical->isEnumeralType() && (canonical->isArithmeticType() || canonical->isAnyCharacterType());
     }
 
-    bool hasFixedWidthIntegerTemplateArgument(TemplateSpecializationTypeLoc tsLoc,
-                                              SourceManager const& sm,
-                                              LangOptions const& langOpts)
+    bool hasPrimitiveWrittenTemplateArgument(TemplateSpecializationTypeLoc tsLoc)
     {
       for (std::uint32_t i = 0; i < tsLoc.getNumArgs(); ++i)
       {
-        auto const argumentLoc = tsLoc.getArgLoc(i);
-
-        if (argumentLoc.getArgument().getKind() != TemplateArgument::Type)
-        {
-          continue;
-        }
-
-        auto const range = argumentLoc.getSourceRange();
-
-        if (range.isInvalid())
-        {
-          continue;
-        }
-
-        auto const spelling = Lexer::getSourceText(CharSourceRange::getTokenRange(range), sm, langOpts);
-
-        if (isFixedWidthIntegerTypeSpelling(spelling))
+        if (auto const argument = tsLoc.getArgLoc(i).getArgument();
+            argument.getKind() == TemplateArgument::Type && isPrimitiveTemplateArgumentType(argument.getAsType()))
         {
           return true;
         }
       }
 
       return false;
+    }
+
+    bool hasPrimitiveDeducedTemplateArgument(llvm::ArrayRef<TemplateArgument> arguments)
+    {
+      return std::ranges::any_of(arguments,
+                                 [](TemplateArgument const& argument)
+                                 {
+                                   if (argument.getKind() == TemplateArgument::Pack)
+                                   {
+                                     return hasPrimitiveDeducedTemplateArgument(argument.pack_elements());
+                                   }
+
+                                   return argument.getKind() == TemplateArgument::Type &&
+                                          isPrimitiveTemplateArgumentType(argument.getAsType());
+                                 });
+    }
+
+    bool isDeducedTemplateTypeLoc(TypeLoc typeLoc)
+    {
+      return !typeLoc.getUnqualifiedLoc().getAs<DeducedTemplateSpecializationTypeLoc>().isNull();
+    }
+
+    bool hasPrimitiveDeducedTemplateArgument(QualType type)
+    {
+      auto const* spec = getTemplateSpecialization(type);
+      return spec != nullptr && hasPrimitiveDeducedTemplateArgument(spec->getTemplateArgs().asArray());
     }
 
     bool isTypeChangingInitializerElement(Expr const* init, QualType valueType)
@@ -834,19 +845,30 @@ namespace clang::tidy::readability
              isPairWithTypeChangingArgs(construct) || isInitializerListWithTypeChangingElements(construct);
     }
 
+    // Diagnostic only: removing the argument list can change the deduced type, so the
+    // author rewrites the arguments instead of accepting a mechanical FixIt.
     void reportCtadWarning(ClangTidyCheck& check, SourceLocation loc, TemplateSpecializationTypeLoc tsLoc)
     {
-      auto const templateName = getTemplateName(tsLoc);
-      auto diagBuilder =
-        check.diag(
-          loc,
-          "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
-        << templateName;
+      check.diag(
+        loc, "consider using CTAD (Class Template Argument Deduction) instead of explicit template arguments '%0<...>'")
+        << getTemplateName(tsLoc);
+    }
 
-      if (tsLoc.getLAngleLoc().isValid() && tsLoc.getRAngleLoc().isValid())
+    // std::array points at std::to_array directly: spelling std::array<T, N> would only
+    // trade this finding for aobus-modernize-use-std-to-array.
+    void reportPrimitiveDeductionWarning(ClangTidyCheck& check, SourceLocation loc, QualType type)
+    {
+      auto const deducedType = type.getCanonicalType().getUnqualifiedType();
+
+      if (getConstructedTemplateName(type) == "std::array")
       {
-        diagBuilder << FixItHint::CreateRemoval(SourceRange{tsLoc.getLAngleLoc(), tsLoc.getRAngleLoc()});
+        check.diag(loc, "CTAD deduces primitive elements for %0; use std::to_array<T>({...}) so the size stays deduced")
+          << deducedType;
+        return;
       }
+
+      check.diag(loc, "CTAD deduces primitive template arguments for %0; spell the template arguments explicitly")
+        << deducedType;
     }
   } // namespace
 
@@ -870,74 +892,83 @@ namespace clang::tidy::readability
               hasInitializer(cxxConstructExpr(hasAnyArgument(unless(cxxDefaultArgExpr()))).bind("var_init")))
         .bind("var_decl"),
       this);
+
+    // CTAD spellings: the deduced specialization is inspected in check().
+    auto deducedTemplateTypeLoc = loc(deducedTemplateSpecializationType());
+
+    finder->addMatcher(
+      cxxTemporaryObjectExpr(
+        unless(isExpansionInSystemHeader()), unless(isInTemplateInstantiation()), hasTypeLoc(deducedTemplateTypeLoc))
+        .bind("deduced_temp_obj"),
+      this);
+    finder->addMatcher(
+      cxxFunctionalCastExpr(
+        unless(isExpansionInSystemHeader()), unless(isInTemplateInstantiation()), hasTypeLoc(deducedTemplateTypeLoc))
+        .bind("deduced_cast"),
+      this);
+    finder->addMatcher(varDecl(unless(isExpansionInSystemHeader()),
+                               unless(isInstantiated()),
+                               unless(isImplicit()),
+                               unless(parmVarDecl()),
+                               hasTypeLoc(deducedTemplateTypeLoc))
+                         .bind("deduced_var"),
+                       this);
   }
 
   void UseCtadCheck::check(MatchFinder::MatchResult const& result)
   {
     auto const& sm = *result.SourceManager;
+    auto const isReportable = [&sm](SourceLocation loc)
+    { return loc.isValid() && !loc.isMacroID() && !sm.isInSystemHeader(loc); };
 
-    if (auto const* tempObj = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("temp_obj"); tempObj != nullptr)
+    // Macro arguments such as CHECK(x == std::vector{1}) are written by the author, so the
+    // primitive-deduction rule follows them to their spelling. Macro bodies stay exempt.
+    auto const checkDeduced = [&](TypeSourceInfo const* typeInfo, QualType type, SourceLocation loc)
+    {
+      auto const reportLoc = loc.isMacroID() && sm.isMacroArgExpansion(loc) ? sm.getSpellingLoc(loc) : loc;
+
+      if (typeInfo != nullptr && isDeducedTemplateTypeLoc(typeInfo->getTypeLoc()) && isReportable(reportLoc) &&
+          hasPrimitiveDeducedTemplateArgument(type))
+      {
+        reportPrimitiveDeductionWarning(*this, reportLoc, type);
+      }
+    };
+
+    if (auto const* deducedTempObj = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("deduced_temp_obj");
+        deducedTempObj != nullptr)
+    {
+      checkDeduced(deducedTempObj->getTypeSourceInfo(), deducedTempObj->getType(), deducedTempObj->getBeginLoc());
+    }
+    else if (auto const* cast = result.Nodes.getNodeAs<CXXFunctionalCastExpr>("deduced_cast"); cast != nullptr)
+    {
+      checkDeduced(cast->getTypeInfoAsWritten(), cast->getType(), cast->getBeginLoc());
+    }
+    else if (auto const* deducedVar = result.Nodes.getNodeAs<VarDecl>("deduced_var"); deducedVar != nullptr)
+    {
+      checkDeduced(deducedVar->getTypeSourceInfo(), deducedVar->getType(), deducedVar->getBeginLoc());
+    }
+    else if (auto const* tempObj = result.Nodes.getNodeAs<CXXTemporaryObjectExpr>("temp_obj"); tempObj != nullptr)
     {
       auto const loc = tempObj->getBeginLoc();
-
-      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
-      {
-        return;
-      }
-
       auto const tsLoc = getExplicitTemplateTypeLoc(tempObj->getTypeSourceInfo()->getTypeLoc());
 
-      if (tsLoc.isNull())
+      if (isReportable(loc) && !tsLoc.isNull() && !hasPrimitiveWrittenTemplateArgument(tsLoc) &&
+          !isUnsafeForCtad(tempObj, tsLoc.getNumArgs()))
       {
-        return;
+        reportCtadWarning(*this, loc, tsLoc);
       }
-
-      if (isUnsafeForCtad(tempObj, tsLoc.getNumArgs()))
-      {
-        return;
-      }
-
-      if (hasFixedWidthIntegerTemplateArgument(tsLoc, sm, result.Context->getLangOpts()))
-      {
-        return;
-      }
-
-      reportCtadWarning(*this, loc, tsLoc);
     }
     else if (auto const* varDecl = result.Nodes.getNodeAs<VarDecl>("var_decl"); varDecl != nullptr)
     {
       auto const* init = result.Nodes.getNodeAs<CXXConstructExpr>("var_init");
-
-      if (init == nullptr)
-      {
-        return;
-      }
-
       auto const loc = varDecl->getBeginLoc();
-
-      if (loc.isInvalid() || loc.isMacroID() || sm.isInSystemHeader(loc))
-      {
-        return;
-      }
-
       auto const tsLoc = getExplicitTemplateTypeLoc(varDecl->getTypeSourceInfo()->getTypeLoc());
 
-      if (tsLoc.isNull())
+      if (init != nullptr && isReportable(loc) && !tsLoc.isNull() && !hasPrimitiveWrittenTemplateArgument(tsLoc) &&
+          !isUnsafeForCtad(init, tsLoc.getNumArgs()))
       {
-        return;
+        reportCtadWarning(*this, loc, tsLoc);
       }
-
-      if (isUnsafeForCtad(init, tsLoc.getNumArgs()))
-      {
-        return;
-      }
-
-      if (hasFixedWidthIntegerTemplateArgument(tsLoc, sm, result.Context->getLangOpts()))
-      {
-        return;
-      }
-
-      reportCtadWarning(*this, loc, tsLoc);
     }
   }
 } // namespace clang::tidy::readability

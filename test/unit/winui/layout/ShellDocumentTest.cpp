@@ -41,7 +41,7 @@ namespace ao::winui::test
       auto const path = std::filesystem::path{AOBUS_WINDOWS_LAYOUT_DIR} / shellPresetResource(preset);
       auto stream = std::ifstream{path, std::ios::binary};
       REQUIRE(stream.is_open());
-      return std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+      return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
 
     /// The frame source that registers actions and composes the shells' menus.
@@ -49,7 +49,7 @@ namespace ao::winui::test
     {
       auto stream = std::ifstream{std::filesystem::path{AOBUS_WINDOWS_SHELL_BUILDER_SOURCE}, std::ios::binary};
       REQUIRE(stream.is_open());
-      return std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+      return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
     }
 
     void collectIds(LayoutNode const& node, std::vector<std::string>& ids)
@@ -231,7 +231,7 @@ namespace ao::winui::test
     // executable's files must still be checked on native Windows.
     auto stream = std::ifstream{std::filesystem::path{AOBUS_WINDOWS_WINUI_CMAKE}, std::ios::binary};
     REQUIRE(stream.is_open());
-    auto const project = std::string{std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+    auto const project = std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
 
     // MSBuild spells the packaged path with escaped backslashes; the shared
     // constant spells it with forward ones.

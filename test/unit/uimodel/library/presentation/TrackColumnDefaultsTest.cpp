@@ -73,7 +73,7 @@ namespace ao::uimodel::test
       auto const isFlexibleText = std::ranges::contains(kFlexibleTextFields, definition.field);
       auto const isScalar = std::ranges::contains(kScalarFields, definition.field);
       auto const isFixedText = std::ranges::contains(kFixedTextFields, definition.field);
-      REQUIRE(std::ranges::count(std::array{isFlexibleText, isScalar, isFixedText}, true) == 1);
+      REQUIRE(std::ranges::count(std::to_array<bool>({isFlexibleText, isScalar, isFixedText}), true) == 1);
 
       CHECK(defaults.sizing == (isFlexibleText ? TrackColumnSizing::Flexible : TrackColumnSizing::Fixed));
       CHECK(defaults.alignment == (isScalar ? TrackColumnAlignment::End : TrackColumnAlignment::Start));

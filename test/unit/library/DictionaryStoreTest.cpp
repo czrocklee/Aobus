@@ -289,8 +289,8 @@ namespace ao::library::test
     constexpr std::ptrdiff_t kWorkerCount = 4;
     auto ready = std::latch{kWorkerCount};
     auto start = std::latch{1};
-    auto failed = std::atomic{false};
-    auto writerDone = std::atomic{false};
+    auto failed = std::atomic<bool>{false};
+    auto writerDone = std::atomic<bool>{false};
 
     auto reader = [&]
     {

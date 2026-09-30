@@ -110,7 +110,7 @@ namespace ao::uimodel::test
 
       auto const widths = solveTrackColumnWidths(specs, 300);
 
-      CHECK(widths == std::vector{maximumWidth, maximumWidth, 20});
+      CHECK(widths == std::vector<std::int32_t>{maximumWidth, maximumWidth, 20});
       auto const resized = resizeTrackColumnSpecs(specs, rt::TrackField::Title, 100, 300);
       REQUIRE(resized.size() == specs.size());
       CHECK(resized[0].fixedWidth == maximumWidth);
@@ -126,7 +126,7 @@ namespace ao::uimodel::test
         flexible(rt::TrackField::Title),
         flexible(rt::TrackField::Artist, 3.0),
       };
-      CHECK(solveTrackColumnWidths(specs, 300) == std::vector{maximumWidth, maximumWidth, 20, 20});
+      CHECK(solveTrackColumnWidths(specs, 300) == std::vector<std::int32_t>{maximumWidth, maximumWidth, 20, 20});
 
       auto const resized = resizeTrackColumnSpecs(specs, rt::TrackField::Title, 100, 300);
       REQUIRE(resized.size() == specs.size());
@@ -143,8 +143,8 @@ namespace ao::uimodel::test
         flexible(rt::TrackField::Artist, 1.0, maximumWidth, maximumWidth),
       };
 
-      CHECK(solveTrackColumnWidths(specs, 300) == std::vector{maximumWidth, maximumWidth});
-      auto const canonical = specsFromWidths(specs, std::vector{maximumWidth, maximumWidth});
+      CHECK(solveTrackColumnWidths(specs, 300) == std::vector<std::int32_t>{maximumWidth, maximumWidth});
+      auto const canonical = specsFromWidths(specs, std::vector<std::int32_t>{maximumWidth, maximumWidth});
       REQUIRE(canonical.size() == specs.size());
       CHECK(canonical[0].weight == 1.0);
       CHECK(canonical[1].weight == 1.0);

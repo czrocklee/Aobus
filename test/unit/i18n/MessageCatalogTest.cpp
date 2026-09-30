@@ -413,7 +413,7 @@ namespace ao::i18n::test
     constexpr std::size_t kThreadCount = 8;
     auto ready = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
     auto start = std::latch{1};
-    auto succeeded = std::atomic{true};
+    auto succeeded = std::atomic<bool>{true};
     auto threads = std::vector<std::jthread>{};
     threads.reserve(kThreadCount);
     auto releaseWorkers = utility::ScopedRegistration{[&start] { start.count_down(); }};

@@ -66,7 +66,7 @@ namespace ao::gtk::test
     REQUIRE(tryPumpGtkEventsUntil([&] { return callbackCount.load(std::memory_order_acquire) == 2; }));
 
     auto const expectedOrder = std::vector<std::string>{"foreign dispatch", "owner defer"};
-    auto const expectedAffinity = std::vector{true, true};
+    auto const expectedAffinity = std::vector<bool>{true, true};
     CHECK(executionOrder == expectedOrder);
     CHECK(ranOnOwner == expectedAffinity);
     CHECK(callbackCount.load(std::memory_order_acquire) == 2);

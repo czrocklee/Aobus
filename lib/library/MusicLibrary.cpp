@@ -221,7 +221,7 @@ namespace ao::library
 
     bool matchesCatalogKey(std::span<std::byte const> const key, std::string_view const expected) noexcept
     {
-      return key.size() == expected.size() && std::ranges::equal(key, std::as_bytes(std::span{expected}));
+      return key.size() == expected.size() && std::ranges::equal(key, std::as_bytes(std::span<char const>{expected}));
     }
 
     bool isCatalogEmpty(lmdb::ByteKeyDatabase const& mainDatabase, lmdb::WriteTransaction const& transaction)

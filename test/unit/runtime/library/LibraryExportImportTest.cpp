@@ -182,7 +182,7 @@ namespace ao::rt::test
 
     {
       auto ifs = std::ifstream{yamlPath};
-      auto const begin = std::istreambuf_iterator{ifs};
+      auto const begin = std::istreambuf_iterator<char>{ifs};
       auto const end = decltype(begin){};
       auto const exported = std::string{begin, end};
       REQUIRE_THAT(exported, Catch::Matchers::ContainsSubstring("codec: FLAC"));

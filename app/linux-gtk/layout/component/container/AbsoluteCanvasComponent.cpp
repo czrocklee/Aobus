@@ -262,7 +262,7 @@ namespace ao::gtk::layout
 
           static constexpr double kDashLength = 6.0;
           static constexpr double kDashGap = 3.0;
-          crPtr->set_dash(std::vector{kDashLength, kDashGap}, 0);
+          crPtr->set_dash(std::vector<double>{kDashLength, kDashGap}, 0);
           crPtr->rectangle(0, 0, width, height);
           crPtr->stroke();
 

@@ -129,7 +129,7 @@ namespace ao::rt::test
     // A budget far below what the threads write, so eviction runs against live
     // writers and readers rather than after them.
     auto const cache = makeCache(temp.path(), kBudgetEntries * kEntryBytes);
-    auto wrongContent = std::atomic{std::size_t{0}};
+    auto wrongContent = std::atomic<std::size_t>{0};
     auto started = AsyncTestState<std::size_t>::create(0);
     auto release = AsyncBarrier{};
     auto threads = std::vector<std::jthread>{};

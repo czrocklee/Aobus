@@ -407,7 +407,7 @@ namespace ao::systemmedia
           if (MprisBridge::shouldEmitSeeked(lastSnapshot.transport, snapshot.transport))
           {
             auto const payload = Glib::Variant<std::tuple<std::int64_t>>::create(
-              std::tuple{MprisBridge::microsecondsFromMilliseconds(snapshot.transport.elapsed)});
+              std::tuple<std::int64_t>{MprisBridge::microsecondsFromMilliseconds(snapshot.transport.elapsed)});
             emitSignal(kPlayerInterface, "Seeked", payload);
           }
 

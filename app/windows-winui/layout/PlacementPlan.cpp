@@ -54,9 +54,10 @@ namespace ao::winui
       .verticalSlot = slotSizing(placement.optVerticalExpand),
       .optHorizontalAlignment = placement.optHorizontalAlignment.transform(toHorizontal),
       .optVerticalAlignment = placement.optVerticalAlignment.transform(toVertical),
-      .optMinWidth = placement.widthRequestAuthored ? std::optional{placement.optMinWidth.value_or(0.0)} : std::nullopt,
+      .optMinWidth =
+        placement.widthRequestAuthored ? std::optional<double>{placement.optMinWidth.value_or(0.0)} : std::nullopt,
       .optMinHeight =
-        placement.heightRequestAuthored ? std::optional{placement.optMinHeight.value_or(0.0)} : std::nullopt,
+        placement.heightRequestAuthored ? std::optional<double>{placement.optMinHeight.value_or(0.0)} : std::nullopt,
       .authoredVisible = placement.optAuthoredVisible.value_or(true),
     };
   }

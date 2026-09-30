@@ -72,14 +72,14 @@ namespace ao::media::file
     std::uint16_t result = 0;
     auto const [end, ec] = std::from_chars(text.data(), text.data() + text.size(), result);
     auto const consumedAll = static_cast<std::size_t>(end - text.data()) == text.size();
-    return ec == std::errc() && consumedAll ? std::optional{result} : std::nullopt;
+    return ec == std::errc() && consumedAll ? std::optional<std::uint16_t>{result} : std::nullopt;
   }
 
   std::optional<std::uint16_t> decodeYear(std::string_view text)
   {
     std::uint16_t result = 0;
     auto const [_, ec] = std::from_chars(text.data(), text.data() + text.size(), result);
-    return ec == std::errc() ? std::optional{result} : std::nullopt;
+    return ec == std::errc() ? std::optional<std::uint16_t>{result} : std::nullopt;
   }
 
   std::uint32_t bitrateFromBytes(std::uint64_t byteCount, std::chrono::milliseconds duration) noexcept

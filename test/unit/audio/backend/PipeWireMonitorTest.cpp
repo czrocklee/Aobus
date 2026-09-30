@@ -56,8 +56,8 @@ namespace ao::audio::backend::test
     auto hooksPtr = makeMonitorHooks();
     auto monitor = PipeWireMonitor{hooksPtr};
     auto graphDelivered = std::binary_semaphore{0};
-    auto deviceCalls = std::atomic{std::size_t{0U}};
-    auto graphCalls = std::atomic{std::size_t{0U}};
+    auto deviceCalls = std::atomic<std::size_t>{0U};
+    auto graphCalls = std::atomic<std::size_t>{0U};
     auto deviceSub = monitor.subscribeDevices([&](std::vector<Device> const&)
                                               { deviceCalls.fetch_add(1U, std::memory_order_relaxed); });
     auto graphSub = monitor.subscribeGraph("42",
@@ -107,7 +107,7 @@ namespace ao::audio::backend::test
     auto monitor = PipeWireMonitor{hooksPtr};
     monitor.start();
     REQUIRE(initialRefreshCompleted.try_acquire_for(kWaitTimeout));
-    auto graphCalls = std::atomic{std::size_t{0U}};
+    auto graphCalls = std::atomic<std::size_t>{0U};
     auto graphSub = utility::ScopedRegistration{};
 
     auto subscriptionThread =
@@ -266,7 +266,7 @@ namespace ao::audio::backend::test
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     hooksPtr->onMonitorStateDestroyed = [&] { stateDestroyed.release(); };
     auto providerPtr = std::make_unique<PipeWireProvider>(hooksPtr);
-    auto callbackCount = std::atomic{std::size_t{0U}};
+    auto callbackCount = std::atomic<std::size_t>{0U};
     auto callbackNodeId = std::string{};
 
     auto graphSub = providerPtr->subscribeGraph("42",
@@ -322,8 +322,8 @@ namespace ao::audio::backend::test
     auto hooksPtr = makeMonitorHooks();
     auto monitor = PipeWireMonitor{hooksPtr};
     auto secondRefreshed = std::binary_semaphore{0};
-    auto firstCalls = std::atomic{std::size_t{0U}};
-    auto secondCalls = std::atomic{std::size_t{0U}};
+    auto firstCalls = std::atomic<std::size_t>{0U};
+    auto secondCalls = std::atomic<std::size_t>{0U};
     auto firstSub = utility::ScopedRegistration{};
     auto secondSub = utility::ScopedRegistration{};
     auto firstThread =
@@ -378,8 +378,8 @@ namespace ao::audio::backend::test
       }
     };
     auto monitor = PipeWireMonitor{hooksPtr};
-    auto firstCalls = std::atomic{std::size_t{0U}};
-    auto secondCalls = std::atomic{std::size_t{0U}};
+    auto firstCalls = std::atomic<std::size_t>{0U};
+    auto secondCalls = std::atomic<std::size_t>{0U};
     auto secondInitiallyDelivered = std::binary_semaphore{0};
     auto firstSub = monitor.subscribeGraph("42",
                                            [&](flow::Graph const&)
@@ -480,8 +480,8 @@ namespace ao::audio::backend::test
     hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     auto monitor = PipeWireMonitor{hooksPtr};
-    auto callbackCount = std::atomic{std::size_t{0U}};
-    auto lateCalls = std::atomic{std::size_t{0U}};
+    auto callbackCount = std::atomic<std::size_t>{0U};
+    auto lateCalls = std::atomic<std::size_t>{0U};
     auto lateSub = utility::ScopedRegistration{};
     auto sub = monitor.subscribeDevices(
       [&](std::vector<Device> const&)

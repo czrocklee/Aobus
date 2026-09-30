@@ -686,9 +686,9 @@ namespace ao::audio::backend
       auto const lock = std::scoped_lock{_implPtr->sessionMutex};
       _implPtr->sessionVolume = std::move(sessionVolume);
       _implPtr->optAppliedVolume =
-        _implPtr->sessionVolume.Get() != nullptr ? std::optional{_implPtr->cachedVolume} : std::nullopt;
+        _implPtr->sessionVolume.Get() != nullptr ? std::optional<float>{_implPtr->cachedVolume} : std::nullopt;
       _implPtr->optAppliedMuted =
-        _implPtr->sessionVolume.Get() != nullptr ? std::optional{_implPtr->cachedMuted} : std::nullopt;
+        _implPtr->sessionVolume.Get() != nullptr ? std::optional<bool>{_implPtr->cachedMuted} : std::nullopt;
     }
 
     // The input stays in the negotiated decoder-side format. The graph records

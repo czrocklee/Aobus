@@ -162,8 +162,9 @@ namespace ao::audio::detail::test
     auto const floatSignal =
       SignalFormat{.sampleRate = kRate, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint};
 
-    auto const [encoding, endpointBits] = GENERATE(
-      std::pair{SampleEncoding::Signed16Le, std::uint8_t{16}}, std::pair{SampleEncoding::Signed32Le, std::uint8_t{32}});
+    auto const [encoding, endpointBits] =
+      GENERATE(std::pair<SampleEncoding, std::uint8_t>{SampleEncoding::Signed16Le, 16},
+               std::pair<SampleEncoding, std::uint8_t>{SampleEncoding::Signed32Le, 32});
     auto const floatToInteger = openedMode(encoding, endpointBits);
     auto const validatedRes = validateOpenedMode(floatSignal, floatToInteger);
 

@@ -347,9 +347,9 @@ namespace ao::audio::test
     auto callbackLifetimePtr = std::make_shared<CallbackLifetime>(callbackStorageDestroyed);
     auto backendPtr = std::make_unique<FakeBlockingStopBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto routeChanged = std::atomic{false};
+    auto routeChanged = std::atomic<bool>{false};
     auto routeDelivered = CallbackLatch{};
-    auto teardownRequested = std::atomic{false};
+    auto teardownRequested = std::atomic<bool>{false};
     auto enginePtr = std::make_unique<Engine>(std::move(backendPtr), device, makeScriptedEngineDecoderFactory());
 
     enginePtr->play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
@@ -432,7 +432,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto blockingBackendPtr = std::make_unique<FakeBlockingStopBackend>();
     auto* const blockingBackendRaw = blockingBackendPtr.get();
-    auto routeChanged = std::atomic{false};
+    auto routeChanged = std::atomic<bool>{false};
     auto settled = CallbackLatch{};
     auto blockingEngine = Engine{std::move(blockingBackendPtr), device, makeScriptedEngineDecoderFactory()};
     blockingEngine.setOnRouteChanged([&](Engine::RouteStatus const&)
@@ -470,7 +470,7 @@ namespace ao::audio::test
     auto stateEntered = std::binary_semaphore{0};
     auto stateRelease = std::binary_semaphore{0};
     auto workerFlushed = std::binary_semaphore{0};
-    auto routeCount = std::atomic{std::size_t{0}};
+    auto routeCount = std::atomic<std::size_t>{0};
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
     auto releaseGuard = SemaphoreReleaseGuard{stateRelease};
 
@@ -519,7 +519,7 @@ namespace ao::audio::test
     auto stateEntered = std::binary_semaphore{0};
     auto stateRelease = std::binary_semaphore{0};
     auto workerFlushed = std::binary_semaphore{0};
-    auto endedCount = std::atomic{std::size_t{0}};
+    auto endedCount = std::atomic<std::size_t>{0};
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
     auto releaseGuard = SemaphoreReleaseGuard{stateRelease};
 
@@ -573,7 +573,7 @@ namespace ao::audio::test
     auto workerEntered = std::binary_semaphore{0};
     auto workerRelease = std::binary_semaphore{0};
     auto workerFlushed = std::binary_semaphore{0};
-    auto failureCount = std::atomic{std::size_t{0}};
+    auto failureCount = std::atomic<std::size_t>{0};
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
     auto releaseGuard = SemaphoreReleaseGuard{workerRelease};
 

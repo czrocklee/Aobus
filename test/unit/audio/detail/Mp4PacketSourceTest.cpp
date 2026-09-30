@@ -45,8 +45,8 @@ namespace ao::audio::detail::test
     CHECK(source.sampleIndex() == 0);
     auto const expectedPacket = std::to_array<std::uint8_t>({1, 2, 3, 4});
     auto const expectedCookie = ao::test::mp4::makeAtom("alac", {9, 8, 7});
-    CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span{expectedPacket})));
-    CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span{expectedCookie})));
+    CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span<std::uint8_t const>{expectedPacket})));
+    CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span<std::uint8_t const>{expectedCookie})));
     CHECK(source.timescale() == 44100);
     CHECK(source.duration() == std::chrono::seconds{2});
     CHECK(source.firstFrameIndex(44100, 4096) == 0);
@@ -72,8 +72,8 @@ namespace ao::audio::detail::test
       auto const expectedCookie = ao::test::mp4::makeAtom("alac", {9, 8, 7});
 
       REQUIRE(source.open(temp.path, "alac"));
-      CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span{expectedPacket})));
-      CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span{expectedCookie})));
+      CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span<std::uint8_t const>{expectedPacket})));
+      CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span<std::uint8_t const>{expectedCookie})));
 
       CHECK_FALSE(source.open(temp.path, "mp4a"));
       CHECK_FALSE(source.isOpen());
@@ -89,8 +89,8 @@ namespace ao::audio::detail::test
       CHECK(source.isOpen());
       CHECK_FALSE(source.isAtEnd());
       CHECK(source.sampleIndex() == 0);
-      CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span{expectedPacket})));
-      CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span{expectedCookie})));
+      CHECK(std::ranges::equal(source.packet(), std::as_bytes(std::span<std::uint8_t const>{expectedPacket})));
+      CHECK(std::ranges::equal(source.magicCookie(), std::as_bytes(std::span<std::uint8_t const>{expectedCookie})));
     }
 
     SECTION("Zero media timescale uses the codec fallback")

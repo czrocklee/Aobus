@@ -161,12 +161,13 @@ namespace ao::audio::backend::detail
       device.isDefault = device.id == defaultDeviceUid;
     }
 
-    std::ranges::sort(devices,
-                      [](Device const& lhs, Device const& rhs)
-                      {
-                        return std::tuple{!lhs.isDefault, lhs.displayName, lhs.id.raw()} <
-                               std::tuple{!rhs.isDefault, rhs.displayName, rhs.id.raw()};
-                      });
+    std::ranges::sort(
+      devices,
+      [](Device const& lhs, Device const& rhs)
+      {
+        return std::tuple<bool, std::string const&, std::string const&>{!lhs.isDefault, lhs.displayName, lhs.id.raw()} <
+               std::tuple<bool, std::string const&, std::string const&>{!rhs.isDefault, rhs.displayName, rhs.id.raw()};
+      });
     return devices;
   }
 

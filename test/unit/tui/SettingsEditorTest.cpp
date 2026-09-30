@@ -234,7 +234,7 @@ namespace ao::tui::test
     REQUIRE(fixture.editor.tryHandleEvent(Event::CtrlK));
     REQUIRE(fixture.editor.tryHandleEvent(Event::Character("$unknown")));
 
-    for (auto const& [columns, rows] : {std::pair{40, 14}, std::pair{24, 16}})
+    for (auto const& [columns, rows] : {std::pair<int, int>{40, 14}, std::pair<int, int>{24, 16}})
     {
       CAPTURE(columns, rows);
       auto const rendered = renderElement(fixture.editor.renderModal(columns, rows), columns, rows);

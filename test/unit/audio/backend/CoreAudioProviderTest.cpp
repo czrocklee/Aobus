@@ -47,7 +47,7 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioProvider - reconciles device state after listener installation",
             "[audio][unit][coreaudio][provider]")
   {
-    auto enumerateCount = std::atomic{std::size_t{0U}};
+    auto enumerateCount = std::atomic<std::size_t>{0U};
     auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
     hooksPtr->enumerateDevices = [&]
     {
@@ -68,7 +68,7 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioProvider - startup failure retires the installed monitor",
             "[audio][unit][coreaudio][provider][concurrency]")
   {
-    auto enumerateCount = std::atomic{std::size_t{0U}};
+    auto enumerateCount = std::atomic<std::size_t>{0U};
     auto monitorStateDestroyed = std::binary_semaphore{0};
     auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
     hooksPtr->enumerateDevices = [&]
@@ -91,7 +91,7 @@ namespace ao::audio::backend::test
             "[audio][unit][coreaudio][provider][concurrency]")
   {
     auto refreshComplete = std::binary_semaphore{0};
-    auto enumerateCount = std::atomic{std::size_t{0U}};
+    auto enumerateCount = std::atomic<std::size_t>{0U};
     auto hooksPtr = std::make_shared<detail::CoreAudioProviderMonitorHooks>();
     hooksPtr->enumerateDevices = [&]
     {
@@ -294,8 +294,8 @@ namespace ao::audio::backend::test
     hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     auto provider = CoreAudioProvider{hooksPtr};
-    auto callbackCount = std::atomic{std::size_t{0U}};
-    auto lateCalls = std::atomic{std::size_t{0U}};
+    auto callbackCount = std::atomic<std::size_t>{0U};
+    auto lateCalls = std::atomic<std::size_t>{0U};
     auto lateDeviceSub = utility::ScopedRegistration{};
     auto lateGraphSub = utility::ScopedRegistration{};
     auto sub = provider.subscribeDevices(

@@ -148,7 +148,7 @@ namespace ao::test
                        { return yaml::scalarAs<std::int32_t>(child, context); })
         .requiredScalarSequence("values", values);
 
-      auto readRes = std::move(reader).finish(std::pair{nested, values});
+      auto readRes = std::move(reader).finish(std::pair<std::int32_t, std::vector<std::int32_t>>{nested, values});
       REQUIRE(readRes);
       CHECK(readRes->first == 9);
       CHECK((readRes->second == std::vector<std::int32_t>{1, 2, 3}));
@@ -259,7 +259,7 @@ namespace ao::test
     {
       auto tree = ryml::Tree{yaml::callbacks()};
       auto writer = yaml::MapWriter{tree.rootref()};
-      writer.scalarSequence("values", std::vector{1, 2})
+      writer.scalarSequence("values", std::vector<int>{1, 2})
         .value("nested",
                7,
                [](ryml::NodeRef child, std::int32_t value) -> Result<>

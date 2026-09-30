@@ -70,7 +70,7 @@ namespace ao::winui
         }
       }
 
-      return targetByteOffset == text.size() ? std::optional{utf16Offset} : std::nullopt;
+      return targetByteOffset == text.size() ? std::optional<std::size_t>{utf16Offset} : std::nullopt;
     }
   } // namespace
 

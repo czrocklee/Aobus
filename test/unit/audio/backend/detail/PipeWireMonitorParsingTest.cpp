@@ -116,7 +116,7 @@ namespace ao::audio::backend::detail::test
   TEST_CASE("SinkProps::classifyVolume - zero channel gain remains the range minimum regardless of order",
             "[audio][unit][pipewire][monitor]")
   {
-    for (auto const& channelVolumes : {std::vector{0.0F, 0.8F}, std::vector{0.8F, 0.0F}})
+    for (auto const& channelVolumes : {std::vector<float>{0.0F, 0.8F}, std::vector<float>{0.8F, 0.0F}})
     {
       auto props = SinkProps{};
       props.hasChannelVolumes = true;
@@ -287,7 +287,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("mergeSinkProps - channel volumes")
     {
-      auto const vols = std::array{1.0F, 0.8F};
+      auto const vols = std::to_array<float>({1.0F, 0.8F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
@@ -329,7 +329,7 @@ namespace ao::audio::backend::detail::test
       auto f1 = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f1, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
-      auto const vols1 = std::array{0.5F, 0.5F};
+      auto const vols1 = std::to_array<float>({0.5F, 0.5F});
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, vols1.size(), utility::layout::asLegacyPtr<float>(vols1.data()));
       auto* pod1 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f1));
@@ -342,7 +342,7 @@ namespace ao::audio::backend::detail::test
       auto f2 = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f2, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
-      auto const vols2 = std::array{0.25F, 0.25F};
+      auto const vols2 = std::to_array<float>({0.25F, 0.25F});
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, vols2.size(), utility::layout::asLegacyPtr<float>(vols2.data()));
       auto* pod2 = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f2));
@@ -364,14 +364,14 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Hardware-only")
     {
-      auto const vols = std::array{0.5F, 0.5F};
+      auto const vols = std::to_array<float>({0.5F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
 
-      auto const softVols = std::array{1.0F, 1.0F};
+      auto const softVols = std::to_array<float>({1.0F, 1.0F});
       ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
@@ -390,7 +390,7 @@ namespace ao::audio::backend::detail::test
     {
       // Deliberately distinct magnitudes so a hardware value leaking into the unclassified range
       // cannot hide behind an equal channel value.
-      auto const vols = std::array{0.5F, 0.5F};
+      auto const vols = std::to_array<float>({0.5F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
 
@@ -425,7 +425,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Mixed Channel Hardware / Scalar Unclassified")
     {
-      auto const vols = std::array{0.25F, 0.25F};
+      auto const vols = std::to_array<float>({0.25F, 0.25F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
 
@@ -458,7 +458,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Channel-only ambiguous attenuation records every channel")
     {
-      auto const vols = std::array{1.0F, 0.5F};
+      auto const vols = std::to_array<float>({1.0F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
@@ -496,7 +496,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Scalar and channel both ambiguous contribute")
     {
-      auto const vols = std::array{0.5F, 0.5F};
+      auto const vols = std::to_array<float>({0.5F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_volume, 0);
@@ -524,7 +524,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - All non-unity evidence hardware-flagged carries no range")
     {
-      auto const vols = std::array{0.5F, 0.5F};
+      auto const vols = std::to_array<float>({0.5F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_volume, SPA_POD_PROP_FLAG_HARDWARE);
@@ -553,7 +553,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Ambiguous amplification keeps the above-unity factor")
     {
-      auto const vols = std::array{0.5F, 1.5F};
+      auto const vols = std::to_array<float>({0.5F, 1.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
@@ -572,14 +572,14 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Soft volumes keep ambiguous evidence out of the unclassified range")
     {
-      auto const vols = std::array{0.25F, 0.25F};
+      auto const vols = std::to_array<float>({0.25F, 0.25F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
 
-      auto const softVols = std::array{0.5F, 0.5F};
+      auto const softVols = std::to_array<float>({0.5F, 0.5F});
       ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
@@ -599,14 +599,14 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Software-only")
     {
-      auto const vols = std::array{0.5F, 0.5F};
+      auto const vols = std::to_array<float>({0.5F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0); // No hardware flag
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
 
-      auto const softVols = std::array{0.5F, 0.5F};
+      auto const softVols = std::to_array<float>({0.5F, 0.5F});
       ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
@@ -628,7 +628,7 @@ namespace ao::audio::backend::detail::test
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
 
-      auto const softVols = std::array{1.0F, 1.25F};
+      auto const softVols = std::to_array<float>({1.0F, 1.25F});
       ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
@@ -647,14 +647,14 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Mixed")
     {
-      auto const vols = std::array{0.25F, 0.25F};
+      auto const vols = std::to_array<float>({0.25F, 0.25F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
 
-      auto const softVols = std::array{0.5F, 0.5F};
+      auto const softVols = std::to_array<float>({0.5F, 0.5F});
       ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));
@@ -671,7 +671,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Ambiguous")
     {
-      auto const vols = std::array{0.5F, 0.5F};
+      auto const vols = std::to_array<float>({0.5F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0); // No hardware flag
@@ -691,7 +691,7 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - stream ambiguous volume is software")
     {
-      auto const vols = std::array{1.0F, 0.5F};
+      auto const vols = std::to_array<float>({1.0F, 0.5F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
@@ -712,14 +712,14 @@ namespace ao::audio::backend::detail::test
 
     SECTION("SinkProps::classifyVolume - Hardware-capable unity")
     {
-      auto const vols = std::array{1.0F, 1.0F};
+      auto const vols = std::to_array<float>({1.0F, 1.0F});
       auto f = ::spa_pod_frame{};
       ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
       ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, SPA_POD_PROP_FLAG_HARDWARE);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
 
-      auto const softVols = std::array{1.0F, 1.0F};
+      auto const softVols = std::to_array<float>({1.0F, 1.0F});
       ::spa_pod_builder_prop(&b, SPA_PROP_softVolumes, 0);
       ::spa_pod_builder_array(
         &b, sizeof(float), SPA_TYPE_Float, softVols.size(), utility::layout::asLegacyPtr<float>(softVols.data()));

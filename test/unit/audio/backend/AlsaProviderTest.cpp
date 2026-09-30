@@ -142,7 +142,7 @@ namespace ao::audio::backend::test
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     hooksPtr->onMonitorStateDestroyed = [&] { monitorStateDestroyed.release(); };
     auto providerPtr = std::make_unique<AlsaProvider>(hooksPtr);
-    auto callbackCount = std::atomic{std::size_t{0U}};
+    auto callbackCount = std::atomic<std::size_t>{0U};
     auto sub = providerPtr->subscribeDevices(
       [&](std::vector<Device> const&)
       {
@@ -229,8 +229,8 @@ namespace ao::audio::backend::test
     auto hooksPtr = makeMonitorHooks();
     hooksPtr->onRefreshComplete = [&] { refreshComplete.release(); };
     auto provider = AlsaProvider{hooksPtr};
-    auto firstCalls = std::atomic{std::size_t{0U}};
-    auto secondCalls = std::atomic{std::size_t{0U}};
+    auto firstCalls = std::atomic<std::size_t>{0U};
+    auto secondCalls = std::atomic<std::size_t>{0U};
     auto firstSub = utility::ScopedRegistration{};
     auto secondSub = utility::ScopedRegistration{};
     auto firstThread =
@@ -270,8 +270,8 @@ namespace ao::audio::backend::test
     hooksPtr->onRefreshComplete = [&] { refreshComplete.release(); };
     auto provider = AlsaProvider{hooksPtr};
     auto cancelSecond = std::atomic_bool{false};
-    auto firstCalls = std::atomic{std::size_t{0U}};
-    auto secondCalls = std::atomic{std::size_t{0U}};
+    auto firstCalls = std::atomic<std::size_t>{0U};
+    auto secondCalls = std::atomic<std::size_t>{0U};
     auto secondSub = utility::ScopedRegistration{};
     auto firstSub = provider.subscribeDevices(
       [&](std::vector<Device> const&)
@@ -365,8 +365,8 @@ namespace ao::audio::backend::test
     hooksPtr->onShutdownWait = [&] { shutdownWait.release(); };
     hooksPtr->onMonitorExit = [&] { monitorExited.release(); };
     auto provider = AlsaProvider{hooksPtr};
-    auto callbackCount = std::atomic{std::size_t{0U}};
-    auto lateCalls = std::atomic{std::size_t{0U}};
+    auto callbackCount = std::atomic<std::size_t>{0U};
+    auto lateCalls = std::atomic<std::size_t>{0U};
     auto lateSub = utility::ScopedRegistration{};
     auto lateSubscriber =
       std::jthread{[&]

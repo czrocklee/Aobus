@@ -149,7 +149,7 @@ namespace ao::gtk::test
     std::string readTextFile(std::filesystem::path const& path)
     {
       auto input = std::ifstream{path};
-      return std::string{std::istreambuf_iterator{input}, std::istreambuf_iterator<char>{}};
+      return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     }
   } // namespace
 

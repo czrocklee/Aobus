@@ -130,7 +130,7 @@ namespace ao::audio::test
             "[audio][unit][streaming-preroll]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
-    auto errors = std::atomic{0};
+    auto errors = std::atomic<int>{0};
     auto source = StreamingSource{std::make_unique<GrowingPcmDecoder>(growingBlockEndsStream),
                                   prerollStreamInfo(),
                                   std::chrono::milliseconds{500},
@@ -156,7 +156,7 @@ namespace ao::audio::test
             "[audio][unit][streaming-preroll][concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
-    auto errors = std::atomic{0};
+    auto errors = std::atomic<int>{0};
     auto source = StreamingSource{std::make_unique<GrowingPcmDecoder>(growingBlockEndsStream),
                                   prerollStreamInfo(),
                                   std::chrono::milliseconds{500},
@@ -175,7 +175,7 @@ namespace ao::audio::test
             "[audio][unit][streaming-preroll][concurrency]")
   {
     bool const growingBlockEndsStream = GENERATE(false, true);
-    auto errors = std::atomic{0};
+    auto errors = std::atomic<int>{0};
     auto source = StreamingSource{std::make_unique<GrowingPcmDecoder>(growingBlockEndsStream),
                                   prerollStreamInfo(),
                                   std::chrono::milliseconds{500},
@@ -205,7 +205,7 @@ namespace ao::audio::test
   {
     bool const activate = GENERATE(false, true);
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
-    auto errors = std::atomic{0};
+    auto errors = std::atomic<int>{0};
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(prerollStreamInfo());
     decoderPtr->setDestroyCounter(destroyedPtr);
     decoderPtr->setReadScript({{std::vector(kFirstBlockByteCount, std::byte{0x10}), false},
@@ -228,7 +228,7 @@ namespace ao::audio::test
             "[audio][unit][streaming-preroll][concurrency]")
   {
     auto destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
-    auto errors = std::atomic{0};
+    auto errors = std::atomic<int>{0};
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(prerollStreamInfo());
     decoderPtr->setDestroyCounter(destroyedPtr);
     decoderPtr->setReadScript({{std::vector(kFirstBlockByteCount, std::byte{0x10}), false},

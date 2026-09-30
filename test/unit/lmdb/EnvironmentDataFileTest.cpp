@@ -161,8 +161,8 @@ namespace ao::lmdb::test
   {
     constexpr std::size_t kThreadCount = 8;
     auto const temp = ao::test::TempDir{};
-    auto failures = std::atomic{std::size_t{0}};
-    auto denseReports = std::atomic{std::size_t{0}};
+    auto failures = std::atomic<std::size_t>{0};
+    auto denseReports = std::atomic<std::size_t>{0};
     auto ready = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
     auto start = std::latch{1};
     auto threads = std::vector<std::jthread>{};
@@ -225,7 +225,7 @@ namespace ao::lmdb::test
       directories.push_back(std::move(directory));
     }
 
-    auto failures = std::atomic{std::size_t{0}};
+    auto failures = std::atomic<std::size_t>{0};
     auto ready = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
     auto start = std::latch{1};
     auto threads = std::vector<std::jthread>{};
