@@ -129,9 +129,13 @@ jobs:
       - name: Show initial disk usage
         run: df -h
 
+      # Enter the shell the way ./ao does, so the inner ./ao check reuses it
+      # through AO_NIX_SHELL_FINGERPRINT instead of nesting a second nix-shell.
       - name: Build and test with private PipeWire
         id: build
         run: |
+          NIX_BUILD_SHELL="$(nix-build shell.nix -A portalShell --no-out-link)/bin/bash"
+          export NIX_BUILD_SHELL
           nix-shell --run 'bash -euo pipefail' <<'BASH'
           runtime=$(mktemp -d)
           trap 'rm -rf "$runtime"' EXIT
@@ -285,6 +289,7 @@ jobs:
             printf 'llvm=%s\n' "$llvm_version"
             printf 'python=%s\n' "$python_version"
             printf 'sdk=%s\n' "$sdk_version"
+            printf 'image=%s\n' "${ImageVersion:-unknown}"
           } >> "$GITHUB_OUTPUT"
 
           printf 'macOS %s, %s, console %s, LLVM %s, Python %s, SDK %s, image %s\n' \
@@ -359,19 +364,36 @@ jobs:
               hashFiles('script/ao/macos-toolchain.json')
             }}
 
+      # Saved keys end with a fingerprint of the archived package ABIs, so the
+      # primary key is a prefix and never reports an exact hit. The runner
+      # image comes last so alternating images keep separate lineages while
+      # still seeding each other; v1 entries seed the first content-keyed save.
+      - name: Resolve vcpkg binary cache key
+        id: vcpkg-key
+        shell: bash
+        env:
+          ARCH: ${{ runner.arch }}
+          LLVM: ${{ steps.macos-toolchain.outputs.llvm }}
+          SDK: ${{ steps.macos-toolchain.outputs.sdk }}
+          IMAGE: ${{ steps.macos-toolchain.outputs.image }}
+          MANIFEST: ${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
+        run: |
+          base="vcpkg-files-v2-macos-$ARCH-$LLVM-$SDK-$MANIFEST-"
+          {
+            printf 'base=%s\n' "$base"
+            printf 'prefix=%s\n' "$base$IMAGE-"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
-          key: >-
-            vcpkg-files-v1-macos-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{
-              steps.macos-toolchain.outputs.sdk
-            }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
+          key: ${{ steps.vcpkg-key.outputs.prefix }}
           restore-keys: |
-            vcpkg-files-v1-macos-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-${{ steps.macos-toolchain.outputs.sdk }}-
-            vcpkg-files-v1-macos-${{ runner.arch }}-${{ steps.macos-toolchain.outputs.llvm }}-
+            ${{ steps.vcpkg-key.outputs.base }}
+            vcpkg-files-v2-macos-${{ runner.arch }}-
             vcpkg-files-v1-macos-${{ runner.arch }}-
 
       - name: Show initial disk usage
@@ -384,26 +406,21 @@ jobs:
         timeout-minutes: 120
         run: ./ao build --target ao_utility
 
-      - name: Inspect vcpkg binary cache
+      # Drop archives the prepared tree did not install and key the rest by
+      # content: a restored directory with stale ABIs must still be replaced.
+      # See script/ao/core/vcpkg_binary_cache.py. The build root mirrors
+      # builddir.linux_build_root(); a failed seal only skips the save.
+      - name: Seal vcpkg binary cache
         id: vcpkg-cache-ready
         if: ${{ !cancelled() && steps.vcpkg-prepare.outcome != 'skipped' }}
+        continue-on-error: true
         shell: bash
-        run: |
-          cache_dir="$AOBUS_STATE_ROOT/cache/vcpkg/binaries"
-          if [[ -d "$cache_dir" ]]; then
-            archives="$(find "$cache_dir" -type f | wc -l | tr -d ' ')"
-            bytes="$(du -sk "$cache_dir" | awk '{print $1 * 1024}')"
-          else
-            archives=0
-            bytes=0
-          fi
-          printf 'vcpkg binary archives: %s (%s bytes)\n' "$archives" "$bytes"
-          if [[ "$archives" == "0" ]]; then
-            echo 'vcpkg produced no binary archives; skipping cache save.' >&2
-            printf 'ready=false\n' >> "$GITHUB_OUTPUT"
-          else
-            printf 'ready=true\n' >> "$GITHUB_OUTPUT"
-          fi
+        run: >-
+          python3 script/ao/core/vcpkg_binary_cache.py seal
+          --cache-dir "$AOBUS_STATE_ROOT/cache/vcpkg/binaries"
+          --build-root "${AOBUS_BUILD_ROOT:-/tmp/build}/${GITHUB_WORKSPACE##*/}"
+          --key-prefix "${{ steps.vcpkg-key.outputs.prefix }}"
+          --github-output "$GITHUB_OUTPUT"
 
       - name: Save managed macOS tools
         if: >-
@@ -421,13 +438,13 @@ jobs:
       - name: Save vcpkg binary cache
         if: >-
           ${{ !cancelled() && steps.vcpkg-cache.outcome == 'success' &&
-              steps.vcpkg-cache.outputs.cache-hit != 'true' &&
-              steps.vcpkg-cache-ready.outputs.ready == 'true' }}
+              steps.vcpkg-cache-ready.outputs.ready == 'true' &&
+              steps.vcpkg-cache-ready.outputs.key != steps.vcpkg-cache.outputs.cache-matched-key }}
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ runner.temp }}/aobus-state/cache/vcpkg/binaries
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          key: ${{ steps.vcpkg-cache-ready.outputs.key }}
 
       - name: Reset compiler cache statistics
         if: ${{ steps.compiler-cache.outcome == 'success' }}
@@ -542,18 +559,35 @@ jobs:
           }
           "version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
 
+      # Saved keys end with a fingerprint of the archived package ABIs; see
+      # the macOS job. Alternating runner images keep separate lineages. MSVC
+      # comes from the image, so a same-image v1 entry seeds a new lineage
+      # better than a v2 entry built with another image's compiler.
+      - name: Resolve vcpkg binary cache key
+        id: vcpkg-key
+        shell: bash
+        env:
+          ARCH: ${{ runner.arch }}
+          IMAGE: ${{ steps.windows-image.outputs.version }}
+          MANIFEST: ${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
+        run: |
+          base="vcpkg-files-v2-windows-$ARCH-$MANIFEST-"
+          {
+            printf 'base=%s\n' "$base"
+            printf 'prefix=%s\n' "$base$IMAGE-"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: C:\aobus-state\cache\vcpkg-binary
-          key: >-
-            vcpkg-files-v1-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-${{
-              hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**')
-            }}
+          key: ${{ steps.vcpkg-key.outputs.prefix }}
           restore-keys: |
             vcpkg-files-v1-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-
+            ${{ steps.vcpkg-key.outputs.base }}
+            vcpkg-files-v2-windows-${{ runner.arch }}-
             vcpkg-files-v1-${{ runner.arch }}-
 
       - name: Restore managed Windows tools
@@ -611,41 +645,29 @@ jobs:
         timeout-minutes: 60
         run: .\ao.bat build --target ao_utility
 
-      - name: Inspect vcpkg binary cache
+      # The later WinUI tree installs a subset of these package ABIs.
+      - name: Seal vcpkg binary cache
         id: vcpkg-cache-ready
         if: ${{ !cancelled() && steps.vcpkg-prepare.outcome != 'skipped' }}
+        continue-on-error: true
         shell: pwsh
-        run: |
-          $archives = @(
-            Get-ChildItem "$env:AOBUS_STATE_ROOT\cache\vcpkg-binary" `
-              -File -Recurse -ErrorAction SilentlyContinue
-          )
-          $ninjaFiles = @(
-            Get-ChildItem "$env:AOBUS_STATE_ROOT\build" `
-              -Filter build.ninja -File -Recurse -ErrorAction SilentlyContinue
-          )
-          $bytes = ($archives | Measure-Object -Property Length -Sum).Sum
-          if ($null -eq $bytes) {
-            $bytes = 0
-          }
-          Write-Host "vcpkg binary archives: $($archives.Count) ($bytes bytes)"
-          if ($archives.Count -eq 0 -or $ninjaFiles.Count -eq 0) {
-            Write-Warning 'vcpkg or CMake configuration did not complete; skipping cache save.'
-            "ready=false" >> $env:GITHUB_OUTPUT
-          } else {
-            "ready=true" >> $env:GITHUB_OUTPUT
-          }
+        run: >-
+          python script/ao/core/vcpkg_binary_cache.py seal
+          --cache-dir "$env:AOBUS_STATE_ROOT\cache\vcpkg-binary"
+          --build-root "$env:AOBUS_STATE_ROOT\build"
+          --key-prefix "${{ steps.vcpkg-key.outputs.prefix }}"
+          --github-output $env:GITHUB_OUTPUT
 
       - name: Save vcpkg binary cache
         if: >-
           ${{ !cancelled() && steps.vcpkg-cache.outcome == 'success' &&
-              steps.vcpkg-cache.outputs.cache-hit != 'true' &&
-              steps.vcpkg-cache-ready.outputs.ready == 'true' }}
+              steps.vcpkg-cache-ready.outputs.ready == 'true' &&
+              steps.vcpkg-cache-ready.outputs.key != steps.vcpkg-cache.outputs.cache-matched-key }}
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: C:\aobus-state\cache\vcpkg-binary
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          key: ${{ steps.vcpkg-cache-ready.outputs.key }}
 
       - name: Reset build compiler cache statistics
         if: ${{ steps.compiler-cache.outcome == 'success' }}
