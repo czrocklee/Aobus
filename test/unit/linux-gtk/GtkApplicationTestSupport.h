@@ -18,7 +18,6 @@ namespace Gtk
 
 namespace ao::gtk::test
 {
-  bool isOwnedGtkSessionBus(char const* address, char const* ownershipAddress) noexcept;
   void requireOwnedGtkSessionBus();
   Glib::RefPtr<Gtk::Application> ensureGtkApplication();
   Glib::RefPtr<Gtk::Application> ensureRegisteredGtkApplication();

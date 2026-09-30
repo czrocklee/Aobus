@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "test/fatal/ProbeProcess.h"
+#include "test/unit/linux-gtk/GtkSessionBusTestSupport.h"
+
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <unistd.h>
 
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -26,7 +30,7 @@ namespace
 {
   using namespace std::string_view_literals;
 
-  constexpr auto kApplicationId = "org.aobus.test.GApplicationReplacement";
+  constexpr auto kApplicationIdPrefix = "org.aobus.test.GApplicationReplacement";
   constexpr auto kInstanceOption = "--aobus-gapplication-instance"sv;
   constexpr auto kScenarioOption = "--aobus-probe-child"sv;
 
@@ -82,7 +86,33 @@ namespace
     }
   }
 
-  std::string queryNameOwner(::GDBusConnection* const connection)
+  void requireOwnedProbeSessionBus()
+  {
+    requireProbe(
+      ao::gtk::test::isOwnedGtkSessionBus(::g_getenv("DBUS_SESSION_BUS_ADDRESS"), ::g_getenv("AOBUS_OWNED_GTK_BUS")),
+      "a portal-owned session bus is required; run ./ao test --gtk");
+  }
+
+  std::string makeProbeApplicationId()
+  {
+    auto guidPtr = GCharPtr{::g_dbus_generate_guid()};
+    return std::format("{}.run{}", kApplicationIdPrefix, guidPtr.get());
+  }
+
+  GObjectPtr<::GDBusConnection> connectSessionBus()
+  {
+    ::GError* rawError = nullptr;
+    auto connectionPtr = GObjectPtr<::GDBusConnection>{::g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &rawError)};
+
+    if (!connectionPtr)
+    {
+      throwGlibError("failed to connect to the private session bus", rawError);
+    }
+
+    return connectionPtr;
+  }
+
+  std::string queryNameOwner(::GDBusConnection* const connection, std::string const& applicationId)
   {
     ::GError* rawError = nullptr;
     auto replyPtr = GVariantPtr{::g_dbus_connection_call_sync(connection,
@@ -90,7 +120,7 @@ namespace
                                                               "/org/freedesktop/DBus",
                                                               "org.freedesktop.DBus",
                                                               "GetNameOwner",
-                                                              ::g_variant_new("(s)", kApplicationId),
+                                                              ::g_variant_new("(s)", applicationId.c_str()),
                                                               G_VARIANT_TYPE("(s)"),
                                                               G_DBUS_CALL_FLAGS_NONE,
                                                               -1,
@@ -121,26 +151,21 @@ namespace
     RegistrationObservation observation;
   };
 
-  RegisteredApplication registerApplication(::GApplicationFlags const flags, std::string_view const expectedOwner)
+  RegisteredApplication registerApplication(std::string const& applicationId,
+                                            ::GApplicationFlags const flags,
+                                            std::string_view const expectedOwner)
   {
     auto ownerBefore = std::string{"-"};
     auto sessionConnectionPtr = GObjectPtr<::GDBusConnection>{};
 
     if (!expectedOwner.empty())
     {
-      ::GError* rawError = nullptr;
-      sessionConnectionPtr.reset(::g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &rawError));
-
-      if (!sessionConnectionPtr)
-      {
-        throwGlibError("failed to connect to the private session bus", rawError);
-      }
-
-      ownerBefore = queryNameOwner(sessionConnectionPtr.get());
+      sessionConnectionPtr = connectSessionBus();
+      ownerBefore = queryNameOwner(sessionConnectionPtr.get(), applicationId);
       requireProbe(ownerBefore == expectedOwner, "the original GApplication owner changed before registration");
     }
 
-    auto appPtr = GObjectPtr<::GApplication>{::g_application_new(kApplicationId, flags)};
+    auto appPtr = GObjectPtr<::GApplication>{::g_application_new(applicationId.c_str(), flags)};
 
     if (::GError* rawError = nullptr; ::g_application_register(appPtr.get(), nullptr, &rawError) == FALSE)
     {
@@ -156,7 +181,7 @@ namespace
     auto const isRemote = ::g_application_get_is_remote(appPtr.get()) != FALSE;
     auto observation = RegistrationObservation{.state = isRemote ? "remote" : "primary",
                                                .ownerBefore = std::move(ownerBefore),
-                                               .ownerAfter = queryNameOwner(connection),
+                                               .ownerAfter = queryNameOwner(connection, applicationId),
                                                .connectionName = connectionName};
     return {.appPtr = std::move(appPtr), .observation = std::move(observation)};
   }
@@ -199,10 +224,16 @@ namespace
     return flags;
   }
 
-  std::int32_t runInstance(std::string_view const role, std::string_view const expectedOwner)
+  std::int32_t runInstance(std::string const& applicationId,
+                           std::string_view const role,
+                           std::string_view const expectedOwner)
   {
+    requireOwnedProbeSessionBus();
+    requireProbe(
+      ::g_application_id_is_valid(applicationId.c_str()) != FALSE, "GApplication probe application ID is invalid");
     auto const replace = role == "replace";
-    auto registered = registerApplication(static_cast<::GApplicationFlags>(applicationFlags(replace)), expectedOwner);
+    auto registered =
+      registerApplication(applicationId, static_cast<::GApplicationFlags>(applicationFlags(replace)), expectedOwner);
     printObservation(registered.observation);
 
     if (role != "owner")
@@ -228,14 +259,18 @@ namespace
   {
   public:
     ProbeInstance(std::filesystem::path const& executablePath,
+                  std::string const& applicationId,
                   std::string_view const role,
                   std::string_view const expectedOwner)
     {
       auto const flags = static_cast<::GSubprocessFlags>(
         G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
       auto launcherPtr = GObjectPtr<::GSubprocessLauncher>{::g_subprocess_launcher_new(flags)};
-      auto arguments = std::vector{
-        executablePath.string(), std::string{kInstanceOption}, std::string{role}, std::string{expectedOwner}};
+      auto arguments = std::vector{executablePath.string(),
+                                   std::string{kInstanceOption},
+                                   applicationId,
+                                   std::string{role},
+                                   std::string{expectedOwner}};
       auto argumentPointers = std::vector<char const*>{};
       argumentPointers.reserve(arguments.size() + 1);
 
@@ -410,13 +445,13 @@ namespace
                  "original GApplication instance does not own the application ID");
   }
 
-  std::int32_t runOrdinaryRemoteScenario()
+  std::int32_t runOrdinaryRemoteScenario(std::string const& applicationId)
   {
-    auto owner = ProbeInstance{currentExecutablePath(), "owner", ""};
+    auto owner = ProbeInstance{currentExecutablePath(), applicationId, "owner", ""};
     auto const ownerObservation = parseObservation(owner.readObservationLine());
     verifyOriginalOwner(ownerObservation);
 
-    auto ordinary = ProbeInstance{currentExecutablePath(), "ordinary", ownerObservation.connectionName};
+    auto ordinary = ProbeInstance{currentExecutablePath(), applicationId, "ordinary", ownerObservation.connectionName};
     auto const ordinaryObservation = parseObservation(ordinary.readObservationLine());
     ordinary.waitForSuccess();
 
@@ -434,13 +469,14 @@ namespace
     return 0;
   }
 
-  std::int32_t runReplacementScenario()
+  std::int32_t runReplacementScenario(std::string const& applicationId)
   {
-    auto owner = ProbeInstance{currentExecutablePath(), "owner", ""};
+    auto owner = ProbeInstance{currentExecutablePath(), applicationId, "owner", ""};
     auto const ownerObservation = parseObservation(owner.readObservationLine());
     verifyOriginalOwner(ownerObservation);
 
-    auto replacement = ProbeInstance{currentExecutablePath(), "replace", ownerObservation.connectionName};
+    auto replacement =
+      ProbeInstance{currentExecutablePath(), applicationId, "replace", ownerObservation.connectionName};
     auto const replacementObservation = parseObservation(replacement.readObservationLine());
     replacement.waitForSuccess();
 
@@ -458,34 +494,70 @@ namespace
     return 0;
   }
 
+  std::int32_t runInvocationIsolationScenario(std::string const& applicationId)
+  {
+    auto const executablePath = currentExecutablePath();
+    auto owner = ProbeInstance{executablePath, applicationId, "owner", ""};
+    auto const ownerObservation = parseObservation(owner.readObservationLine());
+    verifyOriginalOwner(ownerObservation);
+    auto connectionPtr = connectSessionBus();
+    requireProbe(queryNameOwner(connectionPtr.get(), applicationId) == ownerObservation.connectionName,
+                 "the previous invocation's owner disappeared before the isolation check");
+
+    constexpr auto kScenarios =
+      std::array{std::pair{"ordinary-remote"sv, "ordinary-remote: remote=yes owner-unchanged=yes\n"sv},
+                 std::pair{"replacement"sv, "replacement: primary=yes owner-changed=yes\n"sv}};
+    constexpr auto kTimeout = std::chrono::seconds{5};
+
+    // Keep the previous name owned while real outer probes choose their own IDs.
+    // Isolation must not depend on HUP cleanup or on the old owner's scheduling.
+    for (auto const& [scenario, expectedOutput] : kScenarios)
+    {
+      auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
+      requireProbe(result.hasSuccessfulExit(),
+                   std::format("independent {} probe failed: launch error: {}; timed out: {}; stderr: {}",
+                               scenario,
+                               result.launchError,
+                               result.timedOut,
+                               result.standardError));
+      requireProbe(result.standardError.empty(),
+                   std::format("independent {} probe emitted stderr: {}", scenario, result.standardError));
+      requireProbe(result.standardOutput == expectedOutput,
+                   std::format("independent {} probe reported unexpected output: {}", scenario, result.standardOutput));
+      requireProbe(queryNameOwner(connectionPtr.get(), applicationId) == ownerObservation.connectionName,
+                   "an independent invocation changed the previous application ID owner");
+    }
+
+    owner.stop();
+    owner.waitForSuccess();
+    std::println("invocation-isolation: ordinary=yes replacement=yes previous-owner-unchanged=yes");
+    return 0;
+  }
+
   std::int32_t runScenario(std::string_view const scenario)
   {
-    // The outer probe installs a private session bus before creating any
-    // GApplication; every ProbeInstance inherits this isolated bus address.
-    auto testBusPtr = GObjectPtr<::GTestDBus>{::g_test_dbus_new(G_TEST_DBUS_NONE)};
-    ::g_test_dbus_up(testBusPtr.get());
+    requireOwnedProbeSessionBus();
+    // The portal keeps the bus alive beyond this probe and its instances.
+    // Borrow it instead of introducing GTestDBus's asynchronous PID watchdog.
+    // Each invocation has its own name, even if an earlier owner has not exited.
+    auto const applicationId = makeProbeApplicationId();
 
-    try
+    if (scenario == "ordinary-remote")
     {
-      std::int32_t exitCode = 2;
-
-      if (scenario == "ordinary-remote")
-      {
-        exitCode = runOrdinaryRemoteScenario();
-      }
-      else if (scenario == "replacement")
-      {
-        exitCode = runReplacementScenario();
-      }
-
-      ::g_test_dbus_down(testBusPtr.get());
-      return exitCode;
+      return runOrdinaryRemoteScenario(applicationId);
     }
-    catch (...)
+
+    if (scenario == "replacement")
     {
-      ::g_test_dbus_down(testBusPtr.get());
-      throw;
+      return runReplacementScenario(applicationId);
     }
+
+    if (scenario == "invocation-isolation")
+    {
+      return runInvocationIsolationScenario(applicationId);
+    }
+
+    return 2;
   }
 } // namespace
 
@@ -493,14 +565,34 @@ int main(int argc, char* argv[])
 {
   try
   {
-    if (argc == 4 && std::string_view{argv[1]} == kInstanceOption)
+    if (argc == 5 && std::string_view{argv[1]} == kInstanceOption)
     {
-      return runInstance(argv[2], argv[3]);
+      return runInstance(argv[2], argv[3], argv[4]);
     }
 
     if (argc == 3 && std::string_view{argv[1]} == kScenarioOption)
     {
-      return runScenario(argv[2]);
+      auto const scenario = std::string_view{argv[2]};
+
+      if (scenario == "unowned-bus" || scenario == "mismatched-bus" || scenario == "unowned-instance")
+      {
+        // Admission regressions use inert endpoints in this fresh process,
+        // before any GIO worker or D-Bus connection can be created.
+        ::g_setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/aobus-inert-probe", TRUE);
+        ::g_unsetenv("AOBUS_OWNED_GTK_BUS");
+
+        if (scenario == "mismatched-bus")
+        {
+          ::g_setenv("AOBUS_OWNED_GTK_BUS", "unix:path=/other-inert-probe", TRUE);
+        }
+
+        if (scenario == "unowned-instance")
+        {
+          return runInstance(kApplicationIdPrefix, "owner", "");
+        }
+      }
+
+      return runScenario(scenario);
     }
 
     return 2;

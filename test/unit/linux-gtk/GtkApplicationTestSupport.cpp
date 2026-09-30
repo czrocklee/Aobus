@@ -3,6 +3,8 @@
 
 #include "GtkApplicationTestSupport.h"
 
+#include "GtkSessionBusTestSupport.h"
+
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/application.h>
 #include <glib.h>
@@ -14,17 +16,10 @@
 #include <chrono>
 #include <functional>
 #include <memory>
-#include <string_view>
 #include <thread>
 
 namespace ao::gtk::test
 {
-  bool isOwnedGtkSessionBus(char const* const address, char const* const ownershipAddress) noexcept
-  {
-    return address != nullptr && ownershipAddress != nullptr && std::string_view{address}.starts_with("unix:") &&
-           std::string_view{address}.size() > 5 && std::string_view{address} == ownershipAddress;
-  }
-
   void requireOwnedGtkSessionBus()
   {
     if (!isOwnedGtkSessionBus(::g_getenv("DBUS_SESSION_BUS_ADDRESS"), ::g_getenv("AOBUS_OWNED_GTK_BUS")))
