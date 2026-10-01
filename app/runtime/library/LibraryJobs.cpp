@@ -521,6 +521,49 @@ namespace ao::rt
       }
     }
 
+    // Settles an import whose maintenance admission fails. The progress
+    // conversation has already published, so a refused admission and one that
+    // lane closing retires both finish the background lease and the
+    // conversation over the finalization hop before the failure propagates.
+    // Exceptions stay exceptions; cancellation posts no error notification.
+    async::Task<Result<LibraryWriteLane::MaintenanceGuard>> beginImportMaintenanceAsync(
+      LibraryWriteLane::BackgroundTaskLease* backgroundTask,
+      LibraryTaskProgressId const progressId)
+    {
+      AO_EXPECTS(backgroundTask != nullptr);
+
+      auto optAdmissionError = std::optional<Error>{};
+      auto admissionFailure = std::exception_ptr{};
+
+      try
+      {
+        auto maintenanceRes = co_await LibraryWriteLane::beginMaintenanceAsync(writeLane.captureSubmission());
+
+        if (maintenanceRes)
+        {
+          co_return maintenanceRes;
+        }
+
+        optAdmissionError = std::move(maintenanceRes.error());
+      }
+      catch (...)
+      {
+        admissionFailure = std::current_exception();
+      }
+
+      co_await resumeOnCallbackExecutorForFinalizationAsync();
+      backgroundTask->finish();
+      notifyProgressFinished(progressId);
+
+      if (admissionFailure)
+      {
+        async::rethrowException(admissionFailure);
+      }
+
+      AO_INVARIANT(optAdmissionError);
+      co_return std::unexpected{std::move(*optAdmissionError)};
+    }
+
     async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
     LibraryWriteLane& writeLane;
@@ -563,13 +606,10 @@ namespace ao::rt
     }
 
     auto backgroundTask = std::move(*backgroundTaskRes);
-    auto maintenanceRes = co_await LibraryWriteLane::beginMaintenanceAsync(_implPtr->writeLane.captureSubmission());
+    auto maintenanceRes = co_await _implPtr->beginImportMaintenanceAsync(&backgroundTask, progressConversation.id);
 
     if (!maintenanceRes)
     {
-      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
-      backgroundTask.finish();
-      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{maintenanceRes.error()};
     }
 
@@ -687,13 +727,10 @@ namespace ao::rt
     }
 
     auto backgroundTask = std::move(*backgroundTaskRes);
-    auto maintenanceRes = co_await LibraryWriteLane::beginMaintenanceAsync(_implPtr->writeLane.captureSubmission());
+    auto maintenanceRes = co_await _implPtr->beginImportMaintenanceAsync(&backgroundTask, progressConversation.id);
 
     if (!maintenanceRes)
     {
-      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutorAsync();
-      backgroundTask.finish();
-      _implPtr->notifyProgressFinished(progressConversation.id);
       co_return std::unexpected{maintenanceRes.error()};
     }
 
