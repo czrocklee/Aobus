@@ -28,7 +28,7 @@ add_library(ao_audio STATIC
     detail/TrackSession.cpp
     Engine.cpp
     PcmConversion.cpp
-    PcmRingBuffer.cpp
+    PcmFrameRing.cpp
     StreamingSource.cpp
     detail/RouteTracker.cpp
     detail/TimeConversion.cpp

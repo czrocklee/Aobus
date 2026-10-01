@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "PcmRingBuffer.h"
+#include "PcmFrameRing.h"
 
-#ifndef NDEBUG
 #include <ao/Contract.h>
 
+#ifndef NDEBUG
 #include <atomic>
 #include <cstdint>
 #endif
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <span>
@@ -24,42 +25,48 @@ namespace ao::audio
   } // namespace
 #endif
 
-  PcmRingBuffer::PcmRingBuffer()
-    : _queuePtr{std::make_unique<Queue>()}
+  PcmFrameRing::PcmFrameRing(std::size_t frameByteCount)
+    : _queuePtr{std::make_unique<Queue>()}, _frameByteCount{frameByteCount}
   {
+    AO_EXPECTS(frameByteCount > 0, "PCM frame ring frame size must be nonzero");
+    AO_EXPECTS(frameByteCount <= kPcmFrameRingByteCapacity, "PCM frame ring frame size must fit its capacity");
   }
 
-  std::size_t PcmRingBuffer::write(std::span<std::byte const> input) noexcept
+  std::size_t PcmFrameRing::write(std::span<std::byte const> input) noexcept
   {
 #ifndef NDEBUG
     beginDebugAccess();
 #endif
 
-    auto const written = input.empty() ? 0 : _queuePtr->push(input.data(), input.size());
+    auto const byteCount = wholeFrameByteCount(std::min(input.size(), _queuePtr->write_available()));
+    auto const written = byteCount == 0 ? 0 : _queuePtr->push(input.data(), byteCount);
 
 #ifndef NDEBUG
     endDebugAccess();
 #endif
 
+    AO_ENSURES(written == byteCount, "PCM frame ring write must commit every accepted frame");
     return written;
   }
 
-  std::size_t PcmRingBuffer::read(std::span<std::byte> output) noexcept
+  std::size_t PcmFrameRing::read(std::span<std::byte> output) noexcept
   {
 #ifndef NDEBUG
     beginDebugAccess();
 #endif
 
-    auto const bytesRead = output.empty() ? 0 : _queuePtr->pop(output.data(), output.size());
+    auto const byteCount = wholeFrameByteCount(std::min(output.size(), _queuePtr->read_available()));
+    auto const bytesRead = byteCount == 0 ? 0 : _queuePtr->pop(output.data(), byteCount);
 
 #ifndef NDEBUG
     endDebugAccess();
 #endif
 
+    AO_RT_INVARIANT(bytesRead == byteCount, "PCM frame ring read must commit every requested frame");
     return bytesRead;
   }
 
-  void PcmRingBuffer::clear() noexcept
+  void PcmFrameRing::clear() noexcept
   {
 #ifndef NDEBUG
     beginDebugClear();
@@ -72,38 +79,38 @@ namespace ao::audio
 #endif
   }
 
-  std::size_t PcmRingBuffer::size() const noexcept
+  std::size_t PcmFrameRing::readableByteCount() const noexcept
   {
 #ifndef NDEBUG
     beginDebugAccess();
 #endif
 
-    auto const size = _queuePtr->read_available();
+    auto const byteCount = wholeFrameByteCount(_queuePtr->read_available());
 
 #ifndef NDEBUG
     endDebugAccess();
 #endif
 
-    return size;
+    return byteCount;
   }
 
-  std::size_t PcmRingBuffer::availableToWrite() const noexcept
+  std::size_t PcmFrameRing::writableByteCount() const noexcept
   {
 #ifndef NDEBUG
     beginDebugAccess();
 #endif
 
-    auto const available = _queuePtr->write_available();
+    auto const byteCount = wholeFrameByteCount(_queuePtr->write_available());
 
 #ifndef NDEBUG
     endDebugAccess();
 #endif
 
-    return available;
+    return byteCount;
   }
 
 #ifndef NDEBUG
-  void PcmRingBuffer::beginDebugAccess() const noexcept
+  void PcmFrameRing::beginDebugAccess() const noexcept
   {
     auto observed = _debugAccessState.load(std::memory_order_relaxed);
 
@@ -120,13 +127,13 @@ namespace ao::audio
     }
   }
 
-  void PcmRingBuffer::endDebugAccess() const noexcept
+  void PcmFrameRing::endDebugAccess() const noexcept
   {
     auto const previous = _debugAccessState.fetch_sub(1, std::memory_order_release);
     AO_EXPECTS(previous != 0 && (previous & kDebugClearActive) == 0);
   }
 
-  void PcmRingBuffer::beginDebugClear() noexcept
+  void PcmFrameRing::beginDebugClear() noexcept
   {
     std::uint32_t expected = 0;
     auto const acquired = _debugAccessState.compare_exchange_strong(
@@ -134,7 +141,7 @@ namespace ao::audio
     AO_EXPECTS(acquired);
   }
 
-  void PcmRingBuffer::endDebugClear() noexcept
+  void PcmFrameRing::endDebugClear() noexcept
   {
     std::uint32_t expected = kDebugClearActive;
     auto const released = _debugAccessState.compare_exchange_strong(

@@ -29,6 +29,8 @@ namespace ao::audio
     PcmSource& operator=(PcmSource&&) = delete;
 
     virtual Result<> seek(std::chrono::milliseconds offset) noexcept = 0;
+
+    // Returns whole PCM frames only, as the RenderTarget contract requires.
     virtual std::size_t read(std::span<std::byte> output) noexcept = 0;
     virtual bool isDrained() const noexcept = 0;
     virtual std::chrono::milliseconds bufferedDuration() const noexcept = 0;

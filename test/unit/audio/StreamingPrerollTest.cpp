@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "ScriptedDecoderSession.h"
-#include "lib/audio/PcmRingBuffer.h"
+#include "lib/audio/PcmFrameRing.h"
 #include "lib/audio/StreamingSource.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -32,7 +32,7 @@ namespace ao::audio::test
   namespace
   {
     constexpr std::size_t kFirstBlockByteCount = 32768;
-    constexpr std::size_t kGrowingBlockByteCount = kRingBufferCapacity - 32;
+    constexpr std::size_t kGrowingBlockByteCount = kPcmFrameRingByteCapacity - 32;
     constexpr std::size_t kTailByteCount = 64;
 
     DecodedStreamInfo prerollStreamInfo()
@@ -49,7 +49,7 @@ namespace ao::audio::test
     {
     public:
       explicit GrowingPcmDecoder(bool growingBlockEndsStream)
-        : _growingBlockEndsStream{growingBlockEndsStream}, _bytes{kRingBufferCapacity}
+        : _growingBlockEndsStream{growingBlockEndsStream}, _bytes{kPcmFrameRingByteCapacity}
       {
       }
 
@@ -141,7 +141,7 @@ namespace ao::audio::test
 
     // Empty the ring before activation: an EOF on the retained block must not
     // report drainage or prevent the worker from delivering that block's tail.
-    auto prefix = std::vector<std::byte>(kRingBufferCapacity);
+    auto prefix = std::vector<std::byte>(kPcmFrameRingByteCapacity);
     REQUIRE(source.read(prefix) == prefix.size());
     CHECK_FALSE(source.isDrained());
     auto const expected = expectedPcm(growingBlockEndsStream, 0x10);
@@ -242,7 +242,7 @@ namespace ao::audio::test
 
     // With no consumer, growth proves a partial write of the second block:
     // both blocks together exceed capacity, so its tail cannot be delivered.
-    STATIC_REQUIRE(kFirstBlockByteCount + kGrowingBlockByteCount > kRingBufferCapacity);
+    STATIC_REQUIRE(kFirstBlockByteCount + kGrowingBlockByteCount > kPcmFrameRingByteCapacity);
 
     while (sourcePtr->bufferedDuration() <= preparedBufferedDuration && std::chrono::steady_clock::now() < deadline)
     {
