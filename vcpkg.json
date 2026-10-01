@@ -19,6 +19,11 @@
     "boost-process",
     "boost-unordered",
     "cli11",
+    {
+      "name": "date",
+      "platform": "osx",
+      "$reason": "libc++ omits the C++20 time-zone database; remove with doc/development/macos-portability.md entry 10."
+    },
     "c4core",
     "fdk-aac",
     "fast-float",

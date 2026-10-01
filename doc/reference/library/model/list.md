@@ -57,7 +57,7 @@ Application authoring may reject an invalid expression for immediate feedback, w
 ## Compatibility and versioning
 
 The physical version is owned by the [library database reference](../storage/database.md).
-Database version 7 gates the List text-admission invariant; earlier versions remain unsupported even when an individual row already satisfies it.
+Database version 7 introduced the List text-admission invariant; the current version retains it, and earlier versions remain unsupported even when an individual row already satisfies it.
 The database version gates the List record layout, rank representation, and text invariant, not the query grammar accepted by the application.
 Stored `filter` bytes carry no nested language version and may become invalid when interpreted by a later application; that is an application expression outcome rather than database corruption.
 Changing hierarchy or rank-overlay persistence semantics remains a storage compatibility change.

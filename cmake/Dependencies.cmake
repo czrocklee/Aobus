@@ -722,6 +722,12 @@ if(AOBUS_DEPENDENCY_USES_VCPKG)
   find_package(xxHash CONFIG REQUIRED)
   add_library(PkgXXHash INTERFACE)
   target_link_libraries(PkgXXHash INTERFACE xxHash::xxhash)
+
+  if(APPLE)
+    find_package(date CONFIG REQUIRED)
+    add_library(PkgDateTz INTERFACE)
+    target_link_libraries(PkgDateTz INTERFACE date::date-tz)
+  endif()
 else()
   find_package(PkgConfig REQUIRED)
 

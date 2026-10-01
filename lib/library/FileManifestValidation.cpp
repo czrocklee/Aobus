@@ -7,6 +7,7 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/utility/ByteView.h>
@@ -79,6 +80,22 @@ namespace ao::library
     if (!std::ranges::all_of(header.padding, [](std::byte const value) { return value == std::byte{0}; }))
     {
       return makeError(Error::Code::CorruptData, "File manifest payload contains nonzero reserved bytes");
+    }
+
+    if (header.hasMtime > 1U)
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload contains an invalid mtime presence flag");
+    }
+
+    if (header.hasMtime == 0U &&
+        (header.mtimeSecondsLo != 0U || header.mtimeSecondsHi != 0U || header.mtimeNanoseconds != 0U))
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload contains a noncanonical absent mtime");
+    }
+
+    if (auto const optMtime = header.mtime(); optMtime && !optMtime->isNormalized())
+    {
+      return makeError(Error::Code::CorruptData, "File manifest payload contains malformed mtime nanoseconds");
     }
 
     auto const lengthIsPending = header.audioPayloadLength() == 0;

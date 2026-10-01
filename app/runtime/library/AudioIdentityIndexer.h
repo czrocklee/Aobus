@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/AudioIdentity.h>
@@ -34,7 +35,7 @@ namespace ao::rt
   {
     std::string uri{};
     std::uint64_t fileSize = 0;
-    std::uint64_t mtime = 0;
+    std::optional<FileTimestamp> optMtime;
     library::AudioIdentity identity{};
   };
 

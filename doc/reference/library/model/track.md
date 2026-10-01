@@ -6,7 +6,7 @@ id: library.track-model
 ## Scope and version
 
 This reference enumerates the current logical track values owned by library storage and core read models.
-Physical byte placement belongs to [library database version 7](../storage/database.md), and portable names belong to [library YAML version 5](../format/yaml.md).
+Physical byte placement belongs to [library database version 8](../storage/database.md), and portable names belong to [library YAML version 6](../format/yaml.md).
 Application-facing ids, presentation capabilities, sort/group mappings, completion flags, and query bridges belong to the [runtime track field catalog](track-field.md).
 
 Zero numeric values and invalid ids represent unknown or absent values unless a narrower contract states otherwise.
@@ -74,7 +74,9 @@ Tag additions/removals use the separate tag command contract in [library access 
 | `bit-depth` | Unsigned 8-bit | Bits per sample | Hot header |
 | `file-path` | Text path | Music-root-relative URI | Cold URI |
 | `file-size` | Unsigned 64-bit | Bytes | Manifest |
-| `modified-time` | Unsigned 64-bit | Filesystem timestamp count | Manifest |
+| `modified-time` | Optional portable instant | Signed 64-bit Unix/POSIX-epoch seconds plus nanoseconds below `1000000000`; absent when unknown | Manifest |
+
+Display projects `modified-time` without changing it: a present instant renders in the local zone, or UTC when that zone is unavailable; an instant outside the display calendar's range renders empty, and an absent value renders empty.
 
 ## Codec values
 
@@ -115,7 +117,7 @@ The music-root-relative URI is filesystem identity: it is neither Unicode-normal
 ## Compatibility and versioning
 
 Changing a persisted type, codec value, block meaning, or field width requires a library format version increment.
-Database version 7 also makes scalar-valid UTF-8 NFC a semantic admission invariant for persisted Track text and its dictionary references; version 6 is rejected rather than normalized implicitly on open.
+Database version 8 gates the portable manifest modification-time instant; database version 7 made scalar-valid UTF-8 NFC a semantic admission invariant for persisted Track text and its dictionary references, and every earlier version is rejected rather than normalized implicitly on open.
 Portable YAML names and runtime field ids are separate compatibility surfaces owned by their respective references.
 
 ## Implementation authority

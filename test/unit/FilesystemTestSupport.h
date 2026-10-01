@@ -5,6 +5,7 @@
 
 #include <catch2/catch_tostring.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -77,6 +78,26 @@ namespace ao::test
   };
 
   std::string formatFileTime(std::filesystem::file_time_type fileTime);
+
+  /**
+   * Converts a system-clock instant to the native file clock, floored to its
+   * period. Retirement condition for the libc++ branch:
+   * doc/development/macos-portability.md.
+   */
+  template<typename Duration>
+  std::filesystem::file_time_type fileTimeFromSystemTime(std::chrono::sys_time<Duration> const time)
+  {
+    // Narrow before the epoch shift: nanoseconds since the 1601 Windows file
+    // epoch overflow 64 bits, so a finer input must take the native period.
+    auto const nativeTime = std::chrono::floor<std::filesystem::file_time_type::duration>(time);
+// NOLINTNEXTLINE(misc-include-cleaner) -- each standard library defines the macro in a different header.
+#if __cpp_lib_chrono >= 201907L
+    auto const fileTime = std::chrono::clock_cast<std::chrono::file_clock>(nativeTime);
+#else
+    auto const fileTime = std::chrono::file_clock::from_sys(nativeTime);
+#endif
+    return std::chrono::time_point_cast<std::filesystem::file_time_type::duration>(fileTime);
+  }
 } // namespace ao::test
 
 namespace Catch

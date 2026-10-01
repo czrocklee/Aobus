@@ -217,7 +217,7 @@ namespace ao::rt::test
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
 
-      // A delta document carries no embedded cover in version 5. The library holds
+      // A delta document carries no embedded cover in version 6. The library holds
       // what the last scan saw, so a file retagged since then makes the two
       // differ, and the sequence delta would carry is the stale one: applying it
       // would overwrite the covers the baseline just read from the file with
@@ -280,7 +280,7 @@ namespace ao::rt::test
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 5\n"
+      yaml << "version: 6\n"
            << "export_mode: delta\n"
            << "library:\n"
            << "  tracks:\n"
@@ -316,7 +316,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 5
+      yaml << R"(version: 6
 export_mode: delta
 library:
   tracks:
@@ -366,7 +366,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 5\nexport_mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
+      yaml << "version: 6\nexport_mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
     }
 
     auto executorPtr = std::make_unique<QueuedExecutor>();
@@ -393,7 +393,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 5
+      yaml << R"(version: 6
 libraryId: 123E4567-E89B-12D3-A456-426614174000
 export_mode: full
 library:
@@ -454,7 +454,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "preview-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 5\n"
+      yaml << "version: 6\n"
            << "libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
            << "export_mode: full\n"
            << "library:\n"

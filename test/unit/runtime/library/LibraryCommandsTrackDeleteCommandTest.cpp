@@ -7,6 +7,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryWrite.h>
@@ -35,7 +36,9 @@ namespace ao::rt::test
       REQUIRE(transaction.apply(
         [&](library::LibraryWrite& write) -> Result<>
         {
-          auto manifest = library::FileManifestBuilder::makeEmpty().fileSize(10).mtime(20);
+          // A genuine epoch-adjacent POSIX instant: small seconds values are
+          // ordinary evidence, not an absence sentinel.
+          auto manifest = library::FileManifestBuilder::makeEmpty().fileSize(10).mtime(FileTimestamp{.seconds = 20});
 
           if (auto updateRes = write.tracks().updateManifest(trackId, manifest); !updateRes)
           {

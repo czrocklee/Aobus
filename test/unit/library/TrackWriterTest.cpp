@@ -9,6 +9,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/PictureType.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -103,8 +104,9 @@ namespace ao::library::test
     track.property().uri("logical.flac");
     track.tags().add("favorite");
     track.coverArt().add(PictureType::FrontCover, std::span<std::byte const>{coverBytes});
+    constexpr auto kMtime = FileTimestamp{.seconds = 1719835200, .nanoseconds = 654321000};
     auto manifest = FileManifestBuilder::makeEmpty();
-    manifest.fileSize(321).mtime(654).status(FileStatus::Available);
+    manifest.fileSize(321).mtime(kMtime).status(FileStatus::Available);
 
     auto createRes =
       transaction.apply([&track, &manifest](LibraryWrite& write) { return write.tracks().create(track, manifest); });
@@ -129,7 +131,7 @@ namespace ao::library::test
     REQUIRE(optManifest);
     CHECK(optManifest->trackId() == trackId);
     CHECK(optManifest->fileSize() == 321);
-    CHECK(optManifest->mtime() == 654);
+    CHECK(optManifest->mtime() == kMtime);
   }
 
   TEST_CASE("TrackWriter - create rejects a missing existing Resource before mutation", "[library][unit][track-writer]")

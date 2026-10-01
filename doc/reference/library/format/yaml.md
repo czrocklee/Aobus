@@ -5,7 +5,7 @@ id: library.yaml-format
 
 ## Scope and version
 
-This reference defines the exact version 5 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
+This reference defines the exact version 6 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
 Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../system/library/yaml-transfer.md).
@@ -21,7 +21,7 @@ Producer and consumer code lives under `app/runtime/library/`; the format transl
 The root is a closed map with this shape:
 
 ```yaml
-version: 5
+version: 6
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -32,7 +32,7 @@ library:
 
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
-| `version` | Yes. | Always `5`. | Unsigned 32-bit integer; only `5` is accepted. |
+| `version` | Yes. | Always `6`. | Unsigned 32-bit integer; only `6` is accepted. |
 | `libraryId` | No. | Always emitted. | UUID text with hexadecimal digits and hyphens in `8-4-4-4-12` grouping; letter case is ignored. |
 | `export_mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `listOnly`. |
 | `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
@@ -93,7 +93,12 @@ Each track is a closed map.
 | `covers` | No. | Sequence of closed cover maps. | Mode-dependent; an empty sequence is meaningful. |
 | Technical fields | No. | Scalars from the technical table. | Emitted in `full`. |
 | `fileSize` | No. | Unsigned 64-bit integer. | Emitted in `full`; `0` when no manifest row exists. |
-| `mtime` | No. | Unsigned 64-bit integer. | Emitted in `full`; `0` when no manifest row exists. |
+| `mtime` | No. | Closed `seconds`/`nanoseconds` map or an explicit YAML null. | Emitted in `full`: the map when the manifest stores a modification time, an explicit null when it stores none, including when no manifest row exists. |
+
+`mtime` carries the manifest's modification time as one portable instant on the Unix/POSIX time scale: `seconds` is a signed 64-bit count from `1970-01-01 00:00:00 UTC`, excluding leap seconds, and `nanoseconds` is the fraction of that second, at least `0` and below `1000000000`.
+The map is closed and contains exactly both keys; an explicit YAML null records that no modification time is known, while the epoch instant `seconds: 0` with `nanoseconds: 0` is a present value distinct from it.
+The value is one defined instant with no UTC-versus-local meaning and no host file-clock interpretation; timezone is a display concern only.
+Transfer carries the full seconds-and-nanoseconds precision verbatim.
 
 Track `id` values need not match target-library IDs.
 Duplicate nonzero IDs reject the document; `0` and omitted IDs create no ID mapping for list references.
@@ -126,7 +131,7 @@ These names come from `rt::trackFieldId()` and use hyphens rather than underscor
 
 ### Technical properties
 
-The version-5 `duration` scalar remains an unsigned 32-bit millisecond value.
+The version-6 `duration` scalar remains an unsigned 32-bit millisecond value.
 Library storage uses signed 32-bit `TrackDuration`, so import rejects values above `2147483647` ms with `FormatRejected` rather than narrowing or clamping them.
 This is a core-storage representability check, not a change to the scalar grammar or database layout; `0` (unknown) and `2147483647` ms round-trip exactly.
 
@@ -229,6 +234,7 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - an unsupported version, mode, codec, or cover type;
 - an unknown or duplicate field in any closed map;
 - a malformed UUID, Library URI, scalar, sequence, or numeric width;
+- an `mtime` value that is neither an explicit YAML null nor a closed `seconds`/`nanoseconds` map, a map missing either key or carrying an extra key, a `seconds` value outside the signed 64-bit range, or a `nanoseconds` value at or above `1000000000`;
 - a track record whose URI is not a supported audio file;
 - malformed UTF-8 in library text or a normalized text value beyond its core storage limit;
 - duplicate nonzero track IDs, duplicate canonical track URIs, raw or canonically equivalent duplicate custom keys, or missing, zero, or duplicate list IDs;
@@ -237,17 +243,19 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - a malformed digest, an out-of-range `length`, a cover naming no row, a row no track references, or two rows carrying one digest.
 
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 5 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
+Version 6 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
 The observable failure and rollback contract is defined by the [transfer specification](../../../system/library/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
-The importer accepts version 5 only.
-It has no reader for versions 1 through 4, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
+The importer accepts version 6 only.
+It has no reader for versions 1 through 5, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
+A version-5 document is rejected with `FormatRejected` rather than converted.
 There is no migration contract for earlier interchange files, and a version-3 document's embedded cover bytes cannot be read by this version.
 
-Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-5 surface.
-Version 5 records the Unicode-caseless meaning of `~`; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 7.
+Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-6 surface.
+Version 6 exists for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
+Version 5 recorded the Unicode-caseless meaning of `~`, which version 6 carries forward; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 8.
 Payload versioning is independent of the host-local database's `kLibraryVersion`.
 
 ## Examples
@@ -255,7 +263,7 @@ Payload versioning is independent of the host-local database's `kLibraryVersion`
 Full payload:
 
 ```yaml
-version: 5
+version: 6
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -281,7 +289,9 @@ library:
       channels: 2
       bit-depth: 24
       fileSize: 12345678
-      mtime: 1700000000000000000
+      mtime:
+        seconds: 1700000000
+        nanoseconds: 123456789
   lists:
     - id: 7
       parentId: 0
@@ -293,7 +303,7 @@ library:
 List-only payload:
 
 ```yaml
-version: 5
+version: 6
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: listOnly
 library:
@@ -311,6 +321,7 @@ library:
 - [`LibraryYamlExporter.cpp`](../../../../app/runtime/library/LibraryYamlExporter.cpp) defines producer shape and omission rules.
 - [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) defines accepted input and validation.
 - [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines the path namespace.
+- [`FileTimestamp.h`](../../../../include/ao/FileTimestamp.h) defines the portable modification-time instant carried by `mtime`.
 - [`TrackField.cpp`](../../../../app/runtime/TrackField.cpp) defines canonical metadata and technical field IDs.
 - [`AudioCodec.h`](../../../../include/ao/AudioCodec.h) defines codec values and their stable storage representation.
 - [`AudioCodecText.h`](../../../../include/ao/AudioCodecText.h) defines codec display names and case-insensitive parsing.
