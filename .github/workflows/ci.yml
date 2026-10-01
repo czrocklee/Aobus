@@ -559,10 +559,12 @@ jobs:
           }
           "version=$env:ImageVersion" >> $env:GITHUB_OUTPUT
 
-      # Saved keys end with a fingerprint of the archived package ABIs; see
-      # the macOS job. Alternating runner images keep separate lineages. MSVC
-      # comes from the image, so a same-image v1 entry seeds a new lineage
-      # better than a v2 entry built with another image's compiler.
+      # MSVC comes from the runner image: prefer its package ABIs even when
+      # the manifest changes (for example, a macOS-only dependency). Saved v3
+      # keys put the image before the manifest so same-image restores work
+      # across manifests. Same-manifest/image v2 and same-image v1 entries
+      # seed the migration before other images; v2's ordering cannot select
+      # one image across manifests, so the first v3 population may still miss.
       - name: Resolve vcpkg binary cache key
         id: vcpkg-key
         shell: bash
@@ -571,10 +573,11 @@ jobs:
           IMAGE: ${{ steps.windows-image.outputs.version }}
           MANIFEST: ${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-triplets/**') }}
         run: |
-          base="vcpkg-files-v2-windows-$ARCH-$MANIFEST-"
+          base="vcpkg-files-v3-windows-$ARCH-$IMAGE-"
           {
             printf 'base=%s\n' "$base"
-            printf 'prefix=%s\n' "$base$IMAGE-"
+            printf 'prefix=%s\n' "$base$MANIFEST-"
+            printf 'legacy-prefix=%s\n' "vcpkg-files-v2-windows-$ARCH-$MANIFEST-$IMAGE-"
           } >> "$GITHUB_OUTPUT"
 
       - name: Restore vcpkg binary cache
@@ -585,8 +588,10 @@ jobs:
           path: C:\aobus-state\cache\vcpkg-binary
           key: ${{ steps.vcpkg-key.outputs.prefix }}
           restore-keys: |
-            vcpkg-files-v1-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-
             ${{ steps.vcpkg-key.outputs.base }}
+            ${{ steps.vcpkg-key.outputs.legacy-prefix }}
+            vcpkg-files-v1-${{ runner.arch }}-${{ steps.windows-image.outputs.version }}-
+            vcpkg-files-v3-windows-${{ runner.arch }}-
             vcpkg-files-v2-windows-${{ runner.arch }}-
             vcpkg-files-v1-${{ runner.arch }}-
 
