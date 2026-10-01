@@ -115,6 +115,8 @@ Use the narrow GTK test support header that owns the required behavior:
 
 - `GtkApplicationTestSupport.h` owns application initialization, event draining,
   pumping, and `GtkWindowFixture`.
+- `GtkSessionBusTestSupport.h` owns session-bus admission without GTK or D-Bus
+  calls.
 - `GtkWidgetTestSupport.h` owns widget traversal, controller lookup, CSS
   assertions, and signal emission.
 - `GtkLayoutTestSupport.h` owns allocation hosts and explicit widget
@@ -174,6 +176,16 @@ until the process exits.
   filtering logs; a fatal teardown diagnostic fails the run even after Catch2
   reports success.
 - Tests that construct application windows call `ensureRegisteredGtkApplication()`.
+
+The GApplication replacement probe and its instance children borrow the
+portal-owned bus after the same admission check. Direct unowned launches are
+rejected before any D-Bus call. The probe owns no nested `GTestDBus` or watchdog;
+removing that asynchronous cleanup preserves the tests' strict stderr assertions
+and fatal GLib diagnostics instead of filtering output. Each invocation generates
+one GUID-based application ID and passes it to its instances, keeping independent
+invocations isolated even while an earlier owner remains alive on the shared bus.
+This protects name isolation, not orphaned-process cleanup; the owner's existing
+stdin EOF/HUP shutdown path remains in place.
 
 Rerun native-input or bus-dependent cases through `./ao test --gtk`; printed shard
 commands deliberately disable both endpoints.

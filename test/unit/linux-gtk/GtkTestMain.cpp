@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "GtkApplicationTestSupport.h"
+#include "GtkSessionBusTestSupport.h"
 
 #include <catch2/catch_session.hpp>
 #include <glib.h>

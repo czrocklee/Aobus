@@ -199,10 +199,20 @@ target_link_libraries(ao_test_support_i18n
 if(AOBUS_BUILD_GTK)
   pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst x11 xi)
 
+  add_library(ao_test_support_gtk_session_bus STATIC
+      unit/linux-gtk/GtkSessionBusTestSupport.cpp
+  )
+  target_link_libraries(ao_test_support_gtk_session_bus PUBLIC ao_test_options)
+
   add_executable(ao_gapplication_probe
       integration/linux-gtk/GApplicationReplacementProbeMain.cpp
   )
-  target_link_libraries(ao_gapplication_probe PRIVATE PkgGTKMM)
+  target_link_libraries(ao_gapplication_probe
+      PRIVATE
+        ao_fatal_probe_support
+        ao_test_support_gtk_session_bus
+        PkgGTKMM
+  )
 
   add_library(ao_test_support_gtk STATIC
       unit/linux-gtk/GtkApplicationTestSupport.cpp
@@ -219,6 +229,7 @@ if(AOBUS_BUILD_GTK)
   target_link_libraries(ao_test_support_gtk
       PUBLIC
         ao_test_options
+        ao_test_support_gtk_session_bus
         ao_test_support_i18n
         aobus-gtk-lib
         PkgGTKMM

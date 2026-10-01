@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "GtkApplicationTestSupport.h"
+#include "GtkSessionBusTestSupport.h"
 #include "test/fatal/ProbeProcess.h"
 
 #include <catch2/catch_message.hpp>

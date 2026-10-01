@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "test/fatal/ProbeProcess.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -41,6 +42,7 @@ namespace ao::gtk::test
   TEST_CASE("GApplication replacement - ordinary second instance remains remote without changing the owner",
             "[gtk][integration][gapplication][concurrency]")
   {
+    requireOwnedGtkSessionBus();
     auto const result = runGApplicationProbe("ordinary-remote");
 
     requireSuccessfulProbe(result);
@@ -50,9 +52,39 @@ namespace ao::gtk::test
   TEST_CASE("GApplication replacement - replace flag takes ownership from a live replaceable primary",
             "[gtk][integration][gapplication][concurrency]")
   {
+    requireOwnedGtkSessionBus();
     auto const result = runGApplicationProbe("replacement");
 
     requireSuccessfulProbe(result);
     CHECK(result.standardOutput == "replacement: primary=yes owner-changed=yes\n");
+  }
+
+  TEST_CASE("GApplication replacement - independent invocations leave a live previous owner untouched",
+            "[gtk][integration][gapplication][concurrency]")
+  {
+    requireOwnedGtkSessionBus();
+    auto const result = runGApplicationProbe("invocation-isolation");
+
+    requireSuccessfulProbe(result);
+    CHECK(result.standardOutput == "invocation-isolation: ordinary=yes replacement=yes previous-owner-unchanged=yes\n");
+  }
+
+  TEST_CASE("GApplication replacement - probe refuses unowned session buses before connecting",
+            "[gtk][integration][gapplication]")
+  {
+    for (auto const* const scenario : {"unowned-bus", "mismatched-bus", "unowned-instance"})
+    {
+      INFO(scenario);
+      auto const result = runGApplicationProbe(scenario);
+      INFO("launch error: " << result.launchError);
+      INFO("standard error: " << result.standardError);
+      REQUIRE(result.started);
+      REQUIRE_FALSE(result.timedOut);
+      REQUIRE(result.exited);
+      CHECK(result.exitCode == 1);
+      CHECK(result.standardOutput.empty());
+      CHECK(result.standardError ==
+            "GApplication replacement probe failed: a portal-owned session bus is required; run ./ao test --gtk\n");
+    }
   }
 } // namespace ao::gtk::test
