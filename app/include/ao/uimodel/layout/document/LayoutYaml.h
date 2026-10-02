@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <ryml.hpp>
 
@@ -12,6 +12,8 @@
 
 namespace ao::uimodel
 {
+  struct LayoutDocument;
+
   Result<> writeLayoutValue(ryml::NodeRef node, LayoutValue const& value);
   Result<LayoutValue> readLayoutValue(ryml::ConstNodeRef node, std::string_view context);
 

@@ -65,9 +65,8 @@ namespace ao
 
 namespace ao
 {
-  void setCurrentThreadName(std::string_view name) noexcept
+  void setCurrentThreadName(std::string_view /*name*/) noexcept
   {
-    static_cast<void>(name);
   }
 } // namespace ao
 

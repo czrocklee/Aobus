@@ -13,7 +13,6 @@
 #include <filesystem>
 #include <optional>
 #include <string_view>
-#include <sys/types.h>
 #include <utility>
 
 namespace ao::utility

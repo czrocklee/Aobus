@@ -43,6 +43,7 @@ namespace ao::library
   Result<> validateSerializedHotTrack(std::span<std::byte const> bytes)
   {
     auto const view = TrackView{bytes, {}};
+
     if (bytes.empty() || bytes.size() % kSerializedAlignmentBytes != 0 ||
         !utility::bytes::isAligned(bytes.data(), kSerializedAlignmentBytes) || !view.isHotValid())
     {
@@ -69,6 +70,7 @@ namespace ao::library
       {
         return makeError(Error::Code::CorruptData, "Hot Track record contains an invalid tag ID");
       }
+
       if (!seenTags.insert(id).second)
       {
         return makeError(Error::Code::CorruptData, "Hot Track record contains a duplicate tag ID");
@@ -83,6 +85,7 @@ namespace ao::library
     }
 
     auto const title = view.metadata().title();
+
     if (auto titleRes = detail::validatePersistedLibraryText(title, "Track title"); !titleRes)
     {
       return std::unexpected{titleRes.error()};
@@ -108,6 +111,7 @@ namespace ao::library
     for (auto const& [keyId, value] : reader.custom())
     {
       std::ignore = keyId;
+
       if (auto valueRes = detail::validatePersistedLibraryText(value, "Custom metadata value"); !valueRes)
       {
         return std::unexpected{valueRes.error()};
