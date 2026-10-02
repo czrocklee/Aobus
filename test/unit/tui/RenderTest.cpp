@@ -1761,13 +1761,28 @@ namespace ao::tui::test
 
     auto const rendered = renderElement(presentationPanel(items, "wide", 0, nullptr, wideColumns), wideColumns, 16);
 
-    CHECK(rendered.text.contains("Detailed description"));
-    auto rows = std::vector<PresentationRowHitRegion>{};
-    auto const narrow = renderElement(presentationPanel(items, "wide", 0, &rows, 60), 60, 16);
-    REQUIRE(rows.size() == 1);
-    CHECK(rows.front().box.x_min == 2);
-    CHECK(rows.front().box.x_max == 57);
-    CHECK(narrow.screen.PixelAt(58, rows.front().box.y_min).background_color == ftxui::Color::Default);
+    CHECK(rendered.text.contains("Wide View · Detailed description"));
+
+    for (auto const columns : {32, 48, 60, 80})
+    {
+      CAPTURE(columns);
+      auto rows = std::vector<PresentationRowHitRegion>{};
+      auto const narrow = renderElement(presentationPanel(items, "wide", 0, &rows, columns), columns, 16);
+      REQUIRE(rows.size() == 1);
+      CHECK(rows.front().box.x_min == 2);
+      CHECK(rows.front().box.x_max == columns - 3);
+      CHECK(narrow.screen.PixelAt(columns - 2, rows.front().box.y_min).background_color == ftxui::Color::Default);
+
+      // A long description must not squeeze a name that fits the row in full.
+      auto const optName = findTextCells(narrow.screen, "Wide View");
+      auto const optDetail = findTextCells(narrow.screen, " · Detailed");
+      REQUIRE(optName);
+      REQUIRE(optDetail);
+      CHECK(optName->y_min == rows.front().box.y_min);
+      CHECK(optDetail->x_min == optName->x_max + 1);
+      CHECK_FALSE(narrow.screen.PixelAt(optName->x_min, optName->y_min).dim);
+      CHECK(narrow.screen.PixelAt(optDetail->x_min, optDetail->y_min).dim);
+    }
   }
 
   TEST_CASE("Render - empty presentation panel clears stale row hit regions", "[tui][unit][render]")

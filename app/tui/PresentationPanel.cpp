@@ -28,18 +28,28 @@ namespace ao::tui
   namespace
   {
     constexpr std::int32_t kPresentationPanelMarkerColumns = 2;
+    constexpr std::string_view kPresentationDetailSeparator = " · ";
 
-    std::string presentationPanelRowText(TrackPresentationNavEntry const& item)
+    std::int32_t presentationPanelRowColumns(TrackPresentationNavEntry const& item)
     {
-      auto label = item.label;
+      return cellWidth(item.label) +
+             (item.detail.empty() ? 0 : cellWidth(kPresentationDetailSeparator) + cellWidth(item.detail));
+    }
 
-      if (!item.detail.empty())
+    // The name carries the row; its description recedes so a scan down the
+    // list reads names first.
+    ftxui::Element presentationPanelRowLabel(TrackPresentationNavEntry const& item)
+    {
+      using namespace ftxui;
+
+      if (item.detail.empty())
       {
-        label.append(" - ");
-        label.append(item.detail);
+        return text(item.label);
       }
 
-      return label;
+      // Spend constrained row width on the name before shortening its description.
+      return hbox(
+        {text(item.label) | notflex, text(std::string{kPresentationDetailSeparator} + item.detail) | dim | xflex});
     }
   } // namespace
 
@@ -57,8 +67,7 @@ namespace ao::tui
 
     for (auto const& item : items)
     {
-      contentColumns =
-        std::max(contentColumns, kPresentationPanelMarkerColumns + cellWidth(presentationPanelRowText(item)));
+      contentColumns = std::max(contentColumns, kPresentationPanelMarkerColumns + presentationPanelRowColumns(item));
     }
 
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
@@ -100,11 +109,9 @@ namespace ao::tui
         continue;
       }
 
-      auto label = presentationPanelRowText(item);
-
       auto rowPtr = hbox({
         text(item.id == activePresentationId ? "* " : "  "),
-        text(std::move(label)) | flex,
+        presentationPanelRowLabel(item) | flex,
       });
 
       auto const selected = std::cmp_equal(index, selectedIndex);

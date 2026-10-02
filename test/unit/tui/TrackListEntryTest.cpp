@@ -29,20 +29,20 @@ namespace ao::tui::test
     CHECK(item.id == TrackId{7});
     CHECK(item.row.title == "Fugue");
     CHECK(item.detail == "A. Composer - Keyboard Works  2:05");
-    CHECK(item.label == "--  Fugue  A. Composer  Keyboard Works");
+    CHECK(item.label == " -  Fugue  A. Composer  Keyboard Works");
 
     row.title.clear();
     item = makeTrackListEntry(ao::test::englishMessageCatalog(), row);
 
-    CHECK(item.label == "--  untitled.flac  A. Composer  Keyboard Works");
+    CHECK(item.label == " -  untitled.flac  A. Composer  Keyboard Works");
 
     row.optUriPath.reset();
     row.id = TrackId{99};
     item = makeTrackListEntry(ao::test::englishMessageCatalog(), row);
 
-    CHECK(item.label == "--  Track 99  A. Composer  Keyboard Works");
+    CHECK(item.label == " -  Track 99  A. Composer  Keyboard Works");
 
     auto const german = ao::test::messageCatalog("de-AT");
-    CHECK(makeTrackListEntry(german, row).label == "--  Titel 99  A. Composer  Keyboard Works");
+    CHECK(makeTrackListEntry(german, row).label == " -  Titel 99  A. Composer  Keyboard Works");
   }
 } // namespace ao::tui::test

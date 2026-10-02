@@ -19,7 +19,7 @@ namespace ao::tui
   {
     std::string textOrPlaceholder(std::string value)
     {
-      return value.empty() ? std::string{"-"} : std::move(value);
+      return value.empty() ? std::string{kMissingTrackFieldPlaceholder} : std::move(value);
     }
   } // namespace
 
@@ -83,11 +83,11 @@ namespace ao::tui
 
   std::string trackTableLabel(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row)
   {
-    auto trackNo = textOrPlaceholder(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber));
-    return std::format("{:>2}  {}  {}  {}",
-                       trackNo == "-" ? std::string{"--"} : trackNo,
-                       trackDisplayTitle(textCatalog, row),
-                       row.artist.empty() ? "-" : row.artist,
-                       row.album.empty() ? "-" : row.album);
+    return std::format(
+      "{:>2}  {}  {}  {}",
+      textOrPlaceholder(uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber)),
+      trackDisplayTitle(textCatalog, row),
+      textOrPlaceholder(row.artist),
+      textOrPlaceholder(row.album));
   }
 } // namespace ao::tui

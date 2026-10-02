@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <span>
@@ -111,6 +112,7 @@ namespace ao::uimodel
       }
 
       std::int32_t assigned = 0;
+      auto fractions = std::vector<double>(indices.size(), 0.0);
 
       for (std::size_t index = 0; index < indices.size(); ++index)
       {
@@ -120,12 +122,27 @@ namespace ao::uimodel
                                   : (static_cast<double>(amount) * (weight / maximumWeight)) / scaledTotalWeight;
         auto const share = static_cast<std::int32_t>(std::floor(exactShare));
         shares[index] = share;
+        fractions[index] = exactShare - static_cast<double>(share);
         assigned += share;
       }
 
-      for (std::int32_t remainder = amount - assigned; remainder > 0; --remainder)
+      // Leftover units go to the largest fractional parts, earlier columns
+      // first on ties. Handing them out by position instead lets a column
+      // whose exact share is whole gain a unit, so a width committed as a
+      // weight would not reproject to the width that produced it.
+      auto order = std::vector<std::size_t>(indices.size());
+
+      for (std::size_t index = 0; index < order.size(); ++index)
       {
-        ++shares[static_cast<std::size_t>(amount - assigned - remainder) % shares.size()];
+        order[index] = index;
+      }
+
+      std::ranges::stable_sort(
+        order, std::ranges::greater{}, [&](std::size_t const index) { return fractions[index]; });
+
+      for (std::int32_t remainder = amount - assigned, next = 0; remainder > 0; --remainder, ++next)
+      {
+        ++shares[order[static_cast<std::size_t>(next) % order.size()]];
       }
 
       return shares;
@@ -156,6 +173,11 @@ namespace ao::uimodel
     {
       std::int32_t remaining = amount;
       auto active = std::vector<std::size_t>{indices.begin(), indices.end()};
+
+      // Exhausted donors must not receive the remainder while another donor
+      // still has capacity; later iterations already drop exhausted columns.
+      std::erase_if(
+        active, [&](std::size_t const index) { return widths[index] <= normalizedMinimumWidth(specs[index]); });
 
       while (remaining > 0 && !active.empty())
       {
