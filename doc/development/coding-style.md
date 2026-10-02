@@ -13,6 +13,8 @@ Use blank lines before and after control blocks (`if`, `for`, `while`, and `swit
 Top-level macros such as `TEST_CASE` and `SECTION` must be separated by at least one blank line.
 Do not put blank lines immediately after `{` or before `}`.
 Keep a comment written specifically for an `if` directly above that `if`, and do not add a leading blank line when an `if` is the first effective line in a scope.
+Conditional-compilation directives (`#if`, `#ifdef`, `#ifndef`, `#elif`, `#elifdef`, `#elifndef`, `#else`, and `#endif`) also provide a spacing boundary: no blank line is required between one and an adjacent control block.
+Other directives such as `#define` and `#pragma` do not replace the blank-line rule.
 
 Use `#pragma once` in headers.
 Keep ordinary function and method definitions in a `.cpp` file, with these exceptions:

@@ -505,7 +505,6 @@ namespace ao::gtk
       _implPtr->mprisBridgePtr->start();
       _mprisStartRequested = true;
     }
-
 #endif
 
     return {};

@@ -510,12 +510,10 @@ namespace ao::gtk::test
     auto const activate = GENERATE(false, true);
 
 #ifdef AOBUS_HAS_SYSTEM_MEDIA
-
     if (activate)
     {
       requireOwnedGtkSessionBus();
     }
-
 #endif
     bool finalized = false;
 
