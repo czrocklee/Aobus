@@ -11,3 +11,7 @@ class PairValueType
 
 class VariantValueType
 {};
+
+template<typename T>
+class AliasValueWrapper
+{};

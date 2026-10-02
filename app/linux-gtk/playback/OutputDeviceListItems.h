@@ -12,11 +12,6 @@
 
 #include <string>
 
-namespace ao::audio
-{
-  struct Device;
-}
-
 namespace ao::gtk
 {
   /**

@@ -12,6 +12,7 @@
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Type.h>
+#include <clang/AST/TypeLoc.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Basic/Diagnostic.h>
@@ -255,6 +256,34 @@ namespace clang::tidy::aobus
       }
 
       bool shouldVisitTemplateInstantiations() const { return false; }
+
+      void recordTypeAliasDependency(SourceLocation useLoc, SourceLocation declLoc)
+      {
+        // Alias names cannot be forward-declared. Only uses in the selected file
+        // require their provider; a provider's own alias use must not retain it.
+        if (useLoc.isValid() && sm->isInMainFile(sm->getExpansionLoc(useLoc)))
+        {
+          recordStrongFileID(declLoc);
+        }
+      }
+
+      bool VisitTypedefTypeLoc(TypedefTypeLoc typeLoc)
+      {
+        recordTypeAliasDependency(typeLoc.getBeginLoc(), typeLoc.getTypePtr()->getDecl()->getLocation());
+        return true;
+      }
+
+      bool VisitTemplateSpecializationTypeLoc(TemplateSpecializationTypeLoc typeLoc)
+      {
+        if (auto const* alias =
+              dyn_cast_or_null<TypeAliasTemplateDecl>(typeLoc.getTypePtr()->getTemplateName().getAsTemplateDecl());
+            alias != nullptr)
+        {
+          recordTypeAliasDependency(typeLoc.getBeginLoc(), alias->getLocation());
+        }
+
+        return true;
+      }
 
       bool VisitFieldDecl(FieldDecl* decl)
       {
