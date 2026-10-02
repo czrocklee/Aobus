@@ -2225,6 +2225,7 @@ class CliParseTest(unittest.TestCase):
             self.assertIsNone(toolchain.resource_dir)
 
     def test_tidy_build_uses_the_native_lint_preset(self):
+        real_run = subprocess.run
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
             sdk_root = build_dir / "llvm-sdk"
@@ -2239,11 +2240,10 @@ class CliParseTest(unittest.TestCase):
 
             with mock.patch.object(tidy_command.tidyengine, "ensure_compile_db") as ensure_compile_db:
                 with mock.patch.object(tidy_command, "verify_tidy_toolchain"):
-                    with mock.patch.object(
-                        tidy_command.subprocess,
-                        "run",
-                        return_value=mock.Mock(returncode=0),
-                    ):
+                    # Replace only tidy's module binding, not the shared stdlib module.
+                    with mock.patch.object(tidy_command, "subprocess", autospec=True) as process:
+                        process.run.return_value = subprocess.CompletedProcess([], 0)
+                        self.assertIs(subprocess.run, real_run)
                         toolchain = tidy_command.prepare_toolchain(build_dir, no_build=False)
 
         ensure_compile_db.assert_called_once_with(
@@ -2253,6 +2253,12 @@ class CliParseTest(unittest.TestCase):
             reconfigure_preset=False,
         )
         profile = builddir.platform_profile()
+        process.run.assert_called_once()
+        command = process.run.call_args.args[0]
+        target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
+        self.assertEqual(command[:2], ["cmake", "--build"])
+        self.assertEqual(command[3:5], ["--target", target])
+        self.assertEqual(process.run.call_args.kwargs, {"cwd": tidy_command.PROJECT_ROOT})
         if profile.name == "windows":
             self.assertEqual(toolchain.clang_tidy, str(artifact))
             self.assertIsNone(toolchain.plugin)

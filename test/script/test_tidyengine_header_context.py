@@ -2,6 +2,7 @@
 
 import json
 import os
+import platform
 import subprocess
 import tempfile
 import unittest
@@ -67,6 +68,9 @@ class HeaderContextFixture:
 class HeaderCompileCommandSelectionTest(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = HeaderContextFixture()
+        captured_host = platform.system()
+        # platform.system() may invoke Windows "ver" through subprocess.run.
+        self.enterContext(mock.patch("ao.core.workspace_cache.platform.system", return_value=captured_host))
 
     def tearDown(self) -> None:
         self.fixture.close()

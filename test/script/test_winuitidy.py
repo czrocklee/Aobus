@@ -1,6 +1,7 @@
 """Tests for extracting WinUI compile commands from MSBuild."""
 
 import json
+import platform
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,11 @@ from ao.core import winuitidy
 
 
 class WinUiCompileCommandsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        captured_host = platform.system()
+        # platform.system() may invoke Windows "ver" through subprocess.run.
+        self.enterContext(mock.patch("ao.core.workspace_cache.platform.system", return_value=captured_host))
+
     def test_expands_repository_owned_msbuild_groups(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
