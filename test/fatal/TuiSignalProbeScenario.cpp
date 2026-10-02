@@ -162,7 +162,6 @@ namespace ao::tui::test
     auto const name = std::string_view{scenario == nullptr ? "" : scenario};
 
 #ifndef _WIN32
-
     if (name == "sigint")
     {
       return routeSignal(SIGINT);
@@ -182,14 +181,11 @@ namespace ao::tui::test
     {
       return restorePreviousHandler();
     }
-
 #else
-
     if (name == "ctrl-c")
     {
       return routeCtrlC();
     }
-
 #endif
 
     std::println(stderr, "unknown TUI signal probe scenario '{}'", name);

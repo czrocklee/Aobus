@@ -63,7 +63,6 @@ namespace ao::tui::test
       validateConfigStorePaths(libraryPath, layoutPath.parent_path() / "TUI_LAYOUT.YAML", appConfigPath);
 
 #ifdef __APPLE__
-
     if (::pathconf(libraryPath.c_str(), _PC_CASE_SENSITIVE) == 1)
     {
       CHECK(caseVariantCollisionRes);
@@ -74,7 +73,6 @@ namespace ao::tui::test
       REQUIRE_FALSE(caseVariantCollisionRes);
       CHECK(caseVariantCollisionRes.error().code == Error::Code::InvalidInput);
     }
-
 #endif
 
     auto const layoutCollisionRes = validateConfigStorePaths(libraryPath, layoutPath, appConfigPath);

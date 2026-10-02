@@ -169,7 +169,6 @@ namespace ao::audio::test
     }
 
 #ifdef _WIN32
-
     if (scenario == "wasapi-device-observer-exception")
     {
       auto hooksPtr = std::make_shared<backend::detail::WasapiProviderMonitorHooks>();
@@ -196,7 +195,6 @@ namespace ao::audio::test
       hooksPtr->requestRefresh();
       callbackEntered.acquire();
     }
-
 #endif
 
     return 2;

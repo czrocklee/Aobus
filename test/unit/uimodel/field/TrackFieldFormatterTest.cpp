@@ -55,7 +55,6 @@ namespace ao::uimodel::test
     std::string expectedLocalTime(std::chrono::sys_seconds const time)
     {
 #if __cpp_lib_chrono >= 201907L
-
       try
       {
         return std::format("{:%Y-%m-%d %H:%M}", std::chrono::zoned_time{std::chrono::current_zone(), time});
@@ -64,7 +63,6 @@ namespace ao::uimodel::test
       {
         return std::format("{:%Y-%m-%d %H:%M}", time);
       }
-
 #else
       // The C library reads the host zone independently of the date library
       // that substitutes for the missing standard time-zone database.

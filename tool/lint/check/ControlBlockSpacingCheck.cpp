@@ -160,6 +160,128 @@ namespace clang::tidy::readability
 
       return codeIndex;
     }
+
+    // Returns the whitespace between two consecutive tokens in source order.
+    StringRef tokenGap(Token const& left, Token const& right, StringRef buffer, SourceManager const& sm)
+    {
+      std::uint32_t const leftEnd = sm.getFileOffset(left.getLocation()) + left.getLength();
+      std::uint32_t const rightStart = sm.getFileOffset(right.getLocation());
+      return buffer.substr(leftEnd, rightStart - leftEnd);
+    }
+
+    // Returns true when the whitespace between two tokens contains a physical
+    // line break without a backslash line continuation, so the tokens do not
+    // share one logical line. A gap without a newline shares a physical line;
+    // trailing whitespace after the backslash is tolerated like the lexer does.
+    bool containsLogicalLineBreak(StringRef gap)
+    {
+      for (size_t newline = gap.find('\n'); newline != StringRef::npos; newline = gap.find('\n', newline + 1))
+      {
+        bool continued = false;
+
+        for (size_t i = newline; i > 0;)
+        {
+          --i;
+
+          if (gap[i] == '\\')
+          {
+            continued = true;
+            break;
+          }
+
+          if (gap[i] != ' ' && gap[i] != '\t' && gap[i] != '\r')
+          {
+            break;
+          }
+        }
+
+        if (!continued)
+        {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    // Returns the index of the first token on the logical line containing
+    // tokens[index]. The raw lexer keeps physical lines, so lines are joined
+    // only through backslash line continuations, and a comment that starts
+    // the physical line is skipped: the preprocessor treats comments as
+    // whitespace.
+    size_t logicalLineStartIndex(size_t index,
+                                 std::vector<Token> const& tokens,
+                                 StringRef buffer,
+                                 SourceManager const& sm)
+    {
+      size_t first = index;
+
+      while (first > 0 && !containsLogicalLineBreak(tokenGap(tokens[first - 1], tokens[first], buffer, sm)))
+      {
+        --first;
+      }
+
+      while (first + 1 < tokens.size() && tokens[first].is(tok::comment) &&
+             !containsLogicalLineBreak(tokenGap(tokens[first], tokens[first + 1], buffer, sm)))
+      {
+        ++first;
+      }
+
+      return first;
+    }
+
+    // Returns the keyword of the preprocessor directive on the logical line
+    // containing tokens[index], or an empty StringRef when that line does not
+    // start with '#' followed by the directive name.
+    StringRef directiveKeywordOnLine(size_t index,
+                                     std::vector<Token> const& tokens,
+                                     StringRef buffer,
+                                     SourceManager const& sm)
+    {
+      if (index >= tokens.size())
+      {
+        return StringRef{};
+      }
+
+      size_t const first = logicalLineStartIndex(index, tokens, buffer, sm);
+
+      if (!tokens[first].is(tok::hash))
+      {
+        return StringRef{};
+      }
+
+      // Comments are preprocessor whitespace between '#' and the name.
+      size_t name = first + 1;
+
+      while (name < tokens.size() && tokens[name].is(tok::comment))
+      {
+        ++name;
+      }
+
+      if (name >= tokens.size() || !tokens[name].is(tok::raw_identifier))
+      {
+        return StringRef{};
+      }
+
+      // A name-like token on the next line, for example after a null '#'
+      // directive, is not part of the directive.
+      if (logicalLineStartIndex(name, tokens, buffer, sm) != first)
+      {
+        return StringRef{};
+      }
+
+      return tokens[name].getRawIdentifier();
+    }
+
+    // Conditional-compilation directives are structural boundaries for the
+    // blank-line rules around control blocks. Every other directive, including
+    // #define and #pragma, is not.
+    bool isConditionalCompilationDirective(StringRef directiveKeyword)
+    {
+      return directiveKeyword == "if" || directiveKeyword == "ifdef" || directiveKeyword == "ifndef" ||
+             directiveKeyword == "elif" || directiveKeyword == "elifdef" || directiveKeyword == "elifndef" ||
+             directiveKeyword == "else" || directiveKeyword == "endif";
+    }
   } // namespace
 
   void ControlBlockSpacingCheck::registerMatchers(MatchFinder* finder)
@@ -243,6 +365,15 @@ namespace clang::tidy::readability
       std::uint32_t const nextStart = sm.getFileOffset(nextToken.getLocation());
       StringRef const gap = buffer.substr(previousEnd, nextStart - previousEnd);
       std::int32_t const newlines = static_cast<std::int32_t>(gap.count('\n'));
+
+      // A conditional-compilation directive directly before the statement, with
+      // at most comments in between, is a structural boundary like a preceding
+      // comment: no blank line is required. Non-conditional directives such as
+      // #define and #pragma stay subject to the rule.
+      if (isConditionalCompilationDirective(directiveKeywordOnLine(codePrevIndex, tokens, buffer, sm)))
+      {
+        return;
+      }
 
       bool const isBlockStart = previousCodeToken.is(tok::l_brace) || previousCodeToken.is(tok::colon);
 
@@ -443,6 +574,14 @@ namespace clang::tidy::readability
     size_t const codeIndex = skipLeadingComments(nextIndex, tokens, sm);
 
     if (codeIndex >= tokens.size() || tokens[codeIndex].is(tok::r_brace))
+    {
+      return;
+    }
+
+    // A conditional-compilation directive is a structural boundary, so it may
+    // directly follow the '}' of a control block without a blank line. A
+    // following statement or non-conditional directive is still checked.
+    if (isConditionalCompilationDirective(directiveKeywordOnLine(codeIndex, tokens, buffer, sm)))
     {
       return;
     }
