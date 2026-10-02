@@ -1,9 +1,11 @@
 """Tests for the content-addressed CI vcpkg binary cache."""
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -135,6 +137,112 @@ class PruneTest(unittest.TestCase):
             vcpkg_binary_cache.content_fingerprint([ABI_A]),
             vcpkg_binary_cache.content_fingerprint([ABI_A, ABI_B]),
         )
+
+
+@unittest.skipIf(os.name == "nt", "The CI key step runs in Bash; exercise it on a POSIX tooling host.")
+class WindowsWorkflowCacheTest(unittest.TestCase):
+    def _restore_plan(self, manifest: str = "current") -> list[str]:
+        workflow = (Path(vcpkg_binary_cache.__file__).resolve().parents[3] / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+        windows = workflow.split("  windows:\n", 1)[1]
+        key_step = windows.split("      - name: Resolve vcpkg binary cache key\n", 1)[1].split("      - name:", 1)[0]
+        script = textwrap.dedent(key_step.split("        run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "github-output"
+            process = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", script],
+                env={
+                    **os.environ,
+                    "ARCH": "X64",
+                    "IMAGE": "image-a",
+                    "MANIFEST": manifest,
+                    "GITHUB_OUTPUT": str(output),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(process.returncode, 0, process.stderr)
+            fields = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
+        restore_step = windows.split("      - name: Restore vcpkg binary cache\n", 1)[1].split("      - name:", 1)[0]
+        expressions = {
+            "runner.arch": "X64",
+            "steps.windows-image.outputs.version": "image-a",
+            **{f"steps.vcpkg-key.outputs.{key}": value for key, value in fields.items()},
+        }
+
+        def expand(value: str) -> str:
+            return re.sub(r"\$\{\{\s*(.*?)\s*\}\}", lambda match: expressions[match.group(1)], value.strip())
+
+        primary = expand(restore_step.split("          key: ", 1)[1].splitlines()[0])
+        fallbacks = [
+            expand(line)
+            for line in restore_step.split("          restore-keys: |\n", 1)[1].splitlines()
+            if line.strip()
+        ]
+        return [primary, *fallbacks]
+
+    @staticmethod
+    def _restore(plan: list[str], caches_newest_first: list[str]) -> str | None:
+        # GitHub searches primary-key prefixes before ordered restore keys:
+        # https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#cache-key-matching
+        # Sealed keys include an ABI fingerprint, so none is an exact prefix hit.
+        for prefix in plan:
+            for cache in caches_newest_first:
+                if cache.startswith(prefix):
+                    return cache
+        return None
+
+    def test_manifest_change_prefers_same_image_over_newer_foreign_image_cache(self):
+        same_image = "vcpkg-files-v3-windows-X64-image-a-old-abis"
+        other_image = "vcpkg-files-v3-windows-X64-image-b-current-abis"
+        plan = self._restore_plan()
+
+        self.assertEqual(plan[0], "vcpkg-files-v3-windows-X64-image-a-current-")
+        self.assertEqual(self._restore(plan, [other_image, same_image]), same_image)
+        self.assertEqual(self._restore(self._restore_plan("changed"), [other_image, same_image]), same_image)
+
+    def test_current_manifest_precedes_other_manifests_on_the_same_image(self):
+        current = "vcpkg-files-v3-windows-X64-image-a-current-abis"
+        newer_other_manifest = "vcpkg-files-v3-windows-X64-image-a-other-abis"
+
+        self.assertEqual(self._restore(self._restore_plan(), [newer_other_manifest, current]), current)
+
+    def test_same_image_legacy_entries_seed_migration_before_foreign_image_fallbacks(self):
+        foreign = "vcpkg-files-v3-windows-X64-image-b-current-abis"
+        v2 = "vcpkg-files-v2-windows-X64-current-image-a-abis"
+        v1 = "vcpkg-files-v1-X64-image-a-old"
+        plan = self._restore_plan()
+
+        self.assertEqual(self._restore(plan, [foreign, v1, v2]), v2)
+        self.assertEqual(self._restore(plan, [foreign, v1]), v1)
+
+    def test_architecture_wide_fallbacks_prefer_new_key_families(self):
+        v3 = "vcpkg-files-v3-windows-X64-image-b-other-abis"
+        v2 = "vcpkg-files-v2-windows-X64-other-image-b-abis"
+        v1 = "vcpkg-files-v1-X64-image-b-other"
+        plan = self._restore_plan()
+
+        self.assertEqual(self._restore(plan, [v1, v2, v3]), v3)
+        self.assertEqual(self._restore(plan, [v1, v2]), v2)
+        self.assertEqual(self._restore(plan, [v1]), v1)
+
+    def test_first_migration_cannot_select_same_image_across_legacy_v2_manifests(self):
+        same_image_old_manifest = "vcpkg-files-v2-windows-X64-old-image-a-abis"
+        newer_foreign = "vcpkg-files-v2-windows-X64-current-image-b-abis"
+
+        # Legacy v2 puts the manifest first: without v3 or same-image v1,
+        # migration has only the broad v2 fallback, not an image-only prefix.
+        self.assertEqual(self._restore(self._restore_plan(), [newer_foreign, same_image_old_manifest]), newer_foreign)
+
+    def test_fallbacks_never_cross_runner_architecture(self):
+        foreign = "vcpkg-files-v3-windows-X64-image-b-other-abis"
+        wrong_arch = "vcpkg-files-v3-windows-ARM64-image-a-current-abis"
+        plan = self._restore_plan()
+
+        self.assertEqual(self._restore(plan, [wrong_arch, foreign]), foreign)
+        self.assertIsNone(self._restore(plan, [wrong_arch]))
 
 
 class SealCommandTest(unittest.TestCase):
