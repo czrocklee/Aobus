@@ -108,9 +108,12 @@ namespace ao::tui
                                        std::int32_t const row)
     {
       constexpr std::int32_t kResizeEdgeHitSlop = 1;
+      // The visible rule sits after the cell's trailing gutter, so the edge
+      // reaches it as well as the gutter.
+      constexpr std::int32_t kResizeRuleOffset = 2;
 
       return hasHitArea(handle.box) && row >= handle.box.y_min && row <= handle.box.y_max &&
-             column >= handle.box.x_max - kResizeEdgeHitSlop && column <= handle.box.x_max + kResizeEdgeHitSlop;
+             column >= handle.box.x_max - kResizeEdgeHitSlop && column <= handle.box.x_max + kResizeRuleOffset;
     }
 
     bool containsTrackScrollbar(ftxui::Box const& tableBox, std::int32_t const column, std::int32_t const row)

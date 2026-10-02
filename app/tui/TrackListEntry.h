@@ -8,9 +8,14 @@
 #include <ao/rt/TrackRow.h>
 
 #include <string>
+#include <string_view>
 
 namespace ao::tui
 {
+  /// The one visible marker for a missing track field in the table and the
+  /// plain track label. A value that legitimately reads the same stays data.
+  inline constexpr std::string_view kMissingTrackFieldPlaceholder = "-";
+
   struct TrackListEntry final
   {
     TrackId id{};

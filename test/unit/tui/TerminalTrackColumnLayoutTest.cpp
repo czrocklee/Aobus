@@ -35,12 +35,12 @@ namespace ao::tui::test
       uimodel::TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.0},
     };
 
-    auto const layout = projectTerminalTrackColumnLayout(presentation, stored, 80);
+    auto const layout = projectTerminalTrackColumnLayout(presentation, stored, 82);
 
     REQUIRE(layout.columns.size() == 3);
     CHECK(layout.columns[0] == TerminalTrackColumn{.field = rt::TrackField::Duration, .columns = 13});
-    CHECK(layout.columns[1] == TerminalTrackColumn{.field = rt::TrackField::Artist, .columns = 15});
-    CHECK(layout.columns[2] == TerminalTrackColumn{.field = rt::TrackField::Title, .columns = 42});
+    CHECK(layout.columns[1] == TerminalTrackColumn{.field = rt::TrackField::Artist, .columns = 14});
+    CHECK(layout.columns[2] == TerminalTrackColumn{.field = rt::TrackField::Title, .columns = 43});
     CHECK(std::ranges::none_of(
       layout.columns, [](TerminalTrackColumn const& column) { return column.field == rt::TrackField::Album; }));
     auto const contentColumns = std::accumulate(layout.columns.begin(),
@@ -51,7 +51,7 @@ namespace ao::tui::test
     CHECK(contentColumns + trackTableChromeColumns(layout.columns.size()) == layout.availableColumns);
     CHECK(trackTableChromeColumns(0) == 3);
     CHECK(trackTableChromeColumns(1) == 6);
-    CHECK(trackTableChromeColumns(3) == 10);
+    CHECK(trackTableChromeColumns(3) == 12);
   }
 
   TEST_CASE("TerminalTrackColumnLayout - bounds restored fixed widths in terminal cells", "[tui][unit][track-column]")
@@ -95,21 +95,21 @@ namespace ao::tui::test
     auto const stored = std::vector{
       uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 11},
     };
-    auto const before = projectTerminalTrackColumnLayout(presentation, stored, 100);
+    auto const before = projectTerminalTrackColumnLayout(presentation, stored, 102);
     auto const titleIt = std::ranges::find(before.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
     REQUIRE(titleIt != before.columns.end());
-    // At 100 terminal cells, ten chrome cells and the fixed 11-cell duration
-    // leave 79 cells: Title 48, Artist 31. Request a literal 55-cell title.
-    CHECK(titleIt->columns == 48);
+    // At 102 terminal cells, twelve chrome cells and the fixed 11-cell duration
+    // leave 79 cells: Title 47, Artist 32. Request a literal 55-cell title.
+    CHECK(titleIt->columns == 47);
     auto const artistIt = std::ranges::find(before.columns, rt::TrackField::Artist, &TerminalTrackColumn::field);
     REQUIRE(artistIt != before.columns.end());
-    CHECK(artistIt->columns == 31);
+    CHECK(artistIt->columns == 32);
     constexpr int kTargetColumns = 55;
 
     auto const resized =
-      resizeTerminalTrackColumnLayout(presentation, stored, rt::TrackField::Title, kTargetColumns, 100);
-    auto const sameViewport = projectTerminalTrackColumnLayout(presentation, resized, 100);
-    auto const wideViewport = projectTerminalTrackColumnLayout(presentation, resized, 130);
+      resizeTerminalTrackColumnLayout(presentation, stored, rt::TrackField::Title, kTargetColumns, 102);
+    auto const sameViewport = projectTerminalTrackColumnLayout(presentation, resized, 102);
+    auto const wideViewport = projectTerminalTrackColumnLayout(presentation, resized, 132);
     auto const resizedTitle =
       std::ranges::find(sameViewport.columns, rt::TrackField::Title, &TerminalTrackColumn::field);
     auto const wideTitle = std::ranges::find(wideViewport.columns, rt::TrackField::Title, &TerminalTrackColumn::field);

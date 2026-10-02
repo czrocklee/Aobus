@@ -21,10 +21,12 @@
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
+#include <ftxui/screen/pixel.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/string.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -105,6 +107,47 @@ namespace ao::tui::test
                                              .album = std::move(album),
                                              .duration = duration,
                                              .trackNumber = trackNumber});
+    }
+
+    // The widths at which a cell's placeholder contract must hold: a roomy
+    // terminal and one that squeezes every column toward its minimum.
+    constexpr auto kPlaceholderTableWidths = std::to_array<std::int32_t>({120, 48});
+
+    RenderedElement renderTableAt(std::span<TrackListEntry const> const tracks,
+                                  rt::TrackPresentationSpec const& presentation,
+                                  std::int32_t const selectedIndex,
+                                  std::int32_t const columns,
+                                  TrackTableViewOptions options = {})
+    {
+      options.availableColumns = columns;
+      return renderElement(
+        trackTableView(tracks, selectedIndex, kInvalidTrackId, presentation, std::move(options)), columns);
+    }
+
+    /// The first cell under @p headerLabel on the row that contains @p rowNeedle.
+    ftxui::Pixel const& pixelUnder(RenderedElement const& rendered,
+                                   std::string_view const headerLabel,
+                                   std::string_view const rowNeedle)
+    {
+      auto const header = lineContaining(rendered.text, "Title");
+      auto const rowLine = lineIndexContaining(rendered.text, rowNeedle);
+
+      REQUIRE(rowLine >= 0);
+      return rendered.screen.PixelAt(cellPosition(header, headerLabel), rowLine);
+    }
+
+    /// The cell holding the last character of a right-aligned value under
+    /// @p headerLabel on the row that contains @p rowNeedle.
+    ftxui::Pixel const& pixelAtEndOf(RenderedElement const& rendered,
+                                     std::string_view const headerLabel,
+                                     std::string_view const rowNeedle)
+    {
+      auto const header = lineContaining(rendered.text, "Title");
+      auto const rowLine = lineIndexContaining(rendered.text, rowNeedle);
+      auto const endColumn = cellPosition(header, headerLabel) + ftxui::string_width(std::string{headerLabel}) - 1;
+
+      REQUIRE(rowLine >= 0);
+      return rendered.screen.PixelAt(endColumn, rowLine);
     }
 
     std::vector<TrackListEntry> manyTracks(std::size_t const count)
@@ -255,8 +298,8 @@ namespace ao::tui::test
           cellPosition(header, "Duration") + ftxui::string_width("Duration"));
     CHECK(cellPosition(second, "2:05") + ftxui::string_width("2:05") ==
           cellPosition(header, "Duration") + ftxui::string_width("Duration"));
-    CHECK(cellPosition(first, "|") == cellPosition(header, "|"));
-    CHECK(cellPosition(second, "|") == cellPosition(header, "|"));
+    CHECK(cellPosition(first, "│") == cellPosition(header, "│"));
+    CHECK(cellPosition(second, "│") == cellPosition(header, "│"));
   }
 
   TEST_CASE("TrackTable - wide glyph titles do not shift metadata columns", "[tui][unit][track-table]")
@@ -524,8 +567,8 @@ namespace ao::tui::test
     CHECK(wideHandles[0].box.x_max == narrowHandles[0].box.x_max);
     CHECK(narrowHandles[1].box.x_max - narrowHandles[1].box.x_min + 1 == 30);
     CHECK(wideHandles[1].box.x_max - wideHandles[1].box.x_min + 1 == 40);
-    CHECK(narrowHandles[2].box.x_max - narrowHandles[2].box.x_min + 1 == 48);
-    CHECK(wideHandles[2].box.x_max - wideHandles[2].box.x_min + 1 == 58);
+    CHECK(narrowHandles[2].box.x_max - narrowHandles[2].box.x_min + 1 == 47);
+    CHECK(wideHandles[2].box.x_max - wideHandles[2].box.x_min + 1 == 57);
     CHECK(wideHandles[2].box.x_min == narrowHandles[2].box.x_min + 10);
   }
 
@@ -566,13 +609,13 @@ namespace ao::tui::test
 
     REQUIRE_FALSE(rendered.text.empty());
     REQUIRE(handles.size() == 2);
-    auto const header = lineContaining(rendered.text, "Title");
-    REQUIRE(static_cast<std::size_t>(handles[0].box.x_max + 1) < header.size());
     CHECK(handles[0].field == rt::TrackField::Title);
     CHECK(handles[0].columns > 0);
     CHECK(handles[0].box.x_min < handles[0].box.x_max);
     CHECK(handles[0].box.y_min == handles[0].box.y_max);
-    CHECK(header[static_cast<std::size_t>(handles[0].box.x_max + 1)] == '|');
+    // The handle ends at its cell; the visible rule follows its one-cell gutter.
+    CHECK(rendered.screen.PixelAt(handles[0].box.x_max + 1, handles[0].box.y_min).character == " ");
+    CHECK(rendered.screen.PixelAt(handles[0].box.x_max + 2, handles[0].box.y_min).character == "│");
   }
 
   TEST_CASE("TrackTable - selected row style fills the table width", "[tui][unit][track-table]")
@@ -646,7 +689,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.screen.PixelAt(2, plainRow).inverted);
   }
 
-  TEST_CASE("TrackTable - the playing caret drops its accent on the focused row", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - the focused surface overrides the playing caret accent", "[tui][unit][track-table]")
   {
     auto const tracks = std::vector{
       trackEntry(TrackId{1}, "Alpha", "Artist One", "Album One", 7, std::chrono::seconds{65}),
@@ -685,8 +728,8 @@ namespace ao::tui::test
     REQUIRE(row >= 0);
     CHECK(rendered.screen.PixelAt(0, row).character == ">");
 
-    // All three states land on the same cell: the caret drops its own accent to
-    // the interactive pair, and the mark reverses that pair rather than adding a
+    // All three states land on the same cell: the interactive pair overrides
+    // the caret's own accent, and the mark reverses that pair rather than adding a
     // third color.
     checkInteractiveSurface(rendered.screen.PixelAt(0, row));
     CHECK(rendered.screen.PixelAt(0, row).inverted);
@@ -716,29 +759,154 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.text.contains("Track 00"));
   }
 
-  TEST_CASE("TrackTable - empty field fallbacks are visible", "[tui][unit][track-table]")
+  TEST_CASE("TrackTable - missing field values render one dim dash per column", "[tui][unit][track-table]")
   {
     auto const presentation = rt::TrackPresentationSpec{
       .id = "fallbacks",
       .visibleFields = {
         rt::TrackField::DisplayTrackNumber, rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration}};
     auto const tracks = std::vector{makeTrackListEntry(rt::TrackRow{.id = TrackId{9}})};
+    auto const markedIds = std::unordered_set{TrackId{9}};
 
-    auto const text = renderText(trackTableView(tracks, -1, kInvalidTrackId, presentation));
-    auto const header = lineContaining(text, "Title");
-    auto const row = lineContaining(text, "Track 9");
+    // One contract across projected widths: every missing value is a single
+    // dash inside its column, dimmed, next to an undimmed title fallback.
+    // Right-aligned columns end the dash on the header text's last cell.
+    auto const checkDashes = [](RenderedElement const& rendered)
+    {
+      auto const row = lineContaining(rendered.text, "Track 9");
 
-    REQUIRE_FALSE(header.empty());
-    REQUIRE_FALSE(row.empty());
+      REQUIRE_FALSE(row.empty());
+      CHECK_FALSE(rendered.text.contains("--"));
 
-    auto const trackNumberColumn = header.find("Track #");
-    auto const artistColumn = header.find("Artist");
-    REQUIRE(trackNumberColumn != std::string::npos);
-    REQUIRE(artistColumn != std::string::npos);
+      for (auto const* const dash : {&pixelUnder(rendered, "Artist", "Track 9"),
+                                     &pixelAtEndOf(rendered, "Track #", "Track 9"),
+                                     &pixelAtEndOf(rendered, "Duration", "Track 9")})
+      {
+        CHECK(dash->character == "-");
+        CHECK(dash->dim);
+      }
 
-    CHECK(row.find("--") == trackNumberColumn + std::string_view{"Track #"}.size() - std::string_view{"--"}.size());
-    CHECK(row.at(artistColumn) == '-');
-    CHECK(row.contains("--:--"));
+      CHECK_FALSE(
+        rendered.screen.PixelAt(cellPosition(row, "Track 9"), lineIndexContaining(rendered.text, "Track 9")).dim);
+    };
+
+    SECTION("a plain row keeps the default surface")
+    {
+      for (auto const columns : kPlaceholderTableWidths)
+      {
+        auto const rendered = renderTableAt(tracks, presentation, -1, columns);
+
+        checkDashes(rendered);
+        checkDefaultSurface(pixelUnder(rendered, "Artist", "Track 9"));
+      }
+    }
+
+    SECTION("a focused selected row composes the dash with the interactive surface")
+    {
+      for (auto const columns : kPlaceholderTableWidths)
+      {
+        auto const rendered = renderTableAt(tracks, presentation, 0, columns);
+
+        checkDashes(rendered);
+        checkInteractiveSurface(pixelUnder(rendered, "Artist", "Track 9"));
+      }
+    }
+
+    SECTION("a marked row keeps the dash dim under the mark surface")
+    {
+      for (auto const columns : kPlaceholderTableWidths)
+      {
+        auto const rendered = renderTableAt(tracks, presentation, -1, columns, {.markedTrackIds = &markedIds});
+
+        checkDashes(rendered);
+        checkMarkedSurface(pixelUnder(rendered, "Artist", "Track 9"));
+      }
+    }
+
+    SECTION("a marked focused row stacks both surfaces over the dash")
+    {
+      for (auto const columns : kPlaceholderTableWidths)
+      {
+        auto const rendered = renderTableAt(tracks, presentation, 0, columns, {.markedTrackIds = &markedIds});
+        auto const& dash = pixelUnder(rendered, "Artist", "Track 9");
+
+        checkDashes(rendered);
+        checkInteractiveSurface(dash);
+        CHECK(dash.inverted);
+      }
+    }
+  }
+
+  TEST_CASE("TrackTable - a literal dash value keeps full emphasis and column alignment", "[tui][unit][track-table]")
+  {
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "literal-dash",
+      .visibleFields = {
+        rt::TrackField::DisplayTrackNumber, rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration}};
+    auto const tracks = std::vector{
+      makeTrackListEntry(rt::TrackRow{.id = TrackId{1},
+                                      .title = "Named",
+                                      .artist = "-",
+                                      .duration = std::chrono::seconds{65},
+                                      .discNumber = 1,
+                                      .discTotal = 2,
+                                      .trackNumber = 2}),
+      makeTrackListEntry(rt::TrackRow{.id = TrackId{2}, .title = "Blank"}),
+    };
+    auto const markedIds = std::unordered_set{TrackId{1}};
+
+    // A literal dash, or a disc-track number containing one, is data in the
+    // same cell as the missing-value placeholder: same column, no dim, and
+    // real durations still align with the missing-duration dash.
+    auto const check = [](RenderedElement const& rendered)
+    {
+      auto const& namedDash = pixelUnder(rendered, "Artist", "Named");
+      auto const& blankDash = pixelUnder(rendered, "Artist", "Blank");
+
+      CHECK(namedDash.character == "-");
+      CHECK_FALSE(namedDash.dim);
+      CHECK(blankDash.character == "-");
+      CHECK(blankDash.dim);
+
+      CHECK(pixelAtEndOf(rendered, "Track #", "Named").character == "2");
+      CHECK_FALSE(pixelAtEndOf(rendered, "Track #", "Named").dim);
+      CHECK(pixelAtEndOf(rendered, "Duration", "Named").character == "5");
+      CHECK(pixelAtEndOf(rendered, "Duration", "Blank").character == "-");
+      CHECK(pixelAtEndOf(rendered, "Duration", "Blank").dim);
+    };
+
+    SECTION("unselected rows keep the default surface")
+    {
+      for (auto const columns : kPlaceholderTableWidths)
+      {
+        auto const rendered = renderTableAt(tracks, presentation, -1, columns);
+
+        check(rendered);
+        checkDefaultSurface(pixelUnder(rendered, "Artist", "Named"));
+      }
+    }
+
+    SECTION("the literal dash stays undimmed on its own focused selected row")
+    {
+      for (auto const columns : kPlaceholderTableWidths)
+      {
+        auto const rendered = renderTableAt(tracks, presentation, 0, columns);
+
+        check(rendered);
+        checkInteractiveSurface(pixelUnder(rendered, "Artist", "Named"));
+      }
+    }
+
+    SECTION("the literal dash stays undimmed on a marked row")
+    {
+      for (auto const columns : kPlaceholderTableWidths)
+      {
+        auto const rendered = renderTableAt(tracks, presentation, -1, columns, {.markedTrackIds = &markedIds});
+
+        check(rendered);
+        checkMarkedSurface(pixelUnder(rendered, "Artist", "Named"));
+      }
+    }
   }
 
   TEST_CASE("TrackTable - title column expands on wide terminals", "[tui][unit][track-table]")

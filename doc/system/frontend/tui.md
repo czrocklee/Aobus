@@ -297,10 +297,12 @@ Metadata, audio properties, and tags share a two-column key/value layout. Labels
 Field labels are capped at twelve cells before measurement; the label column includes a two-cell gap and takes at most forty percent of the body, leaving at least twelve cells for values at the `80x24` target. Values wrap within their cell budget and continuation lines align with the value column, preferring whitespace and preserving complete display clusters. A terminal too narrow to hold even one cluster uses an ellipsis instead of emitting a partial cluster.
 Artwork stays fixed above the independently scrolling text. It is shown only when the available pane height can reserve the twelve artwork rows, three chrome/separation rows, and ten metadata rows; the decision does not depend on the current track. Scrolling clamps at the last page, and selecting a different track resets it to the top.
 The workspace lower frame edge carries list/view identity on the left and selection/count state on the right.
-Selected rows and hovered controls use one centralized yellow/black/bold interactive style.
+Track-table columns are divided by dim box-drawing rules with a one-cell gutter on each side, so the rules join into continuous vertical lines. A value wider than its column ends in an ellipsis rather than being cut silently. Section headers end in a dim rule across the remaining table width.
+Every missing track-table field renders one dim `-` at the column's alignment; absence is carried separately from text, so a value that legitimately reads `-` keeps full emphasis.
+Popovers title their frame with the overlay name and put context, such as the active view or the selected output device, in the frame's right title part. Picker rows lead with their name and dim any description.
+Selected rows and hovered controls use one centralized yellow/black/bold interactive style. The surface paints after its content, so a cell that carries its own accent, such as the now-playing caret or the active List, yields to the interactive pair instead of rendering an unreadable one.
 Marked track rows use a reverse-video mark surface; it pins no palette slot, so it reverses whichever pair the row already resolved.
 An unfocused marked row therefore reverses the terminal's own colors and a focused marked row reverses the interactive pair, which reports mark state in both focus states without a dedicated cell.
-The now-playing caret keeps its accent only on unfocused rows, because a cell that holds its own foreground over the interactive surface renders an unreadable pair.
 
 The playback Soul animation consumes shared UIModel aura/color/timing policy while terminal code chooses braille geometry.
 Its partial arc travels clockwise like the GTK and brand Soul, with its ends positioned by distance along the braille ring.

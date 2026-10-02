@@ -7,12 +7,15 @@
 #include "TextCell.h"
 
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
+#include <ftxui/screen/screen.hpp>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -120,10 +123,52 @@ namespace ao::tui::style
       });
     }
 
+    // FTXUI paints a color decorator before its children, so an inner color
+    // wins over an outer one. The interactive surface paints after its
+    // content instead: a selected or hovered cell that carries its own
+    // accent still renders the one readable pair rather than, say, cyan on
+    // yellow. Attributes such as dim and inversion stay with the content.
+    class InteractiveSurfaceNode final : public ftxui::Node
+    {
+    public:
+      explicit InteractiveSurfaceNode(ftxui::Element elementPtr)
+        : Node{{std::move(elementPtr)}}
+      {
+      }
+
+      void ComputeRequirement() override
+      {
+        Node::ComputeRequirement();
+        requirement_ = children_.front()->requirement();
+      }
+
+      void SetBox(ftxui::Box box) override
+      {
+        Node::SetBox(box);
+        children_.front()->SetBox(box);
+      }
+
+      void Render(ftxui::Screen& screen) override
+      {
+        Node::Render(screen);
+        auto const area = ftxui::Box::Intersection(box_, screen.stencil);
+
+        for (auto row = area.y_min; row <= area.y_max; ++row)
+        {
+          for (auto column = area.x_min; column <= area.x_max; ++column)
+          {
+            auto& pixel = screen.PixelAt(column, row);
+            pixel.foreground_color = ftxui::Color::Black;
+            pixel.background_color = ftxui::Color::Yellow;
+            pixel.bold = true;
+          }
+        }
+      }
+    };
+
     ftxui::Element warmInteractiveSurface(ftxui::Element elementPtr)
     {
-      return std::move(elementPtr) | ftxui::color(ftxui::Color::Black) | ftxui::bgcolor(ftxui::Color::Yellow) |
-             ftxui::bold;
+      return std::make_shared<InteractiveSurfaceNode>(std::move(elementPtr));
     }
   } // namespace
 

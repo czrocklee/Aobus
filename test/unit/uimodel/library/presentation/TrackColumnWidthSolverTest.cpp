@@ -6,6 +6,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
@@ -239,10 +240,11 @@ namespace ao::uimodel::test
             "[uimodel][unit][presentation]")
   {
     // A coarse viewport that does not divide evenly across the weights exposes the
-    // limit of weight-based round-tripping: re-deriving weights from solved widths
-    // and re-solving does not reproduce the widths exactly. The contract the frontends
-    // rely on is weaker but still stable: the total is preserved on every pass, drift
-    // stays within one unit per column, and a second round-trip reaches a fixed point.
+    // limit of weight-based round-tripping: canonical weights are rounded, so
+    // re-deriving them from solved widths is not guaranteed to reproduce every
+    // width. The contract the frontends rely on is weaker but still stable: the
+    // total is preserved on every pass, drift stays within one unit per column,
+    // and a second round-trip reaches a fixed point.
     constexpr std::int32_t kViewport = 7;
     auto const specs = std::vector{
       flexible(rt::TrackField::Title, 1.0, 100, 1),
@@ -267,6 +269,33 @@ namespace ao::uimodel::test
     auto const thirdSpecs = specsFromWidths(secondSpecs, secondWidths);
     auto const thirdWidths = solveTrackColumnWidths(thirdSpecs, kViewport);
     CHECK(thirdWidths == secondWidths);
+  }
+
+  TEST_CASE("TrackColumnWidthSolver - a committed flexible resize reprojects to the requested width",
+            "[uimodel][unit][presentation]")
+  {
+    // A resize is persisted as weights and solved again on the next frame.
+    // Leftover units must follow the fractional parts, not column order, or
+    // a column whose share is whole picks up a unit it was never given.
+    auto const specs = std::vector{
+      fixed(rt::TrackField::Duration, 8, 8),
+      flexible(rt::TrackField::Title, 3.0, 24, 8),
+      flexible(rt::TrackField::Artist, 1.0, 14, 8),
+      flexible(rt::TrackField::Album, 1.0, 18, 8),
+    };
+
+    for (std::int32_t viewport = 40; viewport <= 240; ++viewport)
+    {
+      for (std::int32_t target = 8; target <= viewport - 8 - 16; ++target)
+      {
+        auto const widths =
+          solveTrackColumnWidths(resizeTrackColumnSpecs(specs, rt::TrackField::Title, target, viewport), viewport);
+
+        REQUIRE(widths.size() == 4);
+        CAPTURE(viewport, target, widths);
+        REQUIRE(widths[1] == target);
+      }
+    }
   }
 
   TEST_CASE("TrackColumnWidthSolver - resizes a flexible column by absorbing width on the right",
@@ -305,6 +334,52 @@ namespace ao::uimodel::test
     CHECK(widths[1] == 300);
     CHECK(widths[2] == 180);
     CHECK(totalWidth(widths) == 600);
+  }
+
+  TEST_CASE("TrackColumnWidthSolver - growing a column takes width from right donors that still have capacity",
+            "[uimodel][unit][presentation]")
+  {
+    // A one-unit reduction must skip the higher-weight donor already at its
+    // minimum, rather than abandon the resize or spend width on the left.
+    constexpr std::int32_t kTargetWidth = 96;
+    auto specs = std::vector<TrackColumnSolveSpec>{};
+    std::int32_t viewportWidth = 0;
+    auto startWidths = std::vector<std::int32_t>{};
+    auto expectedWidths = std::vector<std::int32_t>{};
+
+    SECTION("No left donor keeps the unit with the right donor that has capacity")
+    {
+      specs = std::vector{
+        flexible(rt::TrackField::Title, 1.0, 100, 20),
+        flexible(rt::TrackField::Artist, 1.0, 100, 20),
+        flexible(rt::TrackField::Album, 2.0, 100, 210),
+      };
+      viewportWidth = 400;
+      startWidths = {95, 95, 210};
+      expectedWidths = {96, 94, 210};
+    }
+
+    SECTION("An available left donor stays untouched while a right donor can shrink")
+    {
+      specs = std::vector{
+        flexible(rt::TrackField::Genre, 1.0, 100, 20),
+        flexible(rt::TrackField::Title, 1.0, 100, 20),
+        flexible(rt::TrackField::Artist, 1.0, 100, 20),
+        flexible(rt::TrackField::Album, 2.0, 100, 210),
+      };
+      viewportWidth = 495;
+      startWidths = {95, 95, 95, 210};
+      expectedWidths = {95, 96, 94, 210};
+    }
+
+    CHECK(solveTrackColumnWidths(specs, viewportWidth) == startWidths);
+
+    auto const widths = solveTrackColumnWidths(
+      resizeTrackColumnSpecs(specs, rt::TrackField::Title, kTargetWidth, viewportWidth), viewportWidth);
+
+    REQUIRE(widths.size() == expectedWidths.size());
+    CHECK(widths == expectedWidths);
+    CHECK(totalWidth(widths) == viewportWidth);
   }
 
   TEST_CASE("TrackColumnWidthSolver - lets fixed resizing create overflow instead of rebounding",

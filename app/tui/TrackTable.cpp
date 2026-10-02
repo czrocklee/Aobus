@@ -52,20 +52,17 @@ namespace ao::tui
       bool rightAligned = false;
     };
 
-    std::string blankFallback(std::string_view value)
-    {
-      return value.empty() ? std::string{"-"} : std::string{value};
-    }
-
     ftxui::Element fixedCell(std::string value, std::int32_t const width, bool const rightAligned = false)
     {
       return ftxui::text(fitCellText(value, width, rightAligned ? CellAlignment::Right : CellAlignment::Left)) |
              ftxui::size(ftxui::WIDTH, ftxui::EQUAL, width);
     }
 
-    ftxui::Element fieldCell(std::string value, TrackColumn const& column)
+    // A value wider than its column says so with an ellipsis instead of being
+    // cut silently, which would read as a different, shorter value.
+    ftxui::Element fieldCell(std::string_view const value, TrackColumn const& column)
     {
-      return fixedCell(std::move(value), column.width, column.rightAligned);
+      return fixedCell(ellipsizeToCellWidth(value, column.width), column.width, column.rightAligned);
     }
 
     ftxui::Element columnSeparator(std::size_t const index)
@@ -141,23 +138,28 @@ namespace ao::tui
       return rt::TrackFieldRawValue{};
     }
 
-    std::string formatFieldDisplayText(i18n::MessageCatalog const& textCatalog,
-                                       rt::TrackField const field,
-                                       rt::TrackRow const& row)
+    // Cell text plus whether the underlying value is missing. Every field
+    // formatter renders a missing value as empty text, so only the shared dash
+    // placeholder is dimmed; a value that legitimately reads "-" keeps its own
+    // text and full emphasis.
+    struct FieldDisplayText final
+    {
+      std::string text{};
+      bool missing = false;
+    };
+
+    FieldDisplayText formatFieldDisplayText(i18n::MessageCatalog const& textCatalog,
+                                            rt::TrackField const field,
+                                            rt::TrackRow const& row)
     {
       auto value = uimodel::formatTrackFieldRawValue(textCatalog, field, rawValueForField(textCatalog, field, row));
 
-      if (field == rt::TrackField::Duration && value.empty())
+      if (value.empty())
       {
-        return "--:--";
+        return FieldDisplayText{.text = std::string{kMissingTrackFieldPlaceholder}, .missing = true};
       }
 
-      if (field == rt::TrackField::DisplayTrackNumber && value.empty())
-      {
-        return "--";
-      }
-
-      return blankFallback(value);
+      return FieldDisplayText{.text = std::move(value)};
     }
 
     std::vector<TrackColumn> columnsForLayout(i18n::MessageCatalog const& textCatalog,
@@ -229,8 +231,7 @@ namespace ao::tui
     ftxui::Element trackRow(i18n::MessageCatalog const& textCatalog,
                             TrackListEntry const& track,
                             TrackId const playingTrackId,
-                            std::vector<TrackColumn> const& columns,
-                            bool const focused)
+                            std::vector<TrackColumn> const& columns)
     {
       using namespace ftxui;
 
@@ -241,14 +242,7 @@ namespace ao::tui
 
       if (playing)
       {
-        playingMarkerPtr = std::move(playingMarkerPtr) | bold;
-
-        // The focused row is painted with the interactive surface afterwards, and a
-        // cell that keeps its own foreground would render the caret green on yellow.
-        if (!focused)
-        {
-          playingMarkerPtr = std::move(playingMarkerPtr) | style::success();
-        }
+        playingMarkerPtr = std::move(playingMarkerPtr) | bold | style::success();
       }
 
       cells.push_back(std::move(playingMarkerPtr));
@@ -257,7 +251,17 @@ namespace ao::tui
       {
         auto const& column = columns[index];
         cells.push_back(columnSeparator(index));
-        cells.push_back(fieldCell(formatFieldDisplayText(textCatalog, column.field, track.row), column));
+        auto const display = formatFieldDisplayText(textCatalog, column.field, track.row);
+        auto cellPtr = fieldCell(display.text, column);
+
+        // Only a missing value is dimmed; fitCellText already placed the dash
+        // inside the column, so alignment is unchanged.
+        if (display.missing)
+        {
+          cellPtr = std::move(cellPtr) | ftxui::dim;
+        }
+
+        cells.push_back(std::move(cellPtr));
       }
 
       if (!columns.empty())
@@ -284,10 +288,9 @@ namespace ao::tui
                                        TrackId const playingTrackId,
                                        std::vector<TrackColumn> const& columns,
                                        TrackTableViewOptions const& options,
-                                       std::int32_t const rowIndex,
-                                       bool const focused)
+                                       std::int32_t const rowIndex)
     {
-      auto rowPtr = trackRow(textCatalog, track, playingTrackId, columns, focused);
+      auto rowPtr = trackRow(textCatalog, track, playingTrackId, columns);
 
       if (options.markedTrackIds != nullptr && options.markedTrackIds->contains(track.id))
       {
@@ -349,7 +352,10 @@ namespace ao::tui
         text("─ ") | dim,
         text(primary) | style::accent() | bold,
         text(detail.empty() ? std::string{} : " · " + detail) | dim,
-        filler(),
+        // The trailing rule closes the header row so each group reads as a
+        // divider across the table rather than a line of loose text.
+        text(" "),
+        separatorLight() | dim | xflex,
       });
     }
 
@@ -607,8 +613,7 @@ namespace ao::tui
                                             playingTrackId,
                                             columns,
                                             options,
-                                            static_cast<std::int32_t>(ref.trackIndex),
-                                            std::cmp_equal(ref.trackIndex, selected));
+                                            static_cast<std::int32_t>(ref.trackIndex));
 
           rows.push_back(std::move(rowPtr));
         }

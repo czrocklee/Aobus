@@ -21,6 +21,7 @@
 #include <ftxui/dom/elements.hpp>
 
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 namespace ao::tui::test
@@ -49,7 +50,10 @@ namespace ao::tui::test
     auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
 
     auto const text = renderText(englishQualityPanel(state), 96);
+    auto const titleLine = std::string_view{text}.substr(0, text.find('\n'));
 
+    // Titled like every other popover even before a device is selected.
+    CHECK(titleLine.contains("─ Pipeline "));
     CHECK_FALSE(text.contains("Quality"));
     CHECK_FALSE(text.contains("Audio Pipeline"));
     CHECK(text.contains("No audio pipeline yet"));
@@ -114,8 +118,10 @@ namespace ao::tui::test
       };
 
     auto const text = renderText(englishQualityPanel(state), 96);
+    auto const titleLine = std::string_view{text}.substr(0, text.find('\n'));
 
-    CHECK(text.contains("Studio DAC"));
+    // The device is the popover's context, not its title.
+    CHECK(titleLine.contains("─ Pipeline ─ Studio DAC "));
     CHECK_FALSE(text.contains("Quality"));
     CHECK(text.contains("[Source] FLAC"));
     CHECK(text.contains("44.1 kHz"));

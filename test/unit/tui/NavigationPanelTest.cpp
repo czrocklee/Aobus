@@ -242,6 +242,32 @@ namespace ao::tui::test
     CHECK(regions.rows.front().row.y_min == 1);
   }
 
+  TEST_CASE("NavigationPanel - the focused active List row keeps the interactive pair", "[tui][unit][navigation]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto model = ListNavigationModel{};
+    auto const lists =
+      std::vector<rt::ListNode>{{.id = ListId{1}, .name = "Favorite"}, {.id = ListId{2}, .name = "Other"}};
+    model.setTree(uimodel::buildListTreeProjection(catalog, lists), ListId{1});
+    REQUIRE(model.trySelect(ListId{1}));
+
+    auto const render = [&](bool const focused)
+    { return renderElement(navigationPanel(catalog, model, ListId{1}, {.columns = 26, .focused = focused}), 26, 8); };
+
+    // The active List's accent would otherwise survive the selection surface
+    // and render cyan on yellow.
+    auto const focused = render(true);
+    auto const optFocusedLabel = findTextCells(focused.screen, "Favorite");
+    REQUIRE(optFocusedLabel);
+    checkInteractiveSurface(focused.screen.PixelAt(optFocusedLabel->x_min, optFocusedLabel->y_min));
+
+    auto const unfocused = render(false);
+    auto const optUnfocusedLabel = findTextCells(unfocused.screen, "Favorite");
+    REQUIRE(optUnfocusedLabel);
+    CHECK(unfocused.screen.PixelAt(optUnfocusedLabel->x_min, optUnfocusedLabel->y_min).foreground_color ==
+          ftxui::Color::Cyan);
+  }
+
   TEST_CASE("NavigationPanel - long expressions wrap into two dim rows with explicit truncation",
             "[tui][unit][navigation]")
   {

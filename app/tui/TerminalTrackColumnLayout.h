@@ -19,7 +19,10 @@ namespace ao::tui
   inline constexpr std::int32_t kMaximumTrackColumnWidthColumns = 160;
   inline constexpr std::int32_t kTrackTablePlayingColumns = 2;
   inline constexpr std::string_view kTrackTableLeadingColumnSeparator = "  ";
-  inline constexpr std::string_view kTrackTableInterColumnSeparator = "| ";
+  /// A one-cell gutter on each side of the rule keeps a right-aligned value as
+  /// far from it as a left-aligned value starts after it.
+  inline constexpr std::string_view kTrackTableInterColumnSeparator = " │ ";
+  inline constexpr std::size_t kTrackTableInterColumnSeparatorColumns = 3;
   inline constexpr std::string_view kTrackTableTrailingColumnSeparator = " ";
   inline constexpr std::int32_t kTrackTableScrollIndicatorColumns = 1;
 
@@ -27,7 +30,7 @@ namespace ao::tui
   {
     auto const leadingColumns = columnCount == 0 ? 0 : kTrackTableLeadingColumnSeparator.size();
     auto const interColumnSeparators = columnCount == 0 ? 0 : columnCount - 1;
-    auto const interColumnSeparatorColumns = interColumnSeparators * kTrackTableInterColumnSeparator.size();
+    auto const interColumnSeparatorColumns = interColumnSeparators * kTrackTableInterColumnSeparatorColumns;
     auto const trailingColumns = columnCount == 0 ? 0 : kTrackTableTrailingColumnSeparator.size();
 
     return kTrackTablePlayingColumns +

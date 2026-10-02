@@ -12,14 +12,22 @@ otherwise. Repository hooks remain authoritative. Read
 ## History and authorization
 
 Use commits as coherent review/revert units. Amend follow-ups that complete the
-same intent when unpublished or when rewriting is authorized; otherwise use an
-additive commit. Separate independently useful changes. Preserve the user's chosen
-history shape across turns. Do not squash merely to reduce commit count.
+same intent, including review fixes, into the owning commit when unpublished or
+covered by the authorization below; otherwise use an additive commit. Separate
+independently useful changes. Preserve the user's chosen history shape across
+turns. Do not squash merely to reduce commit count.
+
+For an agent-managed topic branch or PR, user authorization to commit and publish
+that work includes standing authorization to amend your own published commits for
+same-intent follow-ups.
+Do not request separate rewrite approval for each such iteration.
+This does not authorize folding independently useful changes, rewriting another
+contributor's commits, or discarding unexpected remote work.
 
 Before rewriting published history, establish the intended range and observed
-remote tip. Rewriting requires explicit authorization; an existing request to
-amend or squash supplies it. Never rewrite the default branch. Push with an
-OID-bound lease:
+remote tip. Rewrites outside that standing authorization require explicit approval;
+an existing request to amend or squash supplies it. Never rewrite the default
+branch. Push with an OID-bound lease:
 
 ```bash
 git push --force-with-lease=<remote-ref>:<observed-remote-oid> <remote> <local-ref>:<remote-ref>

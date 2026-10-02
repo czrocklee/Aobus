@@ -102,8 +102,10 @@ namespace ao::tui
                                    std::int32_t const terminalColumns)
   {
     auto const deviceName = selectedDeviceName(state);
+    auto const titleColumns = cellWidth(overlayLabel(textCatalog, Overlay::QualityPanel)) +
+                              (deviceName.empty() ? 0 : cellWidth(" ─ ") + cellWidth(deviceName));
     auto contentColumns =
-      std::max(cellWidth(deviceName), cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel)));
+      std::max(titleColumns, cellWidth(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel)));
 
     if (state.quality.assessments.empty())
     {
@@ -194,6 +196,10 @@ namespace ao::tui
     rows.push_back(separator());
     rows.push_back(style::panelFooterHint(overlayHint(textCatalog, keymapPlan, Overlay::QualityPanel)));
 
-    return style::popupPanel(deviceName, vbox(std::move(rows))) | size(WIDTH, EQUAL, columns);
+    // Titled like every other popover, with the device as its context.
+    return style::popupPanel(overlayLabel(textCatalog, Overlay::QualityPanel),
+                             vbox(std::move(rows)),
+                             style::PanelOptions{.rightTitle = deviceName}) |
+           size(WIDTH, EQUAL, columns);
   }
 } // namespace ao::tui
