@@ -112,6 +112,9 @@ The shared width solver uses the current viewport, and a single horizontal
 surface keeps headers and rows aligned when minimum widths overflow.
 Viewport, column, and projection refreshes restore the selected rows and the prior top-visible track after replacing the native item source; an explicit reveal request takes precedence over that scroll anchor.
 Presentation grouping inserts non-playable group headers through a display-index adapter while retaining projection row indices as the playback authority.
+Group headers are not selectable tracks. A header-only native selection keeps the
+Runtime-selected tracks; mixed selection and Select All retain only valid tracks,
+while a genuine clear still empties the selection.
 The presentation menu resolves built-in and restored custom presets through the shared catalog and picker policy.
 It saves a per-List preference only after the complete selected specification is accepted by Runtime.
 A column-header sort creates a temporary presentation labeled with localized
