@@ -247,6 +247,10 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             probe_source = source_root / "test" / "helper" / "WinUiLocalizationProbe.cpp"
             soul_project = build_dir / "app" / "windows-winui" / "ao_winui_soul_probe.vcxproj"
             soul_source = source_root / "test" / "integration" / "windows" / "WinUiSoulProbe.cpp"
+            item_project = build_dir / "app" / "windows-winui" / "ao_winui_track_item_probe.vcxproj"
+            item_source = source_root / "test" / "helper" / "WinUiTrackItemProbe.cpp"
+            table_project = build_dir / "app" / "windows-winui" / "ao_winui_track_table_probe.vcxproj"
+            table_source = source_root / "test" / "integration" / "windows" / "WinUiTrackTableProbe.cpp"
             for path in (
                 msbuild,
                 main_project,
@@ -256,6 +260,10 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                 main_source,
                 probe_source,
                 soul_source,
+                item_project,
+                item_source,
+                table_project,
+                table_source,
             ):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
@@ -264,14 +272,14 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            def payload(source: Path) -> mock.Mock:
+            def payload(source: Path, identity: str = "/c /DWINUI") -> mock.Mock:
                 contents = {
                     "TargetResults": {
                         "GetCompileCommands": {
                             "Result": "Success",
                             "Items": [
                                 {
-                                    "Identity": "/c /DWINUI",
+                                    "Identity": identity,
                                     "WorkingDirectory": str(source_root),
                                     "Files": str(source),
                                 }
@@ -286,20 +294,34 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                     with mock.patch.object(
                         winuitidy.subprocess,
                         "run",
-                        side_effect=(payload(main_source), payload(probe_source), payload(soul_source)),
+                        side_effect=(
+                            payload(main_source),
+                            payload(probe_source),
+                            payload(soul_source),
+                            payload(item_source, "/c /DTRACK_ITEM /Iitem-headers"),
+                            payload(table_source, "/c /DTRACK_TABLE /Itable-headers"),
+                        ),
                     ) as run:
                         commands = winuitidy.compile_commands(
                             build_dir,
                             clang_cl,
-                            required_translation_units=(probe_source, soul_source),
+                            required_translation_units=(probe_source, soul_source, item_source, table_source),
                         )
                     requires_context = [
-                        winuitidy.requires_winui_compile_context(path) for path in (probe_source, soul_source)
+                        winuitidy.requires_winui_compile_context(path)
+                        for path in (probe_source, soul_source, item_source, table_source)
                     ]
 
-            self.assertEqual([Path(entry["file"]) for entry in commands], [main_source, probe_source, soul_source])
-            self.assertEqual(run.call_count, 3)
+            self.assertEqual(
+                [Path(entry["file"]) for entry in commands],
+                [main_source, probe_source, soul_source, item_source, table_source],
+            )
+            self.assertEqual(run.call_count, 5)
             self.assertIn(str(main_project), run.call_args_list[0].args[0])
             self.assertIn(str(probe_project), run.call_args_list[1].args[0])
             self.assertIn(str(soul_project), run.call_args_list[2].args[0])
-            self.assertEqual(requires_context, [True, True])
+            self.assertIn(str(item_project), run.call_args_list[3].args[0])
+            self.assertIn(str(table_project), run.call_args_list[4].args[0])
+            self.assertIn("/DTRACK_ITEM /Iitem-headers", commands[3]["command"])
+            self.assertIn("/DTRACK_TABLE /Itable-headers", commands[4]["command"])
+            self.assertEqual(requires_context, [True, True, True, True])
