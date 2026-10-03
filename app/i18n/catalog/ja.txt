@@ -765,6 +765,7 @@ ja:table {
     winui_theme_file_not_found { "テーマファイルが見つかりません: {path}" }
     winui_theme_load_failed { "Windows テーマの読み込みに失敗しました: {detail}" }
     winui_startup_failure { "Aobus を起動できませんでした:\n\n{detail}" }
+    winui_column_sort_presentation { "列で並べ替え" }
     track_multiple_values { "<複数の値>" }
     track_metadata_heading { "メタデータ" }
     track_audio_properties_heading { "オーディオ情報" }

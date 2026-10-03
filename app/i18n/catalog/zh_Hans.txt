@@ -766,6 +766,7 @@ zh_Hans:table {
     winui_theme_file_not_found { "未找到主题文件：{path}" }
     winui_theme_load_failed { "加载 Windows 主题失败：{detail}" }
     winui_startup_failure { "Aobus 无法启动：\n\n{detail}" }
+    winui_column_sort_presentation { "列排序" }
     track_multiple_values { "<多个值>" }
     track_metadata_heading { "元数据" }
     track_audio_properties_heading { "音频属性" }
