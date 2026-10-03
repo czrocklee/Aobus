@@ -47,6 +47,9 @@ Responsive state is derived from the current client width.
 Below 720 effective pixels navigation uses the minimal overlay presentation and the inspector is available as an explicit overlay.
 From 720 through 1119 navigation uses the compact presentation and the inspector remains an explicit overlay.
 At 1120 or wider navigation is expanded and the inspector is inline.
+In Modern's minimal presentation, the workspace toolbar remains below the native
+Back and pane-toggle controls. NavigationView owns that chrome clearance; the
+compact and expanded presentations return the reserved band to the workspace.
 Below the wide tier the browser summary yields its space to the filter. At the
 narrow tier the Now Playing artwork and text yield their space to transport,
 time, volume, and overflow commands.
