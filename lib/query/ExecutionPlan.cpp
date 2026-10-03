@@ -68,13 +68,16 @@ namespace ao::query
       if (!textRes)
       {
         auto error = std::move(textRes.error());
+
         if (error.code == Error::Code::InvalidInput || error.code == Error::Code::ValueTooLarge)
         {
           error.code = Error::Code::FormatRejected;
         }
+
         error.message = std::format("{}: {}", context, error.message);
         detail::throwQueryError(std::move(error));
       }
+
       return std::move(*textRes);
     }
 

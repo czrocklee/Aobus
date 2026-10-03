@@ -5,7 +5,6 @@
 
 #include "app/ThemeCoordinator.h"
 #include "common/MainContextCallbackScope.h"
-#include "i18n/GtkText.h"
 #include "portal/ImportExportActions.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"

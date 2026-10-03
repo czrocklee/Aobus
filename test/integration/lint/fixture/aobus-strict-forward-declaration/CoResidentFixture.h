@@ -7,6 +7,7 @@
 // by value). The checker must NOT suggest forward-declaring a class when
 // its header is still needed for a co-resident enum.
 
+#include "AliasTypes.h"
 #include "StrongTypes.h"
 #include "WeakOnlyTypes.h"
 
@@ -110,4 +111,18 @@ class TestEnumReturnCoResident
   CoResidentNodeType nodeType();
   // NEGATIVE return type creates a strong dep on StrongTypes.h
   CoResidentNode* _node;
+};
+
+// The wrapper definition lives elsewhere, but its aliases require AliasTypes.h.
+class TestAliasValueCoResident
+{
+  CoResidentValueId _id;
+  CoResidentLegacyId _legacyId;
+  CoResidentScalarId _scalarId;
+
+  // NEGATIVE The alias provider also defines CoResidentAliasOwner.
+  void consume(CoResidentAliasOwner const& owner);
+
+  // POSITIVE: FIX-TO: void consumeIsolated(/* forward declare */ TargetBadRawPtr const& target);
+  void consumeIsolated(TargetBadRawPtr const& target);
 };

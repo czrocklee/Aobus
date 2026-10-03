@@ -67,7 +67,7 @@ namespace ao::utility
 
         while (written < data.size())
         {
-          ssize_t const bytesWritten = ::write(_fd, data.data() + written, data.size() - written);
+          auto const bytesWritten = ::write(_fd, data.data() + written, data.size() - written);
 
           if (bytesWritten < 0)
           {
@@ -167,6 +167,8 @@ namespace ao::utility
 
         auto temporaryFile = PosixTemporaryFile{std::move(tempPath), fd};
 
+        // Darwin defines these macros in an SDK-private header re-exported by public <sys/stat.h>.
+        // NOLINTNEXTLINE(misc-include-cleaner)
         if (::fchmod(temporaryFile.nativeHandle(), S_IRUSR | S_IWUSR) != 0)
         {
           return makeError(
