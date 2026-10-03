@@ -765,6 +765,7 @@ fr:table {
     winui_theme_file_not_found { "Fichier de thème introuvable : {path}" }
     winui_theme_load_failed { "Échec du chargement du thème Windows : {detail}" }
     winui_startup_failure { "Aobus n''a pas pu démarrer :\n\n{detail}" }
+    winui_column_sort_presentation { "Tri par colonne" }
     track_multiple_values { "<Valeurs multiples>" }
     track_metadata_heading { "Métadonnées" }
     track_audio_properties_heading { "Propriétés audio" }

@@ -8,6 +8,7 @@
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
 
 #include <memory>
 
@@ -23,6 +24,8 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Button button{nullptr};
     i18n::MessageCatalog textCatalog;
     uimodel::PlaybackCommand command = uimodel::PlaybackCommand::PlayPause;
+    /// The brush an engaged command's foreground follows; a null brush leaves the theme's own.
+    winrt::Microsoft::UI::Xaml::Media::Brush engagedForeground{nullptr};
   };
 
   class TransportButton final
@@ -45,6 +48,7 @@ namespace ao::winui
     void applyState(uimodel::TransportViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Button _button{nullptr};
+    winrt::Microsoft::UI::Xaml::Media::Brush _engagedForeground{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _clickRevoker{};
     std::unique_ptr<uimodel::TransportViewModel> _viewModelPtr;
   };

@@ -378,6 +378,13 @@ namespace ao::winui::layout
                     [this] { _width.commit(); }}
       {
         _view.IsBackButtonVisible(NavigationViewBackButtonVisible::Visible);
+        // A non-null header reserves the native Back/toggle height in Minimal
+        // mode. There is no page title, so omit its margin, not the chrome band.
+        // Other modes keep the full content height without an empty header.
+        _view.Resources().Insert(winrt::box_value(L"NavigationViewMinimalHeaderMargin"),
+                                 winrt::box_value(winrt::Microsoft::UI::Xaml::Thickness{}));
+        _view.Header(Grid{});
+        _view.AlwaysShowHeader(false);
         _backRequestedRevoker =
           _view.BackRequested(winrt::auto_revoke, {this, &NavigationViewPaneComponent::onBackRequested});
         _view.IsSettingsVisible(false);

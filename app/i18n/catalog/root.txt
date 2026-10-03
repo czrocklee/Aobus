@@ -767,6 +767,7 @@ root:table {
     winui_theme_file_not_found { "Theme file not found: {path}" }
     winui_theme_load_failed { "Failed to load Windows theme: {detail}" }
     winui_startup_failure { "Aobus could not start:\n\n{detail}" }
+    winui_column_sort_presentation { "Column sort" }
     track_multiple_values { "<Multiple Values>" }
     track_metadata_heading { "Metadata" }
     track_audio_properties_heading { "Audio Properties" }

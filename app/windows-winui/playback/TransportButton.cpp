@@ -6,6 +6,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 #include <memory>
@@ -27,8 +28,8 @@ namespace ao::winui
         case Icon::Next: return Symbol::Next;
         case Icon::Previous: return Symbol::Previous;
         case Icon::Shuffle: return Symbol::Shuffle;
-        case Icon::Repeat:
-        case Icon::RepeatOne: return Symbol::RepeatAll;
+        case Icon::Repeat: return Symbol::RepeatAll;
+        case Icon::RepeatOne: return Symbol::RepeatOne;
         case Icon::Play:
         case Icon::None: return Symbol::Play;
       }
@@ -40,7 +41,7 @@ namespace ao::winui
   TransportButton::TransportButton(TransportButtonConfig config,
                                    ao::rt::PlaybackService& playback,
                                    ao::uimodel::PlaybackActions& actions)
-    : _button{std::move(config.button)}
+    : _button{std::move(config.button)}, _engagedForeground{std::move(config.engagedForeground)}
   {
     _clickRevoker = _button.Click(winrt::auto_revoke,
                                   [this](winrt::Windows::Foundation::IInspectable const&,
@@ -78,7 +79,22 @@ namespace ao::winui
     _button.IsEnabled(state.enabled);
     _button.Content(winrt::Microsoft::UI::Xaml::Controls::SymbolIcon{symbolForTransport(state.icon)});
 
-    winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-      _button, winrt::box_value(winrt::to_hstring(state.tooltip)));
+    // An engaged command is the one glyph the transport recolors, and the frame
+    // resolves which brush that is once per generation. Releasing the local
+    // value, rather than setting null, returns the foreground to the theme and
+    // any authored `styleKey`, which is also how a frame that publishes no
+    // accent brush degrades.
+    if (state.engaged && _engagedForeground)
+    {
+      _button.Foreground(_engagedForeground);
+    }
+    else
+    {
+      _button.ClearValue(winrt::Microsoft::UI::Xaml::Controls::Control::ForegroundProperty());
+    }
+
+    auto const tooltip = winrt::to_hstring(state.tooltip);
+    winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_button, winrt::box_value(tooltip));
+    winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(_button, tooltip);
   }
 } // namespace ao::winui

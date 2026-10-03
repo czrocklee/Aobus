@@ -255,6 +255,59 @@ set_target_properties(ao_winui_soul_probe PROPERTIES
   WindowsTargetPlatformVersion 10.0.26100.0)
 aobus_enable_windows_app_sdk(ao_winui_soul_probe APPLICATION)
 
+# The native lazy item view over real generated Aobus.TrackRowItem rows. The
+# first-party projection exists only in this build, so the console contract is
+# exercised here; it needs no desktop session and runs wherever the build runs.
+add_executable(ao_winui_track_item_probe EXCLUDE_FROM_ALL
+  ${CMAKE_SOURCE_DIR}/test/helper/WinUiTrackItemProbe.cpp)
+aobus_enable_windows_utf8_manifest(ao_winui_track_item_probe)
+target_include_directories(ao_winui_track_item_probe PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")
+# The TrackRowItem and StringResources objects pulled out of the library
+# reference dependencies the library links privately, which do not propagate
+# to consumers, so the probe names them itself.
+target_link_libraries(ao_winui_track_item_probe PRIVATE
+  aobus-winui-lib
+  ao_app_i18n
+  ao_unicode_text
+  runtimeobject.lib)
+# The linked WinUI library contributes the shipping wWinMain object, so the
+# probe selects its own console entry point explicitly.
+target_link_options(ao_winui_track_item_probe PRIVATE /ENTRY:mainCRTStartup)
+
+# A real loaded-XAML track table probe: built by native checks, run only in an
+# interactive desktop session like the Soul probe. The shipping executable has
+# no test switches.
+add_executable(ao_winui_track_table_probe WIN32
+  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiTrackTableProbe.cpp)
+aobus_enable_windows_utf8_manifest(ao_winui_track_table_probe)
+target_include_directories(ao_winui_track_table_probe PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")
+# The controller and track-table objects pulled from the library reference the
+# library's own PRIVATE dependencies, which do not propagate to consumers.
+target_link_libraries(ao_winui_track_table_probe PRIVATE
+  aobus-winui-lib
+  ao_app_i18n_completion
+  ao_app_i18n_ordering
+  ao_app_i18n
+  ao_unicode_text
+  runtimeobject.lib)
+# The linked WinUI library contributes the shipping wWinMain object, so the
+# probe selects its own console entry point explicitly.
+target_link_options(ao_winui_track_table_probe PRIVATE /ENTRY:mainCRTStartup)
+set_target_properties(ao_winui_track_table_probe PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/track-table-probe"
+  VS_GLOBAL_AppContainerApplication false
+  VS_GLOBAL_ApplicationType "Windows Store"
+  VS_GLOBAL_ApplicationTypeRevision 10.0
+  VS_GLOBAL_DefaultLanguage en
+  VS_GLOBAL_DesktopCompatible true
+  VS_GLOBAL_MinimumVisualStudioVersion 18.0
+  VS_GLOBAL_RootNamespace AobusTrackTableProbe
+  VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
+  WindowsTargetPlatformVersion 10.0.26100.0)
+aobus_enable_windows_app_sdk(ao_winui_track_table_probe APPLICATION)
+
 aobus_verify_windows_utf8_manifest(aobus-winui)
 target_include_directories(aobus-winui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-winui PRIVATE
@@ -265,10 +318,16 @@ target_link_libraries(aobus-winui PRIVATE
 # entry explicitly so the linker extracts that object without /WHOLEARCHIVE,
 # which would also extract and duplicate generated XAML metadata providers.
 target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
-# Keep the GUI probe a build-only dependency: referencing its application
-# project directly would import its copied WinMD/PRI closure into the product.
+# Keep library-linked probes as build-only dependencies: referencing their
+# application projects directly would import their WinMD/PRI closure into the product.
 add_custom_target(ao_winui_soul_probe_build DEPENDS ao_winui_soul_probe)
-add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_soul_probe_build)
+add_custom_target(ao_winui_track_table_probe_build DEPENDS ao_winui_track_table_probe)
+add_custom_target(ao_winui_track_item_probe_build
+  COMMAND $<TARGET_FILE:ao_winui_track_item_probe>
+  DEPENDS ao_winui_track_item_probe
+  COMMENT "Verifying the native WinUI track item contract"
+  VERBATIM)
+add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_track_item_probe_build ao_winui_track_table_probe_build ao_winui_soul_probe_build)
 # The static-library project emits the XBF files at its output root, while
 # MSBuild's project-reference copy namespaces them under Aobus. The merged
 # application PRI retains the root-relative XBF paths, so deploy those exact
@@ -289,8 +348,17 @@ add_custom_command(TARGET aobus-winui POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E copy_if_different
           "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
           "$<TARGET_FILE_DIR:ao_winui_soul_probe>/ao_winui_soul_probe.pri"
+  # The track table probe parses the same shipping App.xaml and resolves MRT
+  # resources, so it takes the same root-relative XBF and a PRI named after its
+  # own executable. It is executed manually on a desktop, never by this build.
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
+          "$<TARGET_FILE_DIR:ao_winui_track_table_probe>/App.xbf"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
+          "$<TARGET_FILE_DIR:ao_winui_track_table_probe>/ao_winui_track_table_probe.pri"
   COMMAND $<TARGET_FILE:ao_winui_localization_probe>
-  COMMENT "Deploying compiled XAML and verifying WinUI/ICU localization parity"
+  COMMENT "Deploying compiled XAML and verifying the WinUI localization contract"
   VERBATIM)
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
@@ -389,6 +457,18 @@ set_target_properties(ao_winui_localization_probe PROPERTIES
   VS_GLOBAL_TargetName AobusLocalizationProbe
   VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
   WindowsTargetPlatformVersion 10.0.26100.0)
+set_target_properties(ao_winui_track_item_probe PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/track-item-probe"
+  VS_GLOBAL_AppContainerApplication false
+  VS_GLOBAL_ApplicationType "Windows Store"
+  VS_GLOBAL_ApplicationTypeRevision 10.0
+  VS_GLOBAL_DefaultLanguage en
+  VS_GLOBAL_DesktopCompatible true
+  VS_GLOBAL_MinimumVisualStudioVersion 18.0
+  VS_GLOBAL_RootNamespace AobusTrackItemProbe
+  VS_GLOBAL_TargetName AobusTrackItemProbe
+  VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
+  WindowsTargetPlatformVersion 10.0.26100.0)
 set_target_properties(aobus-winui-lib PROPERTIES
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/winui-lib"
   VS_GLOBAL_AppContainerApplication false
@@ -403,3 +483,4 @@ set_target_properties(aobus-winui-lib PROPERTIES
 aobus_enable_windows_app_sdk(aobus-winui-lib STATIC_LIBRARY)
 aobus_enable_windows_app_sdk(aobus-winui APPLICATION)
 aobus_enable_windows_app_sdk(ao_winui_localization_probe APPLICATION)
+aobus_enable_windows_app_sdk(ao_winui_track_item_probe APPLICATION)
