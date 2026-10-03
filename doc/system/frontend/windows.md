@@ -114,6 +114,11 @@ Viewport, column, and projection refreshes restore the selected rows and the pri
 Presentation grouping inserts non-playable group headers through a display-index adapter while retaining projection row indices as the playback authority.
 The presentation menu resolves built-in and restored custom presets through the shared catalog and picker policy.
 It saves a per-List preference only after the complete selected specification is accepted by Runtime.
+A column-header sort creates a temporary presentation labeled with localized
+“Column sort” text, without replacing the saved named-presentation preference.
+Only that synthetic presentation is relabeled; opaque unknown identifiers remain
+data. The button's tooltip and accessible name retain the complete label when
+its allocated layout space constrains the painted text.
 The existing `Ctrl+L` keymap action and native Now Playing/menu command submit a playback reveal request; WinUI follows its preferred view/List hints, selects and scrolls the visible row, and does nothing when the track remains hidden by the active projection or was removed.
 
 Quick Filter adapts the shared completion and filtering policy. Its [Create List action](windows-library-workflows.md#create-and-edit-lists) enters the ordinary List workflow with the resolved expression.

@@ -14,6 +14,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/ViewService.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
@@ -22,6 +23,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/track/TrackFilterView.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
@@ -42,6 +44,7 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::HorizontalAlignment;
     using winrt::Microsoft::UI::Xaml::RoutedEventArgs;
     using winrt::Microsoft::UI::Xaml::Visibility;
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
     using winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox;
     using winrt::Microsoft::UI::Xaml::Controls::Button;
     using winrt::Microsoft::UI::Xaml::Controls::ColumnDefinition;
@@ -149,7 +152,9 @@ namespace ao::winui::layout
      *
      * The presentation set is a runtime fact rather than an authored one, so the
      * component builds its menu on each click from the built-in presets and the
-     * eligibility of each for the active list.
+     * eligibility of each for the active list. The active presentation can also be
+     * the track list's unsaved column sort, an id the presentation catalog echoes
+     * verbatim, so this leaf labels that state with localized copy itself.
      */
     class PresentationButtonComponent final : public LayoutComponent
     {
@@ -164,6 +169,7 @@ namespace ao::winui::layout
                                   std::function<void(std::string)> reportStatus,
                                   bool const compact)
         : _trackList{trackList}
+        , _views{views}
         , _gatePtr{ctx.gatePtr}
         , _reportStatus{std::move(reportStatus)}
         , _viewModelPtr{std::make_unique<uimodel::TrackPresentationPickerViewModel>(
@@ -199,8 +205,22 @@ namespace ao::winui::layout
     private:
       void refreshLabel()
       {
-        _button.Content(winrt::box_value(winrt::to_hstring(_state.label)));
+        // A column-header sort stamps the synthetic presentation id the shared
+        // catalog echoes verbatim, so the leaf names the unsaved field sort with
+        // localized copy instead of the raw identifier. Resolve against the
+        // picker's view: presentation delivery can precede controller adoption
+        // of the committed workspace focus.
+        auto const stateRes = _views.findTrackListState(_state.activeViewId);
+        auto const label = stateRes && stateRes->presentation.id == kColumnSortPresentationId
+                             ? resourceString("winui_column_sort_presentation")
+                             : _state.label;
+        _button.Content(winrt::box_value(winrt::to_hstring(label)));
         _button.IsEnabled(_state.enabled);
+
+        // Constrained layouts can clip longer labels, so the full text stays
+        // reachable through the tooltip and the automation name.
+        ToolTipService::SetToolTip(_button, winrt::box_value(winrt::to_hstring(label)));
+        AutomationProperties::SetName(_button, winrt::to_hstring(label));
       }
 
       void onClicked(IInspectable const& /*sender*/, RoutedEventArgs const& /*args*/)
@@ -301,6 +321,7 @@ namespace ao::winui::layout
       Button _button{};
       MenuFlyout _flyout{nullptr};
       TrackListController& _trackList;
+      rt::ViewService& _views;
       std::weak_ptr<uimodel::ShellGenerationGate> _gatePtr;
       std::function<void(std::string)> _reportStatus;
       uimodel::TrackPresentationPickerState _state;
