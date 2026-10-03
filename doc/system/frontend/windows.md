@@ -152,6 +152,16 @@ The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume
 
 Modern Soul answers the same right-click, hold, and hover, and its click plays or pauses because Modern offers no separate Play/Pause button. Hovering either Soul describes the audio pipeline.
 
+Enabled, engaged shuffle and repeat icons use a live accent theme resource in
+their element's resource scope. The icon style keeps the accent independent of
+the native button's hover and pressed foreground states. The repeat glyph and
+engagement reflect its mode; Repeat One has a distinct glyph from Repeat All.
+Tooltips and accessible names use the shared command labels (“Repeat” in English
+for repeat), not Off/All/One announcements.
+Off or unavailable transport releases the engagement icon style and
+inherits the native button foreground, including its disabled state. Command
+availability and native button activation remain unchanged.
+
 Selecting an output row in either shell submits its backend, device, and profile
 ids through the shared UIModel selector and updates that exact requested tuple
 in memory. The selector performs no synchronous settings write; the next

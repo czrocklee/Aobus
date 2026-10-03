@@ -9,6 +9,11 @@
             <ResourceDictionary.MergedDictionaries>
                 <controls:XamlControlsResources />
             </ResourceDictionary.MergedDictionaries>
+            <!-- Bind the engaged glyph itself so native Button visual states
+                 cannot mask it, while theme variants stay live. -->
+            <Style x:Key="EngagedTransportIconStyle" TargetType="SymbolIcon">
+                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

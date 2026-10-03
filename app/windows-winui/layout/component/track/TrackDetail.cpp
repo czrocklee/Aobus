@@ -49,7 +49,6 @@ namespace ao::winui::layout
     constexpr auto kSectionHeaderStyleKey = std::string_view{"InspectorSectionHeaderStyle"};
     constexpr auto kDividerBrushKey = std::string_view{"DividerStrokeColorDefaultBrush"};
     constexpr auto kCardBrushKey = std::string_view{"CardBackgroundFillColorDefaultBrush"};
-    constexpr auto kAccentTextBrushKey = std::string_view{"AccentTextFillColorPrimaryBrush"};
 
     constexpr double kSectionSpacing = 4.0;
     constexpr double kHeaderLabelSpacing = 8.0;
