@@ -36,6 +36,7 @@ namespace ao::winui::layout
   {
     using winrt::Microsoft::UI::Xaml::FrameworkElement;
     using winrt::Microsoft::UI::Xaml::ResourceDictionary;
+    using winrt::Microsoft::UI::Xaml::Style;
     using winrt::Microsoft::UI::Xaml::Controls::Button;
     using winrt::Microsoft::UI::Xaml::Controls::ControlTemplate;
     using winrt::Microsoft::UI::Xaml::Controls::Flyout;
@@ -53,6 +54,7 @@ namespace ao::winui::layout
     constexpr auto kSeekThumbTemplateKey = std::string_view{"ModernSeekThumbTemplate"};
     constexpr auto kOverlaySeekChromeKey = std::string_view{"ModernSeekOverlayResources"};
     constexpr auto kInlineSeekChromeKey = std::string_view{"ClassicSeekInlineResources"};
+    constexpr auto kEngagedIconStyleKey = std::string_view{"EngagedTransportIconStyle"};
 
     constexpr double kNormalizedMinimum = 0.0;
     constexpr double kNormalizedMaximum = 1.0;
@@ -81,7 +83,10 @@ namespace ao::winui::layout
      * @brief One transport command, as a button.
      *
      * The glyph, tooltip, and enablement all follow the command's own view
-     * state, so the component contributes the button and nothing else.
+     * state, so the component contributes the button and nothing else. The
+     * enabled engaged glyph uses the frame's icon style, which keeps its native
+     * ThemeResource binding live across light/dark transitions. Explicit Aobus
+     * palette reloads still rebuild the generation.
      */
     class TransportButtonComponent final : public LayoutComponent
     {
@@ -89,10 +94,15 @@ namespace ao::winui::layout
       TransportButtonComponent(rt::PlaybackService& playback,
                                uimodel::PlaybackActions& playbackActions,
                                i18n::MessageCatalog const& textCatalog,
-                               uimodel::LayoutNode const& node)
-        : _transport{TransportButtonConfig{.button = _button, .textCatalog = textCatalog, .command = commandOf(node)},
-                     playback,
-                     playbackActions}
+                               uimodel::LayoutNode const& node,
+                               ResourceDictionary const& resources)
+        : _transport{
+            TransportButtonConfig{.button = _button,
+                                  .textCatalog = textCatalog,
+                                  .command = commandOf(node),
+                                  .engagedIconStyle = lookupResource(resources, kEngagedIconStyleKey).try_as<Style>()},
+            playback,
+            playbackActions}
       {
       }
 
@@ -277,8 +287,10 @@ namespace ao::winui::layout
     registry.registerComponent(
       "playback.transportButton",
       [&playback, &playbackActions, textCatalog](
-        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<TransportButtonComponent>(playback, playbackActions, textCatalog, node); });
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& node) -> Result<std::unique_ptr<LayoutComponent>>
+      {
+        return std::make_unique<TransportButtonComponent>(playback, playbackActions, textCatalog, node, ctx.resources);
+      });
 
     auto const optSoulSchema = registry.schema().component("playback.soulButton");
     registry.registerComponent(

@@ -474,8 +474,8 @@ zh_Hant:table {
     gtk_custom_view_group_by { "分組依據" }
     gtk_custom_view_add_sort_field { "新增排序欄位" }
     gtk_custom_view_sort_order { "排序順序" }
-    gtk_custom_view_add_column { "新增列" }
-    gtk_custom_view_visible_columns { "可見列" }
+    gtk_custom_view_add_column { "新增欄" }
+    gtk_custom_view_visible_columns { "可見欄" }
     gtk_custom_view_sort_ascending { "遞增排序" }
     gtk_custom_view_sort_descending { "遞減排序" }
     gtk_common_remove { "移除" }
@@ -681,7 +681,7 @@ zh_Hant:table {
     winui_library_import_mode_restore { "還原（預覽後取代備份範圍）" }
     winui_shell_menu_view { "檢視" }
     winui_shell_modern_mode { "現代模式" }
-    winui_shell_columns { "列設定..." }
+    winui_shell_columns { "欄設定..." }
     winui_shell_reload_theme { "重新載入主題" }
     winui_shell_menu_playback { "播放" }
     winui_shell_play_pause { "播放/暫停" }
@@ -755,16 +755,17 @@ zh_Hant:table {
     winui_list_status { "列表：{list}" }
     winui_presentation_failed { "載入檢視失敗：{detail}" }
     winui_playback_failed { "播放失敗：{detail}" }
-    winui_column_resize_failed { "調整列寬失敗：{detail}" }
-    winui_column_settings_failed { "列設定失敗：{detail}" }
-    winui_column_move_failed { "移動列失敗：{detail}" }
-    winui_column_visibility_failed { "更改列可見性失敗：{detail}" }
-    winui_column_not_sortable { "列 ''{column}'' 不支援排序" }
+    winui_column_resize_failed { "調整欄寬失敗：{detail}" }
+    winui_column_settings_failed { "欄設定失敗：{detail}" }
+    winui_column_move_failed { "移動欄失敗：{detail}" }
+    winui_column_visibility_failed { "更改欄可見性失敗：{detail}" }
+    winui_column_not_sortable { "欄 ''{column}'' 不支援排序" }
     winui_sort_failed { "排序失敗：{detail}" }
     winui_unavailable_track { "無法使用曲目" }
     winui_theme_file_not_found { "未找到主題檔案：{path}" }
     winui_theme_load_failed { "載入 Windows 主題失敗：{detail}" }
     winui_startup_failure { "Aobus 無法啟動：\n\n{detail}" }
+    winui_column_sort_presentation { "欄排序" }
     track_multiple_values { "<多個值>" }
     track_metadata_heading { "後設資料" }
     track_audio_properties_heading { "音訊屬性" }

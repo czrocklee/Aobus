@@ -39,6 +39,10 @@ namespace ao::rt
 
 namespace ao::winui
 {
+  /// Stable presentation id stamped when a column-header sort replaces the active
+  /// presentation; the presentation label resolves it to localized copy.
+  inline constexpr std::string_view kColumnSortPresentationId = "windows-column-sort";
+
   struct TrackColumnChoice final
   {
     rt::TrackField field = rt::TrackField::Title;

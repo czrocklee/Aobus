@@ -10,6 +10,8 @@
 
 namespace ao::winui::layout
 {
+  inline constexpr auto kAccentTextBrushKey = std::string_view{"AccentTextFillColorPrimaryBrush"};
+
   /// Find a frame-owned resource, preferring the window scope over the application fallback.
   winrt::Windows::Foundation::IInspectable lookupResource(
     winrt::Microsoft::UI::Xaml::ResourceDictionary const& resources,

@@ -47,6 +47,9 @@ Responsive state is derived from the current client width.
 Below 720 effective pixels navigation uses the minimal overlay presentation and the inspector is available as an explicit overlay.
 From 720 through 1119 navigation uses the compact presentation and the inspector remains an explicit overlay.
 At 1120 or wider navigation is expanded and the inspector is inline.
+In Modern's minimal presentation, the workspace toolbar remains below the native
+Back and pane-toggle controls. NavigationView owns that chrome clearance; the
+compact and expanded presentations return the reserved band to the workspace.
 Below the wide tier the browser summary yields its space to the filter. At the
 narrow tier the Now Playing artwork and text yield their space to transport,
 time, volume, and overflow commands.
@@ -112,8 +115,16 @@ The shared width solver uses the current viewport, and a single horizontal
 surface keeps headers and rows aligned when minimum widths overflow.
 Viewport, column, and projection refreshes restore the selected rows and the prior top-visible track after replacing the native item source; an explicit reveal request takes precedence over that scroll anchor.
 Presentation grouping inserts non-playable group headers through a display-index adapter while retaining projection row indices as the playback authority.
+Group headers are not selectable tracks. A header-only native selection keeps the
+Runtime-selected tracks; mixed selection and Select All retain only valid tracks,
+while a genuine clear still empties the selection.
 The presentation menu resolves built-in and restored custom presets through the shared catalog and picker policy.
 It saves a per-List preference only after the complete selected specification is accepted by Runtime.
+A column-header sort creates a temporary presentation labeled with localized
+“Column sort” text, without replacing the saved named-presentation preference.
+Only that synthetic presentation is relabeled; opaque unknown identifiers remain
+data. The button's tooltip and accessible name retain the complete label when
+its allocated layout space constrains the painted text.
 The existing `Ctrl+L` keymap action and native Now Playing/menu command submit a playback reveal request; WinUI follows its preferred view/List hints, selects and scrolls the visible row, and does nothing when the track remains hidden by the active projection or was removed.
 
 Quick Filter adapts the shared completion and filtering policy. Its [Create List action](windows-library-workflows.md#create-and-edit-lists) enters the ordinary List workflow with the resolved expression.
@@ -143,6 +154,16 @@ When no group-heading or Inspector entity exists, both placeholder and decoded c
 The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume. Clicking Classic Soul opens output selection, right-clicking opens the system menu, holding opens a full-screen Soul surface, and hovering describes the audio pipeline.
 
 Modern Soul answers the same right-click, hold, and hover, and its click plays or pauses because Modern offers no separate Play/Pause button. Hovering either Soul describes the audio pipeline.
+
+Enabled, engaged shuffle and repeat icons use a live accent theme resource in
+their element's resource scope. The icon style keeps the accent independent of
+the native button's hover and pressed foreground states. The repeat glyph and
+engagement reflect its mode; Repeat One has a distinct glyph from Repeat All.
+Tooltips and accessible names use the shared command labels (“Repeat” in English
+for repeat), not Off/All/One announcements.
+Off or unavailable transport releases the engagement icon style and
+inherits the native button foreground, including its disabled state. Command
+availability and native button activation remain unchanged.
 
 Selecting an output row in either shell submits its backend, device, and profile
 ids through the shared UIModel selector and updates that exact requested tuple

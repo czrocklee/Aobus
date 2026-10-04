@@ -8,6 +8,7 @@
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.h>
 
 #include <memory>
 
@@ -23,6 +24,8 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Button button{nullptr};
     i18n::MessageCatalog textCatalog;
     uimodel::PlaybackCommand command = uimodel::PlaybackCommand::PlayPause;
+    /// The enabled engaged glyph's theme-bound style; null preserves native foregrounds.
+    winrt::Microsoft::UI::Xaml::Style engagedIconStyle{nullptr};
   };
 
   class TransportButton final
@@ -45,6 +48,8 @@ namespace ao::winui
     void applyState(uimodel::TransportViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Button _button{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::SymbolIcon _icon{};
+    winrt::Microsoft::UI::Xaml::Style _engagedIconStyle{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _clickRevoker{};
     std::unique_ptr<uimodel::TransportViewModel> _viewModelPtr;
   };

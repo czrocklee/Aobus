@@ -209,6 +209,41 @@ fails the probe. It uses the control's normal presentation API and no library,
 audio endpoint, or saved application settings. The shipping executable has no
 probe switches.
 
+### Track and navigation probes
+
+The WinUI build also executes `ao_winui_track_item_probe`, a console check of the
+real generated TrackRowItem projection and lazy item view. Its seven scenarios
+cover bounded materialization, null retry, cache identity and eviction, IndexOf,
+GetMany, iterator lifetime, and oversized-count rejection. Failure stops the
+build; no interactive desktop or audio endpoint is required.
+
+`ao_winui_track_table_probe` is built by native checks but runs only from a
+logged-in desktop, like the Soul probe:
+`<reported-build-dir>\app\windows-winui\track-table-probe\Debug\ao_winui_track_table_probe.exe`.
+Its temporary offline library and real application runtime exercise registered
+track-table selection, stable-id restoration, scroll anchoring and reveal
+priority. Sparse selection and interleaved headers distinguish selected-collection
+positions from display indices. Filtering checks retain partially or fully hidden
+Runtime selection through header-only gestures without publication, then restore
+native rows when the filter is cleared. Presentation checks include the intermediate
+public history-replay notification before controller adoption. Transport checks
+retain a loaded icon across window-local Dark/Light transitions and an ancestor
+accent override, comparing it with a separately theme-bound reference. They
+observe programmatic PointerOver/Pressed states and the native disabled foreground
+after runtime readiness is lost. A local silent provider supplies real runtime
+enablement without an audio endpoint or media playback. Native navigation chrome
+clearance covers the 720/1120 effective-width boundaries, including window-local
+Light. A 90-second dispatcher deadline bounds execution; failure reports a
+nonzero exit rather than a dialog.
+
+These are programmatic native XAML observations. The table uses representative
+row templates, and transport checks inspect native properties: passing does not
+certify physical input, shipping-template paint, live shipping theme changes or
+audible playback. Inspect the actual shipping window separately for those
+claims. The shipping executable has no probe switches; probe application
+metadata stays outside its WinMD/PRI dependency closure. Close the application
+and probes before another portal build or hygiene refresh can relink them.
+
 ## Compiler cache
 
 Run `ao.bat setup compiler-cache` to install and verify governed ccache and

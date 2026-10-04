@@ -312,12 +312,51 @@ namespace ao::winui::layout
         }
 
         auto selected = std::vector<TrackId>{};
+        auto invalidSelectedIndices = std::vector<std::uint32_t>{};
+        auto const nativeSelection = _rows.SelectedItems();
+        std::uint32_t selectedItemIndex = 0;
 
-        for (auto const& item : _rows.SelectedItems())
+        for (auto const& item : nativeSelection)
         {
           if (auto const row = item.try_as<ProjectedTrackRowItem>(); row && !row.IsGroupHeader() && row.TrackId() != 0)
           {
             selected.emplace_back(row.TrackId());
+          }
+          else
+          {
+            invalidSelectedIndices.push_back(selectedItemIndex);
+          }
+
+          ++selectedItemIndex;
+        }
+
+        if (!invalidSelectedIndices.empty())
+        {
+          auto const previousSuppression = _suppressSelectionPublication;
+          _suppressSelectionPublication = true;
+          auto restoreSuppression =
+            gsl_lite::finally([this, previousSuppression] { _suppressSelectionPublication = previousSuppression; });
+
+          for (auto it = invalidSelectedIndices.rbegin(); it != invalidSelectedIndices.rend(); ++it)
+          {
+            nativeSelection.RemoveAt(*it);
+          }
+
+          // A header-only gesture is not a request to clear the view's selection.
+          // Restore its visible tracks without publishing an intermediate empty set.
+          if (selected.empty())
+          {
+            auto const items = _trackList.items();
+
+            for (auto const trackId : _trackList.selection())
+            {
+              if (auto const optIndex = _trackList.displayIndexOfTrack(trackId); optIndex && *optIndex < items.Size())
+              {
+                nativeSelection.Append(items.GetAt(static_cast<std::uint32_t>(*optIndex)));
+              }
+            }
+
+            return;
           }
         }
 

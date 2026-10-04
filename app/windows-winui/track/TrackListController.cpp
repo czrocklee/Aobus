@@ -731,7 +731,7 @@ namespace ao::winui
     auto spec = stateRes->presentation;
     auto const ascending =
       spec.sortBy.empty() || spec.sortBy.front().field != field ? true : !spec.sortBy.front().ascending;
-    spec.id = "windows-column-sort";
+    spec.id = kColumnSortPresentationId;
     spec.sortBy = {{.field = field, .ascending = ascending}};
     return _views.setPresentation(_viewId, spec);
   }
