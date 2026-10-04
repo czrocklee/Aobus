@@ -944,6 +944,7 @@ aobus_target_test_sources(ao_cli_test "${AOBUS_BUILD_CLI}" "AOBUS_BUILD_CLI=OFF"
     unit/cli/InitCommandTest.cpp
     unit/cli/LibCommandTest.cpp
     unit/cli/ListCommandTest.cpp
+    unit/cli/ListDestructiveCommandTest.cpp
     unit/cli/QueryHelpTest.cpp
     unit/cli/RunTest.cpp
     unit/cli/ScanCommandTest.cpp

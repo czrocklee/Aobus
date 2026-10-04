@@ -18,19 +18,6 @@ namespace ao::cli::test
 {
   namespace
   {
-    std::uint32_t parseCreatedListId(std::string_view output)
-    {
-      auto constexpr kPrefix = std::string_view{"add list: "};
-      auto const start = output.find(kPrefix);
-      REQUIRE(start != std::string_view::npos);
-
-      auto const idStart = start + kPrefix.size();
-      auto const idEnd = output.find(' ', idStart);
-      REQUIRE(idEnd != std::string_view::npos);
-
-      return static_cast<std::uint32_t>(std::stoul(std::string{output.substr(idStart, idEnd - idStart)}));
-    }
-
     std::uint32_t parseFirstTrackId(std::string_view output)
     {
       auto const idStart = output.find_first_of("0123456789");

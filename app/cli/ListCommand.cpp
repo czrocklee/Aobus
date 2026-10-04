@@ -115,12 +115,20 @@ namespace ao::cli
     std::size_t forgottenPositionCount = 0;
   };
 
+  struct ListDeleteSubtreeEntryDto final
+  {
+    ListId listId{};
+    std::string name{};
+    std::size_t forgottenPositionCount = 0;
+    std::optional<rt::DeleteListReply::TagImpact> optTagImpact{};
+  };
+
   struct ListDeleteSubtreeReportDto final
   {
     std::string action{};
     bool dryRun = false;
     ListId rootListId{};
-    std::vector<rt::DeleteListReply> deletedLists{};
+    std::vector<ListDeleteSubtreeEntryDto> deletedLists{};
   };
 
   struct ListOrderReportDto final
@@ -153,6 +161,15 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::ListCreateReportDto>
   static constexpr std::string_view keyFor(std::string_view memberName) noexcept
   {
     return memberName == "optListId" ? "listId" : memberName;
+  }
+};
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::ListDeleteSubtreeEntryDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    return memberName == "optTagImpact" ? "tagImpact" : memberName;
   }
 };
 
@@ -554,14 +571,24 @@ namespace ao::cli
     {
       if (cli.options().format != OutputFormat::Plain)
       {
-        emitDocument(cli.io().out,
-                     cli.options().format,
-                     ListDeleteSubtreeReportDto{
-                       .action = "delete-subtree",
-                       .dryRun = dryRun,
-                       .rootListId = reply.rootListId,
-                       .deletedLists = reply.deletedLists,
-                     });
+        auto report = ListDeleteSubtreeReportDto{
+          .action = "delete-subtree",
+          .dryRun = dryRun,
+          .rootListId = reply.rootListId,
+        };
+        report.deletedLists.reserve(reply.deletedLists.size());
+
+        for (auto const& deleted : reply.deletedLists)
+        {
+          report.deletedLists.push_back(ListDeleteSubtreeEntryDto{
+            .listId = deleted.listId,
+            .name = deleted.name,
+            .forgottenPositionCount = deleted.orderTrackIdCount,
+            .optTagImpact = deleted.optTagImpact,
+          });
+        }
+
+        emitDocument(cli.io().out, cli.options().format, report);
         return;
       }
 

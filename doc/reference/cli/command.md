@@ -138,7 +138,15 @@ Mutation/administrative shapes:
 | `lib resource export` | `id, output, size` |
 | `lib dump` | selected optional `meta`, `dictionary`, `manifest`, `resources` sections |
 
-Change-record nested fields are defined by the runtime mutation reply types and are emitted without CLI reinterpretation.
+For `list delete --descendants`, `deletedLists` is a root-first sequence of `{listId, name, forgottenPositionCount, tagImpact?}` entries.
+`forgottenPositionCount` has the same meaning as in ordinary deletion.
+Only the root entry can have `tagImpact`, when its local filter is one positive writable-tag predicate.
+The impact contains `tag`, the library-wide `taggedTrackCount`, `removedFromTrackCount`, and `otherListReferences[{listId,name}]` for surviving Lists that reference the tag.
+CLI deletion preserves track tags, so `removedFromTrackCount` is `0`.
+An absent impact is omitted, not `null`.
+Preview and commit expose the same entry shape.
+
+Other change-record nested fields are defined by the runtime mutation reply types and are emitted without CLI reinterpretation.
 `track update` emits `tagChanges` only when tag options were supplied; it uses the same per-track records as `tag add`/`tag remove` changes.
 In that path `updated` and `trackIds` are the sorted, deduplicated union of tracks mutated by metadata or tag changes, while `changes` stays metadata-only.
 Plain output appends `added tag: <tag> to N track(s)` and `removed tag: <tag> from N track(s)` lines with the `tag add`/`tag remove` wording.
@@ -193,6 +201,11 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 - `list add/remove` require a List whose complete local expression is one positive tag predicate; compound, negated, or non-tag predicates are not directly writable.
 - `list remove` removes that global tag from the target tracks and also forgets their saved positions in the List; plain output states both effects.
 - `list order move` binds the current effective sequence, preserves selected relative order, inserts it before the optional anchor, and moves it to the bottom when the anchor is omitted.
+- `list order reset` forgets all saved positions in the target List, including currently hidden tracks; it leaves other Lists' orders unchanged.
+- `list order forget-hidden` forgets only positions outside current effective membership, preserving the saved relative order of visible tracks.
+  Neither command changes track tags.
+  Their reports include `selectedTrackIds: []` and the number of forgotten positions; an unchanged order is a successful no-op.
+- No `list order` subcommand accepts `--dry-run`; supplying it is a usage failure.
 - The saved-order runtime may return `Applied`, `NoOp`, `Stale`, or `Unavailable`.
   CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
 - Ordinary List deletion rejects a List with descendants; `--descendants` explicitly selects complete-subtree deletion, and `--dry-run` reports the same subtree without committing.
@@ -208,6 +221,8 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 ## Compatibility and versioning
 
 The command surface and DTOs are unversioned.
+Subtree deletion entries use `forgottenPositionCount` and `tagImpact` rather than the former undocumented `orderTrackIdCount` and `optTagImpact` keys; there is no compatibility alias.
+Scripts reading the former keys must use the new names.
 Any syntax or field change requires updating this reference and `CliSmokeTest` in the same change.
 Library YAML and database versioning are independent.
 There is no separate CLI protocol version or migration layer.
@@ -233,6 +248,7 @@ aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects the command tree and representative exact shapes.
 - [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects encoding rules.
+- [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal and saved-order cleanup.
 
 ## Related documents
 
