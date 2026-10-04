@@ -2,11 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "CliTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <filesystem>
+#include <string>
+#include <string_view>
 
 namespace ao::cli::test
 {
@@ -151,6 +155,77 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     CHECK(std::filesystem::exists(fixture.root() / "library.yaml"));
+  }
+
+  TEST_CASE("CLI - subtree deletion reports tag impact without internal optional names", "[cli][integration][output]")
+  {
+    auto const* const format = GENERATE("yaml", "json");
+    auto fixture = CliFixture{};
+    auto const trackId = fixture.addTrack(library::test::TrackSpec{.title = "Tagged", .tags = {"subtree"}});
+    auto const createList = [&fixture](std::string_view name, std::string_view parent, std::string_view filter)
+    {
+      auto const create =
+        fixture.run({"-O", "json", "list", "create", "--name", name, "--parent", parent, "--filter", filter});
+      REQUIRE(create.status == 0);
+      auto const tree = parseYaml(create.out);
+      return std::string{yaml::scalarView(tree.rootref()["listId"])};
+    };
+    auto const rootId = createList("Root", "0", "#subtree");
+    // The child references the same tag, so impact must stay on the root and
+    // exclude the child from the surviving references.
+    auto const childId = createList("Child", rootId, "#subtree");
+    auto const survivorId = createList("Survivor", "0", "#subtree");
+    auto const checkReport = [&](std::string_view output, std::string_view dryRun)
+    {
+      auto const tree = parseYaml(output);
+      auto const report = tree.rootref();
+      CHECK(yaml::scalarView(report["action"]) == "delete-subtree");
+      CHECK(yaml::scalarView(report["dryRun"]) == dryRun);
+      CHECK(yaml::scalarView(report["rootListId"]) == rootId);
+      auto const deleted = report["deletedLists"];
+      REQUIRE(deleted.is_seq());
+      REQUIRE(deleted.num_children() == 2);
+      CHECK(yaml::scalarView(deleted[0]["listId"]) == rootId);
+      CHECK(yaml::scalarView(deleted[0]["name"]) == "Root");
+      CHECK(yaml::scalarView(deleted[0]["forgottenPositionCount"]) == "0");
+      CHECK_FALSE(deleted[0].has_child("orderTrackIdCount"));
+      CHECK_FALSE(deleted[0].has_child("optTagImpact"));
+      REQUIRE(deleted[0].has_child("tagImpact"));
+      auto const impact = deleted[0]["tagImpact"];
+      REQUIRE(impact.is_map());
+      CHECK(yaml::scalarView(impact["tag"]) == "subtree");
+      CHECK(yaml::scalarView(impact["taggedTrackCount"]) == "1");
+      CHECK(yaml::scalarView(impact["removedFromTrackCount"]) == "0");
+      auto const references = impact["otherListReferences"];
+      REQUIRE(references.is_seq());
+      REQUIRE(references.num_children() == 1);
+      CHECK(yaml::scalarView(references[0]["listId"]) == survivorId);
+      CHECK(yaml::scalarView(references[0]["name"]) == "Survivor");
+      CHECK(yaml::scalarView(deleted[1]["listId"]) == childId);
+      CHECK(yaml::scalarView(deleted[1]["name"]) == "Child");
+      CHECK_FALSE(deleted[1].has_child("tagImpact"));
+      CHECK_FALSE(deleted[1].has_child("optTagImpact"));
+    };
+
+    auto result = fixture.run({"-O", format, "list", "delete", rootId, "--descendants", "--dry-run"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    checkReport(result.out, "true");
+    REQUIRE(fixture.run({"list", "show", rootId}).status == 0);
+    REQUIRE(fixture.run({"list", "show", childId}).status == 0);
+
+    result = fixture.run({"-O", format, "list", "delete", rootId, "--descendants"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    checkReport(result.out, "false");
+    checkDomainFailure(fixture.run({"list", "show", rootId}), "list not found");
+    checkDomainFailure(fixture.run({"list", "show", childId}), "list not found");
+    REQUIRE(fixture.run({"list", "show", survivorId}).status == 0);
+    result = fixture.run({"-O", format, "tag", "show", std::to_string(trackId.raw())});
+    REQUIRE(result.status == 0);
+    auto const tagTree = parseYaml(result.out);
+    REQUIRE(tagTree.rootref()["tags"].num_children() == 1);
+    CHECK(yaml::scalarView(tagTree.rootref()["tags"][0]) == "subtree");
   }
 
   TEST_CASE("CLI - empty YAML collections are sequences", "[cli][unit][output]")
