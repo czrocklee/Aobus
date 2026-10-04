@@ -201,6 +201,11 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 - `list add/remove` require a List whose complete local expression is one positive tag predicate; compound, negated, or non-tag predicates are not directly writable.
 - `list remove` removes that global tag from the target tracks and also forgets their saved positions in the List; plain output states both effects.
 - `list order move` binds the current effective sequence, preserves selected relative order, inserts it before the optional anchor, and moves it to the bottom when the anchor is omitted.
+- `list order reset` forgets all saved positions in the target List, including currently hidden tracks; it leaves other Lists' orders unchanged.
+- `list order forget-hidden` forgets only positions outside current effective membership, preserving the saved relative order of visible tracks.
+  Neither command changes track tags.
+  Their reports include `selectedTrackIds: []` and the number of forgotten positions; an unchanged order is a successful no-op.
+- No `list order` subcommand accepts `--dry-run`; supplying it is a usage failure.
 - The saved-order runtime may return `Applied`, `NoOp`, `Stale`, or `Unavailable`.
   CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
 - Ordinary List deletion rejects a List with descendants; `--descendants` explicitly selects complete-subtree deletion, and `--dry-run` reports the same subtree without committing.
@@ -243,6 +248,7 @@ aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects the command tree and representative exact shapes.
 - [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects encoding rules.
+- [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal and saved-order cleanup.
 
 ## Related documents
 

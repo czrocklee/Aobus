@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <initializer_list>
 #include <optional>
@@ -35,6 +36,19 @@ namespace ao::cli::test
     auto tree = ryml::Tree{yaml::callbacks()};
     REQUIRE(yaml::parseInArena(tree, text, state));
     return tree;
+  }
+
+  std::uint32_t parseCreatedListId(std::string_view output)
+  {
+    auto constexpr kPrefix = std::string_view{"add list: "};
+    auto const start = output.find(kPrefix);
+    REQUIRE(start != std::string_view::npos);
+
+    auto const idStart = start + kPrefix.size();
+    auto const idEnd = output.find(' ', idStart);
+    REQUIRE(idEnd != std::string_view::npos);
+
+    return static_cast<std::uint32_t>(std::stoul(std::string{output.substr(idStart, idEnd - idStart)}));
   }
 
   void requireJsonLineParses(std::string_view line)
