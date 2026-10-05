@@ -5,6 +5,7 @@
 
 #include "DesktopControls.h"
 #include "PlaybackSeekTarget.h"
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #import <AppKit/AppKit.h>
 
@@ -24,6 +25,8 @@ namespace ao::i18n
 @interface AobusSeekSlider : AobusSlider
 - (void)presentSeekTarget:(std::optional<ao::appkit::PlaybackSeekTarget>)optTarget;
 - (std::optional<ao::appkit::PlaybackSeekTarget>)seekTarget;
+/// Call once per native action to classify its value change or tracking-end commit.
+- (ao::uimodel::SeekSliderUpdate)seekUpdate;
 @end
 
 @interface AobusPlaybackBar : NSObject

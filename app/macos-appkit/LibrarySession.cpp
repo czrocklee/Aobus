@@ -56,7 +56,6 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <functional>
@@ -607,21 +606,27 @@ namespace ao::appkit
     transportPtrs[index]->handleClick();
   }
 
-  void LibrarySession::seek(double fraction, PlaybackSeekTarget const& target)
+  void LibrarySession::seek(uimodel::SeekSliderUpdate const& update, PlaybackSeekTarget const& target)
   {
     auto const& current = runtime().playback().snapshot().transport;
 
     if (target.occurrenceId.value == 0 || target.duration <= std::chrono::milliseconds{0} ||
-        target.occurrenceId != current.occurrenceId || target.revision != current.positionRevision ||
-        current.duration <= std::chrono::milliseconds{0})
+        target.occurrenceId != current.occurrenceId || update.occurrenceId != target.occurrenceId ||
+        target.revision != current.positionRevision || current.duration <= std::chrono::milliseconds{0})
     {
       return;
     }
 
-    _storagePtr->positionPtr->seekFinal(
-      target.occurrenceId,
-      std::chrono::milliseconds{
-        static_cast<std::int64_t>(std::clamp(fraction, 0.0, 1.0) * static_cast<double>(target.duration.count()))});
+    switch (update.action)
+    {
+      case uimodel::SeekSliderAction::Preview:
+        _storagePtr->positionPtr->seekPreview(update.occurrenceId, update.elapsed);
+        break;
+      case uimodel::SeekSliderAction::Commit:
+        _storagePtr->positionPtr->seekFinal(update.occurrenceId, update.elapsed);
+        break;
+      case uimodel::SeekSliderAction::None: break;
+    }
   }
 
   void LibrarySession::setVolume(float volume)

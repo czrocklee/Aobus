@@ -951,7 +951,7 @@ namespace ao::appkit
       {
         if (auto const optTarget = [static_cast<AobusSeekSlider*>(sender) seekTarget]; optTarget)
         {
-          _sessionPtr->seek(sender.doubleValue, *optTarget);
+          _sessionPtr->seek([static_cast<AobusSeekSlider*>(sender) seekUpdate], *optTarget);
         }
       });
   }

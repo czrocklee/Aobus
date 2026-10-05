@@ -131,6 +131,14 @@ The AppKit application delegate is the session and native-presentation
 coordinator. It retires callback admission before detaching presentation owners
 and releasing the session.
 
+The native playback-position slider uses shared `SeekInteraction` classification.
+Continuous pointer actions publish previews; the end of current tracking delivers one final seek only after a value action.
+Keyboard and discrete actions commit directly.
+The gesture retains its starting playback occurrence and duration, while the session also rejects an obsolete position revision.
+A replacement occurrence, including same-track replay, or loss of seekability retires the gesture instead of retargeting its preview or final seek.
+[`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) owns native tracking and
+[`AppKitPlaybackScenario.mm`](../../../test/integration/macos/AppKitPlaybackScenario.mm) checks preview/final separation, repeated in-gesture previews with one final commit, and guarded replacement through generated AppKit events and native target/action callbacks, not physical input.
+
 The session-lifetime `MediaPlayerAdapter` projects playback into MediaPlayer Now
 Playing state and the remote command center. It is the sole owner of its native
 registration tokens, playback snapshot subscription, and current artwork

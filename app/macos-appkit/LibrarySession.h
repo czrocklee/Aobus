@@ -22,6 +22,7 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -108,7 +109,7 @@ namespace ao::appkit
     void filter(std::string const& text);
     void play(TrackId trackId);
     void execute(uimodel::PlaybackCommand command);
-    void seek(double fraction, PlaybackSeekTarget const& target);
+    void seek(uimodel::SeekSliderUpdate const& update, PlaybackSeekTarget const& target);
     void setVolume(float volume);
     void selectOutput(audio::OutputDeviceSelection const& selection);
     std::optional<std::chrono::steady_clock::duration> refreshActivity();
