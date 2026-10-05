@@ -245,8 +245,10 @@ namespace
 
     if (flag != NO)
     {
+      _toolbarSearchCompletionPtr.reset();
       _toolbarSearch = search;
       _toolbarSearchItem = item;
+      [self installSearchCompletion:search toolbar:YES];
     }
 
     return item;
@@ -327,6 +329,7 @@ namespace
 
   if (item == _toolbarSearchItem)
   {
+    _toolbarSearchCompletionPtr.reset();
     _toolbarSearchItem = nil;
     _toolbarSearch = nil;
   }

@@ -7,11 +7,17 @@
 
 #import <AppKit/AppKit.h>
 
+namespace ao::rt
+{
+  class CompletionService;
+}
+
 @interface AobusLibraryEditor : NSObject<NSTextFieldDelegate, NSTokenFieldDelegate>
 - (instancetype)initWithModel:(ao::appkit::LibraryEditorModel&)model
                        parent:(NSWindow*)parent
                        modern:(BOOL)modern
-                      artwork:(NSImage*)artwork;
+                      artwork:(NSImage*)artwork
+                   completion:(ao::rt::CompletionService&)completion;
 - (NSWindow*)window;
 - (void)present;
 - (void)refresh;

@@ -5,17 +5,22 @@
 #include "ArtworkView.h"
 #include "DesktopApplicationInternal.h"
 #include "DesktopControls.h"
+#include "EntryCompletionAdapter.h"
 #include "LibraryBrowser.h"
 #include "LibrarySession.h"
 #include "PlaybackBar.h"
 #include "TrackInspector.h"
 #include <ao/rt/VirtualListIds.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <memory>
+#include <string_view>
 
 namespace
 {
@@ -266,6 +271,7 @@ namespace
   _search.action = @selector(filterTracks:);
   _search.delegate = self;
   _search.sendsSearchStringImmediately = YES;
+  [self installSearchCompletion:_search toolbar:NO];
   [_browser addSubview:_search];
   _presentation = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
   _presentation.bezelStyle = NSBezelStyleRounded;
@@ -549,6 +555,16 @@ namespace
   nativeCallback(
     [&]
     {
+      if (_searchCompletionPtr)
+      {
+        _searchCompletionPtr->dismiss();
+      }
+
+      if (_toolbarSearchCompletionPtr)
+      {
+        _toolbarSearchCompletionPtr->dismiss();
+      }
+
       auto const origin = _libraryBrowser.trackScroll.contentView.bounds.origin;
       _settings[_modern ? @"modernInspector" : @"classicInspector"] = @(_inspectorVisible);
       _modern = static_cast<BOOL>(sender.tag != 0);
@@ -702,6 +718,80 @@ namespace
   }
 }
 
+- (void)installSearchCompletion:(NSSearchField*)field toolbar:(BOOL)toolbar
+{
+  if (_closing != NO || !_sessionPtr || field == nil)
+  {
+    return;
+  }
+
+  nativeCallback(
+    [&]
+    {
+      auto completer = ao::uimodel::TrackFilterCompleter{_sessionPtr->runtime().completion()};
+      auto& controllerPtr = toolbar != NO ? _toolbarSearchCompletionPtr : _searchCompletionPtr;
+      controllerPtr = std::make_unique<ao::appkit::EntryCompletionAdapter>(
+        field,
+        _sessionPtr->catalog(),
+        [completer](std::string_view text, std::size_t cursor) mutable { return completer.complete(text, cursor); },
+        ao::appkit::EntryCompletionOptions{.acceptOnReturn = true});
+    });
+}
+
+- (ao::appkit::EntryCompletionAdapter*)completionForSearch:(NSControl*)field
+{
+  if (_closing != NO || !_sessionPtr)
+  {
+    return nullptr;
+  }
+
+  if (field == _search)
+  {
+    return _searchCompletionPtr.get();
+  }
+
+  return field == _toolbarSearch ? _toolbarSearchCompletionPtr.get() : nullptr;
+}
+
+- (void)controlTextDidChange:(NSNotification*)notification
+{
+  nativeCallback(
+    [&]
+    {
+      if (auto* const controller = [self completionForSearch:notification.object]; controller != nullptr)
+      {
+        [self filterTracks:notification.object];
+        controller->update();
+      }
+    });
+}
+
+- (void)controlTextDidEndEditing:(NSNotification*)notification
+{
+  nativeCallback(
+    [&]
+    {
+      if (auto* const controller = [self completionForSearch:notification.object]; controller != nullptr)
+      {
+        controller->dismiss();
+      }
+    });
+}
+
+- (BOOL)control:(NSControl*)control textView:(NSTextView*) [[maybe_unused]] textView doCommandBySelector:(SEL)command
+{
+  BOOL consumed = NO;
+  nativeCallback(
+    [&]
+    {
+      if (auto* const controller = [self completionForSearch:control]; controller != nullptr)
+      {
+        consumed = static_cast<BOOL>(controller->tryHandleCommand(command));
+      }
+    });
+  return consumed;
+}
+
 - (void)filterTracks:(id) [[maybe_unused]] sender
 {
   auto* field = (_modern != NO) ? _toolbarSearch : _search;
@@ -727,7 +817,16 @@ namespace
       peer.stringValue = field.stringValue;
     }
 
-    nativeCallback([&] { _sessionPtr->filter(utf8(field.stringValue)); });
+    // Both the immediate search action and the delegate's text change report
+    // each edit; the delegate also covers completion's programmatic insertion.
+    nativeCallback(
+      [&]
+      {
+        if (auto const text = utf8(field.stringValue); text != _sessionPtr->state().filter.entryText)
+        {
+          _sessionPtr->filter(text);
+        }
+      });
   }
 }
 

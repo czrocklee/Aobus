@@ -5,7 +5,7 @@
 
 #include "AppKitText.h"
 #include "LibrarySession.h"
-#include <ao/Contract.h>
+#include "NativeCallback.h"
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
@@ -26,14 +26,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <format>
 #include <limits>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <unordered_set>
-#include <utility>
 #include <vector>
 
 namespace
@@ -71,21 +69,9 @@ namespace
   NSUserInterfaceItemIdentifier const kClassicGroupCellIdentifier = @"track-group-classic";
   NSUserInterfaceItemIdentifier const kModernGroupCellIdentifier = @"track-group-modern";
 
+  using ao::appkit::nativeCallback;
   using ao::appkit::nativeText;
   using ao::i18n::MessageId;
-
-  template<typename Callback>
-  void nativeCallback(Callback&& callback) noexcept
-  {
-    try
-    {
-      std::forward<Callback>(callback)();
-    }
-    catch (...)
-    {
-      AO_FATAL_EXCEPTION(std::current_exception(), "AppKit library browser callback");
-    }
-  }
 
   void setFrame(NSView* view, CGFloat left, CGFloat top, CGFloat width, CGFloat height)
   {

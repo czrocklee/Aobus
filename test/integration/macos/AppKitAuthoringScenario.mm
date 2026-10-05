@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "app/macos-appkit/AppKitText.h"
+#include "app/macos-appkit/EntryCompletionAdapter.h"
 #include "app/macos-appkit/LibraryBrowser.h"
 #include "app/macos-appkit/LibraryEditor.h"
 #include "app/macos-appkit/LibrarySession.h"
@@ -13,12 +14,14 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 
 #import <AppKit/AppKit.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -108,7 +111,11 @@ namespace ao::appkit::test
         AO_INVARIANT(_window.attachedSheet == nil, "The parent must be free before presenting an editor");
         AO_INVARIANT(model().state().kind != LibraryEditorKind::None,
                      "The editor model must begin a transaction before presentation");
-        _editor = [[AobusLibraryEditor alloc] initWithModel:model() parent:_window modern:modern artwork:nil];
+        _editor = [[AobusLibraryEditor alloc] initWithModel:model()
+                                                     parent:_window
+                                                     modern:modern
+                                                    artwork:nil
+                                                 completion:session().runtime().completion()];
         [_editor present];
         settleNativeCallbacks();
         AO_INVARIANT(_editor.window != nil, "Presenting an editor must create its panel");
@@ -633,6 +640,203 @@ namespace ao::appkit::test
       fixture.detachClosed();
     }
 
+    NSView* findIdentifiedCompletionView(NSView* root)
+    {
+      if ([root.identifier isEqualToString:@"completion-list"] != NO ||
+          [root.accessibilityIdentifier isEqualToString:@"completion-list"] != NO)
+      {
+        return root;
+      }
+
+      auto* const children = root.subviews;
+
+      for (NSUInteger index = 0; index < children.count; ++index)
+      {
+        auto* const child = children[index];
+
+        if (auto* const found = findIdentifiedCompletionView(child); found != nil)
+        {
+          return found;
+        }
+      }
+
+      return nil;
+    }
+
+    // The completion popover is its own native window outside every editor
+    // panel tree, so discovery walks the application's shown windows.
+    NSTableView* findShownCompletionTable()
+    {
+      auto* const windows = NSApp.windows;
+
+      for (NSUInteger index = 0; index < windows.count; ++index)
+      {
+        auto* const window = windows[index];
+
+        if (window.visible == NO)
+        {
+          continue;
+        }
+
+        if (auto* const view = findIdentifiedCompletionView(window.contentView); view != nil)
+        {
+          AO_INVARIANT([view isKindOfClass:NSTableView.class] != 0, "The completion list must be a table view");
+          return static_cast<NSTableView*>(view);
+        }
+      }
+
+      return nil;
+    }
+
+    void verifyCompletionRanges(EditorFixture& fixture)
+    {
+      auto* const field = [NSTextField textFieldWithString:@"😀$ti tail"];
+      field.frame = NSMakeRect(16, 16, 320, 28);
+      [fixture.window().contentView addSubview:field];
+      AO_INVARIANT([fixture.window() makeFirstResponder:field] != NO, "The range probe must own native editing");
+      auto* const editor = static_cast<NSTextView*>(field.currentEditor);
+      AO_INVARIANT(editor != nil);
+      editor.selectedRange = NSMakeRange(5, 0);
+      std::size_t providerCalls = 0;
+      std::size_t observedCursor = 0;
+      bool invalidSpan = false;
+      auto completion = EntryCompletionAdapter{
+        field,
+        fixture.session().catalog(),
+        [&](std::string_view text, std::size_t cursor) -> std::optional<rt::CompletionResult>
+        {
+          ++providerCalls;
+          observedCursor = cursor;
+          AO_INVARIANT(text == "😀$ti tail", "The provider must receive exact UTF-8 source bytes");
+          return rt::CompletionResult{
+            .replaceBegin = invalidSpan ? 1U : 4U,
+            .replaceEnd = 7,
+            .items = {{.displayText = "Title field", .insertText = "$title"}},
+          };
+        }};
+      completion.update();
+      AO_INVARIANT(providerCalls == 1 && observedCursor == 7 && findShownCompletionTable() != nil,
+                   "A non-BMP prefix must map the native caret to its exact UTF-8 byte offset");
+      AO_INVARIANT(completion.tryHandleCommand(@selector(insertTab:)));
+      AO_INVARIANT(
+        [editor.string isEqual:@"😀$title tail"] != NO && NSEqualRanges(editor.selectedRange, NSMakeRange(8, 0)),
+        "Acceptance must preserve both sides of the advertised byte span and use UTF-16 caret units");
+      AO_INVARIANT([field.stringValue isEqual:editor.string] != NO,
+                   "Native acceptance must publish insertText rather than the candidate display label");
+      [editor insertText:@"😀$ti tail" replacementRange:NSMakeRange(0, editor.string.length)];
+      editor.selectedRange = NSMakeRange(5, 0);
+      invalidSpan = true;
+      completion.update();
+      AO_INVARIANT(providerCalls == 2 && findShownCompletionTable() == nil,
+                   "A provider span inside a UTF-8 scalar must not become a native replacement");
+      invalidSpan = false;
+      completion.update();
+      AO_INVARIANT(findShownCompletionTable() != nil);
+      // A pointer click moves the caret without a command or text change.
+      editor.selectedRange = NSMakeRange(2, 0);
+      AO_INVARIANT(findShownCompletionTable() == nil && !completion.tryHandleCommand(@selector(insertTab:)),
+                   "A caret moved away from the source must dismiss and leave Tab to the field");
+      editor.selectedRange = NSMakeRange(5, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 4 && findShownCompletionTable() != nil);
+      // Text the host has not forwarded yet leaves the popover to the next update.
+      [editor insertText:@"x" replacementRange:NSMakeRange(editor.string.length, 0)];
+      AO_INVARIANT(findShownCompletionTable() != nil, "A text edit must not dismiss through the caret observer");
+      AO_INVARIANT(!completion.tryHandleCommand(@selector(insertTab:)) && findShownCompletionTable() == nil &&
+                     [editor.string isEqual:@"😀$ti tailx"] != NO,
+                   "A stale source must dismiss without consuming Tab or replacing text");
+      [editor insertText:@"😀$ti tail" replacementRange:NSMakeRange(0, editor.string.length)];
+      editor.selectedRange = NSMakeRange(5, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 5 && findShownCompletionTable() != nil);
+      editor.selectedRange = NSMakeRange(5, 1);
+      AO_INVARIANT(!completion.tryApplySelected() && [editor.string isEqual:@"😀$ti tail"] != NO &&
+                     findShownCompletionTable() == nil,
+                   "A live selection must invalidate a pending replacement even when its start did not move");
+      editor.selectedRange = NSMakeRange(5, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 6 && findShownCompletionTable() != nil);
+      [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidResignActiveNotification object:NSApp];
+      AO_INVARIANT(findShownCompletionTable() == nil, "Leaving the application must dismiss completion");
+      // A lone surrogate has no UTF-8 offset to hand the provider.
+      [editor insertText:[NSString stringWithCharacters:std::to_array<unichar>({0xD83D, u'$'}).data() length:2]
+        replacementRange:NSMakeRange(0, editor.string.length)];
+      editor.selectedRange = NSMakeRange(2, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 6 && findShownCompletionTable() == nil,
+                   "Text that cannot convert to UTF-8 must not reach the provider");
+      completion.detach();
+      completion.update();
+      AO_INVARIANT(providerCalls == 6 && !completion.tryHandleCommand(@selector(insertTab:)),
+                   "Detached completion must not query providers or consume commands");
+      [fixture.window() makeFirstResponder:nil];
+      [field removeFromSuperview];
+    }
+
+    void verifyEntryCompletion(EditorFixture& fixture, std::vector<TrackId> const& tracks)
+    {
+      auto& model = fixture.model();
+
+      // Metadata dictionary completion runs through the artist field's real
+      // fixture vocabulary; the inserted text is expected from the scanned
+      // fixture metadata, not from any shared completion algorithm.
+      requireAdmission(model.beginProperties({tracks[0]}), "The completion properties draft must begin");
+      fixture.present();
+      auto* const artist = requireTextField(fixture, @"artist");
+      editText(fixture.editor().window, @"artist", @"Aobus");
+      settleNativeCallbacks();
+      auto* const table = findShownCompletionTable();
+      AO_INVARIANT(
+        table != nil && table.numberOfRows >= 1, "An artist dictionary prefix must open the completion list");
+      AO_INVARIANT([table.identifier isEqualToString:@"completion-list"] != 0 &&
+                     table.window != fixture.editor().window && table.window != fixture.window(),
+                   "The completion list must live in its own shown window outside the editor tree");
+      auto* const artistEditor = static_cast<NSTextView*>(artist.currentEditor);
+      AO_INVARIANT(artistEditor != nil, "Artist completion must run through the native field editor");
+      [artistEditor doCommandBySelector:@selector(insertTab:)];
+      settleNativeCallbacks();
+      AO_INVARIANT([artistEditor.string isEqualToString:@"Aobus Fixture Artist"] != 0,
+                   "Tab acceptance must insert the fixture's real artist value");
+      auto const artistField = model.state().fields.at(static_cast<std::size_t>(artist.tag));
+      AO_INVARIANT(
+        artistEditor.selectedRange.location == artistEditor.string.length && artistEditor.selectedRange.length == 0,
+        "Acceptance must leave the caret at the end of the inserted value");
+      AO_INVARIANT(artistField.text == "Aobus Fixture Artist" && artistField.changed && model.state().dirty,
+                   "Acceptance must publish the edited artist value into the model");
+      AO_INVARIANT(findShownCompletionTable() == nil, "Acceptance must dismiss the completion popover");
+      fixture.finish();
+
+      // Query expression completion for a system field prefix.
+      requireAdmission(model.beginList(), "The expression completion draft must begin");
+      fixture.present();
+      auto* const expression = requireTextField(fixture, @"Expression");
+      editText(fixture.editor().window, @"Expression", @"$ti");
+      settleNativeCallbacks();
+      AO_INVARIANT(findShownCompletionTable() != nil, "A system field prefix must complete query expressions");
+      auto* const expressionEditor = static_cast<NSTextView*>(expression.currentEditor);
+      AO_INVARIANT(expressionEditor != nil, "Expression completion must run through the native field editor");
+      [expressionEditor doCommandBySelector:@selector(insertTab:)];
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        [expressionEditor.string isEqualToString:@"$title"] != 0, "Tab must insert the advertised system field name");
+      AO_INVARIANT(expressionEditor.selectedRange.location == static_cast<NSUInteger>(6) &&
+                     expressionEditor.selectedRange.length == 0,
+                   "The caret must follow the inserted field name");
+      AO_INVARIANT(model.state().list.expression == "$title" && model.state().dirty,
+                   "Expression acceptance must publish the edited draft value");
+      AO_INVARIANT(findShownCompletionTable() == nil, "Expression acceptance must dismiss completion");
+
+      // A visible popover must not survive its editor's teardown.
+      editText(fixture.editor().window, @"Name", @"Completion teardown probe");
+      editText(fixture.editor().window, @"Expression", @"$");
+      settleNativeCallbacks();
+      AO_INVARIANT(findShownCompletionTable() != nil, "The teardown probe must open completion first");
+      fixture.finish();
+      settleNativeCallbacks();
+      AO_INVARIANT(fixture.editor() == nil && findShownCompletionTable() == nil,
+                   "Finishing with a visible popover must tear the completion down with its editor");
+    }
+
     void finishCompletedEditor(EditorFixture& fixture)
     {
       AO_INVARIANT(fixture.model().state().completed, "Only a completed editor may use completion cleanup");
@@ -854,6 +1058,8 @@ namespace ao::appkit::test
     auto const listId = verifyStaleDraft(fixture, tracks, stateRoot);
     verifyStaleCloseContract(fixture, tracks, listId);
     verifyListAuthoring(fixture, tracks, listId, stateRoot);
+    verifyCompletionRanges(fixture);
+    verifyEntryCompletion(fixture, tracks);
     return 0;
   }
 } // namespace ao::appkit::test

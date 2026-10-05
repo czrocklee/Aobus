@@ -5,15 +5,22 @@
 
 #include "AppKitText.h"
 #include "ArtworkView.h"
+#include "EntryCompletionAdapter.h"
+#include "NativeCallback.h"
 #include <ao/Contract.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/MetadataValueCompleter.h>
+#include <ao/rt/completion/QueryExpressionCompleter.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
 #include <algorithm>
-#include <exception>
+#include <cstddef>
 #include <format>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -38,24 +45,14 @@ namespace
   constexpr auto kLabelWidth = 124;
   constexpr auto kActionWidth = 28;
   constexpr auto kCornerRadius = 12;
+  // The List form rows are Name, Description, then the query Expression.
+  constexpr NSUInteger kListExpressionFieldIndex = 2;
 
+  using ao::appkit::nativeCallback;
   using ao::appkit::nativeText;
   using ao::appkit::utf8;
   using ao::i18n::MessageId;
   using ao::rt::TrackField;
-
-  template<typename Callback>
-  void nativeCallback(Callback&& callback) noexcept
-  {
-    try
-    {
-      std::forward<Callback>(callback)();
-    }
-    catch (...)
-    {
-      AO_FATAL_EXCEPTION(std::current_exception(), "AppKit library editor callback");
-    }
-  }
 
   NSTextField* textLabel(NSString* text, CGFloat size, BOOL secondary = NO)
   {
@@ -124,6 +121,9 @@ namespace
 - (void)layoutForm;
 - (void)addSection:(NSString*)title expanded:(BOOL)expanded;
 - (void)addField:(NSTextField*)field label:(NSString*)label section:(NSUInteger)section editable:(BOOL)editable;
+- (ao::appkit::EntryCompletionAdapter*)completionControllerForField:(NSControl*)field;
+- (void)dismissCompletionControllers;
+- (void)detachCompletionControllers;
 @end
 
 @implementation AobusLibraryEditor {
@@ -156,11 +156,14 @@ namespace
   BOOL _trackingFieldMenu;
   BOOL _renderedStale;
   std::string _displayedError;
+  ao::rt::CompletionService* _completionService;
+  std::vector<std::unique_ptr<ao::appkit::EntryCompletionAdapter>> _completionControllers;
 }
 - (instancetype)initWithModel:(ao::appkit::LibraryEditorModel&)model
                        parent:(NSWindow*)parent
                        modern:(BOOL)modern
                       artwork:(NSImage*)artwork
+                   completion:(ao::rt::CompletionService&)completion
 {
   self = [super init];
 
@@ -170,6 +173,7 @@ namespace
     _parent = parent;
     _modern = modern;
     _artwork = artwork;
+    _completionService = &completion;
   }
 
   return self;
@@ -217,6 +221,7 @@ namespace
       _panel.contentView = _content;
       _panel.autorecalculatesKeyViewLoop = YES;
       _panel.title = nativeText(state.title);
+      [self detachCompletionControllers];
       _fields = [NSMutableArray array];
       _fieldButtons = [NSMutableArray array];
       _groups = [NSMutableArray array];
@@ -499,6 +504,17 @@ namespace
     field.tag = static_cast<NSInteger>(index);
     field.identifier = nativeText(std::string{ao::rt::trackFieldId(value.spec.field)});
     field.delegate = self;
+    auto controllerPtr = std::unique_ptr<ao::appkit::EntryCompletionAdapter>{};
+
+    // Completion covers editable dictionary-backed text fields only.
+    if (value.spec.editorKind == ao::uimodel::TrackPropertiesFormEditorKind::Text &&
+        ao::rt::supportsTrackFieldValueCompletion(value.spec.field))
+    {
+      controllerPtr = std::make_unique<ao::appkit::EntryCompletionAdapter>(
+        field, _model->catalog(), ao::rt::MetadataValueCompleter{*_completionService, value.spec.field}.asProvider());
+    }
+
+    _completionControllers.push_back(std::move(controllerPtr));
     [_fields addObject:field];
     [self
       addField:field
@@ -542,10 +558,22 @@ namespace
     field.identifier = identifiers[index];
     field.delegate = self;
     field.placeholderString = placeholders[index];
+    auto controllerPtr = std::unique_ptr<ao::appkit::EntryCompletionAdapter>{};
+
+    if (index == kListExpressionFieldIndex)
+    {
+      auto completer = ao::rt::QueryExpressionCompleter{*_completionService};
+      controllerPtr = std::make_unique<ao::appkit::EntryCompletionAdapter>(
+        field,
+        _model->catalog(),
+        [completer](std::string_view text, std::size_t cursor) mutable { return completer.complete(text, cursor); });
+    }
+
+    _completionControllers.push_back(std::move(controllerPtr));
     [_fields addObject:field];
     [self addField:field label:names[index] section:0 editable:YES];
 
-    if (index == 2)
+    if (index == kListExpressionFieldIndex)
     {
       _expressionError = textLabel(@"", kCaptionSize);
       _expressionError.textColor = NSColor.systemRedColor;
@@ -601,6 +629,12 @@ namespace
 - (void)refresh
 {
   auto const& state = _model->state();
+
+  if (state.busy || state.stale)
+  {
+    [self dismissCompletionControllers];
+  }
+
   auto const restoreStale = state.stale && _renderedStale == NO;
 
   if (_discardAlert != nil)
@@ -782,11 +816,39 @@ namespace
       }
 
       [self refresh];
+
+      if (auto* const controller = [self completionControllerForField:notification.object]; controller != nullptr)
+      {
+        controller->update();
+      }
     });
+}
+
+- (BOOL)control:(NSControl*)control textView:(NSTextView*) [[maybe_unused]] textView doCommandBySelector:(SEL)command
+{
+  BOOL consumed = NO;
+  nativeCallback(
+    [&]
+    {
+      if (auto* const controller = [self completionControllerForField:control]; controller != nullptr)
+      {
+        consumed = static_cast<BOOL>(controller->tryHandleCommand(command));
+      }
+    });
+  return consumed;
 }
 
 - (void)controlTextDidEndEditing:(NSNotification*)notification
 {
+  nativeCallback(
+    [&]
+    {
+      if (auto* const controller = [self completionControllerForField:notification.object]; controller != nullptr)
+      {
+        controller->dismiss();
+      }
+    });
+
   if (notification.object == _tags)
   {
     nativeCallback(
@@ -905,6 +967,8 @@ namespace
 
   auto* const panel = _panel;
   _panel = nil;
+  // Detach the borrowed-field controllers before the panel tears its fields down.
+  [self detachCompletionControllers];
   [_parent endSheet:panel];
   _model->cancel();
   auto const completed = _closeCompletion;
@@ -952,6 +1016,7 @@ namespace
                                   keyEquivalent:@""];
       item.target = self;
       item.tag = sender.tag;
+      [self dismissCompletionControllers];
       _trackingFieldMenu = YES;
       [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0, sender.bounds.size.height) inView:sender];
       _trackingFieldMenu = NO;
@@ -984,5 +1049,46 @@ namespace
 - (void)cancel:(id) [[maybe_unused]] sender
 {
   std::ignore = [self requestClose];
+}
+
+- (ao::appkit::EntryCompletionAdapter*)completionControllerForField:(NSControl*)field
+{
+  if ([field isKindOfClass:NSTextField.class] == NO || _completionControllers.empty())
+  {
+    return nullptr;
+  }
+
+  NSUInteger const index = [_fields indexOfObjectIdenticalTo:static_cast<NSTextField*>(field)];
+
+  if (index == NSNotFound || index >= _completionControllers.size())
+  {
+    return nullptr;
+  }
+
+  return _completionControllers[index].get();
+}
+
+- (void)dismissCompletionControllers
+{
+  for (auto const& controllerPtr : _completionControllers)
+  {
+    if (controllerPtr != nullptr)
+    {
+      controllerPtr->dismiss();
+    }
+  }
+}
+
+- (void)detachCompletionControllers
+{
+  for (auto const& controllerPtr : _completionControllers)
+  {
+    if (controllerPtr != nullptr)
+    {
+      controllerPtr->detach();
+    }
+  }
+
+  _completionControllers.clear();
 }
 @end

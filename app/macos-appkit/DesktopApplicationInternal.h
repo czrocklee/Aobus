@@ -9,9 +9,11 @@
 #include "AppKitText.h"
 #include "DesktopApplication.h"
 #include "DesktopControls.h"
+#include "EntryCompletionAdapter.h"
 #include "LibraryBrowser.h"
 #include "LibraryEditor.h"
 #include "LibrarySession.h"
+#include "NativeCallback.h"
 #include "PlaybackBar.h"
 #include "TrackInspector.h"
 #include <ao/Contract.h>
@@ -29,18 +31,6 @@
 
 namespace ao::appkit
 {
-  template<typename Callback>
-  void nativeCallback(Callback&& callback) noexcept
-  {
-    try
-    {
-      std::forward<Callback>(callback)();
-    }
-    catch (...)
-    {
-      AO_FATAL_EXCEPTION(std::current_exception(), "AppKit desktop callback");
-    }
-  }
   NSTextField* label(NSString* text, CGFloat size, BOOL secondary = NO);
   NSAppearance* nativeAppearance(NSString* name);
   inline constexpr auto kContentInset = 16;
@@ -79,6 +69,8 @@ namespace ao::appkit
   AobusLibraryBrowser* _libraryBrowser;
   NSSearchField* _search;
   NSSearchField* _toolbarSearch;
+  std::unique_ptr<ao::appkit::EntryCompletionAdapter> _searchCompletionPtr;
+  std::unique_ptr<ao::appkit::EntryCompletionAdapter> _toolbarSearchCompletionPtr;
   NSSearchToolbarItem* _toolbarSearchItem;
   NSToolbarItem* _toolbarActivityItem;
   NSPopUpButton* _presentation;
@@ -194,6 +186,8 @@ namespace ao::appkit
 - (void)selectPresentation:(id) [[maybe_unused]] sender;
 - (void)emptyAction:(id) [[maybe_unused]] sender;
 - (void)filterTracks:(id) [[maybe_unused]] sender;
+- (void)installSearchCompletion:(NSSearchField*)field toolbar:(BOOL)toolbar;
+- (ao::appkit::EntryCompletionAdapter*)completionForSearch:(NSControl*)field;
 - (void)showVolume:(id) [[maybe_unused]] sender;
 @end
 

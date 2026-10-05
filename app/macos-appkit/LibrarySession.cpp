@@ -14,6 +14,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -26,6 +27,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -88,6 +90,7 @@ namespace ao::appkit
     i18n::MessageCatalog catalog;
     std::function<void(DesktopInvalidation)> onInvalidated;
     std::unique_ptr<rt::TextOrderingPolicy> textOrderingPolicyPtr;
+    std::unique_ptr<rt::CompletionAliasPolicy> completionAliasPolicyPtr;
     std::optional<rt::AppRuntime> optRuntime;
     MainRunLoopExecutor* executor = nullptr;
     rt::ViewId viewId = rt::kInvalidViewId;
@@ -187,6 +190,7 @@ namespace ao::appkit
     }
 
     storage.textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
+    storage.completionAliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
     auto runtimeRes = rt::AppRuntime::create({
       .executorPtr = std::move(executorPtr),
       .musicRoot = root,
@@ -194,6 +198,7 @@ namespace ao::appkit
       .cacheDirectory = stateRoot / "cache",
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(paths.databasePath() / "appkit-workspace.yaml"),
       .textOrderingPolicy = storage.textOrderingPolicyPtr.get(),
+      .completionAliasPolicy = storage.completionAliasPolicyPtr.get(),
     });
 
     if (!runtimeRes)
@@ -732,6 +737,7 @@ namespace ao::appkit
     storage.editorPtr.reset();
     storage.optRuntime.reset();
     storage.textOrderingPolicyPtr.reset();
+    storage.completionAliasPolicyPtr.reset();
     storage.executor = nullptr;
     APP_LOG_INFO("AppKit session closed after producer join and final callback drain");
   }

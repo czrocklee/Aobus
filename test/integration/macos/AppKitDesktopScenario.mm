@@ -173,6 +173,11 @@ namespace
   {
     auto* const window = windows[index];
 
+    if (window.visible == NO)
+    {
+      continue;
+    }
+
     if (auto* const control = ao::appkit::test::findControl(window.contentView, identifier); control != nil)
     {
       return control;
@@ -289,6 +294,82 @@ namespace
                    "Filtering must preserve the selected track: expected {}, observed {}",
                    _selectedIdentity.UTF8String,
                    rowIdentity(_table, _table.selectedRow).UTF8String);
+      activateMenuItem([self menuItem:@"focusSearch:"], @"focus search completion");
+      _searchStep = 5;
+      return NO;
+    case 5:
+    {
+      auto* const field = findSearchField(_window);
+
+      if (field == nil || field.currentEditor == nil)
+      {
+        return NO;
+      }
+
+      _searchEditor = static_cast<NSTextView*>(field.currentEditor);
+      [_searchEditor insertText:@"\"Aobus Fixture Ar" replacementRange:(::NSMakeRange(0, _searchEditor.string.length))];
+      _searchStep = 6;
+      return NO;
+    }
+    case 6:
+    {
+      auto* const suggestions = static_cast<NSTableView*>([self controlInAnyWindow:@"completion-list"]);
+
+      if (suggestions == nil || suggestions.window.visible == NO || suggestions.numberOfRows == 0)
+      {
+        return NO;
+      }
+
+      [_searchEditor doCommandBySelector:@selector(insertNewline:)];
+      _searchStep = 7;
+      return NO;
+    }
+    case 7:
+    {
+      auto* const field = findSearchField(_window);
+      auto* const suggestions = [self controlInAnyWindow:@"completion-list"];
+      AO_INVARIANT([_searchEditor.string isEqual:@"\"Aobus Fixture Artist\""] != NO &&
+                     [field.stringValue isEqual:_searchEditor.string] != NO,
+                   "Return must insert the quick-filter's quoted value, not its display text: {}",
+                   _searchEditor.string.UTF8String);
+      AO_INVARIANT(suggestions == nil || suggestions.window.visible == NO,
+                   "Accepting a search completion must dismiss its transient native window");
+
+      if (selectableRowCount(_table) < 3)
+      {
+        return NO;
+      }
+
+      [_searchEditor insertText:@"$ti" replacementRange:(::NSMakeRange(0, _searchEditor.string.length))];
+      _searchStep = 8;
+      return NO;
+    }
+    case 8:
+    {
+      auto* const suggestions = static_cast<NSTableView*>([self controlInAnyWindow:@"completion-list"]);
+
+      if (suggestions == nil || suggestions.window.visible == NO || suggestions.numberOfRows == 0)
+      {
+        return NO;
+      }
+
+      [_searchEditor doCommandBySelector:@selector(insertTab:)];
+      AO_INVARIANT([_searchEditor.string isEqual:@"$title"] != NO,
+                   "Explicit-expression search completion must apply the shared field token");
+      [_searchEditor insertText:@"" replacementRange:(::NSMakeRange(0, _searchEditor.string.length))];
+      [self activateControl:findSearchField(_window) obligation:@"clear completed search"];
+      [_window makeFirstResponder:_table];
+      _searchStep = 9;
+      return NO;
+    }
+    case 9:
+      if (selectableRowCount(_table) < 3 || _table.selectedRow < 0)
+      {
+        return NO;
+      }
+
+      AO_INVARIANT([rowIdentity(_table, _table.selectedRow) isEqual:_selectedIdentity] != NO,
+                   "Accepting and clearing completion must preserve Runtime selection");
       _searchStep = 0;
       _searchEditor = nil;
       return YES;
@@ -359,8 +440,9 @@ namespace
   @autoreleasepool
   {
     AO_INVARIANT(std::chrono::steady_clock::now() <= _deadline,
-                 "Desktop scenario timed out at stage {}",
-                 static_cast<std::int32_t>(_stage));
+                 "Desktop scenario timed out at stage {} search step {}",
+                 static_cast<std::int32_t>(_stage),
+                 _searchStep);
 
     if (_stage == Stage::Complete)
     {

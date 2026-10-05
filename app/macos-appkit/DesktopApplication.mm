@@ -1388,6 +1388,8 @@ namespace ao::appkit
   [_activityExpirationTimer invalidate];
   _activityExpirationTimer = nil;
 
+  _searchCompletionPtr.reset();
+  _toolbarSearchCompletionPtr.reset();
   [_trackInspector detach];
   [_playbackBar detach];
   [_activityPopover close];
@@ -1655,7 +1657,8 @@ namespace ao::appkit
   _libraryEditor = [[AobusLibraryEditor alloc] initWithModel:_sessionPtr->editor()
                                                       parent:_window
                                                       modern:_modern
-                                                     artwork:artwork];
+                                                     artwork:artwork
+                                                  completion:_sessionPtr->runtime().completion()];
   [_libraryEditor present];
 }
 
