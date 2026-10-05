@@ -12,6 +12,8 @@
 #include <ao/query/Parser.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -501,7 +503,16 @@ namespace ao::appkit
     {
       if (res)
       {
+        // Format before the synchronous change callback; reentrant shutdown retires the post.
+        auto const notification = uimodel::listMembershipEditNotification(owner->_catalog, *res);
         owner->finishStatus(res->status);
+
+        if (owner->_closing)
+        {
+          co_return;
+        }
+
+        owner->_runtime.notifications().post(notification.severity, notification.text, notification.lifetime);
       }
       else
       {

@@ -14,6 +14,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/i18n/IcuCompletionAliases.h>
 #include <ao/i18n/IcuTextOrdering.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -21,11 +22,14 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -34,7 +38,11 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/resource/ResourceByteMemoryCache.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
+#include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
@@ -56,7 +64,6 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <functional>
@@ -89,6 +96,7 @@ namespace ao::appkit
     i18n::MessageCatalog catalog;
     std::function<void(DesktopInvalidation)> onInvalidated;
     std::unique_ptr<rt::TextOrderingPolicy> textOrderingPolicyPtr;
+    std::unique_ptr<rt::CompletionAliasPolicy> completionAliasPolicyPtr;
     std::optional<rt::AppRuntime> optRuntime;
     MainRunLoopExecutor* executor = nullptr;
     rt::ViewId viewId = rt::kInvalidViewId;
@@ -102,6 +110,12 @@ namespace ao::appkit
     async::Subscription selectionSub;
     std::vector<TrackId> selectedTrackIds;
     std::unique_ptr<LibraryEditorModel> editorPtr;
+    std::unique_ptr<uimodel::TrackPresentationCatalog> presentationCatalogPtr;
+    std::unique_ptr<uimodel::ListPresentations> listPresentationsPtr;
+    std::unique_ptr<uimodel::TrackPresentationPickerViewModel> presentationPickerPtr;
+    async::Subscription presentationPreferencesSub;
+    // A group that failed to load is never overwritten by this session's preferences.
+    bool presentationPreferencesWritable = false;
     std::unique_ptr<uimodel::PlaybackActions> actionsPtr;
     std::unique_ptr<MediaPlayerAdapter> mediaPlayerPtr;
     std::array<std::unique_ptr<uimodel::TransportViewModel>, kPlaybackCommandCapacity> transportPtrs;
@@ -126,6 +140,74 @@ namespace ao::appkit
       {
         onInvalidated(invalidation);
       }
+    }
+
+    void renderPresentation(uimodel::TrackPresentationPickerState const& pickerState)
+    {
+      AO_INVARIANT(optRuntime);
+      state.presentation = pickerState;
+      state.optListPresentationId.reset();
+
+      if (auto const viewRes = optRuntime->views().findTrackListState(pickerState.activeViewId); viewRes)
+      {
+        if (auto const optId = listPresentationsPtr->presentationIdForList(viewRes->listId); optId)
+        {
+          state.optListPresentationId = std::string{*optId};
+        }
+      }
+
+      invalidate(DesktopInvalidation::Library);
+    }
+
+    void restorePresentationPreferences()
+    {
+      AO_INVARIANT(optRuntime);
+      auto& runtime = *optRuntime;
+      presentationCatalogPtr = std::make_unique<uimodel::TrackPresentationCatalog>(runtime.workspace(), catalog);
+      listPresentationsPtr =
+        std::make_unique<uimodel::ListPresentations>(*presentationCatalogPtr, runtime.library().changes());
+      auto preferences = uimodel::ListPresentations::Snapshot{};
+
+      if (auto res = runtime.workspaceConfigStore().load(
+            uimodel::kListPresentationsConfigGroup, preferences, uimodel::ListPresentationPreferenceYamlSchema{});
+          !res)
+      {
+        runtime.notifications().post(
+          rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
+      }
+      else
+      {
+        presentationPreferencesWritable = true;
+      }
+
+      auto knownListIds = std::vector<ListId>{};
+
+      for (auto const& list : runtime.library().snapshot().lists())
+      {
+        knownListIds.push_back(list.id);
+      }
+
+      // Install before observing saves: restoring a sibling group must not rewrite it.
+      listPresentationsPtr->restore(std::move(preferences), knownListIds);
+    }
+
+    // A virtual id, or a saved id whose List is gone, recommends as All Tracks.
+    rt::TrackPresentationSpec presentationForList(ListId const listId)
+    {
+      AO_INVARIANT(optRuntime);
+      auto context = uimodel::ListPresentationContext{.listId = listId};
+
+      if (!rt::isVirtualListId(listId))
+      {
+        if (auto const optNode = optRuntime->library().snapshot().listNode(listId); optNode)
+        {
+          context.sourceKind = uimodel::ListPresentationSourceKind::SavedList;
+          context.listExpression = optNode->expression;
+          return listPresentationsPtr->presentationForList(context);
+        }
+      }
+
+      return listPresentationsPtr->presentationForList(context);
     }
 
     // Storage stays alive through runtime shutdown and the final executor drain.
@@ -188,6 +270,7 @@ namespace ao::appkit
     }
 
     storage.textOrderingPolicyPtr = std::move(*textOrderingPolicyRes);
+    storage.completionAliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
     auto runtimeRes = rt::AppRuntime::create({
       .executorPtr = std::move(executorPtr),
       .musicRoot = root,
@@ -195,6 +278,7 @@ namespace ao::appkit
       .cacheDirectory = stateRoot / "cache",
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(paths.databasePath() / "appkit-workspace.yaml"),
       .textOrderingPolicy = storage.textOrderingPolicyPtr.get(),
+      .completionAliasPolicy = storage.completionAliasPolicyPtr.get(),
     });
 
     if (!runtimeRes)
@@ -218,9 +302,19 @@ namespace ao::appkit
       APP_LOG_WARN("AppKit workspace restore: {}", res.error().message);
     }
 
+    storage.restorePresentationPreferences();
+
     if (runtime.workspace().snapshot().activeViewId == rt::kInvalidViewId)
     {
-      if (auto res = runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}); !res)
+      if (auto res = runtime.workspace().navigate({
+            .target = rt::kAllTracksListId,
+            .optPresentation =
+              rt::NavigationPresentation{
+                .mode = rt::NavigationPresentationMode::NewViewDefault,
+                .spec = storage.presentationForList(rt::kAllTracksListId),
+              },
+          });
+          !res)
       {
         return std::unexpected{res.error()};
       }
@@ -347,6 +441,34 @@ namespace ao::appkit
         storage.invalidate(DesktopInvalidation::Activity);
       },
       uimodel::ActivityStatusViewModelOptions{.libraryJobs = &runtime.library().jobs()});
+    storage.presentationPickerPtr = std::make_unique<uimodel::TrackPresentationPickerViewModel>(
+      runtime.views(),
+      runtime.workspace(),
+      *storage.presentationCatalogPtr,
+      *storage.listPresentationsPtr,
+      storage.catalog,
+      [&storage](auto const& state) { storage.renderPresentation(state); });
+    storage.presentationPreferencesSub = storage.listPresentationsPtr->signalChanged().connect(
+      [&storage, &runtime](ListId)
+      {
+        if (!storage.presentationPreferencesWritable)
+        {
+          storage.presentationPickerPtr->refresh();
+          return;
+        }
+
+        if (auto res = runtime.workspaceConfigStore().save(uimodel::kListPresentationsConfigGroup,
+                                                           storage.listPresentationsPtr->snapshot(),
+                                                           uimodel::ListPresentationPreferenceYamlSchema{});
+            !res)
+        {
+          runtime.notifications().post(
+            rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
+        }
+
+        storage.presentationPickerPtr->refresh();
+      });
+    storage.presentationPickerPtr->refresh();
     storage.workspaceSub = runtime.workspace().onChanged([this](auto const&) { bindProjection(); });
     storage.projectionSub = runtime.views().onProjectionChanged([this](auto const&) { bindProjection(); });
     storage.selectionSub = runtime.views().onSelectionChanged(
@@ -548,14 +670,69 @@ namespace ao::appkit
 
   void LibrarySession::navigate(ListId listId) const
   {
-    auto res = runtime().workspace().navigate({.target = listId});
-    AO_INVARIANT(res);
+    auto res = runtime().workspace().navigate({
+      .target = listId,
+      .optPresentation =
+        rt::NavigationPresentation{
+          .mode = rt::NavigationPresentationMode::NewViewDefault,
+          .spec = _storagePtr->presentationForList(listId),
+        },
+    });
+
+    if (!res)
+    {
+      runtime().notifications().post(
+        rt::NotificationSeverity::Error, res.error().message, rt::NotificationLifetime::history());
+    }
   }
 
-  void LibrarySession::setPresentation(std::string const& id) const
+  Result<> LibrarySession::setPresentation(std::string const& id) const
   {
-    auto res = runtime().workspace().setActivePresentation(id);
-    AO_INVARIANT(res);
+    auto& storage = *_storagePtr;
+
+    if (!id.empty())
+    {
+      if (auto const optSelection = storage.presentationPickerPtr->selectPresentation(id); optSelection)
+      {
+        if (auto res = runtime().workspace().setActivePresentation(optSelection->spec); !res)
+        {
+          return res;
+        }
+
+        storage.presentationPickerPtr->completeSelection(*optSelection);
+        return {};
+      }
+
+      auto const viewRes = runtime().views().findTrackListState(runtime().workspace().snapshot().activeViewId);
+
+      if (!viewRes)
+      {
+        return std::unexpected{viewRes.error()};
+      }
+
+      auto const eligibility = uimodel::trackPresentationEligibility(storage.catalog, viewRes->listId, id);
+
+      if (!eligibility.enabled)
+      {
+        return makeError(Error::Code::NotSupported, eligibility.disabledReason);
+      }
+
+      // Let the runtime supply its ordinary unknown-id error; never pin a rejected choice.
+      auto res = runtime().workspace().setActivePresentation(id);
+      return res ? Result<>{} : std::unexpected{res.error()};
+    }
+
+    auto const viewRes = runtime().views().findTrackListState(runtime().workspace().snapshot().activeViewId);
+
+    if (!viewRes)
+    {
+      return std::unexpected{viewRes.error()};
+    }
+
+    // Auto drops the pin first so the shared resolver supplies the recommendation.
+    auto const listId = viewRes->listId;
+    storage.listPresentationsPtr->clearPresentationForList(listId);
+    return runtime().workspace().setActivePresentation(storage.presentationForList(listId));
   }
 
   Result<> LibrarySession::sort(rt::TrackSortField const field, bool const ascending) const
@@ -607,21 +784,27 @@ namespace ao::appkit
     transportPtrs[index]->handleClick();
   }
 
-  void LibrarySession::seek(double fraction, PlaybackSeekTarget const& target)
+  void LibrarySession::seek(uimodel::SeekSliderUpdate const& update, PlaybackSeekTarget const& target)
   {
     auto const& current = runtime().playback().snapshot().transport;
 
     if (target.occurrenceId.value == 0 || target.duration <= std::chrono::milliseconds{0} ||
-        target.occurrenceId != current.occurrenceId || target.revision != current.positionRevision ||
-        current.duration <= std::chrono::milliseconds{0})
+        target.occurrenceId != current.occurrenceId || update.occurrenceId != target.occurrenceId ||
+        target.revision != current.positionRevision || current.duration <= std::chrono::milliseconds{0})
     {
       return;
     }
 
-    _storagePtr->positionPtr->seekFinal(
-      target.occurrenceId,
-      std::chrono::milliseconds{
-        static_cast<std::int64_t>(std::clamp(fraction, 0.0, 1.0) * static_cast<double>(target.duration.count()))});
+    switch (update.action)
+    {
+      case uimodel::SeekSliderAction::Preview:
+        _storagePtr->positionPtr->seekPreview(update.occurrenceId, update.elapsed);
+        break;
+      case uimodel::SeekSliderAction::Commit:
+        _storagePtr->positionPtr->seekFinal(update.occurrenceId, update.elapsed);
+        break;
+      case uimodel::SeekSliderAction::None: break;
+    }
   }
 
   void LibrarySession::setVolume(float volume)
@@ -706,6 +889,10 @@ namespace ao::appkit
     storage.selectionSub.reset();
     storage.playingCoverRequest.reset();
     storage.selectedCoverRequest.reset();
+    storage.presentationPreferencesSub.reset();
+    storage.presentationPickerPtr.reset();
+    storage.listPresentationsPtr.reset();
+    storage.presentationCatalogPtr.reset();
     storage.filterPtr.reset();
     storage.activityPtr.reset();
     storage.positionPtr.reset();
@@ -727,6 +914,7 @@ namespace ao::appkit
     storage.editorPtr.reset();
     storage.optRuntime.reset();
     storage.textOrderingPolicyPtr.reset();
+    storage.completionAliasPolicyPtr.reset();
     storage.executor = nullptr;
     APP_LOG_INFO("AppKit session closed after producer join and final callback drain");
   }

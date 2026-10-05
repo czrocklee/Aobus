@@ -15,6 +15,7 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/uimodel/library/track/TrackFilterView.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -22,6 +23,7 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 #include <ao/uimodel/playback/seek/PlaybackPosition.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -69,6 +71,8 @@ namespace ao::appkit
     rt::PlaybackPositionRevision positionRevision{};
     uimodel::AobusSoulViewState soul{};
     uimodel::TrackFilterViewState filter{};
+    uimodel::TrackPresentationPickerState presentation{};
+    std::optional<std::string> optListPresentationId{};
     uimodel::ActivityStatusViewState activity{};
     std::array<uimodel::TransportViewState, kPlaybackCommandCapacity> transport{};
     rt::ResourceBytes playingCover{};
@@ -103,12 +107,12 @@ namespace ao::appkit
     std::optional<std::size_t> displayIndexOf(TrackId trackId) const;
     void select(std::vector<TrackId> ids);
     void navigate(ListId listId) const;
-    void setPresentation(std::string const& id) const;
+    Result<> setPresentation(std::string const& id) const;
     Result<> sort(rt::TrackSortField field, bool ascending) const;
     void filter(std::string const& text);
     void play(TrackId trackId);
     void execute(uimodel::PlaybackCommand command);
-    void seek(double fraction, PlaybackSeekTarget const& target);
+    void seek(uimodel::SeekSliderUpdate const& update, PlaybackSeekTarget const& target);
     void setVolume(float volume);
     void selectOutput(audio::OutputDeviceSelection const& selection);
     std::optional<std::chrono::steady_clock::duration> refreshActivity();

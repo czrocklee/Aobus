@@ -7,17 +7,19 @@ add_library(ao_appkit OBJECT
   DesktopShell.mm
   DesktopCommandSurface.mm
   DesktopControls.mm DesktopControls.h
+  EntryCompletionAdapter.mm EntryCompletionAdapter.h
   LibraryBrowser.mm LibraryBrowser.h
   LibraryEditor.mm LibraryEditor.h
   LibraryEditorModel.cpp LibraryEditorModel.h
   LibrarySession.cpp LibrarySession.h
   MainRunLoopExecutor.cpp MainRunLoopExecutor.h
   MediaPlayerAdapter.mm MediaPlayerAdapter.h
+  NativeCallback.h
   PlaybackBar.mm PlaybackBar.h
   SoulButton.mm SoulButton.h
   TrackInspector.mm TrackInspector.h)
 target_link_libraries(ao_appkit PUBLIC
-  ao_app_uimodel ao_app_runtime ao_app_i18n ao_app_i18n_ordering ao_audio ao_desktop_launch
+  ao_app_uimodel ao_app_runtime ao_app_i18n ao_app_i18n_ordering ao_app_i18n_completion ao_audio ao_desktop_launch
   "-framework AppKit" "-framework CoreFoundation" "-framework MediaPlayer" "-framework QuartzCore")
 target_compile_options(ao_appkit PUBLIC
   "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc;-Woverloaded-virtual;-Wnon-virtual-dtor>")

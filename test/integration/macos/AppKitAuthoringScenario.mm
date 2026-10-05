@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "app/macos-appkit/AppKitText.h"
+#include "app/macos-appkit/EntryCompletionAdapter.h"
 #include "app/macos-appkit/LibraryBrowser.h"
 #include "app/macos-appkit/LibraryEditor.h"
 #include "app/macos-appkit/LibrarySession.h"
@@ -9,16 +10,22 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationIds.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #import <AppKit/AppKit.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -26,6 +33,7 @@
 #include <memory>
 #include <ranges>
 #include <string>
+#include <variant>
 #include <vector>
 
 @interface AobusAuthoringBrowserDelegate : NSObject<AobusLibraryBrowserDelegate>
@@ -98,6 +106,11 @@ namespace ao::appkit::test
 
       LibraryEditorModel& model() { return session().editor(); }
 
+      void retainMembershipModel(std::shared_ptr<LibraryEditorModel> modelPtr)
+      {
+        _membershipModels.push_back(std::move(modelPtr));
+      }
+
       NSWindow* window() const { return _window; }
 
       AobusLibraryEditor* editor() const { return _editor; }
@@ -108,7 +121,11 @@ namespace ao::appkit::test
         AO_INVARIANT(_window.attachedSheet == nil, "The parent must be free before presenting an editor");
         AO_INVARIANT(model().state().kind != LibraryEditorKind::None,
                      "The editor model must begin a transaction before presentation");
-        _editor = [[AobusLibraryEditor alloc] initWithModel:model() parent:_window modern:modern artwork:nil];
+        _editor = [[AobusLibraryEditor alloc] initWithModel:model()
+                                                     parent:_window
+                                                     modern:modern
+                                                    artwork:nil
+                                                 completion:session().runtime().completion()];
         [_editor present];
         settleNativeCallbacks();
         AO_INVARIANT(_editor.window != nil, "Presenting an editor must create its panel");
@@ -140,6 +157,8 @@ namespace ao::appkit::test
       }
 
     private:
+      // Test-owned models stay alive through SessionFixture's shutdown and final callback drain.
+      std::vector<std::shared_ptr<LibraryEditorModel>> _membershipModels;
       SessionFixture _sessionFixture;
       NSWindow* _window = nil;
       AobusLibraryEditor* _editor = nil;
@@ -633,6 +652,203 @@ namespace ao::appkit::test
       fixture.detachClosed();
     }
 
+    NSView* findIdentifiedCompletionView(NSView* root)
+    {
+      if ([root.identifier isEqualToString:@"completion-list"] != NO ||
+          [root.accessibilityIdentifier isEqualToString:@"completion-list"] != NO)
+      {
+        return root;
+      }
+
+      auto* const children = root.subviews;
+
+      for (NSUInteger index = 0; index < children.count; ++index)
+      {
+        auto* const child = children[index];
+
+        if (auto* const found = findIdentifiedCompletionView(child); found != nil)
+        {
+          return found;
+        }
+      }
+
+      return nil;
+    }
+
+    // The completion popover is its own native window outside every editor
+    // panel tree, so discovery walks the application's shown windows.
+    NSTableView* findShownCompletionTable()
+    {
+      auto* const windows = NSApp.windows;
+
+      for (NSUInteger index = 0; index < windows.count; ++index)
+      {
+        auto* const window = windows[index];
+
+        if (window.visible == NO)
+        {
+          continue;
+        }
+
+        if (auto* const view = findIdentifiedCompletionView(window.contentView); view != nil)
+        {
+          AO_INVARIANT([view isKindOfClass:NSTableView.class] != 0, "The completion list must be a table view");
+          return static_cast<NSTableView*>(view);
+        }
+      }
+
+      return nil;
+    }
+
+    void verifyCompletionRanges(EditorFixture& fixture)
+    {
+      auto* const field = [NSTextField textFieldWithString:@"😀$ti tail"];
+      field.frame = NSMakeRect(16, 16, 320, 28);
+      [fixture.window().contentView addSubview:field];
+      AO_INVARIANT([fixture.window() makeFirstResponder:field] != NO, "The range probe must own native editing");
+      auto* const editor = static_cast<NSTextView*>(field.currentEditor);
+      AO_INVARIANT(editor != nil);
+      editor.selectedRange = NSMakeRange(5, 0);
+      std::size_t providerCalls = 0;
+      std::size_t observedCursor = 0;
+      bool invalidSpan = false;
+      auto completion = EntryCompletionAdapter{
+        field,
+        fixture.session().catalog(),
+        [&](std::string_view text, std::size_t cursor) -> std::optional<rt::CompletionResult>
+        {
+          ++providerCalls;
+          observedCursor = cursor;
+          AO_INVARIANT(text == "😀$ti tail", "The provider must receive exact UTF-8 source bytes");
+          return rt::CompletionResult{
+            .replaceBegin = invalidSpan ? 1U : 4U,
+            .replaceEnd = 7,
+            .items = {{.displayText = "Title field", .insertText = "$title"}},
+          };
+        }};
+      completion.update();
+      AO_INVARIANT(providerCalls == 1 && observedCursor == 7 && findShownCompletionTable() != nil,
+                   "A non-BMP prefix must map the native caret to its exact UTF-8 byte offset");
+      AO_INVARIANT(completion.tryHandleCommand(@selector(insertTab:)));
+      AO_INVARIANT(
+        [editor.string isEqual:@"😀$title tail"] != NO && NSEqualRanges(editor.selectedRange, NSMakeRange(8, 0)),
+        "Acceptance must preserve both sides of the advertised byte span and use UTF-16 caret units");
+      AO_INVARIANT([field.stringValue isEqual:editor.string] != NO,
+                   "Native acceptance must publish insertText rather than the candidate display label");
+      [editor insertText:@"😀$ti tail" replacementRange:NSMakeRange(0, editor.string.length)];
+      editor.selectedRange = NSMakeRange(5, 0);
+      invalidSpan = true;
+      completion.update();
+      AO_INVARIANT(providerCalls == 2 && findShownCompletionTable() == nil,
+                   "A provider span inside a UTF-8 scalar must not become a native replacement");
+      invalidSpan = false;
+      completion.update();
+      AO_INVARIANT(findShownCompletionTable() != nil);
+      // A pointer click moves the caret without a command or text change.
+      editor.selectedRange = NSMakeRange(2, 0);
+      AO_INVARIANT(findShownCompletionTable() == nil && !completion.tryHandleCommand(@selector(insertTab:)),
+                   "A caret moved away from the source must dismiss and leave Tab to the field");
+      editor.selectedRange = NSMakeRange(5, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 4 && findShownCompletionTable() != nil);
+      // Text the host has not forwarded yet leaves the popover to the next update.
+      [editor insertText:@"x" replacementRange:NSMakeRange(editor.string.length, 0)];
+      AO_INVARIANT(findShownCompletionTable() != nil, "A text edit must not dismiss through the caret observer");
+      AO_INVARIANT(!completion.tryHandleCommand(@selector(insertTab:)) && findShownCompletionTable() == nil &&
+                     [editor.string isEqual:@"😀$ti tailx"] != NO,
+                   "A stale source must dismiss without consuming Tab or replacing text");
+      [editor insertText:@"😀$ti tail" replacementRange:NSMakeRange(0, editor.string.length)];
+      editor.selectedRange = NSMakeRange(5, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 5 && findShownCompletionTable() != nil);
+      editor.selectedRange = NSMakeRange(5, 1);
+      AO_INVARIANT(!completion.tryApplySelected() && [editor.string isEqual:@"😀$ti tail"] != NO &&
+                     findShownCompletionTable() == nil,
+                   "A live selection must invalidate a pending replacement even when its start did not move");
+      editor.selectedRange = NSMakeRange(5, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 6 && findShownCompletionTable() != nil);
+      [NSNotificationCenter.defaultCenter postNotificationName:NSApplicationDidResignActiveNotification object:NSApp];
+      AO_INVARIANT(findShownCompletionTable() == nil, "Leaving the application must dismiss completion");
+      // A lone surrogate has no UTF-8 offset to hand the provider.
+      [editor insertText:[NSString stringWithCharacters:std::to_array<unichar>({0xD83D, u'$'}).data() length:2]
+        replacementRange:NSMakeRange(0, editor.string.length)];
+      editor.selectedRange = NSMakeRange(2, 0);
+      completion.update();
+      AO_INVARIANT(providerCalls == 6 && findShownCompletionTable() == nil,
+                   "Text that cannot convert to UTF-8 must not reach the provider");
+      completion.detach();
+      completion.update();
+      AO_INVARIANT(providerCalls == 6 && !completion.tryHandleCommand(@selector(insertTab:)),
+                   "Detached completion must not query providers or consume commands");
+      [fixture.window() makeFirstResponder:nil];
+      [field removeFromSuperview];
+    }
+
+    void verifyEntryCompletion(EditorFixture& fixture, std::vector<TrackId> const& tracks)
+    {
+      auto& model = fixture.model();
+
+      // Metadata dictionary completion runs through the artist field's real
+      // fixture vocabulary; the inserted text is expected from the scanned
+      // fixture metadata, not from any shared completion algorithm.
+      requireAdmission(model.beginProperties({tracks[0]}), "The completion properties draft must begin");
+      fixture.present();
+      auto* const artist = requireTextField(fixture, @"artist");
+      editText(fixture.editor().window, @"artist", @"Aobus");
+      settleNativeCallbacks();
+      auto* const table = findShownCompletionTable();
+      AO_INVARIANT(
+        table != nil && table.numberOfRows >= 1, "An artist dictionary prefix must open the completion list");
+      AO_INVARIANT([table.identifier isEqualToString:@"completion-list"] != 0 &&
+                     table.window != fixture.editor().window && table.window != fixture.window(),
+                   "The completion list must live in its own shown window outside the editor tree");
+      auto* const artistEditor = static_cast<NSTextView*>(artist.currentEditor);
+      AO_INVARIANT(artistEditor != nil, "Artist completion must run through the native field editor");
+      [artistEditor doCommandBySelector:@selector(insertTab:)];
+      settleNativeCallbacks();
+      AO_INVARIANT([artistEditor.string isEqualToString:@"Aobus Fixture Artist"] != 0,
+                   "Tab acceptance must insert the fixture's real artist value");
+      auto const artistField = model.state().fields.at(static_cast<std::size_t>(artist.tag));
+      AO_INVARIANT(
+        artistEditor.selectedRange.location == artistEditor.string.length && artistEditor.selectedRange.length == 0,
+        "Acceptance must leave the caret at the end of the inserted value");
+      AO_INVARIANT(artistField.text == "Aobus Fixture Artist" && artistField.changed && model.state().dirty,
+                   "Acceptance must publish the edited artist value into the model");
+      AO_INVARIANT(findShownCompletionTable() == nil, "Acceptance must dismiss the completion popover");
+      fixture.finish();
+
+      // Query expression completion for a system field prefix.
+      requireAdmission(model.beginList(), "The expression completion draft must begin");
+      fixture.present();
+      auto* const expression = requireTextField(fixture, @"Expression");
+      editText(fixture.editor().window, @"Expression", @"$ti");
+      settleNativeCallbacks();
+      AO_INVARIANT(findShownCompletionTable() != nil, "A system field prefix must complete query expressions");
+      auto* const expressionEditor = static_cast<NSTextView*>(expression.currentEditor);
+      AO_INVARIANT(expressionEditor != nil, "Expression completion must run through the native field editor");
+      [expressionEditor doCommandBySelector:@selector(insertTab:)];
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        [expressionEditor.string isEqualToString:@"$title"] != 0, "Tab must insert the advertised system field name");
+      AO_INVARIANT(expressionEditor.selectedRange.location == static_cast<NSUInteger>(6) &&
+                     expressionEditor.selectedRange.length == 0,
+                   "The caret must follow the inserted field name");
+      AO_INVARIANT(model.state().list.expression == "$title" && model.state().dirty,
+                   "Expression acceptance must publish the edited draft value");
+      AO_INVARIANT(findShownCompletionTable() == nil, "Expression acceptance must dismiss completion");
+
+      // A visible popover must not survive its editor's teardown.
+      editText(fixture.editor().window, @"Name", @"Completion teardown probe");
+      editText(fixture.editor().window, @"Expression", @"$");
+      settleNativeCallbacks();
+      AO_INVARIANT(findShownCompletionTable() != nil, "The teardown probe must open completion first");
+      fixture.finish();
+      settleNativeCallbacks();
+      AO_INVARIANT(fixture.editor() == nil && findShownCompletionTable() == nil,
+                   "Finishing with a visible popover must tear the completion down with its editor");
+    }
+
     void finishCompletedEditor(EditorFixture& fixture)
     {
       AO_INVARIANT(fixture.model().state().completed, "Only a completed editor may use completion cleanup");
@@ -839,6 +1055,186 @@ namespace ao::appkit::test
       AO_INVARIANT(activeStateRes && activeStateRes->listId == rt::kAllTracksListId,
                    "The component caller must be able to return to All Tracks after deletion");
     }
+
+    void verifyMembershipNotifications(EditorFixture& fixture, std::vector<TrackId> const& tracks)
+    {
+      auto& session = fixture.session();
+      auto& model = fixture.model();
+
+      requireAdmission(model.beginList(), "The notification probe list must begin");
+      model.editList("Notification probe list", "", "#aobus_notification_probe");
+      model.save();
+      requireWaitUntil([&] { return model.state().completed; }, "The notification probe list must save");
+      auto const probeListId = model.state().savedListId;
+      AO_INVARIANT(probeListId != kInvalidListId, "The notification probe list must publish its id");
+      model.cancel();
+
+      struct PostedObservation final
+      {
+        std::vector<rt::NotificationEntry> posted{};
+        std::vector<rt::NotificationId> known{};
+      };
+      auto observationPtr = std::make_shared<PostedObservation>();
+
+      for (auto const& entry : session.runtime().notifications().feed().entries)
+      {
+        observationPtr->known.push_back(entry.id);
+      }
+
+      auto feedSub = session.runtime().notifications().onFeedUpdated(
+        [observationPtr](rt::NotificationFeedUpdate const& update)
+        {
+          if (update.feedPtr == nullptr)
+          {
+            return;
+          }
+
+          for (auto const& entry : update.feedPtr->entries)
+          {
+            if (!std::ranges::contains(observationPtr->known, entry.id))
+            {
+              observationPtr->known.push_back(entry.id);
+              observationPtr->posted.push_back(entry);
+            }
+          }
+        });
+
+      auto const expectedNotification =
+        [&](uimodel::ListMembershipOperation operation, rt::AuthoringStatus status, std::size_t changedTrackCount)
+      {
+        return uimodel::listMembershipEditNotification(
+          session.catalog(),
+          uimodel::ListMembershipEditResult{
+            .status = status,
+            .listId = probeListId,
+            .operation = operation,
+            .listName = "Notification probe list",
+            .tag = "aobus_notification_probe",
+            .targetTrackCount = changedTrackCount,
+            .changedTrackCount = status == rt::AuthoringStatus::NoOp ? 0 : changedTrackCount,
+            .forgottenPositionCount = 0,
+          });
+      };
+
+      auto const trackHasProbeTag = [&](TrackId trackId)
+      {
+        return std::ranges::contains(
+          session.runtime().library().snapshot().selectionTags(std::vector{trackId}), "aobus_notification_probe");
+      };
+
+      auto const requirePosted = [&](std::size_t expectedCount)
+      {
+        requireWaitUntil([&] { return observationPtr->posted.size() >= expectedCount; },
+                         "The membership notification feed must observe its posted update");
+        AO_INVARIANT(observationPtr->posted.size() == expectedCount,
+                     "Each live successful membership reply must append exactly one feed entry");
+      };
+
+      // The severity and lifetime policy is the shared uimodel mapping; its unit
+      // test owns the Busy, Stale, and Unavailable cases, which contend for the
+      // live write lane nondeterministically here.
+      auto const requireLastPosted = [&](uimodel::ListMembershipEditNotification const& expected)
+      {
+        auto const& entry = observationPtr->posted.back();
+        AO_INVARIANT(entry.severity == expected.severity && entry.lifetime == expected.lifetime &&
+                       std::holds_alternative<std::string>(entry.message) &&
+                       std::get<std::string>(entry.message) == expected.text,
+                     "A completed membership edit must post exactly the shared feed notification: expected {} {} '{}', "
+                     "observed {} {} '{}'",
+                     static_cast<int>(expected.severity),
+                     static_cast<int>(expected.lifetime.kind()),
+                     expected.text,
+                     static_cast<int>(entry.severity),
+                     static_cast<int>(entry.lifetime.kind()),
+                     std::holds_alternative<std::string>(entry.message) ? std::get<std::string>(entry.message)
+                                                                        : std::string{"<non-text>"});
+      };
+
+      // Applied add: the busy contract settles into completed with one exact post.
+      requireAdmission(
+        model.beginMembership({tracks[0], tracks[1]}, probeListId, false), "The applied add membership must begin");
+      AO_INVARIANT(model.state().busy, "A membership edit must enter the busy state on admission");
+      requireWaitUntil([&] { return model.state().completed; }, "The applied add must complete");
+      requirePosted(1);
+      requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::Applied, 2));
+      AO_INVARIANT(!model.state().busy && trackHasProbeTag(tracks[0]) && trackHasProbeTag(tracks[1]),
+                   "The applied add must settle idle with both durable probe tags");
+      model.cancel();
+
+      // Applied remove of one captured track.
+      requireAdmission(
+        model.beginMembership({tracks[0]}, probeListId, true), "The applied remove membership must begin");
+      requireWaitUntil([&] { return model.state().completed; }, "The applied remove must complete");
+      requirePosted(2);
+      requireLastPosted(
+        expectedNotification(uimodel::ListMembershipOperation::Remove, rt::AuthoringStatus::Applied, 1));
+      AO_INVARIANT(!trackHasProbeTag(tracks[0]) && trackHasProbeTag(tracks[1]),
+                   "The applied remove must drop only the captured track's durable probe tag");
+      model.cancel();
+
+      // A genuine no-op re-add still completes and posts its shared no-op text.
+      requireAdmission(
+        model.beginMembership({tracks[1]}, probeListId, false), "The no-op re-add membership must begin");
+      requireWaitUntil([&] { return model.state().completed; }, "The no-op re-add must complete");
+      requirePosted(3);
+      requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::NoOp, 1));
+      model.cancel();
+
+      // A failed authoring result publishes its editor error without any feed post.
+      requireAdmission(model.beginMembership({tracks[0]}, ListId{9999}, false), "The failed membership must begin");
+      requireWaitUntil([&] { return !model.state().busy && !model.state().error.empty(); },
+                       "The failed membership must return its authoring error");
+      AO_INVARIANT(
+        observationPtr->posted.size() == 3, "A failed membership edit must not post a completion notification");
+      model.cancel();
+
+      // Live positive control on a separately owned model borrowing the same runtime.
+      auto controlPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      requireAdmission(
+        controlPtr->beginMembership({tracks[0]}, probeListId, false), "The control membership must begin");
+      requireWaitUntil([&] { return controlPtr->state().completed; }, "The control membership must complete");
+      requirePosted(4);
+      requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::Applied, 1));
+      controlPtr->cancel();
+      controlPtr->shutdown();
+      fixture.retainMembershipModel(controlPtr);
+
+      // A shutdown before the callback lands retires the completed edit: no post.
+      auto retiredPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      requireAdmission(
+        retiredPtr->beginMembership({tracks[1]}, probeListId, true), "The retired membership must begin");
+      retiredPtr->shutdown();
+      fixture.retainMembershipModel(retiredPtr);
+      requireWaitUntil(
+        [&] { return !trackHasProbeTag(tracks[1]); }, "The retired membership must still commit its durable removal");
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        observationPtr->posted.size() == 4, "A shutdown before the completion callback must retire the notification");
+
+      // A reentrant shutdown from the completed change callback also suppresses the post.
+      auto const reentrantBorrowPtr = std::make_shared<std::weak_ptr<LibraryEditorModel>>();
+      auto const shutdownObservedPtr = std::make_shared<bool>(false);
+      auto reentrantPtr = std::make_shared<LibraryEditorModel>(session.runtime(),
+                                                               session.catalog(),
+                                                               [reentrantBorrowPtr, shutdownObservedPtr]
+                                                               {
+                                                                 if (auto const modelPtr = reentrantBorrowPtr->lock();
+                                                                     modelPtr && modelPtr->state().completed)
+                                                                 {
+                                                                   modelPtr->shutdown();
+                                                                   *shutdownObservedPtr = true;
+                                                                 }
+                                                               });
+      *reentrantBorrowPtr = reentrantPtr;
+      fixture.retainMembershipModel(reentrantPtr);
+      requireAdmission(
+        reentrantPtr->beginMembership({tracks[1]}, probeListId, false), "The reentrant membership must begin");
+      requireWaitUntil([&] { return trackHasProbeTag(tracks[1]) && *shutdownObservedPtr; },
+                       "The committed membership must reach its reentrant shutdown callback");
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        observationPtr->posted.size() == 4, "A reentrant shutdown must suppress the completed edit's notification");
+    }
   } // namespace
 
   std::int32_t runAuthoringScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
@@ -854,6 +1250,9 @@ namespace ao::appkit::test
     auto const listId = verifyStaleDraft(fixture, tracks, stateRoot);
     verifyStaleCloseContract(fixture, tracks, listId);
     verifyListAuthoring(fixture, tracks, listId, stateRoot);
+    verifyCompletionRanges(fixture);
+    verifyEntryCompletion(fixture, tracks);
+    verifyMembershipNotifications(fixture, tracks);
     return 0;
   }
 } // namespace ao::appkit::test

@@ -9,9 +9,11 @@
 #include "AppKitText.h"
 #include "DesktopApplication.h"
 #include "DesktopControls.h"
+#include "EntryCompletionAdapter.h"
 #include "LibraryBrowser.h"
 #include "LibraryEditor.h"
 #include "LibrarySession.h"
+#include "NativeCallback.h"
 #include "PlaybackBar.h"
 #include "TrackInspector.h"
 #include <ao/Contract.h>
@@ -24,23 +26,34 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace ao::appkit
 {
-  template<typename Callback>
-  void nativeCallback(Callback&& callback) noexcept
+  // One native presentation picker row. The popup rebuilds only when these
+  // change, so an unchanged Library refresh keeps its menu items.
+  struct PresentationMenuEntry final
   {
-    try
+    enum class Kind : std::uint8_t
     {
-      std::forward<Callback>(callback)();
-    }
-    catch (...)
-    {
-      AO_FATAL_EXCEPTION(std::current_exception(), "AppKit desktop callback");
-    }
-  }
+      Current,
+      Choice,
+      Separator,
+    };
+
+    Kind kind = Kind::Choice;
+    std::string title{};
+    // Auto selects the empty id; the current-label row selects nothing.
+    std::optional<std::string> optId{};
+    std::string toolTip{};
+    bool enabled = true;
+    bool checked = false;
+
+    bool operator==(PresentationMenuEntry const&) const = default;
+  };
+
   NSTextField* label(NSString* text, CGFloat size, BOOL secondary = NO);
   NSAppearance* nativeAppearance(NSString* name);
   inline constexpr auto kContentInset = 16;
@@ -79,9 +92,13 @@ namespace ao::appkit
   AobusLibraryBrowser* _libraryBrowser;
   NSSearchField* _search;
   NSSearchField* _toolbarSearch;
+  std::unique_ptr<ao::appkit::EntryCompletionAdapter> _searchCompletionPtr;
+  std::unique_ptr<ao::appkit::EntryCompletionAdapter> _toolbarSearchCompletionPtr;
   NSSearchToolbarItem* _toolbarSearchItem;
   NSToolbarItem* _toolbarActivityItem;
   NSPopUpButton* _presentation;
+  std::vector<ao::appkit::PresentationMenuEntry> _presentationEntries;
+  BOOL _trackingPresentationMenu;
   NSTextField* _libraryLabel;
   NSTextField* _count;
   NSTextField* _toolbarTitle;
@@ -127,6 +144,7 @@ namespace ao::appkit
 - (void)frameTick:(NSTimer*) [[maybe_unused]] timer;
 - (void)sheetDidEnd:(NSNotification*) [[maybe_unused]] notification;
 - (void)refreshLibrary;
+- (void)refreshPresentationPicker;
 - (void)refreshPlayback;
 - (void)refreshPlaybackProgress;
 - (void)refreshInspector;
@@ -194,6 +212,8 @@ namespace ao::appkit
 - (void)selectPresentation:(id) [[maybe_unused]] sender;
 - (void)emptyAction:(id) [[maybe_unused]] sender;
 - (void)filterTracks:(id) [[maybe_unused]] sender;
+- (void)installSearchCompletion:(NSSearchField*)field toolbar:(BOOL)toolbar;
+- (ao::appkit::EntryCompletionAdapter*)completionForSearch:(NSControl*)field;
 - (void)showVolume:(id) [[maybe_unused]] sender;
 @end
 
@@ -215,8 +235,8 @@ namespace ao::appkit
 - (void)customizeToolbar:(id) [[maybe_unused]] sender;
 - (void)persistToolbarConfiguration;
 - (void)menuNeedsUpdate:(NSMenu*)menu;
-- (void)menuWillOpen:(NSMenu*) [[maybe_unused]] menu;
-- (void)menuDidClose:(NSMenu*) [[maybe_unused]] menu;
+- (void)menuWillOpen:(NSMenu*)menu;
+- (void)menuDidClose:(NSMenu*)menu;
 - (BOOL)tryValidateAuthoringMenuItem:(NSMenuItem*)item result:(BOOL*)result;
 - (BOOL)tryValidateViewMenuItem:(NSMenuItem*)item result:(BOOL*)result;
 - (BOOL)validateMenuItem:(NSMenuItem*)item;

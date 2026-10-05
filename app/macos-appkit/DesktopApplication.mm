@@ -28,6 +28,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 #include <ao/utility/Path.h>
@@ -836,20 +837,105 @@ namespace ao::appkit
   _toolbarSearch.textColor = filter.hasError ? NSColor.systemRedColor : NSColor.controlTextColor;
   _toolbarSearch.toolTip = nativeText(filter.tooltip);
 
-  auto const identifiers = std::array<NSString*, 4>{@"albums", @"songs", @"artists", @"library"};
-
-  for (std::size_t index = 0; index < identifiers.size(); ++index)
-  {
-    if ([_libraryBrowser.presentationIdentifier isEqual:identifiers[index]] != NO)
-    {
-      [_presentation selectItemAtIndex:static_cast<NSInteger>(index)];
-      break;
-    }
-  }
+  [self refreshPresentationPicker];
 
   _browserTitle.stringValue = _libraryBrowser.activeListTitle;
   _toolbarTitle.stringValue = _browserTitle.stringValue;
   _toolbarCount.stringValue = _count.stringValue;
+}
+
+- (void)refreshPresentationPicker
+{
+  using Entry = ao::appkit::PresentationMenuEntry;
+
+  // The refresh runs in the common run-loop modes, which include menu
+  // tracking; replacing an open menu's items would move or close the choice.
+  // menuDidClose: schedules the deferred refresh.
+  if (_trackingPresentationMenu != NO)
+  {
+    return;
+  }
+
+  auto const& picker = _sessionPtr->state().presentation;
+  auto const& optPreference = _sessionPtr->state().optListPresentationId;
+  auto* const currentLabel = [_libraryBrowser.presentationIdentifier isEqual:@"appkit-column-sort"] != NO
+                               ? [self text:MessageId::AppKitColumnSortPresentation]
+                               : nativeText(picker.label);
+  auto entries = std::vector{
+    Entry{.kind = Entry::Kind::Current, .title = utf8(currentLabel), .enabled = false},
+    Entry{
+      .title = utf8([self text:MessageId::AppKitAutoPresentation]), .optId = std::string{}, .checked = !optPreference},
+    Entry{.kind = Entry::Kind::Separator},
+  };
+  bool preferenceAvailable = !optPreference;
+  bool pendingSeparator = false;
+
+  for (auto const& item : picker.menuItems)
+  {
+    // AppKit does not author custom views; a shared separator survives only between presets.
+    if (item.type == ao::uimodel::TrackPresentationMenuItemType::Separator)
+    {
+      pendingSeparator = entries.back().kind != Entry::Kind::Separator;
+      continue;
+    }
+
+    if (item.type != ao::uimodel::TrackPresentationMenuItemType::Preset)
+    {
+      continue;
+    }
+
+    if (pendingSeparator)
+    {
+      entries.push_back(Entry{.kind = Entry::Kind::Separator});
+      pendingSeparator = false;
+    }
+
+    auto const checked = optPreference && item.id == *optPreference;
+    preferenceAvailable = preferenceAvailable || checked;
+    entries.push_back(Entry{.title = item.label,
+                            .optId = item.id,
+                            .toolTip = item.disabledReason,
+                            .enabled = item.enabled,
+                            .checked = checked});
+  }
+
+  if (!preferenceAvailable)
+  {
+    entries.push_back(
+      Entry{.title = utf8(ao::appkit::catalogFormat(
+              _sessionPtr->catalog(), MessageId::AppKitUnavailablePresentation, {{"id", *optPreference}})),
+            .enabled = false,
+            .checked = true});
+  }
+
+  if (entries != _presentationEntries)
+  {
+    // Direct NSMenuItems: addItemWithTitle: would drop a preset whose title matches the current label.
+    auto* const menu = _presentation.menu;
+    [menu removeAllItems];
+
+    for (auto const& entry : entries)
+    {
+      if (entry.kind == Entry::Kind::Separator)
+      {
+        [menu addItem:NSMenuItem.separatorItem];
+        continue;
+      }
+
+      auto* const item = [[NSMenuItem alloc] initWithTitle:nativeText(entry.title) action:nil keyEquivalent:@""];
+      item.representedObject = entry.optId ? nativeText(*entry.optId) : nil;
+      item.enabled = static_cast<BOOL>(entry.enabled);
+      item.toolTip = entry.toolTip.empty() ? nil : nativeText(entry.toolTip);
+      item.state = entry.checked ? NSControlStateValueOn : NSControlStateValueOff;
+      [menu addItem:item];
+    }
+
+    _presentationEntries = std::move(entries);
+  }
+
+  [_presentation selectItemAtIndex:0];
+  _presentation.enabled = static_cast<BOOL>(picker.enabled);
+  _presentation.toolTip = currentLabel;
 }
 
 - (void)refreshPlayback
@@ -951,7 +1037,7 @@ namespace ao::appkit
       {
         if (auto const optTarget = [static_cast<AobusSeekSlider*>(sender) seekTarget]; optTarget)
         {
-          _sessionPtr->seek(sender.doubleValue, *optTarget);
+          _sessionPtr->seek([static_cast<AobusSeekSlider*>(sender) seekUpdate], *optTarget);
         }
       });
   }
@@ -1388,6 +1474,8 @@ namespace ao::appkit
   [_activityExpirationTimer invalidate];
   _activityExpirationTimer = nil;
 
+  _searchCompletionPtr.reset();
+  _toolbarSearchCompletionPtr.reset();
   [_trackInspector detach];
   [_playbackBar detach];
   [_activityPopover close];
@@ -1655,7 +1743,8 @@ namespace ao::appkit
   _libraryEditor = [[AobusLibraryEditor alloc] initWithModel:_sessionPtr->editor()
                                                       parent:_window
                                                       modern:_modern
-                                                     artwork:artwork];
+                                                     artwork:artwork
+                                                  completion:_sessionPtr->runtime().completion()];
   [_libraryEditor present];
 }
 

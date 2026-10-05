@@ -11,6 +11,7 @@
 #include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/WritableTagList.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -271,6 +272,27 @@ namespace ao::uimodel
                                        tagExpression(result.tag),
                                        result.changedTrackCount,
                                        result.forgottenPositionCount);
+  }
+
+  ListMembershipEditNotification listMembershipEditNotification(i18n::MessageCatalog const& textCatalog,
+                                                                ListMembershipEditResult const& result)
+  {
+    auto notification =
+      ListMembershipEditNotification{.text = formatListMembershipEditNotification(textCatalog, result)};
+
+    switch (result.status)
+    {
+      case rt::AuthoringStatus::Busy: notification.severity = rt::NotificationSeverity::Warning; break;
+      case rt::AuthoringStatus::Stale:
+      case rt::AuthoringStatus::Unavailable:
+        notification.severity = rt::NotificationSeverity::Error;
+        notification.lifetime = rt::NotificationLifetime::history();
+        break;
+      case rt::AuthoringStatus::Applied:
+      case rt::AuthoringStatus::NoOp: break;
+    }
+
+    return notification;
   }
 
   Result<ListMembershipAuthoringSession> ListMembershipAuthoringSession::begin(rt::Library& library,

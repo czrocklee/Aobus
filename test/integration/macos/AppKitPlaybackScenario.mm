@@ -10,6 +10,7 @@
 #include <ao/Contract.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
@@ -21,7 +22,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -34,6 +37,7 @@
 - (void)showVolume:(id)sender;
 - (void)showOutput:(id)sender;
 - (void)showOptions:(id)sender;
+- (void)setSeekObserver:(std::function<void(ao::uimodel::SeekSliderUpdate const&, bool)>)observer;
 - (NSUInteger)seekCount;
 - (NSUInteger)volumeCount;
 - (double)lastSeekFraction;
@@ -46,6 +50,7 @@
   NSUInteger _volumeCount;
   double _lastSeekFraction;
   double _lastVolume;
+  std::function<void(ao::uimodel::SeekSliderUpdate const&, bool)> _seekObserver;
 }
 
 - (instancetype)initWithSession:(ao::appkit::LibrarySession&)session
@@ -70,10 +75,28 @@
   _lastSeekFraction = sender.doubleValue;
   ++_seekCount;
 
-  if (auto const optTarget = [static_cast<AobusSeekSlider*>(sender) seekTarget]; optTarget)
+  auto const update = [static_cast<AobusSeekSlider*>(sender) seekUpdate];
+  auto const optTarget = [static_cast<AobusSeekSlider*>(sender) seekTarget];
+
+  if (_seekObserver)
   {
-    _session->seek(_lastSeekFraction, *optTarget);
+    _seekObserver(update, true);
   }
+
+  if (optTarget)
+  {
+    _session->seek(update, *optTarget);
+  }
+
+  if (_seekObserver)
+  {
+    _seekObserver(update, false);
+  }
+}
+
+- (void)setSeekObserver:(std::function<void(ao::uimodel::SeekSliderUpdate const&, bool)>)observer
+{
+  _seekObserver = std::move(observer);
 }
 
 - (void)volume:(NSSlider*)sender
@@ -347,12 +370,28 @@ namespace ao::appkit::test
                                 pressure:1];
     }
 
+    struct SeekGestureOptions final
+    {
+      bool paused = false;
+      // Re-enter the slider's continuous action as AppKit does for each drag event.
+      bool scrub = false;
+    };
+
     void exerciseSeekGesture(LibrarySession& session,
                              AobusPlaybackBar* playback,
                              AobusPresentationActionTarget* target,
                              NSWindow* window,
-                             TrackId replacement)
+                             TrackId replacement,
+                             SeekGestureOptions const options = {})
     {
+      if (options.paused)
+      {
+        session.runtime().playback().commands().pause();
+        requireWaitUntil(
+          [&] { return session.runtime().playback().snapshot().transport.transport == audio::Transport::Paused; },
+          "Paused scrubbing requires a stable paused transport");
+      }
+
       auto* const slider = requireControl<AobusSeekSlider>(playback.modernView, @"playback.seek");
       [playback renderState:session.state() modern:YES];
       [playback renderFrameForState:session.state() elapsed:session.playbackElapsed() modern:YES];
@@ -363,63 +402,129 @@ namespace ao::appkit::test
       auto const beforeCount = target.seekCount;
       auto const knob = [static_cast<NSSliderCell*>(slider.cell) knobRectFlipped:slider.flipped];
       auto const start = [slider convertPoint:NSMakePoint(NSMidX(knob), NSMidY(knob)) toView:nil];
-      auto const end = [slider convertPoint:NSMakePoint(slider.bounds.size.width * 0.7, NSMidY(knob)) toView:nil];
       struct Observation final
       {
-        bool requested = false;
-        bool released = false;
+        bool transitioned = false;
+        bool previewedWhileTracking = false;
+        bool trackedPreviewAction = false;
+        bool heldFinalUnchanged = true;
+        bool scrubbing = false;
+        std::size_t previewCount = 0;
+        std::size_t commitCount = 0;
+        std::vector<std::chrono::milliseconds> previewElapsed{};
+        std::chrono::milliseconds committedElapsed{-1};
         rt::PlaybackFinalSeekRevision finalSeek{};
       };
-      auto observation = Observation{};
-      auto* const observed = &observation;
-      auto* const sessionBorrow = &session;
-      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{15};
-      auto* const timer = [NSTimer
-        timerWithTimeInterval:0.01
-                      repeats:YES
-                        block:^(NSTimer* tick) {
-                          AO_INVARIANT(
-                            [slider isTrackingGesture] != NO, "Transition must occur inside native mouse tracking");
+      auto observation = Observation{.finalSeek = session.runtime().playback().snapshot().transport.finalSeekRevision};
+      auto previewSub = session.runtime().playback().events().onSeekPreview(
+        [&](std::chrono::milliseconds)
+        {
+          ++observation.previewCount;
+          observation.previewedWhileTracking = observation.previewedWhileTracking || [slider isTrackingGesture] != NO;
+        });
+      [target
+        setSeekObserver:[&](uimodel::SeekSliderUpdate const& update, bool beforeDispatch)
+        {
+          if (update.action == uimodel::SeekSliderAction::Commit)
+          {
+            if (beforeDispatch)
+            {
+              ++observation.commitCount;
+              observation.committedElapsed = update.elapsed;
+            }
 
-                          if (!observed->requested)
-                          {
-                            observed->requested = true;
+            return;
+          }
 
-                            if (replacement != kInvalidTrackId)
-                            {
-                              sessionBorrow->play(replacement);
-                            }
-                          }
+          if (update.action != uimodel::SeekSliderAction::Preview)
+          {
+            return;
+          }
 
-                          auto const& snapshot = sessionBorrow->runtime().playback().snapshot().transport;
-                          auto const ready =
-                            snapshot.nowPlaying.trackId == expectedTrack &&
-                            snapshot.transport == audio::Transport::Playing &&
-                            (replacement == kInvalidTrackId || snapshot.positionRevision != initialRevision);
+          if (beforeDispatch)
+          {
+            observation.previewElapsed.push_back(update.elapsed);
+          }
 
-                          if (ready || std::chrono::steady_clock::now() >= deadline)
-                          {
-                            observed->released = ready;
-                            observed->finalSeek = snapshot.finalSeekRevision;
-                            [playback renderState:sessionBorrow->state() modern:YES];
-                            [playback renderFrameForState:sessionBorrow->state()
-                                                  elapsed:sessionBorrow->playbackElapsed()
-                                                   modern:YES];
-                            [NSApp postEvent:seekMouseEvent(window, NSEventTypeLeftMouseDragged, end) atStart:NO];
-                            [NSApp postEvent:seekMouseEvent(window, NSEventTypeLeftMouseUp, end) atStart:NO];
-                            [tick invalidate];
-                          }
-                        }];
-      [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
-      [slider mouseDown:seekMouseEvent(window, NSEventTypeLeftMouseDown, start)];
-      [timer invalidate];
-      AO_INVARIANT(observation.released && target.seekCount > beforeCount,
-                   "Native drag must observe its transition and deliver mouse-up through target/action");
+          observation.trackedPreviewAction = observation.trackedPreviewAction || [slider isTrackingGesture] != NO;
+
+          if (beforeDispatch && replacement != kInvalidTrackId && !observation.transitioned)
+          {
+            session.play(replacement);
+            requireWaitUntil(
+              [&]
+              {
+                auto const& snapshot = session.runtime().playback().snapshot().transport;
+                return snapshot.nowPlaying.trackId == expectedTrack &&
+                       snapshot.transport == audio::Transport::Playing && snapshot.positionRevision != initialRevision;
+              },
+              "Replacement must publish while the native slider action is tracking");
+            observation.transitioned = true;
+            observation.finalSeek = session.runtime().playback().snapshot().transport.finalSeekRevision;
+            [playback renderState:session.state() modern:YES];
+          }
+
+          if (!beforeDispatch && replacement == kInvalidTrackId)
+          {
+            requireWaitUntil(
+              [&]
+              {
+                return observation.previewCount > 0 ||
+                       session.runtime().playback().snapshot().transport.finalSeekRevision != observation.finalSeek;
+              },
+              "A continuous native action must settle before tracking returns");
+            observation.heldFinalUnchanged =
+              observation.heldFinalUnchanged &&
+              session.runtime().playback().snapshot().transport.finalSeekRevision == observation.finalSeek;
+          }
+
+          if (!beforeDispatch && options.scrub && !observation.scrubbing)
+          {
+            observation.scrubbing = true;
+
+            for (auto const fraction : std::to_array<double>({0.25, 0.75}))
+            {
+              slider.doubleValue = fraction;
+              [slider sendAction:slider.action to:slider.target];
+            }
+          }
+        }];
+      // Generated AppKit events can finish continuous cell tracking in the same
+      // turn; witness timeline changes inside its real target/action callback,
+      // rather than assuming a later tracking-mode timer gets a turn.
+      [NSApp sendEvent:seekMouseEvent(window, NSEventTypeLeftMouseDown, start)];
+      [target setSeekObserver:{}];
+      AO_INVARIANT(target.seekCount > beforeCount && [slider isTrackingGesture] == NO &&
+                     observation.trackedPreviewAction && (replacement == kInvalidTrackId || observation.transitioned),
+                   "A native continuous seek action must witness tracking and the requested timeline transition");
       settleNativeCallbacks();
       auto const finalSeek = session.runtime().playback().snapshot().transport.finalSeekRevision;
-      AO_INVARIANT(
-        replacement == kInvalidTrackId ? finalSeek != observation.finalSeek : finalSeek == observation.finalSeek,
-        "Only a gesture on the same timeline may commit a final seek");
+      AO_INVARIANT(observation.heldFinalUnchanged, "A preview must not commit a final seek during native tracking");
+      AO_INVARIANT(replacement == kInvalidTrackId
+                     ? finalSeek.value == observation.finalSeek.value + 1 && observation.commitCount == 1
+                     : finalSeek == observation.finalSeek && observation.commitCount == 0,
+                   "Only a current native gesture may deliver and commit exactly one final seek");
+      AO_INVARIANT(replacement == kInvalidTrackId ? observation.previewCount > 0 && observation.previewedWhileTracking
+                                                  : observation.previewCount == 0,
+                   "A current occurrence must preview during tracking; a replaced occurrence must not preview");
+
+      if (options.scrub)
+      {
+        auto const optSeekTarget = [slider seekTarget];
+        AO_INVARIANT(optSeekTarget, "A scrubbed slider must keep its presented seek target");
+        auto const duration = optSeekTarget->duration;
+        auto const expectedElapsed = [&](double fraction)
+        {
+          return std::chrono::milliseconds{static_cast<std::int64_t>(fraction * static_cast<double>(duration.count()))};
+        };
+        AO_INVARIANT(observation.previewElapsed.size() >= 3 &&
+                       std::ranges::contains(observation.previewElapsed, expectedElapsed(0.25)) &&
+                       std::ranges::contains(observation.previewElapsed, expectedElapsed(0.75)),
+                     "Every continuous drag action must preview its own position");
+        AO_INVARIANT(observation.commitCount == 1 &&
+                       observation.committedElapsed == expectedElapsed(std::clamp(slider.doubleValue, 0.0, 1.0)),
+                     "A scrub must commit once, at the slider's final position");
+      }
     }
   } // namespace
 
@@ -710,6 +815,8 @@ namespace ao::appkit::test
     exerciseSeekGesture(session, playback, target, window, secondId);
     exerciseSeekGesture(session, playback, target, window, secondId);
     exerciseSeekGesture(session, playback, target, window, kInvalidTrackId);
+    exerciseSeekGesture(session, playback, target, window, kInvalidTrackId, {.paused = true});
+    exerciseSeekGesture(session, playback, target, window, kInvalidTrackId, {.scrub = true});
     session.runtime().playback().commands().stop();
     settleNativeCallbacks();
     [soul presentState:{.aura = uimodel::SoulAura::Radiant, .motionMode = uimodel::AobusSoulMotionMode::Animating}

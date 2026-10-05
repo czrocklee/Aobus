@@ -131,6 +131,32 @@ The AppKit application delegate is the session and native-presentation
 coordinator. It retires callback admission before detaching presentation owners
 and releasing the session.
 
+The native playback-position slider uses shared `SeekInteraction` classification.
+Continuous pointer actions publish previews; the end of current tracking delivers one final seek only after a value action.
+Keyboard and discrete actions commit directly.
+The gesture retains its starting playback occurrence and duration, while the session also rejects an obsolete position revision.
+A replacement occurrence, including same-track replay, or loss of seekability retires the gesture instead of retargeting its preview or final seek.
+[`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) owns native tracking and
+[`AppKitPlaybackScenario.mm`](../../../test/integration/macos/AppKitPlaybackScenario.mm) checks preview/final separation, repeated in-gesture previews with one final commit, and guarded replacement through generated AppKit events and native target/action callbacks, not physical input.
+
+AppKit search fields and native metadata/List-expression editors consume the existing runtime completion providers.
+The native adapter displays shared candidates and applies their UTF-8 replacement spans as exact UTF-16 field-editor ranges; display labels are not insertion text.
+Marked input, disabled or read-only fields, text that cannot convert to UTF-8, live text selections, and stale source text/carets cannot accept completion.
+Tab accepts, arrows and page commands navigate, Escape dismisses, and caret/selection commands dismiss while retaining native editing behavior.
+A caret moved by pointer or other non-command input, or application deactivation, also dismisses the popover.
+Return accepts in search fields only; editor Return retains its ordinary host behavior.
+When a stale source rejects acceptance, Tab or Return only dismisses and keeps its ordinary field behavior.
+The popover's native views are built on first display.
+A native text-change notification publishes the accepted metadata/expression or quick filter, and presentation owners detach the popover adapter before its borrowed field or completion service retires.
+[`AppKitAuthoringScenario.mm`](../../../test/integration/macos/AppKitAuthoringScenario.mm) checks editor acceptance, non-BMP byte-span mapping, invalid spans, stale-source key fallthrough, caret and deactivation dismissal, and teardown;
+[`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm) checks quick/expression completion in both shell modes.
+These use programmatic native editing and selector commands, not physical keyboard or VoiceOver delivery.
+
+Successful AppKit membership replies also publish the shared membership summary to the notification feed through `listMembershipEditNotification`, the uimodel mapping GTK also uses:
+Applied/NoOp use transient Info, Busy uses transient Warning, and Stale/Unavailable use history Error.
+A failed operation remains an inline editor error; a retired model or reentrant shutdown posts no late completion.
+The uimodel unit test owns the status mapping; the authoring scenario checks live add/remove/no-op feed contents and durable tags, failure suppression, and both retirement paths.
+
 The session-lifetime `MediaPlayerAdapter` projects playback into MediaPlayer Now
 Playing state and the remote command center. It is the sole owner of its native
 registration tokens, playback snapshot subscription, and current artwork

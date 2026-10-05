@@ -78,19 +78,47 @@ namespace
 @implementation AobusSeekSlider {
   std::optional<ao::appkit::PlaybackSeekTarget> _optPresentedTarget;
   std::optional<ao::appkit::PlaybackSeekTarget> _optGestureTarget;
+  std::optional<ao::uimodel::SeekSliderUpdate> _optFinalUpdate;
+  ao::uimodel::SeekInteraction _interaction;
 }
 - (void)presentSeekTarget:(std::optional<ao::appkit::PlaybackSeekTarget>)optTarget
 {
   _optPresentedTarget = optTarget;
+  _interaction.applyViewState(optTarget ? optTarget->duration : std::chrono::milliseconds{0},
+                              optTarget.has_value(),
+                              optTarget ? optTarget->occurrenceId : ao::rt::PlaybackOccurrenceId{});
 }
 - (std::optional<ao::appkit::PlaybackSeekTarget>)seekTarget
 {
-  return [self isTrackingGesture] != NO ? _optGestureTarget : _optPresentedTarget;
+  return _interaction.isPointerActive() || _optFinalUpdate ? _optGestureTarget : _optPresentedTarget;
+}
+- (std::chrono::milliseconds)seekElapsed
+{
+  return std::chrono::milliseconds{static_cast<std::int64_t>(std::clamp(self.doubleValue, 0.0, 1.0) *
+                                                             static_cast<double>(_interaction.duration().count()))};
+}
+- (ao::uimodel::SeekSliderUpdate)seekUpdate
+{
+  return _optFinalUpdate ? *_optFinalUpdate : _interaction.valueChanged([self seekElapsed]);
 }
 - (void)mouseDown:(NSEvent*)event
 {
+  if (!_interaction.tryBeginPointerInteraction())
+  {
+    return;
+  }
+
   _optGestureTarget = _optPresentedTarget;
   [super mouseDown:event];
+  auto const update = _interaction.endPointerInteraction([self seekElapsed]);
+
+  if (update.action == ao::uimodel::SeekSliderAction::Commit)
+  {
+    _optFinalUpdate = update;
+    [self sendAction:self.action to:self.target];
+    _optFinalUpdate.reset();
+  }
+
   _optGestureTarget.reset();
 }
 @end
@@ -222,7 +250,7 @@ namespace
     _seek = [AobusSeekSlider sliderWithValue:0 minValue:0 maxValue:1 target:actionTarget action:seekAction];
     _seek.identifier = @"playback.seek";
     _seek.controlSize = NSControlSizeSmall;
-    _seek.continuous = NO;
+    _seek.continuous = YES;
     _seek.accessibilityLabel = ao::appkit::catalogText(*_optCatalog, MessageId::AppKitPlaybackPosition);
     _volume = [AobusSlider sliderWithValue:1 minValue:0 maxValue:1 target:actionTarget action:volumeAction];
     _volume.identifier = @"playback.volume";

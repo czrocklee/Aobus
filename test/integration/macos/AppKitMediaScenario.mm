@@ -573,6 +573,11 @@ namespace ao::appkit::test
     {
       auto fixture = SessionFixture{musicRoot, stateRoot};
       auto& session = fixture.session();
+      // Sequence ordinals require a flat fixture, independently of the frontend's new-view recommendation.
+      auto const presentationRes = session.setPresentation("library");
+      AO_INVARIANT(presentationRes);
+      requireWaitUntil([&] { return session.displayIndex().displayCount() == session.displayIndex().rowCount(); },
+                       "The media sequence fixture must settle into its explicit flat presentation");
       exerciseIdle(session.mediaPlayer());
       session.play(session.rowAt(0)->id);
       waitForTransport(session, audio::Transport::Playing);
