@@ -47,6 +47,7 @@ namespace
     WaitForVolume,
     SortTitle,
     WaitForTitleSort,
+    WaitForColumnSortLabel,
     ModernSearch,
     SelectClassic,
     WaitForClassic,
@@ -98,6 +99,7 @@ namespace
   NSString* _initialPlayingElapsed;
   NSString* _occludedElapsed;
   NSString* _unsortedFirstIdentity;
+  NSMenuItem* _openPresentationLabel;
   double _initialPlayingFraction;
   NSTextView* _searchEditor;
   NSSize _initialContentSize;
@@ -493,7 +495,11 @@ namespace
         AO_INVARIANT([control isKindOfClass:NSPopUpButton.class] != 0,
                      "The production window must expose its native presentation control");
         auto* const presentation = static_cast<NSPopUpButton*>(control);
-        AO_INVARIANT(presentation.numberOfItems == 4, "The native presentation control must expose four choices");
+        AO_INVARIANT(presentation.numberOfItems > 4, "The native presentation control must expose the shared catalog");
+        auto* const manual = [presentation itemAtIndex:[presentation indexOfItemWithRepresentedObject:@"list-order"]];
+        auto* const automatic = [presentation itemAtIndex:[presentation indexOfItemWithRepresentedObject:@""]];
+        AO_INVARIANT(manual.enabled == NO && manual.toolTip.length > 0 && [automatic.title isEqual:@"Auto"] != NO,
+                     "The native catalog must explain All Tracks Manual Order unavailability and expose Auto");
         auto const rowCount = _table.numberOfRows;
         [presentation selectItem:nil];
         AO_INVARIANT(
@@ -502,12 +508,15 @@ namespace
         AO_INVARIANT(presentation.indexOfSelectedItem == -1 && _table.numberOfRows == rowCount,
                      "An absent presentation selection must leave browsing unchanged");
         [presentation addItemWithTitle:@"Unsupported scenario presentation"];
-        [presentation selectItemAtIndex:4];
+        auto const unsupportedIndex = presentation.numberOfItems - 1;
+        [presentation selectItemAtIndex:unsupportedIndex];
         [self activateControl:presentation obligation:@"ignore an unsupported presentation selection"];
-        AO_INVARIANT(presentation.indexOfSelectedItem == 4 && _table.numberOfRows == rowCount,
+        AO_INVARIANT(presentation.indexOfSelectedItem == unsupportedIndex && _table.numberOfRows == rowCount,
                      "An unsupported presentation selection must leave browsing unchanged");
-        [presentation removeItemAtIndex:4];
-        [presentation selectItemAtIndex:0];
+        [presentation removeItemAtIndex:unsupportedIndex];
+        auto const albumsIndex = [presentation indexOfItemWithRepresentedObject:@"albums"];
+        AO_INVARIANT(albumsIndex >= 0, "The native catalog must retain the Albums identity");
+        [presentation selectItemAtIndex:albumsIndex];
         [self activateControl:presentation obligation:@"select Albums presentation"];
         _stage = Stage::WaitForAlbums;
         break;
@@ -515,6 +524,20 @@ namespace
       case Stage::WaitForAlbums:
         if (selectableRowCount(_table) >= 3 && _table.numberOfRows > selectableRowCount(_table))
         {
+          auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
+          auto* const albums = [picker itemAtIndex:[picker indexOfItemWithRepresentedObject:@"albums"]];
+          NSInteger checkedCount = 0;
+
+          for (NSInteger index = 0; index < picker.numberOfItems; ++index)
+          {
+            checkedCount += [picker itemAtIndex:index].state == NSControlStateValueOn ? 1 : 0;
+          }
+
+          AO_INVARIANT(picker.indexOfSelectedItem == 0 && [picker itemAtIndex:0].enabled == NO &&
+                         [picker.title isEqual:albums.title] != NO,
+                       "The picker must show the active preset on its display-only label row");
+          AO_INVARIANT(checkedCount == 1 && albums.state == NSControlStateValueOn,
+                       "Only the pinned preset may carry a picker checkmark");
           _stage = Stage::SelectTrack;
         }
 
@@ -711,10 +734,16 @@ namespace
         break;
       }
       case Stage::SortTitle:
+      {
+        // Hold the picker menu open across the sort's Library refresh.
+        auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
+        _openPresentationLabel = [picker itemAtIndex:0];
+        [picker.menu.delegate menuWillOpen:picker.menu];
         _unsortedFirstIdentity = [rowIdentity(_table, firstSelectableRow(_table)) copy];
         _table.sortDescriptors = @[[[NSSortDescriptor alloc] initWithKey:@"Title" ascending:NO]];
         _stage = Stage::WaitForTitleSort;
         break;
+      }
       case Stage::WaitForTitleSort:
         if (_table.selectedRow >= 0 &&
             [rowIdentity(_table, firstSelectableRow(_table)) isEqual:_unsortedFirstIdentity] == NO &&
@@ -724,6 +753,19 @@ namespace
                          [_table.sortDescriptors.firstObject.key isEqual:@"Title"] != 0 &&
                          _table.sortDescriptors.firstObject.ascending == 0,
                        "The native Title header must retain descending sort state");
+          auto* const picker = static_cast<NSPopUpButton*>([self control:@"presentation-picker"]);
+          AO_INVARIANT([picker itemAtIndex:0] == _openPresentationLabel && [picker.title isEqual:@"Column sort"] == NO,
+                       "An open presentation menu must keep its items through a Library refresh");
+          [picker.menu.delegate menuDidClose:picker.menu];
+          _openPresentationLabel = nil;
+          _stage = Stage::WaitForColumnSortLabel;
+        }
+
+        break;
+      case Stage::WaitForColumnSortLabel:
+        if ([static_cast<NSPopUpButton*>([self control:@"presentation-picker"]).title isEqual:@"Column sort"] != NO)
+        {
+          // A transient header sort must not leave the previous preset's native label selected.
           _stage = Stage::ModernSearch;
         }
 

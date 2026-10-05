@@ -501,6 +501,12 @@ namespace
         return;
       }
 
+      // The presentation picker owns its items through refreshPresentationPicker.
+      if (menu == _presentation.menu)
+      {
+        return;
+      }
+
       [menu removeAllItems];
 
       if ([_libraryBrowser prepareContextMenu:menu] == 0)
@@ -564,14 +570,27 @@ namespace
     });
 }
 
-- (void)menuWillOpen:(NSMenu*) [[maybe_unused]] menu
+- (void)menuWillOpen:(NSMenu*)menu
 {
   _presentingMenu = YES;
+
+  if (menu == _presentation.menu)
+  {
+    _trackingPresentationMenu = YES;
+  }
 }
 
-- (void)menuDidClose:(NSMenu*) [[maybe_unused]] menu
+- (void)menuDidClose:(NSMenu*)menu
 {
   _presentingMenu = NO;
+
+  if (menu == _presentation.menu)
+  {
+    // Apply any picker change deferred while the menu was open.
+    _trackingPresentationMenu = NO;
+    _libraryDirty = YES;
+  }
+
   [self requestService];
 }
 

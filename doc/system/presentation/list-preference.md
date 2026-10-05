@@ -77,7 +77,7 @@ The New Playlist template selects that preference when it creates a tag-backed L
 
 ## Commands and transitions
 
-When GTK or TUI opens a plain list target, it resolves the preferred or recommended presentation and submits it to `WorkspaceService` as `NewViewDefault` intent.
+When GTK, TUI, or AppKit opens a plain list target, it resolves the preferred or recommended presentation and submits it to `WorkspaceService` as `NewViewDefault` intent.
 `WorkspaceService` alone decides whether an existing unfiltered view is reusable.
 Reuse ignores that default and retains the view's exact active presentation; creation applies the resolved default to the new plain view.
 A filtered view over the same list is not a reusable plain target, so `WorkspaceService` creates the plain view with the resolved default and does not alter the filtered view.
@@ -118,6 +118,15 @@ TUI likewise installs both startup candidates before connecting save observers; 
 
 GTK persists the preference map with other per-library track-view layout state through `GtkLayoutStateStore` in the library-specific `gtk_layout.yaml` store.
 TUI persists the same semantic group with terminal column-layout state through its library-specific `tui_layout.yaml` store.
+AppKit persists the same group through the runtime-owned `appkit-workspace.yaml` store, alongside workspace and playback-session groups.
+It borrows that exact `ConfigStore` instance so checkpoints by distinct group owners preserve their cached sibling state.
+Its catalog is built after workspace restoration; the map is restored against live Lists before save observers connect.
+When the group fails to load, AppKit keeps that session's preference changes in memory and never saves over the rejected group.
+The native catalog menu pins only accepted normal choices, Auto clears the key and applies the resulting recommendation, and a temporary header sort changes neither the map nor its save boundary.
+The menu keeps the shared separator between built-in and custom presets, checks only the stored choice, and defers rebuilding while it is open.
+Unavailable ids stay opaque and visible in the menu while new views use recommendation fallback; picker-less List edits do not write them.
+Workspace/history replay retains exact specs, and live List deletion retires the corresponding persisted entries through shared `ListPresentations`.
+
 WinUI persists the group with desktop column-layout state in the library-specific `winui_layout.yaml` store, keeps opaque ids across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
 It loads that store when the runtime graph binds rather than at startup, because the list ids the group is keyed by only mean anything against an open library.
 The `trackView.presentations` group carries required `version: 1` and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
@@ -139,7 +148,7 @@ Quick-filter controls and List editors may display the current presentation, but
 
 The GTK Saved-List editor shows an unavailable stored id as an explicit selected option, labeled with the retained opaque id, while list opening uses recommendation fallback. A rename or filter-only edit preserves that preference; only choosing another presentation replaces it, and choosing Auto clears it. The editor's option catalog is a construction-time snapshot, so display and save use the same identities even if the workspace presets change while the dialog is open. Opening the List resolves the retained id through the live catalog, which may now contain a changed preset or require fallback.
 
-The TUI editor has no presentation picker, so its saves never write the preference map: a new List stays Auto and an edit keeps whatever the List already stores, including a dangling opaque id.
+The TUI and AppKit editors have no presentation picker, so their saves never write the preference map: a new List stays Auto and an edit keeps whatever the List already stores, including a dangling opaque id.
 
 ## Implementation map
 
@@ -159,6 +168,7 @@ The TUI editor has no presentation picker, so its saves never write the preferen
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) prove independent per-library persistence.
 - [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) proves TUI preference/recommendation navigation and exact restored-view precedence.
 - [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves GTK creation, reuse, workspace restoration, history replay, and playback-restoration precedence.
+- [`AppKitPresentationScenario.mm`](../../../test/integration/macos/AppKitPresentationScenario.mm) checks native-session preference writes, reuse/new-view defaults, Auto, opaque and custom ids, deletion, history, reopen sibling preservation, and no overwrite of a rejected group; [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm) checks native catalog identity, eligibility, label and checkmark display, open-menu deferral, and transient sort labeling.
 - Workspace history tests under [`test/unit/runtime/`](../../../test/unit/runtime) prove snapshot replay semantics.
 
 ## Related documents

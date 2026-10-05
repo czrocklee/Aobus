@@ -23,8 +23,8 @@ The [persistence and managed-state architecture](../../system/persistence/README
 The runtime [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) provides the common top-level group container.
 Runtime and UIModel payload owners define their types and schemas; frontend
 composition selects files according to the [managed file locations
-reference](location.md). AppKit uses the ordinary workspace and playback-session
-schemas in one per-library `ConfigStore`; its native `desktop.plist` settings
+reference](location.md). AppKit uses the ordinary workspace, playback-session,
+and List-presentation preference schemas in one per-library `ConfigStore`; its native `desktop.plist` settings
 are outside this YAML registry.
 The standalone shell component-state store uses the shared YAML and atomic-file mechanisms directly and is included here so the managed-document registry is complete.
 
@@ -40,6 +40,7 @@ The location reference owns platform paths and command-line overrides.
 | Global GTK config | One application-global GTK file. | `AppConfigStore` over one `ConfigStore`. | `window`, `runtime`, `session`, `shortcuts`, plus `playback-session` for the active library runtime. |
 | Global TUI config | One application-global TUI file. | One `ConfigStore` owned by the TUI composition root. | `runtime`, `shortcuts`, `preferences`. |
 | Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
+| AppKit library state | One per-library AppKit file. | The `ConfigStore` owned by `AppRuntime`, borrowed by `LibrarySession`. | `workspace`, `playback-session`, and `trackView.presentations`. |
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
 | TUI library presentation | One per-library TUI file. | `LayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts`, `trackView.presentations`, `navigation`, and `panels`. |
 | Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop` and `shortcuts`. |
@@ -67,6 +68,7 @@ It does not denote nested mappings.
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | None; WinUI loads hand-authored overrides. |
 | Frontend-selected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `4`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
+| AppKit library state | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | AppKit `LibrarySession`. |
 | GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
 | GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
 | TUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`; positive widths are terminal cells. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `LayoutStateStore`. |

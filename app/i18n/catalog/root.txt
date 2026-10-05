@@ -1164,6 +1164,9 @@ root:table {
     appkit_empty_list_hint { "Add music to this list, or browse all your tracks." }
     appkit_show_all_tracks { "Show All Tracks" }
     appkit_invalid_filter { "Invalid filter" }
+    appkit_auto_presentation { "Auto" }
+    appkit_unavailable_presentation { "Unavailable: {id} (Auto)" }
+    appkit_column_sort_presentation { "Column sort" }
     appkit_no_activity { "No current activity" }
     appkit_audio { "Audio" }
     appkit_file_label { "File" }

@@ -109,7 +109,7 @@ checkpoint, and successor persistence admission.
 |---|---|---|---|
 | `<root>/.aobus/library/` | GTK, TUI, WinUI, AppKit, and CLI | Default LMDB music-library database | TUI `--database` may select another database path; CLI derives this path from `-C`/`--root` or `AOBUS_ROOT` |
 | `<root>/.aobus/library/workspace.yaml` | GTK and WinUI | Runtime workspace and view session | None in the current GTK or WinUI command surface |
-| `<root>/.aobus/library/appkit-workspace.yaml` | AppKit | Runtime workspace and playback-session groups in one owned `ConfigStore` | Selected library root |
+| `<root>/.aobus/library/appkit-workspace.yaml` | AppKit | Runtime workspace, playback-session, and List-presentation preference groups in one owned `ConfigStore` | Selected library root |
 | `<root>/.aobus/gtk_layout.yaml` | GTK | Per-library desktop track-column and list-presentation preferences | None |
 | `<root>/.aobus/tui_layout.yaml` | TUI | Per-library List navigation visibility, sidebar widths, terminal-cell track-column and list-presentation preferences | None |
 | `<root>/.aobus/winui_layout.yaml` | WinUI | Per-library desktop track-column and list-presentation preferences | None |

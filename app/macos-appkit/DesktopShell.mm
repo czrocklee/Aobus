@@ -10,6 +10,7 @@
 #include "LibrarySession.h"
 #include "PlaybackBar.h"
 #include "TrackInspector.h"
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/track/TrackFilter.h>
 
@@ -274,13 +275,13 @@ namespace
   [self installSearchCompletion:_search toolbar:NO];
   [_browser addSubview:_search];
   _presentation = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+  _presentationEntries.clear();
   _presentation.bezelStyle = NSBezelStyleRounded;
-  [_presentation addItemsWithTitles:@[
-    [self text:MessageId::TrackPresentationAlbums],
-    [self text:MessageId::TrackPresentationSongs],
-    [self text:MessageId::TrackPresentationArtists],
-    [self text:MessageId::TrackPresentationLibrary]
-  ]];
+  _presentation.identifier = @"presentation-picker";
+  _presentation.menu.autoenablesItems = NO;
+  // The disabled current-label row is selected for display only; checkmarks mark the stored preference.
+  _presentation.altersStateOfSelectedItem = NO;
+  _presentation.menu.delegate = self;
   _presentation.target = self;
   _presentation.action = @selector(selectPresentation:);
   [_browser addSubview:_presentation];
@@ -680,15 +681,20 @@ namespace
   nativeCallback(
     [&]
     {
-      auto* const ids = @[@"albums", @"songs", @"artists", @"library"];
-      auto const index = _presentation.indexOfSelectedItem;
+      id const identifier = _presentation.selectedItem.representedObject;
 
-      if (index < 0 || static_cast<NSUInteger>(index) >= ids.count)
+      if ([identifier isKindOfClass:NSString.class] == NO)
       {
         return;
       }
 
-      _sessionPtr->setPresentation(utf8(ids[static_cast<NSUInteger>(index)]));
+      if (auto res = _sessionPtr->setPresentation(utf8(static_cast<NSString*>(identifier))); !res)
+      {
+        _sessionPtr->runtime().notifications().post(
+          ao::rt::NotificationSeverity::Error, res.error().message, ao::rt::NotificationLifetime::history());
+      }
+
+      [self refreshLibrary];
     });
 }
 
