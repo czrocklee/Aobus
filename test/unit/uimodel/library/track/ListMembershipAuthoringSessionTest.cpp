@@ -13,6 +13,7 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
@@ -128,6 +129,48 @@ namespace ao::uimodel::test
                                                                         .tag = "road-trip",
                                                                         .changedTrackCount = 1}) ==
           R"(#"road-trip" wurde für 1 Titel in Road Trip hinzugefügt.)");
+  }
+
+  TEST_CASE("ListMembershipAuthoringSession - maps edit results to feed notifications",
+            "[uimodel][unit][list-membership]")
+  {
+    auto const& catalog = ao::test::messageCatalog("en-US");
+    auto const notificationFor = [&catalog](rt::AuthoringStatus const status)
+    {
+      return listMembershipEditNotification(
+        catalog,
+        ListMembershipEditResult{
+          .status = status, .operation = ListMembershipOperation::Add, .listName = "Road", .tag = "road"});
+    };
+
+    SECTION("an applied or no-op edit informs briefly")
+    {
+      for (auto const status : std::array{rt::AuthoringStatus::Applied, rt::AuthoringStatus::NoOp})
+      {
+        auto const notification = notificationFor(status);
+        CHECK(notification.severity == rt::NotificationSeverity::Info);
+        CHECK(notification.lifetime == rt::NotificationLifetime::transient());
+      }
+    }
+
+    SECTION("a busy library warns briefly with the shared summary")
+    {
+      CHECK(notificationFor(rt::AuthoringStatus::Busy) ==
+            ListMembershipEditNotification{.severity = rt::NotificationSeverity::Warning,
+                                           .lifetime = rt::NotificationLifetime::transient(),
+                                           .text = "Library is busy. Try again."});
+    }
+
+    SECTION("a rejected edit stays in history as an error")
+    {
+      for (auto const status : std::array{rt::AuthoringStatus::Stale, rt::AuthoringStatus::Unavailable})
+      {
+        auto const notification = notificationFor(status);
+        CHECK(notification.severity == rt::NotificationSeverity::Error);
+        CHECK(notification.lifetime == rt::NotificationLifetime::history());
+        CHECK_FALSE(notification.text.empty());
+      }
+    }
   }
 
   TEST_CASE("ListMembershipAuthoringSession - Remove maps the reply and removes tags and saved positions",

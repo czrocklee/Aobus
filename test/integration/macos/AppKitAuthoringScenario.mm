@@ -10,6 +10,9 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/NotificationIds.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -17,6 +20,7 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #import <AppKit/AppKit.h>
 
@@ -29,6 +33,7 @@
 #include <memory>
 #include <ranges>
 #include <string>
+#include <variant>
 #include <vector>
 
 @interface AobusAuthoringBrowserDelegate : NSObject<AobusLibraryBrowserDelegate>
@@ -101,6 +106,11 @@ namespace ao::appkit::test
 
       LibraryEditorModel& model() { return session().editor(); }
 
+      void retainMembershipModel(std::shared_ptr<LibraryEditorModel> modelPtr)
+      {
+        _membershipModels.push_back(std::move(modelPtr));
+      }
+
       NSWindow* window() const { return _window; }
 
       AobusLibraryEditor* editor() const { return _editor; }
@@ -147,6 +157,8 @@ namespace ao::appkit::test
       }
 
     private:
+      // Test-owned models stay alive through SessionFixture's shutdown and final callback drain.
+      std::vector<std::shared_ptr<LibraryEditorModel>> _membershipModels;
       SessionFixture _sessionFixture;
       NSWindow* _window = nil;
       AobusLibraryEditor* _editor = nil;
@@ -1043,6 +1055,186 @@ namespace ao::appkit::test
       AO_INVARIANT(activeStateRes && activeStateRes->listId == rt::kAllTracksListId,
                    "The component caller must be able to return to All Tracks after deletion");
     }
+
+    void verifyMembershipNotifications(EditorFixture& fixture, std::vector<TrackId> const& tracks)
+    {
+      auto& session = fixture.session();
+      auto& model = fixture.model();
+
+      requireAdmission(model.beginList(), "The notification probe list must begin");
+      model.editList("Notification probe list", "", "#aobus_notification_probe");
+      model.save();
+      requireWaitUntil([&] { return model.state().completed; }, "The notification probe list must save");
+      auto const probeListId = model.state().savedListId;
+      AO_INVARIANT(probeListId != kInvalidListId, "The notification probe list must publish its id");
+      model.cancel();
+
+      struct PostedObservation final
+      {
+        std::vector<rt::NotificationEntry> posted{};
+        std::vector<rt::NotificationId> known{};
+      };
+      auto observationPtr = std::make_shared<PostedObservation>();
+
+      for (auto const& entry : session.runtime().notifications().feed().entries)
+      {
+        observationPtr->known.push_back(entry.id);
+      }
+
+      auto feedSub = session.runtime().notifications().onFeedUpdated(
+        [observationPtr](rt::NotificationFeedUpdate const& update)
+        {
+          if (update.feedPtr == nullptr)
+          {
+            return;
+          }
+
+          for (auto const& entry : update.feedPtr->entries)
+          {
+            if (!std::ranges::contains(observationPtr->known, entry.id))
+            {
+              observationPtr->known.push_back(entry.id);
+              observationPtr->posted.push_back(entry);
+            }
+          }
+        });
+
+      auto const expectedNotification =
+        [&](uimodel::ListMembershipOperation operation, rt::AuthoringStatus status, std::size_t changedTrackCount)
+      {
+        return uimodel::listMembershipEditNotification(
+          session.catalog(),
+          uimodel::ListMembershipEditResult{
+            .status = status,
+            .listId = probeListId,
+            .operation = operation,
+            .listName = "Notification probe list",
+            .tag = "aobus_notification_probe",
+            .targetTrackCount = changedTrackCount,
+            .changedTrackCount = status == rt::AuthoringStatus::NoOp ? 0 : changedTrackCount,
+            .forgottenPositionCount = 0,
+          });
+      };
+
+      auto const trackHasProbeTag = [&](TrackId trackId)
+      {
+        return std::ranges::contains(
+          session.runtime().library().snapshot().selectionTags(std::vector{trackId}), "aobus_notification_probe");
+      };
+
+      auto const requirePosted = [&](std::size_t expectedCount)
+      {
+        requireWaitUntil([&] { return observationPtr->posted.size() >= expectedCount; },
+                         "The membership notification feed must observe its posted update");
+        AO_INVARIANT(observationPtr->posted.size() == expectedCount,
+                     "Each live successful membership reply must append exactly one feed entry");
+      };
+
+      // The severity and lifetime policy is the shared uimodel mapping; its unit
+      // test owns the Busy, Stale, and Unavailable cases, which contend for the
+      // live write lane nondeterministically here.
+      auto const requireLastPosted = [&](uimodel::ListMembershipEditNotification const& expected)
+      {
+        auto const& entry = observationPtr->posted.back();
+        AO_INVARIANT(entry.severity == expected.severity && entry.lifetime == expected.lifetime &&
+                       std::holds_alternative<std::string>(entry.message) &&
+                       std::get<std::string>(entry.message) == expected.text,
+                     "A completed membership edit must post exactly the shared feed notification: expected {} {} '{}', "
+                     "observed {} {} '{}'",
+                     static_cast<int>(expected.severity),
+                     static_cast<int>(expected.lifetime.kind()),
+                     expected.text,
+                     static_cast<int>(entry.severity),
+                     static_cast<int>(entry.lifetime.kind()),
+                     std::holds_alternative<std::string>(entry.message) ? std::get<std::string>(entry.message)
+                                                                        : std::string{"<non-text>"});
+      };
+
+      // Applied add: the busy contract settles into completed with one exact post.
+      requireAdmission(
+        model.beginMembership({tracks[0], tracks[1]}, probeListId, false), "The applied add membership must begin");
+      AO_INVARIANT(model.state().busy, "A membership edit must enter the busy state on admission");
+      requireWaitUntil([&] { return model.state().completed; }, "The applied add must complete");
+      requirePosted(1);
+      requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::Applied, 2));
+      AO_INVARIANT(!model.state().busy && trackHasProbeTag(tracks[0]) && trackHasProbeTag(tracks[1]),
+                   "The applied add must settle idle with both durable probe tags");
+      model.cancel();
+
+      // Applied remove of one captured track.
+      requireAdmission(
+        model.beginMembership({tracks[0]}, probeListId, true), "The applied remove membership must begin");
+      requireWaitUntil([&] { return model.state().completed; }, "The applied remove must complete");
+      requirePosted(2);
+      requireLastPosted(
+        expectedNotification(uimodel::ListMembershipOperation::Remove, rt::AuthoringStatus::Applied, 1));
+      AO_INVARIANT(!trackHasProbeTag(tracks[0]) && trackHasProbeTag(tracks[1]),
+                   "The applied remove must drop only the captured track's durable probe tag");
+      model.cancel();
+
+      // A genuine no-op re-add still completes and posts its shared no-op text.
+      requireAdmission(
+        model.beginMembership({tracks[1]}, probeListId, false), "The no-op re-add membership must begin");
+      requireWaitUntil([&] { return model.state().completed; }, "The no-op re-add must complete");
+      requirePosted(3);
+      requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::NoOp, 1));
+      model.cancel();
+
+      // A failed authoring result publishes its editor error without any feed post.
+      requireAdmission(model.beginMembership({tracks[0]}, ListId{9999}, false), "The failed membership must begin");
+      requireWaitUntil([&] { return !model.state().busy && !model.state().error.empty(); },
+                       "The failed membership must return its authoring error");
+      AO_INVARIANT(
+        observationPtr->posted.size() == 3, "A failed membership edit must not post a completion notification");
+      model.cancel();
+
+      // Live positive control on a separately owned model borrowing the same runtime.
+      auto controlPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      requireAdmission(
+        controlPtr->beginMembership({tracks[0]}, probeListId, false), "The control membership must begin");
+      requireWaitUntil([&] { return controlPtr->state().completed; }, "The control membership must complete");
+      requirePosted(4);
+      requireLastPosted(expectedNotification(uimodel::ListMembershipOperation::Add, rt::AuthoringStatus::Applied, 1));
+      controlPtr->cancel();
+      controlPtr->shutdown();
+      fixture.retainMembershipModel(controlPtr);
+
+      // A shutdown before the callback lands retires the completed edit: no post.
+      auto retiredPtr = std::make_shared<LibraryEditorModel>(session.runtime(), session.catalog(), [] {});
+      requireAdmission(
+        retiredPtr->beginMembership({tracks[1]}, probeListId, true), "The retired membership must begin");
+      retiredPtr->shutdown();
+      fixture.retainMembershipModel(retiredPtr);
+      requireWaitUntil(
+        [&] { return !trackHasProbeTag(tracks[1]); }, "The retired membership must still commit its durable removal");
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        observationPtr->posted.size() == 4, "A shutdown before the completion callback must retire the notification");
+
+      // A reentrant shutdown from the completed change callback also suppresses the post.
+      auto const reentrantBorrowPtr = std::make_shared<std::weak_ptr<LibraryEditorModel>>();
+      auto const shutdownObservedPtr = std::make_shared<bool>(false);
+      auto reentrantPtr = std::make_shared<LibraryEditorModel>(session.runtime(),
+                                                               session.catalog(),
+                                                               [reentrantBorrowPtr, shutdownObservedPtr]
+                                                               {
+                                                                 if (auto const modelPtr = reentrantBorrowPtr->lock();
+                                                                     modelPtr && modelPtr->state().completed)
+                                                                 {
+                                                                   modelPtr->shutdown();
+                                                                   *shutdownObservedPtr = true;
+                                                                 }
+                                                               });
+      *reentrantBorrowPtr = reentrantPtr;
+      fixture.retainMembershipModel(reentrantPtr);
+      requireAdmission(
+        reentrantPtr->beginMembership({tracks[1]}, probeListId, false), "The reentrant membership must begin");
+      requireWaitUntil([&] { return trackHasProbeTag(tracks[1]) && *shutdownObservedPtr; },
+                       "The committed membership must reach its reentrant shutdown callback");
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        observationPtr->posted.size() == 4, "A reentrant shutdown must suppress the completed edit's notification");
+    }
   } // namespace
 
   std::int32_t runAuthoringScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
@@ -1060,6 +1252,7 @@ namespace ao::appkit::test
     verifyListAuthoring(fixture, tracks, listId, stateRoot);
     verifyCompletionRanges(fixture);
     verifyEntryCompletion(fixture, tracks);
+    verifyMembershipNotifications(fixture, tracks);
     return 0;
   }
 } // namespace ao::appkit::test

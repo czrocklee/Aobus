@@ -152,6 +152,11 @@ A native text-change notification publishes the accepted metadata/expression or 
 [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm) checks quick/expression completion in both shell modes.
 These use programmatic native editing and selector commands, not physical keyboard or VoiceOver delivery.
 
+Successful AppKit membership replies also publish the shared membership summary to the notification feed through `listMembershipEditNotification`, the uimodel mapping GTK also uses:
+Applied/NoOp use transient Info, Busy uses transient Warning, and Stale/Unavailable use history Error.
+A failed operation remains an inline editor error; a retired model or reentrant shutdown posts no late completion.
+The uimodel unit test owns the status mapping; the authoring scenario checks live add/remove/no-op feed contents and durable tags, failure suppression, and both retirement paths.
+
 The session-lifetime `MediaPlayerAdapter` projects playback into MediaPlayer Now
 Playing state and the remote command center. It is the sole owner of its native
 registration tokens, playback snapshot subscription, and current artwork

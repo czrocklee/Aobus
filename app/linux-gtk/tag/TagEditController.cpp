@@ -467,22 +467,8 @@ namespace ao::gtk
                     return;
                   }
 
-                  auto const notificationText =
-                    uimodel::formatListMembershipEditNotification(owner->_textCatalog, *res);
-
-                  if (res->status == rt::AuthoringStatus::Busy)
-                  {
-                    owner->_notifications.post(
-                      rt::NotificationSeverity::Warning, notificationText, rt::NotificationLifetime::transient());
-                    return;
-                  }
-
-                  auto const failed =
-                    res->status == rt::AuthoringStatus::Stale || res->status == rt::AuthoringStatus::Unavailable;
-                  owner->_notifications.post(
-                    failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
-                    notificationText,
-                    failed ? rt::NotificationLifetime::history() : rt::NotificationLifetime::transient());
+                  auto const notification = uimodel::listMembershipEditNotification(owner->_textCatalog, *res);
+                  owner->_notifications.post(notification.severity, notification.text, notification.lifetime);
                 });
   }
 

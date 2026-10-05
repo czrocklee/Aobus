@@ -9,6 +9,7 @@
 #include <ao/async/Task.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/rt/ListNode.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
@@ -109,6 +110,20 @@ namespace ao::uimodel
 
   std::string formatListMembershipEditNotification(i18n::MessageCatalog const& textCatalog,
                                                    ListMembershipEditResult const& result);
+
+  // A busy library warns briefly, a rejected edit stays in history, and an
+  // applied or no-op edit informs briefly.
+  struct ListMembershipEditNotification final
+  {
+    rt::NotificationSeverity severity = rt::NotificationSeverity::Info;
+    rt::NotificationLifetime lifetime = rt::NotificationLifetime::transient();
+    std::string text{};
+
+    bool operator==(ListMembershipEditNotification const&) const = default;
+  };
+
+  ListMembershipEditNotification listMembershipEditNotification(i18n::MessageCatalog const& textCatalog,
+                                                                ListMembershipEditResult const& result);
 
   /**
    * Revision-bound membership editing for one stable target set.
