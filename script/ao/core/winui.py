@@ -6,6 +6,7 @@ import ctypes
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 import urllib.request
@@ -157,6 +158,8 @@ def bundled_cmake(installation: Path) -> Path:
 
 
 def _runtime_version(version: str) -> tuple[int, ...] | None:
+    # Strict ASCII four-part version: each part is 1..5 digits and <= 65535.
+    # Leading zeros inside that width are numeric. No trim, prefix, or suffix.
     parts = version.split(".")
     if len(parts) != 4 or any(not part.isascii() or not part.isdecimal() or len(part) > 5 for part in parts):
         return None
@@ -179,6 +182,8 @@ def _runtime_packages_from_json(text: str, runtime: RuntimeContract) -> tuple[Ru
         version = str(record.get("Version", ""))
         package_full_name = str(record.get("PackageFullName", ""))
         expected_name = f"{runtime.package_name}_{version}_{runtime.architecture}__8wekyb3d8bbwe"
+        # PackageFullName is the identity, compared case-insensitively. Status
+        # must be the exact string "Ok"; Name-field case is not a second rule.
         if (
             _runtime_version(version) is None
             or package_full_name.casefold() != expected_name.casefold()
@@ -227,8 +232,10 @@ def matching_runtime(
     minimum = _runtime_version(selected.version)
     if minimum is None:
         raise RuntimeError(f"Invalid Windows App Runtime minimum version: {selected.version!r}")
-    # The framework is serviced in place; SDK bootstrap uses a minimum version
-    # within its package family, not an exact match to the installer version.
+    # Current-user Framework packages only. Main, DDLM, and support packages
+    # are not selected here. The framework is serviced in place; SDK bootstrap
+    # uses a minimum version within its package family, not an exact match to
+    # the installer version.
     best = None
     best_version = minimum
     for package in installed_runtime_packages(selected, powershell=powershell, environ=environ):
@@ -424,7 +431,14 @@ def _verify_authenticode(
         raise RuntimeError("Authenticode verification returned invalid data")
     status = signature.get("Status")
     subject = signature.get("Subject")
-    if status != "Valid" or not isinstance(subject, str) or "Microsoft Corporation" not in subject:
+    # The case-sensitive Microsoft CN must start the subject and be followed
+    # by a comma or absolute end. A later O= value is not a match. Valid is Windows
+    # system trust from Get-AuthenticodeSignature, not a pinned Microsoft root.
+    if (
+        status != "Valid"
+        or not isinstance(subject, str)
+        or not re.search(r"\ACN=Microsoft Corporation(?:,|\Z)", subject)
+    ):
         raise RuntimeError(
             f"Windows App Runtime installer has an invalid signer: status={status!r}, subject={subject!r}"
         )

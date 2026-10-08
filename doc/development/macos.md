@@ -130,20 +130,10 @@ Generated state must be on the macOS host's local disk. A source checkout may be
 mounted over SMB, but build trees, vcpkg state, Python environments, and compiler
 caches must not be written to that mount.
 
-For the project validation VM, mount the authoritative checkout read-write and
-keep all generated state local, for example:
-
-```bash
-mkdir -p ~/mnt/aobus
-mount_smbfs -N //guest@10.200.200.1/aobus ~/mnt/aobus
-cd ~/mnt/aobus
-./ao check
-./ao hygiene
-```
-
-The share does not survive a guest reboot. Credentials are managed outside the
-repository. Do not copy the checkout into the guest or run two writers against
-the same source files.
+For a shared-checkout workflow, mount the intended share read-write and run the
+portal from its root. Connection details and credentials are host configuration,
+not repository policy. Reverify the mount after reboot; do not copy the checkout
+into the guest or run two writers against the same source files.
 
 ## Native desktop development slice
 
@@ -254,17 +244,6 @@ hardware behavior.
 - If AUHAL or `afplay` fails over SSH, `stat -f "%Su" /dev/console` must name
   the logged-in user rather than `root`; on an unattended host also verify that
   `pmset -g custom` still reports `sleep 0`.
-- In a QEMU guest, a frozen framebuffer clock can mean display sleep rather than
-  a stalled guest. Compare the guest clock with the network before changing
-  timekeeping:
-
-  ```bash
-  date
-  sntp -d time.apple.com
-  ```
-
-  Add no periodic clock-setting service unless `date` or `sntp` demonstrates
-  real drift; wake the display through Screen Sharing for visual checks.
 - macOS does not provide a `timeout` command by default. Bound remote native
   operations from the controlling host rather than adding an ambient utility
   or leaving a hidden blocking loop in the guest.

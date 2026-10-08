@@ -184,6 +184,36 @@ class WinUiTest(unittest.TestCase):
                 )
                 self.assertEqual(winui._runtime_packages_from_json(payload, runtime), ())
 
+    def test_runtime_version_accepts_only_strict_four_part_ascii(self):
+        # 1..5 ASCII digits per part, numeric value <= 65535, no trim.
+        # 1.02.003.00004 is (1, 2, 3, 4); a 6-digit part is rejected.
+        cases = (
+            ("valid", "14.51.36247.0", (14, 51, 36247, 0)),
+            ("boundary", "65535.65535.65535.65535", (65535, 65535, 65535, 65535)),
+            ("leading-zeros", "1.02.003.00004", (1, 2, 3, 4)),
+            ("five-digit-zeros", "00000.0.0.1", (0, 0, 0, 1)),
+            ("major-too-large", "99999.1.1.1", None),
+            ("revision-too-large", "1.1.1.99999", None),
+            ("above-boundary", "65536.0.0.0", None),
+            ("integer-overflow", "999999999999999999999.1.1.1", None),
+            ("part-over-five-digits", "1.2.3.000004", None),
+            ("six-leading-zeros", "000000.1.2.3", None),
+            ("trailing-newline", "1.2.3.4\n", None),
+            ("negative", "-1.2.3.4", None),
+            ("three-parts", "1.2.3", None),
+            ("five-parts", "1.2.3.4.5", None),
+            ("prefix", "v1.2.3.4", None),
+            ("suffix", "1.2.3.4 (RC)", None),
+            ("leading-space", " 1.2.3.4", None),
+            ("trailing-space", "1.2.3.4 ", None),
+            ("unicode-digit", "\uff11.2.3.4", None),
+            ("empty", "", None),
+            ("empty-part", "1.2..4", None),
+        )
+        for name, version, expected in cases:
+            with self.subTest(case=name):
+                self.assertEqual(winui._runtime_version(version), expected)
+
     def test_runtime_query_failure_is_not_reported_as_an_absent_package(self):
         query = subprocess.CompletedProcess([], 1, "", "AppX service unavailable")
         with mock.patch.object(winui, "_run_text", return_value=query) as run:
@@ -330,6 +360,73 @@ class WinUiTest(unittest.TestCase):
         with mock.patch.object(winui, "_run_text", return_value=invalid):
             with self.assertRaisesRegex(RuntimeError, "returned invalid data"):
                 winui._verify_authenticode(Path("C:/runtime.exe"), environ={})
+
+    def test_authenticode_requires_exact_microsoft_cn_and_valid_status(self):
+        # Same case-sensitive CN prefix as the deployment helper. A substring,
+        # a longer CN, or Microsoft Corporation only in a later RDN is not enough.
+        installer = Path("C:/runtime.exe")
+        exact = "CN=Microsoft Corporation"
+        full_subject = "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+
+        def queried(stdout):
+            return subprocess.CompletedProcess([], 0, stdout, "")
+
+        def accept(subject):
+            verified = queried(json.dumps({"Status": "Valid", "Subject": subject}))
+            with mock.patch.object(winui, "_run_text", return_value=verified):
+                winui._verify_authenticode(installer, environ={})
+
+        def reject_signer(payload):
+            verified = queried(json.dumps(payload))
+            with mock.patch.object(winui, "_run_text", return_value=verified):
+                with self.assertRaisesRegex(RuntimeError, "invalid signer"):
+                    winui._verify_authenticode(installer, environ={})
+
+        def reject_shape(stdout):
+            with mock.patch.object(winui, "_run_text", return_value=queried(stdout)):
+                with self.assertRaisesRegex(RuntimeError, "returned invalid data"):
+                    winui._verify_authenticode(installer, environ={})
+
+        for name, subject in (
+            ("exact-cn", exact),
+            ("full-subject", full_subject),
+            ("cn-then-other-organization", "CN=Microsoft Corporation, O=Contoso"),
+            ("cn-trailing-comma", "CN=Microsoft Corporation,"),
+        ):
+            with self.subTest(signer=name):
+                accept(subject)
+
+        for name, subject in (
+            ("cn-overlap", "CN=Microsoft Corporationation"),
+            ("evil", "CN=Microsoft Corporation Evil"),
+            ("other-cn", "CN=Contoso"),
+            ("other-cn-with-microsoft-o", "CN=Contoso, O=Microsoft Corporation"),
+            ("o-contains-cn", "O=Microsoft Corporation, CN=Microsoft Corporation"),
+            ("bare-organization", "Microsoft Corporation"),
+            ("case-wrong", "CN=microsoft corporation"),
+            ("cn-prefix-case", "cn=Microsoft Corporation"),
+            ("cn-trailing-space", "CN=Microsoft Corporation "),
+            ("cn-trailing-newline", "CN=Microsoft Corporation\n"),
+        ):
+            with self.subTest(signer=name):
+                reject_signer({"Status": "Valid", "Subject": subject})
+
+        for name, payload in (
+            ("not-signed", {"Status": "NotSigned", "Subject": exact}),
+            ("subject-missing", {"Status": "Valid"}),
+            ("subject-null", {"Status": "Valid", "Subject": None}),
+            ("subject-not-string", {"Status": "Valid", "Subject": [exact]}),
+        ):
+            with self.subTest(signer=name):
+                reject_signer(payload)
+
+        for name, stdout in (
+            ("json-string", json.dumps(exact)),
+            ("json-array", "[]"),
+            ("not-json", "not-json"),
+        ):
+            with self.subTest(shape=name):
+                reject_shape(stdout)
 
     def test_runtime_setup_does_not_install_or_downgrade_an_acceptable_runtime(self):
         for version in ("2.4.0.0", "2.5.1.0"):

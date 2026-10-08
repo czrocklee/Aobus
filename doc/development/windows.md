@@ -151,8 +151,11 @@ doctor commands never install it. A healthy runtime registered for the current
 user in the governed Microsoft package family and architecture satisfies the
 requirement when its four-part version is at least the contract's runtime
 version. Doctor and setup accept newer serviced versions rather than requiring
-a downgrade; setup reports the selected installed version. The NuGet development
-closure remains exactly pinned.
+a downgrade; setup reports the selected installed version. These checks inventory
+framework registration, not bootstrap execution or successful application startup.
+Validate the actual app on its [supported systems](../user/use-windows-desktop.md);
+package requirements depend on the consumed SDK, bootstrap path and features.
+The NuGet development closure remains exactly pinned.
 
 Build or launch the dedicated tree with:
 
@@ -166,6 +169,9 @@ ao.bat run winui release
 The current app is unpackaged and framework-dependent; Developer Mode is not
 required. Launch requires an interactive RDP/local desktop. An SSH service
 session can build and verify but cannot display WinUI.
+
+For offline deployment without SDKs, Python, or network access, see
+[staging prerequisites](#stage-offline-prerequisites).
 
 `ao.bat check` builds Debug WinUI after the native Debug graph except under
 MSVC ASan. `ao.bat check release` validates the native IPO graph and builds the
@@ -195,6 +201,37 @@ All first-party Windows executables verify their UTF-8 process manifest after
 link. Narrow `argv` and audited narrow process boundaries are UTF-8, but
 filesystem paths still require the project's explicit native/UTF-8 conversion
 facades.
+
+### Stage offline prerequisites
+
+For offline deployment without target-side SDKs, Python, or network access, use
+the [operator instructions](../../app/windows-winui/deployment/README.md). This
+helper prepares the machine CRT and application user's runtime registration; it
+is not a complete installer.
+
+From the repository root on the build host, stage the matching signed x64 VC
+redistributable, the consumed
+`VC\Tools\MSVC` directory version (not the `cl.exe` file version), and the
+Windows App Runtime installer governed by
+[dependency-contract.json](../../dependency-contract.json):
+
+```powershell
+.\script\windows\stage-prerequisites.ps1 `
+  -VcRedistPath $vcRedistPath `
+  -VcToolsVersion $vcToolsVersion `
+  -WindowsAppRuntimeInstallerPath $runtimeInstallerPath `
+  -Destination 'C:\package\Prerequisites'
+```
+
+Set the input variables from the matching build, not an unrelated installation.
+The [staging script](../../script/windows/stage-prerequisites.ps1) never installs
+anything and refuses an existing destination. It verifies Microsoft signatures,
+the governed runtime hash, x64 VC identity/version, and copied payload hashes.
+The output includes `README.md`, both installers, `prerequisites.json`,
+`Install-Prerequisites.ps1`, and `Prerequisites.cmd`. The manifest records the
+bundled CRT floor/hash and governed runtime identity/minimum/hash; it is an
+artifact, not another dependency policy. Keep the complete package together,
+include applicable notices, and verify its hash after transfer.
 
 ### Soul lifecycle probe
 
