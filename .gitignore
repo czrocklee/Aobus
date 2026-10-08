@@ -72,6 +72,7 @@ Thumbs.db
 test/test_results/
 
 # AI agents
+.pi/
 .gemini
 .claude
 .ai-bridge
