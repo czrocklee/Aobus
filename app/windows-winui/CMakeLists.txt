@@ -147,6 +147,9 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   track/MainWindowTrack.cpp
   track/TrackCellItem.cpp
   track/TrackCellItem.h
+  track/TrackCreditsEditorControl.cpp
+  track/TrackCreditsEditorControl.h
+  track/TrackPropertiesCredits.cpp
   track/TrackDetailControl.cpp
   track/TrackDetailControl.h
   track/TrackItemView.cpp
@@ -309,6 +312,31 @@ set_target_properties(ao_winui_track_table_probe PROPERTIES
   WindowsTargetPlatformVersion 10.0.26100.0)
 aobus_enable_windows_app_sdk(ao_winui_track_table_probe APPLICATION)
 
+# Real scoped Credits controls; manually executed on an authenticated desktop.
+add_executable(ao_winui_credits_probe WIN32
+  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiCreditsProbe.cpp)
+aobus_enable_windows_utf8_manifest(ao_winui_credits_probe)
+target_include_directories(ao_winui_credits_probe PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")
+target_link_libraries(ao_winui_credits_probe PRIVATE
+  aobus-winui-lib
+  ao_app_i18n
+  ao_unicode_text
+  runtimeobject.lib)
+target_link_options(ao_winui_credits_probe PRIVATE /ENTRY:mainCRTStartup)
+set_target_properties(ao_winui_credits_probe PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/credits-probe"
+  VS_GLOBAL_AppContainerApplication false
+  VS_GLOBAL_ApplicationType "Windows Store"
+  VS_GLOBAL_ApplicationTypeRevision 10.0
+  VS_GLOBAL_DefaultLanguage en
+  VS_GLOBAL_DesktopCompatible true
+  VS_GLOBAL_MinimumVisualStudioVersion 18.0
+  VS_GLOBAL_RootNamespace AobusCreditsProbe
+  VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
+  WindowsTargetPlatformVersion 10.0.26100.0)
+aobus_enable_windows_app_sdk(ao_winui_credits_probe APPLICATION)
+
 aobus_verify_windows_utf8_manifest(aobus-winui)
 target_include_directories(aobus-winui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-winui PRIVATE
@@ -321,6 +349,7 @@ target_link_libraries(aobus-winui PRIVATE
 target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
 # Keep library-linked probes as build-only dependencies: referencing their
 # application projects directly would import their WinMD/PRI closure into the product.
+add_custom_target(ao_winui_credits_probe_build DEPENDS ao_winui_credits_probe)
 add_custom_target(ao_winui_soul_probe_build DEPENDS ao_winui_soul_probe)
 add_custom_target(ao_winui_track_table_probe_build DEPENDS ao_winui_track_table_probe)
 add_custom_target(ao_winui_track_item_probe_build
@@ -328,7 +357,7 @@ add_custom_target(ao_winui_track_item_probe_build
   DEPENDS ao_winui_track_item_probe
   COMMENT "Verifying the native WinUI track item contract"
   VERBATIM)
-add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_track_item_probe_build ao_winui_track_table_probe_build ao_winui_soul_probe_build)
+add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_track_item_probe_build ao_winui_track_table_probe_build ao_winui_soul_probe_build ao_winui_credits_probe_build)
 # The static-library project emits the XBF files at its output root, while
 # MSBuild's project-reference copy namespaces them under Aobus. The merged
 # application PRI retains the root-relative XBF paths, so deploy those exact
@@ -358,6 +387,12 @@ add_custom_command(TARGET aobus-winui POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E copy_if_different
           "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
           "$<TARGET_FILE_DIR:ao_winui_track_table_probe>/ao_winui_track_table_probe.pri"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
+          "$<TARGET_FILE_DIR:ao_winui_credits_probe>/App.xbf"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
+          "$<TARGET_FILE_DIR:ao_winui_credits_probe>/ao_winui_credits_probe.pri"
   COMMAND $<TARGET_FILE:ao_winui_localization_probe>
   COMMENT "Deploying compiled XAML and verifying the WinUI localization contract"
   VERBATIM)

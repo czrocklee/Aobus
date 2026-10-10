@@ -3,6 +3,7 @@
 
 #include <ao/library/TrackBuilder.h>
 
+#include "CreditAdmission.h"
 #include "TextAdmission.h"
 #include "WriteTransactionAccess.h"
 #include "detail/LibraryError.h"
@@ -13,8 +14,10 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackLayout.h>
@@ -23,6 +26,7 @@
 #include <ao/utility/ByteView.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -98,6 +102,34 @@ namespace ao::library
       if (property.duration() > TrackDuration::max())
       {
         return makeError(Error::Code::ValueTooLarge, "Track duration exceeds the signed 32-bit millisecond range");
+      }
+
+      return {};
+    }
+
+    Result<> validateCreditEntries(std::span<CreditView const> entries)
+    {
+      // Preflight independently of upstream normalization, without producing an NFC list.
+      for (std::size_t index = 0; index < entries.size(); ++index)
+      {
+        auto const shapeRes = detail::admitCreditShape(entries[index], index);
+
+        if (!shapeRes)
+        {
+          return std::unexpected{shapeRes.error()};
+        }
+
+        if (auto textRes = detail::validateLibraryText(shapeRes->name, std::format("Credit entry {} name", index));
+            !textRes)
+        {
+          return textRes;
+        }
+
+        if (auto textRes = detail::validateLibraryText(shapeRes->role, std::format("Credit entry {} role", index));
+            !textRes)
+        {
+          return textRes;
+        }
       }
 
       return {};
@@ -188,37 +220,37 @@ namespace ao::library
       .discNumber(metadata.discNumber())
       .discTotal(metadata.discTotal());
 
-    auto classical = view.classical();
-    builder.metadata().movementNumber(classical.movementNumber()).movementTotal(classical.movementTotal());
+    auto const work = view.work();
+    auto const performance = view.performance();
+    builder.metadata()
+      .movementNumber(work.movementNumber())
+      .movementTotal(work.movementTotal())
+      .recordingDate(performance.recordingDate());
+
+    for (std::size_t index = 0; index < kCreditKindCount; ++index)
+    {
+      auto const kind = static_cast<CreditKind>(index);
+
+      for (auto const& entry : performance.credits(kind))
+      {
+        builder._metadataBuilder._credits.push_back(
+          {.name = dictionary.get(entry.nameId), .kind = kind, .role = dictionary.getOrDefault(entry.roleId)});
+      }
+    }
 
     for (auto const cover : view.coverArt())
     {
       builder.coverArt().add(cover.type, cover.resourceId);
     }
 
-    if (auto workId = classical.workId(); workId.raw() > 0)
+    if (auto workId = work.workId(); workId.raw() > 0)
     {
       builder.metadata().work(dictionary.get(workId));
     }
 
-    if (auto movementId = classical.movementId(); movementId.raw() > 0)
+    if (auto movementId = work.movementId(); movementId.raw() > 0)
     {
       builder.metadata().movement(dictionary.get(movementId));
-    }
-
-    if (auto conductorId = classical.conductorId(); conductorId.raw() > 0)
-    {
-      builder.metadata().conductor(dictionary.get(conductorId));
-    }
-
-    if (auto ensembleId = classical.ensembleId(); ensembleId.raw() > 0)
-    {
-      builder.metadata().ensemble(dictionary.get(ensembleId));
-    }
-
-    if (auto soloistId = classical.soloistId(); soloistId.raw() > 0)
-    {
-      builder.metadata().soloist(dictionary.get(soloistId));
     }
 
     for (auto const& [dictionaryId, value] : view.customMetadata())
@@ -313,18 +345,6 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::conductor(std::string_view text)
-  {
-    _conductor = text;
-    return *this;
-  }
-
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::ensemble(std::string_view text)
-  {
-    _ensemble = text;
-    return *this;
-  }
-
   TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::genre(std::string_view text)
   {
     _genre = text;
@@ -343,9 +363,30 @@ namespace ao::library
     return *this;
   }
 
-  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::soloist(std::string_view text)
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::recordingDate(RecordingDate date)
   {
-    _soloist = text;
+    _recordingDate = date;
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::credits(std::span<CreditView const> entries)
+  {
+    auto replacement = std::vector<CreditView>{entries.begin(), entries.end()};
+    _credits = std::move(replacement);
+    return *this;
+  }
+
+  TrackBuilder::MetadataBuilder& TrackBuilder::MetadataBuilder::credits(std::span<Credit const> entries)
+  {
+    auto replacement = std::vector<CreditView>{};
+    replacement.reserve(entries.size());
+
+    for (auto const& entry : entries)
+    {
+      replacement.push_back({.name = entry.name, .kind = entry.kind, .role = entry.role});
+    }
+
+    _credits = std::move(replacement);
     return *this;
   }
 
@@ -649,7 +690,7 @@ namespace ao::library
 
     if (auto propertyRes = validateColdProperties(_propertyBuilder); !propertyRes)
     {
-      return propertyRes;
+      return std::unexpected{propertyRes.error()};
     }
 
     try
@@ -675,74 +716,87 @@ namespace ao::library
       }
 
       auto const& metadata = _metadataBuilder;
-      auto const hasClassical = !metadata._work.empty() || !metadata._movement.empty() ||
-                                !metadata._conductor.empty() || !metadata._ensemble.empty() ||
-                                !metadata._soloist.empty() || metadata._movementNumber != 0 ||
-                                metadata._movementTotal != 0;
+      auto const hasWork = !metadata._work.empty() || !metadata._movement.empty() || metadata._movementNumber != 0 ||
+                           metadata._movementTotal != 0;
 
-      if (hasClassical)
+      if (hasWork)
       {
-        addBlock(sizeof(TrackClassicalBlock));
+        addBlock(sizeof(TrackWorkBlock));
+      }
+
+      if (!metadata._recordingDate.isValid())
+      {
+        return makeError(Error::Code::InvalidInput, "Track recording date is invalid");
+      }
+
+      auto const hasPerformance = metadata._recordingDate.isPresent() || !metadata._credits.empty();
+
+      if (hasPerformance)
+      {
+        auto const entryBytes =
+          checkedPayloadBytes(metadata._credits.size(), sizeof(TrackCreditEntry), "Credits entry payload length");
+        addBlock(sizeof(TrackPerformanceBlock) + entryBytes);
       }
 
       for (auto const& [value, context] : {
              std::pair{metadata._work, std::string_view{"Track work"}},
              std::pair{metadata._movement, std::string_view{"Track movement"}},
-             std::pair{metadata._conductor, std::string_view{"Track conductor"}},
-             std::pair{metadata._ensemble, std::string_view{"Track ensemble"}},
-             std::pair{metadata._soloist, std::string_view{"Track soloist"}},
            })
       {
         if (auto textRes = detail::validateLibraryText(value, context); !textRes)
         {
-          return textRes;
+          return std::unexpected{textRes.error()};
         }
       }
 
-      if (!_customMetadataBuilder._customPairs.empty())
+      auto const entryCount = _customMetadataBuilder._customPairs.size();
+      auto const entryBytes =
+        checkedPayloadBytes(entryCount, sizeof(CustomMetadataEntry), "Custom metadata entry table length");
+      auto const valueOffset = sizeof(CustomMetadataBlockHeader) + entryBytes;
+      checkedUint16(entryCount, "Custom metadata count");
+      checkedUint16(valueOffset, "Custom metadata value offset");
+
+      std::size_t totalValueSize = 0;
+      auto normalizedKeys = std::unordered_set<std::string>{};
+
+      if (entryCount != 0)
       {
-        auto const entryCount = _customMetadataBuilder._customPairs.size();
-        auto const entryBytes =
-          checkedPayloadBytes(entryCount, sizeof(CustomMetadataEntry), "Custom metadata entry table length");
-        auto const valueOffset = sizeof(CustomMetadataBlockHeader) + entryBytes;
-        checkedUint16(entryCount, "Custom metadata count");
-        checkedUint16(valueOffset, "Custom metadata value offset");
-
-        std::size_t totalValueSize = 0;
-        auto normalizedKeys = std::unordered_set<std::string>{};
         normalizedKeys.reserve(entryCount);
+      }
 
-        for (auto const& [key, value] : _customMetadataBuilder._customPairs)
+      for (auto const& [key, value] : _customMetadataBuilder._customPairs)
+      {
+        auto normalizedKeyRes = detail::normalizeLibraryText(key, "Custom metadata key");
+
+        if (!normalizedKeyRes)
         {
-          auto normalizedKeyRes = detail::normalizeLibraryText(key, "Custom metadata key");
-
-          if (!normalizedKeyRes)
-          {
-            return std::unexpected{normalizedKeyRes.error()};
-          }
-
-          if (!normalizedKeys.insert(std::move(*normalizedKeyRes)).second)
-          {
-            return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
-          }
-
-          auto const valueLengthRes = detail::normalizedLibraryTextSize(value, "Custom metadata value");
-
-          if (!valueLengthRes)
-          {
-            return std::unexpected{valueLengthRes.error()};
-          }
-
-          checkedUint16(*valueLengthRes, "Custom metadata value length");
-
-          if (*valueLengthRes > kU16Max - totalValueSize)
-          {
-            detail::throwLibraryError(Error::Code::ValueTooLarge, "Custom metadata payload length exceeds uint16_t");
-          }
-
-          totalValueSize += *valueLengthRes;
+          return std::unexpected{normalizedKeyRes.error()};
         }
 
+        if (!normalizedKeys.insert(std::move(*normalizedKeyRes)).second)
+        {
+          return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
+        }
+
+        auto const valueLengthRes = detail::normalizedLibraryTextSize(value, "Custom metadata value");
+
+        if (!valueLengthRes)
+        {
+          return std::unexpected{valueLengthRes.error()};
+        }
+
+        checkedUint16(*valueLengthRes, "Custom metadata value length");
+
+        if (*valueLengthRes > kU16Max - totalValueSize)
+        {
+          detail::throwLibraryError(Error::Code::ValueTooLarge, "Custom metadata payload length exceeds uint16_t");
+        }
+
+        totalValueSize += *valueLengthRes;
+      }
+
+      if (entryCount != 0)
+      {
         auto const payloadSize = valueOffset + totalValueSize;
         checkedUint16(payloadSize, "Custom metadata payload length");
         addBlock(payloadSize);
@@ -763,7 +817,7 @@ namespace ao::library
         detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold record size exceeds uint16_t");
       }
 
-      return {};
+      return validateCreditEntries(metadata._credits);
     }
     catch (detail::LibraryException const& error)
     {
@@ -962,25 +1016,40 @@ namespace ao::library
                                                               ResourceStore const& resources)
   {
     auto prepared = PreparedCold{};
-    prepared.resolveClassicalIds(builder, transaction);
+    prepared.resolveMetadataIds(builder, transaction);
     auto const resolvedPairs = resolveCustomMetadata(builder, transaction);
     prepared.resolveCoverArt(builder, transaction, resources);
     prepared.appendCoverArtBlock();
-    prepared.appendClassicalBlock(builder->_metadataBuilder);
+    prepared.appendWorkBlock(builder->_metadataBuilder);
     prepared.appendCustomMetadataBlock(resolvedPairs);
+    prepared.appendPerformanceBlock(builder->_metadataBuilder);
     prepared.assignLayout(builder->_propertyBuilder._uri);
     prepared.snapshot(builder);
     return prepared;
   }
 
-  void TrackBuilder::PreparedCold::resolveClassicalIds(TrackBuilder const* builder, WriteTransaction& transaction)
+  void TrackBuilder::PreparedCold::resolveMetadataIds(TrackBuilder const* builder, WriteTransaction& transaction)
   {
     auto const& metadata = builder->_metadataBuilder;
     _workId = TrackBuilder::resolveDictionaryId(metadata._work, transaction);
     _movementId = TrackBuilder::resolveDictionaryId(metadata._movement, transaction);
-    _conductorId = TrackBuilder::resolveDictionaryId(metadata._conductor, transaction);
-    _ensembleId = TrackBuilder::resolveDictionaryId(metadata._ensemble, transaction);
-    _soloistId = TrackBuilder::resolveDictionaryId(metadata._soloist, transaction);
+    _credits.reserve(metadata._credits.size());
+    auto kindCounts = std::array<std::size_t, kCreditKindCount>{};
+    detail::forEachCreditInKindOrder(
+      metadata._credits,
+      [&](CreditView const& credit)
+      {
+        auto const trimmed = detail::trimCredit(credit);
+        _credits.push_back({.nameId = TrackBuilder::internDictionaryId(trimmed.name, transaction),
+                            .roleId = TrackBuilder::resolveDictionaryId(trimmed.role, transaction)});
+        ++kindCounts[static_cast<std::size_t>(credit.kind)];
+      });
+
+    // Performer is the unrecorded tail segment.
+    for (std::size_t index = 0; index < _sectionCounts.size(); ++index)
+    {
+      _sectionCounts[index] = checkedUint16(kindCounts[index], "Credit section count");
+    }
   }
 
   std::vector<std::pair<DictionaryId, std::string>> TrackBuilder::PreparedCold::resolveCustomMetadata(
@@ -1075,31 +1144,45 @@ namespace ao::library
     appendBlock(TrackColdBlockSlot::CoverArt, std::move(payload));
   }
 
-  void TrackBuilder::PreparedCold::appendClassicalBlock(MetadataBuilder const& metadata)
+  void TrackBuilder::PreparedCold::appendWorkBlock(MetadataBuilder const& metadata)
   {
-    bool const hasClassical = _workId != kInvalidDictionaryId || _movementId != kInvalidDictionaryId ||
-                              _conductorId != kInvalidDictionaryId || _ensembleId != kInvalidDictionaryId ||
-                              _soloistId != kInvalidDictionaryId || metadata._movementNumber != 0 ||
-                              metadata._movementTotal != 0;
-
-    if (!hasClassical)
+    if (_workId == kInvalidDictionaryId && _movementId == kInvalidDictionaryId && metadata._movementNumber == 0 &&
+        metadata._movementTotal == 0)
     {
       return;
     }
 
-    auto payload = std::vector<std::byte>(sizeof(TrackClassicalBlock), std::byte{0});
+    auto payload = std::vector<std::byte>(sizeof(TrackWorkBlock), std::byte{0});
     writePod(std::span<std::byte>{payload},
              0,
-             TrackClassicalBlock{
-               .workId = _workId,
-               .movementId = _movementId,
-               .conductorId = _conductorId,
-               .ensembleId = _ensembleId,
-               .soloistId = _soloistId,
-               .movementNumber = metadata._movementNumber,
-               .movementTotal = metadata._movementTotal,
-             });
-    appendBlock(TrackColdBlockSlot::Classical, std::move(payload));
+             TrackWorkBlock{.workId = _workId,
+                            .movementId = _movementId,
+                            .movementNumber = metadata._movementNumber,
+                            .movementTotal = metadata._movementTotal});
+    appendBlock(TrackColdBlockSlot::Work, std::move(payload));
+  }
+
+  void TrackBuilder::PreparedCold::appendPerformanceBlock(MetadataBuilder const& metadata)
+  {
+    if (!metadata._recordingDate.isPresent() && _credits.empty())
+    {
+      return;
+    }
+
+    auto const payloadSize = sizeof(TrackPerformanceBlock) + (_credits.size() * sizeof(TrackCreditEntry));
+    auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
+    writePod(std::span<std::byte>{payload},
+             0,
+             TrackPerformanceBlock{.recordingDate = metadata._recordingDate, .sectionCounts = _sectionCounts});
+    auto offset = sizeof(TrackPerformanceBlock);
+
+    for (auto const& entry : _credits)
+    {
+      writePod(std::span<std::byte>{payload}, offset, entry);
+      offset += sizeof(TrackCreditEntry);
+    }
+
+    appendBlock(TrackColdBlockSlot::Performance, std::move(payload));
   }
 
   void TrackBuilder::PreparedCold::appendCustomMetadataBlock(

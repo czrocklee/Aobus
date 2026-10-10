@@ -4,6 +4,8 @@
 #pragma once
 
 #include "app/AppDialog.h"
+#include "common/MainContextCallbackScope.h"
+#include "layout/component/track/TrackCreditsEditor.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
@@ -96,6 +98,8 @@ namespace ao::gtk
     void updateEditorSensitivity();
     void updateSaveEnabled();
     void updateEditorValue(rt::TrackField field, Gtk::Widget* widget);
+    bool hasUnsavedCredits() const noexcept;
+    void promptDiscardCredits();
 
     Gtk::Widget* createEditorWidget(rt::TrackField field, uimodel::TrackPropertiesFormEditorKind editorKind);
     Gtk::Widget* createReadonlyWidget(rt::TrackField field);
@@ -112,10 +116,14 @@ namespace ao::gtk
     std::optional<uimodel::TrackAuthoringSession> _optEditSession;
     async::Subscription _editSessionInvalidatedSubscription;
     bool _multipleTracks = false;
+    bool _hasInvalidRecordingDate = false;
     uimodel::TrackPropertiesFormModel _formModel;
     uimodel::TrackPropertiesFormSpec _formSpec;
     Gtk::Button* _saveButton = nullptr;
     InteractionState _interactionState = InteractionState::Editing;
+    // Non-owning: the managed prompt closes itself and is destroyed with this dialog.
+    AppDialog* _discardPrompt = nullptr;
+    bool _discardConfirmed = false;
 
     Gtk::Box _contentBox{Gtk::Orientation::VERTICAL};
     Gtk::Label _sessionErrorLabel{};
@@ -127,9 +135,11 @@ namespace ao::gtk
     Gtk::ScrolledWindow _propertiesScroll{};
     Gtk::Box _propertiesBox{Gtk::Orientation::VERTICAL};
 
+    layout::TrackCreditsEditor _creditsEditor;
     std::vector<FieldEditor> _editors;
     std::vector<FieldEditor> _readonlyRows;
     std::vector<CompletionControllerBinding> _completionControllers;
     async::LifetimeScope _tasks;
+    MainContextCallbackScope _callbackScope;
   };
 } // namespace ao::gtk

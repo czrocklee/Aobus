@@ -8,14 +8,17 @@
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -83,6 +86,11 @@ namespace ao::appkit
     void editField(std::size_t index, std::string text);
     void editTags(std::vector<std::string> tags);
     void editList(std::string name, std::string description, std::string expression);
+    uimodel::TrackCreditSections creditSections() const;
+    uimodel::TrackCreditsEditorModel& creditsEditor() noexcept;
+    Result<> beginCreditsEdit(std::bitset<library::kCreditKindCount> kinds);
+    Result<> acceptCreditsEdit();
+    void cancelCreditsEdit();
     void save();
     void cancel();
     void shutdown();

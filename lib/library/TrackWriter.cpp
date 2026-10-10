@@ -153,7 +153,7 @@ namespace ao::library
 
     if (!idRes)
     {
-      return std::unexpected{idRes.error()};
+      throwAfterMutation(std::move(idRes.error()));
     }
 
     if (auto putRes = manifestWriter.put(std::move(*unboundManifestRes).bind(*idRes)); !putRes)
@@ -199,7 +199,13 @@ namespace ao::library
 
     auto const& [hot, cold] = *preparedRes;
     AO_INVARIANT(cold.uri() == *currentUriRes, "Validated Track update changed its URI");
-    return updatePreparedTrackRecord(writer, id, hot, cold);
+
+    if (auto updateRes = updatePreparedTrackRecord(writer, id, hot, cold); !updateRes)
+    {
+      throwAfterMutation(std::move(updateRes.error()));
+    }
+
+    return {};
   }
 
   Result<> TrackWriter::updateHot(TrackId const id, TrackBuilder const& track)
@@ -225,7 +231,12 @@ namespace ao::library
       return std::unexpected{preparedRes.error()};
     }
 
-    return updatePreparedHotTrackRecord(writer, id, *preparedRes);
+    if (auto updateRes = updatePreparedHotTrackRecord(writer, id, *preparedRes); !updateRes)
+    {
+      throwAfterMutation(std::move(updateRes.error()));
+    }
+
+    return {};
   }
 
   Result<> TrackWriter::updateCold(TrackId const id, TrackBuilder const& track)
@@ -262,7 +273,13 @@ namespace ao::library
     }
 
     AO_INVARIANT(preparedRes->uri() == *currentUriRes, "Validated cold Track update changed its URI");
-    return updatePreparedColdTrackRecord(writer, id, *preparedRes);
+
+    if (auto updateRes = updatePreparedColdTrackRecord(writer, id, *preparedRes); !updateRes)
+    {
+      throwAfterMutation(std::move(updateRes.error()));
+    }
+
+    return {};
   }
 
   Result<> TrackWriter::replace(TrackId const id, TrackBuilder const& track, FileManifestBuilder manifestBuilder)
@@ -310,7 +327,7 @@ namespace ao::library
 
     if (auto updateRes = updatePreparedTrackRecord(writer, id, hot, cold); !updateRes)
     {
-      return updateRes;
+      throwAfterMutation(std::move(updateRes.error()));
     }
 
     if (auto putRes = manifestWriter.put(std::move(*unboundManifestRes).bind(id)); !putRes)
@@ -397,7 +414,7 @@ namespace ao::library
 
     if (auto updateRes = updatePreparedTrackRecord(writer, id, hot, cold); !updateRes)
     {
-      return updateRes;
+      throwAfterMutation(std::move(updateRes.error()));
     }
 
     auto const removedOldManifest = manifestWriter.tryRemove(*oldUriRes);

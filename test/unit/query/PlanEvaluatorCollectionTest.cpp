@@ -4,6 +4,7 @@
 #include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
+#include <ao/library/Credits.h>
 #include <ao/query/PlanEvaluator.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -40,17 +41,15 @@ namespace ao::query::test
       CHECK(evaluator.matchesFullPlan(plan, present.view()));
     }
 
-    SECTION("OtherDictionaryMetadataExistsWhenIdIsValid")
+    SECTION("OtherTextMetadataExistsWhenPresent")
     {
       auto missingSpec = TrackSpec{};
       missingSpec.album.clear();
       missingSpec.albumArtist.clear();
       missingSpec.composer.clear();
-      missingSpec.conductor.clear();
-      missingSpec.ensemble.clear();
       missingSpec.work.clear();
       missingSpec.movement.clear();
-      missingSpec.soloist.clear();
+      missingSpec.credits.clear();
       missingSpec.genre.clear();
       auto missing = TrackFixture{missingSpec};
 
@@ -58,11 +57,11 @@ namespace ao::query::test
       presentSpec.album = "Album";
       presentSpec.albumArtist = "Album Artist";
       presentSpec.composer = "Composer";
-      presentSpec.conductor = "Conductor";
-      presentSpec.ensemble = "Ensemble";
       presentSpec.work = "Work";
       presentSpec.movement = "Movement";
-      presentSpec.soloist = "Soloist";
+      presentSpec.credits = {{.name = "Conductor", .kind = CreditKind::Conductor},
+                             {.name = "Ensemble", .kind = CreditKind::Ensemble},
+                             {.name = "Soloist", .kind = CreditKind::Soloist}};
       presentSpec.genre = "Genre";
       auto present = TrackFixture{presentSpec};
 

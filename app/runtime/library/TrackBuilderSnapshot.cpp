@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/utility/Sha256.h>
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <format>
 #include <span>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -24,12 +26,9 @@ namespace ao::rt
     , _album{source.metadata().album()}
     , _albumArtist{source.metadata().albumArtist()}
     , _composer{source.metadata().composer()}
-    , _conductor{source.metadata().conductor()}
-    , _ensemble{source.metadata().ensemble()}
     , _genre{source.metadata().genre()}
     , _work{source.metadata().work()}
     , _movement{source.metadata().movement()}
-    , _soloist{source.metadata().soloist()}
     , _uri{source.property().uri()}
     , _year{source.metadata().year()}
     , _trackNumber{source.metadata().trackNumber()}
@@ -38,6 +37,7 @@ namespace ao::rt
     , _discTotal{source.metadata().discTotal()}
     , _movementNumber{source.metadata().movementNumber()}
     , _movementTotal{source.metadata().movementTotal()}
+    , _recordingDate{source.metadata().recordingDate()}
     , _duration{source.property().duration()}
     , _bitrate{source.property().bitrate()}
     , _sampleRate{source.property().sampleRate()}
@@ -63,6 +63,16 @@ namespace ao::rt
   Result<TrackBuilderSnapshot> TrackBuilderSnapshot::make(library::TrackBuilder const& source)
   {
     auto result = TrackBuilderSnapshot{source};
+    result._credits.reserve(source.metadata().credits().size());
+
+    // Snapshot ownership is not admission: new items validate at the writer,
+    // while changed and moved items retain their curated metadata instead.
+    for (auto const& credit : source.metadata().credits())
+    {
+      result._credits.push_back(
+        library::Credit{.name = std::string{credit.name}, .kind = credit.kind, .role = std::string{credit.role}});
+    }
+
     result._covers.reserve(source.coverArt().entries().size());
 
     for (auto const& entry : source.coverArt().entries())
@@ -117,12 +127,9 @@ namespace ao::rt
       .album(_album)
       .albumArtist(_albumArtist)
       .composer(_composer)
-      .conductor(_conductor)
-      .ensemble(_ensemble)
       .genre(_genre)
       .work(_work)
       .movement(_movement)
-      .soloist(_soloist)
       .year(_year)
       .trackNumber(_trackNumber)
       .trackTotal(_trackTotal)
@@ -130,6 +137,10 @@ namespace ao::rt
       .discTotal(_discTotal)
       .movementNumber(_movementNumber)
       .movementTotal(_movementTotal);
+    result.metadata().recordingDate(_recordingDate);
+
+    // Borrowed views into this snapshot's own text, like the scalar fields.
+    result.metadata().credits(_credits);
     result.property()
       .uri(_uri)
       .duration(_duration)

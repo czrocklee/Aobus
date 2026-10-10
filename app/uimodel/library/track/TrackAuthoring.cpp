@@ -4,12 +4,14 @@
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <ao/Error.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <charconv>
 #include <cstdint>
+#include <expected>
 #include <limits>
 #include <optional>
 #include <string>
@@ -90,6 +92,25 @@ namespace ao::uimodel
     return TrackFieldEditValue{std::in_place_type<std::uint16_t>, static_cast<std::uint16_t>(parsed)};
   }
 
+  Result<TrackFieldEditValue> parseRecordingDateEditValue(std::string_view value)
+  {
+    auto const trimmed = trimAsciiWhitespace(value);
+
+    if (trimmed.empty())
+    {
+      return TrackFieldEditValue{library::RecordingDate{}};
+    }
+
+    auto dateRes = library::parseRecordingDate(trimmed);
+
+    if (!dateRes)
+    {
+      return std::unexpected{dateRes.error()};
+    }
+
+    return TrackFieldEditValue{*dateRes};
+  }
+
   bool canWriteTrackFieldPatch(rt::TrackField field) noexcept
   {
     using F = rt::TrackField;
@@ -102,19 +123,20 @@ namespace ao::uimodel
       case F::AlbumArtist:
       case F::Genre:
       case F::Composer:
-      case F::Conductor:
-      case F::Ensemble:
       case F::Work:
       case F::Movement:
-      case F::Soloist:
       case F::Year:
       case F::DiscNumber:
       case F::DiscTotal:
       case F::TrackNumber:
       case F::TrackTotal:
       case F::MovementNumber:
-      case F::MovementTotal: return true;
+      case F::MovementTotal:
+      case F::RecordingDate: return true;
 
+      case F::Conductor:
+      case F::Ensemble:
+      case F::Soloist:
       case F::Duration:
       case F::Tags:
       case F::FilePath:
@@ -145,11 +167,16 @@ namespace ao::uimodel
       case F::AlbumArtist: return tryWriteStringPatch(value, patch.optAlbumArtist);
       case F::Genre: return tryWriteStringPatch(value, patch.optGenre);
       case F::Composer: return tryWriteStringPatch(value, patch.optComposer);
-      case F::Conductor: return tryWriteStringPatch(value, patch.optConductor);
-      case F::Ensemble: return tryWriteStringPatch(value, patch.optEnsemble);
       case F::Work: return tryWriteStringPatch(value, patch.optWork);
       case F::Movement: return tryWriteStringPatch(value, patch.optMovement);
-      case F::Soloist: return tryWriteStringPatch(value, patch.optSoloist);
+      case F::RecordingDate:
+        if (auto const* date = std::get_if<library::RecordingDate>(&value); date != nullptr && date->isValid())
+        {
+          patch.optRecordingDate = *date;
+          return true;
+        }
+
+        return false;
 
       case F::Year: return tryWriteUint16Patch(value, patch.optYear);
       case F::DiscNumber: return tryWriteUint16Patch(value, patch.optDiscNumber);
@@ -159,6 +186,9 @@ namespace ao::uimodel
       case F::MovementNumber: return tryWriteUint16Patch(value, patch.optMovementNumber);
       case F::MovementTotal: return tryWriteUint16Patch(value, patch.optMovementTotal);
 
+      case F::Conductor:
+      case F::Ensemble:
+      case F::Soloist:
       case F::Duration:
       case F::Tags:
       case F::FilePath:

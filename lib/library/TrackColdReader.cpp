@@ -59,10 +59,35 @@ namespace ao::library::detail
                                  });
     }
 
-    bool isValidClassicalPayload(std::span<std::byte const> payload) noexcept
+    bool isValidWorkPayload(std::span<std::byte const> payload) noexcept
     {
-      return payload.size() == sizeof(TrackClassicalBlock) &&
-             utility::bytes::tryLayout<TrackClassicalBlock>(payload) != nullptr;
+      auto const* block = utility::bytes::tryLayout<TrackWorkBlock>(payload);
+      return payload.size() == sizeof(TrackWorkBlock) && block != nullptr &&
+             (block->workId != kInvalidDictionaryId || block->movementId != kInvalidDictionaryId ||
+              block->movementNumber != 0 || block->movementTotal != 0);
+    }
+
+    bool isValidPerformancePayload(std::span<std::byte const> payload) noexcept
+    {
+      auto const* block = utility::bytes::tryLayout<TrackPerformanceBlock>(payload);
+
+      if (block == nullptr || (payload.size() - sizeof(TrackPerformanceBlock)) % sizeof(TrackCreditEntry) != 0 ||
+          block->reserved != 0 || !block->recordingDate.isValid())
+      {
+        return false;
+      }
+
+      auto const entries = utility::layout::viewArray<TrackCreditEntry>(payload.subspan(sizeof(TrackPerformanceBlock)));
+      auto const classified =
+        static_cast<std::size_t>(block->sectionCounts[0]) + block->sectionCounts[1] + block->sectionCounts[2];
+
+      if (classified > entries.size() || (entries.empty() && !block->recordingDate.isPresent()))
+      {
+        return false;
+      }
+
+      return std::ranges::all_of(
+        entries, [](TrackCreditEntry const& entry) { return entry.nameId != kInvalidDictionaryId; });
     }
 
     bool isValidCustomPayload(std::span<std::byte const> payload) noexcept
@@ -235,12 +260,14 @@ namespace ao::library::detail
     }
 
     bool hasValidPayloads(std::span<std::byte const> coverPayload,
-                          std::span<std::byte const> classicalPayload,
-                          std::span<std::byte const> customPayload) noexcept
+                          std::span<std::byte const> workPayload,
+                          std::span<std::byte const> customPayload,
+                          std::span<std::byte const> performancePayload) noexcept
     {
       return (coverPayload.empty() || isValidCoverPayload(coverPayload)) &&
-             (classicalPayload.empty() || isValidClassicalPayload(classicalPayload)) &&
-             (customPayload.empty() || isValidCustomPayload(customPayload));
+             (workPayload.empty() || isValidWorkPayload(workPayload)) &&
+             (customPayload.empty() || isValidCustomPayload(customPayload)) &&
+             (performancePayload.empty() || isValidPerformancePayload(performancePayload));
     }
   } // namespace
 
@@ -262,20 +289,23 @@ namespace ao::library::detail
     }
 
     auto const coverPayload = payloadForSlot(header, coldBytes, optLayout->uriOffset, TrackColdBlockSlot::CoverArt);
-    auto const classicalPayload =
-      payloadForSlot(header, coldBytes, optLayout->uriOffset, TrackColdBlockSlot::Classical);
+    auto const workPayload = payloadForSlot(header, coldBytes, optLayout->uriOffset, TrackColdBlockSlot::Work);
     auto const customPayload =
       payloadForSlot(header, coldBytes, optLayout->uriOffset, TrackColdBlockSlot::CustomMetadata);
 
-    if (!hasValidPayloads(coverPayload, classicalPayload, customPayload))
+    auto const performancePayload =
+      payloadForSlot(header, coldBytes, optLayout->uriOffset, TrackColdBlockSlot::Performance);
+
+    if (!hasValidPayloads(coverPayload, workPayload, customPayload, performancePayload))
     {
       return;
     }
 
     _header = optLayout->header;
     _coverPayload = coverPayload;
-    _classicalPayload = classicalPayload;
+    _workPayload = workPayload;
     _customPayload = customPayload;
+    _performancePayload = performancePayload;
     _valid = true;
   }
 

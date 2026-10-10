@@ -3,14 +3,26 @@
 
 #include "RenderTestSupport.h"
 #include "TrackPropertiesEditorTestSupport.h"
+#include "test/unit/MessageCatalogTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "tui/TrackCreditsEditor.h"
 #include "tui/TrackPropertiesEditor.h"
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/component/mouse.hpp>
 
+#include <array>
 #include <cstddef>
 #include <format>
 #include <optional>
@@ -37,6 +49,29 @@ namespace ao::tui::test
 
         return rt::CompletionResult{.replaceBegin = 0, .replaceEnd = text.size(), .items = std::move(items)};
       };
+    }
+    TrackPropertiesEditor makeCreditsEditor(TrackPropertiesEditor::CompletionProvider completionProvider,
+                                            TrackCreditsEditor::CompletionProvider creditCompletionProvider)
+    {
+      auto storage = rt::test::MusicLibraryFixture{};
+      auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
+      auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
+      auto const trackId = commands.addTrack({.title = "Track",
+                                              .album = "Blue",
+                                              .credits = {{"Seed", library::CreditKind::Soloist, "violin"},
+                                                          {"Hidden", library::CreditKind::Soloist, "cello"}},
+                                              .uri = "/music/track.flac"});
+      auto const& textCatalog = ao::test::englishMessageCatalog();
+      auto form = uimodel::TrackPropertiesFormModel{textCatalog};
+      REQUIRE(uimodel::loadTrackPropertiesFormBaseline(
+        commands.library().snapshot(), std::array{trackId}, uimodel::buildTrackPropertiesFormSpec(textCatalog), form));
+      return TrackPropertiesEditor{
+        textCatalog,
+        TrackEditorPreparation{
+          .targets = {{.id = trackId, .title = "Track", .path = "/music/track.flac"}}, .baseline = std::move(form)},
+        std::move(completionProvider),
+        TrackEditorMode::Properties,
+        std::move(creditCompletionProvider)};
     }
   } // namespace
 
@@ -254,7 +289,7 @@ namespace ao::tui::test
   {
     for (auto const height : {24, 20, 16})
     {
-      for (auto const* const label : {"Composer", "Work", "Soloist"})
+      for (auto const* const label : {"Composer", "Work"})
       {
         DYNAMIC_SECTION(label << " at 80x" << height)
         {
@@ -270,6 +305,118 @@ namespace ao::tui::test
           auto const rendered = renderElement(editor.renderModal(80, height), 80, height);
           CHECK(rendered.text.contains("> Cand05"));
           CHECK_FALSE(editor.isDirty());
+        }
+      }
+    }
+  }
+
+  TEST_CASE("TrackPropertiesEditor - locked Soloist completion stays visible without scalar editing",
+            "[tui][unit][editor][credits]")
+  {
+    for (auto const columns : {80, 48, 32})
+    {
+      for (auto const height : {24, 20, 16})
+      {
+        DYNAMIC_SECTION("Soloist at " << columns << "x" << height)
+        {
+          bool scalarCompletionInvoked = false;
+          bool creditCompletionInvoked = false;
+          auto editor = makeCreditsEditor(
+            [&](rt::TrackField, std::string_view, std::size_t) -> std::optional<rt::CompletionResult>
+            {
+              scalarCompletionInvoked = true;
+              return std::nullopt;
+            },
+            [&](library::CreditKind const kind, bool const role, std::string_view const text, std::size_t const cursor)
+            {
+              creditCompletionInvoked = true;
+              CHECK(kind == library::CreditKind::Soloist);
+              CHECK_FALSE(role);
+              CHECK(text == "Seed");
+              CHECK(cursor == 4);
+              return numberedCandidates()(rt::TrackField::Soloist, text, cursor);
+            });
+          focusRow(editor, "Soloist");
+          editor.tryHandleEvent(completeEvent());
+          typeText(editor, "not a scalar");
+          CHECK_FALSE(scalarCompletionInvoked);
+          CHECK_FALSE(editor.isDirty());
+          REQUIRE(editor.tryHandleEvent(ftxui::Event::Return));
+          REQUIRE(editor.isEditingCredits());
+
+          editor.tryHandleEvent(completeEvent());
+          REQUIRE(creditCompletionInvoked);
+
+          for (std::size_t step = 0; step < 5; ++step)
+          {
+            editor.tryHandleEvent(ftxui::Event::ArrowDown);
+          }
+
+          auto rendered = renderElement(editor.renderModal(columns, height), columns, height);
+          INFO(rendered.text);
+          CHECK(rendered.text.contains("> Cand05"));
+          CHECK_FALSE(rendered.text.contains("Cand06"));
+          CHECK_FALSE(editor.canApply());
+          CHECK_FALSE(editor.buildPatch().metadata.optCredits);
+          CHECK(editor.takeRequest() == TrackEditorRequest::None);
+
+          auto const optTab = findTextCells(rendered.screen, "Tags");
+          REQUIRE(optTab);
+          REQUIRE(editor.tryHandleEvent(ftxui::Event::Mouse(
+            "",
+            ftxui::Mouse{
+              .button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = optTab->x_min, .y = optTab->y_min})));
+          CHECK(editor.tab() == TrackEditorTab::Metadata);
+          CHECK(editor.isEditingCredits());
+          rendered = renderElement(editor.renderModal(columns, height), columns, height);
+          CHECK(rendered.text.contains("> Cand05"));
+
+          SECTION("accepting a candidate preserves the locked kind and role in the parent draft")
+          {
+            auto candidate = std::string{"Cand05"};
+
+            SECTION("Enter accepts the keyboard selection")
+            {
+              editor.tryHandleEvent(ftxui::Event::Return);
+            }
+
+            SECTION("clicking accepts the painted candidate instead of the keyboard selection")
+            {
+              candidate = "Cand04";
+              auto const optCandidate = findTextCells(rendered.screen, candidate);
+              REQUIRE(optCandidate);
+              REQUIRE(editor.tryHandleEvent(ftxui::Event::Mouse("",
+                                                                ftxui::Mouse{.button = ftxui::Mouse::Left,
+                                                                             .motion = ftxui::Mouse::Pressed,
+                                                                             .x = optCandidate->x_min,
+                                                                             .y = optCandidate->y_min})));
+            }
+
+            CHECK(editor.isEditingCredits());
+            editor.tryHandleEvent(applyEvent());
+            CHECK_FALSE(editor.isEditingCredits());
+            CHECK(editor.takeRequest() == TrackEditorRequest::None);
+            auto const patch = editor.buildPatch();
+            REQUIRE(patch.metadata.optCredits);
+            CHECK(patch.metadata.optCredits->kinds == uimodel::trackCreditScope(library::CreditKind::Soloist));
+            CHECK(patch.metadata.optCredits->entries ==
+                  std::vector<library::Credit>{{candidate, library::CreditKind::Soloist, "violin"},
+                                               {"Hidden", library::CreditKind::Soloist, "cello"}});
+            CHECK_FALSE(patch.metadata.optTitle);
+            CHECK_FALSE(patch.metadata.optAlbum);
+          }
+
+          SECTION("dismissing completion then cancelling the child leaves no edit")
+          {
+            editor.tryHandleEvent(ftxui::Event::Escape);
+            CHECK(editor.isEditingCredits());
+            CHECK_FALSE(renderElement(editor.renderModal(columns, height), columns, height).text.contains("Cand05"));
+            editor.tryHandleEvent(ftxui::Event::Escape);
+            CHECK_FALSE(editor.isEditingCredits());
+            CHECK_FALSE(editor.isDirty());
+            CHECK_FALSE(editor.buildPatch().metadata.optCredits);
+            CHECK(editor.takeRequest() == TrackEditorRequest::None);
+          }
         }
       }
     }

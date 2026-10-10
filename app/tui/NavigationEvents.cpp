@@ -9,9 +9,12 @@
 #include "SelectionNavigation.h"
 #include "ShellInteractionModel.h"
 #include "SmartListEditor.h"
+#include "TrackEditController.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
@@ -20,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <variant>
 
 namespace ao::tui
@@ -282,6 +286,31 @@ namespace ao::tui
     }
 
     auto& sections = _shell.detailSections();
+
+    auto scope = uimodel::allTrackCreditKinds();
+    bool creditsRequested = event == ftxui::Event::CtrlK;
+
+    for (std::size_t index = 0; index < library::kCreditKindCount; ++index)
+    {
+      if (event == ftxui::Event::Character(std::to_string(index + 1)))
+      {
+        scope = uimodel::trackCreditScope(static_cast<library::CreditKind>(index));
+        creditsRequested = true;
+      }
+    }
+
+    // Credits edit the same captured selection as Properties: the marked
+    // tracks, or the focused track when nothing is marked.
+    if (creditsRequested)
+    {
+      if (_trackEdit.tryOpenCredits(_library.selectedTrackIds(), scope))
+      {
+        cancelTransientInteractions();
+        _library.commitVisualSelection();
+      }
+
+      return true;
+    }
 
     if (event == ftxui::Event::Escape)
     {

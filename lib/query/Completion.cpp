@@ -655,7 +655,7 @@ namespace ao::query
     {
       operators = std::span{kTagOperators};
     }
-    else if (isStringField(field) || isDictionaryField(field))
+    else if (isStringField(field) || isDictionaryField(field) || isCreditField(field))
     {
       operators = std::span{kStringOperators};
     }
@@ -669,6 +669,7 @@ namespace ao::query
         case Field::Channels:
         case Field::BitDepth:
         case Field::Year:
+        case Field::RecordingDate:
         case Field::TrackNumber:
         case Field::TrackTotal:
         case Field::DiscNumber:

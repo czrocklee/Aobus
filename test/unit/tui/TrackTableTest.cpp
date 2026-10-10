@@ -449,6 +449,28 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.screen.PixelAt(2, trackLine).inverted);
   }
 
+  TEST_CASE("TrackTable credits - compact categories count every entry including duplicates", "[tui][unit][credits]")
+  {
+    auto const presentation = rt::TrackPresentationSpec{
+      .id = "credits", .visibleFields = {rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist}};
+    auto const tracks = std::vector{makeTrackListEntry(rt::TrackRow{.id = TrackId{1},
+                                                                    .conductor = "A",
+                                                                    .ensemble = "Group",
+                                                                    .soloist = "Solo",
+                                                                    .conductorCount = 3,
+                                                                    .ensembleCount = 1,
+                                                                    .soloistCount = 2})};
+
+    for (auto const columns : {48, 120})
+    {
+      auto const rendered = renderTableAt(tracks, presentation, 0, columns);
+      CHECK(rendered.text.contains("A +2"));
+      CHECK(rendered.text.contains("Group"));
+      CHECK(rendered.text.contains("Solo +1"));
+      CHECK_FALSE(rendered.text.contains("Group +"));
+    }
+  }
+
   TEST_CASE("TrackTable - projected column widths reposition following columns", "[tui][unit][track-table]")
   {
     auto const presentation =

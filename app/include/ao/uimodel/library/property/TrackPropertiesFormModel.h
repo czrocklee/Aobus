@@ -6,11 +6,15 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
+#include <bitset>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -56,6 +60,15 @@ namespace ao::uimodel
     /// Replaces even a mixed baseline; a later setEditValue restores ordinary mixed-field preservation.
     void setExplicitFieldEdit(rt::TrackField field, TrackFieldEditValue value);
 
+    // Credits baseline is captured with ordinary fields and the owner's binding.
+    std::optional<rt::CreditReplacement> const& pendingCredits() const noexcept;
+    TrackCreditSections creditSections() const;
+    Result<> beginCreditsEdit(std::bitset<library::kCreditKindCount> kinds);
+    TrackCreditsEditorModel& creditsEditor() noexcept;
+    TrackCreditsEditorModel const& creditsEditor() const noexcept;
+    Result<> acceptCreditsEdit();
+    void cancelCreditsEdit();
+
     /// The captured baseline, independent of pending edits.
     TrackPropertiesFormRowView rowView(rt::TrackField field) const;
     bool canSave() const;
@@ -72,6 +85,9 @@ namespace ao::uimodel
 
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackPropertiesFormFieldState> _fields;
+    TrackCreditSections _capturedCredits;
+    std::optional<rt::CreditReplacement> _optPendingCredits;
+    TrackCreditsEditorModel _creditsEditor;
   };
 
   /**

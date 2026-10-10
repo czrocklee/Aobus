@@ -35,11 +35,8 @@ namespace ao::uimodel::test
                       patch.optAlbumArtist,
                       patch.optGenre,
                       patch.optComposer,
-                      patch.optConductor,
-                      patch.optEnsemble,
                       patch.optWork,
                       patch.optMovement,
-                      patch.optSoloist,
                       patch.optYear,
                       patch.optTrackNumber,
                       patch.optTrackTotal,
@@ -47,6 +44,8 @@ namespace ao::uimodel::test
                       patch.optDiscTotal,
                       patch.optMovementNumber,
                       patch.optMovementTotal,
+                      patch.optRecordingDate,
+                      patch.optCredits,
                       patch.customUpdates);
     }
 
@@ -164,11 +163,8 @@ namespace ao::uimodel::test
     checkStringField(rt::TrackField::AlbumArtist, &rt::MetadataPatch::optAlbumArtist);
     checkStringField(rt::TrackField::Genre, &rt::MetadataPatch::optGenre);
     checkStringField(rt::TrackField::Composer, &rt::MetadataPatch::optComposer);
-    checkStringField(rt::TrackField::Conductor, &rt::MetadataPatch::optConductor);
-    checkStringField(rt::TrackField::Ensemble, &rt::MetadataPatch::optEnsemble);
     checkStringField(rt::TrackField::Work, &rt::MetadataPatch::optWork);
     checkStringField(rt::TrackField::Movement, &rt::MetadataPatch::optMovement);
-    checkStringField(rt::TrackField::Soloist, &rt::MetadataPatch::optSoloist);
 
     checkUint16Field(rt::TrackField::Year, &rt::MetadataPatch::optYear);
     checkUint16Field(rt::TrackField::DiscNumber, &rt::MetadataPatch::optDiscNumber);
@@ -209,6 +205,13 @@ namespace ao::uimodel::test
     auto patch = rt::MetadataPatch{};
     patch.optTitle = "Before";
     auto const value = TrackFieldEditValue{std::in_place_type<std::string>, "Edited"};
+
+    for (auto const field : {rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist})
+    {
+      CHECK_FALSE(canWriteTrackFieldPatch(field));
+      CHECK_FALSE(tryWriteTrackFieldPatch(patch, field, value));
+      CHECK_FALSE(patch.optCredits);
+    }
 
     CHECK_FALSE(canWriteTrackFieldPatch(rt::TrackField::Tags));
     CHECK_FALSE(canWriteTrackFieldPatch(rt::TrackField::Duration));

@@ -21,6 +21,7 @@ to the [error value reference](error.md).
 |---|---|---|
 | `ao::async::OperationCancelled` | Stop-aware async checkpoints and adapters that preserve cancellation. | A caller-owned future retains it. `spawnLogged`, `spawnCancellable`, and `spawnWithLifetime` consume it after their bookkeeping. |
 | `ao::cli::CommandError` | One accepted CLI invocation. | `app/cli/Run.cpp` formats the command diagnostic and returns command-failure status. |
+| CLI11 `CLI::ArgumentMismatch` | Missing literal operands or unsupported attached credit values in the immediate track-update parsing callbacks. | The `CLI::ParseError` catch in `app/cli/Run.cpp` reports the parser diagnostic and returns CLI11's parse status without executing the command. |
 | `ao::query::detail::QueryException` | Query and format compilation helpers. | The source-private compiler boundary returns the carried `Error` as `Result`. |
 | `ao::media::detail::MediaException` | MP4 demux construction. | The MP4 demux public boundary returns the carried `Error`. |
 | `ao::audio::detail::DecoderException` | One decoder/session operation. | The nearest public decoder/session result boundary returns the carried `Error`. |
@@ -32,8 +33,8 @@ to the [error value reference](error.md).
 The project-specific error carriers derive directly from `std::exception`, own
 an `Error`, and expose its message through `what()`. They are caught as their
 exact leaf type; an unrelated exception is not reclassified as their error.
-The GTK layout row is an adapter transport rather than a project Error carrier
-and follows the explicitly stated adapter boundary instead.
+The CLI11 and GTK layout rows are adapter transports rather than project Error
+carriers and follow their explicitly stated adapter boundaries instead.
 
 No general `ao::Exception` hierarchy or public catch-all project vocabulary
 exists.
@@ -49,6 +50,7 @@ statement shape rather than maintaining a site-name allowlist.
 |---|---|---|
 | `ao::async::throwOperationCancelled` | `CancellationTransport` | Constructs cancellation. |
 | `ao::cli::throwCommandError` | `CommandBoundary` | Constructs CLI command transport. |
+| `throwLiteralArgumentError` in `TrackCommand.cpp` | `ForeignCallbackAdapter` | Adapts missing literal operands and unsupported attached credit values to CLI11's parse boundary, retaining argument-mismatch status `114` rather than command-failure status. |
 | `ao::query::detail::throwQueryError` | `PrivateErrorTransport` | Constructs private query/format transport. |
 | `ao::media::detail::throwMediaError` | `PrivateErrorTransport` | Constructs private media transport. |
 | `ao::audio::detail::throwDecoderError` | `PrivateErrorTransport` | Constructs private decoder transport. |
@@ -131,7 +133,7 @@ is explicitly approved.
 
 Carrier declarations live with their owning subsystem; cancellation is in
 `include/ao/async/`, CLI transport in `app/cli/`, and private Error carriers in
-the corresponding `detail/` directories. `RymlAdapter.cpp` and `LayoutHost.cpp` own the adapter-only rows.
+the corresponding `detail/` directories. `TrackCommand.cpp`, `RymlAdapter.cpp`, and `LayoutHost.cpp` own the adapter-only rows.
 
 `ForbidRawThrowCheck.cpp` and its integration fixture enforce the marker shapes.
 Subsystem tests protect public translation. `AsyncRuntimeTest.cpp`,

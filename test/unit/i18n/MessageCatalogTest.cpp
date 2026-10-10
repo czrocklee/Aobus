@@ -84,6 +84,80 @@ namespace ao::i18n::test
     }
   }
 
+  TEST_CASE("MessageCatalog - Credits copy resolves in every maintained locale without English fallback",
+            "[core][unit][catalog]")
+  {
+    // Maintained locales are sparse by policy, but the Credits feature is
+    // translated as one unit. A missing override would fall back silently.
+    struct CreditMessage final
+    {
+      MessageId id;
+      std::vector<MessageArgument> arguments;
+    };
+
+    auto const messages = std::vector<CreditMessage>{
+      {MessageId::TrackFieldRecordingDate, {}},
+      {MessageId::TrackRecordingDateInvalid, {}},
+      {MessageId::TrackCreditsHeading, {}},
+      {MessageId::TrackCreditPerformer, {}},
+      {MessageId::TrackCreditName, {}},
+      {MessageId::TrackCreditRole, {}},
+      {MessageId::TrackCreditKind, {}},
+      {MessageId::TrackCreditsAdd, {}},
+      {MessageId::TrackCreditsReplace, {}},
+      {MessageId::TrackCreditsReplaceScope, {}},
+      {MessageId::TrackCreditsClear, {}},
+      {MessageId::TrackCreditsCleared, {}},
+      {MessageId::TrackCreditsCommit, {}},
+      {MessageId::TrackCreditsCancel, {}},
+      {MessageId::TrackCreditsAllKinds, {}},
+      {MessageId::TrackCreditDelete, {}},
+      {MessageId::TrackCreditMoveUp, {}},
+      {MessageId::TrackCreditMoveDown, {}},
+      {MessageId::TrackCreditBlankName, {{"row", 2}}},
+      {MessageId::TrackCreditInvalidNameText, {{"row", 2}}},
+      {MessageId::TrackCreditInvalidRoleText, {{"row", 2}}},
+      {MessageId::TrackCreditInvalidKind, {{"row", 2}}},
+      {MessageId::TrackCreditRowMoveUp, {{"row", 2}}},
+      {MessageId::TrackCreditRowMoveDown, {{"row", 2}}},
+      {MessageId::TrackCreditRowDelete, {{"row", 2}}},
+      {MessageId::TrackCreditRowPosition, {{"row", 2}, {"count", 3}}},
+      {MessageId::TrackCreditsSummary, {{"first", "A"}, {"count", 2}}},
+      {MessageId::TrackCreditsScope, {{"scope", "S"}}},
+      {MessageId::TrackCreditKindSummary, {{"kind", "K"}, {"summary", "S"}}},
+      {MessageId::TrackCreditKindValue, {{"kind", "K"}}},
+      {MessageId::TrackCreditNameRole, {{"name", "N"}, {"role", "R"}}},
+      {MessageId::GtkTrackCreditsDiscardTitle, {}},
+      {MessageId::GtkTrackCreditsDiscardMessage, {}},
+      {MessageId::GtkTrackCreditsDiscard, {}},
+      {MessageId::GtkTrackCreditsKeepEditing, {}},
+      {MessageId::WinUiTrackPropertiesReload, {}},
+      {MessageId::WinUiTrackPropertiesDiscardQuestion, {}},
+      {MessageId::WinUiTrackPropertiesDiscard, {}},
+      {MessageId::WinUiTrackPropertiesKeepEditing, {}},
+    };
+
+    for (auto const& locale : availableCatalogLocales())
+    {
+      if (locale.tag == "en")
+      {
+        continue;
+      }
+
+      INFO(locale.tag);
+      auto catalogRes = MessageCatalog::create(locale.tag);
+      REQUIRE(catalogRes);
+
+      for (auto const& message : messages)
+      {
+        CAPTURE(static_cast<std::size_t>(message.id));
+        auto const res = catalogRes->format(message.id, message.arguments);
+        REQUIRE(res);
+        CHECK(res->locale == locale.tag);
+      }
+    }
+  }
+
   TEST_CASE("MessageCatalog - admits canonical locale tags and applies explicit fallback", "[core][unit][catalog]")
   {
     auto englishRes = MessageCatalog::create("en-GB");

@@ -12,23 +12,116 @@
 #include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
 #include "tui/TextCell.h"
+#include "tui/TrackEditController.h"
 #include "tui/TrackListEntry.h"
 #include <ao/AudioCodec.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
 
 #include <array>
+#include <cstddef>
 #include <string>
 
 namespace ao::tui::test
 {
+  TEST_CASE("DetailSections - empty credits expose focused all-kind and locked category editors",
+            "[tui][unit][credits]")
+  {
+    using namespace ftxui;
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    REQUIRE(events.tryHandleEvent(Event::Character('D')));
+    auto const* track = library.selectedTrackView().track;
+    REQUIRE(track != nullptr);
+    auto const focusedId = track->id;
+    auto const frame = renderElement(detailPane(ao::test::englishMessageCatalog(),
+                                                track,
+                                                {},
+                                                40,
+                                                nullptr,
+                                                0,
+                                                {.sections = fixture.shell.detailSections(), .focused = true}),
+                                     40,
+                                     30)
+                         .text;
+    CHECK(frame.contains("Credits [Ctrl-K]"));
+    CHECK(frame.contains("Performer [4]"));
+
+    for (auto const& event :
+         {Event::CtrlK, Event::Character('1'), Event::Character('2'), Event::Character('3'), Event::Character('4')})
+    {
+      REQUIRE(events.tryHandleEvent(event));
+      REQUIRE(fixture.trackEditPtr->isActive());
+      auto const* editor = fixture.trackEditPtr->activeEditor();
+      REQUIRE(editor->isEditingCredits());
+      REQUIRE(editor->targets().size() == 1);
+      CHECK(editor->targets()[0].id == focusedId);
+      CHECK_FALSE(editor->canApply());
+      REQUIRE(events.tryHandleEvent(Event::Escape));
+      CHECK_FALSE(fixture.trackEditPtr->activeEditor()->isEditingCredits());
+      CHECK_FALSE(fixture.trackEditPtr->activeEditor()->isDirty());
+      REQUIRE(events.tryHandleEvent(Event::Escape));
+      CHECK_FALSE(fixture.trackEditPtr->isActive());
+    }
+  }
+
+  TEST_CASE("DetailSections - focused credits carry their shortcut on a single heading", "[tui][unit][credits]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    REQUIRE(events.tryHandleEvent(ftxui::Event::Character('D')));
+    auto const* track = library.selectedTrackView().track;
+    REQUIRE(track != nullptr);
+    auto credits = uimodel::TrackCreditSections{};
+
+    for (auto& section : credits)
+    {
+      section.optValue.emplace();
+    }
+
+    credits[0].optValue->push_back({"Bernstein", library::CreditKind::Conductor, ""});
+
+    for (bool const focused : {false, true})
+    {
+      CAPTURE(focused);
+      auto const frame =
+        renderElement(detailPane(ao::test::englishMessageCatalog(),
+                                 track,
+                                 {},
+                                 40,
+                                 nullptr,
+                                 0,
+                                 {.sections = fixture.shell.detailSections(), .credits = &credits, .focused = focused}),
+                      40,
+                      40)
+          .text;
+      std::size_t headings = 0;
+
+      for (auto position = frame.find("Credits"); position != std::string::npos;
+           position = frame.find("Credits", position + 1))
+      {
+        ++headings;
+      }
+
+      CHECK(headings == 1);
+      CHECK(frame.contains("Bernstein"));
+      CHECK(frame.contains("Credits [Ctrl-K]") == focused);
+      CHECK(frame.contains("Performer [4]") == focused);
+    }
+  }
+
   TEST_CASE("DetailSections - explicit focus stays outside the normal panel cycle", "[tui][unit][detail]")
   {
     using namespace ftxui;

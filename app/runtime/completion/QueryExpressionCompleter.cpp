@@ -4,6 +4,7 @@
 #include <ao/rt/completion/QueryExpressionCompleter.h>
 
 #include "../detail/CompletionVocabulary.h"
+#include <ao/library/Credits.h>
 #include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
@@ -142,15 +143,30 @@ namespace ao::rt
                           std::string_view prefix,
                           std::size_t limit)
     {
-      auto const optTrackField = trackFieldFromQueryField(field);
+      auto values = std::span<VocabularyEntry const>{};
 
-      if (!optTrackField || !supportsTrackFieldValueCompletion(*optTrackField))
+      if (field == query::Field::Credit)
       {
-        return;
+        values = vocabulary.creditNames();
+      }
+      else if (field == query::Field::Performer)
+      {
+        values = vocabulary.creditNames(library::CreditKind::Performer);
+      }
+      else
+      {
+        auto const optTrackField = trackFieldFromQueryField(field);
+
+        if (!optTrackField || !supportsTrackFieldValueCompletion(*optTrackField))
+        {
+          return;
+        }
+
+        values = vocabulary.valuesFor(*optTrackField);
       }
 
       appendVocabularyCompletionItems(items,
-                                      vocabulary.valuesFor(*optTrackField),
+                                      values,
                                       prefix,
                                       limit,
                                       [](VocabularyEntry const& entry)

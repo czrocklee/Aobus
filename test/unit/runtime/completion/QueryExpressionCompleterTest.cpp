@@ -8,6 +8,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/completion/CompletionTestSupport.h"
 #include <ao/i18n/IcuCompletionAliases.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/completion/CompletionAliasPolicy.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -36,9 +37,9 @@ namespace ao::rt::test
         library::test::TrackSpec{.title = "Completion Track",
                                  .artist = "Artist",
                                  .album = "Album",
-                                 .conductor = "Conductor",
-                                 .ensemble = "Ensemble",
-                                 .soloist = "Soloist",
+                                 .credits = {{.name = "Conductor", .kind = library::CreditKind::Conductor},
+                                             {.name = "Ensemble", .kind = library::CreditKind::Ensemble},
+                                             {.name = "Soloist", .kind = library::CreditKind::Soloist}},
                                  .uri = "query-completion.flac",
                                  .tags = {tags.begin(), tags.end()},
                                  .customMetadata = {custom.begin(), custom.end()},

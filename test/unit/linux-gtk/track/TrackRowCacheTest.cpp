@@ -13,6 +13,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
@@ -112,6 +113,7 @@ namespace ao::gtk::test
                                        spec1.genre = "Genre 1";
                                        spec1.uri = "track-1.flac";
                                        spec1.year = 2021;
+                                       spec1.recordingDate = {.year = 1955, .month = 6};
                                        spec1.trackNumber = 1;
                                        spec1.duration = std::chrono::minutes{3};
                                        basicId1 = library::test::addTrackWithUniqueFixtureUri(musicLibrary, spec1);
@@ -129,11 +131,11 @@ namespace ao::gtk::test
                                        utf8Spec.albumArtist = "Sigur Rós";
                                        utf8Spec.genre = "Électronique";
                                        utf8Spec.composer = "久石譲";
-                                       utf8Spec.conductor = "指揮者";
-                                       utf8Spec.ensemble = "東京交響楽団";
+                                       utf8Spec.credits = {{"指揮者", library::CreditKind::Conductor, ""},
+                                                           {"東京交響楽団", library::CreditKind::Ensemble, ""},
+                                                           {"独奏者", library::CreditKind::Soloist, ""}};
                                        utf8Spec.work = "作品一";
                                        utf8Spec.movement = "第一楽章";
-                                       utf8Spec.soloist = "独奏者";
                                        utf8Spec.uri = "utf8.flac";
                                        utf8Spec.tags = {"夜", "ライブ"};
                                        utf8Id = library::test::addTrackWithUniqueFixtureUri(musicLibrary, utf8Spec);
@@ -160,6 +162,7 @@ namespace ao::gtk::test
       CHECK(row1Ptr->fieldText(rt::TrackField::Title) == "Track 1");
       CHECK(row1Ptr->fieldText(rt::TrackField::Genre) == "Genre 1");
       CHECK(row1Ptr->year() == 2021);
+      CHECK(row1Ptr->fieldText(rt::TrackField::RecordingDate) == "1955-06");
       CHECK(row1Ptr->trackNumber() == 1);
       CHECK(row1Ptr->duration() == std::chrono::minutes{3});
 
@@ -386,5 +389,28 @@ namespace ao::gtk::test
     CHECK(changedTextValues == 0);
     CHECK(warmCharacters == coldCharacters * kReScrollPasses);
     CHECK(cache.cachedRowCount() == kRowCount);
+  }
+
+  TEST_CASE("TrackRowCache - credit columns retain first text and count duplicate entries",
+            "[gtk][unit][track-row-cache]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto id = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& storage)
+                                     {
+                                       id = library::test::addTrackWithUniqueFixtureUri(
+                                         storage,
+                                         {.credits = {{"First", library::CreditKind::Conductor, "Lead"},
+                                                      {"First", library::CreditKind::Conductor, "Lead"},
+                                                      {"Second", library::CreditKind::Conductor, "Guest"}}});
+                                     }};
+    auto cache = TrackRowCache{fixture.runtime().library(), ao::test::englishMessageCatalog()};
+    auto rowPtr = cache.trackRow(id);
+    REQUIRE(rowPtr);
+    CHECK(rowPtr->stringField(rt::TrackField::Conductor)->raw() == "First");
+    CHECK(rowPtr->fieldText(rt::TrackField::Conductor) == "First +2");
+    CHECK(rowPtr->fieldText(rt::TrackField::Ensemble).empty());
+    CHECK_FALSE(rowPtr->trySetStringField(rt::TrackField::Conductor, "Scalar replacement"));
+    CHECK(rowPtr->fieldText(rt::TrackField::Conductor) == "First +2");
   }
 } // namespace ao::gtk::test

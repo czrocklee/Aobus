@@ -3,6 +3,37 @@
 
 ja:table {
   messages:table {
+    track_field_recording_date { "録音日" }
+    track_credits_heading { "演奏クレジット" }
+    track_credit_performer { "演奏者" }
+    track_credit_name { "名前" }
+    track_credit_role { "役割または楽器（任意）" }
+    track_credits_add { "クレジットを追加" }
+    track_credits_replace { "置き換え…" }
+    track_credits_clear { "この範囲をクリア" }
+    track_credits_commit { "クレジットを保存" }
+    track_credits_cancel { "キャンセル" }
+    track_credit_delete { "クレジットを削除" }
+    track_credit_blank_name { "{row} 行目: 名前を入力してください。" }
+    track_credit_invalid_name_text { "{row} 行目: 名前に無効なテキストが含まれています。" }
+    track_credit_invalid_role_text { "{row} 行目: 役割または楽器に無効なテキストが含まれています。" }
+    track_credit_invalid_kind { "{row} 行目: この範囲で有効なクレジット分類を選択してください。" }
+    track_credits_cleared { "クレジットをクリアしました" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "分類" }
+    track_credits_scope { "クレジットの範囲: {scope}" }
+    track_credits_all_kinds { "すべてのクレジット分類" }
+    track_credits_replace_scope { "選択したすべての曲でこの範囲を置き換える" }
+    track_credit_move_up { "上へ移動" }
+    track_credit_move_down { "下へ移動" }
+    track_credit_row_move_up { "クレジット {row} を上へ移動" }
+    track_credit_row_move_down { "クレジット {row} を下へ移動" }
+    track_credit_row_delete { "クレジット {row} を削除" }
+    track_credit_row_position { "{count} 件中 {row} 件目のクレジット" }
+    track_credit_kind_summary { "{kind}: {summary}" }
+    track_credit_kind_value { "分類: {kind}" }
+    track_credit_name_role { "{name}（{role}）" }
+    track_recording_date_invalid { "有効な日付を YYYY、YYYY-MM、YYYY-MM-DD の形式で入力してください。空欄にするとクリアします。" }
     tui_go_to_back { "戻る" }
     tui_go_to_forward { "進む" }
     tui_go_to_cancel { "キャンセル" }
@@ -703,6 +734,10 @@ ja:table {
     winui_track_properties_save_failed { "保存に失敗しました: {detail}" }
     winui_track_properties_stale { "このダイアログを開いている間にライブラリが変更されました。プロパティを開き直して再試行してください。" }
     winui_track_properties_invalid_value { "値が無効です: {detail}" }
+    winui_track_properties_reload { "再読み込み" }
+    winui_track_properties_discard_question { "これらの変更を破棄しますか？" }
+    winui_track_properties_discard { "変更を破棄" }
+    winui_track_properties_keep_editing { "編集を続ける" }
     winui_list_create_from_filter { "現在のフィルターからリストを作成" }
     winui_list_editor_new_title { "新規リスト" }
     winui_list_editor_edit_title { "リストを編集" }
@@ -787,6 +822,10 @@ ja:table {
     gtk_track_save_failed { "保存に失敗しました" }
     gtk_track_save_stale_title { "変更を保存できませんでした" }
     gtk_track_save_stale { "このダイアログが開いている間にライブラリが変更されました。プロパティを再読み込みして再試行してください。" }
+    gtk_track_credits_discard_title { "演奏クレジットの変更を破棄しますか？" }
+    gtk_track_credits_discard_message { "今プロパティを閉じると、保存していない演奏クレジットの変更は失われます。" }
+    gtk_track_credits_discard { "変更を破棄" }
+    gtk_track_credits_keep_editing { "編集を続ける" }
     gtk_tag_add { "追加…" }
     gtk_tag_add_placeholder { "タグを追加…" }
     gtk_tag_remove { "タグ {tag} を削除" }

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "tui/TrackPropertiesEditor.h"
+#include <ao/library/RecordingDate.h>
 
 #include <ftxui/component/event.hpp>
 #include <ftxui/screen/screen.hpp>
@@ -26,6 +27,7 @@ namespace ao::tui::test
     std::string album;
     std::uint16_t year = 0;
     std::string codec = "FLAC";
+    library::RecordingDate recordingDate{};
   };
 
   TrackPropertiesEditor makeEditor(std::vector<TrackFixture> tracks,

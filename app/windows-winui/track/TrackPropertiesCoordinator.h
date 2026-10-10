@@ -22,7 +22,9 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <bitset>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -47,6 +49,7 @@ namespace ao::uimodel
 
 namespace ao::winui
 {
+  class TrackCreditsEditorControl;
   struct TrackPropertiesCoordinatorConfig final
   {
     winrt::Microsoft::UI::Xaml::XamlRoot xamlRoot{nullptr};
@@ -56,6 +59,7 @@ namespace ao::winui
     rt::CompletionService& completion;
     i18n::MessageCatalog textCatalog;
     std::vector<TrackId> trackIds;
+    std::optional<std::bitset<library::kCreditKindCount>> optCreditsScope;
   };
 
   /** Native, window-owned Properties workflow for one captured track selection. */
@@ -72,6 +76,8 @@ namespace ao::winui
 
     Result<> present();
     bool isActive() const noexcept { return _active; }
+    /// Current native presentation; null before present() and after closure or retirement.
+    winrt::Microsoft::UI::Xaml::Controls::ContentDialog element() const { return _dialog; }
     void retire() noexcept;
 
   private:
@@ -109,6 +115,12 @@ namespace ao::winui
 
     Result<> prepareSession();
     void buildDialog();
+    void buildCreditsSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
+    void refreshCreditsPreview();
+    void beginCreditsEdit(std::bitset<library::kCreditKindCount> scope);
+    void finishCreditsEdit(bool accept);
+    void requestDiscard(bool reload);
+    void confirmDiscard();
     void buildMetadataSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void buildTechnicalSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
     void buildTagsSection(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& content);
@@ -155,6 +167,7 @@ namespace ao::winui
     rt::CompletionService& _completion;
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackId> _trackIds;
+    std::optional<std::bitset<library::kCreditKindCount>> _optCreditsScope;
     uimodel::TrackPropertiesFormModel _formModel;
     uimodel::TrackPropertiesFormSpec _formSpec;
     rt::TrackDetailSnapshot _snapshot;
@@ -165,6 +178,15 @@ namespace ao::winui
 
     winrt::Microsoft::UI::Xaml::Controls::ContentDialog _dialog{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::TextBlock _errorText{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::StackPanel _creditsPreview{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::StackPanel _creditsHost{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::StackPanel _discardPrompt{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button _reloadButton{nullptr};
+    std::unique_ptr<TrackCreditsEditorControl> _creditsControlPtr;
+    std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _creditClickRevokers;
+    std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _discardClickRevokers;
+    winrt::Microsoft::UI::Xaml::Controls::ContentDialog::Closing_revoker _closingRevoker{};
+    bool _reloadAfterDiscard = false;
     winrt::Microsoft::UI::Xaml::Controls::StackPanel _tagRows{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox _tagInput{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button _tagAddButton{nullptr};

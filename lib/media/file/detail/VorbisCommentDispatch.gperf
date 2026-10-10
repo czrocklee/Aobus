@@ -23,7 +23,7 @@ CONDUCTOR, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder
 ENSEMBLE, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::ensemble>
 ORCHESTRA, &handleEnsembleFallback
 SOLOIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::soloist>
-PERFORMER, &handleSoloistFallback
+PERFORMER, &appendPerformerCredit
 TRACKNUMBER, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 TRACK, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 TRACKTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
@@ -33,8 +33,8 @@ DISC, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuild
 DISCTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
 TOTALDISCS, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::discTotal>
 GENRE, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::genre>
-WORK, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
-GROUPING, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
+WORK, &handleWorkCandidate<ao::media::file::detail::WorkSource::Work>
+GROUPING, &handleWorkCandidate<ao::media::file::detail::WorkSource::GroupingAlias>
 MOVEMENTNAME, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movement>
 MOVEMENT, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
 MOVEMENTTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>

@@ -139,12 +139,9 @@ namespace ao::media::file::test
       {Kind::Text, static_cast<std::uint8_t>(TextField::Artist)},
       {Kind::Text, static_cast<std::uint8_t>(TextField::Album)},
       {Kind::Text, static_cast<std::uint8_t>(TextField::Composer)},
-      {Kind::Text, static_cast<std::uint8_t>(TextField::Conductor)},
-      {Kind::Text, static_cast<std::uint8_t>(TextField::Ensemble)},
       {Kind::Text, static_cast<std::uint8_t>(TextField::Genre)},
       {Kind::Text, static_cast<std::uint8_t>(TextField::Work)},
       {Kind::Text, static_cast<std::uint8_t>(TextField::Movement)},
-      {Kind::Text, static_cast<std::uint8_t>(TextField::Soloist)},
       {Kind::Number, static_cast<std::uint8_t>(NumberField::Year)},
       {Kind::Number, static_cast<std::uint8_t>(NumberField::TrackNumber)},
       {Kind::Number, static_cast<std::uint8_t>(NumberField::TrackTotal)},
@@ -156,9 +153,15 @@ namespace ao::media::file::test
       {Kind::SampleRate},
       {Kind::Channels},
       {Kind::BitDepth},
+      {Kind::Credits},
     };
 
     CHECK(content.events() == expected);
+    CHECK(content.credits() == std::vector<RecordedContent::Credit>{
+                                 {.name = "Fixture Conductor", .kind = CreditKind::Conductor},
+                                 {.name = "Fixture Ensemble", .kind = CreditKind::Ensemble},
+                                 {.name = "Fixture Soloist", .kind = CreditKind::Soloist},
+                               });
   }
 
   TEST_CASE("Media File - repeated visits retain earlier decoded string views", "[media][unit][file]")

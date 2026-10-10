@@ -5,9 +5,11 @@
 #include "common/UiWorkflow.h"
 #include "i18n/GtkText.h"
 #include "layout/component/ComponentRegistrations.h"
+#include "layout/component/track/TrackCreditsEditor.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
+#include "layout/component/track/TrackFieldGridOperationProbe.h"
 #include "layout/component/track/TrackFieldGridRows.h"
 #include "layout/component/track/TrackFieldGridText.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
@@ -15,8 +17,10 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackFieldUi.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Executor.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
@@ -30,6 +34,7 @@
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
@@ -54,6 +59,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <deque>
+#include <expected>
 #include <memory>
 #include <optional>
 #include <string>
@@ -153,6 +159,13 @@ namespace ao::gtk::layout
         , _notifications{notifications}
         , _scope{ctx.detailScope}
         , _detailUndo{ctx.detailUndo}
+        , _creditsEditor{asyncRuntime,
+                         library,
+                         completion,
+                         notifications,
+                         _textCatalog,
+                         ctx.detailScope,
+                         ctx.detailUndo}
         , _metadataHeader{gtkText(_textCatalog, MessageId::TrackMetadataHeading)}
         , _technicalHeader{gtkText(_textCatalog, MessageId::TrackAudioPropertiesHeading)}
         , _showAllFieldsButton{gtkText(_textCatalog, MessageId::TrackShowEmptyFields)}
@@ -219,6 +232,13 @@ namespace ao::gtk::layout
 
         for (auto const field : projection.metadataFields)
         {
+          // Category previews belong to the scoped list editor, never scalar entries.
+          if (field == rt::TrackField::Conductor || field == rt::TrackField::Ensemble ||
+              field == rt::TrackField::Soloist)
+          {
+            continue;
+          }
+
           _metadataRows.emplace_back(field);
           configureBuiltInRow(_metadataRows.back());
         }
@@ -327,6 +347,8 @@ namespace ao::gtk::layout
 
       void updateMetadataVisibility()
       {
+        _creditsEditor.updateVisibility(_metadataExpanded, _showEmptyMetadata);
+
         for (auto& row : _metadataRows)
         {
           row.labelSlot.set_visible(_metadataExpanded);
@@ -352,6 +374,8 @@ namespace ao::gtk::layout
 
       void updateMetadataVisibility(rt::TrackDetailSnapshot const& snap)
       {
+        _creditsEditor.updateVisibility(_metadataExpanded, _showEmptyMetadata);
+
         for (auto& row : _metadataRows)
         {
           bool const show = shouldShowRow(row, snap);
@@ -646,8 +670,11 @@ namespace ao::gtk::layout
         if (!editValueRes)
         {
           APP_LOG_ERROR("Failed to parse edit value for {}: {}", rt::trackFieldId(field), editValueRes.error().message);
-          _notifications.post(
-            rt::NotificationSeverity::Error, editValueRes.error().message, rt::NotificationLifetime::history());
+          _notifications.post(rt::NotificationSeverity::Error,
+                              field == rt::TrackField::RecordingDate
+                                ? gtkText(_textCatalog, MessageId::TrackRecordingDateInvalid)
+                                : editValueRes.error().message,
+                              rt::NotificationLifetime::history());
           return false;
         }
 
@@ -920,19 +947,57 @@ namespace ao::gtk::layout
         }
 
         auto const snap = _scope->snapshot();
-
-        auto const optPrevValue = uimodel::undoValueForDeletedTrackCustomMetadata(snap, key);
-        auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
-
-        if (!sessionRes)
+        auto preparedRes = [&] -> Result<std::pair<uimodel::TrackAuthoringSession, std::optional<std::string>>>
         {
-          APP_LOG_ERROR("Custom metadata delete could not start: {}", sessionRes.error().message);
+          auto snapshot = _library.snapshot();
+          auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds, snapshot);
+
+          if (!sessionRes)
+          {
+            return std::unexpected{sessionRes.error()};
+          }
+
+          // Bind and read the undo PRE in one snapshot, never the possibly
+          // lagging projection. Common present empty values remain eligible;
+          // mixed or missing values allow deletion without an undo opportunity.
+          auto optCommonValue = std::optional<std::string>{};
+          bool eligible = true;
+
+          for (auto const trackId : sessionRes->targetIds())
+          {
+            auto optValue = snapshot.trackCustomMetadataValue(trackId, key);
+
+            if (!optValue || (optCommonValue && *optCommonValue != *optValue))
+            {
+              eligible = false;
+              break;
+            }
+
+            if (!optCommonValue)
+            {
+              optCommonValue = std::move(*optValue);
+            }
+          }
+
+          if (!sessionRes->isCurrent())
+          {
+            return makeError(Error::Code::InvalidState, gtkText(_textCatalog, MessageId::TrackEditStale));
+          }
+
+          return std::pair{std::move(*sessionRes), eligible ? std::move(optCommonValue) : std::nullopt};
+        }();
+
+        if (!preparedRes)
+        {
+          APP_LOG_ERROR("Custom metadata delete could not start: {}", preparedRes.error().message);
           _notifications.post(
-            rt::NotificationSeverity::Error, sessionRes.error().message, rt::NotificationLifetime::history());
+            rt::NotificationSeverity::Error, preparedRes.error().message, rt::NotificationLifetime::history());
           return;
         }
 
-        auto session = std::move(*sessionRes);
+        // Only owning values escape preparation; its snapshot is released before submission.
+        auto [session, optPrevValue] = std::move(*preparedRes);
+
         auto submission = session.submitMetadataAsync(uimodel::makeCustomMetadataDeletePatch(key));
         auto trackIds = snap.trackIds;
         spawnUiTask(_async,
@@ -1086,6 +1151,16 @@ namespace ao::gtk::layout
             row.valueSlot.set_visible(_metadataExpanded);
           }
 
+          // Its position precedes the variable custom-key area. Keep the live
+          // credits surface parented across those topology rebuilds.
+          if (_creditsEditor.get_parent() == nullptr)
+          {
+            _grid.attach(_creditsEditor, 0, rowIndex, 1 + kValueColWidth, 1);
+          }
+
+          ++rowIndex;
+          _creditsEditor.updateVisibility(_metadataExpanded, _showEmptyMetadata);
+
           for (auto& row : _customRows)
           {
             _grid.attach(row.labelSlot, 0, rowIndex, 1, 1);
@@ -1111,9 +1186,16 @@ namespace ao::gtk::layout
 
       void clearGrid()
       {
-        while (auto* child = _grid.get_first_child())
+        for (auto* child = _grid.get_first_child(); child != nullptr;)
         {
-          _grid.remove(*child);
+          auto* next = child->get_next_sibling();
+
+          if (child != &_creditsEditor)
+          {
+            _grid.remove(*child);
+          }
+
+          child = next;
         }
       }
 
@@ -1325,6 +1407,7 @@ namespace ao::gtk::layout
       std::deque<CompositeBuiltInRow> _compositeRows;
       std::deque<BuiltInRow> _technicalRows;
       std::deque<CustomRow> _customRows;
+      TrackCreditsEditor _creditsEditor;
 
       bool _metadataExpanded = true;
       bool _technicalExpanded = false;
@@ -1351,8 +1434,21 @@ namespace ao::gtk::layout
 
       ConstrainedGridBox _wrapper;
       async::LifetimeScope _tasks;
+
+      friend class detail::TrackFieldGridOperationProbe;
     };
   } // namespace
+
+  namespace detail
+  {
+    bool TrackFieldGridOperationProbe::hasPendingSubmissions(LayoutComponent const& component)
+    {
+      auto const* fieldGrid = dynamic_cast<TrackFieldGridComponent const*>(&component);
+      AO_EXPECTS(fieldGrid != nullptr, "Submission observation requires a track.fieldGrid component");
+      AO_EXPECTS(fieldGrid->_async.callbackExecutor().isCurrent(), "Submission observation requires the GTK owner");
+      return !fieldGrid->_tasks.empty();
+    }
+  } // namespace detail
 
   void registerTrackFieldGridComponent(ComponentRegistry& registry,
                                        async::Runtime& asyncRuntime,

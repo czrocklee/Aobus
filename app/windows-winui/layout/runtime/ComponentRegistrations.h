@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/list/ListOrder.h>
@@ -14,6 +15,7 @@
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
+#include <bitset>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -100,19 +102,21 @@ namespace ao::winui::layout
                                 i18n::MessageCatalog textCatalog,
                                 async::Signal<ShellState>& shellStateChanged,
                                 async::Signal<std::string>& statusMessageChanged);
-  void registerTrackComponents(ComponentRegistry& registry,
-                               async::Runtime& asyncRuntime,
-                               rt::ViewService& views,
-                               rt::WorkspaceService& workspace,
-                               rt::CompletionService& completion,
-                               rt::ResourceByteMemoryCache& resourceBytes,
-                               ThemeCoordinator& theme,
-                               TrackListController& trackList,
-                               uimodel::TrackPresentationCatalog& presentationCatalog,
-                               uimodel::ListPresentations& listPresentations,
-                               std::function<void(ListId, std::string)> createList,
-                               i18n::MessageCatalog textCatalog,
-                               std::function<void(std::string)> reportStatus);
+  void registerTrackComponents(
+    ComponentRegistry& registry,
+    async::Runtime& asyncRuntime,
+    rt::ViewService& views,
+    rt::WorkspaceService& workspace,
+    rt::CompletionService& completion,
+    rt::ResourceByteMemoryCache& resourceBytes,
+    ThemeCoordinator& theme,
+    TrackListController& trackList,
+    uimodel::TrackPresentationCatalog& presentationCatalog,
+    uimodel::ListPresentations& listPresentations,
+    std::function<void(ListId, std::string)> createList,
+    i18n::MessageCatalog textCatalog,
+    std::function<void(std::string)> reportStatus,
+    std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)> editCredits = {});
   void registerTrackTableComponent(ComponentRegistry& registry,
                                    TrackListController& trackList,
                                    std::function<Result<>(rt::ViewId, TrackId)> playTrack,

@@ -12,6 +12,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -19,6 +20,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <span>
@@ -92,9 +94,9 @@ namespace ao::library::test
     builder.metadata()
       .work("Symphony No. 9 in D minor, Op. 125")
       .movement("II. Molto vivace")
-      .conductor("Carlos Kleiber")
-      .ensemble("Vienna Philharmonic")
-      .soloist("Yo-Yo Ma")
+      .credits(std::array{CreditView{.name = "Carlos Kleiber", .kind = CreditKind::Conductor},
+                          CreditView{.name = "Vienna Philharmonic", .kind = CreditKind::Ensemble},
+                          CreditView{.name = "Yo-Yo Ma", .kind = CreditKind::Soloist}})
       .movementNumber(2)
       .movementTotal(4);
 
@@ -107,15 +109,19 @@ namespace ao::library::test
     REQUIRE(transaction.commit());
     auto const view = makeColdTrackView(coldData);
 
-    CHECK(view.classical().workId().raw() > 0);
-    CHECK(view.classical().movementId().raw() > 0);
-    CHECK(library.dictionary().get(view.classical().workId()) == "Symphony No. 9 in D minor, Op. 125");
-    CHECK(library.dictionary().get(view.classical().movementId()) == "II. Molto vivace");
-    CHECK(library.dictionary().get(view.classical().conductorId()) == "Carlos Kleiber");
-    CHECK(library.dictionary().get(view.classical().ensembleId()) == "Vienna Philharmonic");
-    CHECK(library.dictionary().get(view.classical().soloistId()) == "Yo-Yo Ma");
-    CHECK(view.classical().movementNumber() == 2);
-    CHECK(view.classical().movementTotal() == 4);
+    CHECK(view.work().workId().raw() > 0);
+    CHECK(view.work().movementId().raw() > 0);
+    CHECK(library.dictionary().get(view.work().workId()) == "Symphony No. 9 in D minor, Op. 125");
+    CHECK(library.dictionary().get(view.work().movementId()) == "II. Molto vivace");
+    REQUIRE(view.performance().credits(CreditKind::Conductor).size() == 1);
+    REQUIRE(view.performance().credits(CreditKind::Ensemble).size() == 1);
+    REQUIRE(view.performance().credits(CreditKind::Soloist).size() == 1);
+    CHECK(library.dictionary().get(view.performance().credits(CreditKind::Conductor)[0].nameId) == "Carlos Kleiber");
+    CHECK(library.dictionary().get(view.performance().credits(CreditKind::Ensemble)[0].nameId) ==
+          "Vienna Philharmonic");
+    CHECK(library.dictionary().get(view.performance().credits(CreditKind::Soloist)[0].nameId) == "Yo-Yo Ma");
+    CHECK(view.work().movementNumber() == 2);
+    CHECK(view.work().movementTotal() == 4);
   }
 
   TEST_CASE("TrackView - returns cover art entries from cold data", "[library][unit][track]")

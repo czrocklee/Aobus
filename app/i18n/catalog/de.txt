@@ -3,6 +3,37 @@
 
 de:table {
   messages:table {
+    track_field_recording_date { "Aufnahmedatum" }
+    track_credits_heading { "Mitwirkende" }
+    track_credit_performer { "Interpret" }
+    track_credit_name { "Name" }
+    track_credit_role { "Rolle oder Instrument (optional)" }
+    track_credits_add { "Mitwirkung hinzufügen" }
+    track_credits_replace { "Ersetzen…" }
+    track_credits_clear { "Diesen Bereich leeren" }
+    track_credits_commit { "Mitwirkende speichern" }
+    track_credits_cancel { "Abbrechen" }
+    track_credit_delete { "Mitwirkung löschen" }
+    track_credit_blank_name { "Zeile {row}: Geben Sie einen Namen ein." }
+    track_credit_invalid_name_text { "Zeile {row}: Der Name enthält ungültigen Text." }
+    track_credit_invalid_role_text { "Zeile {row}: Die Rolle oder das Instrument enthält ungültigen Text." }
+    track_credit_invalid_kind { "Zeile {row}: Wählen Sie eine gültige Mitwirkungskategorie für diesen Bereich." }
+    track_credits_cleared { "Mitwirkende entfernt" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "Kategorie" }
+    track_credits_scope { "Mitwirkungsbereich: {scope}" }
+    track_credits_all_kinds { "Alle Mitwirkungskategorien" }
+    track_credits_replace_scope { "Diesen Bereich für alle ausgewählten Titel ersetzen" }
+    track_credit_move_up { "Nach oben" }
+    track_credit_move_down { "Nach unten" }
+    track_credit_row_move_up { "Mitwirkung {row} nach oben verschieben" }
+    track_credit_row_move_down { "Mitwirkung {row} nach unten verschieben" }
+    track_credit_row_delete { "Mitwirkung {row} löschen" }
+    track_credit_row_position { "Mitwirkung {row} von {count}" }
+    track_credit_kind_summary { "{kind}: {summary}" }
+    track_credit_kind_value { "Kategorie: {kind}" }
+    track_credit_name_role { "{name} ({role})" }
+    track_recording_date_invalid { "Geben Sie ein gültiges Datum als YYYY, YYYY-MM oder YYYY-MM-DD ein, oder lassen Sie das Feld zum Löschen leer." }
     tui_go_to_back { "Zurück" }
     tui_go_to_forward { "Vorwärts" }
     tui_go_to_cancel { "Abbrechen" }
@@ -703,6 +734,10 @@ de:table {
     winui_track_properties_save_failed { "Speichern fehlgeschlagen: {detail}" }
     winui_track_properties_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Öffnen Sie die Eigenschaften erneut und versuchen Sie es noch einmal." }
     winui_track_properties_invalid_value { "Ungültiger Wert: {detail}" }
+    winui_track_properties_reload { "Neu laden" }
+    winui_track_properties_discard_question { "Diese Änderungen verwerfen?" }
+    winui_track_properties_discard { "Änderungen verwerfen" }
+    winui_track_properties_keep_editing { "Weiter bearbeiten" }
     winui_list_create_from_filter { "Liste aus aktuellem Filter erstellen" }
     winui_list_editor_new_title { "Neue Liste" }
     winui_list_editor_edit_title { "Liste bearbeiten" }
@@ -787,6 +822,10 @@ de:table {
     gtk_track_save_failed { "Speichern fehlgeschlagen" }
     gtk_track_save_stale_title { "Speichern konnte nicht angewendet werden" }
     gtk_track_save_stale { "Die Bibliothek wurde geändert, während dieses Dialogfeld geöffnet war. Laden Sie die Eigenschaften neu und versuchen Sie es erneut." }
+    gtk_track_credits_discard_title { "Änderungen an den Mitwirkenden verwerfen?" }
+    gtk_track_credits_discard_message { "Wenn Sie die Eigenschaften jetzt schließen, gehen nicht gespeicherte Änderungen an den Mitwirkenden verloren." }
+    gtk_track_credits_discard { "Änderungen verwerfen" }
+    gtk_track_credits_keep_editing { "Weiter bearbeiten" }
     gtk_tag_add { "Hinzufügen…" }
     gtk_tag_add_placeholder { "Tag hinzufügen…" }
     gtk_tag_remove { "Tag {tag} entfernen" }

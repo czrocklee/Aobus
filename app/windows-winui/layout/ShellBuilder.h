@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutHost.h"
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
+#include <ao/library/Credits.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/library/list/ListOrder.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
@@ -23,6 +24,7 @@
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <bitset>
 #include <functional>
 #include <optional>
 #include <string>
@@ -81,6 +83,7 @@ namespace ao::winui::layout
     std::function<void(winrt::Microsoft::UI::Xaml::FrameworkElement const&)> showOutputDeviceSelector;
 
     ShellListCommands listCommands;
+    std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)> editCredits;
   };
 
   /**

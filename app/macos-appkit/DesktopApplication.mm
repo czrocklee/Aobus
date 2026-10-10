@@ -24,10 +24,13 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -1013,10 +1016,35 @@ namespace ao::appkit
   auto const hadSelection = !_inspectorSelection.empty();
   _inspectorSelection = selection;
   _layoutPending = static_cast<BOOL>(_layoutPending != NO || hadSelection != !selection.empty());
-  auto const optRow =
-    selection.size() == 1 ? _sessionPtr->runtime().library().snapshot().trackRow(selection.front()) : std::nullopt;
+  auto optRow = std::optional<ao::rt::TrackRow>{};
+  auto credits = ao::uimodel::TrackCreditSections{};
+
+  if (selection.size() == 1)
+  {
+    // The row and its Credits come from one short-lived snapshot, so a write
+    // between two reads cannot pair one revision's fields with another's Credits.
+    auto const snapshot = _sessionPtr->runtime().library().snapshot();
+    optRow = snapshot.trackRow(selection.front());
+
+    if (auto creditsRes = ao::uimodel::loadTrackCreditsEditorBaseline(snapshot, selection); optRow && creditsRes)
+    {
+      credits = std::move(*creditsRes);
+    }
+  }
+  else
+  {
+    // Display skips unavailable tracks and resolves only common credit sections.
+    // Editor admission still captures every requested target through its own binding.
+    credits = _sessionPtr->runtime()
+                .workspace()
+                .detailProjection(ao::rt::ExplicitSelectionTarget{.trackIds = selection})
+                ->snapshot()
+                .credits;
+  }
+
   [_trackInspector renderSelectionCount:selection.size()
                                     row:optRow
+                                credits:credits
                               canReveal:static_cast<BOOL>(_closing == NO && optRow && optRow->optUriPath)];
 }
 

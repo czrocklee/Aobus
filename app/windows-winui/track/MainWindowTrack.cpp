@@ -106,6 +106,20 @@ namespace winrt::Aobus::implementation
       return;
     }
 
+    presentCapturedTrackProperties(std::move(stateRes->selection), std::nullopt);
+  }
+
+  void MainWindow::presentCapturedTrackProperties(std::vector<ao::TrackId> trackIds,
+                                                  std::optional<std::bitset<ao::library::kCreditKindCount>> optScope)
+  {
+    if (_session == nullptr || isModalWorkflowActive() || trackIds.empty())
+    {
+      return;
+    }
+
+    _trackPropertiesCoordinatorPtr.reset();
+    auto& runtime = _session->runtime();
+
     try
     {
       auto dialogPtr =
@@ -116,7 +130,8 @@ namespace winrt::Aobus::implementation
           .workspace = runtime.workspace(),
           .completion = runtime.completion(),
           .textCatalog = _session->textCatalog(),
-          .trackIds = std::move(stateRes->selection),
+          .trackIds = std::move(trackIds),
+          .optCreditsScope = optScope,
         });
 
       if (auto presentedRes = dialogPtr->present(); !presentedRes)

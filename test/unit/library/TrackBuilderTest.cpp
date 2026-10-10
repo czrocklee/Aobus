@@ -5,9 +5,11 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
+#include <ao/library/Credits.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 
 namespace ao::library::test
@@ -21,10 +23,8 @@ namespace ao::library::test
     CHECK(builder.metadata().album().empty());
     CHECK(builder.metadata().albumArtist().empty());
     CHECK(builder.metadata().composer().empty());
-    CHECK(builder.metadata().conductor().empty());
-    CHECK(builder.metadata().ensemble().empty());
+    CHECK(builder.metadata().credits().empty());
     CHECK(builder.metadata().genre().empty());
-    CHECK(builder.metadata().soloist().empty());
     CHECK(builder.property().uri().empty());
     CHECK(builder.property().bitDepth() == 0);
     CHECK(builder.property().duration() == std::chrono::milliseconds{0});
@@ -36,6 +36,9 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - metadata builder fluent setters update fields", "[library][unit][track][builder]")
   {
     auto builder = TrackBuilder::makeEmpty();
+    auto const entries = std::array{CreditView{.name = "Carlos Kleiber", .kind = CreditKind::Conductor},
+                                    CreditView{.name = "Vienna Philharmonic", .kind = CreditKind::Ensemble},
+                                    CreditView{.name = "Yo-Yo Ma", .kind = CreditKind::Soloist}};
     builder.metadata()
       .title("Test Title")
       .artist("Test Artist")
@@ -45,9 +48,7 @@ namespace ao::library::test
       .genre("Rock")
       .work("Symphony No. 9")
       .movement("I. Allegro ma non troppo")
-      .conductor("Carlos Kleiber")
-      .ensemble("Vienna Philharmonic")
-      .soloist("Yo-Yo Ma")
+      .credits(entries)
       .year(2024)
       .trackNumber(5)
       .trackTotal(10)
@@ -64,9 +65,13 @@ namespace ao::library::test
     CHECK(builder.metadata().genre() == "Rock");
     CHECK(builder.metadata().work() == "Symphony No. 9");
     CHECK(builder.metadata().movement() == "I. Allegro ma non troppo");
-    CHECK(builder.metadata().conductor() == "Carlos Kleiber");
-    CHECK(builder.metadata().ensemble() == "Vienna Philharmonic");
-    CHECK(builder.metadata().soloist() == "Yo-Yo Ma");
+    REQUIRE(builder.metadata().credits().size() == 3);
+    CHECK(builder.metadata().credits()[0].name == "Carlos Kleiber");
+    CHECK(builder.metadata().credits()[0].kind == CreditKind::Conductor);
+    CHECK(builder.metadata().credits()[1].name == "Vienna Philharmonic");
+    CHECK(builder.metadata().credits()[1].kind == CreditKind::Ensemble);
+    CHECK(builder.metadata().credits()[2].name == "Yo-Yo Ma");
+    CHECK(builder.metadata().credits()[2].kind == CreditKind::Soloist);
     CHECK(builder.metadata().year() == 2024);
     CHECK(builder.metadata().trackNumber() == 5);
     CHECK(builder.metadata().trackTotal() == 10);

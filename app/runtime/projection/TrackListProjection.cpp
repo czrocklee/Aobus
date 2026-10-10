@@ -12,8 +12,10 @@
 #include <ao/async/Subscription.h>
 #include <ao/compat/Enumerate.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
@@ -47,6 +49,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -65,6 +68,7 @@ namespace ao::rt
     struct SortKeys final
     {
       std::uint16_t year = 0;
+      library::RecordingDate recordingDate{};
       std::uint16_t discNumber = 0;
       std::uint16_t trackNumber = 0;
       std::uint16_t movementNumber = 0;
@@ -229,7 +233,9 @@ namespace ao::rt
         case TrackSortField::Ensemble:
         case TrackSortField::Work:
         case TrackSortField::Movement:
-        case TrackSortField::Soloist: return true;
+        case TrackSortField::Soloist:
+        case TrackSortField::RecordingYear:
+        case TrackSortField::RecordingDate: return true;
         default: return false;
       }
     }
@@ -307,6 +313,10 @@ namespace ao::rt
     {
       switch (term.field)
       {
+        case TrackSortField::RecordingYear: return compareNumeric(lhs.recordingDate.year, rhs.recordingDate.year);
+        case TrackSortField::RecordingDate:
+          return compareNumeric(std::tie(lhs.recordingDate.year, lhs.recordingDate.month, lhs.recordingDate.day),
+                                std::tie(rhs.recordingDate.year, rhs.recordingDate.month, rhs.recordingDate.day));
         case TrackSortField::Year: return compareNumeric(lhs.year, rhs.year);
         case TrackSortField::DiscNumber: return compareNumeric(lhs.discNumber, rhs.discNumber);
         case TrackSortField::TrackNumber: return compareNumeric(lhs.trackNumber, rhs.trackNumber);
@@ -325,6 +335,25 @@ namespace ao::rt
       }
 
       return 0;
+    }
+
+    std::int32_t compareDirectedField(TrackSortTerm const& term, SortKeys const& lhs, SortKeys const& rhs)
+    {
+      if (term.field == TrackSortField::RecordingYear || term.field == TrackSortField::RecordingDate)
+      {
+        bool const lhsPresent = lhs.recordingDate.isPresent();
+
+        // Absence stays last in either direction; only present values are inverted.
+        if (bool const rhsPresent = rhs.recordingDate.isPresent(); lhsPresent != rhsPresent)
+        {
+          return lhsPresent ? -1 : 1;
+        }
+      }
+
+      auto const comparison = compareSingleField(term, lhs, rhs);
+      std::int32_t const normalized =
+        static_cast<std::int32_t>(comparison > 0) - static_cast<std::int32_t>(comparison < 0);
+      return term.ascending ? normalized : -normalized;
     }
 
     std::span<TrackSortField const> groupSortFields(TrackGroupKey const groupBy)
@@ -442,9 +471,9 @@ namespace ao::rt
       {
         for (auto const& term : groupOrder)
         {
-          if (auto const cmp = compareSingleField(term, lhs.keys, rhs.keys); cmp != 0)
+          if (auto const cmp = compareDirectedField(term, lhs.keys, rhs.keys); cmp != 0)
           {
-            return term.ascending ? (cmp < 0) : (cmp > 0);
+            return cmp < 0;
           }
         }
 
@@ -455,9 +484,9 @@ namespace ao::rt
 
         for (auto const& term : sortBy)
         {
-          if (auto const cmp = compareSingleField(term, lhs.keys, rhs.keys); cmp != 0)
+          if (auto const cmp = compareDirectedField(term, lhs.keys, rhs.keys); cmp != 0)
           {
-            return term.ascending ? (cmp < 0) : (cmp > 0);
+            return cmp < 0;
           }
         }
 
@@ -511,6 +540,12 @@ namespace ao::rt
       return text;
     }
 
+    DictionaryId firstCreditNameId(library::TrackView const& view, library::CreditKind kind)
+    {
+      auto const entries = view.performance().credits(kind);
+      return entries.empty() ? kInvalidDictionaryId : entries.front().nameId;
+    }
+
     void fillSortKey(SortKeys& keys,
                      library::TrackView const& view,
                      library::DictionaryStore const& dictionary,
@@ -525,10 +560,12 @@ namespace ao::rt
 
       switch (field)
       {
+        case TrackSortField::RecordingYear:
+        case TrackSortField::RecordingDate: keys.recordingDate = view.performance().recordingDate(); break;
         case TrackSortField::Year: keys.year = view.metadata().year(); break;
         case TrackSortField::DiscNumber: keys.discNumber = view.metadata().discNumber(); break;
         case TrackSortField::TrackNumber: keys.trackNumber = view.metadata().trackNumber(); break;
-        case TrackSortField::Movement: keys.movementNumber = view.classical().movementNumber(); break;
+        case TrackSortField::Movement: keys.movementNumber = view.work().movementNumber(); break;
         case TrackSortField::Duration: keys.duration = view.property().duration(); break;
         case TrackSortField::Title:
           makeOrderingKeyInto(scratch, view.metadata().title(), textOrderingPolicy);
@@ -539,10 +576,16 @@ namespace ao::rt
         case TrackSortField::AlbumArtist: keys.albumArtistKey = sortText(view.metadata().albumArtistId()); break;
         case TrackSortField::Genre: keys.genreKey = sortText(view.metadata().genreId()); break;
         case TrackSortField::Composer: keys.composerKey = sortText(view.metadata().composerId()); break;
-        case TrackSortField::Conductor: keys.conductorKey = sortText(view.classical().conductorId()); break;
-        case TrackSortField::Ensemble: keys.ensembleKey = sortText(view.classical().ensembleId()); break;
-        case TrackSortField::Work: keys.workKey = sortText(view.classical().workId()); break;
-        case TrackSortField::Soloist: keys.soloistKey = sortText(view.classical().soloistId()); break;
+        case TrackSortField::Conductor:
+          keys.conductorKey = sortText(firstCreditNameId(view, library::CreditKind::Conductor));
+          break;
+        case TrackSortField::Ensemble:
+          keys.ensembleKey = sortText(firstCreditNameId(view, library::CreditKind::Ensemble));
+          break;
+        case TrackSortField::Work: keys.workKey = sortText(view.work().workId()); break;
+        case TrackSortField::Soloist:
+          keys.soloistKey = sortText(firstCreditNameId(view, library::CreditKind::Soloist));
+          break;
       }
     }
 
@@ -666,7 +709,7 @@ namespace ao::rt
         break;
         case TrackGroupKey::Conductor:
         {
-          auto const text = dictionaryText(view.classical().conductorId());
+          auto const text = dictionaryText(firstCreditNameId(view, library::CreditKind::Conductor));
           entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Conductor}
                                            : GroupSection::HeadingValue{text.raw};
@@ -674,7 +717,7 @@ namespace ao::rt
         break;
         case TrackGroupKey::Ensemble:
         {
-          auto const text = dictionaryText(view.classical().ensembleId());
+          auto const text = dictionaryText(firstCreditNameId(view, library::CreditKind::Ensemble));
           entry.groupIdentity.first = text.identityKey;
           entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Ensemble}
                                            : GroupSection::HeadingValue{text.raw};
@@ -682,7 +725,7 @@ namespace ao::rt
         break;
         case TrackGroupKey::Work:
         {
-          auto const work = dictionaryText(view.classical().workId());
+          auto const work = dictionaryText(view.work().workId());
           auto const composer = dictionaryText(view.metadata().composerId());
           entry.groupIdentity = {.first = composer.identityKey, .second = work.identityKey};
           entry.primary = work.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Work}
@@ -1718,6 +1761,13 @@ namespace ao::rt
     TrackListProjectionOperationCounts RuntimeOperationProbe::counts(TrackListProjection const& projection) noexcept
     {
       return projection._implPtr->operationCounts;
+    }
+
+    TrackListProjectionStorageSizes RuntimeOperationProbe::projectionStorageSizes() noexcept
+    {
+      return {.sortKeys = sizeof(SortKeys),
+              .orderEntry = sizeof(OrderEntry),
+              .dictionaryCacheEntry = sizeof(DictionaryTextCache::value_type)};
     }
   } // namespace detail
   void TrackListProjection::setTextOrderingPolicy(std::shared_ptr<TextOrderingPolicy const> policyPtr)

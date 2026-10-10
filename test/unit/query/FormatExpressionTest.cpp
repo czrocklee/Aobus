@@ -7,6 +7,7 @@
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
@@ -50,11 +51,8 @@ namespace ao::query::test
                        .album = "Solo Works",
                        .albumArtist = "Bach",
                        .composer = "Bach",
-                       .conductor = "Carlos Kleiber",
-                       .ensemble = "Vienna Philharmonic",
                        .work = "BWV 1007",
                        .movement = "Prelude",
-                       .soloist = "Yo-Yo Ma",
                        .genre = "Classical",
                        .year = 1720,
                        .trackNumber = 3,
@@ -69,7 +67,10 @@ namespace ao::query::test
                        .channels = 2,
                        .bitDepth = 24,
                        .codec = AudioCodec::Flac,
-                       .customPairs = {{"catalog", "Archiv 123"}}};
+                       .customPairs = {{"catalog", "Archiv 123"}},
+                       .credits = {{.name = "Carlos Kleiber", .kind = CreditKind::Conductor},
+                                   {.name = "Vienna Philharmonic", .kind = CreditKind::Ensemble},
+                                   {.name = "Yo-Yo Ma", .kind = CreditKind::Soloist}}};
     }
 
     std::string evaluate(std::string_view expression, TrackFixture& fixture)
@@ -112,6 +113,49 @@ namespace ao::query::test
           "Carlos Kleiber / Vienna Philharmonic / Yo-Yo Ma");
     CHECK(evaluate(R"(@codec + " " + @sampleRate + "Hz " + @bitDepth + "bit")", fixture) == "FLAC 96000Hz 24bit");
     CHECK(evaluate(R"(%catalog + " " + @duration)", fixture) == "Archiv 123 143000");
+  }
+
+  TEST_CASE("FormatExpression - joins selected credit names preserving duplicates and kind order",
+            "[query][unit][format-expression][credit]")
+  {
+    auto fixture = TrackFixture{TrackSpec{.credits = {
+                                            {.name = "Player; literal", .kind = CreditKind::Performer, .role = "Piano"},
+                                            {.name = "Second", .kind = CreditKind::Conductor},
+                                            {.name = "Orchestra", .kind = CreditKind::Ensemble},
+                                            {.name = "First", .kind = CreditKind::Conductor},
+                                            {.name = "First", .kind = CreditKind::Conductor, .role = "Other role"},
+                                            {.name = "Solo", .kind = CreditKind::Soloist},
+                                          }}};
+
+    CHECK(evaluate("$conductor", fixture) == "Second; First; First");
+    CHECK(evaluate("$ensemble", fixture) == "Orchestra");
+    CHECK(evaluate("$soloist", fixture) == "Solo");
+    CHECK(evaluate("$performer", fixture) == "Player; literal");
+    CHECK(evaluate("$credit", fixture) == "Second; First; First; Orchestra; Solo; Player; literal");
+    CHECK(evaluate("'[' + $conductor + ']'", fixture) == "[Second; First; First]");
+  }
+
+  TEST_CASE("FormatExpression - credit formatting declares cold and dictionary dependencies even for empty lists",
+            "[query][unit][format-expression][credit]")
+  {
+    auto fixture = TrackFixture{};
+    auto cache = library::DictionaryReadCache{fixture.dictionary()};
+    auto context = library::DictionaryReadContext{cache};
+    auto evaluator = FormatEvaluator{};
+
+    for (auto const* expression : {"$conductor", "$ensemble", "$soloist", "$performer", "$credit"})
+    {
+      auto const plan = compileFormatOk(parseOk(expression));
+      CHECK(plan.accessProfile == AccessProfile::ColdOnly);
+      CHECK(plan.requiresDictionary);
+      CHECK(plan.dictionarySymbols.empty());
+      auto const binding = FormatBinding{plan, context};
+      auto output = std::string{"stale"};
+      evaluator.evaluate(binding, fixture.coldOnlyView(), output);
+      CHECK(output.empty());
+    }
+
+    CHECK(compileFormatOk(parseOk("$title + $credit")).accessProfile == AccessProfile::HotAndCold);
   }
 
   TEST_CASE("FormatExpression - rejects track ids as format fields", "[query][unit][format-expression]")

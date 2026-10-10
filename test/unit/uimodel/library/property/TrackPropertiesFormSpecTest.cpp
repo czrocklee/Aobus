@@ -25,11 +25,11 @@ namespace ao::uimodel::test
       {.field = F::AlbumArtist, .label = "Album Artist", .editorKind = E::Text},
       {.field = F::Genre, .label = "Genre", .editorKind = E::Text},
       {.field = F::Composer, .label = "Composer", .editorKind = E::Text},
-      {.field = F::Conductor, .label = "Conductor", .editorKind = E::Text},
-      {.field = F::Ensemble, .label = "Ensemble", .editorKind = E::Text},
+      {.field = F::Conductor, .label = "Conductor", .editorKind = E::ReadonlyText},
+      {.field = F::Ensemble, .label = "Ensemble", .editorKind = E::ReadonlyText},
       {.field = F::Work, .label = "Work", .editorKind = E::Text},
       {.field = F::Movement, .label = "Movement", .editorKind = E::Text},
-      {.field = F::Soloist, .label = "Soloist", .editorKind = E::Text},
+      {.field = F::Soloist, .label = "Soloist", .editorKind = E::ReadonlyText},
       {.field = F::Year, .label = "Year", .editorKind = E::Number},
       {.field = F::DiscNumber, .label = "Disc", .editorKind = E::Number},
       {.field = F::DiscTotal, .label = "Total Discs", .editorKind = E::Number},
@@ -37,9 +37,11 @@ namespace ao::uimodel::test
       {.field = F::TrackTotal, .label = "Total Tracks", .editorKind = E::Number},
       {.field = F::MovementNumber, .label = "Movement No.", .editorKind = E::Number},
       {.field = F::MovementTotal, .label = "Total Movements", .editorKind = E::Number},
+      {.field = F::RecordingDate, .label = "Recording Date", .editorKind = E::Date},
     };
 
     CHECK(spec.metadataRows == expected);
+    CHECK(spec.creditsLabel == "Credits");
   }
 
   TEST_CASE("TrackPropertiesFormSpec - projects readonly technical property rows", "[uimodel][unit][property]")

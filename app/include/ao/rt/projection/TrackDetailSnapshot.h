@@ -6,6 +6,7 @@
 #include "../TrackField.h"
 #include "../TrackFieldValue.h"
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
 
 #include <array>
 #include <cstdint>
@@ -47,6 +48,10 @@ namespace ao::rt
 
     ResourceId singleCoverArtId{kInvalidResourceId};
     std::array<AggregateValue<TrackFieldRawValue>, kTrackFieldCount> fields{};
+    // Complete owning sections compare names, roles, order and multiplicity.
+    // Empty is a common value; absent means no track was loaded. Section
+    // position supplies the kind, and every contained entry agrees with it.
+    std::array<AggregateValue<std::vector<library::Credit>>, library::kCreditKindCount> credits{};
     std::vector<CustomMetadataItem> customMetadata{};
     std::vector<DictionaryId> commonTagIds{};
   };

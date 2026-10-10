@@ -3,6 +3,37 @@
 
 zh_Hans:table {
   messages:table {
+    track_field_recording_date { "录音日期" }
+    track_credits_heading { "演出署名" }
+    track_credit_performer { "演奏者" }
+    track_credit_name { "名称" }
+    track_credit_role { "角色或乐器（可选）" }
+    track_credits_add { "添加署名" }
+    track_credits_replace { "替换…" }
+    track_credits_clear { "清空此范围" }
+    track_credits_commit { "保存署名" }
+    track_credits_cancel { "取消" }
+    track_credit_delete { "删除署名" }
+    track_credit_blank_name { "第 {row} 行：请输入名称。" }
+    track_credit_invalid_name_text { "第 {row} 行：名称包含无效文本。" }
+    track_credit_invalid_role_text { "第 {row} 行：角色或乐器包含无效文本。" }
+    track_credit_invalid_kind { "第 {row} 行：请选择此范围内的有效署名类别。" }
+    track_credits_cleared { "已清空署名" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "类别" }
+    track_credits_scope { "署名范围：{scope}" }
+    track_credits_all_kinds { "全部署名类别" }
+    track_credits_replace_scope { "替换所有选中曲目的此范围" }
+    track_credit_move_up { "上移" }
+    track_credit_move_down { "下移" }
+    track_credit_row_move_up { "上移第 {row} 条署名" }
+    track_credit_row_move_down { "下移第 {row} 条署名" }
+    track_credit_row_delete { "删除第 {row} 条署名" }
+    track_credit_row_position { "第 {row} 条署名，共 {count} 条" }
+    track_credit_kind_summary { "{kind}：{summary}" }
+    track_credit_kind_value { "类别：{kind}" }
+    track_credit_name_role { "{name}（{role}）" }
+    track_recording_date_invalid { "请输入有效的 YYYY、YYYY-MM 或 YYYY-MM-DD 日期，留空则清除。" }
     tui_go_to_back { "后退" }
     tui_go_to_forward { "前进" }
     tui_go_to_cancel { "取消" }
@@ -704,6 +735,10 @@ zh_Hans:table {
     winui_track_properties_save_failed { "保存失败：{detail}" }
     winui_track_properties_stale { "打开此对话框期间，音乐库已发生更改。请重新打开属性后重试。" }
     winui_track_properties_invalid_value { "值无效：{detail}" }
+    winui_track_properties_reload { "重新加载" }
+    winui_track_properties_discard_question { "放弃这些修改？" }
+    winui_track_properties_discard { "放弃修改" }
+    winui_track_properties_keep_editing { "继续编辑" }
     winui_list_create_from_filter { "根据当前筛选条件创建列表" }
     winui_list_editor_new_title { "新建列表" }
     winui_list_editor_edit_title { "编辑列表" }
@@ -788,6 +823,10 @@ zh_Hans:table {
     gtk_track_save_failed { "保存失败" }
     gtk_track_save_stale_title { "无法保存更改" }
     gtk_track_save_stale { "在打开此对话框期间音乐库已更改。请重新加载属性后重试。" }
+    gtk_track_credits_discard_title { "放弃演出署名的修改？" }
+    gtk_track_credits_discard_message { "现在关闭属性会丢失尚未保存的演出署名修改。" }
+    gtk_track_credits_discard { "放弃修改" }
+    gtk_track_credits_keep_editing { "继续编辑" }
     gtk_tag_add { "添加…" }
     gtk_tag_add_placeholder { "添加标签…" }
     gtk_tag_remove { "移除标签 {tag}" }

@@ -8,6 +8,7 @@
 #include "SelectableList.h"
 #include "SelectionNavigation.h"
 #include "Style.h"
+#include "TrackCreditsEditor.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackMutation.h>
 
@@ -39,10 +40,15 @@ namespace ao::tui
   TrackPropertiesEditor::TrackPropertiesEditor(i18n::MessageCatalog textCatalog,
                                                TrackEditorPreparation preparation,
                                                CompletionProvider completionProvider,
-                                               TrackEditorMode const mode)
+                                               TrackEditorMode const mode,
+                                               TrackCreditsEditor::CompletionProvider creditCompletionProvider)
     : _textCatalog{std::move(textCatalog)}
     , _targets{std::move(preparation.targets)}
-    , _metadataEditor{_textCatalog, _targets.size(), std::move(preparation.baseline), std::move(completionProvider)}
+    , _metadataEditor{_textCatalog,
+                      _targets.size(),
+                      std::move(preparation.baseline),
+                      std::move(completionProvider),
+                      std::move(creditCompletionProvider)}
     , _tagEditor{_textCatalog, _targets.size(), std::move(preparation.tagCounts), std::move(preparation.tagSuggestions)}
     , _mode{mode}
     , _tab{mode == TrackEditorMode::Tags ? TrackEditorTab::Tags : TrackEditorTab::Metadata}
@@ -76,7 +82,7 @@ namespace ao::tui
 
   bool TrackPropertiesEditor::canApply() const noexcept
   {
-    return _status == TrackEditorStatus::Ready && isDirty() &&
+    return _status == TrackEditorStatus::Ready && !isEditingCredits() && isDirty() &&
            (_mode == TrackEditorMode::Tags || !_metadataEditor.hasInvalidFields());
   }
 
@@ -93,6 +99,11 @@ namespace ao::tui
   rt::TrackPropertiesPatch TrackPropertiesEditor::buildPatch() const
   {
     auto patch = rt::TrackPropertiesPatch{};
+
+    if (isEditingCredits())
+    {
+      return patch;
+    }
 
     if (_mode == TrackEditorMode::Properties)
     {
@@ -145,6 +156,12 @@ namespace ao::tui
 
     if (_tab == TrackEditorTab::Metadata && _metadataEditor.tryHandleCompletionEvent(event))
     {
+      return true;
+    }
+
+    if (isEditingCredits() && event != ftxui::Event::CtrlR)
+    {
+      _metadataEditor.handleCreditsEvent(event);
       return true;
     }
 
@@ -331,7 +348,7 @@ namespace ao::tui
       return;
     }
 
-    if (isLeftPress(mouse))
+    if (isLeftPress(mouse) && !isEditingCredits())
     {
       if (auto const optTab = mouseRowAt(_tabBoxes, mouse); optTab)
       {
@@ -352,7 +369,11 @@ namespace ao::tui
       return;
     }
 
-    if (auto event = ftxui::Event::Mouse("", mouse); _tab == TrackEditorTab::Metadata)
+    if (auto event = ftxui::Event::Mouse("", mouse); isEditingCredits())
+    {
+      _metadataEditor.handleCreditsEvent(event);
+    }
+    else if (_tab == TrackEditorTab::Metadata)
     {
       if (!_metadataEditor.tryHandleCompletionEvent(event))
       {
@@ -556,6 +577,11 @@ namespace ao::tui
       });
     }
 
+    if (isEditingCredits())
+    {
+      return paragraph(countedText(_textCatalog, MessageId::TuiEditorAppliesToAll, _targets.size()));
+    }
+
     auto makeRow = [](Elements chips) -> Element
     {
       if (chips.empty())
@@ -583,6 +609,9 @@ namespace ao::tui
 
     if (_tab == TrackEditorTab::Metadata)
     {
+      row1Chips.push_back(_mouseBindings.bind(
+        style::shortcutChip("Ctrl-O", i18n::requiredText(_textCatalog, MessageId::TrackCreditsHeading)), Event::CtrlO));
+
       if (_metadataEditor.hasCompletion())
       {
         row1Chips.push_back(

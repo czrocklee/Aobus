@@ -5,6 +5,8 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 
 #include <chrono>
 #include <cstddef>
@@ -74,11 +76,8 @@ namespace ao::query::test
     std::string album = "Test Album";
     std::string albumArtist = {};
     std::string composer = {};
-    std::string conductor = {};
-    std::string ensemble = {};
     std::string work = {};
     std::string movement = {};
-    std::string soloist = {};
     std::string genre = {};
     std::string uri = "path/to/track.flac";
     std::uint16_t year = 2020;
@@ -100,13 +99,12 @@ namespace ao::query::test
     std::uint32_t genreId = 0;
     std::uint32_t albumArtistId = 0;
     std::uint32_t composerId = 0;
-    std::uint32_t conductorId = 0;
-    std::uint32_t ensembleId = 0;
     std::uint32_t workId = 0;
     std::uint32_t movementId = 0;
-    std::uint32_t soloistId = 0;
     std::vector<std::string> tags = {};
     std::vector<std::pair<std::string, std::string>> customPairs = {};
+    library::RecordingDate recordingDate{};
+    std::vector<library::Credit> credits{};
   };
 
   class TrackFixture final

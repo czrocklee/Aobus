@@ -11,6 +11,7 @@
 #include <ao/Error.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
@@ -137,9 +138,11 @@ namespace ao::winui::layout
     class TrackDetailComponent final : public LayoutComponent
     {
     public:
-      TrackDetailComponent(LayoutBuildContext& ctx,
-                           rt::WorkspaceService& workspace,
-                           i18n::MessageCatalog const& textCatalog)
+      TrackDetailComponent(
+        LayoutBuildContext& ctx,
+        rt::WorkspaceService& workspace,
+        i18n::MessageCatalog const& textCatalog,
+        std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)> editCredits)
         : _metadata{buildSection(ctx.resources)}
         , _technical{buildSection(ctx.resources)}
         , _focusedDetailPtr{ctx.focusedDetailPtr}
@@ -179,6 +182,20 @@ namespace ao::winui::layout
         // Built last, and only once every element it drives is arranged the way
         // this component wants it: the adapter renders as soon as it exists, and
         // section visibility is its decision from that moment on.
+        auto guardedEdit = std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)>{};
+
+        if (editCredits)
+        {
+          guardedEdit = [gatePtr = std::weak_ptr{ctx.gatePtr}, editCredits = std::move(editCredits)](
+                          std::vector<TrackId> ids, std::bitset<library::kCreditKindCount> scope)
+          {
+            if (uimodel::isGenerationActive(gatePtr))
+            {
+              editCredits(std::move(ids), scope);
+            }
+          };
+        }
+
         _controlPtr = std::make_unique<TrackDetailControl>(
           TrackDetailControlConfig{
             .fieldScroll = _scroll,
@@ -193,6 +210,7 @@ namespace ao::winui::layout
             .technicalChevron = _technical.chevron,
             .technicalRows = _technical.rows,
             .textCatalog = textCatalog,
+            .editCredits = std::move(guardedEdit),
           },
           _focusedDetailPtr->projection(workspace));
       }
@@ -211,11 +229,13 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  Result<std::unique_ptr<LayoutComponent>> makeTrackDetail(LayoutBuildContext& ctx,
-                                                           uimodel::LayoutNode const& /*node*/,
-                                                           rt::WorkspaceService& workspace,
-                                                           i18n::MessageCatalog const& textCatalog)
+  Result<std::unique_ptr<LayoutComponent>> makeTrackDetail(
+    LayoutBuildContext& ctx,
+    uimodel::LayoutNode const& /*node*/,
+    rt::WorkspaceService& workspace,
+    i18n::MessageCatalog const& textCatalog,
+    std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)> editCredits)
   {
-    return std::make_unique<TrackDetailComponent>(ctx, workspace, textCatalog);
+    return std::make_unique<TrackDetailComponent>(ctx, workspace, textCatalog, std::move(editCredits));
   }
 } // namespace ao::winui::layout

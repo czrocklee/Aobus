@@ -183,12 +183,37 @@ namespace ao::media::file::wav
       copyText(metadata.album(), [](auto& builder, auto value) { builder.album(value); });
       copyText(metadata.albumArtist(), [](auto& builder, auto value) { builder.albumArtist(value); });
       copyText(metadata.composer(), [](auto& builder, auto value) { builder.composer(value); });
-      copyText(metadata.conductor(), [](auto& builder, auto value) { builder.conductor(value); });
-      copyText(metadata.ensemble(), [](auto& builder, auto value) { builder.ensemble(value); });
       copyText(metadata.genre(), [](auto& builder, auto value) { builder.genre(value); });
-      copyText(metadata.work(), [](auto& builder, auto value) { builder.work(value); });
+
+      // The embedded ID3 reader already resolved the work precedence; the copy
+      // keeps the winning rank instead of re-admitting the text as a candidate.
+      if (auto const optWorkSource = metadata.workSource(); optWorkSource)
+      {
+        target.metadata().work(*optWorkSource, target.own(std::string{metadata.work()}));
+      }
+
       copyText(metadata.movement(), [](auto& builder, auto value) { builder.movement(value); });
-      copyText(metadata.soloist(), [](auto& builder, auto value) { builder.soloist(value); });
+
+      // Copy unresolved candidates in traversal order; temporary chunk strings
+      // cannot survive this call, and Ensemble precedence is whole-file.
+      auto const credits = metadata.credits();
+      auto const orchestraCandidates = metadata.orchestraCandidates();
+      std::size_t candidateIndex = 0;
+
+      for (std::size_t creditIndex = 0; creditIndex <= credits.size(); ++creditIndex)
+      {
+        while (candidateIndex < orchestraCandidates.size() &&
+               orchestraCandidates[candidateIndex].precedingCredits == creditIndex)
+        {
+          target.metadata().orchestra(orchestraCandidates[candidateIndex++].name);
+        }
+
+        if (creditIndex < credits.size())
+        {
+          auto const& entry = credits[creditIndex];
+          target.metadata().credit(entry.name, entry.kind, entry.role);
+        }
+      }
 
       if (metadata.year() != 0)
       {

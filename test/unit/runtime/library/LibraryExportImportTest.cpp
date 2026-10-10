@@ -12,6 +12,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -350,28 +351,28 @@ namespace ao::rt::test
 
     // 1. Setup initial library with new fields
     {
-      auto const trackId =
-        library::test::addTrackWithUniqueFixtureUri(ml1,
-                                                    library::test::TrackSpec{.title = "Test Title",
-                                                                             .artist = "Test Artist",
-                                                                             .album = "",
-                                                                             .composer = "Test Composer",
-                                                                             .conductor = "Test Conductor",
-                                                                             .ensemble = "Test Ensemble",
-                                                                             .work = "Test Work",
-                                                                             .movement = "Test Movement",
-                                                                             .soloist = "Test Soloist",
-                                                                             .uri = "full-fields.flac",
-                                                                             .year = 0,
-                                                                             .discNumber = 0,
-                                                                             .trackNumber = 0,
-                                                                             .movementNumber = 2,
-                                                                             .movementTotal = 4,
-                                                                             .duration = std::chrono::minutes{4},
-                                                                             .bitrate = Bitrate{},
-                                                                             .sampleRate = SampleRate{},
-                                                                             .channels = Channels{},
-                                                                             .bitDepth = BitDepth{}});
+      auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+        ml1,
+        library::test::TrackSpec{.title = "Test Title",
+                                 .artist = "Test Artist",
+                                 .album = "",
+                                 .composer = "Test Composer",
+                                 .work = "Test Work",
+                                 .movement = "Test Movement",
+                                 .credits = {{.name = "Test Conductor", .kind = CreditKind::Conductor},
+                                             {.name = "Test Ensemble", .kind = CreditKind::Ensemble},
+                                             {.name = "Test Soloist", .kind = CreditKind::Soloist}},
+                                 .uri = "full-fields.flac",
+                                 .year = 0,
+                                 .discNumber = 0,
+                                 .trackNumber = 0,
+                                 .movementNumber = 2,
+                                 .movementTotal = 4,
+                                 .duration = std::chrono::minutes{4},
+                                 .bitrate = Bitrate{},
+                                 .sampleRate = SampleRate{},
+                                 .channels = Channels{},
+                                 .bitDepth = BitDepth{}});
       auto transaction = library::test::writeTransaction(ml1);
       auto builder = FileManifestBuilder::makeEmpty();
       // A real instant before the Unix epoch, fraction included, so the full
@@ -419,13 +420,17 @@ namespace ao::rt::test
       CHECK(std::string{view.metadata().title()} == "Test Title");
       CHECK(std::string{dictionary.get(view.metadata().artistId())} == "Test Artist");
       CHECK(std::string{dictionary.get(view.metadata().composerId())} == "Test Composer");
-      CHECK(std::string{dictionary.get(view.classical().conductorId())} == "Test Conductor");
-      CHECK(std::string{dictionary.get(view.classical().ensembleId())} == "Test Ensemble");
-      CHECK(std::string{dictionary.get(view.classical().workId())} == "Test Work");
-      CHECK(std::string{dictionary.get(view.classical().movementId())} == "Test Movement");
-      CHECK(std::string{dictionary.get(view.classical().soloistId())} == "Test Soloist");
-      CHECK(view.classical().movementNumber() == 2);
-      CHECK(view.classical().movementTotal() == 4);
+      auto const performance = view.performance();
+      REQUIRE(performance.credits(CreditKind::Conductor).size() == 1);
+      REQUIRE(performance.credits(CreditKind::Ensemble).size() == 1);
+      REQUIRE(performance.credits(CreditKind::Soloist).size() == 1);
+      CHECK(dictionary.get(performance.credits(CreditKind::Conductor).front().nameId) == "Test Conductor");
+      CHECK(dictionary.get(performance.credits(CreditKind::Ensemble).front().nameId) == "Test Ensemble");
+      CHECK(std::string{dictionary.get(view.work().workId())} == "Test Work");
+      CHECK(std::string{dictionary.get(view.work().movementId())} == "Test Movement");
+      CHECK(dictionary.get(performance.credits(CreditKind::Soloist).front().nameId) == "Test Soloist");
+      CHECK(view.work().movementNumber() == 2);
+      CHECK(view.work().movementTotal() == 4);
 
       auto const optManifest = ml2.manifest().reader(transaction).get("full-fields.flac");
       REQUIRE(optManifest);
@@ -464,7 +469,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "merge.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 6
+      yaml << R"(version: 7
 export_mode: delta
 library:
   tracks:
@@ -520,7 +525,7 @@ library:
     SECTION("omitted collections preserve the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 6
+      yaml << R"(version: 7
 export_mode: full
 library:
   resources: []
@@ -548,7 +553,7 @@ library:
     SECTION("present empty collections clear the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 6
+      yaml << R"(version: 7
 export_mode: full
 library:
   resources: []
@@ -614,7 +619,7 @@ library:
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
       {
         auto yaml = std::ofstream{yamlPath};
-        yaml << R"(version: 6
+        yaml << R"(version: 7
 export_mode: delta
 library:
   tracks:
@@ -671,7 +676,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -755,7 +760,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 6\n";
+      yaml << "version: 7\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
@@ -783,7 +788,7 @@ library:
     }
 
     REQUIRE(res);
-    CHECK(*res == ImportReport{.payloadVersion = 6,
+    CHECK(*res == ImportReport{.payloadVersion = 7,
                                .payloadMode = ExportMode::Metadata,
                                .tracksCreated = 2,
                                .listsCreated = 1,
@@ -823,7 +828,7 @@ library:
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
     {
       auto yaml = std::ofstream{yamlPathDelta};
-      yaml << "version: 6\n";
+      yaml << "version: 7\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: delta\n";
       yaml << "library:\n";
@@ -841,7 +846,7 @@ library:
 
     auto resultDeltaRes = importer.importFromYamlOffline(yamlPathDelta, ImportMode::Merge);
     REQUIRE(resultDeltaRes);
-    CHECK(*resultDeltaRes == ImportReport{.payloadVersion = 6,
+    CHECK(*resultDeltaRes == ImportReport{.payloadVersion = 7,
                                           .payloadMode = ExportMode::Delta,
                                           .tracksUpdated = 1,
                                           .listsCreated = 1,
@@ -879,7 +884,7 @@ library:
     CHECK(addedLists == 1);
   }
 
-  TEST_CASE("LibraryYaml - version 6 rejects aliases and extension fields", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 7 rejects aliases and extension fields", "[runtime][unit][import-export][schema]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -889,7 +894,7 @@ library:
     SECTION("legacy mode alias")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 6
+      yaml << R"(version: 7
 export_mode: minimum
 library:
   tracks: []
@@ -905,7 +910,7 @@ library:
     SECTION("unknown root field")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 6
+      yaml << R"(version: 7
 export_mode: full
 extension_root: future
 library:
@@ -933,7 +938,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 6\n";
+      yaml << "version: 7\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
@@ -953,9 +958,7 @@ library:
     REQUIRE(optView);
     CHECK(optView->property().uri() == uri);
     CHECK(optView->metadata().title() == "YAML Title");
-    CHECK(optView->classical().conductorId() == kInvalidDictionaryId);
-    CHECK(optView->classical().ensembleId() == kInvalidDictionaryId);
-    CHECK(optView->classical().soloistId() == kInvalidDictionaryId);
+    CHECK(optView->performance().credits().empty());
   }
 
   TEST_CASE("LibraryYaml - full transfer preserves modification instants exactly",
@@ -1087,7 +1090,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -1135,7 +1138,7 @@ library:
     auto const overlayPayload = [&](std::string_view mtimeLines)
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 6\n";
+      yaml << "version: 7\n";
       yaml << "export_mode: full\n";
       yaml << "library:\n";
       yaml << "  resources: []\n";

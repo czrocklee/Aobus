@@ -251,6 +251,8 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             item_source = source_root / "test" / "helper" / "WinUiTrackItemProbe.cpp"
             table_project = build_dir / "app" / "windows-winui" / "ao_winui_track_table_probe.vcxproj"
             table_source = source_root / "test" / "integration" / "windows" / "WinUiTrackTableProbe.cpp"
+            credits_project = build_dir / "app" / "windows-winui" / "ao_winui_credits_probe.vcxproj"
+            credits_source = source_root / "test" / "integration" / "windows" / "WinUiCreditsProbe.cpp"
             for path in (
                 msbuild,
                 main_project,
@@ -264,6 +266,8 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                 item_source,
                 table_project,
                 table_source,
+                credits_project,
+                credits_source,
             ):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
@@ -296,6 +300,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                         "run",
                         side_effect=(
                             payload(main_source),
+                            payload(credits_source, "/c /DCREDITS_PROBE /Icredits-headers"),
                             payload(probe_source),
                             payload(soul_source),
                             payload(item_source, "/c /DTRACK_ITEM /Iitem-headers"),
@@ -305,23 +310,34 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                         commands = winuitidy.compile_commands(
                             build_dir,
                             clang_cl,
-                            required_translation_units=(probe_source, soul_source, item_source, table_source),
+                            required_translation_units=(
+                                probe_source,
+                                soul_source,
+                                item_source,
+                                table_source,
+                                credits_source,
+                            ),
                         )
                     requires_context = [
                         winuitidy.requires_winui_compile_context(path)
-                        for path in (probe_source, soul_source, item_source, table_source)
+                        for path in (probe_source, soul_source, item_source, table_source, credits_source)
                     ]
 
             self.assertEqual(
                 [Path(entry["file"]) for entry in commands],
-                [main_source, probe_source, soul_source, item_source, table_source],
+                [main_source, credits_source, probe_source, soul_source, item_source, table_source],
             )
-            self.assertEqual(run.call_count, 5)
+            self.assertEqual(run.call_count, 6)
             self.assertIn(str(main_project), run.call_args_list[0].args[0])
-            self.assertIn(str(probe_project), run.call_args_list[1].args[0])
-            self.assertIn(str(soul_project), run.call_args_list[2].args[0])
-            self.assertIn(str(item_project), run.call_args_list[3].args[0])
-            self.assertIn(str(table_project), run.call_args_list[4].args[0])
-            self.assertIn("/DTRACK_ITEM /Iitem-headers", commands[3]["command"])
-            self.assertIn("/DTRACK_TABLE /Itable-headers", commands[4]["command"])
-            self.assertEqual(requires_context, [True, True, True, True])
+            self.assertIn(str(credits_project), run.call_args_list[1].args[0])
+            self.assertIn(str(probe_project), run.call_args_list[2].args[0])
+            self.assertIn(str(soul_project), run.call_args_list[3].args[0])
+            self.assertIn(str(item_project), run.call_args_list[4].args[0])
+            self.assertIn(str(table_project), run.call_args_list[5].args[0])
+            self.assertEqual(
+                commands[1]["command"],
+                f'"{clang_cl}" /c /DCREDITS_PROBE /Icredits-headers "{credits_source}"',
+            )
+            self.assertIn("/DTRACK_ITEM /Iitem-headers", commands[4]["command"])
+            self.assertIn("/DTRACK_TABLE /Itable-headers", commands[5]["command"])
+            self.assertEqual(requires_context, [True, True, True, True, True])

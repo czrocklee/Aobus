@@ -15,6 +15,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
@@ -588,5 +589,194 @@ namespace ao::gtk::test
       dialog.response(Gtk::ResponseType::CLOSE);
       drainGtkEvents();
     }
+  }
+
+  TEST_CASE("TrackPropertiesDialog - active Credits child blocks parent Save and stages one composed patch",
+            "[gtk][integration][track-credits][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& storage)
+      {
+        trackId = library::test::addTrackWithUniqueFixtureUri(
+          storage, {.title = "Before", .credits = {{"Player", library::CreditKind::Performer, "Piano"}}});
+      }};
+    auto& runtime = fixture.runtime();
+    auto catalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), catalog};
+    auto parent = Gtk::Window{};
+    parent.present();
+    auto* dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId});
+    dialog->present();
+    drainGtkEvents();
+    auto entries = collectAll<Gtk::Entry>(*dialog);
+    auto title = std::ranges::find_if(entries, [](auto* entry) { return entry->get_text() == "Before"; });
+    REQUIRE(title != entries.end());
+    (*title)->set_text("After");
+    auto* edit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-edit");
+    REQUIRE(edit != nullptr);
+    emitClicked(*edit);
+    drainGtkEvents();
+    auto* name = findWidgetByClass<Gtk::Entry>(*dialog, "ao-credit-name");
+    REQUIRE(name != nullptr);
+    name->set_text("Changed player");
+    auto* save = findButtonByLabel(*dialog, "Save");
+    REQUIRE(save != nullptr);
+    CHECK_FALSE(save->get_sensitive());
+    // Programmatic responses cannot bypass the active-child guard.
+    dialog->response(Gtk::ResponseType::OK);
+    drainGtkEvents();
+    CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "Before");
+    CHECK(runtime.library().snapshot().trackCredits(trackId) ==
+          std::vector<library::Credit>{{"Player", library::CreditKind::Performer, "Piano"}});
+    auto* commit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-commit");
+    REQUIRE(commit != nullptr);
+    emitClicked(*commit);
+    drainGtkEvents();
+    CHECK(save->get_sensitive());
+    CHECK(runtime.library().snapshot().trackCredits(trackId) ==
+          std::vector<library::Credit>{{"Player", library::CreditKind::Performer, "Piano"}});
+    auto finalization = FinalizationObserver{G_OBJECT(dialog->gobj())};
+    emitClicked(*save);
+    REQUIRE(tryPumpGtkEventsUntil([&] { return finalization.isFinalized(); }));
+    CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "After");
+    CHECK(runtime.library().snapshot().trackCredits(trackId) ==
+          std::vector<library::Credit>{{"Changed player", library::CreditKind::Performer, "Piano"}});
+    parent.close();
+    drainGtkEvents();
+  }
+
+  TEST_CASE("TrackPropertiesDialog - closing with a Credits draft asks before discarding it",
+            "[gtk][integration][track-credits][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto const before = std::vector<library::Credit>{{"Player", library::CreditKind::Performer, "Piano"}};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& storage)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(storage, {.title = "Before", .credits = before}); }};
+    auto& runtime = fixture.runtime();
+    auto catalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), catalog};
+    auto parent = Gtk::Window{};
+    parent.present();
+    auto* dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId});
+    dialog->present();
+    drainGtkEvents();
+    auto const promptTitle = std::string{"Discard the Credits changes?"};
+    auto awaitPrompt = [&]
+    {
+      AppDialog* prompt = nullptr;
+      REQUIRE(tryPumpGtkEventsUntil(
+        [&]
+        {
+          prompt = findOtherDialogWithText(*dialog, promptTitle);
+          return prompt != nullptr;
+        }));
+      return prompt;
+    };
+
+    auto* edit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-edit");
+    REQUIRE(edit != nullptr);
+    emitClicked(*edit);
+    drainGtkEvents();
+    auto* name = findWidgetByClass<Gtk::Entry>(*dialog, "ao-credit-name");
+    REQUIRE(name != nullptr);
+    name->set_text("Draft player");
+
+    SECTION("an active child draft survives Keep Editing")
+    {
+      dialog->response(Gtk::ResponseType::CLOSE);
+      auto* prompt = awaitPrompt();
+      CHECK(dialog->get_visible());
+      prompt->response(Gtk::ResponseType::CANCEL);
+      drainGtkEvents();
+      REQUIRE(std::ranges::contains(Gtk::Window::list_toplevels(), dialog));
+      CHECK(dialog->get_visible());
+      CHECK(findOtherDialogWithText(*dialog, promptTitle) == nullptr);
+      name = findWidgetByClass<Gtk::Entry>(*dialog, "ao-credit-name");
+      REQUIRE(name != nullptr);
+      CHECK(name->get_text() == "Draft player");
+
+      // A repeated close request returns to one live question.
+      dialog->close();
+      prompt = awaitPrompt();
+      dialog->close();
+      drainGtkEvents();
+      auto prompts = std::ranges::count_if(
+        Gtk::Window::list_toplevels(),
+        [&](Gtk::Window* window) { return window != dialog && findLabelByText(*window, promptTitle) != nullptr; });
+      CHECK(prompts == 1);
+      prompt->response(Gtk::ResponseType::CANCEL);
+      drainGtkEvents();
+      CHECK(dialog->get_visible());
+
+      dialog->response(Gtk::ResponseType::CLOSE);
+      prompt = awaitPrompt();
+      auto finalization = FinalizationObserver{G_OBJECT(dialog->gobj())};
+      prompt->response(Gtk::ResponseType::REJECT);
+      REQUIRE(tryPumpGtkEventsUntil([&] { return finalization.isFinalized(); }));
+    }
+
+    SECTION("an accepted but unsaved replacement is discarded only on confirmation")
+    {
+      auto* commit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-commit");
+      REQUIRE(commit != nullptr);
+      emitClicked(*commit);
+      drainGtkEvents();
+      dialog->close();
+      auto* prompt = awaitPrompt();
+      auto finalization = FinalizationObserver{G_OBJECT(dialog->gobj())};
+      prompt->response(Gtk::ResponseType::REJECT);
+      REQUIRE(tryPumpGtkEventsUntil([&] { return finalization.isFinalized(); }));
+    }
+
+    CHECK(runtime.library().snapshot().trackCredits(trackId) == before);
+    CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "Before");
+    parent.close();
+    drainGtkEvents();
+  }
+
+  TEST_CASE("TrackPropertiesDialog - closing an unchanged Credits session does not ask",
+            "[gtk][integration][track-credits][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto const before = std::vector<library::Credit>{{"Player", library::CreditKind::Performer, "Piano"}};
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& storage)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(storage, {.title = "Before", .credits = before}); }};
+    auto& runtime = fixture.runtime();
+    auto catalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), catalog};
+    auto parent = Gtk::Window{};
+    parent.present();
+    auto* dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId});
+    dialog->present();
+    drainGtkEvents();
+    auto* edit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-edit");
+    REQUIRE(edit != nullptr);
+    emitClicked(*edit);
+    drainGtkEvents();
+    auto* name = findWidgetByClass<Gtk::Entry>(*dialog, "ao-credit-name");
+    REQUIRE(name != nullptr);
+
+    // An open session, even one whose edit was typed back to the baseline,
+    // holds nothing a close would lose.
+    name->set_text("Draft player");
+    name->set_text("Player");
+    auto finalization = FinalizationObserver{G_OBJECT(dialog->gobj())};
+    dialog->close();
+    REQUIRE(tryPumpGtkEventsUntil([&] { return finalization.isFinalized(); }));
+    CHECK(std::ranges::none_of(Gtk::Window::list_toplevels(),
+                               [](Gtk::Window* window)
+                               { return findLabelByText(*window, "Discard the Credits changes?") != nullptr; }));
+    CHECK(runtime.library().snapshot().trackCredits(trackId) == before);
+    parent.close();
+    drainGtkEvents();
   }
 } // namespace ao::gtk::test

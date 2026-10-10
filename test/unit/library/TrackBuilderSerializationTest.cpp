@@ -6,7 +6,9 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
@@ -62,8 +64,10 @@ namespace ao::library::test
       auto const& header = reader.header();
       auto result = std::vector<TrackColdBlockSlot>{};
 
-      for (auto const slot :
-           {TrackColdBlockSlot::CoverArt, TrackColdBlockSlot::Classical, TrackColdBlockSlot::CustomMetadata})
+      for (auto const slot : {TrackColdBlockSlot::CoverArt,
+                              TrackColdBlockSlot::Work,
+                              TrackColdBlockSlot::CustomMetadata,
+                              TrackColdBlockSlot::Performance})
       {
         if (coldBlockOffset(header, slot) != 0)
         {
@@ -106,7 +110,8 @@ namespace ao::library::test
     CHECK(view.metadata().discTotal() == 0);
     CHECK(view.tags().count() == 0);
     CHECK(view.tags().bloom() == 0);
-    CHECK(view.classical().empty());
+    CHECK(view.work().empty());
+    CHECK(view.performance().empty());
     CHECK(view.coverArt().count() == 0);
     CHECK(view.customMetadata().count() == 0);
   }
@@ -299,14 +304,10 @@ namespace ao::library::test
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
-    builder.metadata()
-      .trackNumber(5)
-      .trackTotal(10)
-      .discNumber(1)
-      .discTotal(2)
-      .conductor("Carlos Kleiber")
-      .ensemble("Vienna Philharmonic")
-      .soloist("Yo-Yo Ma");
+    builder.metadata().trackNumber(5).trackTotal(10).discNumber(1).discTotal(2).credits(
+      std::array{CreditView{.name = "Carlos Kleiber", .kind = CreditKind::Conductor},
+                 CreditView{.name = "Vienna Philharmonic", .kind = CreditKind::Ensemble},
+                 CreditView{.name = "Yo-Yo Ma", .kind = CreditKind::Soloist}});
     builder.property().uri("path/to/file.flac").duration(std::chrono::minutes{3});
 
     auto const [hotData, coldData] = context.serialize(builder);
@@ -317,13 +318,21 @@ namespace ao::library::test
     CHECK(header->trackTotal == 10);
     CHECK(header->discNumber == 1);
     CHECK(header->discTotal == 2);
-    CHECK(coldBlockOffset(*header, TrackColdBlockSlot::Classical) == sizeof(TrackColdHeader));
-    CHECK(header->uriOffset == sizeof(TrackColdHeader) + sizeof(TrackClassicalBlock));
+    CHECK(coldBlockOffset(*header, TrackColdBlockSlot::Performance) == sizeof(TrackColdHeader));
+    CHECK(header->uriOffset ==
+          sizeof(TrackColdHeader) + sizeof(TrackPerformanceBlock) + (3 * sizeof(TrackCreditEntry)));
 
     auto const view = TrackView{std::span<std::byte const>{}, coldData};
-    CHECK(view.classical().conductorId() == requireDictionaryId(context.dictionary(), "Carlos Kleiber"));
-    CHECK(view.classical().ensembleId() == requireDictionaryId(context.dictionary(), "Vienna Philharmonic"));
-    CHECK(view.classical().soloistId() == requireDictionaryId(context.dictionary(), "Yo-Yo Ma"));
+    CHECK(view.work().empty());
+    REQUIRE(view.performance().credits(CreditKind::Conductor).size() == 1);
+    REQUIRE(view.performance().credits(CreditKind::Ensemble).size() == 1);
+    REQUIRE(view.performance().credits(CreditKind::Soloist).size() == 1);
+    CHECK(view.performance().credits(CreditKind::Conductor)[0].nameId ==
+          requireDictionaryId(context.dictionary(), "Carlos Kleiber"));
+    CHECK(view.performance().credits(CreditKind::Ensemble)[0].nameId ==
+          requireDictionaryId(context.dictionary(), "Vienna Philharmonic"));
+    CHECK(view.performance().credits(CreditKind::Soloist)[0].nameId ==
+          requireDictionaryId(context.dictionary(), "Yo-Yo Ma"));
   }
 
   TEST_CASE("TrackBuilder - writes extension blocks in deterministic order",
@@ -333,23 +342,25 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     builder.property().uri("track.flac");
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
-    builder.metadata().work("Work");
+    builder.metadata().work("Work").recordingDate(RecordingDate{.year = 1981});
     builder.customMetadata().add("key", "value");
 
     auto const coldData = context.serializeCold(builder);
     auto const& header = coldHeader(coldData);
     auto const slots = coldBlockSlots(coldData);
 
-    REQUIRE(slots.size() == 3);
+    REQUIRE(slots.size() == 4);
     CHECK(slots[0] == TrackColdBlockSlot::CoverArt);
-    CHECK(slots[1] == TrackColdBlockSlot::Classical);
+    CHECK(slots[1] == TrackColdBlockSlot::Work);
     CHECK(slots[2] == TrackColdBlockSlot::CustomMetadata);
+    CHECK(slots[3] == TrackColdBlockSlot::Performance);
     CHECK(coldBlockOffset(header, TrackColdBlockSlot::CoverArt) == sizeof(TrackColdHeader));
-    CHECK(coldBlockOffset(header, TrackColdBlockSlot::CoverArt) <
-          coldBlockOffset(header, TrackColdBlockSlot::Classical));
-    CHECK(coldBlockOffset(header, TrackColdBlockSlot::Classical) <
+    CHECK(coldBlockOffset(header, TrackColdBlockSlot::CoverArt) < coldBlockOffset(header, TrackColdBlockSlot::Work));
+    CHECK(coldBlockOffset(header, TrackColdBlockSlot::Work) <
           coldBlockOffset(header, TrackColdBlockSlot::CustomMetadata));
-    CHECK(coldBlockOffset(header, TrackColdBlockSlot::CustomMetadata) < header.uriOffset);
+    CHECK(coldBlockOffset(header, TrackColdBlockSlot::CustomMetadata) <
+          coldBlockOffset(header, TrackColdBlockSlot::Performance));
+    CHECK(coldBlockOffset(header, TrackColdBlockSlot::Performance) < header.uriOffset);
   }
 
   TEST_CASE("TrackBuilder - writes custom block logical length and aligned padding",
@@ -398,48 +409,25 @@ namespace ao::library::test
     CHECK(view.property().uri() == "uri");
   }
 
-  TEST_CASE("TrackBuilder - writes classical block for standalone new classical fields",
+  TEST_CASE("TrackBuilder - writes performance block for each standalone credit kind",
             "[library][unit][track-builder][serialization]")
   {
-    auto checkSingleClassicalBlock = [](auto configure, auto check)
+    for (auto const kind : {CreditKind::Conductor, CreditKind::Ensemble, CreditKind::Soloist, CreditKind::Performer})
     {
       auto context = TrackSerializationFixture{};
       auto builder = TrackBuilder::makeEmpty();
-      configure(builder);
+      builder.metadata().credits(std::array{CreditView{.name = "Name", .kind = kind}});
       builder.property().uri("track.flac");
-
       auto const coldData = context.serializeCold(builder);
       auto const& header = coldHeader(coldData);
       auto const slots = coldBlockSlots(coldData);
       auto const view = TrackView{std::span<std::byte const>{}, coldData};
-
       REQUIRE(slots.size() == 1);
-      CHECK(slots[0] == TrackColdBlockSlot::Classical);
-      CHECK(coldBlockOffset(header, TrackColdBlockSlot::Classical) == sizeof(TrackColdHeader));
-      check(view, context.dictionary());
-    };
-
-    SECTION("conductor")
-    {
-      checkSingleClassicalBlock(
-        [](TrackBuilder& builder) { builder.metadata().conductor("Conductor"); },
-        [](TrackView const& view, DictionaryStore const& dictionary)
-        { CHECK(view.classical().conductorId() == requireDictionaryId(dictionary, "Conductor")); });
-    }
-
-    SECTION("ensemble")
-    {
-      checkSingleClassicalBlock(
-        [](TrackBuilder& builder) { builder.metadata().ensemble("Ensemble"); },
-        [](TrackView const& view, DictionaryStore const& dictionary)
-        { CHECK(view.classical().ensembleId() == requireDictionaryId(dictionary, "Ensemble")); });
-    }
-
-    SECTION("soloist")
-    {
-      checkSingleClassicalBlock([](TrackBuilder& builder) { builder.metadata().soloist("Soloist"); },
-                                [](TrackView const& view, DictionaryStore const& dictionary)
-                                { CHECK(view.classical().soloistId() == requireDictionaryId(dictionary, "Soloist")); });
+      CHECK(slots[0] == TrackColdBlockSlot::Performance);
+      CHECK(coldBlockOffset(header, TrackColdBlockSlot::Performance) == sizeof(TrackColdHeader));
+      CHECK(view.work().empty());
+      REQUIRE(view.performance().credits(kind).size() == 1);
+      CHECK(view.performance().credits(kind)[0].nameId == requireDictionaryId(context.dictionary(), "Name"));
     }
   }
 
@@ -481,9 +469,9 @@ namespace ao::library::test
       .title("Title")
       .albumArtist("Test Album Artist")
       .composer("Test Composer")
-      .conductor("Test Conductor")
-      .ensemble("Test Ensemble")
-      .soloist("Test Soloist");
+      .credits(std::array{CreditView{.name = "Test Conductor", .kind = CreditKind::Conductor},
+                          CreditView{.name = "Test Ensemble", .kind = CreditKind::Ensemble},
+                          CreditView{.name = "Test Soloist", .kind = CreditKind::Soloist}});
     original.property().uri("path.flac");
 
     auto const [hotData, coldData] = context.serialize(original);
@@ -493,9 +481,13 @@ namespace ao::library::test
     CHECK(reconstructed.metadata().title() == "Title");
     CHECK(reconstructed.metadata().albumArtist() == "Test Album Artist");
     CHECK(reconstructed.metadata().composer() == "Test Composer");
-    CHECK(reconstructed.metadata().conductor() == "Test Conductor");
-    CHECK(reconstructed.metadata().ensemble() == "Test Ensemble");
-    CHECK(reconstructed.metadata().soloist() == "Test Soloist");
+    REQUIRE(reconstructed.metadata().credits().size() == 3);
+    CHECK(reconstructed.metadata().credits()[0].name == "Test Conductor");
+    CHECK(reconstructed.metadata().credits()[0].kind == CreditKind::Conductor);
+    CHECK(reconstructed.metadata().credits()[1].name == "Test Ensemble");
+    CHECK(reconstructed.metadata().credits()[1].kind == CreditKind::Ensemble);
+    CHECK(reconstructed.metadata().credits()[2].name == "Test Soloist");
+    CHECK(reconstructed.metadata().credits()[2].kind == CreditKind::Soloist);
     CHECK(reconstructed.property().uri() == "path.flac");
 
     auto const& constBuilder = reconstructed;
@@ -517,9 +509,9 @@ namespace ao::library::test
       .album("Album")
       .genre("Genre")
       .albumArtist("Album Artist")
-      .conductor("Conductor")
-      .ensemble("Ensemble")
-      .soloist("Soloist");
+      .credits(std::array{CreditView{.name = "Conductor", .kind = CreditKind::Conductor},
+                          CreditView{.name = "Ensemble", .kind = CreditKind::Ensemble},
+                          CreditView{.name = "Soloist", .kind = CreditKind::Soloist}});
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
     builder.tags().add("tag1").add("tag2");
     builder.property().uri("track.flac");
@@ -536,9 +528,15 @@ namespace ao::library::test
     CHECK(view.metadata().albumId() == requireDictionaryId(context.dictionary(), "Album"));
     CHECK(view.metadata().genreId() == requireDictionaryId(context.dictionary(), "Genre"));
     CHECK(view.metadata().albumArtistId() == requireDictionaryId(context.dictionary(), "Album Artist"));
-    CHECK(view.classical().conductorId() == requireDictionaryId(context.dictionary(), "Conductor"));
-    CHECK(view.classical().ensembleId() == requireDictionaryId(context.dictionary(), "Ensemble"));
-    CHECK(view.classical().soloistId() == requireDictionaryId(context.dictionary(), "Soloist"));
+    REQUIRE(view.performance().credits(CreditKind::Conductor).size() == 1);
+    REQUIRE(view.performance().credits(CreditKind::Ensemble).size() == 1);
+    REQUIRE(view.performance().credits(CreditKind::Soloist).size() == 1);
+    CHECK(view.performance().credits(CreditKind::Conductor)[0].nameId ==
+          requireDictionaryId(context.dictionary(), "Conductor"));
+    CHECK(view.performance().credits(CreditKind::Ensemble)[0].nameId ==
+          requireDictionaryId(context.dictionary(), "Ensemble"));
+    CHECK(view.performance().credits(CreditKind::Soloist)[0].nameId ==
+          requireDictionaryId(context.dictionary(), "Soloist"));
     REQUIRE(view.tags().count() == 2);
     CHECK(view.tags().id(0) == DictionaryId{1});
     CHECK(view.tags().id(1) == DictionaryId{2});
