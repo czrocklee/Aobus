@@ -23,7 +23,7 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 ## Terminology
 
 - An **environment** owns one native LMDB environment handle.
-- **Database-open admission** is the process-wide serialization held from a write transaction's first `mdb_dbi_open` call until that transaction commits or aborts.
+- **Database-open admission** is the process-wide serialization held from a transaction's first `mdb_dbi_open` call until that native transaction finishes.
 - A **read transaction** owns one read snapshot until destruction.
 - A **write transaction** owns staged mutations until commit or destruction and also provides read capability.
 - An **integer-key database** is an `IntegerKeyDatabase` token whose public reader and writer accept only `std::uint32_t` keys and whose writer owns append allocation.
@@ -38,9 +38,11 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - Environments, transactions, iterators, writers, and their native handles follow RAII ownership and are movable but not copyable unless their public type explicitly provides copying.
 - `Environment` is move-constructible and move-assignable. It directly owns its native handle and has no shared implementation ownership.
 - Callers keep at most one live environment for a database path in a process, as required by LMDB. The adapter deliberately has no canonical-path registry and does not attempt to detect aliases.
-- At most one active write transaction in the process performs database-open calls at a time, including transactions for different environments.
-- A write transaction acquires database-open admission lazily on its first main or named database open and releases it only after native commit or abort finishes.
-- Lock acquisition is environment writer transaction before process-wide database-open admission. A thread that holds database-open admission does not begin or wait for a write transaction on another environment before releasing admission.
+- At most one active write transaction in the process performs database-open calls at a time, including transactions for different environments. Ordinary readers use retained DBI tokens and never acquire database-open admission.
+- `WriteTransaction` owns a lazily acquired `std::unique_lock<std::mutex>` from its first main or named database open until after native commit or abort finishes. Moving the complete writer transfers admission; replacement first ends the old native transaction before unlocking its old admission.
+- A readonly transaction may move between threads when the environment uses `kEnvNoTls` and the caller prevents concurrent access; readers and iterators must be recreated after that move. `MDB_NOTLS` does not relax native writer or mutex thread ownership. Writer moves and terminal operations stay on their owning thread.
+- Acquisition order is native environment writer transaction before process-wide database-open admission. An admission holder must not begin or wait for another write transaction, open a DBI through another transaction, or wait for a worker that needs admission before releasing its own admission. The gate is intentionally non-reentrant.
+- Direct moves from `WriteTransaction` to `ReadTransaction` are deleted. Public `ReadTransaction` moves still reject either a writer source or writer destination at runtime, including explicit base casts, finished writers and writer-base self-move, before touching native ownership. Borrowing a writer's read base remains valid; only a complete `WriteTransaction` move can transfer its native handle and admission together.
 - A configured map size is a capacity bound rather than a disk reservation wherever the filesystem can hold a hole; where it cannot, the environment reports that its map costs the whole size instead of pretending otherwise.
 - Reported high water is the peak page extent the environment has committed, never a live-data measure, and it does not decrease when records are deleted.
 - Map capacity changes only at the open boundary, before the environment is handed to a caller. No live environment is resized, because resizing unmaps and remaps the file and would invalidate every pointer a transaction or reader holds.
@@ -48,7 +50,10 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - An exhausted map is its own recoverable code, distinct from a full disk and from an exhausted identifier space, because only the exhausted map may succeed on a repeat with more capacity.
 - Environment paths crossing this adapter are UTF-8, matching LMDB's own decoding, and are converted explicitly rather than through a platform's narrow-string default.
 - Native environment handles are private to the adapter; public callers compose transactions and databases rather than bypassing their ownership checks.
-- A byte span, key view, iterator value, or operation through a reader, iterator, or writer does not outlive the active transaction that supplies its storage or cursor state.
+- A byte span, key view, iterator value, or operation through a reader, iterator, or writer does not outlive the active transaction that supplies its storage or cursor state. Moving or replacing that transaction invalidates its previous readers, iterators and writers for further operations; recreate them on the new owner.
+- Both integer-key and byte-key Readers and Writers, and Iterator dereference/increment, require an active owner, the captured native handle, and the captured owner-local binding generation; a mismatch fails through `AO_EXPECTS` before native access. Moving a native handle out and back, or reusing a native address after termination, does not reactivate old bindings. The generation does not transfer between owner objects; legitimate self-move preserves current bindings.
+- Every borrower still requires its owner to outlive operations on it; guards do not make dangling owner references safe. A reader's error channel and cursor cleanup follow the owning transaction, including a borrowed writer base.
+- Owner-local binding generations never wrap; generation exhaustion is an invariant failure.
 - Destroying a reader, iterator, or writer after that transaction ends is safe and does not inspect the borrowed transaction object.
 - Explicitly aborting or destroying an uncommitted write transaction aborts all of its staged changes.
 - An unexpected failure from a mutating LMDB primitive throws the private `detail::TransactionFailure`. The enclosing library transaction owner must catch it at the root operation boundary, explicitly abort the complete transaction, and only then return or propagate the failure; an inner operation must never swallow it and continue or commit.
@@ -97,7 +102,7 @@ Consequently, destroying a write-backed wrapper early may retain its native curs
 ### Writer allocation cursor
 
 An integer-key writer captures the database's largest key when the writer is constructed and advances that cached value after each successful append.
-`Writer::maxKey()` exposes this cached allocation value and is distinct from `Reader::maxKey()`.
+`Writer::maxKey()` exposes this cached allocation value and is distinct from `Reader::maxKey()`; cached access still requires the original active transaction binding.
 Successful `clear()` resets that cached allocation value to zero, so the same writer's next append allocates key `1`.
 
 Explicit `create`, `update`, or `delete` calls do not recompute or advance the cache.
@@ -168,11 +173,12 @@ A mutation that exhausts the map therefore leaves nothing behind for the next op
 The high water is a peak rather than a measure of live data: deleting records returns their pages to the free list for reuse, and nothing lowers the figure in place, so a capacity decision reads it as the amount the map has had to cover.
 The accessor requires only an owned environment and reports no recoverable failure, because the native queries reject nothing else.
 The adapter does not canonicalize or register paths; application composition owns LMDB's one-live-environment-per-path process constraint.
-The independent write-transaction database-open admission serializes the native DBI-open interval across environment paths without entering later reads or writes through retained typed database tokens.
+Transaction-wide database-open admission serializes the native DBI-open interval across environment paths without entering later reads or writes through retained typed database tokens.
 
 `IntegerKeyDatabase::open` and `ByteKeyDatabase::open` create the named database when missing and otherwise open the existing database with the type's exact native key flags.
 Their `openExisting` factories never create and report a missing or incompatible catalog entry as a typed schema-admission result.
-Named databases can be opened only through an active write transaction; a retained typed token can then create readers and writers for later transactions without reopening its DBI.
+Retained typed database tokens can be opened only through an active write transaction; after successful commit, a token can create readers and writers for later transactions without reopening its DBI.
+Readonly transactions use those retained tokens; there is no readonly named-database opener in the adapter.
 `ByteKeyDatabase::main` opens the main database only when its persistent key flags describe byte keys; a mismatch returns `CorruptData` instead of producing a falsely typed token.
 An unexpected write-open failure throws `lmdb::detail::TransactionFailure`; the transaction owner must unwind, which aborts that complete transaction, including named databases created earlier in it.
 Both create-capable and existing-only opens inspect the returned database's native flags instead of assuming that requested flags changed an existing database.
@@ -188,7 +194,8 @@ Beginning a read or write transaction returns `Result<Transaction>`.
 A successful write commit publishes all staged changes atomically.
 Destruction without commit aborts the complete transaction.
 Explicit `abort()` consumes the native handle immediately and is idempotent.
-Commit, explicit abort, destruction, and move replacement finish the native transaction before releasing database-open admission.
+Write commit (including failure), explicit write abort, writer destruction, and writer move replacement finish the native transaction before releasing database-open admission.
+Readonly destruction and replacement end only the native snapshot, with no admission lock.
 Opening a database from an inactive transaction or creating a reader/writer from an inactive transaction violates `AO_EXPECTS` before calling LMDB.
 
 ### Reads and iteration
@@ -314,7 +321,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`MapCapacityPolicy.h`](../../../lib/lmdb/detail/MapCapacityPolicy.h) and
   [`MapCapacityPolicy.cpp`](../../../lib/lmdb/detail/MapCapacityPolicy.cpp) own the pure grow-only rule that
   turns a reported capacity, its allocation behaviour, and a policy into the map size the open boundary installs.
-- [`Transaction.h`](../../../include/ao/lmdb/Transaction.h) and [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own read/write begin, process-wide database-open admission, abort, commit, and terminal state.
+- [`Transaction.h`](../../../include/ao/lmdb/Transaction.h) and [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own read/write begin, writer-owned process-wide database-open admission, abort, commit, terminal state, and owner-local borrower-binding generations.
 - [`Database.h`](../../../include/ao/lmdb/Database.h) and [`Database.cpp`](../../../lib/lmdb/Database.cpp) own the integer-key and byte-key tokens, named-database access, readers, iterators, writers, and integer key allocation.
 - [`ReservationWriterAccess.h`](../../../lib/lmdb/detail/ReservationWriterAccess.h) owns the source-private zero-copy reservation access used by library Track encoding; public create, update, and append operations accept only copied input bytes.
 - [`UnvalidatedDatabase.h`](../../../lib/lmdb/detail/UnvalidatedDatabase.h) owns the source-private, read-only token used to inspect a library metadata version before consuming the same DBI as an integer-key token; the LMDB build guard limits that seam to its implementation and `MusicLibrary` admission.
@@ -336,8 +343,11 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`EnvironmentDataFileTest.cpp`](../../../test/unit/lmdb/EnvironmentDataFileTest.cpp) protects allocation staying proportional to committed use under a large configured map, across a reopen, over a data file an earlier session left behind, on a non-ASCII path, and under deterministic concurrent preparation and concurrent first opens.
 - [`TransactionTest.cpp`](../../../test/unit/lmdb/TransactionTest.cpp) protects top-level-only construction, read/write lifetime, commit, abort, moves, and bounded deterministic database-open serialization plus commit/abort/destruction release across environments.
 - [`DatabaseTest.cpp`](../../../test/unit/lmdb/DatabaseTest.cpp) protects write-transaction-only database admission, create-capable and existing-only exact flag validation for both named-token types, exact byte-key main-database validation, missing existing databases, and failed-open rollback.
+- [`ReadOnlyDatabaseTest.cpp`](../../../test/unit/lmdb/ReadOnlyDatabaseTest.cpp) protects ordinary retained-DBI reads, integer ordering, missing/empty records, staged write-backed reads and commit, `MDB_DBS_FULL` from existing-only writer admission with root rollback, Reader/Iterator moves, safe destruction, owner moves, and self-move. [`ReadOnlyDatabaseLifetimeTest.cpp`](../../../test/unit/lmdb/ReadOnlyDatabaseLifetimeTest.cpp) protects both key families across cross-thread readonly `kEnvNoTls` handoff with recreated bindings, fatal stale-reader/iterator use after replacement and ABA round trips, permitted complete writer moves, and forbidden public base transfers involving active or finished writers. [`LibraryProbeScenario.cpp`](../../../test/fatal/LibraryProbeScenario.cpp) owns the subprocess implementations.
+- [`LmdbTestSupportTest.cpp`](../../../test/unit/lmdb/LmdbTestSupportTest.cpp) protects independently owned native readonly fixture inspection, UTF-8 paths, exact integer flags, missing versus empty values, native key width, error cleanup, and unchanged payload/catalog bytes. The helper opens only after every other environment owner for that path has closed; it never creates a named database or repairs a layout. Lock-file reader coordination is not payload mutation.
 - [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseByteKeyTest.cpp`](../../../test/unit/lmdb/DatabaseByteKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, byte-key ordering and lower-bound seeks, compile-time key-operation isolation, integer-key coercion, maximum-key behavior, and safe integer-key and byte-key wrapper destruction after read or write transaction teardown.
 - [`DatabaseWriterTest.cpp`](../../../test/unit/lmdb/DatabaseWriterTest.cpp) protects compile-time key-operation isolation, the copied-data-only public writer surface, source-private integer reservation encoding and append, clear-and-reappend allocation, exhaustion, update, delete, write reads, conflicts, mutation-failure exception unwinding and rollback, moves, and use-after-commit faults.
+- [`DatabaseWriterLifetimeTest.cpp`](../../../test/unit/lmdb/DatabaseWriterLifetimeTest.cpp) protects both Writer families against same-owner commit/rebind, active replacement, move-out/rebind and move-roundtrip ABA, including stale `clear()` without native cursor-address reuse. It also covers guarded integer cache access, wrapper/owner moves and self-moves, fresh binding and transaction-owned cursor cleanup.
 - [`MapCapacityPolicyTest.cpp`](../../../test/unit/lmdb/MapCapacityPolicyTest.cpp) protects the grow-only rule: a default policy leaving the map alone, the floor lifting a smaller map without lowering a larger one, doubling once the peak passes half and repeating until it fits, the ceiling stopping growth without shrinking a map already past it, additive growth and its absence where a file holds no hole, and saturation near the representable limit.
 - [`ResultErrorTest.cpp`](../../../test/unit/lmdb/ResultErrorTest.cpp) protects native-code mapping including the exhausted-map, stale-mapping, full-disk, and full-transaction separation, and caller source-location capture.
 - [`MusicLibraryTest.cpp`](../../../test/unit/library/MusicLibraryTest.cpp),

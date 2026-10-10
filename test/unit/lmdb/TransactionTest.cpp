@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace ao::lmdb::test
@@ -28,6 +29,12 @@ namespace ao::lmdb::test
     concept SupportsNestedBegin = requires(Transaction& transaction) { WriteTransaction::begin(transaction); };
 
     static_assert(!SupportsNestedBegin<WriteTransaction>);
+    static_assert(!std::is_constructible_v<ReadTransaction, WriteTransaction&&>);
+    static_assert(!std::is_assignable_v<ReadTransaction&, WriteTransaction&&>);
+    static_assert(std::is_nothrow_move_constructible_v<ReadTransaction>);
+    static_assert(std::is_nothrow_move_assignable_v<ReadTransaction>);
+    static_assert(std::is_nothrow_move_constructible_v<WriteTransaction>);
+    static_assert(std::is_nothrow_move_assignable_v<WriteTransaction>);
   } // namespace
 
   TEST_CASE("ReadTransaction - helper starts transaction", "[lmdb][unit][transaction]")
@@ -215,10 +222,12 @@ namespace ao::lmdb::test
   TEST_CASE("WriteTransaction - database-open admission releases after every terminal path",
             "[lmdb][unit][transaction][concurrency]")
   {
-    static constexpr auto kScenarios = std::array<std::string_view, 3>{
+    static constexpr auto kScenarios = std::array<std::string_view, 5>{
       "lmdb-database-open-admission-release-commit",
       "lmdb-database-open-admission-release-abort",
       "lmdb-database-open-admission-release-destruction",
+      "lmdb-database-open-admission-release-move-assignment",
+      "lmdb-database-open-admission-release-move-round-trip",
     };
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");

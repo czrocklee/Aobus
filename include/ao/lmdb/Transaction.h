@@ -22,19 +22,27 @@ namespace ao::lmdb
     class DatabaseAccess;
   }
 
+  class WriteTransaction;
+
   // Read-only transaction
   class [[nodiscard]] ReadTransaction
   {
   public:
     static Result<ReadTransaction> begin(Environment const& env);
 
-    ~ReadTransaction() = default;
+    ~ReadTransaction();
 
     ReadTransaction(ReadTransaction const&) = delete;
     ReadTransaction& operator=(ReadTransaction const&) = delete;
 
-    ReadTransaction(ReadTransaction&&) = default;
-    ReadTransaction& operator=(ReadTransaction&&) = default;
+    // Moves transfer readonly native lifetime; the source becomes inactive.
+    // Public base transfers involving a WriteTransaction (even finished) are
+    // forbidden. Borrowing its read capability is supported; move the writer
+    // itself to transfer ownership. Recreate bindings after an owner move.
+    ReadTransaction(ReadTransaction&& other) noexcept;
+    ReadTransaction& operator=(ReadTransaction&& other) noexcept;
+    ReadTransaction(WriteTransaction&& other) = delete;
+    ReadTransaction& operator=(WriteTransaction&& other) = delete;
 
     bool isActive() const noexcept { return handle() != nullptr; }
 
@@ -60,15 +68,24 @@ namespace ao::lmdb
     static Result<TxnPtr> create(MDB_env* env, std::uint32_t flags);
 
     MDB_txn* handle() const noexcept { return _txnPtr.get(); }
-    MDB_txn* releaseHandle() noexcept { return _txnPtr.release(); }
+    MDB_txn* releaseHandle() noexcept;
+    void finish() noexcept;
 
   private:
+    void moveNativeFrom(ReadTransaction& other) noexcept;
+    void advanceBindingGeneration() noexcept;
+
     TxnPtr _txnPtr;
-    ReadFailureMode _failureMode = ReadFailureMode::Fatal;
+    // Local to this owner object; moves never import another owner's counter.
+    std::uint64_t _bindingGeneration = 1;
+    ReadFailureMode const _failureMode = ReadFailureMode::Fatal;
     friend class detail::DatabaseAccess;
+    friend class WriteTransaction;
   };
 
-  // Read-write transaction (inherits from ReadTransaction for read capabilities)
+  // Read-write transaction (inherits from ReadTransaction for read capabilities).
+  // Native writer and admission-mutex ownership stay on the creating thread,
+  // including moves and termination; MDB_NOTLS only relaxes readonly affinity.
   class [[nodiscard]] WriteTransaction final : public ReadTransaction
   {
   public:
@@ -76,8 +93,8 @@ namespace ao::lmdb
 
     WriteTransaction(WriteTransaction const&) = delete;
     WriteTransaction& operator=(WriteTransaction const&) = delete;
-    WriteTransaction(WriteTransaction&&) noexcept;
-    WriteTransaction& operator=(WriteTransaction&&) noexcept;
+    WriteTransaction(WriteTransaction&& other) noexcept;
+    WriteTransaction& operator=(WriteTransaction&& other) noexcept;
     ~WriteTransaction();
 
     Result<> commit();
@@ -90,15 +107,15 @@ namespace ao::lmdb
     bool isFinished() const noexcept { return !isActive(); }
 
   private:
+    void acquireDatabaseOpenAdmission();
+    void releaseDatabaseOpenAdmission() noexcept;
+
     explicit WriteTransaction(TxnPtr txnPtr)
       : ReadTransaction{std::move(txnPtr), ReadFailureMode::Transaction}
     {
     }
 
-    void acquireDatabaseOpenAdmission();
-
-    std::unique_lock<std::mutex> _databaseOpenLock;
-
+    std::unique_lock<std::mutex> _databaseOpenAdmission;
     friend class detail::DatabaseAccess;
   };
 } // namespace ao::lmdb
