@@ -3,6 +3,30 @@
 
 zh_Hant:table {
   messages:table {
+    track_field_recording_date { "錄音日期" }
+    track_credits_heading { "演出署名" }
+    track_credit_performer { "演奏者" }
+    track_credit_name { "名稱" }
+    track_credit_role { "角色或樂器（選填）" }
+    track_credits_add { "新增署名" }
+    track_credits_replace { "取代…" }
+    track_credits_clear { "清空此範圍" }
+    track_credits_commit { "儲存署名" }
+    track_credits_cancel { "取消" }
+    track_credit_delete { "刪除署名" }
+    track_credit_blank_name { "第 {row} 行：請輸入名稱。" }
+    track_credit_invalid_name_text { "第 {row} 行：名稱包含無效文字。" }
+    track_credit_invalid_role_text { "第 {row} 行：角色或樂器包含無效文字。" }
+    track_credit_invalid_kind { "第 {row} 行：請選擇此範圍內的有效署名類別。" }
+    track_credits_cleared { "已清空署名" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "類別" }
+    track_credits_scope { "署名範圍：{scope}" }
+    track_credits_all_kinds { "全部署名類別" }
+    track_credits_replace_scope { "取代所有選取曲目的此範圍" }
+    track_credit_move_up { "上移" }
+    track_credit_move_down { "下移" }
+    track_recording_date_invalid { "請輸入有效的 YYYY、YYYY-MM 或 YYYY-MM-DD 日期，留空則清除。" }
     tui_go_to_back { "後退" }
     tui_go_to_forward { "前進" }
     tui_go_to_cancel { "取消" }

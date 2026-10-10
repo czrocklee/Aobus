@@ -717,6 +717,7 @@ namespace ao::tui
         if (shell.isDetailVisible())
         {
           hitRegions.detailTrack = trackId;
+          auto const& credits = library.focusedCredits();
           mainContentPtr = dockDetailPane(std::move(mainContentPtr),
                                           detailPane(textCatalog,
                                                      track,
@@ -726,6 +727,7 @@ namespace ao::tui
                                                      shell.detailScroll(),
                                                      {.sections = shell.detailSections(),
                                                       .headerBoxes = &hitRegions.detailSectionBoxes,
+                                                      .credits = &credits,
                                                       .focused = shell.isDetailFocused() && !suspended}),
                                           columns,
                                           suspended ? nullptr : &hitRegions.detailToggleBox,

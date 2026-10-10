@@ -7,6 +7,7 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -71,6 +72,15 @@ namespace ao::gtk::test
     rowPtr->setYear(1999);
     REQUIRE(rowPtr->displayText(rt::TrackField::Year) != nullptr);
     CHECK(*rowPtr->displayText(rt::TrackField::Year) == "1999");
+
+    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate).empty());
+    rowPtr->setRecordingDate(library::RecordingDate{.year = 1955, .month = 6});
+    CHECK(rowPtr->recordingDate() == library::RecordingDate{.year = 1955, .month = 6});
+    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate) == "1955-06");
+    rowPtr->setRecordingDate(library::RecordingDate{.year = 1981});
+    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate) == "1981");
+    rowPtr->setRecordingDate({});
+    CHECK(rowPtr->fieldText(rt::TrackField::RecordingDate).empty());
 
     REQUIRE(rowPtr->displayText(rt::TrackField::TrackNumber) != nullptr);
     CHECK(*rowPtr->displayText(rt::TrackField::TrackNumber) == "4");

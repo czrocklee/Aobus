@@ -7,6 +7,7 @@
 #include "ArtworkView.h"
 #include "EntryCompletionAdapter.h"
 #include "NativeCallback.h"
+#include "TrackCreditsEditor.h"
 #include <ao/Contract.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -16,6 +17,7 @@
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <format>
 #include <memory>
@@ -45,6 +47,8 @@ namespace
   constexpr auto kLabelWidth = 124;
   constexpr auto kActionWidth = 28;
   constexpr auto kCornerRadius = 12;
+  // Credits follows the five ordinary Track Properties sections.
+  constexpr NSUInteger kCreditsSectionIndex = 5;
   // The List form rows are Name, Description, then the query Expression.
   constexpr NSUInteger kListExpressionFieldIndex = 2;
 
@@ -83,7 +87,9 @@ namespace
       case TrackField::Movement:
       case TrackField::Soloist:
       case TrackField::MovementNumber:
-      case TrackField::MovementTotal: return 3;
+      case TrackField::MovementTotal:
+      // Recording date is performance metadata, not technical file information.
+      case TrackField::RecordingDate: return 3;
       default: return 4;
     }
   }
@@ -118,7 +124,11 @@ namespace
 - (NSString*)text:(MessageId)message;
 - (void)buildProperties;
 - (void)buildList;
+- (void)refreshCreditsSummary;
+- (void)editCredits:(NSButton*)sender;
+- (void)creditsChanged;
 - (void)layoutForm;
+- (void)layoutDocument;
 - (void)addSection:(NSString*)title expanded:(BOOL)expanded;
 - (void)addField:(NSTextField*)field label:(NSString*)label section:(NSUInteger)section editable:(BOOL)editable;
 - (ao::appkit::EntryCompletionAdapter*)completionControllerForField:(NSControl*)field;
@@ -155,6 +165,11 @@ namespace
   BOOL _finishAfterConfirmation;
   BOOL _trackingFieldMenu;
   BOOL _renderedStale;
+  AobusTrackCreditsEditor* _creditsEditor;
+  CGFloat _creditsLayoutHeight;
+  NSStackView* _creditsSummary;
+  NSMutableArray<NSButton*>* _creditButtons;
+  NSMutableArray<NSButton*>* _creditPreviewButtons;
   std::string _displayedError;
   ao::rt::CompletionService* _completionService;
   std::vector<std::unique_ptr<ao::appkit::EntryCompletionAdapter>> _completionControllers;
@@ -224,6 +239,7 @@ namespace
       [self detachCompletionControllers];
       _fields = [NSMutableArray array];
       _fieldButtons = [NSMutableArray array];
+      _creditPreviewButtons = [NSMutableArray array];
       _groups = [NSMutableArray array];
       _groupStacks = [NSMutableArray array];
       _headings = [NSMutableArray array];
@@ -469,6 +485,18 @@ namespace
     [error.widthAnchor constraintEqualToAnchor:row.widthAnchor].active = YES;
     [_errors addObject:error];
 
+    if (auto const optKind = ao::rt::creditKindForTrackField(_model->state().fields.at(field.tag).spec.field); optKind)
+    {
+      auto* const action = [NSButton buttonWithTitle:[self text:MessageId::TrackCreditsReplace]
+                                              target:self
+                                              action:@selector(editCredits:)];
+      action.tag = static_cast<NSInteger>(*optKind);
+      action.identifier = nativeText(std::format("credit-preview-edit-{}", static_cast<std::size_t>(*optKind)));
+      [line addArrangedSubview:action];
+      // Preview controls live with the fields, not the regenerated Credits summary.
+      [_creditPreviewButtons addObject:action];
+    }
+
     if (editable != NO)
     {
       auto* const image = [NSImage imageWithSystemSymbolName:@"ellipsis"
@@ -523,6 +551,19 @@ namespace
       editable:static_cast<BOOL>(value.spec.editorKind != ao::uimodel::TrackPropertiesFormEditorKind::ReadonlyText)];
   }
 
+  [self addSection:[self text:MessageId::TrackCreditsHeading] expanded:YES];
+  _creditButtons = [NSMutableArray array];
+  _creditsSummary = [[NSStackView alloc] initWithFrame:NSZeroRect];
+  _creditsSummary.orientation = NSUserInterfaceLayoutOrientationVertical;
+  _creditsSummary.alignment = NSLayoutAttributeLeading;
+  _creditsSummary.spacing = kSectionRowGap;
+  [_groupStacks[kCreditsSectionIndex] addArrangedSubview:_creditsSummary];
+  [_creditsSummary.widthAnchor constraintEqualToAnchor:_groupStacks[kCreditsSectionIndex].widthAnchor
+                                              constant:-2 * kRowInset]
+    .active = YES;
+  [_rows[kCreditsSectionIndex] addObject:_creditsSummary];
+  [self refreshCreditsSummary];
+
   _tags = [[NSTokenField alloc] initWithFrame:NSZeroRect];
   auto* const tags = [NSMutableArray array];
 
@@ -536,6 +577,131 @@ namespace
   _tags.identifier = @"shared-tags";
   _tags.placeholderString = [self text:MessageId::AppKitAddSharedTags];
   [self addField:_tags label:[self text:MessageId::AppKitSharedTags] section:1 editable:YES];
+}
+
+- (void)refreshCreditsSummary
+{
+  for (NSUInteger index = 0; index < _creditButtons.count; ++index)
+  {
+    auto* const button = _creditButtons[index];
+    button.target = nil;
+    button.action = nullptr;
+    button.enabled = NO;
+  }
+
+  {
+    auto* const subviews = static_cast<NSArray<NSView*>*>([_creditsSummary.arrangedSubviews copy]);
+
+    for (NSUInteger index = 0; index < subviews.count; ++index)
+    {
+      auto* const view = subviews[index];
+      [_creditsSummary removeArrangedSubview:view];
+      [view removeFromSuperview];
+    }
+  }
+
+  [_creditButtons removeAllObjects];
+  auto const sections = _model->creditSections();
+
+  for (std::size_t index = 0; index <= ao::library::kCreditKindCount; ++index)
+  {
+    auto const all = index == ao::library::kCreditKindCount;
+    auto* const button =
+      [NSButton buttonWithTitle:all ? [self text:MessageId::TrackCreditsAllKinds]
+                                    : nativeText(ao::uimodel::trackCreditKindLabel(
+                                        _model->catalog(), static_cast<ao::library::CreditKind>(index)))
+                         target:self
+                         action:@selector(editCredits:)];
+    button.tag = static_cast<NSInteger>(index);
+    button.identifier = nativeText(all ? "credits-edit-all" : std::format("credits-edit-{}", index));
+    button.bezelStyle = NSBezelStyleRounded;
+    [_creditsSummary addArrangedSubview:button];
+    [_creditButtons addObject:button];
+  }
+
+  for (auto const& row : ao::uimodel::formatTrackCreditDisplayRows(_model->catalog(), sections))
+  {
+    auto* const label = textLabel(
+      nativeText(row.kindLabel + " — " + row.name + (row.role.empty() ? "" : " (" + row.role + ")")), kBodySize);
+    [_creditsSummary addArrangedSubview:label];
+    [label.widthAnchor constraintEqualToAnchor:_creditsSummary.widthAnchor].active = YES;
+  }
+}
+
+- (void)editCredits:(NSButton*)sender
+{
+  nativeCallback(
+    [&]
+    {
+      if (_confirmingDiscard != NO || _trackingFieldMenu != NO || _panel == nil || sender == nil ||
+          ([_creditButtons indexOfObjectIdenticalTo:sender] == NSNotFound &&
+           [_creditPreviewButtons indexOfObjectIdenticalTo:sender] == NSNotFound))
+      {
+        return;
+      }
+
+      auto const scope = std::cmp_equal(sender.tag, ao::library::kCreditKindCount)
+                           ? ao::uimodel::allTrackCreditKinds()
+                           : ao::uimodel::trackCreditScope(static_cast<ao::library::CreditKind>(sender.tag));
+
+      if (auto res = _model->beginCreditsEdit(scope); !res)
+      {
+        return;
+      }
+
+      [_panel makeFirstResponder:sender];
+      [self dismissCompletionControllers];
+      __weak AobusLibraryEditor* weakSelf = self;
+      _creditsEditor = [[AobusTrackCreditsEditor alloc] initWithModel:*_model
+                                                           completion:*_completionService
+                                                              changed:^{
+                                                                if (auto* const owner = weakSelf; owner != nil)
+                                                                {
+                                                                  [owner creditsChanged];
+                                                                }
+                                                              }];
+      [_groupStacks[kCreditsSectionIndex] addArrangedSubview:_creditsEditor.view];
+      [_creditsEditor.view.widthAnchor constraintEqualToAnchor:_creditsSummary.widthAnchor].active = YES;
+      [_rows[kCreditsSectionIndex] addObject:_creditsEditor.view];
+      _headings[kCreditsSectionIndex].state = NSControlStateValueOn;
+      [self refresh];
+      [self layoutForm];
+      [_creditsEditor.view scrollRectToVisible:_creditsEditor.view.bounds];
+    });
+}
+
+- (void)creditsChanged
+{
+  if (_model->creditsEditor().isEditing())
+  {
+    // The child owns validation rendering; unchanged geometry must not relayout unrelated sections.
+    // Independent model invalidation still uses refresh for stale and modal admission.
+    if (_creditsEditor != nil)
+    {
+      // Same-height structural edits still need new descendant frames before focus and scrolling.
+      [_creditsEditor.view layoutSubtreeIfNeeded];
+
+      if (_creditsLayoutHeight != _creditsEditor.view.fittingSize.height)
+      {
+        [self layoutDocument];
+      }
+    }
+
+    return;
+  }
+
+  if (_creditsEditor != nil)
+  {
+    [_creditsEditor detach];
+    [_rows[kCreditsSectionIndex] removeObjectIdenticalTo:_creditsEditor.view];
+    [_groupStacks[kCreditsSectionIndex] removeArrangedSubview:_creditsEditor.view];
+    [_creditsEditor.view removeFromSuperview];
+    _creditsEditor = nil;
+    [self refreshCreditsSummary];
+  }
+
+  [self refresh];
+  [self layoutForm];
 }
 
 - (void)buildList
@@ -617,13 +783,31 @@ namespace
   }
 
   [_content layoutSubtreeIfNeeded];
+  [self layoutDocument];
+}
+
+- (void)layoutDocument
+{
   auto const width = std::max(1.0, _scroll.contentSize.width);
-  _document.frame = NSMakeRect(0, 0, width, std::max(1.0, _documentStack.fittingSize.height));
+  auto const frame = NSMakeRect(0, 0, width, std::max(_scroll.contentSize.height, _documentStack.fittingSize.height));
+
+  if (::NSEqualRects(_document.frame, frame) == NO)
+  {
+    _document.frame = frame;
+  }
+
   [_document layoutSubtreeIfNeeded];
-  auto const contentHeight = _documentStack.fittingSize.height;
-  _document.frame = NSMakeRect(0, 0, width, std::max(_scroll.contentSize.height, contentHeight));
+  auto const fittedFrame =
+    NSMakeRect(0, 0, width, std::max(_scroll.contentSize.height, _documentStack.fittingSize.height));
+
+  if (::NSEqualRects(_document.frame, fittedFrame) == NO)
+  {
+    _document.frame = fittedFrame;
+  }
+
   [_scroll tile];
   [_scroll reflectScrolledClipView:_scroll.contentView];
+  _creditsLayoutHeight = _creditsEditor != nil ? _creditsEditor.view.fittingSize.height : 0.0;
 }
 
 - (void)refresh
@@ -673,8 +857,22 @@ namespace
   _message.toolTip = _message.stringValue;
   _save.enabled =
     static_cast<BOOL>(!state.busy && !state.stale && !state.completed &&
-                      (state.dirty || state.kind == ao::appkit::LibraryEditorKind::List || state.optDeletion));
+                      (state.dirty || state.kind == ao::appkit::LibraryEditorKind::List || state.optDeletion) &&
+                      !_model->creditsEditor().isEditing());
   _save.hidden = static_cast<BOOL>(state.kind == ao::appkit::LibraryEditorKind::Membership);
+  [_creditsEditor refreshWithBlocked:static_cast<BOOL>(_confirmingDiscard != NO || _trackingFieldMenu != NO)];
+  _save.keyEquivalent = _model->creditsEditor().isEditing() || _save.hasDestructiveAction != NO ? @"" : @"\r";
+  _cancel.keyEquivalent = _model->creditsEditor().isEditing() ? @"" : @"\033";
+
+  for (auto const& buttons : std::array<NSMutableArray<NSButton*>*, 2>{_creditButtons, _creditPreviewButtons})
+  {
+    for (NSUInteger index = 0; index < buttons.count; ++index)
+    {
+      buttons[index].enabled =
+        static_cast<BOOL>(!state.busy && !state.stale && !state.completed && !_model->creditsEditor().isEditing());
+    }
+  }
+
   _cancel.enabled = static_cast<BOOL>(!state.busy);
   _tags.enabled = static_cast<BOOL>(!state.busy);
   _tags.editable = static_cast<BOOL>(!state.busy && !state.stale);
@@ -697,6 +895,13 @@ namespace
       if (restoreStale)
       {
         field.stringValue = nativeText(value.text);
+      }
+
+      if (auto const optKind = ao::rt::creditKindForTrackField(value.spec.field); optKind)
+      {
+        auto const sections = _model->creditSections();
+        field.stringValue = nativeText(ao::uimodel::formatTrackCreditSectionSummary(
+          _model->catalog(), sections[static_cast<std::size_t>(*optKind)]));
       }
 
       field.placeholderString = value.mixed && !value.changed ? [self text:MessageId::TrackMultipleValues] : @"—";
@@ -752,7 +957,7 @@ namespace
   for (NSUInteger buttonIndex = 0; buttonIndex < _fieldButtons.count; ++buttonIndex)
   {
     auto* const button = _fieldButtons[buttonIndex];
-    button.enabled = static_cast<BOOL>(!state.busy && !state.stale);
+    button.enabled = static_cast<BOOL>(!state.busy && !state.stale && !_model->creditsEditor().isEditing());
   }
 
   if (state.error != _displayedError)
@@ -897,7 +1102,7 @@ namespace
     return;
   }
 
-  if (_model->state().dirty)
+  if (_model->state().dirty || _model->creditsEditor().isEditing())
   {
     auto* const alert = [[NSAlert alloc] init];
     alert.messageText = [self text:MessageId::AppKitDiscardQuestion];
@@ -909,6 +1114,7 @@ namespace
     // Let the application join this close decision when Quit arrives later.
     alert.window.preventsApplicationTerminationWhenModal = NO;
     _confirmingDiscard = YES;
+    [_creditsEditor refreshWithBlocked:YES];
     _discardAlert = alert;
     // The sheet keeps its editor alive until the nested close transaction settles.
     // Its attached parent prevents the LibrarySession from being released first.
@@ -933,6 +1139,7 @@ namespace
                         {
                           auto const completed = owner->_closeCompletion;
                           owner->_closeCompletion = nil;
+                          [owner refresh];
 
                           if (completed != nil)
                           {
@@ -967,7 +1174,24 @@ namespace
 
   auto* const panel = _panel;
   _panel = nil;
+
+  // Revoke entrypoints before child teardown or endSheet can deliver focus callbacks.
+  for (auto const& buttons : std::array<NSMutableArray<NSButton*>*, 2>{_creditButtons, _creditPreviewButtons})
+  {
+    for (NSUInteger index = 0; index < buttons.count; ++index)
+    {
+      auto* const button = buttons[index];
+      button.target = nil;
+      button.action = nullptr;
+      button.enabled = NO;
+    }
+
+    [buttons removeAllObjects];
+  }
+
   // Detach the borrowed-field controllers before the panel tears its fields down.
+  [_creditsEditor detach];
+  _creditsEditor = nil;
   [self detachCompletionControllers];
   [_parent endSheet:panel];
   _model->cancel();

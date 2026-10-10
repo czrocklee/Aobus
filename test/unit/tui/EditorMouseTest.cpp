@@ -122,7 +122,8 @@ namespace ao::tui::test
     typeText(editor, "x");
     auto rendered = renderElement(editor.renderModal(80, 24), 80, 24);
     REQUIRE(editor.tryHandleEvent(clickText(rendered.screen, "Esc")));
-    CHECK(editor.isConfirmingDiscard());
+    REQUIRE(editor.isConfirmingDiscard());
+    CHECK(editor.buildPatch().metadata.optTitle == "Bluex");
     rendered = renderElement(editor.renderModal(80, 24), 80, 24);
     REQUIRE(editor.tryHandleEvent(clickText(rendered.screen, "[Esc]")));
     CHECK_FALSE(editor.isConfirmingDiscard());
@@ -130,8 +131,18 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::None);
     rendered = renderElement(editor.renderModal(80, 24), 80, 24);
     REQUIRE(editor.tryHandleEvent(clickText(rendered.screen, "Esc")));
+    REQUIRE(editor.isConfirmingDiscard());
     rendered = renderElement(editor.renderModal(80, 24), 80, 24);
+
+    // Category previews also advertise [Enter]; clicking one cannot answer the prompt.
     REQUIRE(editor.tryHandleEvent(clickText(rendered.screen, "[Enter]")));
+    CHECK(editor.isConfirmingDiscard());
+    CHECK_FALSE(editor.isEditingCredits());
+    CHECK(editor.takeRequest() == TrackEditorRequest::None);
+    CHECK(editor.buildPatch().metadata.optTitle == "Bluex");
+    rendered = renderElement(editor.renderModal(80, 24), 80, 24);
+    REQUIRE(editor.tryHandleEvent(clickText(rendered.screen, "[Enter]  [Esc]")));
+    CHECK_FALSE(editor.isConfirmingDiscard());
     CHECK(editor.takeRequest() == TrackEditorRequest::Close);
   }
 

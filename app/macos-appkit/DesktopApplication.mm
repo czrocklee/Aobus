@@ -24,10 +24,12 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -1013,10 +1015,21 @@ namespace ao::appkit
   auto const hadSelection = !_inspectorSelection.empty();
   _inspectorSelection = selection;
   _layoutPending = static_cast<BOOL>(_layoutPending != NO || hadSelection != !selection.empty());
-  auto const optRow =
-    selection.size() == 1 ? _sessionPtr->runtime().library().snapshot().trackRow(selection.front()) : std::nullopt;
+  auto optRow = std::optional<ao::rt::TrackRow>{};
+  {
+    auto const snapshot = _sessionPtr->runtime().library().snapshot();
+    optRow = selection.size() == 1 ? snapshot.trackRow(selection.front()) : std::nullopt;
+  }
+
+  // Display skips unavailable tracks and resolves only common credit sections.
+  // Editor admission still captures every requested target through its own binding.
+  auto const detail = _sessionPtr->runtime()
+                        .workspace()
+                        .detailProjection(ao::rt::ExplicitSelectionTarget{.trackIds = selection})
+                        ->snapshot();
   [_trackInspector renderSelectionCount:selection.size()
                                     row:optRow
+                                credits:detail.credits
                               canReveal:static_cast<BOOL>(_closing == NO && optRow && optRow->optUriPath)];
 }
 

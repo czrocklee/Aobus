@@ -60,7 +60,8 @@ int main(int argc, char** argv)
     }
 
     if (launch.stateRoot.empty() || !launch.optRequest ||
-        (scenario != "desktop" && scenario != "authoring" && scenario != "presentation" && scenario != "media"))
+        (scenario != "desktop" && scenario != "authoring" && scenario != "presentation" && scenario != "media" &&
+         scenario != "credits-controls" && scenario != "credits-previews"))
     {
       return 2;
     }
@@ -116,6 +117,14 @@ int main(int argc, char** argv)
     else if (scenario == "media")
     {
       runScenario = ao::appkit::test::runMediaScenario;
+    }
+    else if (scenario == "credits-controls")
+    {
+      runScenario = ao::appkit::test::runCreditsControlsScenario;
+    }
+    else if (scenario == "credits-previews")
+    {
+      runScenario = ao::appkit::test::runCreditsPreviewsScenario;
     }
 
     auto const result = runScenario(launch.optRequest->libraryRoot, launch.stateRoot);

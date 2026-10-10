@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/FileTimestamp.h>
+#include <ao/library/RecordingDate.h>
 
 #include <chrono>
 #include <cstdint>
@@ -15,12 +16,14 @@ namespace ao::rt
   using TrackFieldDuration = std::chrono::milliseconds;
 
   // Absence is std::monostate. A present modification time is a Unix/POSIX
-  // FileTimestamp whose fraction is preserved for exact equality.
+  // FileTimestamp whose fraction is preserved for exact equality. Recording
+  // dates retain their exact components and partial-date precision.
   using TrackFieldRawValue = std::variant<std::monostate,
                                           std::string,
                                           std::uint16_t,
                                           std::uint32_t,
                                           std::uint64_t,
                                           TrackFieldDuration,
-                                          FileTimestamp>;
+                                          FileTimestamp,
+                                          library::RecordingDate>;
 } // namespace ao::rt

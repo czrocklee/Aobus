@@ -245,7 +245,8 @@ namespace ao::winui::layout
                             _session.listPresentations(),
                             _config.listCommands.createList,
                             _session.textCatalog(),
-                            report);
+                            report,
+                            _config.editCredits);
     registerTrackTableComponent(
       _registry,
       _config.trackList,

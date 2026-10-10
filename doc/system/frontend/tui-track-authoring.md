@@ -19,8 +19,8 @@ The controller captures that vector once.
 Nothing during the editor's lifetime adds, removes, or reorders those ids; changing the target set requires closing and opening a new editor.
 
 Preparation is one attempt on the callback executor.
-It begins one `TrackAuthoringSession` over the complete captured vector, then reads every required field, target identity, tag count, and suggestion from one `LibrarySnapshot`.
-The snapshot revision must equal the session's bound revision, so the displayed baseline describes the exact revision through which the draft can write.
+It opens one short-lived `LibrarySnapshot`, binds a `TrackAuthoringSession` against that snapshot over the complete captured vector, and copies every required field, per-kind Credits baseline, target identity, tag count, and suggestion from it.
+The snapshot is released before editor installation, submission, or waiting; the owning baseline describes exactly the revision through which the draft can write.
 Tags-only preparation omits the metadata/property form but retains target identities and tag membership.
 
 An empty selection, a bind failure, and a revision mismatch all refuse without opening, each posting its own Warning.
@@ -55,7 +55,7 @@ Confirmation and diagnostic text wraps to the modal width; recovery shortcuts oc
 ## Full Properties editor
 
 The full editor organizes authoring into `Metadata`, `Tags`, read-only `Properties`, and, for multi-track selections, `Tracks` pages.
-`Tab` and `Shift-Tab` cycle forward and backward through available pages from any control, search input, or completion popup.
+`Tab` and `Shift-Tab` cycle forward and backward through available pages, except while the Credits child owns those keys for its controls.
 Page changes preserve metadata and tag draft state while retiring page-local completion or query state.
 Page editors retain their own baseline and draft values rather than borrowing the enclosing modal's members.
 
@@ -76,7 +76,8 @@ A draft can be submitted only when it has effective intent and every included me
 
 ### Metadata completion
 
-Artist, Album, Album Artist, Genre, Composer, Conductor, Ensemble, Work, Movement, and Soloist query the runtime `CompletionService` synchronously on the event thread.
+Artist, Album, Album Artist, Genre, Composer, Work, and Movement query the runtime `CompletionService` synchronously on the event thread.
+Category names are read-only previews; their completion belongs to the Credits child.
 Non-empty typing or `Ctrl-N` requests candidates in an anchored popup.
 `Up`/`Down` and `PageUp`/`PageDown` navigate candidates; `Enter` replaces the targeted field text through checked range replacement with `tryReplaceRange`; and `Esc` closes completion without dismissing the editor.
 
@@ -87,6 +88,39 @@ Clicking a candidate accepts that candidate through the same replacement path.
 
 Every chord the popup declines—`Ctrl-S`, `Ctrl-R`, `Ctrl-D`, `Ctrl-G`, `Tab`, and `Shift-Tab`—closes it before the editor acts, so no confirmation prompt or switched page is drawn under candidates that still appear to own input.
 Caret navigation (`Left`, `Right`, `Home`, `End`, `Ctrl-A`, `Ctrl-E`, `Alt-B`, `Alt-F`, `Ctrl-Left`, and `Ctrl-Right`) also closes completion rather than leaving candidates attached to an obsolete caret range.
+
+### Credits list editing
+
+Conductor, Ensemble, and Soloist rows are read-only previews of the first name plus a localized additional-entry count, including duplicates.
+`Enter` or clicking a category preview opens the shared list editor with that kind locked.
+The full Credits row (`Enter`, or `Ctrl-O` anywhere on Metadata) opens all four kinds with an editable kind control.
+Neither route turns a preview string into a scalar mutation.
+
+The focused detail pane opens the same child over its focused track: `Ctrl-K` selects all kinds, while `1` through `4` select Conductor, Ensemble, Soloist, and Performer respectively.
+The pane displays those controls while focused, including when Credits are empty.
+Its complete owning per-kind facts are cached by focused track and observed library revision, not materialized into table rows or reread on each redraw.
+Detail rows retain every name, kind, and optional role; table rows retain only first-name/count projections.
+
+The Credits child uses `Tab`/`Shift-Tab` to select Name, Role, Kind, Add, Delete, Move Up, Move Down, Replace Scope, Clear, Commit, or Cancel.
+`Up`/`Down` select an entry; `Enter` activates a control.
+Name and Role use the ordinary grapheme-aware input; `Ctrl-N` requests name completion for the selected kind or global role completion.
+Completion arrows select candidates, `Enter` accepts, and `Esc` dismisses completion first.
+Kind activation cycles the four kinds only in a full-scope editor and appends the entry to the destination section.
+Move controls reorder only within the current kind.
+Labels wrap and the focused control scrolls into view in constrained layouts.
+
+Common scopes load their complete lists, including roles, order, and duplicates, even when other categories differ.
+Mixed scopes start without a seeded draft and require the explicit Replace Scope action before editing; accepting an untouched empty replacement cannot clear them.
+Clear is a distinct action under the visible scope and captured target count.
+Validation retains the draft and focuses the first invalid row on Commit.
+`Ctrl-S` accepts the child into the parent draft; it does not submit to the library.
+`Esc` cancels only the child and restores the prior pending parent state.
+Opening or cancelling emits no replacement.
+Sequential accepted scopes overlay one pending replacement and reopen from that pending state, never from a fresh unrelated snapshot.
+
+An active child blocks parent Apply and patch construction, even when tags or ordinary metadata are dirty.
+After accepting the child, parent `Ctrl-S` submits Credits, metadata, and tags together through the captured session.
+Busy and stale outcomes preserve the draft; `Ctrl-R` requires explicit confirmation before discarding an active or pending Credits draft.
 
 ### Tags page
 
@@ -198,6 +232,7 @@ The general exit sources, interaction retirement, persistence checkpoints, playb
 - [`TrackPropertiesEditor.h`](../../../app/tui/TrackPropertiesEditor.h) defines modes, pages, status, owner requests, and patch summaries; [`TrackPropertiesEditor.cpp`](../../../app/tui/TrackPropertiesEditor.cpp) owns full-modal input, confirmation, page composition, validation gating, and combined patch construction.
 - [`TrackPropertiesEditorTagPopover.cpp`](../../../app/tui/TrackPropertiesEditorTagPopover.cpp) owns tags-only rendering, query/result focus, dismissal, and local input.
 - [`TrackMetadataEditor.cpp`](../../../app/tui/TrackMetadataEditor.cpp) owns metadata rows, explicit intent, codec validation, completion, and read-only Properties projection.
+- [`TrackCreditsEditor.cpp`](../../../app/tui/TrackCreditsEditor.cpp) binds keyboard list controls and scoped completion to the shared Credits model; the Properties form owns pending replacements and the active child.
 - [`TrackTagEditor.cpp`](../../../app/tui/TrackTagEditor.cpp) owns tag intent, Unicode query matching, suggestion capping, creation, and patch projection.
 - [`TrackAuthoringSessions.h`](../../../app/include/ao/uimodel/library/track/TrackAuthoringSessions.h) defines stable targets, bound revision, invalidation, and the retained asynchronous facade; [`TrackAuthoringSession.cpp`](../../../app/uimodel/library/track/TrackAuthoringSession.cpp) owns Session State and result reconciliation.
 - [`ExitController.cpp`](../../../app/tui/ExitController.cpp) owns the idempotent pending-write exit gate; [`App.cpp`](../../../app/tui/App.cpp) wires pending-state inspection, settlement notification, waiting input ownership, and status rendering.
@@ -206,6 +241,7 @@ The general exit sources, interaction retirement, persistence checkpoints, playb
 
 - [`TrackEditControllerTest.cpp`](../../../test/unit/tui/TrackEditControllerTest.cpp) protects whole-selection preparation and refusal, one active editor, callback-executor submission, unified patches, staleness, reload rebinding, tags-only target retention, and settlement after editor/controller retirement.
 - [`TrackPropertiesEditorTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTest.cpp) protects modal consumption, page focus, mixed-value intent, explicit clear/restore, validation, patch construction, confirmations, submission-state rendering, short-terminal layout, and cross-page draft preservation.
+- [`TrackCreditsEditorTest.cpp`](../../../test/unit/tui/TrackCreditsEditorTest.cpp) protects scoped keyboard controls, mixed intent, validation focus, attribute preservation, and constrained layouts; [`LibraryCreditsCacheTest.cpp`](../../../test/unit/tui/LibraryCreditsCacheTest.cpp) protects owning focused facts across redraw, focus, publication, deletion, and reset.
 - [`TrackPropertiesEditorCompletionTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorCompletionTest.cpp) protects completion request and acceptance, six-row paging, dismissal ownership, caret invalidation, and selected-candidate visibility in short terminals.
 - [`TrackPropertiesEditorTagsTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTagsTest.cpp) protects three-state intent, Unicode matching and normalization, creation priority, query ownership, suggestion caps, wide queries, and membership counts.
 - [`TrackTagPopoverTest.cpp`](../../../test/unit/tui/TrackTagPopoverTest.cpp) protects tags-only patches, query/result focus, direct cancellation, localized Close/Discard transitions, mouse and narrow-layout targets, and submission/recovery controls.

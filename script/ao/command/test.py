@@ -90,7 +90,14 @@ SUITES = {
     "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
 }
 
-APPKIT_SCENARIOS = ("desktop", "authoring", "presentation", "media")
+APPKIT_SCENARIOS = (
+    "desktop",
+    "authoring",
+    "presentation",
+    "media",
+    "credits-controls",
+    "credits-previews",
+)
 APPKIT_SUCCESSOR_TIMEOUT_SECONDS = 60.0
 APPKIT_PARENT_TIMEOUT_SECONDS = 120.0
 APPKIT_PARENT_TERMINATE_SECONDS = 5.0

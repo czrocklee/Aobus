@@ -3,6 +3,30 @@
 
 zh_Hans:table {
   messages:table {
+    track_field_recording_date { "录音日期" }
+    track_credits_heading { "演出署名" }
+    track_credit_performer { "演奏者" }
+    track_credit_name { "名称" }
+    track_credit_role { "角色或乐器（可选）" }
+    track_credits_add { "添加署名" }
+    track_credits_replace { "替换…" }
+    track_credits_clear { "清空此范围" }
+    track_credits_commit { "保存署名" }
+    track_credits_cancel { "取消" }
+    track_credit_delete { "删除署名" }
+    track_credit_blank_name { "第 {row} 行：请输入名称。" }
+    track_credit_invalid_name_text { "第 {row} 行：名称包含无效文本。" }
+    track_credit_invalid_role_text { "第 {row} 行：角色或乐器包含无效文本。" }
+    track_credit_invalid_kind { "第 {row} 行：请选择此范围内的有效署名类别。" }
+    track_credits_cleared { "已清空署名" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "类别" }
+    track_credits_scope { "署名范围：{scope}" }
+    track_credits_all_kinds { "全部署名类别" }
+    track_credits_replace_scope { "替换所有选中曲目的此范围" }
+    track_credit_move_up { "上移" }
+    track_credit_move_down { "下移" }
+    track_recording_date_invalid { "请输入有效的 YYYY、YYYY-MM 或 YYYY-MM-DD 日期，留空则清除。" }
     tui_go_to_back { "后退" }
     tui_go_to_forward { "前进" }
     tui_go_to_cancel { "取消" }

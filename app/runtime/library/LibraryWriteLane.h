@@ -47,6 +47,8 @@ namespace ao::library
 
 namespace ao::rt
 {
+  class LibrarySnapshot;
+
   template<typename Value>
   struct Unchanged final
   {
@@ -326,6 +328,8 @@ namespace ao::rt
     async::Subscription onAvailabilityChanged(
       compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
+    Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds,
+                                               LibrarySnapshot const& snapshot) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
     static BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision);

@@ -63,7 +63,8 @@ owner:
 | `WriteTransaction::Options::optInjectedCommitFailure` | Rollback and publication behavior for a native commit result that cannot be induced portably. | Data-only input; production roots cannot reference it, and it invokes no callback while locks are held. |
 | `library::detail::OpenValidationMetrics` | Exact named-DBI-open counts and operation counts for the open gate's linear Track/manifest growth law. | Source-private observation; only `MusicLibrary` may record/reset it and production roots cannot consume it. |
 | `lmdb::detail::ReadFaultInjection` | Admission, live-read, and writer-read ownership for a native LMDB fault without damaging a mapped environment. | Source-private, single-use, same-thread scope; destruction requires that the next read consumed it, and production roots cannot reference it. |
-| `lmdb::detail::DatabaseOpenAdmissionProbe` | Deterministic observation that a second transaction reached the contended process-wide DBI-open gate. | Source-private, same-thread observation; production roots cannot construct it, and it does not alter gate behavior. |
+| `lmdb::detail::DatabaseOpenAdmissionProbe` | Deterministic observation that a second writer reached the contended process-wide DBI-open gate after native writer begin. | Source-private, same-thread observation; production roots cannot construct it, and it does not alter gate behavior. |
+| `gtk::layout::detail::TrackFieldGridOperationProbe` | Admitted-to-terminal field-grid metadata workflow observation before negative frontend assertions. | Source-private, live-owner/GTK-executor observation; only the field-grid implementation may reference it outside tests. It does not schedule, mutate, or cancel work. |
 
 These seams do not authorize application behavior, arbitrary collaborator
 control, or a general test API. Adding another seam requires updating this
@@ -115,6 +116,8 @@ When a mocked interface must be returned as `std::unique_ptr`, use existing test
 
 - Use `ao::test::TempDir` for unit tests needing files or LMDB storage.
 - Use integration test data only for integration-style behavior such as real codecs or scanned audio files.
+- `lmdb::test::readExistingIntegerKeyRecord` independently owns a native readonly environment and transaction. Close every other environment owner for the path before invoking it. It checks exact integer-key flags, uses native uint32 keys and UTF-8 paths, copies bytes before teardown, and reports missing databases or native faults as fixture errors rather than missing records. It performs no creation or repair; byte-for-byte payload/catalog assertions exclude lock coordination files.
+- Integer read-binding generation increments and their maximum invariant remain local to `Transaction.cpp`. There is no successor seam or private counter setter; practical lifecycle/ABA tests do not claim dynamic maximum-branch coverage.
 - Keep malformed fixtures tiny and locally explained by the test name/setup.
 - Open test files in binary mode whenever assertions compare exact bytes or preserve existing bytes; Windows text mode translates line endings and invalidates byte-for-byte evidence.
 - Restore permissions in RAII helpers when testing filesystem permission errors.

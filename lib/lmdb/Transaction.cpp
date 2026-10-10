@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <limits>
 #include <mutex>
 #include <semaphore>
 #include <thread>
@@ -22,10 +23,11 @@ namespace ao::lmdb
 {
   namespace
   {
-    std::mutex& databaseOpenMutex()
+    std::mutex& databaseOpenAdmission()
     {
-      static auto mutex = std::mutex{};
-      return mutex;
+      // Only writers open DBIs, after acquiring their native writer lock.
+      static auto admission = std::mutex{};
+      return admission;
     }
 
     detail::DatabaseOpenAdmissionProbe*& databaseOpenAdmissionProbe() noexcept
@@ -66,6 +68,63 @@ namespace ao::lmdb
       probe->_contentionSignal.release();
     }
   } // namespace detail
+
+  ReadTransaction::~ReadTransaction()
+  {
+    finish();
+  }
+
+  ReadTransaction::ReadTransaction(ReadTransaction&& other) noexcept
+  {
+    AO_EXPECTS(
+      other._failureMode == ReadFailureMode::Fatal, "Cannot transfer writer ownership through ReadTransaction");
+    moveNativeFrom(other);
+  }
+
+  ReadTransaction& ReadTransaction::operator=(ReadTransaction&& other) noexcept
+  {
+    AO_EXPECTS(_failureMode == ReadFailureMode::Fatal && other._failureMode == ReadFailureMode::Fatal,
+               "Cannot transfer writer ownership through ReadTransaction");
+
+    if (this != &other)
+    {
+      moveNativeFrom(other);
+    }
+
+    return *this;
+  }
+
+  void ReadTransaction::moveNativeFrom(ReadTransaction& other) noexcept
+  {
+    // This private path also serves complete writer moves, never base slicing.
+    AO_INVARIANT(_failureMode == other._failureMode);
+    advanceBindingGeneration();
+    finish();
+    other.advanceBindingGeneration();
+    _txnPtr = std::move(other._txnPtr);
+  }
+
+  MDB_txn* ReadTransaction::releaseHandle() noexcept
+  {
+    if (_txnPtr != nullptr)
+    {
+      advanceBindingGeneration();
+    }
+
+    return _txnPtr.release();
+  }
+
+  void ReadTransaction::finish() noexcept
+  {
+    auto transactionPtr = TxnPtr{releaseHandle()};
+  }
+
+  void WriteTransaction::releaseDatabaseOpenAdmission() noexcept
+  {
+    // This checks wrapper ownership, not completion of a native call after releaseHandle().
+    AO_INVARIANT(_txnPtr == nullptr, "Cannot release database-open admission while owning a native transaction");
+    _databaseOpenAdmission = {};
+  }
 
   void ReadTransaction::MdbTxnDeleter::operator()(MDB_txn* txn) const noexcept
   {
@@ -108,8 +167,25 @@ namespace ao::lmdb
     return WriteTransaction{std::move(*txnPtrRes)};
   }
 
-  WriteTransaction::WriteTransaction(WriteTransaction&&) noexcept = default;
-  WriteTransaction& WriteTransaction::operator=(WriteTransaction&&) noexcept = default;
+  WriteTransaction::WriteTransaction(WriteTransaction&& other) noexcept
+    : ReadTransaction{TxnPtr{}, ReadFailureMode::Transaction}
+    , _databaseOpenAdmission{std::move(other._databaseOpenAdmission)}
+  {
+    moveNativeFrom(other);
+  }
+
+  WriteTransaction& WriteTransaction::operator=(WriteTransaction&& other) noexcept
+  {
+    if (this != &other)
+    {
+      // End the replaced native writer before releasing its admission.
+      abort();
+      moveNativeFrom(other);
+      _databaseOpenAdmission = std::move(other._databaseOpenAdmission);
+    }
+
+    return *this;
+  }
 
   WriteTransaction::~WriteTransaction()
   {
@@ -118,20 +194,25 @@ namespace ao::lmdb
 
   void WriteTransaction::acquireDatabaseOpenAdmission()
   {
-    AO_EXPECTS(isActive(), "Cannot open a database with a finished write transaction");
+    AO_EXPECTS(isActive(), "Cannot open a database with a finished transaction");
 
-    if (!_databaseOpenLock.owns_lock())
+    if (!_databaseOpenAdmission.owns_lock())
     {
-      auto lock = std::unique_lock{databaseOpenMutex(), std::defer_lock};
+      _databaseOpenAdmission = std::unique_lock{databaseOpenAdmission(), std::defer_lock};
 
-      if (!lock.try_lock())
+      if (!_databaseOpenAdmission.try_lock())
       {
         detail::recordDatabaseOpenAdmissionContention();
-        lock.lock();
+        _databaseOpenAdmission.lock();
       }
-
-      _databaseOpenLock = std::move(lock);
     }
+  }
+
+  void ReadTransaction::advanceBindingGeneration() noexcept
+  {
+    AO_INVARIANT(
+      _bindingGeneration != std::numeric_limits<std::uint64_t>::max(), "LMDB transaction binding generation exhausted");
+    ++_bindingGeneration;
   }
 
   Result<> WriteTransaction::commit()
@@ -139,16 +220,13 @@ namespace ao::lmdb
     AO_EXPECTS(isActive(), "LMDB write transaction is already finished");
 
     int const rc = ::mdb_txn_commit(releaseHandle());
-    _databaseOpenLock = {};
+    releaseDatabaseOpenAdmission();
     return resultFromCode("mdb_txn_commit", rc);
   }
 
   void WriteTransaction::abort() noexcept
   {
-    {
-      auto transactionPtr = TxnPtr{releaseHandle()};
-    }
-
-    _databaseOpenLock = {};
+    finish();
+    releaseDatabaseOpenAdmission();
   }
 } // namespace ao::lmdb

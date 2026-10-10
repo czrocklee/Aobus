@@ -5,6 +5,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/yaml/RymlAdapter.h>
 
+#include <CLI/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -143,6 +144,22 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(updateTree.rootref()["updated"]) == "1");
     CHECK(yaml::scalarView(updateTree.rootref()["tagChanges"][0]["addedTags"][0]) == "fav");
 
+    result = fixture.run({"-O", "json", "track", "update", "1", "--set=source=[manual]", "--add-tag=[literal]"});
+    REQUIRE(result.status == 0);
+    requireJsonLineParses(result.out);
+    auto literalUpdate = parseYaml(result.out);
+    CHECK(yaml::scalarView(literalUpdate.rootref()["updated"]) == "1");
+    CHECK(yaml::scalarView(literalUpdate.rootref()["tagChanges"][0]["addedTags"][0]) == "[literal]");
+    result =
+      fixture.run({"track", "update", "1", "--title", "Must not commit", "--credit=true", "performer", "Name", ""});
+    CHECK(result.status == static_cast<int>(CLI::ExitCodes::ArgumentMismatch));
+    CHECK(result.out.empty());
+    result = fixture.run({"-O", "json", "track", "show", "1"});
+    REQUIRE(result.status == 0);
+    auto afterRejectedCredit = parseYaml(result.out);
+    CHECK(yaml::scalarView(afterRejectedCredit.rootref()["title"]) == "Renamed");
+    CHECK(yaml::scalarView(afterRejectedCredit.rootref()["custom"]["source"]) == "[manual]");
+
     result = fixture.run({"-O", "yaml", "track", "delete", "1"});
     REQUIRE(result.status == 0);
     auto deleteTree = parseYaml(result.out);
@@ -258,5 +275,17 @@ namespace ao::cli::test
     tree = parseYaml(result.out);
     REQUIRE(tree.rootref()["resources"].is_seq());
     CHECK(tree.rootref()["resources"].num_children() == 0);
+
+    auto const trackId = fixture.addTrack(library::test::makeEmptyTrackSpec("empty-credits.flac"));
+    result = fixture.run({"-O", "yaml", "track", "show", std::to_string(trackId.raw())});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    auto const track = tree.rootref()["tracks"][0];
+    REQUIRE(track["credits"].is_seq());
+    CHECK(track["credits"].num_children() == 0);
+    CHECK_FALSE(track.has_child("conductor"));
+    CHECK_FALSE(track.has_child("ensemble"));
+    CHECK_FALSE(track.has_child("soloist"));
+    CHECK_FALSE(track.has_child("musicians"));
   }
 } // namespace ao::cli::test

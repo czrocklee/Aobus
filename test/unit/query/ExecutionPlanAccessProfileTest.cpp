@@ -209,12 +209,12 @@ namespace ao::query::test
         CHECK(plan.accessProfile == AccessProfile::ColdOnly);
       }
 
-      // Cold dictionary fields accept equality and string-valued ordering,
+      // Cold dictionary and credit member fields accept string equality,
       // but not the numeric ordered comparison used above.
       auto workPlan = compileOk(parseOk("$work = w"));
       CHECK(workPlan.accessProfile == AccessProfile::ColdOnly);
 
-      for (auto const* field : {"$conductor", "$ensemble", "$soloist", "$movement"})
+      for (auto const* field : {"$conductor", "$ensemble", "$soloist", "$performer", "$credit", "$movement"})
       {
         CAPTURE(field);
         auto const plan = compileOk(parseOk(std::string{field} + " = Bach"));

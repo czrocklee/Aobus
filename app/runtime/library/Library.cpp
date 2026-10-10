@@ -127,6 +127,12 @@ namespace ao::rt
     return _implPtr->writeLane.bindTrackTargets(trackIds);
   }
 
+  Result<BoundTrackTargets> Library::bindTrackTargets(std::span<TrackId const> trackIds,
+                                                      LibrarySnapshot const& snapshot) const
+  {
+    return _implPtr->writeLane.bindTrackTargets(trackIds, snapshot);
+  }
+
   Result<BoundListOrder> Library::bindListOrder(ListId const listId,
                                                 std::span<TrackId const> const effectiveTrackIds) const
   {

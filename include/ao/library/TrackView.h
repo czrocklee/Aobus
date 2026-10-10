@@ -8,6 +8,8 @@
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 
@@ -31,24 +33,14 @@ namespace ao::library
     class TrackColdReader;
   } // namespace detail
 
-  /**
-   * ClassicalProxy - Accessors for the classical extension block.
-   *
-   * Only TrackView and detail::TrackColdReader construct non-empty proxies,
-   * from gated slices (at least sizeof(TrackClassicalBlock) bytes, 4-byte
-   * aligned); the payload constructor is private to keep that precondition
-   * out of reach of ungated data.
-   */
-  class ClassicalProxy final
+  /** Borrowed work metadata over an exact, gated 12-byte block. */
+  class WorkView final
   {
   public:
-    ClassicalProxy() = default;
+    WorkView() = default;
 
     DictionaryId workId() const noexcept { return _block == nullptr ? kInvalidDictionaryId : _block->workId; }
     DictionaryId movementId() const noexcept { return _block == nullptr ? kInvalidDictionaryId : _block->movementId; }
-    DictionaryId conductorId() const noexcept { return _block == nullptr ? kInvalidDictionaryId : _block->conductorId; }
-    DictionaryId ensembleId() const noexcept { return _block == nullptr ? kInvalidDictionaryId : _block->ensembleId; }
-    DictionaryId soloistId() const noexcept { return _block == nullptr ? kInvalidDictionaryId : _block->soloistId; }
     std::uint16_t movementNumber() const noexcept { return _block == nullptr ? 0 : _block->movementNumber; }
     std::uint16_t movementTotal() const noexcept { return _block == nullptr ? 0 : _block->movementTotal; }
     bool empty() const noexcept { return _block == nullptr; }
@@ -57,12 +49,39 @@ namespace ao::library
     friend class TrackView;
     friend class detail::TrackColdReader;
 
-    explicit ClassicalProxy(std::span<std::byte const> payload) noexcept
-      : _block{payload.empty() ? nullptr : utility::layout::view<TrackClassicalBlock>(payload)}
+    explicit WorkView(std::span<std::byte const> payload) noexcept
+      : _block{payload.empty() ? nullptr : utility::layout::view<TrackWorkBlock>(payload)}
     {
     }
 
-    TrackClassicalBlock const* _block = nullptr;
+    TrackWorkBlock const* _block = nullptr;
+  };
+
+  /**
+   * Borrowed performance prefix and canonical Credits tail. Returned spans alias
+   * the cold record and share TrackView's backing-buffer/transaction lifetime;
+   * no list is copied or materialized by this view.
+   */
+  class PerformanceView final
+  {
+  public:
+    PerformanceView() = default;
+
+    RecordingDate recordingDate() const noexcept;
+    std::span<TrackCreditEntry const> credits() const noexcept;
+    std::span<TrackCreditEntry const> credits(CreditKind kind) const noexcept;
+    bool empty() const noexcept { return _payload.empty(); }
+
+  private:
+    friend class TrackView;
+    friend class detail::TrackColdReader;
+
+    explicit PerformanceView(std::span<std::byte const> payload) noexcept
+      : _payload{payload}
+    {
+    }
+
+    std::span<std::byte const> _payload{};
   };
 
   /**
@@ -172,9 +191,10 @@ namespace ao::library
    * structurally invalid side violates that accessor's precondition and fails
    * fast through AO_EXPECTS. Optional blocks absent from an otherwise valid
    * cold side still produce empty proxies and their documented default values.
-   * Semantic corruption within the established bounds (for example unsorted
-   * custom metadata keys) is not detected here; deep structural verification
-   * lives in detail::TrackColdReader for diagnostics and tests.
+   * Semantic corruption within the established bounds (for example invalid
+   * recording dates or unsorted custom metadata keys) is not detected here;
+   * deep structural verification lives in detail::TrackColdReader for
+   * diagnostics and tests.
    *
    * The cold index is a lazy per-view mutable cache; views are intended for
    * single-threaded row access.
@@ -184,7 +204,7 @@ namespace ao::library
   public:
     /**
      * MetadataProxy - Accessors for universal track metadata ($ prefix).
-     * Classical, cover-art, and custom metadata are exposed through domain accessors on TrackView.
+     * Work structure, performance, cover-art, and custom metadata are exposed through domain accessors on TrackView.
      */
     class MetadataProxy final
     {
@@ -300,7 +320,8 @@ namespace ao::library
 
     TagProxy tags() const noexcept;
 
-    ClassicalProxy classical() const noexcept { return ClassicalProxy{requiredColdIndex().classical}; }
+    WorkView work() const noexcept { return WorkView{requiredColdIndex().work}; }
+    PerformanceView performance() const noexcept { return PerformanceView{requiredColdIndex().performance}; }
 
     CoverArtProxy coverArt() const noexcept
     {
@@ -320,8 +341,9 @@ namespace ao::library
       TrackColdHeader const* header = nullptr;
       std::span<std::byte const> uri{};
       std::span<std::byte const> cover{};
-      std::span<std::byte const> classical{};
+      std::span<std::byte const> work{};
       std::span<std::byte const> custom{};
+      std::span<std::byte const> performance{};
       bool scanned = false;
     };
 

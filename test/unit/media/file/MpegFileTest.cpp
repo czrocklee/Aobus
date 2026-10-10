@@ -28,6 +28,7 @@
 namespace ao::media::file::mpeg::test
 {
   using TestFile = ao::media::file::test::TestFile;
+  using Credit = ao::media::file::test::RecordedContent::Credit;
   using namespace ao::test;
 
   namespace
@@ -306,15 +307,18 @@ namespace ao::media::file::mpeg::test
     CHECK(metadata.text(TextField::Title) == "Title");
     CHECK(metadata.text(TextField::Artist) == "Artist");
     CHECK(metadata.text(TextField::Album) == "Album");
-    CHECK(metadata.text(TextField::Conductor) == "Conductor");
+    CHECK(metadata.credits() == std::vector<Credit>{
+                                  {.name = "Conductor", .kind = CreditKind::Conductor},
+                                  {.name = "Ensemble", .kind = CreditKind::Ensemble},
+                                  {.name = "Soloist", .kind = CreditKind::Soloist},
+                                });
     CHECK(metadata.number(NumberField::Year) == 2024);
     CHECK(metadata.number(NumberField::TrackNumber) == 1);
     CHECK(metadata.number(NumberField::TrackTotal) == 10);
     CHECK(metadata.text(TextField::Genre) == "Genre");
     CHECK(metadata.text(TextField::Work) == "WorkName");
     CHECK(metadata.text(TextField::Movement) == "MovementName");
-    CHECK(metadata.text(TextField::Ensemble) == "Ensemble");
-    CHECK(metadata.text(TextField::Soloist) == "Soloist");
+
     CHECK(metadata.number(NumberField::MovementNumber) == 2);
     CHECK(metadata.number(NumberField::MovementTotal) == 4);
 
@@ -340,7 +344,8 @@ namespace ao::media::file::mpeg::test
     auto const content = readContent(file);
 
     CHECK(content.text(TextField::Title) == "Classical Fallback");
-    CHECK(content.text(TextField::Ensemble) == "Fixture Fallback Ensemble");
+    CHECK(content.credits() ==
+          std::vector<Credit>{{.name = "Fixture Fallback Ensemble", .kind = CreditKind::Ensemble}});
   }
 
   TEST_CASE("MPEG File - emits real fixture tag fields", "[media][unit][mpeg][file]")

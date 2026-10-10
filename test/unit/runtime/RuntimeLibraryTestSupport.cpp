@@ -18,7 +18,9 @@
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/Credits.h>
 #include <ao/library/LibraryWrite.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
@@ -39,6 +41,7 @@
 
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -75,11 +78,8 @@ namespace ao::rt::test
       .optAlbumArtist = spec.albumArtist,
       .optGenre = spec.genre,
       .optComposer = spec.composer,
-      .optConductor = spec.conductor,
-      .optEnsemble = spec.ensemble,
       .optWork = spec.work,
       .optMovement = spec.movement,
-      .optSoloist = spec.soloist,
       .optYear = spec.year,
       .optTrackNumber = spec.trackNumber,
       .optTrackTotal = spec.trackTotal,
@@ -87,6 +87,8 @@ namespace ao::rt::test
       .optDiscTotal = spec.discTotal,
       .optMovementNumber = spec.movementNumber,
       .optMovementTotal = spec.movementTotal,
+      .optRecordingDate = spec.recordingDate,
+      .optCredits = CreditReplacement{.kinds = std::bitset<library::kCreditKindCount>{}.set(), .entries = spec.credits},
     };
 
     for (auto const& [key, value] : spec.customMetadata)
@@ -197,11 +199,8 @@ namespace ao::rt::test
       .albumArtist = stringField(TrackField::AlbumArtist),
       .genre = stringField(TrackField::Genre),
       .composer = stringField(TrackField::Composer),
-      .conductor = stringField(TrackField::Conductor),
-      .ensemble = stringField(TrackField::Ensemble),
       .work = stringField(TrackField::Work),
       .movement = stringField(TrackField::Movement),
-      .soloist = stringField(TrackField::Soloist),
       .coverArtId = detail.singleCoverArtId,
       .year = numberField(TrackField::Year),
       .discNumber = numberField(TrackField::DiscNumber),
@@ -211,6 +210,22 @@ namespace ao::rt::test
       .movementNumber = numberField(TrackField::MovementNumber),
       .movementTotal = numberField(TrackField::MovementTotal),
     };
+    auto const& date = trackFieldArrayAt(detail.fields, TrackField::RecordingDate);
+
+    if (auto const* value = date.optValue ? std::get_if<library::RecordingDate>(&*date.optValue) : nullptr;
+        value != nullptr)
+    {
+      spec.recordingDate = *value;
+    }
+
+    // Assemble the complete desired value from the four owning sections.
+    for (auto const& section : detail.credits)
+    {
+      REQUIRE_FALSE(section.mixed);
+      REQUIRE(section.optValue);
+      spec.credits.insert(spec.credits.end(), section.optValue->begin(), section.optValue->end());
+    }
+
     auto snapshot = runtime.library().snapshot();
 
     for (auto const tagId : detail.commonTagIds)

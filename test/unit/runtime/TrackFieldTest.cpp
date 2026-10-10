@@ -3,6 +3,7 @@
 
 #include <ao/rt/TrackField.h>
 
+#include <ao/library/Credits.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
@@ -51,27 +52,17 @@ namespace
     "display-track-number",
     "technical-summary",
     "quality",
+    "recording-date",
   });
 
   constexpr auto kMetadataFields = std::to_array<ao::rt::TrackField>({
-    ao::rt::TrackField::Title,
-    ao::rt::TrackField::Artist,
-    ao::rt::TrackField::Album,
-    ao::rt::TrackField::AlbumArtist,
-    ao::rt::TrackField::Genre,
-    ao::rt::TrackField::Composer,
-    ao::rt::TrackField::Conductor,
-    ao::rt::TrackField::Ensemble,
-    ao::rt::TrackField::Work,
-    ao::rt::TrackField::Movement,
-    ao::rt::TrackField::Soloist,
-    ao::rt::TrackField::Year,
-    ao::rt::TrackField::DiscNumber,
-    ao::rt::TrackField::DiscTotal,
-    ao::rt::TrackField::TrackNumber,
-    ao::rt::TrackField::TrackTotal,
-    ao::rt::TrackField::MovementNumber,
-    ao::rt::TrackField::MovementTotal,
+    ao::rt::TrackField::Title,         ao::rt::TrackField::Artist,         ao::rt::TrackField::Album,
+    ao::rt::TrackField::AlbumArtist,   ao::rt::TrackField::Genre,          ao::rt::TrackField::Composer,
+    ao::rt::TrackField::Conductor,     ao::rt::TrackField::Ensemble,       ao::rt::TrackField::Work,
+    ao::rt::TrackField::Movement,      ao::rt::TrackField::Soloist,        ao::rt::TrackField::Year,
+    ao::rt::TrackField::DiscNumber,    ao::rt::TrackField::DiscTotal,      ao::rt::TrackField::TrackNumber,
+    ao::rt::TrackField::TrackTotal,    ao::rt::TrackField::MovementNumber, ao::rt::TrackField::MovementTotal,
+    ao::rt::TrackField::RecordingDate,
   });
 
   constexpr auto kTechnicalFields = std::to_array<ao::rt::TrackField>({
@@ -109,6 +100,7 @@ namespace
     ao::rt::TrackField::TrackNumber,
     ao::rt::TrackField::MovementNumber,
     ao::rt::TrackField::Duration,
+    ao::rt::TrackField::RecordingDate,
   });
 
   constexpr auto kGroupableFields = std::to_array<ao::rt::TrackField>({
@@ -139,6 +131,8 @@ namespace
     "track-number",
     "title",
     "duration",
+    "recording-year",
+    "recording-date",
   });
 
   constexpr auto kPersistedTrackGroupKeyIds = std::to_array<std::string_view>({
@@ -300,7 +294,7 @@ namespace ao::rt::test
     auto const syntheticCount =
       countIf(defs, [](auto const& d) { return d.category == TrackFieldCategory::Synthetic; });
 
-    CHECK(metadataCount == 18);
+    CHECK(metadataCount == 19);
     CHECK(tagCount == 1);
     CHECK(technicalCount == 9);
     CHECK(syntheticCount == 3);
@@ -340,7 +334,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackField - editable fields match metadata text and numeric fields", "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - editable metadata excludes readonly credit projections", "[runtime][unit][trackfield]")
   {
     auto const defs = trackFieldDefinitions();
 
@@ -348,7 +342,9 @@ namespace ao::rt::test
     {
       INFO("Field: " << def.id);
 
-      CHECK(def.editable == std::ranges::contains(kMetadataFields, def.field));
+      auto const isCreditProjection =
+        def.field == TrackField::Conductor || def.field == TrackField::Ensemble || def.field == TrackField::Soloist;
+      CHECK(def.editable == (std::ranges::contains(kMetadataFields, def.field) && !isCreditProjection));
     }
   }
 
@@ -501,7 +497,9 @@ namespace ao::rt::test
       {
         auto const optTrackField = trackFieldFromQueryField(descriptor.field);
 
-        if (descriptor.field == query::Field::CoverArtId)
+        // All-credit and Performer member queries do not need table fields.
+        if (descriptor.field == query::Field::CoverArtId || descriptor.field == query::Field::Credit ||
+            descriptor.field == query::Field::Performer)
         {
           CHECK_FALSE(optTrackField);
           continue;
@@ -521,7 +519,7 @@ namespace ao::rt::test
       if (definition.valueCompletion)
       {
         REQUIRE(definition.optQueryField);
-        CHECK(query::isDictionaryField(*definition.optQueryField));
+        CHECK((query::isDictionaryField(*definition.optQueryField) || query::isCreditField(*definition.optQueryField)));
       }
 
       if (!definition.optQueryField)
@@ -536,6 +534,37 @@ namespace ao::rt::test
                     [&definition](TrackFieldDefinition const& candidate)
                     { return candidate.optQueryField == definition.optQueryField; }) == 1);
     }
+  }
+
+  TEST_CASE("TrackField - credits and category keys are reserved without retired musician aliases",
+            "[runtime][unit][trackfield]")
+  {
+    CHECK(isReservedCustomMetadataKey(kCreditsMetadataKey));
+    CHECK(isReservedCustomMetadataKey("conductor"));
+    CHECK(isReservedCustomMetadataKey("ensemble"));
+    CHECK(isReservedCustomMetadataKey("soloist"));
+    CHECK_FALSE(isReservedCustomMetadataKey("musicians"));
+    CHECK_FALSE(isReservedCustomMetadataKey("Credits"));
+    CHECK_FALSE(isReservedCustomMetadataKey("credit"));
+  }
+
+  TEST_CASE("TrackField - only category projections map to credit kinds", "[runtime][unit][trackfield]")
+  {
+    CHECK(creditKindForTrackField(TrackField::Conductor) == library::CreditKind::Conductor);
+    CHECK(creditKindForTrackField(TrackField::Ensemble) == library::CreditKind::Ensemble);
+    CHECK(creditKindForTrackField(TrackField::Soloist) == library::CreditKind::Soloist);
+
+    for (auto const& definition : trackFieldDefinitions())
+    {
+      if (definition.field != TrackField::Conductor && definition.field != TrackField::Ensemble &&
+          definition.field != TrackField::Soloist)
+      {
+        CAPTURE(definition.id);
+        CHECK_FALSE(creditKindForTrackField(definition.field));
+      }
+    }
+
+    CHECK_FALSE(creditKindForTrackField(static_cast<TrackField>(255)));
   }
 
   TEST_CASE("TrackField - helpers return empty values for invalid fields", "[runtime][unit][trackfield]")

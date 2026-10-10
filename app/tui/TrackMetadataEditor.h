@@ -6,7 +6,9 @@
 #include "CompletionPopup.h"
 #include "MouseBindings.h"
 #include "TextFieldModel.h"
+#include "TrackCreditsEditor.h"
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -17,6 +19,7 @@
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
 
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -24,6 +27,11 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace ftxui
+{
+  struct Mouse;
+} // namespace ftxui
 
 namespace ao::tui
 {
@@ -37,9 +45,13 @@ namespace ao::tui
     TrackMetadataEditor(i18n::MessageCatalog textCatalog,
                         std::size_t targetCount,
                         uimodel::TrackPropertiesFormModel baseline,
-                        CompletionProvider completionProvider);
+                        CompletionProvider completionProvider,
+                        TrackCreditsEditor::CompletionProvider creditCompletionProvider = {});
 
     bool isDirty() const noexcept;
+    bool isEditingCredits() const noexcept { return _baseline.creditsEditor().isEditing(); }
+    void beginCreditsEdit(std::bitset<library::kCreditKindCount> kinds);
+    void handleCreditsEvent(ftxui::Event const& event);
     bool hasInvalidFields() const noexcept;
     std::size_t editedFieldCount() const noexcept;
     std::size_t clearedFieldCount() const noexcept;
@@ -74,6 +86,7 @@ namespace ao::tui
       bool isIncluded() const noexcept { return intent != FieldIntent::Unchanged; }
     };
 
+    void handleMetadataMouse(ftxui::Mouse const& mouse);
     void moveMetadataRow(std::int32_t delta);
     void scrollProperties(std::int32_t delta);
     void clearField(MetadataRow& row);
@@ -88,6 +101,7 @@ namespace ao::tui
     i18n::MessageCatalog _textCatalog;
     std::size_t _targetCount;
     uimodel::TrackPropertiesFormModel _baseline;
+    TrackCreditsEditor _creditsEditor;
     uimodel::TrackPropertiesFormSpec _spec;
     std::vector<MetadataRow> _metadataRows{};
     CompletionProvider _completionProvider;

@@ -23,6 +23,7 @@
 namespace ao::media::file::flac::test
 {
   using File = ao::media::file::test::TestFile;
+  using Credit = ao::media::file::test::RecordedContent::Credit;
   using namespace ao::media::flac;
   using namespace ao::test;
 
@@ -133,8 +134,12 @@ namespace ao::media::file::flac::test
     CHECK(metadata.text(TextField::Artist) == "Artist");
     CHECK(metadata.text(TextField::AlbumArtist) == "AlbumArtist");
     CHECK(metadata.text(TextField::Composer) == "Composer");
-    CHECK(metadata.text(TextField::Conductor) == "Conductor");
-    CHECK(metadata.text(TextField::Ensemble) == "Ensemble");
+    CHECK(metadata.credits() == std::vector<Credit>{
+                                  {.name = "Conductor", .kind = CreditKind::Conductor},
+                                  {.name = "Ensemble", .kind = CreditKind::Ensemble},
+                                  {.name = "Soloist", .kind = CreditKind::Soloist},
+                                  {.name = "Performer Fallback", .kind = CreditKind::Performer},
+                                });
     CHECK(metadata.text(TextField::Genre) == "Genre");
     CHECK(metadata.number(NumberField::TrackNumber) == 1);
     CHECK(metadata.number(NumberField::TrackTotal) == 10);
@@ -143,7 +148,6 @@ namespace ao::media::file::flac::test
     CHECK(metadata.number(NumberField::Year) == 2024);
     CHECK(metadata.text(TextField::Work) == "WorkName");
     CHECK(metadata.text(TextField::Movement) == "MovementName");
-    CHECK(metadata.text(TextField::Soloist) == "Soloist");
     CHECK(metadata.number(NumberField::MovementNumber) == 2);
     CHECK(metadata.number(NumberField::MovementTotal) == 4);
     auto const& prop = content;
@@ -175,6 +179,75 @@ namespace ao::media::file::flac::test
     CHECK(content.number(NumberField::Year) == 2024);
   }
 
+  TEST_CASE("FLAC File - explicit WORK outranks GROUPING regardless of comment order", "[media][unit][flac][file]")
+  {
+    // Copy the view out; the file and content die with the lambda.
+    auto const readWork = [](std::vector<std::string> comments) -> std::string
+    {
+      auto data = createFlac(comments);
+      data.push_back(0xA0);
+      auto const temp = TempFile{data, ".flac"};
+      auto const file = File{temp.path};
+      return std::string{readContent(file).text(TextField::Work)};
+    };
+
+    // All six ASCII whitespace characters.
+    auto const blank = std::string{" \t\n\r\f\v"};
+
+    SECTION("WORK before GROUPING")
+    {
+      CHECK(readWork({"WORK=WorkName", "GROUPING=GroupName"}) == "WorkName");
+    }
+
+    SECTION("GROUPING before WORK")
+    {
+      CHECK(readWork({"GROUPING=GroupName", "WORK=WorkName"}) == "WorkName");
+    }
+
+    SECTION("grouping-only fallback keeps the grouping value")
+    {
+      CHECK(readWork({"GROUPING=GroupName"}) == "GroupName");
+    }
+
+    SECTION("blank WORK before or after GROUPING does not suppress it")
+    {
+      CHECK(readWork({"WORK=" + blank, "GROUPING=GroupName"}) == "GroupName");
+      CHECK(readWork({"GROUPING=GroupName", "WORK=" + blank}) == "GroupName");
+    }
+
+    SECTION("nonblank work text retains surrounding whitespace")
+    {
+      CHECK(readWork({"GROUPING=GroupName", "WORK= \tWorkName \r\n"}) == " \tWorkName \r\n");
+    }
+
+    SECTION("repeated WORK comments keep the last nonempty value")
+    {
+      CHECK(readWork({"WORK=First", "WORK=" + blank, "WORK=Second"}) == "Second");
+    }
+
+    SECTION("blank repeated WORK does not clear the earlier value")
+    {
+      CHECK(readWork({"WORK=First", "WORK=" + blank}) == "First");
+    }
+
+    SECTION("all-blank WORK and GROUPING emit no work callback")
+    {
+      auto const comments = std::array{"WORK=" + blank, "GROUPING=" + blank};
+      auto data = createFlac(comments);
+      data.push_back(0xA0);
+      auto const temp = TempFile{data, ".flac"};
+      auto const file = File{temp.path};
+      auto const content = readContent(file);
+
+      CHECK(content.text(TextField::Work).empty());
+      auto const workEvent = ao::media::file::test::RecordedContent::CallbackEvent{
+        .kind = ao::media::file::test::RecordedContent::CallbackKind::Text,
+        .field = static_cast<std::uint8_t>(TextField::Work),
+      };
+      CHECK_FALSE(std::ranges::contains(content.events(), workEvent));
+    }
+  }
+
   TEST_CASE("FLAC File - emits real fixture tag fields", "[media][unit][flac][file]")
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.flac")};
@@ -189,17 +262,87 @@ namespace ao::media::file::flac::test
     CHECK(metadata.text(TextField::Work) == "Symphony No. 5");
     CHECK(metadata.number(NumberField::TrackNumber) == 1);
     CHECK(metadata.number(NumberField::Year) == 2024);
+    CHECK(metadata.credits().empty());
+    CHECK_FALSE(std::ranges::contains(metadata.events(),
+                                      ao::media::file::test::RecordedContent::CallbackEvent{
+                                        .kind = ao::media::file::test::RecordedContent::CallbackKind::Credits}));
   }
 
   TEST_CASE("FLAC File - maps classical fallback comments when primary fields are absent", "[media][unit][flac][file]")
   {
-    auto const file = File{audio::test::requireAudioFixture("classical_fallback.flac")};
-    auto content = readContent(file);
-    auto const& metadata = content;
+    using Event = ao::media::file::test::RecordedContent::CallbackEvent;
+    using Kind = ao::media::file::test::RecordedContent::CallbackKind;
 
-    CHECK(metadata.text(TextField::Title) == "Classical Fallback");
-    CHECK(metadata.text(TextField::Ensemble) == "Fixture Fallback Ensemble");
-    CHECK(metadata.text(TextField::Soloist) == "Fixture Fallback Soloist");
+    auto const owned = []
+    {
+      auto const file = File{audio::test::requireAudioFixture("classical_fallback.flac")};
+      auto content = readContent(file);
+
+      CHECK(content.text(TextField::Title) == "Classical Fallback");
+      // ORCHESTRA and PERFORMER are distinct kinds; PERFORMER never implies Soloist.
+      CHECK(content.events() == std::vector<Event>{
+                                  {Kind::Text, static_cast<std::uint8_t>(TextField::Title)},
+                                  {Kind::Codec},
+                                  {Kind::Duration},
+                                  {Kind::Bitrate},
+                                  {Kind::SampleRate},
+                                  {Kind::Channels},
+                                  {Kind::BitDepth},
+                                  {Kind::Credits},
+                                });
+      return content.credits();
+    }();
+
+    CHECK(owned == std::vector<Credit>{
+                     {.name = "Fixture Fallback Ensemble", .kind = CreditKind::Ensemble},
+                     {.name = "Fixture Fallback Soloist", .kind = CreditKind::Performer},
+                   });
+  }
+
+  TEST_CASE("FLAC File - public visitor owns ordered performer credits after the file dies",
+            "[media][unit][flac][file]")
+  {
+    using Event = ao::media::file::test::RecordedContent::CallbackEvent;
+    using Kind = ao::media::file::test::RecordedContent::CallbackKind;
+
+    auto const owned = []
+    {
+      auto const comments = std::vector<std::string>{
+        "TITLE=Title",
+        "SOLOIST=Anne",
+        "DATE=2024",
+        "PERFORMER=Ada (Piano)",
+        "PERFORMER=Ada (Piano)",
+        "PERFORMER=Bob",
+        "PERFORMER=Ada (Violin)",
+      };
+      auto data = createFlac(comments);
+      data.push_back(0xA0);
+      auto const temp = TempFile{data, ".flac"};
+      auto const file = File{temp.path};
+      auto content = readContent(file);
+
+      CHECK(content.events() == std::vector<Event>{
+                                  {Kind::Text, static_cast<std::uint8_t>(TextField::Title)},
+                                  {Kind::Number, static_cast<std::uint8_t>(NumberField::Year)},
+                                  {Kind::Codec},
+                                  {Kind::Duration},
+                                  {Kind::Bitrate},
+                                  {Kind::SampleRate},
+                                  {Kind::Channels},
+                                  {Kind::BitDepth},
+                                  {Kind::Credits},
+                                });
+      return content.credits();
+    }();
+
+    CHECK(owned == std::vector<Credit>{
+                     {.name = "Anne", .kind = CreditKind::Soloist},
+                     {.name = "Ada", .kind = CreditKind::Performer, .role = "Piano"},
+                     {.name = "Ada", .kind = CreditKind::Performer, .role = "Piano"},
+                     {.name = "Bob", .kind = CreditKind::Performer},
+                     {.name = "Ada", .kind = CreditKind::Performer, .role = "Violin"},
+                   });
   }
 
   TEST_CASE("FLAC File - audio payload range starts after metadata blocks", "[media][unit][flac][file]")

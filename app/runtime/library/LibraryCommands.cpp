@@ -24,12 +24,15 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/utility/UnicodeText.h>
 
+#include <boost/unordered/unordered_flat_set.hpp>
+
 #include <algorithm>
 #include <cstddef>
 #include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -204,9 +207,17 @@ namespace ao::rt
 
       auto writer = transaction.tracks();
       auto changes = std::vector<TrackTagsChange>{};
+      auto seenTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
+      seenTrackIds.reserve(trackIds.size());
 
       for (auto const trackId : trackIds)
       {
+        // Do not reload dictionary IDs staged by an earlier write of this track.
+        if (!seenTrackIds.insert(trackId).second)
+        {
+          continue;
+        }
+
         auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
 
         if (!optView)

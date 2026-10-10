@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -36,6 +37,7 @@ namespace ao::media::file::test
       Channels,
       BitDepth,
       Picture,
+      Credits,
     };
 
     struct CallbackEvent final
@@ -52,6 +54,17 @@ namespace ao::media::file::test
       std::span<std::byte const> bytes;
     };
 
+    // Owning credit. The visitor span borrows the reader's storage and must
+    // not escape the callback that produced it.
+    struct Credit final
+    {
+      std::string name{};
+      CreditKind kind = CreditKind::Performer;
+      std::string role{};
+
+      bool operator==(Credit const&) const = default;
+    };
+
     std::string_view text(TextField field) const;
     std::uint16_t number(NumberField field) const;
 
@@ -62,6 +75,7 @@ namespace ao::media::file::test
     Channels channels() const noexcept { return _channels; }
     BitDepth bitDepth() const noexcept { return _bitDepth; }
     std::vector<Picture> const& pictures() const noexcept { return _pictures; }
+    std::vector<Credit> const& credits() const noexcept { return _credits; }
     std::vector<CallbackEvent> const& events() const noexcept { return _events; }
     std::size_t callCount() const noexcept { return _events.size(); }
 
@@ -77,6 +91,7 @@ namespace ao::media::file::test
     Channels _channels{};
     BitDepth _bitDepth{};
     std::vector<Picture> _pictures;
+    std::vector<Credit> _credits;
     std::vector<CallbackEvent> _events;
   };
 
@@ -94,8 +109,11 @@ namespace ao::media::file::test
     void channels(Channels value) override;
     void bitDepth(BitDepth value) override;
     void picture(PictureType type, std::span<std::byte const> bytes) override;
+    void visitCredits(std::span<CreditView const> entries) override;
 
   private:
+    void record(RecordedContent::CallbackEvent event);
+
     RecordedContent& _content;
   };
 

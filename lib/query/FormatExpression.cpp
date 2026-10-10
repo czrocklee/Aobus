@@ -3,6 +3,7 @@
 
 #include <ao/query/FormatExpression.h>
 
+#include "detail/CreditField.h"
 #include "detail/QueryError.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
@@ -11,6 +12,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
@@ -142,6 +144,25 @@ namespace ao::query
         return;
       }
 
+      if (isCreditField(field))
+      {
+        AO_INVARIANT(dictionary != nullptr);
+        bool first = true;
+
+        for (auto const& entry : detail::creditFieldEntries(track, field))
+        {
+          if (!first)
+          {
+            output.append("; ");
+          }
+
+          output.append(dictionary->get(entry.nameId));
+          first = false;
+        }
+
+        return;
+      }
+
       switch (field)
       {
         case Field::Title: output.append(track.metadata().title()); break;
@@ -160,13 +181,16 @@ namespace ao::query
 
           break;
         }
+        case Field::RecordingDate:
+          output.append(library::formatRecordingDate(track.performance().recordingDate()));
+          break;
         case Field::Year: appendDecimalText(output, track.metadata().year()); break;
         case Field::TrackNumber: appendDecimalText(output, track.metadata().trackNumber()); break;
         case Field::TrackTotal: appendDecimalText(output, track.metadata().trackTotal()); break;
         case Field::DiscNumber: appendDecimalText(output, track.metadata().discNumber()); break;
         case Field::DiscTotal: appendDecimalText(output, track.metadata().discTotal()); break;
-        case Field::MovementNumber: appendDecimalText(output, track.classical().movementNumber()); break;
-        case Field::MovementTotal: appendDecimalText(output, track.classical().movementTotal()); break;
+        case Field::MovementNumber: appendDecimalText(output, track.work().movementNumber()); break;
+        case Field::MovementTotal: appendDecimalText(output, track.work().movementTotal()); break;
         case Field::Duration: appendDecimalText(output, track.property().duration().count()); break;
         case Field::Bitrate: appendDecimalText(output, track.property().bitrate().raw()); break;
         case Field::SampleRate: appendDecimalText(output, track.property().sampleRate().raw()); break;
@@ -276,7 +300,7 @@ namespace ao::query
       dictionarySymbol = addDictionarySymbol(variable.name);
       _hasDictionaryAccess = true;
     }
-    else if (isDictionaryField(field))
+    else if (isDictionaryField(field) || isCreditField(field))
     {
       _hasDictionaryAccess = true;
     }

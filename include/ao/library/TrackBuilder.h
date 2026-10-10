@@ -9,6 +9,8 @@
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackLayout.h>
 
@@ -81,12 +83,13 @@ namespace ao::library
       MetadataBuilder& album(std::string_view text);
       MetadataBuilder& albumArtist(std::string_view text);
       MetadataBuilder& composer(std::string_view text);
-      MetadataBuilder& conductor(std::string_view text);
-      MetadataBuilder& ensemble(std::string_view text);
       MetadataBuilder& genre(std::string_view text);
       MetadataBuilder& work(std::string_view text);
       MetadataBuilder& movement(std::string_view text);
-      MetadataBuilder& soloist(std::string_view text);
+      MetadataBuilder& recordingDate(RecordingDate date);
+      // Replaces the whole list; entry strings remain borrowed until preparation.
+      MetadataBuilder& credits(std::span<CreditView const> entries);
+      MetadataBuilder& credits(std::span<Credit const> entries);
 
       // Numeric setters
       MetadataBuilder& year(std::uint16_t year);
@@ -103,12 +106,11 @@ namespace ao::library
       std::string_view album() const { return _album; }
       std::string_view albumArtist() const { return _albumArtist; }
       std::string_view composer() const { return _composer; }
-      std::string_view conductor() const { return _conductor; }
-      std::string_view ensemble() const { return _ensemble; }
       std::string_view genre() const { return _genre; }
       std::string_view work() const { return _work; }
       std::string_view movement() const { return _movement; }
-      std::string_view soloist() const { return _soloist; }
+      RecordingDate recordingDate() const { return _recordingDate; }
+      std::span<CreditView const> credits() const { return _credits; }
       std::uint16_t year() const { return _year; }
       std::uint16_t trackNumber() const { return _trackNumber; }
       std::uint16_t trackTotal() const { return _trackTotal; }
@@ -126,12 +128,11 @@ namespace ao::library
       std::string_view _album;
       std::string_view _albumArtist;
       std::string_view _composer;
-      std::string_view _conductor;
-      std::string_view _ensemble;
       std::string_view _genre;
       std::string_view _work;
       std::string_view _movement;
-      std::string_view _soloist;
+      RecordingDate _recordingDate{};
+      std::vector<CreditView> _credits{};
 
       // Metadata numerics
       std::uint16_t _year = 0;
@@ -333,11 +334,12 @@ namespace ao::library
       static std::vector<std::pair<DictionaryId, std::string>> resolveCustomMetadata(TrackBuilder const* builder,
                                                                                      WriteTransaction& transaction);
 
-      void resolveClassicalIds(TrackBuilder const* builder, WriteTransaction& transaction);
+      void resolveMetadataIds(TrackBuilder const* builder, WriteTransaction& transaction);
       void resolveCoverArt(TrackBuilder const* builder, WriteTransaction& transaction, ResourceStore const& resources);
       void appendBlock(TrackColdBlockSlot slot, std::vector<std::byte> payload);
       void appendCoverArtBlock();
-      void appendClassicalBlock(MetadataBuilder const& metadata);
+      void appendWorkBlock(MetadataBuilder const& metadata);
+      void appendPerformanceBlock(MetadataBuilder const& metadata);
       void appendCustomMetadataBlock(std::vector<std::pair<DictionaryId, std::string>> const& resolvedPairs);
       void assignLayout(std::string_view uri);
       void snapshot(TrackBuilder const* builder);
@@ -362,9 +364,8 @@ namespace ao::library
       std::uint16_t _uriLength = 0;
       DictionaryId _workId = kInvalidDictionaryId;
       DictionaryId _movementId = kInvalidDictionaryId;
-      DictionaryId _conductorId = kInvalidDictionaryId;
-      DictionaryId _ensembleId = kInvalidDictionaryId;
-      DictionaryId _soloistId = kInvalidDictionaryId;
+      std::array<std::uint16_t, 3> _sectionCounts{};
+      std::vector<TrackCreditEntry> _credits{};
       Channels _channels{};
       std::size_t _size = 0;
 

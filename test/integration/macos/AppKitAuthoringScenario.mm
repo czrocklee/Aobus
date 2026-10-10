@@ -6,20 +6,26 @@
 #include "app/macos-appkit/LibraryBrowser.h"
 #include "app/macos-appkit/LibraryEditor.h"
 #include "app/macos-appkit/LibrarySession.h"
+#include "app/macos-appkit/TrackInspector.h"
 #include "test/integration/macos/AppKitScenarioSupport.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #import <AppKit/AppKit.h>
@@ -414,6 +420,264 @@ namespace ao::appkit::test
       model.cancel();
     }
 
+    void verifyRecordingDateProperty(EditorFixture& fixture, TrackId trackId)
+    {
+      auto& session = fixture.session();
+      auto model = LibraryEditorModel{session.runtime(), session.catalog(), [] {}};
+
+      // A full typed date through the shared Date editor parsing.
+      requireAdmission(model.beginProperties({trackId}), "The recording-date property edit must begin");
+      auto const dateField = std::ranges::find_if(model.state().fields,
+                                                  [](LibraryEditorField const& candidate)
+                                                  { return candidate.spec.field == rt::TrackField::RecordingDate; });
+      AO_INVARIANT(dateField != model.state().fields.end(), "The property form must expose the recording date field");
+      AO_INVARIANT(dateField->spec.editorKind == uimodel::TrackPropertiesFormEditorKind::Date,
+                   "The recording date field must use the Date editor kind");
+      model.editField(static_cast<std::size_t>(std::distance(model.state().fields.begin(), dateField)), "1981-05-12");
+      model.save();
+      requireWaitUntil([&] { return model.state().completed; }, "The recording-date submission must complete");
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        auto const optRow = snapshot.trackRow(trackId);
+        AO_INVARIANT(
+          optRow && optRow->recordingDate == (ao::library::RecordingDate{.year = 1981, .month = 5, .day = 12}),
+          "The native property save must store the typed recording date");
+      }
+      model.cancel();
+
+      // An invalid date is rejected before submission; the durable value stands.
+      requireAdmission(model.beginProperties({trackId}), "The invalid recording-date edit must begin");
+      auto const invalidDateField = std::ranges::find_if(
+        model.state().fields,
+        [](LibraryEditorField const& candidate) { return candidate.spec.field == rt::TrackField::RecordingDate; });
+      AO_INVARIANT(
+        invalidDateField != model.state().fields.end(), "The invalid recording-date edit requires its field");
+      model.editField(
+        static_cast<std::size_t>(std::distance(model.state().fields.begin(), invalidDateField)), "1981-13");
+      model.save();
+      AO_INVARIANT(model.state().optInvalidField == rt::TrackField::RecordingDate,
+                   "The invalid recording date must mark exactly its field");
+      AO_INVARIANT(!model.state().error.empty(), "The invalid recording date must publish a validation message");
+      AO_INVARIANT(!model.state().completed && !model.state().busy, "An invalid recording date must not submit");
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        auto const optRow = snapshot.trackRow(trackId);
+        AO_INVARIANT(
+          optRow && optRow->recordingDate == (ao::library::RecordingDate{.year = 1981, .month = 5, .day = 12}),
+          "A rejected recording date must leave the durable value unchanged");
+      }
+      model.cancel();
+
+      // An empty Date-editor value is the explicit clear.
+      requireAdmission(model.beginProperties({trackId}), "The recording-date clear must begin");
+      auto const clearDateField = std::ranges::find_if(
+        model.state().fields,
+        [](LibraryEditorField const& candidate) { return candidate.spec.field == rt::TrackField::RecordingDate; });
+      AO_INVARIANT(clearDateField != model.state().fields.end(), "The recording-date clear requires its field");
+      model.editField(static_cast<std::size_t>(std::distance(model.state().fields.begin(), clearDateField)), "");
+      model.save();
+      requireWaitUntil([&] { return model.state().completed; }, "The recording-date clear must complete");
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        auto const optRow = snapshot.trackRow(trackId);
+        AO_INVARIANT(optRow && !optRow->recordingDate.isPresent(),
+                     "An empty Date-editor value must clear the stored recording date");
+      }
+      model.cancel();
+    }
+
+    bool isControlInSection(NSView* control, NSView* heading)
+    {
+      auto* view = control;
+
+      while (view != nil)
+      {
+        if (view == heading.superview)
+        {
+          return true;
+        }
+
+        view = view.superview;
+      }
+
+      return false;
+    }
+
+    NSTextField* rowErrorLabel(NSTextField* field)
+    {
+      auto* const row = field.superview.superview;
+      AO_INVARIANT([row isKindOfClass:NSStackView.class] != 0, "The editor field must belong to its row");
+      auto* const subviews = static_cast<NSStackView*>(row).arrangedSubviews;
+
+      for (NSUInteger index = 0; index < subviews.count; ++index)
+      {
+        if (auto* const subview = subviews[index]; [subview.identifier isEqualToString:@"field-error"] != NO)
+        {
+          AO_INVARIANT([subview isKindOfClass:NSTextField.class] != 0, "The field error must be a text label");
+          return static_cast<NSTextField*>(subview);
+        }
+      }
+
+      return nil;
+    }
+
+    void verifyNativeRecordingDateControl(EditorFixture& fixture, TrackId trackId)
+    {
+      auto& session = fixture.session();
+      auto& model = fixture.model();
+      auto const typedDate = library::RecordingDate{.year = 1974, .month = 3, .day = 9};
+      auto durableGenre = std::string{};
+      auto requireSaveButton = [&]
+      {
+        auto* const save = static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"save"));
+
+        AO_INVARIANT(save != nil && save.target == static_cast<id>(fixture.editor()) && save.action == @selector(save:),
+                     "The presented editor must expose its Save action");
+        return save;
+      };
+
+      // The Date control is disclosed with Work & Performance, not File Information.
+      requireAdmission(model.beginProperties({trackId}), "The native recording-date edit must begin");
+      fixture.present();
+      auto* const performance = static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
+      auto* const fileInformation =
+        static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-4"));
+      auto* const dateField = requireTextField(fixture, @"recording-date");
+      auto* const filePath = requireTextField(fixture, @"file-path");
+      AO_INVARIANT(performance != nil && fileInformation != nil,
+                   "The property editor must expose its performance and file sections");
+      AO_INVARIANT([performance.title
+                     isEqualToString:catalogText(session.catalog(), ao::i18n::MessageId::AppKitWorkPerformance)] != 0 &&
+                     performance.action == @selector(toggleSection:),
+                   "Section 3 must be the Work & Performance disclosure");
+      AO_INVARIANT([fileInformation.title
+                     isEqualToString:catalogText(session.catalog(), ao::i18n::MessageId::AppKitFileInformation)] != 0,
+                   "Section 4 must remain technical File Information");
+      AO_INVARIANT(isControlInSection(dateField, performance) && !isControlInSection(dateField, fileInformation),
+                   "The recording-date control must be placed in Work & Performance, not File Information");
+      AO_INVARIANT(isControlInSection(filePath, fileInformation) && !isControlInSection(filePath, performance),
+                   "Technical file fields must remain in File Information");
+      auto const dateIndex = static_cast<std::size_t>(dateField.tag);
+      AO_INVARIANT(dateIndex < model.state().fields.size() &&
+                     model.state().fields[dateIndex].spec.field == rt::TrackField::RecordingDate &&
+                     model.state().fields[dateIndex].spec.editorKind == uimodel::TrackPropertiesFormEditorKind::Date &&
+                     dateField.delegate == static_cast<id>(fixture.editor()) && dateField.editable != 0,
+                   "The recording-date control must bind the editable Date field through the editor delegate");
+      AO_INVARIANT(performance.state == NSControlStateValueOff && dateField.hiddenOrHasHiddenAncestor != 0,
+                   "Modern Work & Performance must start collapsed, hiding the recording-date control");
+      [performance performClick:nil];
+      AO_INVARIANT(performance.state == NSControlStateValueOn && dateField.hiddenOrHasHiddenAncestor == 0,
+                   "The native performance disclosure must reveal the recording-date control");
+      AO_INVARIANT([dateField.stringValue isEqualToString:@"1974-03-09"] == 0,
+                   "The typed recording date must not already be displayed");
+      auto* const save = requireSaveButton();
+      AO_INVARIANT(save.enabled == 0, "Save must start disabled before the recording-date edit");
+      editText(fixture.editor().window, @"recording-date", @"1974-03-09");
+      AO_INVARIANT(model.state().dirty && model.state().fields.at(dateIndex).text == "1974-03-09" && save.enabled != 0,
+                   "The native field editor must route the recording-date text and enable Save");
+      [fixture.editor() save:save];
+      requireWaitUntil([&] { return model.state().completed; }, "The native recording-date Save must complete");
+      [fixture.editor() refresh];
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        auto const optRow = snapshot.trackRow(trackId);
+        AO_INVARIANT(optRow && optRow->recordingDate == typedDate,
+                     "The native Save action must durably store the typed recording date");
+        durableGenre = optRow->genre;
+      }
+      fixture.finish();
+
+      // Collapse the performance section, then require invalid Save to reveal, focus, and describe it.
+      requireAdmission(model.beginProperties({trackId}), "The native invalid recording-date edit must begin");
+      fixture.present();
+      auto* const invalidPerformance =
+        static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
+      auto* const invalidFileInformation =
+        static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-4"));
+      AO_INVARIANT(invalidPerformance != nil && invalidFileInformation != nil,
+                   "The invalid recording-date edit must expose both metadata sections");
+      [invalidPerformance performClick:nil];
+      editText(fixture.editor().window, @"recording-date", @"1974-13");
+      editText(fixture.editor().window, @"genre", @"Rejected recording-date probe");
+      [invalidPerformance performClick:nil];
+      auto* const invalidDate = requireTextField(fixture, @"recording-date");
+      auto const invalidIndex = static_cast<std::size_t>(invalidDate.tag);
+      AO_INVARIANT(invalidPerformance.state == NSControlStateValueOff && invalidDate.hiddenOrHasHiddenAncestor != 0,
+                   "The recording-date section must be collapsed before the invalid Save");
+      auto* const invalidSave = requireSaveButton();
+      AO_INVARIANT(invalidSave.enabled != 0, "The invalid recording-date draft must still offer Save");
+      [fixture.editor() save:invalidSave];
+      auto* const errorLabel = rowErrorLabel(invalidDate);
+      AO_INVARIANT(!model.state().busy && model.state().dirty && !model.state().completed &&
+                     model.state().optInvalidField == rt::TrackField::RecordingDate && !model.state().error.empty() &&
+                     model.state().fields.at(invalidIndex).text == "1974-13",
+                   "An invalid native recording date must reject Save without submitting or dropping the draft");
+      AO_INVARIANT(
+        invalidPerformance.state == NSControlStateValueOn && invalidFileInformation.state == NSControlStateValueOff &&
+          invalidDate.hiddenOrHasHiddenAncestor == 0 && invalidDate.currentEditor != nil &&
+          fixture.editor().window.firstResponder == invalidDate.currentEditor &&
+          [invalidDate.accessibilityHelp isEqualToString:nativeText(model.state().error)] != 0 && errorLabel != nil &&
+          errorLabel.hidden == 0 && [errorLabel.stringValue isEqualToString:nativeText(model.state().error)] != 0,
+        "Invalid recording-date Save must reveal, focus, and describe the field without opening File "
+        "Information");
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        auto const optRow = snapshot.trackRow(trackId);
+        AO_INVARIANT(optRow && optRow->recordingDate == typedDate && optRow->genre == durableGenre,
+                     "An invalid recording date must not partially replace the durable date or other fields");
+      }
+      fixture.finish();
+
+      // The production clear action, not a model edit, then Save.
+      requireAdmission(model.beginProperties({trackId}), "The native recording-date clear must begin");
+      fixture.present();
+      auto* const clearPerformance =
+        static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
+      AO_INVARIANT(clearPerformance != nil, "The recording-date clear must expose the performance disclosure");
+      [clearPerformance performClick:nil];
+      auto* const populatedDate = requireTextField(fixture, @"recording-date");
+      AO_INVARIANT(
+        [populatedDate.stringValue isEqualToString:@"1974-03-09"] != 0 && populatedDate.hiddenOrHasHiddenAncestor == 0,
+        "The reopened recording-date control must show the durable typed value");
+      auto* const line = populatedDate.superview;
+      AO_INVARIANT([line isKindOfClass:NSStackView.class] != 0, "The recording-date control must own its action line");
+      NSButton* actions = nil;
+      auto* const subviews = static_cast<NSStackView*>(line).arrangedSubviews;
+
+      for (NSUInteger index = 0; index < subviews.count; ++index)
+      {
+        if (auto* const subview = subviews[index]; [subview.identifier isEqualToString:@"field-actions"] != NO)
+        {
+          actions = static_cast<NSButton*>(subview);
+        }
+      }
+
+      AO_INVARIANT(actions != nil && actions.enabled != 0 && actions.tag == populatedDate.tag &&
+                     actions.action == @selector(fieldActions:),
+                   "The recording-date row must expose its field-actions affordance");
+      auto* const clearDate = [[NSMenuItem alloc] init];
+      clearDate.tag = populatedDate.tag;
+      [fixture.editor() clearField:clearDate];
+      AO_INVARIANT(model.state().dirty &&
+                     model.state().fields.at(static_cast<std::size_t>(populatedDate.tag)).text.empty() &&
+                     populatedDate.stringValue.length == 0 &&
+                     [populatedDate.placeholderString
+                       isEqualToString:catalogText(session.catalog(), ao::i18n::MessageId::AppKitWillClear)] != 0,
+                   "The native clear action must route an explicit empty recording date");
+      auto* const clearSave = requireSaveButton();
+      AO_INVARIANT(clearSave.enabled != 0, "The native recording-date clear must enable Save");
+      [fixture.editor() save:clearSave];
+      requireWaitUntil([&] { return model.state().completed; }, "The native recording-date clear must complete");
+      [fixture.editor() refresh];
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        auto const optRow = snapshot.trackRow(trackId);
+        AO_INVARIANT(optRow && !optRow->recordingDate.isPresent() && optRow->genre == durableGenre,
+                     "The native clear Save must durably remove the recording date without changing other fields");
+      }
+      fixture.finish();
+    }
+
     void addSharedTag(EditorFixture const& fixture, NSString* tag)
     {
       auto* const tags = requireTextField(fixture, @"shared-tags");
@@ -431,15 +695,564 @@ namespace ao::appkit::test
                                                                object:tags]];
     }
 
+    void verifyNativeCreditPreviews(EditorFixture& fixture, TrackId trackId)
+    {
+      auto& model = fixture.model();
+      auto& library = fixture.session().runtime().library();
+      auto const storedCredits = [&]
+      {
+        auto const optCredits = library.snapshot().trackCredits(trackId);
+        AO_INVARIANT(optCredits, "The preview fixture track must remain available");
+        return *optCredits;
+      };
+      auto const before = library.snapshot().revision();
+      auto const original = storedCredits();
+      auto const button = [&](NSString* identifier)
+      {
+        auto* const control = findControl(fixture.editor().window.contentView, identifier);
+        AO_INVARIANT([control isKindOfClass:NSButton.class], "The preview must expose its native action");
+        return static_cast<NSButton*>(control);
+      };
+      auto const click = [&](NSString* identifier)
+      {
+        auto* const control = button(identifier);
+        AO_INVARIANT(control.enabled, "The preview scenario requires an enabled action");
+        [control performClick:nil];
+      };
+      auto const requireUnwritten = [&]
+      {
+        AO_INVARIANT(library.snapshot().revision() == before && storedCredits() == original,
+                     "Opening, cancelling and accepting a preview must not write before parent Save");
+      };
+      auto const replacements = std::array<library::Credit, 3>{
+        library::Credit{.name = "Preview conductor", .kind = library::CreditKind::Conductor, .role = "direction"},
+        library::Credit{.name = "Preview ensemble", .kind = library::CreditKind::Ensemble, .role = "strings"},
+        library::Credit{.name = "Preview soloist", .kind = library::CreditKind::Soloist, .role = "violin"}};
+
+      requireAdmission(model.beginProperties({trackId}), "Category previews must begin Properties");
+      fixture.present();
+      click(@"section-3");
+      auto* const previews =
+        @[button(@"credit-preview-edit-0"), button(@"credit-preview-edit-1"), button(@"credit-preview-edit-2")];
+      id const entryTarget = static_cast<NSButton*>(previews[0]).target;
+      SEL const entryAction = static_cast<NSButton*>(previews[0]).action;
+
+      for (std::size_t index = 0; index < replacements.size(); ++index)
+      {
+        auto* const preview = static_cast<NSButton*>(previews[index]);
+        auto* const oldSummary = button(@"credits-edit-all");
+        id const summaryTarget = oldSummary.target;
+        SEL const summaryAction = oldSummary.action;
+        AO_INVARIANT(preview.enabled && !preview.hiddenOrHasHiddenAncestor,
+                     "Every category preview must remain enabled after earlier summary refreshes");
+        [preview performClick:nil];
+        AO_INVARIANT(model.creditsEditor().isEditing() &&
+                       model.creditsEditor().scope() == uimodel::trackCreditScope(replacements[index].kind),
+                     "Each native preview must open exactly its fixed category scope");
+        requireUnwritten();
+        click(@"credits-clear");
+        click(@"credits-add");
+        AO_INVARIANT(findControl(fixture.editor().window.contentView, @"credit-kind-0").hiddenOrHasHiddenAncestor,
+                     "Preview editing must not expose an editable kind selector");
+        editText(fixture.editor().window, @"credit-name-0", nativeText(replacements[index].name));
+        editText(fixture.editor().window, @"credit-role-0", nativeText(replacements[index].role));
+        click(@"credits-save");
+        AO_INVARIANT(model.state().dirty && !model.creditsEditor().isEditing() &&
+                       model.creditSections()[index].optValue == std::vector<library::Credit>{replacements[index]},
+                     "A preview child Save must stage its full typed segment in the parent");
+        requireUnwritten();
+        AO_INVARIANT(oldSummary.target == nil && oldSummary.action == nullptr && !oldSummary.enabled &&
+                       preview.target == entryTarget && preview.action == entryAction && preview.enabled,
+                     "Summary regeneration must revoke summary controls without revoking field previews");
+        auto* const responder = fixture.editor().window.firstResponder;
+        [oldSummary sendAction:summaryAction to:summaryTarget];
+        auto* const forgedPreview = [NSButton buttonWithTitle:preview.title target:entryTarget action:entryAction];
+        forgedPreview.tag = preview.tag;
+        [forgedPreview sendAction:entryAction to:entryTarget];
+        AO_INVARIANT(!model.creditsEditor().isEditing() && fixture.editor().window.firstResponder == responder,
+                     "Retired or copied entry senders must be rejected before focus callbacks");
+        [preview performClick:nil];
+        AO_INVARIANT(model.creditsEditor().isEditing() &&
+                       model.creditsEditor().scope() == uimodel::trackCreditScope(replacements[index].kind) &&
+                       model.creditsEditor().entries() == std::vector<library::Credit>{replacements[index]},
+                     "The same preview must reopen its staged segment after summary replacement");
+        click(@"credits-cancel");
+        requireUnwritten();
+      }
+
+      click(@"save");
+      requireWaitUntil([&] { return model.state().completed; }, "Composed preview Save must complete");
+      auto expected = std::vector<library::Credit>{replacements.begin(), replacements.end()};
+
+      for (auto const& credit : original)
+      {
+        if (credit.kind == library::CreditKind::Performer)
+        {
+          expected.push_back(credit);
+        }
+      }
+
+      AO_INVARIANT(storedCredits() == expected && library.snapshot().revision() == before + 1,
+                   "Parent Save must compose all three preview segments and preserve unselected performers");
+      fixture.finish();
+      requireAdmission(model.beginProperties({trackId}), "Preview teardown must permit a successor Properties draft");
+      fixture.present();
+      auto* const responder = fixture.editor().window.firstResponder;
+
+      for (NSUInteger index = 0; index < previews.count; ++index)
+      {
+        auto* const preview = static_cast<NSButton*>(previews[index]);
+        AO_INVARIANT(preview.target == nil && preview.action == nullptr && !preview.enabled,
+                     "Parent teardown must revoke every retained preview control");
+        [preview sendAction:entryAction to:entryTarget];
+        AO_INVARIANT(!model.creditsEditor().isEditing() && !model.state().dirty && storedCredits() == expected &&
+                       library.snapshot().revision() == before + 1 &&
+                       fixture.editor().window.firstResponder == responder,
+                     "Retained preview callbacks must not reopen or disturb a successor draft");
+      }
+
+      fixture.finish();
+    }
+
+    void verifyNativeCreditsControls(EditorFixture& fixture,
+                                     std::vector<TrackId> const& tracks,
+                                     std::filesystem::path const& stateRoot)
+    {
+      auto& model = fixture.model();
+      auto& library = fixture.session().runtime().library();
+      auto const revision = [&] { return library.snapshot().revision(); };
+      auto const storedCredits = [&](TrackId id)
+      {
+        auto optCredits = library.snapshot().trackCredits(id);
+        AO_INVARIANT(optCredits, "Credits fixture must retain its track");
+        return *optCredits;
+      };
+      auto const button = [&](NSString* identifier)
+      {
+        auto* const control = findControl(fixture.editor().window.contentView, identifier);
+        AO_INVARIANT([control isKindOfClass:NSButton.class], "Credits must expose its semantic native button");
+        return static_cast<NSButton*>(control);
+      };
+      auto const click = [&](NSString* identifier)
+      {
+        auto* const control = button(identifier);
+        AO_INVARIANT(control.enabled, "Credits scenario requires an enabled native action");
+        [control performClick:nil];
+      };
+      auto const pressKey = [&](NSString* identifier, NSString* characters, std::uint16_t keyCode)
+      {
+        auto* const event = [NSEvent keyEventWithType:NSEventTypeKeyDown
+                                             location:NSZeroPoint
+                                        modifierFlags:0
+                                            timestamp:NSProcessInfo.processInfo.systemUptime
+                                         windowNumber:fixture.editor().window.windowNumber
+                                              context:nil
+                                           characters:characters
+                          charactersIgnoringModifiers:characters
+                                            isARepeat:NO
+                                              keyCode:keyCode];
+        auto const handled = [button(identifier) performKeyEquivalent:event];
+        AO_INVARIANT(handled, "Credits must handle its native key equivalent");
+      };
+      auto const chooseKind = [&](NSString* identifier, library::CreditKind kind)
+      {
+        auto* const control = static_cast<NSPopUpButton*>(findControl(fixture.editor().window.contentView, identifier));
+        AO_INVARIANT(
+          [control isKindOfClass:NSPopUpButton.class] && control.enabled && !control.hiddenOrHasHiddenAncestor,
+          "All-kind Credits must expose an editable kind popup");
+        [control selectItemAtIndex:static_cast<NSInteger>(kind)];
+        [control sendAction:control.action to:control.target];
+      };
+
+      auto const retainCreditsCallbacks = [&]
+      {
+        auto* const controls = @[
+          button(@"credit-delete-0"),
+          button(@"credit-up-1"),
+          button(@"credit-down-0"),
+          findControl(fixture.editor().window.contentView, @"credit-kind-0"),
+          button(@"credits-add"),
+          button(@"credits-clear"),
+          button(@"credits-replace"),
+          button(@"credits-save"),
+          button(@"credits-cancel")
+        ];
+        auto actions = std::vector<SEL>{};
+        id const target = static_cast<NSControl*>(controls[0]).target;
+
+        for (NSUInteger index = 0; index < controls.count; ++index)
+        {
+          auto* const control = static_cast<NSControl*>(controls[index]);
+          AO_INVARIANT(control.target == target && control.action != nullptr,
+                       "The retained controls must come from the actual current Credits child");
+          actions.push_back(control.action);
+        }
+
+        auto* const field = requireTextField(fixture, @"credit-name-0");
+        id<NSTextFieldDelegate> const delegate = field.delegate;
+        auto* const textView = static_cast<NSTextView*>([fixture.editor().window fieldEditor:YES forObject:field]);
+        AO_INVARIANT(textView != nil, "The Credits callback probe requires the native field editor");
+        return [&, controls, actions, target, field, delegate, textView]
+        {
+          auto const candidate = model.creditsEditor().entries();
+          auto const scope = model.creditsEditor().scope();
+          auto const editing = model.creditsEditor().isEditing();
+          auto const optFocusedRow = model.creditsEditor().focusedRow();
+          auto const durable = storedCredits(tracks[0]);
+          auto const beforeCallbacks = revision();
+          auto* const responder = fixture.editor().window.firstResponder;
+          auto const requireUnchanged = [&]
+          {
+            AO_INVARIANT(
+              model.creditsEditor().entries() == candidate && model.creditsEditor().scope() == scope &&
+                model.creditsEditor().isEditing() == editing && model.creditsEditor().focusedRow() == optFocusedRow &&
+                storedCredits(tracks[0]) == durable && revision() == beforeCallbacks &&
+                fixture.editor().window.firstResponder == responder,
+              "Retired Credits callbacks must preserve complete draft order/kinds/roles, scope, native focus and "
+              "database");
+          };
+
+          for (NSUInteger index = 0; index < controls.count; ++index)
+          {
+            NSControl* const control = controls[index];
+            AO_INVARIANT(control.target == nil && control.action == nullptr && !control.enabled,
+                         "Retiring a Credits control must revoke its target and action");
+
+            if ([control isKindOfClass:NSPopUpButton.class])
+            {
+              [static_cast<NSPopUpButton*>(control)
+                selectItemAtIndex:static_cast<NSInteger>(library::CreditKind::Ensemble)];
+            }
+
+            // Deliver the captured target/action, as an event already queued before retirement would.
+            [control sendAction:actions[index] to:target];
+            requireUnchanged();
+          }
+
+          AO_INVARIANT(field.delegate == nil, "Retired credit fields must detach their delegate");
+          field.stringValue = @"Obsolete name callback";
+          [delegate
+            controlTextDidBeginEditing:[NSNotification notificationWithName:NSControlTextDidBeginEditingNotification
+                                                                     object:field]];
+          requireUnchanged();
+          [delegate controlTextDidChange:[NSNotification notificationWithName:NSControlTextDidChangeNotification
+                                                                       object:field]];
+          requireUnchanged();
+          auto const consumed = [delegate control:field textView:textView doCommandBySelector:@selector(moveDown:)];
+          AO_INVARIANT(!consumed, "A retired field must not route commands to a successor completion adapter");
+          [delegate controlTextDidEndEditing:[NSNotification notificationWithName:NSControlTextDidEndEditingNotification
+                                                                           object:field]];
+          requireUnchanged();
+        };
+      };
+
+      // The actual inspector action opens Properties; its child edits the same draft.
+      auto* const fixtureBorrow = &fixture;
+      auto const trackId = tracks[0];
+      auto* const inspector = [[AobusTrackInspector alloc] initWithCatalog:fixture.session().catalog()
+        revealHandler:^{}
+        propertiesHandler:^{
+          requireAdmission(fixtureBorrow->model().beginProperties({trackId}), "Inspector Properties must begin");
+          fixtureBorrow->present();
+        }
+        dismissHandler:^{}];
+      auto const optInspectorRow = library.snapshot().trackRow(trackId);
+      [inspector renderSelectionCount:1 row:optInspectorRow credits:{} canReveal:NO];
+      auto* const properties = static_cast<NSButton*>(findControl(inspector.view, @"inspector-properties"));
+      AO_INVARIANT(properties != nil && properties.enabled, "Inspector must expose its working Properties route");
+      [properties performClick:nil];
+      [inspector detach];
+      auto const before = revision();
+      click(@"credits-edit-all");
+      AO_INVARIANT(model.creditsEditor().isEditing() && model.creditsEditor().entries().empty(),
+                   "An empty Credits list must open the same list editor without a scalar fallback");
+      click(@"credits-add");
+      auto* const invalidName = requireTextField(fixture, @"credit-name-0");
+      auto* const error = requireTextField(fixture, @"credit-error-0");
+      AO_INVARIANT(!button(@"credits-save").enabled && !error.hidden && error.stringValue.length > 0 &&
+                     invalidName.currentEditor != nil && invalidName.accessibilityHelp.length > 0,
+                   "A blank native credit must expose its error, retain focus, and prevent child Save");
+      editText(fixture.editor().window, @"credit-name-0", @"Aa");
+      editText(fixture.editor().window, @"credit-role-0", @"pano");
+      auto* const typingRole = requireTextField(fixture, @"credit-role-0");
+      auto const typedEntries = std::array<library::Credit, 2>{
+        library::Credit{.name = "Ada", .role = "pano"}, library::Credit{.name = "Ada", .role = "piano"}};
+      auto const interruptedEntries = std::array<library::Credit, 2>{
+        library::Credit{.name = "Ad!a", .role = "pano"}, library::Credit{.name = "Ada", .role = "pi!ano"}};
+
+      // Programmatic native text insertion, not physical keyboard or accessibility evidence.
+      // Select each field once; consecutive interior edits must not replace it or move the caret.
+      for (std::size_t column = 0; column < typedEntries.size(); ++column)
+      {
+        auto* const field = column == 0 ? invalidName : typingRole;
+        id const delegate = field.delegate;
+        [field selectText:nil];
+        auto* const textEditor = static_cast<NSTextView*>(field.currentEditor);
+        AO_INVARIANT(textEditor != nil, "Consecutive credit edits require the actual native field editor");
+        auto const requireTyping = [&](library::Credit const& expectedEntry, NSUInteger caret)
+        {
+          auto const requireStable = [&]
+          {
+            AO_INVARIANT(requireTextField(fixture, @"credit-name-0") == invalidName &&
+                           requireTextField(fixture, @"credit-role-0") == typingRole && field.delegate == delegate &&
+                           field.currentEditor == textEditor && fixture.editor().window.firstResponder == textEditor &&
+                           NSEqualRanges(textEditor.selectedRange, NSMakeRange(caret, 0)) != NO &&
+                           model.creditsEditor().focusedRow() == std::size_t{0},
+                         "Consecutive Name/Role edits must retain field identity, delegate, native focus and caret");
+            AO_INVARIANT(model.creditsEditor().entries() == std::vector<library::Credit>{expectedEntry} &&
+                           model.creditsEditor().isEditing() && model.creditsEditor().validationErrors().empty() &&
+                           error.hidden != NO && button(@"credits-save").enabled != NO &&
+                           button(@"save").enabled == NO && revision() == before && storedCredits(trackId).empty(),
+                         "Typing must retain every unedited credit attribute, clear child validation and keep parent "
+                         "Save guarded without writing");
+          };
+          requireStable();
+          settleNativeCallbacks();
+          requireStable();
+        };
+        textEditor.selectedRange = NSMakeRange(1, 0);
+        [textEditor insertText:column == 0 ? @"d" : @"i" replacementRange:textEditor.selectedRange];
+        requireTyping(typedEntries[column], 2);
+        [textEditor insertText:@"!" replacementRange:textEditor.selectedRange];
+        requireTyping(interruptedEntries[column], 3);
+        [textEditor insertText:@"" replacementRange:NSMakeRange(2, 1)];
+        requireTyping(typedEntries[column], 2);
+      }
+
+      [fixture.editor() save:nil];
+      AO_INVARIANT(model.creditsEditor().isEditing() && !model.state().busy && revision() == before &&
+                     model.creditsEditor().entries() == (std::vector<library::Credit>{typedEntries[1]}),
+                   "Programmatic parent Save must not submit or discard the consecutive typing candidate");
+      click(@"credits-add");
+      editText(fixture.editor().window, @"credit-name-1", @"Ada");
+      editText(fixture.editor().window, @"credit-role-1", @"piano");
+      click(@"credits-add");
+      editText(fixture.editor().window, @"credit-name-2", @"Leader");
+      editText(fixture.editor().window, @"credit-role-2", @"director");
+      click(@"credit-up-2");
+      AO_INVARIANT(
+        model.creditsEditor().entries()[1].name == "Leader" && model.creditsEditor().entries()[1].role == "director",
+        "Native within-kind reorder must preserve the moved row's role");
+      chooseKind(@"credit-kind-1", library::CreditKind::Conductor);
+      AO_INVARIANT(model.creditsEditor().entries()[0] ==
+                     (library::Credit{.name = "Leader", .kind = library::CreditKind::Conductor, .role = "director"}),
+                   "Native reclassification must preserve name and role and regroup the row");
+      addSharedTag(fixture, @"native_credits_probe");
+      AO_INVARIANT(!button(@"save").enabled, "A tags-only dirty parent must not bypass an active Credits child");
+      [fixture.editor() save:nil];
+      AO_INVARIANT(!model.state().busy && revision() == before, "An active child must block programmatic parent Save");
+      [fixture.editor().window setContentSize:NSMakeSize(580, 500)];
+      [fixture.editor() refresh];
+      auto* const name = requireTextField(fixture, @"credit-name-0");
+      [name scrollRectToVisible:name.bounds];
+      [fixture.editor().window.contentView layoutSubtreeIfNeeded];
+      AO_INVARIANT(name.frame.size.width > 100 && name.frame.size.width < 580 &&
+                     button(@"credits-save").keyEquivalent.length == 1 &&
+                     button(@"credits-cancel").keyEquivalent.length == 1,
+                   "Constrained Credits must retain usable field width and native Save/Cancel key equivalents");
+      captureView(fixture.editor().window.contentView, stateRoot / "properties-credits-narrow.png");
+      [fixture.editor() requestCloseWithCompletion:nil];
+      requireWaitUntil([&] { return fixture.editor().window.attachedSheet != nil; },
+                       "Closing a Credits draft must present the native discard decision");
+      auto* const childSave = button(@"credits-save");
+      [childSave sendAction:childSave.action to:childSave.target];
+      AO_INVARIANT(model.creditsEditor().isEditing() && revision() == before,
+                   "A programmatic child Save beneath discard confirmation must not accept or submit the draft");
+      [fixture.editor().window endSheet:fixture.editor().window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+      requireWaitUntil([&] { return fixture.editor().window.attachedSheet == nil; },
+                       "Keep Editing must return to the existing Credits child");
+      pressKey(@"credits-save", @"\r", 36);
+      AO_INVARIANT(!model.creditsEditor().isEditing() && model.state().dirty && revision() == before,
+                   "Accepting Credits must stage the parent draft without a database write");
+      editText(fixture.editor().window, @"genre", @"Credits composed save");
+      click(@"save");
+      requireWaitUntil([&] { return model.state().completed; }, "Composed native Credits Save must complete");
+      auto const expected =
+        std::vector<library::Credit>{{.name = "Leader", .kind = library::CreditKind::Conductor, .role = "director"},
+                                     {.name = "Ada", .role = "piano"},
+                                     {.name = "Ada", .role = "piano"}};
+      AO_INVARIANT(
+        storedCredits(trackId) == expected && revision() == before + 1 &&
+          library.snapshot().trackRow(trackId)->genre == "Credits composed save" &&
+          std::ranges::contains(library.snapshot().selectionTags(std::array{trackId}), "native_credits_probe"),
+        "One composed commit must retain duplicate credits and save ordinary metadata and tags atomically");
+      fixture.finish();
+
+      // Retained native senders must not acquire the meaning of a reused row tag.
+      requireAdmission(model.beginProperties({trackId}), "Retired Credits controls must begin");
+      fixture.present();
+      auto* const retiredEntry = button(@"credits-edit-all");
+      id const retiredEntryTarget = retiredEntry.target;
+      auto* const retiredEntryAction = retiredEntry.action;
+      click(@"credits-edit-all");
+      click(@"credits-clear");
+
+      for (auto const index : {0, 1, 2})
+      {
+        click(@"credits-add");
+        auto* const nameIdentifier = [NSString stringWithFormat:@"credit-name-%d", index];
+        auto* const roleIdentifier = [NSString stringWithFormat:@"credit-role-%d", index];
+        editText(fixture.editor().window, nameIdentifier, [NSString stringWithFormat:@"Retained row %d", index]);
+        editText(fixture.editor().window, roleIdentifier, [NSString stringWithFormat:@"Retained role %d", index]);
+      }
+
+      auto const afterAdd = retainCreditsCallbacks();
+      click(@"credits-add");
+      afterAdd();
+      auto* const addedName = requireTextField(fixture, @"credit-name-3");
+      AO_INVARIANT(model.creditsEditor().focusedRow() == std::size_t{3} && addedName.currentEditor != nil &&
+                     fixture.editor().window.firstResponder == addedName.currentEditor,
+                   "Native Add must retire the old row controls and focus the new blank row");
+      editText(fixture.editor().window, @"credit-name-3", @"Retained row 3");
+      editText(fixture.editor().window, @"credit-role-3", @"Retained role 3");
+      auto const afterMove = retainCreditsCallbacks();
+      click(@"credit-up-3");
+      afterMove();
+      auto* const movedName = requireTextField(fixture, @"credit-name-2");
+      AO_INVARIANT(model.creditsEditor().entries() ==
+                       (std::vector<library::Credit>{{.name = "Retained row 0", .role = "Retained role 0"},
+                                                     {.name = "Retained row 1", .role = "Retained role 1"},
+                                                     {.name = "Retained row 3", .role = "Retained role 3"},
+                                                     {.name = "Retained row 2", .role = "Retained role 2"}}) &&
+                     model.creditsEditor().focusedRow() == std::size_t{2} && movedName.currentEditor != nil &&
+                     fixture.editor().window.firstResponder == movedName.currentEditor,
+                   "Native Move must preserve the complete row attributes and focus the moved row");
+      auto const afterReclassification = retainCreditsCallbacks();
+      chooseKind(@"credit-kind-2", library::CreditKind::Conductor);
+      afterReclassification();
+      auto const afterDestinationReclassification = retainCreditsCallbacks();
+      chooseKind(@"credit-kind-2", library::CreditKind::Conductor);
+      afterDestinationReclassification();
+      auto* const reclassifiedName = requireTextField(fixture, @"credit-name-1");
+      AO_INVARIANT(model.creditsEditor().entries() ==
+                       (std::vector<library::Credit>{
+                         {.name = "Retained row 3", .kind = library::CreditKind::Conductor, .role = "Retained role 3"},
+                         {.name = "Retained row 1", .kind = library::CreditKind::Conductor, .role = "Retained role 1"},
+                         {.name = "Retained row 0", .role = "Retained role 0"},
+                         {.name = "Retained row 2", .role = "Retained role 2"}}) &&
+                     model.creditsEditor().focusedRow() == std::size_t{1} && reclassifiedName.currentEditor != nil &&
+                     fixture.editor().window.firstResponder == reclassifiedName.currentEditor,
+                   "Native Kind change must append to the destination segment with name/role and focus intact");
+      auto const afterDeletion = retainCreditsCallbacks();
+      click(@"credit-delete-0");
+      afterDeletion();
+      auto const afterCancel = retainCreditsCallbacks();
+      click(@"credits-cancel");
+      afterCancel();
+      AO_INVARIANT(retiredEntry.target == nil && retiredEntry.action == nullptr && !retiredEntry.enabled,
+                   "Rebuilding the Credits summary must revoke its retired entry buttons");
+      [retiredEntry sendAction:retiredEntryAction to:retiredEntryTarget];
+      AO_INVARIANT(!model.creditsEditor().isEditing() && !model.state().dirty && storedCredits(trackId) == expected &&
+                     revision() == before + 1,
+                   "A queued retired summary action must not reopen an obsolete Credits scope");
+      click(@"credits-edit-0");
+      afterAdd();
+      afterMove();
+      afterReclassification();
+      afterDestinationReclassification();
+      afterDeletion();
+      afterCancel();
+      AO_INVARIANT(model.creditsEditor().entries() == (std::vector<library::Credit>{expected[0]}) &&
+                     storedCredits(trackId) == expected && revision() == before + 1,
+                   "Retired controls must leave the reopened scope and complete durable Credits unchanged");
+      click(@"credits-cancel");
+      fixture.finish();
+
+      requireAdmission(model.beginProperties({trackId}), "Scoped native Credits must reopen");
+      fixture.present();
+      click(@"credits-edit-0");
+      AO_INVARIANT(model.creditsEditor().scope() == uimodel::trackCreditScope(library::CreditKind::Conductor) &&
+                     model.creditsEditor().entries().size() == 1 &&
+                     findControl(fixture.editor().window.contentView, @"credit-kind-0").hiddenOrHasHiddenAncestor,
+                   "A category editor must lock kind and load its complete scoped list");
+      editText(fixture.editor().window, @"credit-name-0", @"Revised leader");
+      click(@"credits-save");
+      click(@"credits-edit-3");
+      click(@"credit-delete-0");
+      pressKey(@"credits-cancel", @"\033", 53);
+      click(@"credits-edit-all");
+      AO_INVARIANT(
+        model.creditsEditor().entries().size() == 3 && model.creditsEditor().entries()[0].name == "Revised leader" &&
+          model.creditsEditor().entries()[0].role == "director" && model.creditsEditor().entries()[1] == expected[1] &&
+          model.creditsEditor().entries()[2] == expected[2],
+        "Reopening must overlay accepted scopes and preserve cancelled scopes with roles and duplicates");
+      click(@"credits-cancel");
+      click(@"save");
+      requireWaitUntil([&] { return model.state().completed; }, "Scoped native name edit must complete");
+      auto scopedExpected = expected;
+      scopedExpected[0].name = "Revised leader";
+      AO_INVARIANT(storedCredits(trackId) == scopedExpected,
+                   "A category name edit must preserve role and every unselected segment");
+      fixture.finish();
+
+      requireAdmission(model.beginProperties({trackId, tracks[1]}), "Mixed Credits must begin");
+      fixture.present();
+      auto const mixedBefore = revision();
+      click(@"credits-edit-0");
+      AO_INVARIANT(model.creditsEditor().isMixedReplacement() && model.creditsEditor().entries().empty() &&
+                     !button(@"credits-add").enabled && !button(@"credits-save").enabled,
+                   "Mixed Credits must neither seed a first-target/union draft nor permit implicit replacement");
+      click(@"credits-replace");
+      AO_INVARIANT(button(@"credits-add").enabled && !button(@"credits-save").enabled,
+                   "An untouched empty mixed replacement must not become an implicit clear");
+      click(@"credits-clear");
+      click(@"credits-save");
+      AO_INVARIANT(revision() == mixedBefore, "Explicit mixed clear must remain a staged parent edit");
+      click(@"save");
+      requireWaitUntil([&] { return model.state().completed; }, "Mixed scoped clear must complete");
+      AO_INVARIANT(storedCredits(trackId) == (std::vector<library::Credit>{expected[1], expected[2]}) &&
+                     storedCredits(tracks[1]).empty(),
+                   "Explicit mixed clear must preserve each target's unselected credits independently");
+      fixture.finish();
+
+      requireAdmission(model.beginProperties({trackId}), "Stale child Credits must begin");
+      fixture.present();
+      click(@"credits-edit-3");
+      editText(fixture.editor().window, @"credit-role-0", @"Retained stale role");
+      auto concurrent = LibraryEditorModel{fixture.session().runtime(), fixture.session().catalog(), [] {}};
+      requireAdmission(concurrent.beginProperties({tracks[1]}), "Independent mutation must begin");
+      auto const field = std::ranges::find(
+        concurrent.state().fields, rt::TrackField::Genre, [](auto const& candidate) { return candidate.spec.field; });
+      AO_INVARIANT(field != concurrent.state().fields.end(), "Independent mutation requires Genre");
+      concurrent.editField(static_cast<std::size_t>(field - concurrent.state().fields.begin()), "Stale Credits probe");
+      concurrent.save();
+      requireWaitUntil([&] { return concurrent.state().completed && model.state().stale; },
+                       "Independent revision must stale the active Credits draft");
+      concurrent.cancel();
+      [fixture.editor() refresh];
+      AO_INVARIANT(model.creditsEditor().entries()[0].role == "Retained stale role" &&
+                     !requireTextField(fixture, @"credit-role-0").editable && !button(@"credits-save").enabled,
+                   "Stale native Credits must freeze and retain the candidate without rebinding");
+      [fixture.editor() requestCloseWithCompletion:nil];
+      requireWaitUntil([&] { return fixture.editor().window.attachedSheet != nil; },
+                       "An active Credits child alone must require a discard decision");
+      [fixture.editor().window endSheet:fixture.editor().window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+      settleNativeCallbacks();
+      AO_INVARIANT(
+        model.creditsEditor().isEditing() && model.creditsEditor().entries()[0].role == "Retained stale role",
+        "Keep Open must preserve the stale Credits child");
+      [fixture.editor() requestCloseWithCompletion:nil];
+      requireWaitUntil(
+        [&] { return fixture.editor().window.attachedSheet != nil; }, "Discard must reopen confirmation");
+      [fixture.editor().window endSheet:fixture.editor().window.attachedSheet returnCode:NSAlertSecondButtonReturn];
+      requireWaitUntil(
+        [&] { return fixture.editor().window == nil; }, "Confirmed discard must detach the child safely");
+      fixture.detachClosed();
+      AO_INVARIANT(storedCredits(trackId) == (std::vector<library::Credit>{expected[1], expected[2]}),
+                   "Discarding a stale child must not write its candidate");
+    }
+
     void verifyPropertyAuthoring(EditorFixture& fixture,
                                  std::vector<TrackId> const& tracks,
                                  std::filesystem::path const& stateRoot)
     {
       auto& session = fixture.session();
       auto& model = fixture.model();
-      auto initialSnapshot = session.runtime().library().snapshot();
-      auto const optFirstRow = initialSnapshot.trackRow(tracks[0]);
-      auto const optThirdRow = initialSnapshot.trackRow(tracks[2]);
+      auto const [optFirstRow, optThirdRow] = [&]
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        return std::pair{snapshot.trackRow(tracks[0]), snapshot.trackRow(tracks[2])};
+      }();
       AO_INVARIANT(optFirstRow && optThirdRow, "Scanned authoring tracks must remain readable");
       auto const originalFirstGenre = optFirstRow->genre;
       auto const originalThirdGenre = optThirdRow->genre;
@@ -454,6 +1267,9 @@ namespace ao::appkit::test
       [disclosure performClick:nil];
       AO_INVARIANT(
         composer.hiddenOrHasHiddenAncestor == 0, "The native disclosure button must reveal secondary metadata");
+      auto* const expandedDate = requireTextField(fixture, @"recording-date");
+      AO_INVARIANT(expandedDate.hiddenOrHasHiddenAncestor == 0 && isControlInSection(expandedDate, disclosure),
+                   "Modern disclosure must reveal RecordingDate in Work & Performance");
       captureView(fixture.editor().window.contentView, stateRoot / "properties-expanded.png");
       [disclosure performClick:nil];
       AO_INVARIANT(
@@ -481,6 +1297,14 @@ namespace ao::appkit::test
                      requireTextField(fixture, @"genre").controlSize == NSControlSizeRegular &&
                      requireTextField(fixture, @"composer").hiddenOrHasHiddenAncestor == 0,
                    "Classic presentation must retain compact controls and expanded secondary metadata");
+      auto* const classicPerformance =
+        static_cast<NSButton*>(findControl(fixture.editor().window.contentView, @"section-3"));
+      auto* const classicDate = requireTextField(fixture, @"recording-date");
+      AO_INVARIANT(classicPerformance != nil && classicPerformance.state == NSControlStateValueOn &&
+                     classicDate.hiddenOrHasHiddenAncestor == 0 && classicDate.editable != 0 &&
+                     classicDate.controlSize == NSControlSizeRegular &&
+                     isControlInSection(classicDate, classicPerformance),
+                   "Classic must expose the editable RecordingDate control in its expanded Work & Performance section");
       captureView(fixture.editor().window.contentView, stateRoot / "properties-classic.png");
       fixture.finish();
 
@@ -1246,6 +2070,8 @@ namespace ao::appkit::test
     auto const tracks = firstThreeTracks(fixture.session());
     verifyPendingTagClose(fixture, tracks[0]);
     verifyCallbackExecutorSubmission(fixture, tracks[0]);
+    verifyRecordingDateProperty(fixture, tracks[0]);
+    verifyNativeRecordingDateControl(fixture, tracks[0]);
     verifyPropertyAuthoring(fixture, tracks, stateRoot);
     auto const listId = verifyStaleDraft(fixture, tracks, stateRoot);
     verifyStaleCloseContract(fixture, tracks, listId);
@@ -1253,6 +2079,44 @@ namespace ao::appkit::test
     verifyCompletionRanges(fixture);
     verifyEntryCompletion(fixture, tracks);
     verifyMembershipNotifications(fixture, tracks);
+    return 0;
+  }
+
+  std::int32_t runCreditsControlsScenario(std::filesystem::path const& musicRoot,
+                                          std::filesystem::path const& stateRoot)
+  {
+    auto fixture = EditorFixture{musicRoot, stateRoot};
+    auto const tracks = firstThreeTracks(fixture.session());
+    verifyNativeCreditsControls(fixture, tracks, stateRoot);
+    return 0;
+  }
+
+  std::int32_t runCreditsPreviewsScenario(std::filesystem::path const& musicRoot,
+                                          std::filesystem::path const& stateRoot)
+  {
+    auto fixture = EditorFixture{musicRoot, stateRoot};
+    auto const tracks = firstThreeTracks(fixture.session());
+    auto const expected =
+      std::vector<library::Credit>{{.name = "Ada", .role = "piano"}, {.name = "Ada", .role = "piano"}};
+    auto& model = fixture.model();
+    requireAdmission(model.beginProperties({tracks[0]}), "Preview preserved-segment arrangement must begin");
+    requireAdmission(model.beginCreditsEdit(uimodel::allTrackCreditKinds()), "Preview Credits arrangement must begin");
+
+    for (std::size_t index = 0; index < expected.size(); ++index)
+    {
+      model.creditsEditor().addEntry(expected[index].kind);
+      model.creditsEditor().updateName(index, expected[index].name);
+      model.creditsEditor().updateRole(index, expected[index].role);
+    }
+
+    requireAdmission(model.acceptCreditsEdit(), "Preview preserved-segment arrangement must stage");
+    model.save();
+    requireWaitUntil([&] { return model.state().completed; }, "Preview preserved-segment arrangement must commit");
+    model.cancel();
+    auto const optCredits = fixture.session().runtime().library().snapshot().trackCredits(tracks[0]);
+    AO_INVARIANT(optCredits && *optCredits == expected,
+                 "Preview isolation must preserve the original nonempty duplicate-Performer oracle");
+    verifyNativeCreditPreviews(fixture, tracks[0]);
     return 0;
   }
 } // namespace ao::appkit::test

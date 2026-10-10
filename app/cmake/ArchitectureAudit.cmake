@@ -154,6 +154,47 @@ function(_aobus_architecture_audit_self_test)
   endforeach()
   _aobus_adjudicate_architecture_rule(
     uimodel_core "#include <ao/library/MusicLibrary.h>" "#include <ao/rt/LibrarySnapshot.h>")
+  foreach(_header IN ITEMS "ao/library/RecordingDate.h" "ao/library/Credits.h")
+    _aobus_assert_architecture_allows(uimodel_core "#include <${_header}>")
+    _aobus_assert_architecture_allows(uimodel_core "#include \"${_header}\"")
+  endforeach()
+  _aobus_assert_architecture_allows(uimodel_core
+    "# include\t<ao/library/RecordingDate.h>\n#include \"ao/library/Credits.h\"\n")
+  foreach(_header IN ITEMS
+      "ao/library/MusicLibrary.h"
+      "ao/library/TrackView.h"
+      "ao/library/TrackBuilder.h"
+      "ao/library/ListStore.h"
+      "ao/library/ResourceStore.h"
+      "ao/library/DictionaryStore.h"
+      "ao/library/FileManifestStore.h"
+      "ao/library/RecordingDate.hpp"
+      "ao/library/RecordingDate.h.extra"
+      "ao/library/RecordingDate.h/../MusicLibrary.h"
+      "ao/library/Musicians.h"
+      "ao/library/CreditsExtra.h"
+      "ao/library/Credits.h/TrackView.h"
+      "ao/library/detail/Credits.h"
+      "ao/library/../lmdb/Transaction.h"
+      "ao/lmdb/Transaction.h"
+      "ao/audio/Player.h"
+      "ao/audio/Backend.h"
+      "ao/audio/Engine.h"
+      "ao/audio/backend/Backend.h"
+      "ao/audio/detail/Control.h")
+    _aobus_assert_architecture_rejects(uimodel_core "#include <${_header}>")
+    _aobus_assert_architecture_rejects(uimodel_core "#include \"${_header}\"")
+    # Removing an allowed include must leave every later dependency visible.
+    _aobus_assert_architecture_rejects(uimodel_core
+      "#include <ao/library/RecordingDate.h>\n#include \"ao/library/Credits.h\"\n#include <${_header}>")
+  endforeach()
+  foreach(_sample IN ITEMS
+      "#include <ao/library/RecordingDate.h\""
+      "#include \"ao/library/Credits.h>"
+      "#include <ao/library/RecordingDate.h>\nWriteTransaction& transaction"
+      "#include \"ao/library/Credits.h\"\nWritableMusicLibrary& library")
+    _aobus_assert_architecture_rejects(uimodel_core "${_sample}")
+  endforeach()
   _aobus_adjudicate_architecture_rule(
     system_media_frontend "#include <gtkmm/widget.h>" "#include <giomm/file.h>")
   foreach(_sample IN ITEMS
@@ -321,10 +362,13 @@ function(_aobus_run_architecture_audit)
     FORBIDDEN
       "(#[ \t]*(include|import)[ \t]*[<\\\"](gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib|AppKit|Cocoa|Foundation|CoreGraphics)/)|(@[ \t\r\n]*import[ \t\r\n]+(AppKit|Cocoa|Foundation|CoreGraphics)[ \t\r\n]*([.]|;))|(\"(ao-activity-status[A-Za-z0-9_.-]*|[A-Za-z0-9_.-]+-symbolic)\")"
     ALLOWED "//[^\r\n]*|/[*]([^*]|[*]+[^*/])*[*]+/")
+  # Only these independent Core value/admission capsules cross this boundary;
+  # matching the complete path and paired delimiter prevents prefix exemptions.
   _aobus_register_architecture_rule(uimodel_core
     ROOTS app/include/ao/uimodel app/uimodel
     FORBIDDEN
-      "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${_forbidden_audio_control}))|${_forbidden_write_authority}")
+      "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${_forbidden_audio_control}))|${_forbidden_write_authority}"
+    ALLOWED "#[ \t]*include[ \t]*(<ao/library/(RecordingDate|Credits)[.]h>|\"ao/library/(RecordingDate|Credits)[.]h\")")
   # Shared adapters serve several frontends, so they may use native OS
   # frameworks but no frontend toolkit or frontend implementation header.
   _aobus_register_architecture_rule(system_media_frontend

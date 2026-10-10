@@ -3,6 +3,30 @@
 
 de:table {
   messages:table {
+    track_field_recording_date { "Aufnahmedatum" }
+    track_credits_heading { "Mitwirkende" }
+    track_credit_performer { "Interpret" }
+    track_credit_name { "Name" }
+    track_credit_role { "Rolle oder Instrument (optional)" }
+    track_credits_add { "Mitwirkung hinzufügen" }
+    track_credits_replace { "Ersetzen…" }
+    track_credits_clear { "Diesen Bereich leeren" }
+    track_credits_commit { "Mitwirkende speichern" }
+    track_credits_cancel { "Abbrechen" }
+    track_credit_delete { "Mitwirkung löschen" }
+    track_credit_blank_name { "Zeile {row}: Geben Sie einen Namen ein." }
+    track_credit_invalid_name_text { "Zeile {row}: Der Name enthält ungültigen Text." }
+    track_credit_invalid_role_text { "Zeile {row}: Die Rolle oder das Instrument enthält ungültigen Text." }
+    track_credit_invalid_kind { "Zeile {row}: Wählen Sie eine gültige Mitwirkungskategorie für diesen Bereich." }
+    track_credits_cleared { "Mitwirkende entfernt" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "Kategorie" }
+    track_credits_scope { "Mitwirkungsbereich: {scope}" }
+    track_credits_all_kinds { "Alle Mitwirkungskategorien" }
+    track_credits_replace_scope { "Diesen Bereich für alle ausgewählten Titel ersetzen" }
+    track_credit_move_up { "Nach oben" }
+    track_credit_move_down { "Nach unten" }
+    track_recording_date_invalid { "Geben Sie ein gültiges Datum als YYYY, YYYY-MM oder YYYY-MM-DD ein, oder lassen Sie das Feld zum Löschen leer." }
     tui_go_to_back { "Zurück" }
     tui_go_to_forward { "Vorwärts" }
     tui_go_to_cancel { "Abbrechen" }

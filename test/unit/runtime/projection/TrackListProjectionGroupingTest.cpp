@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/RuntimeOperationProbe.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackRow.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <catch2/catch_message.hpp>
@@ -660,18 +667,20 @@ namespace ao::rt::test
   {
     auto env = TrackListProjectionFixture{};
 
-    auto id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A",
-                                                                    .genre = "Pop",
-                                                                    .composer = "Mozart",
-                                                                    .conductor = "Carlos Kleiber",
-                                                                    .ensemble = "Vienna Philharmonic",
-                                                                    .work = "Opus 1"});
-    auto id2 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B",
-                                                                    .genre = "Rock",
-                                                                    .composer = "Bach",
-                                                                    .conductor = "Leonard Bernstein",
-                                                                    .ensemble = "New York Philharmonic",
-                                                                    .work = "Opus 2"});
+    auto id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "A",
+                               .genre = "Pop",
+                               .composer = "Mozart",
+                               .work = "Opus 1",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Vienna Philharmonic", .kind = library::CreditKind::Ensemble}}});
+    auto id2 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "B",
+                               .genre = "Rock",
+                               .composer = "Bach",
+                               .work = "Opus 2",
+                               .credits = {{.name = "Leonard Bernstein", .kind = library::CreditKind::Conductor},
+                                           {.name = "New York Philharmonic", .kind = library::CreditKind::Ensemble}}});
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
@@ -730,6 +739,130 @@ namespace ao::rt::test
       CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "New York Philharmonic");
       CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Vienna Philharmonic");
     }
+  }
+
+  TEST_CASE("TrackListProjection - same primary credits keep distinct row counts through incremental refresh",
+            "[runtime][unit][projection][credits]")
+  {
+    auto kind = library::CreditKind::Conductor;
+    auto field = TrackField::Conductor;
+    auto sortField = TrackSortField::Conductor;
+    auto groupKey = TrackGroupKey::Conductor;
+    auto missingKind = MissingTrackValueKind::Conductor;
+    auto nameMember = &TrackRow::conductor;
+    auto countMember = &TrackRow::conductorCount;
+
+    SECTION("Conductors")
+    {
+    }
+
+    SECTION("Ensembles")
+    {
+      kind = library::CreditKind::Ensemble;
+      field = TrackField::Ensemble;
+      sortField = TrackSortField::Ensemble;
+      groupKey = TrackGroupKey::Ensemble;
+      missingKind = MissingTrackValueKind::Ensemble;
+      nameMember = &TrackRow::ensemble;
+      countMember = &TrackRow::ensembleCount;
+    }
+
+    auto env = TrackListProjectionFixture{};
+    auto const single = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Single", .credits = {{.name = "Zulu", .kind = kind}}});
+    auto const multiple = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "Multiple",
+                               .credits = {{.name = "Zulu", .kind = kind},
+                                           {.name = "Aaron", .kind = kind, .role = "Guest"},
+                                           {.name = "Aaron", .kind = kind, .role = "Guest"},
+                                           {.name = "Solo", .kind = library::CreditKind::Soloist},
+                                           {.name = "Solo", .kind = library::CreditKind::Soloist},
+                                           {.name = "Other", .kind = library::CreditKind::Soloist}}});
+    auto const missing = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Missing"});
+    env.setupFiltered({{single, multiple, missing}});
+    auto changes = makeStateOnlyLibraryChanges(env.libraryFixture.library());
+    auto commands = LibraryCommandsFixture{env.libraryFixture.library(), changes};
+    auto projection = env.createProjection(ViewId{1});
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const subscription =
+      projection.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    projection.setPresentation(TrackPresentationSpec{.groupBy = groupKey,
+                                                     .sortBy = {{sortField, true}},
+                                                     .visibleFields = {TrackField::Title, field},
+                                                     .redundantFields = {field}});
+    CHECK(projection.presentation().redundantFields.empty());
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(trackGroupHeadingMissingKind(projection.groupAt(0).heading.primary) == missingKind);
+    CHECK(trackGroupHeadingText(projection.groupAt(1).heading.primary) == "Zulu");
+    CHECK(projection.groupAt(1).rows.count == 2);
+    CHECK(projection.trackIdAt(0) == missing);
+    CHECK(projection.trackIdAt(1) == single);
+    CHECK(projection.trackIdAt(2) == multiple);
+
+    auto checkRow = [&](TrackId id, std::string const& name, std::uint16_t count)
+    {
+      auto const snapshot = commands.library().snapshot();
+      auto const optRow = snapshot.trackRow(id);
+      REQUIRE(optRow);
+      CHECK((*optRow).*nameMember == name);
+      CHECK((*optRow).*countMember == count);
+      CHECK(std::get<std::string>(snapshot.trackField(id, field)) == name);
+      CHECK(optRow->soloist == (id == multiple ? "Solo" : ""));
+      CHECK(optRow->soloistCount == (id == multiple ? 3 : 0));
+    };
+    checkRow(single, "Zulu", 1);
+    checkRow(multiple, "Zulu", 3);
+    checkRow(missing, "", 0);
+    auto const heading = projection.groupAt(1).heading;
+
+    auto replace = [&](std::vector<library::Credit> const& entries, std::uint16_t count)
+    {
+      auto replacement = CreditReplacement{.entries = entries};
+      replacement.kinds.set(static_cast<std::size_t>(kind));
+      REQUIRE(commands.updateMetadata(std::array{multiple}, MetadataPatch{.optCredits = replacement}));
+      batches.clear();
+      auto const before = rt::detail::RuntimeOperationProbe::counts(projection);
+      env.source.update(multiple);
+      auto const after = rt::detail::RuntimeOperationProbe::counts(projection);
+      CHECK(after.fullProjectionRebuilds == before.fullProjectionRebuilds);
+      CHECK(after.incrementalProjectionUpdates == before.incrementalProjectionUpdates + 1);
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      auto const* update = std::get_if<ProjectionUpdateRange>(&batches.front().deltas.front());
+      REQUIRE(update != nullptr);
+      CHECK(update->range.start == 2);
+      CHECK(update->range.count == 1);
+      CHECK(projection.groupAt(1).heading == heading);
+      CHECK(projection.groupAt(1).rows.count == 2);
+      checkRow(multiple, "Zulu", count);
+
+      auto rebuilt = env.createProjection(ViewId{2});
+      rebuilt.setPresentation(projection.presentation());
+      REQUIRE(rebuilt.groupCount() == projection.groupCount());
+
+      for (std::size_t index = 0; index < 3; ++index)
+      {
+        CHECK(rebuilt.trackIdAt(index) == projection.trackIdAt(index));
+      }
+
+      for (std::size_t index = 0; index < rebuilt.groupCount(); ++index)
+      {
+        CHECK(rebuilt.groupAt(index).heading == projection.groupAt(index).heading);
+        CHECK(rebuilt.groupAt(index).rows.start == projection.groupAt(index).rows.start);
+        CHECK(rebuilt.groupAt(index).rows.count == projection.groupAt(index).rows.count);
+      }
+    };
+
+    // Role-only, nonfirst-name, then duplicate-count changes leave the heading intact.
+    replace({{.name = "Zulu", .kind = kind},
+             {.name = "Aaron", .kind = kind, .role = "Host"},
+             {.name = "Aaron", .kind = kind, .role = "Guest"}},
+            3);
+    replace({{.name = "Zulu", .kind = kind},
+             {.name = "Beta", .kind = kind, .role = "Host"},
+             {.name = "Aaron", .kind = kind, .role = "Guest"}},
+            3);
+    replace({{.name = "Zulu", .kind = kind}, {.name = "Zulu", .kind = kind}}, 2);
   }
 
   TEST_CASE("TrackListProjection - every grouping supplies a semantic primary heading", "[runtime][unit][projection]")

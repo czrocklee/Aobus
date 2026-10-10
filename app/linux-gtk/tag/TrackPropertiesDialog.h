@@ -4,6 +4,7 @@
 #pragma once
 
 #include "app/AppDialog.h"
+#include "layout/component/track/TrackCreditsEditor.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
@@ -112,6 +113,7 @@ namespace ao::gtk
     std::optional<uimodel::TrackAuthoringSession> _optEditSession;
     async::Subscription _editSessionInvalidatedSubscription;
     bool _multipleTracks = false;
+    bool _hasInvalidRecordingDate = false;
     uimodel::TrackPropertiesFormModel _formModel;
     uimodel::TrackPropertiesFormSpec _formSpec;
     Gtk::Button* _saveButton = nullptr;
@@ -127,6 +129,7 @@ namespace ao::gtk
     Gtk::ScrolledWindow _propertiesScroll{};
     Gtk::Box _propertiesBox{Gtk::Orientation::VERTICAL};
 
+    layout::TrackCreditsEditor _creditsEditor;
     std::vector<FieldEditor> _editors;
     std::vector<FieldEditor> _readonlyRows;
     std::vector<CompletionControllerBinding> _completionControllers;

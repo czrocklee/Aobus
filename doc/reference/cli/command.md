@@ -74,14 +74,38 @@ Track update field options are:
 
 ```text
 --title --artist --album --album-artist --genre
---composer --conductor --ensemble --work --movement --soloist
+--composer --work --movement
+--recording-date <date> --credit KIND NAME ROLE --credit-scope KIND --clear-credits
 --year --track-number --track-total --disc-number --disc-total
 --movement-number --movement-total
 --set key=value --unset key
 ```
 
-`--set`, `--unset`, `--add-tag`, and `--remove-tag` are repeatable.
+`--set`, `--unset`, `--add-tag`, `--remove-tag`, `--credit`, and `--credit-scope` are repeatable.
+Each of `--set`, `--unset`, `--add-tag`, and `--remove-tag` accepts one or more text arguments per occurrence; additional arguments stop at CLI11's next option, subcommand boundary, or delimiter.
+The mandatory first argument may be option-like; use attached `--option=VALUE` to supply an option-like value unambiguously.
+Attached values also allow further space-separated arguments. An attached empty value supplies an empty argument rather than consuming the next token.
+Brackets and commas are literal text, not a list or escape codec: `[live]`, `[]`, `[[aabb]]`, and `a,b` retain their spelling.
+`--set` splits only at the first `=` inside its argument: `--set '[source=manual]'` stores key `[source` with value `manual]`; `--set '[mood]=bright'` stores key `[mood]` with value `bright`.
+Empty assignments and empty unset keys are rejected; empty custom values and empty tag text retain their ordinary meaning.
+A `--` ending one of these unlimited vectors is consumed before ordinary option parsing resumes.
 At least one field or tag option is required.
+`--recording-date` accepts `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`; surrounding whitespace is trimmed, an empty value explicitly clears the date, and an invalid literal is rejected with an InvalidInput error before any target is bound.
+Each `--credit` consumes exactly the next three literal process arguments: `KIND NAME ROLE`, including empty or option-like name and role text. Incomplete occurrences reject the command with CLI11 argument-mismatch status `114`.
+Only the space-separated triple grammar is supported; every attached `--credit=...` spelling, including boolean or empty values, is rejected with the same parse status.
+**Warning:** `--credit performer Name --dry-run` stores the literal role `--dry-run`; it does not request a preview.
+Place the preview flag before the triple (`--dry-run --credit performer Name ''`) or after an explicitly supplied role (`--credit performer Name '' --dry-run`).
+Kind tokens are exactly `conductor`, `ensemble`, `soloist`, and `performer`.
+Pass an empty argument for an absent role. Punctuation has no separator meaning: `--credit conductor 'A=B: C' ''` supplies the roleless name `A=B: C`.
+Brackets have no list or escape meaning in these values: `[Smith, John]`, `[]`, and `[[aabb]]` remain literal name or role text.
+Names and roles have the six ASCII whitespace characters trimmed at their boundaries and are normalized to NFC; malformed UTF-8 or a blank name rejects the whole command, and a blank role means absence.
+With no scope option, all kinds are replaced. Repeated `--credit-scope KIND` options select their union; duplicates are idempotent, and there is no `all` token.
+Every entry must belong to the chosen scope. Occurrences replace the complete selected segments rather than appending, preserving duplicates and supplied within-kind order; other segments stay untouched independently on each track.
+`--clear-credits` clears the selected scope and cannot be combined with `--credit`. A scope without either action is rejected.
+No credit action leaves credits unchanged. Recording date and unrelated fields are independent, and can share the same atomic update.
+Replacing identical normalized scoped credits, or clearing an empty scope, is a no-op reported as zero updated tracks.
+Unrecognized options, including `--musician`, `--clear-musicians`, `--conductor`, `--ensemble`, and `--soloist`, are rejected rather than treated as aliases.
+`--set` rejects reserved keys with an InvalidInput error: the `TrackField` id vocabulary (including category projections such as `soloist`) and the runtime-owned `credits` key. The `musicians` key is not reserved.
 When any tag option is present, metadata fields and tag changes commit as one atomic edit through the runtime properties mutation.
 The same tag in both `--add-tag` and `--remove-tag` is rejected with an InvalidInput error.
 `--dry-run` does not support tag changes yet; combined with tag options it is rejected with an InvalidInput error.
@@ -99,14 +123,18 @@ Most commands emit one YAML or JSON document.
 Each track record contains:
 
 ```text
-id, title, artist, album, albumArtist, genre, composer, conductor,
-ensemble, work, movement, soloist, year, trackNumber, trackTotal,
-discNumber, discTotal, movementNumber, movementTotal, tags, duration,
-sampleRate, uri, custom
+id, title, artist, album, albumArtist, genre, composer,
+work, movement, recordingDate, credits, year,
+trackNumber, trackTotal, discNumber, discTotal, movementNumber,
+movementTotal, tags, duration, sampleRate, uri, custom
 ```
 
 Zero/empty sentinel track values are omitted.
 `duration` is milliseconds.
+`recordingDate` is the canonical stored precision (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) and is omitted when absent.
+`credits` is one sequence of `{name, kind, role?}` entries, including an explicit empty sequence.
+It preserves duplicates and within-kind order, grouped canonically as conductor, ensemble, soloist, performer; absent roles omit the `role` key.
+There are no duplicated editable `conductor`, `ensemble`, or `soloist` keys in structured output.
 
 Mutation/administrative shapes:
 
@@ -196,6 +224,8 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 
 - `track show --format` is mutually exclusive with YAML/JSON.
 - `track update` applies field options and tag options as one atomic edit; the same tag in `--add-tag` and `--remove-tag` is rejected, and `--dry-run` is rejected when tag options are present.
+- `track update` rejects credit arity, scope, kind, text, and clear/replacement conflicts, invalid recording-date literals, and reserved keys in `--set`, all before mutation.
+- `track update` change records use the runtime field names: `recordingDate` values are canonical date strings, and `credits` values are diagnostics-only text, never replacement input.
 - Explicit missing ids fail before mutation.
 - List parent existence, self-parenting, and cycles are rejected.
 - `list add/remove` require a List whose complete local expression is one positive tag predicate; compound, negated, or non-tag predicates are not directly writable.
@@ -231,6 +261,9 @@ There is no separate CLI protocol version or migration layer.
 
 ```bash
 aobus -C /music track show --filter '$artist == "Miles Davis"' -O json
+aobus track update 42 --recording-date 1981-05-12 --credit soloist 'Glenn Gould' Piano --credit conductor 'Leonard Bernstein' ''
+aobus track update 42 --credit-scope performer --clear-credits
+aobus track update 42 --dry-run --credit performer 'Preview only' ''
 aobus track update 42 --composer "J. S. Bach" --set source=manual --dry-run
 aobus track update 12 --genre Jazz --add-tag favourite --remove-tag inbox
 aobus lib export backup.yaml --mode full
@@ -238,6 +271,22 @@ aobus lib resource export 3 --output-file cover.jpg
 aobus -O json lib import backup.yaml --mode restore --dry-run
 aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 ```
+
+For a roleless credit in Windows Command Prompt, pass a double-quoted empty argument:
+
+```bat
+aobus.exe -C "C:\Music" track update 42 --credit conductor "Leonard Bernstein" ""
+```
+
+Windows PowerShell 5.1 drops empty strings in ordinary native-command argument passing.
+Use its stop-parsing token for a literal native invocation that preserves the empty role:
+
+```powershell
+aobus.exe --% -C "C:\Music" track update 42 --credit conductor "Leonard Bernstein" ""
+```
+
+After `--%`, the example uses literal arguments, not PowerShell variables or expressions.
+The CLI cannot restore an empty argument removed by the invoking shell; missing arguments reject the command rather than partially applying it.
 
 ## Implementation authority
 
@@ -249,6 +298,8 @@ aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects the command tree and representative exact shapes.
 - [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects encoding rules.
 - [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal and saved-order cleanup.
+- [`TrackPerformanceMetadataCommandTest.cpp`](../../../test/unit/cli/TrackPerformanceMetadataCommandTest.cpp) protects recording-date and Credits show/update options, literal fixed-triple arguments, native argv dry-run placement, attached-form rejection, exact arity, option context, scope/clear/conflict/rejection rules, and structured sequence output.
+- [`TrackLiteralMetadataCommandTest.cpp`](../../../test/unit/cli/TrackLiteralMetadataCommandTest.cpp) protects literal tag/custom operands, attached and multiargument forms, contextual recognition, and atomic rejection.
 
 ## Related documents
 

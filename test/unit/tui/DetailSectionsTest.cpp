@@ -12,6 +12,7 @@
 #include "tui/ShellInteractionModel.h"
 #include "tui/StatusBar.h"
 #include "tui/TextCell.h"
+#include "tui/TrackEditController.h"
 #include "tui/TrackListEntry.h"
 #include <ao/AudioCodec.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -29,6 +30,48 @@
 
 namespace ao::tui::test
 {
+  TEST_CASE("DetailSections - empty credits expose focused all-kind and locked category editors",
+            "[tui][unit][credits]")
+  {
+    using namespace ftxui;
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto events = fixture.makeEvents(library);
+    REQUIRE(events.tryHandleEvent(Event::Character('D')));
+    auto const* track = library.selectedTrackView().track;
+    REQUIRE(track != nullptr);
+    auto const focusedId = track->id;
+    auto const frame = renderElement(detailPane(ao::test::englishMessageCatalog(),
+                                                track,
+                                                {},
+                                                40,
+                                                nullptr,
+                                                0,
+                                                {.sections = fixture.shell.detailSections(), .focused = true}),
+                                     40,
+                                     30)
+                         .text;
+    CHECK(frame.contains("Credits [Ctrl-K]"));
+    CHECK(frame.contains("Performer [4]"));
+
+    for (auto const& event :
+         {Event::CtrlK, Event::Character('1'), Event::Character('2'), Event::Character('3'), Event::Character('4')})
+    {
+      REQUIRE(events.tryHandleEvent(event));
+      REQUIRE(fixture.trackEditPtr->isActive());
+      auto const* editor = fixture.trackEditPtr->activeEditor();
+      REQUIRE(editor->isEditingCredits());
+      REQUIRE(editor->targets().size() == 1);
+      CHECK(editor->targets()[0].id == focusedId);
+      CHECK_FALSE(editor->canApply());
+      REQUIRE(events.tryHandleEvent(Event::Escape));
+      CHECK_FALSE(fixture.trackEditPtr->activeEditor()->isEditingCredits());
+      CHECK_FALSE(fixture.trackEditPtr->activeEditor()->isDirty());
+      REQUIRE(events.tryHandleEvent(Event::Escape));
+      CHECK_FALSE(fixture.trackEditPtr->isActive());
+    }
+  }
+
   TEST_CASE("DetailSections - explicit focus stays outside the normal panel cycle", "[tui][unit][detail]")
   {
     using namespace ftxui;

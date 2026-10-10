@@ -453,6 +453,13 @@ namespace winrt::Aobus::implementation
             }
           },
         },
+        .editCredits = [weak](std::vector<ao::TrackId> ids, std::bitset<ao::library::kCreditKindCount> scope)
+        {
+          if (auto self = weak.get(); self)
+          {
+            self->presentCapturedTrackProperties(std::move(ids), scope);
+          }
+        },
       });
   }
 

@@ -55,6 +55,7 @@ namespace ao::uimodel
       MessageId::TrackFieldDisplayTrackNumber,
       MessageId::TrackFieldTechnicalSummary,
       MessageId::TrackFieldQuality,
+      MessageId::TrackFieldRecordingDate,
     });
 
     static_assert(kTrackFieldMessageIds.size() == rt::kTrackFieldCount);

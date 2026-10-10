@@ -12,9 +12,11 @@
 #include "TrackRowItem.g.cpp"
 #endif
 
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/utility/Path.h>
 
 #include <concepts>
@@ -68,11 +70,12 @@ namespace winrt::Aobus::implementation
         case F::AlbumArtist: return row.albumArtist;
         case F::Genre: return row.genre;
         case F::Composer: return row.composer;
-        case F::Conductor: return row.conductor;
-        case F::Ensemble: return row.ensemble;
+        case F::Conductor: return formatTrackCreditSummary(textCatalog, row.conductor, row.conductorCount);
+        case F::Ensemble: return formatTrackCreditSummary(textCatalog, row.ensemble, row.ensembleCount);
         case F::Work: return row.work;
         case F::Movement: return row.movement;
-        case F::Soloist: return row.soloist;
+        case F::Soloist: return formatTrackCreditSummary(textCatalog, row.soloist, row.soloistCount);
+        case F::RecordingDate: return ao::library::formatRecordingDate(row.recordingDate);
         case F::Year: return formatUint16(row.year);
         case F::DiscNumber: return formatUint16(row.discNumber);
         case F::DiscTotal: return formatUint16(row.discTotal);

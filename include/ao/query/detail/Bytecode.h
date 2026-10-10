@@ -11,6 +11,7 @@
 // code should not include this header directly; query-engine internals and
 // white-box tests may include it to inspect compiled bytecode.
 
+#include <ao/library/RecordingDate.h>
 #include <ao/query/Field.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
@@ -88,8 +89,9 @@ namespace ao::query
     // operand - 1). Load/Exists/InSet: target register.
     std::int32_t operand = 0;
 
-    // LoadConstant: the constant value (or the string-constant index). InSet:
-    // the index into ExecutionPlan::inSets. Unused by other field-bearing ops.
+    // LoadConstant: the scalar value, string-constant index, or typed
+    // recording-date constant index. InSet: the index into ExecutionPlan::inSets.
+    // Unused by other field-bearing ops.
     std::int64_t constValue = 0;
 
     // Reserved for bytecode payloads that require an additional 32-bit value.
@@ -111,6 +113,7 @@ namespace ao::query
   {
     std::vector<Instruction> instructions;
     std::vector<std::string> stringConstants;
+    std::vector<library::RecordingDate> recordingDateConstants;
     std::vector<InSet> inSets;
     std::vector<std::string> dictionarySymbols;
     std::vector<std::uint32_t> requiredTagSymbols;

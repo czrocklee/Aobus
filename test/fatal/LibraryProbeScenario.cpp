@@ -44,6 +44,7 @@
 #include <string_view>
 #include <system_error>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -969,7 +970,10 @@ namespace ao::library::test
 
       auto firstTransactionPtr = std::make_unique<lmdb::WriteTransaction>(std::move(*firstTransactionRes));
 
-      if (!lmdb::IntegerKeyDatabase::open(*firstTransactionPtr, "first"))
+      auto firstDatabaseRes = lmdb::IntegerKeyDatabase::open(*firstTransactionPtr, "first");
+
+      if (!firstDatabaseRes ||
+          !firstDatabaseRes->writer(*firstTransactionPtr).create(1, utility::bytes::view(std::string_view{"staged"})))
       {
         return 3;
       }
@@ -1008,6 +1012,23 @@ namespace ao::library::test
       {
         firstTransactionPtr.reset();
       }
+      else if (scenario == "lmdb-database-open-admission-release-move-assignment")
+      {
+        // Replacing by a finished writer must abort before unlocking admission.
+        *firstTransactionPtr = std::move(*firstTransactionRes);
+      }
+      else if (scenario == "lmdb-database-open-admission-release-move-round-trip")
+      {
+        auto moved = lmdb::WriteTransaction{std::move(*firstTransactionPtr)};
+        *firstTransactionPtr = std::move(moved);
+        auto* const sameOwner = firstTransactionPtr.get();
+        *firstTransactionPtr = std::move(*sameOwner);
+
+        if (!firstTransactionPtr->commit())
+        {
+          return 3;
+        }
+      }
       else
       {
         return 2;
@@ -1018,7 +1039,683 @@ namespace ao::library::test
         return 3;
       }
 
+      // A fresh writer also proves the first native writer ended. Aborted
+      // creation disappears; commit through moved ownership preserves payload.
+      // This observes termination after the terminal call returns, not the
+      // relative order of native termination and admission unlock inside it.
+      auto verificationRes = lmdb::WriteTransaction::begin(*firstEnvironmentRes);
+
+      if (!verificationRes)
+      {
+        return 3;
+      }
+
+      auto databaseRes = lmdb::IntegerKeyDatabase::openExisting(*verificationRes, "first");
+      bool const committed = scenario == "lmdb-database-open-admission-release-commit" ||
+                             scenario == "lmdb-database-open-admission-release-move-round-trip";
+
+      if (committed)
+      {
+        if (!databaseRes)
+        {
+          return 3;
+        }
+
+        auto const optValue = databaseRes->reader(*verificationRes).get(1);
+
+        if (!optValue || utility::bytes::stringView(*optValue) != "staged")
+        {
+          return 3;
+        }
+      }
+      else if (databaseRes || databaseRes.error().code != Error::Code::NotFound)
+      {
+        return 3;
+      }
+
       return writeObservation(scenario);
+    }
+
+    // Creates named integer-key databases with one probe row in the first
+    // named database, through the typed wrappers only.
+    bool trySeedNamedIntegerKeyDatabases(std::filesystem::path const& path,
+                                         std::span<std::string const> names,
+                                         lmdb::DbiHandle maxDatabases)
+    {
+      auto error = std::error_code{};
+      std::filesystem::create_directories(path, error);
+
+      if (error)
+      {
+        return false;
+      }
+
+      auto environmentRes = lmdb::Environment::open(
+        path, lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = maxDatabases});
+
+      if (!environmentRes)
+      {
+        return false;
+      }
+
+      auto transactionRes = lmdb::WriteTransaction::begin(*environmentRes);
+
+      if (!transactionRes)
+      {
+        return false;
+      }
+
+      for (auto const& name : names)
+      {
+        if (!lmdb::IntegerKeyDatabase::open(*transactionRes, name))
+        {
+          return false;
+        }
+      }
+
+      if (auto const firstDatabaseRes = lmdb::IntegerKeyDatabase::openExisting(*transactionRes, names.front());
+          !firstDatabaseRes ||
+          !firstDatabaseRes->writer(*transactionRes).create(1, utility::bytes::view(std::string_view{"probe"})))
+      {
+        return false;
+      }
+
+      return transactionRes->commit().has_value();
+    }
+
+    template<typename Database, typename Key>
+    bool hasBindingValue(Database const& database,
+                         lmdb::ReadTransaction const& owner,
+                         Key const key,
+                         std::string_view const expected)
+    {
+      auto reader = database.reader(owner);
+      auto const optValue = reader.get(key);
+      auto iterator = reader.begin();
+      return optValue && utility::bytes::stringView(*optValue) == expected && reader.entryCount() == 1 &&
+             iterator != reader.end() && utility::bytes::stringView(iterator->second) == expected;
+    }
+
+    template<typename Database, typename Transaction, typename Key>
+    std::int32_t runRetainedBindingLifetime(std::string_view const scratchName,
+                                            std::string_view const scenario,
+                                            Key const key)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto const firstPath = scratchPath / "first";
+      auto const secondPath = scratchPath / "second";
+      auto error = std::error_code{};
+      std::filesystem::create_directories(firstPath, error);
+
+      if (error)
+      {
+        return 3;
+      }
+
+      std::filesystem::create_directories(secondPath, error);
+
+      if (error)
+      {
+        return 3;
+      }
+
+      auto environmentRes = lmdb::Environment::open(firstPath, {.flags = lmdb::kEnvNoTls, .maxDatabases = 2});
+      auto replacementEnvironmentRes =
+        lmdb::Environment::open(secondPath, {.flags = lmdb::kEnvNoTls, .maxDatabases = 2});
+
+      if (!environmentRes || !replacementEnvironmentRes)
+      {
+        return 3;
+      }
+
+      auto setupRes = lmdb::WriteTransaction::begin(*environmentRes);
+
+      if (!setupRes)
+      {
+        return 3;
+      }
+
+      auto databaseRes = Database::open(*setupRes, "records");
+
+      if (!databaseRes ||
+          !databaseRes->writer(*setupRes).create(key, utility::bytes::view(std::string_view{"original"})) ||
+          !setupRes->commit())
+      {
+        return 3;
+      }
+
+      auto replacementSetupRes = lmdb::WriteTransaction::begin(*replacementEnvironmentRes);
+
+      if (!replacementSetupRes)
+      {
+        return 3;
+      }
+
+      auto replacementDatabaseRes = Database::open(*replacementSetupRes, "records");
+
+      if (!replacementDatabaseRes ||
+          !replacementDatabaseRes->writer(*replacementSetupRes)
+             .create(key, utility::bytes::view(std::string_view{"replacement"})) ||
+          !replacementSetupRes->commit())
+      {
+        return 3;
+      }
+
+      auto ownerRes = Transaction::begin(*environmentRes);
+
+      if (!ownerRes)
+      {
+        return 3;
+      }
+
+      auto& owner = *ownerRes;
+      auto expected = std::string_view{"original"};
+
+      if constexpr (std::is_same_v<Transaction, lmdb::WriteTransaction>)
+      {
+        if (!databaseRes->writer(owner).update(key, utility::bytes::view(std::string_view{"staged"})))
+        {
+          return 3;
+        }
+
+        expected = "staged";
+      }
+
+      // Borrow the read base, but transfer only the complete transaction below.
+      auto reader = databaseRes->reader(static_cast<lmdb::ReadTransaction const&>(owner));
+      auto iterator = reader.begin();
+
+      if constexpr (std::is_same_v<Database, lmdb::ByteKeyDatabase>)
+      {
+        if (scenario.ends_with("seek-dereference") || scenario.ends_with("seek-advance"))
+        {
+          iterator = reader.lowerBound(key);
+        }
+      }
+
+      // Preserve captured identity through both iterator move operations too.
+      auto movedIterator = typename Database::Reader::Iterator{std::move(iterator)};
+      iterator = std::move(movedIterator);
+      auto optMoved = std::optional<Transaction>{};
+
+      if (scenario.contains("-construction-") || scenario.contains("-round-trip-") ||
+          scenario.contains("-move-out-rebind-"))
+      {
+        optMoved.emplace(std::move(owner));
+
+        if (!hasBindingValue(*databaseRes, *optMoved, key, expected))
+        {
+          return 3;
+        }
+      }
+
+      if (scenario.contains("-round-trip-"))
+      {
+        owner = std::move(*optMoved);
+
+        if (!hasBindingValue(*databaseRes, owner, key, expected))
+        {
+          return 3;
+        }
+      }
+      else if (scenario.contains("-replacement-") || scenario.contains("-move-out-rebind-"))
+      {
+        // No native writer acquisition or DBI open while holding admission:
+        // both DBIs were committed before either retained-token writer began.
+        auto replacementRes = Transaction::begin(*replacementEnvironmentRes);
+
+        if (!replacementRes)
+        {
+          return 3;
+        }
+
+        owner = std::move(*replacementRes);
+
+        if (!hasBindingValue(*replacementDatabaseRes, owner, key, "replacement"))
+        {
+          return 3;
+        }
+      }
+      else if (!scenario.contains("-construction-"))
+      {
+        return 2;
+      }
+
+      if (scenario.ends_with("-get"))
+      {
+        std::ignore = reader.get(key);
+      }
+      else if (scenario.ends_with("-count"))
+      {
+        std::ignore = reader.entryCount();
+      }
+      else if (scenario.ends_with("-begin"))
+      {
+        std::ignore = reader.begin();
+      }
+      else if (scenario.ends_with("-advance"))
+      {
+        ++iterator;
+      }
+      else if (scenario.ends_with("-seek-dereference"))
+      {
+        std::ignore = *iterator;
+      }
+      else if (scenario.ends_with("-dereference"))
+      {
+        std::ignore = iterator->first;
+      }
+      else if constexpr (std::is_same_v<Database, lmdb::ByteKeyDatabase>)
+      {
+        if (scenario.ends_with("-lower-bound"))
+        {
+          std::ignore = reader.lowerBound(key);
+        }
+      }
+
+      return 3;
+    }
+
+    template<typename Writer, typename Key>
+    void exerciseStaleWriter(Writer& writer, Key const key, std::string_view const scenario)
+    {
+      if (scenario.ends_with("-clear"))
+      {
+        std::ignore = writer.clear();
+      }
+      else if (scenario.ends_with("-get"))
+      {
+        std::ignore = writer.get(key);
+      }
+      else if (scenario.ends_with("-create"))
+      {
+        std::ignore = writer.create(key, utility::bytes::view(std::string_view{"invalid"}));
+      }
+      else if (scenario.ends_with("-update"))
+      {
+        std::ignore = writer.update(key, utility::bytes::view(std::string_view{"invalid"}));
+      }
+      else if (scenario.ends_with("-delete"))
+      {
+        std::ignore = writer.tryDelete(key);
+      }
+      else if constexpr (std::is_same_v<Writer, lmdb::IntegerKeyDatabase::Writer>)
+      {
+        if (scenario.ends_with("-append"))
+        {
+          std::ignore = writer.append(utility::bytes::view(std::string_view{"invalid"}));
+        }
+        else if (scenario.ends_with("-max"))
+        {
+          std::ignore = writer.maxKey();
+        }
+      }
+    }
+
+    template<typename Database, typename Key>
+    std::int32_t runWriterBindingLifetime(std::string_view const scratchName,
+                                          std::string_view const scenario,
+                                          Key const key)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto const firstPath = scratchPath / "first";
+      auto const secondPath = scratchPath / "second";
+      auto error = std::error_code{};
+      std::filesystem::create_directories(firstPath, error);
+
+      if (error)
+      {
+        return 3;
+      }
+
+      std::filesystem::create_directories(secondPath, error);
+
+      if (error)
+      {
+        return 3;
+      }
+
+      auto environmentRes = lmdb::Environment::open(firstPath, {.flags = lmdb::kEnvNoTls, .maxDatabases = 2});
+      auto replacementEnvironmentRes =
+        lmdb::Environment::open(secondPath, {.flags = lmdb::kEnvNoTls, .maxDatabases = 2});
+
+      if (!environmentRes || !replacementEnvironmentRes)
+      {
+        return 3;
+      }
+
+      auto setupRes = lmdb::WriteTransaction::begin(*environmentRes);
+
+      if (!setupRes)
+      {
+        return 3;
+      }
+
+      auto databaseRes = Database::open(*setupRes, "records");
+
+      if (!databaseRes ||
+          !databaseRes->writer(*setupRes).create(key, utility::bytes::view(std::string_view{"original"})) ||
+          !setupRes->commit())
+      {
+        return 3;
+      }
+
+      auto replacementSetupRes = lmdb::WriteTransaction::begin(*replacementEnvironmentRes);
+
+      if (!replacementSetupRes)
+      {
+        return 3;
+      }
+
+      auto replacementDatabaseRes = Database::open(*replacementSetupRes, "records");
+
+      if (!replacementDatabaseRes ||
+          !replacementDatabaseRes->writer(*replacementSetupRes)
+             .create(key, utility::bytes::view(std::string_view{"replacement"})) ||
+          !replacementSetupRes->commit())
+      {
+        return 3;
+      }
+
+      // Retained DBIs avoid acquiring another native writer while admission is held.
+      auto ownerRes = lmdb::WriteTransaction::begin(*environmentRes);
+
+      if (!ownerRes)
+      {
+        return 3;
+      }
+
+      auto& owner = *ownerRes;
+      auto writer = databaseRes->writer(owner);
+
+      if (!writer.update(key, utility::bytes::view(std::string_view{"staged"})))
+      {
+        return 3;
+      }
+
+      if (scenario.contains("-wrapper-construction-"))
+      {
+        [[maybe_unused]] auto moved = typename Database::Writer{std::move(writer)};
+        // NOLINTNEXTLINE(bugprone-use-after-move): deliberately exercise the moved-from wrapper contract.
+        exerciseStaleWriter(writer, key, scenario);
+        return 3;
+      }
+
+      if (scenario.contains("-wrapper-assignment-"))
+      {
+        auto destination = databaseRes->writer(owner);
+        destination = std::move(writer);
+        // NOLINTNEXTLINE(bugprone-use-after-move): deliberately exercise the moved-from wrapper contract.
+        exerciseStaleWriter(writer, key, scenario);
+        return 3;
+      }
+
+      // Both wrapper moves must retain the old captured identity, not recapture it.
+      auto movedWriter = typename Database::Writer{std::move(writer)};
+      writer = std::move(movedWriter);
+      auto optMovedOwner = std::optional<lmdb::WriteTransaction>{};
+      auto const* currentDatabase = &*databaseRes;
+      auto* currentOwner = &owner;
+      auto expected = std::string_view{"staged"};
+
+      if (scenario.contains("-committed-rebind-"))
+      {
+        if (!owner.commit())
+        {
+          return 3;
+        }
+
+        auto replacementRes = lmdb::WriteTransaction::begin(*environmentRes);
+
+        if (!replacementRes)
+        {
+          return 3;
+        }
+
+        owner = std::move(*replacementRes);
+      }
+      else if (scenario.contains("-round-trip-") || scenario.contains("-construction-") ||
+               scenario.contains("-move-out-rebind-"))
+      {
+        optMovedOwner.emplace(std::move(owner));
+        currentOwner = nullptr;
+
+        if (!hasBindingValue(*databaseRes, *optMovedOwner, key, "staged"))
+        {
+          return 3;
+        }
+
+        if (scenario.contains("-round-trip-"))
+        {
+          // The same native handle returns; only the owner-local generation changes.
+          owner = std::move(*optMovedOwner);
+          currentOwner = &owner;
+        }
+      }
+      else if (!scenario.contains("-replacement-"))
+      {
+        return 2;
+      }
+
+      if (scenario.contains("-replacement-") || scenario.contains("-move-out-rebind-"))
+      {
+        auto replacementRes = lmdb::WriteTransaction::begin(*replacementEnvironmentRes);
+
+        if (!replacementRes)
+        {
+          return 3;
+        }
+
+        owner = std::move(*replacementRes);
+        currentOwner = &owner;
+        currentDatabase = &*replacementDatabaseRes;
+        expected = "replacement";
+      }
+
+      if (currentOwner != nullptr)
+      {
+        if (!currentOwner->isActive())
+        {
+          return 3;
+        }
+
+        auto fresh = currentDatabase->writer(*currentOwner);
+
+        if (auto const optValue = fresh.get(key);
+            !optValue || utility::bytes::stringView(*optValue) != expected ||
+            !fresh.update(key, utility::bytes::view(std::string_view{"fresh binding"})))
+        {
+          return 3;
+        }
+      }
+
+      // Moving a stale wrapper must transfer its captured identity unchanged,
+      // rather than silently rebinding it to the owner's replacement lifetime.
+      auto retainedWriter = typename Database::Writer{std::move(writer)};
+      writer = std::move(retainedWriter);
+      auto* const sameWriter = &writer;
+      writer = std::move(*sameWriter);
+
+      // In particular clear() uses no stale cursor: committed-rebind must fail
+      // even without allocator reuse of the native transaction or cursor address.
+      exerciseStaleWriter(writer, key, scenario);
+      return 3;
+    }
+
+    std::int32_t runReadonlyReaderLifetime(std::string_view const scratchName, std::string_view const scenario)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto const environmentPath = scratchPath / "environment";
+
+      if (auto const probeNames = std::array<std::string, 1>{"probe"};
+          !trySeedNamedIntegerKeyDatabases(environmentPath, probeNames, 8))
+      {
+        return 3;
+      }
+
+      auto environmentRes = lmdb::Environment::open(
+        environmentPath, lmdb::Environment::Options{.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
+
+      if (!environmentRes)
+      {
+        return 3;
+      }
+
+      auto setupRes = lmdb::WriteTransaction::begin(*environmentRes);
+
+      if (!setupRes)
+      {
+        return 3;
+      }
+
+      auto databaseRes = lmdb::IntegerKeyDatabase::openExisting(*setupRes, "probe");
+
+      if (!databaseRes || !setupRes->commit())
+      {
+        return 3;
+      }
+
+      auto ownerRes = lmdb::ReadTransaction::begin(*environmentRes);
+
+      if (!ownerRes)
+      {
+        return 3;
+      }
+
+      auto owner = std::move(*ownerRes);
+      auto reader = databaseRes->reader(owner);
+      auto iterator = reader.begin();
+
+      if (scenario == "lmdb-reader-after-transaction-replacement" ||
+          scenario == "lmdb-iterator-after-transaction-replacement")
+      {
+        // Replace the owning transaction: the owner object stays active under a
+        // new native handle, so the readers' captured handles no longer match.
+        auto replacementRes = lmdb::ReadTransaction::begin(*environmentRes);
+
+        if (!replacementRes)
+        {
+          return 3;
+        }
+
+        owner = std::move(*replacementRes);
+      }
+      else if (scenario == "lmdb-reader-after-transaction-move-round-trip" ||
+               scenario == "lmdb-iterator-after-transaction-move-round-trip")
+      {
+        // Move the owner out and back: the exact native handle returns to the
+        // owner object, so a handle-only guard would still match. Each move
+        // invalidates the binding generation the readers captured, so the
+        // stale access below is rejected even though the owner is live again.
+        auto moved = lmdb::ReadTransaction{std::move(owner)};
+        owner = std::move(moved);
+
+        // The owner is genuinely usable again: a fresh wrapper read succeeds
+        // before any stale access is attempted.
+        if (!databaseRes->reader(owner).get(1))
+        {
+          return 3;
+        }
+      }
+      else
+      {
+        return 2;
+      }
+
+      if (scenario == "lmdb-reader-after-transaction-replacement" ||
+          scenario == "lmdb-reader-after-transaction-move-round-trip")
+      {
+        std::ignore = reader.get(1);
+      }
+      else
+      {
+        std::ignore = iterator->first;
+      }
+
+      return 3;
+    }
+
+    std::int32_t runWriterBaseTransfer(std::string_view const scratchName, std::string_view const scenario)
+    {
+      auto const path = std::filesystem::temp_directory_path() / std::string{scratchName};
+      auto environmentRes = lmdb::Environment::open(path, {.flags = lmdb::kEnvNoTls, .maxDatabases = 2});
+
+      if (!environmentRes)
+      {
+        return 3;
+      }
+
+      auto writerRes = lmdb::WriteTransaction::begin(*environmentRes);
+
+      if (!writerRes || !lmdb::IntegerKeyDatabase::open(*writerRes, "probe"))
+      {
+        return 3;
+      }
+
+      auto optMovedWriter = std::optional<lmdb::WriteTransaction>{};
+
+      if (scenario.contains("finished"))
+      {
+        writerRes->abort();
+      }
+      else if (scenario.contains("committed"))
+      {
+        if (!writerRes->commit())
+        {
+          return 3;
+        }
+      }
+      else if (scenario.contains("moved-from"))
+      {
+        optMovedWriter.emplace(std::move(*writerRes));
+      }
+
+      auto& base = static_cast<lmdb::ReadTransaction&>(*writerRes);
+
+      if (scenario.contains("construct"))
+      {
+        [[maybe_unused]] auto sliced = lmdb::ReadTransaction{std::move(base)};
+      }
+      else if (scenario.contains("self"))
+      {
+        auto* const sameBase = &base;
+        base = std::move(*sameBase);
+      }
+      else
+      {
+        auto readerRes = lmdb::ReadTransaction::begin(*environmentRes);
+
+        if (!readerRes)
+        {
+          return 3;
+        }
+
+        if (scenario.contains("destination"))
+        {
+          base = std::move(*readerRes);
+        }
+        else
+        {
+          *readerRes = std::move(base);
+        }
+      }
+
+      return 3;
     }
 
     std::int32_t runTransactionOperationContract(std::string_view const scratchName, std::string_view const scenario)
@@ -1252,9 +1949,58 @@ namespace ao::library::test
     }
 
     if (name == "lmdb-database-open-admission-release-commit" || name == "lmdb-database-open-admission-release-abort" ||
-        name == "lmdb-database-open-admission-release-destruction")
+        name == "lmdb-database-open-admission-release-destruction" ||
+        name == "lmdb-database-open-admission-release-move-assignment" ||
+        name == "lmdb-database-open-admission-release-move-round-trip")
     {
       return runDatabaseOpenAdmissionRelease(scratchName, name);
+    }
+
+    if (name == "lmdb-reader-after-transaction-replacement" || name == "lmdb-iterator-after-transaction-replacement" ||
+        name == "lmdb-reader-after-transaction-move-round-trip" ||
+        name == "lmdb-iterator-after-transaction-move-round-trip")
+    {
+      return runReadonlyReaderLifetime(scratchName, name);
+    }
+
+    if (name.starts_with("lmdb-binding-integer-read-"))
+    {
+      return runRetainedBindingLifetime<lmdb::IntegerKeyDatabase, lmdb::ReadTransaction>(
+        scratchName, name, std::uint32_t{1});
+    }
+
+    if (name.starts_with("lmdb-binding-integer-write-"))
+    {
+      return runRetainedBindingLifetime<lmdb::IntegerKeyDatabase, lmdb::WriteTransaction>(
+        scratchName, name, std::uint32_t{1});
+    }
+
+    if (name.starts_with("lmdb-binding-byte-read-"))
+    {
+      return runRetainedBindingLifetime<lmdb::ByteKeyDatabase, lmdb::ReadTransaction>(
+        scratchName, name, utility::bytes::view(std::string_view{"key"}));
+    }
+
+    if (name.starts_with("lmdb-binding-byte-write-"))
+    {
+      return runRetainedBindingLifetime<lmdb::ByteKeyDatabase, lmdb::WriteTransaction>(
+        scratchName, name, utility::bytes::view(std::string_view{"key"}));
+    }
+
+    if (name.starts_with("lmdb-writer-binding-integer-"))
+    {
+      return runWriterBindingLifetime<lmdb::IntegerKeyDatabase>(scratchName, name, std::uint32_t{1});
+    }
+
+    if (name.starts_with("lmdb-writer-binding-byte-"))
+    {
+      return runWriterBindingLifetime<lmdb::ByteKeyDatabase>(
+        scratchName, name, utility::bytes::view(std::string_view{"key"}));
+    }
+
+    if (name.starts_with("lmdb-writer-base-transfer-"))
+    {
+      return runWriterBaseTransfer(scratchName, name);
     }
 
     if (name == "nested-apply" || name == "commit-during-apply" || name == "terminated-during-apply" ||

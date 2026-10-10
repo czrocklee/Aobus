@@ -9,14 +9,20 @@
 // strong view reference. Expected contract failures are reported and counted
 // with a nonzero exit status; the probe never aborts on them.
 
+#include "track/TrackCellItem.h"
 #include "track/TrackItemView.h"
 #include "track/TrackRowItem.h"
+#include <ao/CoreIds.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackRow.h>
 
 #include <windows.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/base.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -410,6 +416,44 @@ namespace
       maximal.Size() == std::numeric_limits<std::uint32_t>::max(), "the exact 32-bit size bound is accepted");
   }
 
+  void scenarioCompactCreditCounts(ScenarioReport& report)
+  {
+    report.beginScenario("credit columns render first text and duplicate-inclusive counts");
+    auto catalogRes = ao::i18n::MessageCatalog::create("en");
+
+    if (!catalogRes)
+    {
+      report.record(catalogRes.error().message);
+      return;
+    }
+
+    auto const columns = std::array{
+      ao::winui::TrackColumnCellSpec{.field = ao::rt::TrackField::Conductor, .width = 160.0},
+      ao::winui::TrackColumnCellSpec{.field = ao::rt::TrackField::Ensemble, .width = 160.0},
+      ao::winui::TrackColumnCellSpec{.field = ao::rt::TrackField::Soloist, .width = 160.0},
+    };
+    auto const row = ao::rt::TrackRow{
+      .id = ao::TrackId{7},
+      .title = "Credit projection",
+      .conductor = "First conductor",
+      .ensemble = "Only ensemble",
+      .conductorCount = 3,
+      .ensembleCount = 1,
+    };
+    auto const item = winrt::make<winrt::Aobus::implementation::TrackRowItem>(0U, 0U, row, *catalogRes, columns);
+    auto cells = item.Cells();
+    report.check(cells.Size() == 3, "the native projection exposes the three requested compact cells");
+
+    if (cells.Size() == 3)
+    {
+      report.check(cells.GetAt(0).as<winrt::Aobus::TrackCellItem>().Text() == L"First conductor +2",
+                   "additional entries, including duplicates, are counted rather than materialized");
+      report.check(
+        cells.GetAt(1).as<winrt::Aobus::TrackCellItem>().Text() == L"Only ensemble", "one entry has no count suffix");
+      report.check(cells.GetAt(2).as<winrt::Aobus::TrackCellItem>().Text().empty(), "empty category stays absent");
+    }
+  }
+
   int run()
   {
     auto report = ScenarioReport{};
@@ -421,6 +465,7 @@ namespace
     scenarioGetMany(report);
     scenarioIterator(report);
     scenarioOversizedSizeRejected(report);
+    scenarioCompactCreditCounts(report);
 
     if (report.failureCount() == 0)
     {

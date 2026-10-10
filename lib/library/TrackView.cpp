@@ -7,6 +7,8 @@
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 
@@ -24,6 +26,44 @@ namespace ao::library
   {
     constexpr std::size_t kSerializedAlignmentBytes = 4;
   } // namespace
+
+  RecordingDate PerformanceView::recordingDate() const noexcept
+  {
+    return empty() ? RecordingDate{} : utility::layout::view<TrackPerformanceBlock>(_payload)->recordingDate;
+  }
+
+  std::span<TrackCreditEntry const> PerformanceView::credits() const noexcept
+  {
+    if (empty())
+    {
+      return {};
+    }
+
+    return utility::layout::viewArray<TrackCreditEntry>(_payload.subspan(sizeof(TrackPerformanceBlock)));
+  }
+
+  std::span<TrackCreditEntry const> PerformanceView::credits(CreditKind kind) const noexcept
+  {
+    AO_EXPECTS(isValidCreditKind(kind));
+
+    if (empty())
+    {
+      return {};
+    }
+
+    auto const& counts = utility::layout::view<TrackPerformanceBlock>(_payload)->sectionCounts;
+    auto const index = static_cast<std::size_t>(kind);
+    std::size_t begin = 0;
+
+    for (std::size_t previous = 0; previous < index; ++previous)
+    {
+      begin += counts[previous];
+    }
+
+    auto const entries = credits();
+    auto const count = index < counts.size() ? static_cast<std::size_t>(counts[index]) : entries.size() - begin;
+    return entries.subspan(begin, count);
+  }
 
   CoverArt CoverArtProxy::at(std::uint16_t index) const noexcept
   {
@@ -209,8 +249,8 @@ namespace ao::library
    * O(1) cold gate: header fits and is aligned, the URI range stays inside
    * the record, and present known block slots are aligned, strictly
    * increasing, and end before the URI. Slot payloads get one size check
-   * each so the proxies can trust their slices. Unknown trailing slots and
-   * bytes beyond the URI are ignored; semantic invariants (no gaps, zeroed
+   * each so the views can trust their slices. Unknown trailing slots are
+   * rejected; bytes beyond the URI and semantic invariants (no gaps, zeroed
    * padding, sorted custom keys) are the write side's job and are only
    * re-checked by detail::TrackColdReader.
    */
@@ -235,6 +275,14 @@ namespace ao::library
       return index;
     }
 
+    for (std::size_t i = kTrackColdKnownBlockSlotCount; i < kTrackColdBlockSlotCount; ++i)
+    {
+      if (header->blockOffsets[i] != 0)
+      {
+        return index;
+      }
+    }
+
     auto begins = std::array<std::size_t, kTrackColdKnownBlockSlotCount>{};
     std::size_t previousBegin = 0;
 
@@ -257,42 +305,52 @@ namespace ao::library
       previousBegin = offset;
     }
 
-    auto payloadForSlot = [&](TrackColdBlockSlot slot) noexcept
-    {
-      auto const slotIndex = trackColdBlockSlotIndex(slot);
+    auto payloads = std::array<std::span<std::byte const>, kTrackColdKnownBlockSlotCount>{};
+    std::size_t endOffset = uriOffset;
 
-      if (begins[slotIndex] == 0)
+    for (std::size_t slotIndex = kTrackColdKnownBlockSlotCount; slotIndex > 0; --slotIndex)
+    {
+      std::size_t const beginOffset = begins[slotIndex - 1];
+
+      if (beginOffset == 0)
       {
-        return std::span<std::byte const>{};
+        continue;
       }
 
-      std::size_t endOffset = uriOffset;
+      payloads[slotIndex - 1] = _coldData.subspan(beginOffset, endOffset - beginOffset);
+      endOffset = beginOffset;
+    }
 
-      for (auto nextIndex = slotIndex + 1; nextIndex < kTrackColdKnownBlockSlotCount; ++nextIndex)
-      {
-        if (begins[nextIndex] != 0)
-        {
-          endOffset = begins[nextIndex];
-          break;
-        }
-      }
+    auto const workPayload = payloads[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)];
 
-      return _coldData.subspan(begins[slotIndex], endOffset - begins[slotIndex]);
-    };
-
-    auto classicalPayload = payloadForSlot(TrackColdBlockSlot::Classical);
-
-    if (!classicalPayload.empty())
+    if (!workPayload.empty() && workPayload.size() != sizeof(TrackWorkBlock))
     {
-      if (classicalPayload.size() < sizeof(TrackClassicalBlock))
+      return index;
+    }
+
+    auto const performancePayload = payloads[trackColdBlockSlotIndex(TrackColdBlockSlot::Performance)];
+
+    if (!performancePayload.empty())
+    {
+      auto const* block = utility::bytes::tryLayout<TrackPerformanceBlock>(performancePayload);
+
+      if (block == nullptr ||
+          (performancePayload.size() - sizeof(TrackPerformanceBlock)) % sizeof(TrackCreditEntry) != 0)
       {
         return index;
       }
 
-      classicalPayload = classicalPayload.first(sizeof(TrackClassicalBlock));
+      auto const count = (performancePayload.size() - sizeof(TrackPerformanceBlock)) / sizeof(TrackCreditEntry);
+      auto const classified =
+        static_cast<std::size_t>(block->sectionCounts[0]) + block->sectionCounts[1] + block->sectionCounts[2];
+
+      if (classified > count)
+      {
+        return index;
+      }
     }
 
-    auto const customPayload = payloadForSlot(TrackColdBlockSlot::CustomMetadata);
+    auto const customPayload = payloads[trackColdBlockSlotIndex(TrackColdBlockSlot::CustomMetadata)];
 
     if (!customPayload.empty())
     {
@@ -305,13 +363,14 @@ namespace ao::library
       }
     }
 
-    auto coverPayload = payloadForSlot(TrackColdBlockSlot::CoverArt);
+    auto coverPayload = payloads[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)];
     coverPayload = coverPayload.first(coverPayload.size() - (coverPayload.size() % sizeof(CoverArtEntry)));
 
     index.uri = _coldData.subspan(uriOffset, uriLength);
     index.cover = coverPayload;
-    index.classical = classicalPayload;
+    index.work = workPayload;
     index.custom = customPayload;
+    index.performance = performancePayload;
     index.header = header;
     return index;
   }

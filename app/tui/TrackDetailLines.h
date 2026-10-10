@@ -5,6 +5,7 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 
 #include <array>
 #include <cstddef>
@@ -51,4 +52,11 @@ namespace ao::tui
   /// Labeled identity, facts, optional credits, and read-only tags.
   /// Missing values and an album artist identical to the artist are omitted.
   std::vector<TrackDetailLine> trackDetailLines(i18n::MessageCatalog const& textCatalog, rt::TrackRow const& row);
+
+  /// Complete Credits subsection for the focused detail: the localized
+  /// heading plus one line per aggregated credit. Empty while the aggregate is
+  /// absent or empty; the TUI has no show-empty toggle. The list arrives from
+  /// the runtime snapshot at the detail boundary, never from TrackRow.
+  std::vector<TrackDetailLine> trackCreditDetailLines(i18n::MessageCatalog const& textCatalog,
+                                                      uimodel::TrackCreditSections const& credits);
 } // namespace ao::tui

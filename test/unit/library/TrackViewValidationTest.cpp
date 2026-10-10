@@ -41,7 +41,7 @@ namespace ao::library::test
 
     struct RawColdBlock final
     {
-      TrackColdBlockSlot slot = TrackColdBlockSlot::Classical;
+      TrackColdBlockSlot slot = TrackColdBlockSlot::Work;
       std::vector<std::byte> payload{};
     };
 
@@ -104,10 +104,10 @@ namespace ao::library::test
 
     std::vector<std::byte> makeClassicalPayload()
     {
-      auto payload = std::vector<std::byte>(sizeof(TrackClassicalBlock), std::byte{0});
+      auto payload = std::vector<std::byte>(sizeof(TrackWorkBlock), std::byte{0});
       writePod(payload,
                0,
-               TrackClassicalBlock{
+               TrackWorkBlock{
                  .workId = DictionaryId{1},
                  .movementId = DictionaryId{2},
                  .movementNumber = 3,
@@ -277,7 +277,8 @@ namespace ao::library::test
     CHECK_FALSE(coldView.isHotValid());
     REQUIRE(coldView.isColdValid());
     CHECK(coldView.property().uri() == "cold-only.flac");
-    CHECK(coldView.classical().empty());
+    CHECK(coldView.work().empty());
+    CHECK(coldView.performance().empty());
     CHECK(coldView.coverArt().count() == 0);
     CHECK(coldView.customMetadata().count() == 0);
   }
@@ -301,8 +302,8 @@ namespace ao::library::test
     auto const data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
     auto const reader = detail::TrackColdReader{data};
     REQUIRE(reader.isValid());
-    CHECK(reader.classical().workId() == DictionaryId{1});
-    CHECK(reader.classical().movementNumber() == 3);
+    CHECK(reader.work().workId() == DictionaryId{1});
+    CHECK(reader.work().movementNumber() == 3);
   }
 
   TEST_CASE("TrackView - block-backed proxies are stable across repeated access and copies",
@@ -312,13 +313,13 @@ namespace ao::library::test
                                       RawColdBlock{.payload = makeClassicalPayload()}});
     auto const view = TrackView{std::span<std::byte const>{}, data};
 
-    CHECK(view.classical().workId() == DictionaryId{1});
-    CHECK(view.classical().workId() == DictionaryId{1});
+    CHECK(view.work().workId() == DictionaryId{1});
+    CHECK(view.work().workId() == DictionaryId{1});
     REQUIRE(view.coverArt().primary());
     CHECK(view.coverArt().primary()->resourceId == ResourceId{42});
 
     auto const copy = view;
-    CHECK(copy.classical().movementNumber() == 3);
+    CHECK(copy.work().movementNumber() == 3);
     REQUIRE(copy.coverArt().primary());
     CHECK(copy.coverArt().primary()->type == PictureType::FrontCover);
   }
@@ -354,7 +355,7 @@ namespace ao::library::test
     {
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] = 30;
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] = 30;
       checkColdGateRejects(data);
     }
 
@@ -362,7 +363,7 @@ namespace ao::library::test
     {
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] =
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] =
         static_cast<std::uint16_t>(sizeof(TrackColdHeader) - 4);
       checkColdGateRejects(data);
     }
@@ -372,7 +373,7 @@ namespace ao::library::test
       auto data = makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::CoverArt, .payload = makeCoverPayload()},
                                   RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] =
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] =
         header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt)];
       checkColdGateRejects(data);
     }
@@ -381,22 +382,30 @@ namespace ao::library::test
     {
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] = header->uriOffset;
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] = header->uriOffset;
       checkColdGateRejects(data);
     }
 
-    SECTION("classical slice is too small for the block")
+    SECTION("work slice is too small for the block")
     {
       auto const data = makeColdRecord({RawColdBlock{.payload = std::vector<std::byte>(4, std::byte{0})}});
       checkColdGateRejects(data);
     }
 
-    SECTION("classical slice shrinks below the block size through a shifted offset")
+    SECTION("work slice shrinks below the block size through a shifted offset")
     {
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] =
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] =
         static_cast<std::uint16_t>(sizeof(TrackColdHeader) + 4);
+      checkColdGateRejects(data);
+    }
+
+    SECTION("reserved slot is nonzero")
+    {
+      auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
+      auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
+      header->blockOffsets[kTrackColdKnownBlockSlotCount] = header->uriOffset;
       checkColdGateRejects(data);
     }
 
@@ -435,7 +444,7 @@ namespace ao::library::test
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
       header->trackNumber = 7;
-      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Classical)] = 30;
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] = 30;
 
       auto const view = TrackView{std::span<std::byte const>{}, data};
       CHECK_FALSE(view.isColdValid());
@@ -444,6 +453,27 @@ namespace ao::library::test
 
   TEST_CASE("TrackView cold gate - tolerates semantic corruption within bounds", "[library][unit][track][validation]")
   {
+    SECTION("exact twelve-byte all-zero work block is present but noncanonical")
+    {
+      auto const payload = std::vector<std::byte>(12, std::byte{0});
+      auto const data = makeColdRecord({RawColdBlock{.slot = TrackColdBlockSlot::Work, .payload = payload}});
+      auto const* header = utility::layout::view<TrackColdHeader>(data);
+      REQUIRE(header != nullptr);
+      REQUIRE(header->uriOffset - header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)] == 12);
+      auto const view = checkColdGateTolerates(data);
+      REQUIRE(view.isColdValid());
+      auto const work = view.work();
+      CHECK_FALSE(work.empty());
+      CHECK(work.workId() == kInvalidDictionaryId);
+      CHECK(work.movementId() == kInvalidDictionaryId);
+      CHECK(work.movementNumber() == 0);
+      CHECK(work.movementTotal() == 0);
+      auto const res = validateSerializedColdTrack(data);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
+      CHECK(res.error().message == "Cold Track record has a non-canonical structural layout");
+    }
+
     SECTION("header reserved byte is nonzero")
     {
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
@@ -451,17 +481,7 @@ namespace ao::library::test
       header->reserved8 = 1;
 
       auto const view = checkColdGateTolerates(data);
-      CHECK(view.classical().workId() == DictionaryId{1});
-    }
-
-    SECTION("reserved slot is nonzero")
-    {
-      auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
-      auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[kTrackColdKnownBlockSlotCount] = header->uriOffset;
-
-      auto const view = checkColdGateTolerates(data);
-      CHECK(view.classical().workId() == DictionaryId{1});
+      CHECK(view.work().workId() == DictionaryId{1});
     }
 
     SECTION("URI padding is nonzero")
@@ -486,7 +506,7 @@ namespace ao::library::test
       data.resize(data.size() + 4, std::byte{0});
 
       auto const view = checkColdGateTolerates(data);
-      CHECK(view.classical().workId() == DictionaryId{1});
+      CHECK(view.work().workId() == DictionaryId{1});
     }
 
     SECTION("record size exceeds the writer's uint16 maximum")

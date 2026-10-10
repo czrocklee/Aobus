@@ -5,7 +5,7 @@ id: library.database
 
 ## Scope and version
 
-This reference defines physical library format version `8`, gated by `ao::library::kLibraryVersion`.
+This reference defines physical library format version `9`, gated by `ao::library::kLibraryVersion`.
 It owns the LMDB environment, named databases, key encodings, record composition, size and alignment requirements, and version policy.
 
 Entity meaning belongs to the [track](../model/track.md) and [list](../model/list.md) references.
@@ -43,12 +43,12 @@ A mutation that exhausts the map rolls back and leaves the recorded peak untouch
 `Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
 It is for callers that need one known capacity, including tests that mean to reach the end of a map.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-8 schema only when that catalog is empty.
+It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-9 schema only when that catalog is empty.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
 Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
 The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.
 A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
-After the version gate accepts version 8, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
+After the version gate accepts version 9, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
 
 The database is host-local rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
@@ -75,7 +75,7 @@ A failure to begin a snapshot is fatal for an already admitted live library beca
 A separately acquired `WritableMusicLibrary` is the only authority that can create a write transaction, and production mutation receives only callback-scoped logical Track, List, and identity ports through `LibraryWrite`.
 Physical Store writers, native transaction handles, and mutable LMDB reservations remain inaccessible to production callers except for the source-private Track encoder described below.
 An active transaction keeps the non-blocking `<database-path>/.aobus-writer.lock` lease alive even if the originating writable capability is destroyed.
-The lock file has no governed payload and is not part of format version `8`; it must not be removed while a writable process is active.
+The lock file has no governed payload and is not part of format version `9`; it must not be removed while a writable process is active.
 
 The logical Track writer preserves the format's hot/cold, manifest, dictionary, and Resource relationships while it:
 
@@ -151,9 +151,10 @@ Defined block slots are written in slot order:
 | Slot | Payload |
 |---|---|
 | `0` cover art | Zero or more eight-byte `CoverArtEntry` values: `ResourceId`, picture type, three reserved bytes. |
-| `1` classical | One 24-byte `TrackClassicalBlock`: five dictionary ids plus movement number and total. |
+| `1` work | One 12-byte `TrackWorkBlock`: work and movement dictionary ids, then two unsigned 16-bit movement number/total values. |
 | `2` custom metadata | Eight-byte header, eight-byte entries, then value bytes. |
-| `3` and `4` | Reserved and zero. |
+| `3` performance | One 12-byte `TrackPerformanceBlock` prefix, followed by eight-byte `TrackCreditEntry` values. |
+| `4` | Last unused cold slot; zero. |
 
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
@@ -161,6 +162,45 @@ The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI
 Inline title and custom-metadata value bytes are scalar-valid UTF-8 in NFC.
 Every dictionary-backed metadata field, tag, and custom-metadata key inherits the same text invariant from its dictionary row.
 The URI is filesystem identity and is explicitly outside this text-normalization contract.
+
+Work structure and performance are independently optional.
+The work block is omitted when both ids and both movement numbers are zero.
+Performance is omitted iff RecordingDate is absent and all four credit segments are empty; a date-only or credits-only performance is valid without a work block.
+Composer, artist, album artist, and the existing Year retain their hot access paths rather than moving to a logically related cold block.
+These blocks are storage domains, not Work or Performance entities or recording identities.
+
+The performance prefix has this exact layout; integers retain the host-local byte order:
+
+| Byte offset | Value | Bytes |
+|---:|---|---:|
+| `0` | Recording year, unsigned 16-bit | `2` |
+| `2` | Recording month, unsigned 8-bit | `1` |
+| `3` | Recording day, unsigned 8-bit | `1` |
+| `4` | Conductor entry count, unsigned 16-bit | `2` |
+| `6` | Ensemble entry count, unsigned 16-bit | `2` |
+| `8` | Soloist entry count, unsigned 16-bit | `2` |
+| `10` | Reserved unsigned 16-bit word; zero | `2` |
+| `12` onward | Conductor, Ensemble, Soloist, Performer segments: name id, optional role id | `8` per entry |
+
+An absent recording date is exactly four zero bytes.
+Year zero requires month and day zero; a present year is `1..9999`, month/day zero retain partial precision, and supplied components must form a valid proleptic Gregorian date.
+There is no date flag or inferred value from the hot Year.
+
+A credit name id must be nonzero and resolve to nonempty, ASCII-trimmed, scalar-valid UTF-8 NFC text.
+Role id zero is absence; every nonzero role id must resolve to the same admitted nonempty text form.
+All other nonzero dictionary ids must also resolve.
+Ids identify supplied text, not entities; duplicates and within-kind order are retained.
+Kind comes from the physical segment, not an entry member or dictionary label. Credits are the sole participant authority; category fields are projections.
+
+The next present slot offset, or `uriOffset` for the last block, supplies the performance boundary.
+Its length must be exactly `12 + 8 * N`: at least 12 bytes, with the remaining length divisible by eight and no tail padding.
+The first three `sectionCounts` sum, widened before addition, must not exceed `N`; Performer count is `N` minus that sum.
+Unsigned 16-bit counts leave the whole cold-record byte limit as the effective cardinality bound, not a 255-entry category cap.
+A present prefix without date or entries is noncanonical and rejected, as is a logically empty work block.
+A structurally valid changed count can reclassify entries: this nonredundant encoding cannot detect every semantic corruption.
+The five-offset directory and both fixed headers remain unchanged.
+Compute multiplication, additions, and alignment in a wide checked type before narrowing, including URI and every retained block in the full merged record.
+This layout is not a general compression or performance guarantee; first-entry access remains O(1), but timings, heap use, and RSS do not follow from encoded size.
 
 Production callers pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
 The writer performs preparation itself and keeps the resulting immutable `TrackBuilder::PreparedHot` and `PreparedCold` values inside `ao_library`.
@@ -171,8 +211,13 @@ The Track writer is the only production consumer that reaches the integer writer
 Writes reject the reserved zero `TrackId` as a `CorruptData` fault.
 Complete internal preparation first runs both pure hot and cold validators; single-side logical updates run the validator for that side.
 Private serialization helpers used by representation tests follow the same preflight rules.
-Those gates validate scalar UTF-8 and check every representable post-NFC size plus the canonical Track URI before dictionary interning, resource creation, or Track mutation begins, so a recoverable rejection adds no item-relative dictionary, resource, or Track delta.
-Already-NFC input uses a quick check to avoid a temporary normalized allocation during size preflight; prepared text is normalized once before it is encoded or interned.
+Those gates validate scalar UTF-8, canonical Track URI, representable inline post-NFC sizes, and complete encoded record bounds before dictionary interning, Resource creation, or Track mutation begins.
+Already-NFC inline scalar input uses a quick check to avoid a temporary normalized allocation during size preflight.
+Credit preflight independently checks valid kinds, trimmed nonempty names, name/role UTF-8, date validity, counters, and full cold-record bounds, without requiring upstream normalization.
+Preparation stably groups the four fixed kinds, trims and interns names/nonempty roles, and obtains NFC from dictionary admission.
+The owning-input setter still retains copied borrowed descriptors; all supplied text must survive through preparation.
+Failures after interning starts abort the enclosing root write; there is no per-call rollback or permission to continue and commit that transaction, and private dictionary changes are not published early.
+Prepared values own every byte their encoder emits, including performance entries and the exact date precision.
 They validate builder input and representability rather than encoded bytes: a prepared Track side is a typed zero-copy snapshot and does not retain a second serialized record.
 That private zero-copy path reserves the hot value, fills every byte, and validates it before its encoder callback returns, then repeats the sequence for the cold value.
 Updates follow the same per-side sequence.
@@ -318,9 +363,9 @@ Track encoders validate the bytes they fill with the same canonical local valida
 Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
 After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-8 catalog closure, exact header size, named-database flags, or extra-database checks; migration remains a separate facility even when the old named database's key flags differ from the current schema.
+A valid non-current version returns `NotSupported` before version-9 catalog closure, exact header size, named-database flags, or extra-database checks; no conversion is attempted, even when an existing named database's key flags differ from the current schema.
 The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
-For version 8, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
+For version 9, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
 Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
 The typed `meta` token contains only header record `1` plus optional revision record `2`.
 
@@ -329,6 +374,8 @@ A row whose key is not the first free slot at or above its digest's initial key 
 Reachability is checked over the occupied key runs the same traversal already collects, so it stays linear in the number of rows.
 It validates dictionary key width, dense ids, scalar-valid UTF-8 NFC, and unique canonical text while building the in-memory index.
 It merge-checks the hot/cold Track key sets, validates canonical records including scalar-valid UTF-8 NFC inline text plus every dictionary and Resource reference, and proves a strict Track-to-manifest bijection.
+For performance records it rejects malformed prefix/tail bounds, a widened count sum greater than the physical entry count, a nonzero reserved word, noncanonical empty prefixes, invalid partial dates, zero or unresolved credit name ids, unresolved role ids, and empty or untrimmed referenced name/role text.
+Dictionary admission has already proved scalar UTF-8 and NFC, so checking the extra credit text rules requires no per-entry normalization or temporary string.
 The bijection first compares row counts, then performs one canonical manifest point read for each Track URI and requires the manifest's Track id to equal that Track id.
 Equal counts, unique Track ids, and the exact point matches prove that no extra manifest row exists without allocating a Track- or manifest-sized set; duplicate Track URIs and duplicate manifest bindings cannot pass.
 It validates every List key and local record, including scalar-valid UTF-8 NFC text, requires each non-root parent to exist, and rejects parent cycles using memory proportional to the List count.
@@ -348,11 +395,17 @@ Directly constructed read views perform one constant-time structural gate that p
 `isHotValid()` and `isColdValid()` are always legal and report whether the corresponding loaded side passed its gate.
 A decoded hot or cold accessor requires that side to be valid; calling it for an absent or structurally invalid side is a programmer error that fails fast through `AO_EXPECTS`.
 Raw diagnostic access remains available for the exact bytes supplied to the view.
-An absent optional block inside a valid cold side is not an invalid tier: classical, cover-art, and custom-metadata proxies remain legal and empty, with their documented optional-block defaults.
-The canonical write validator additionally checks exact size and zero padding, tag ids and bloom agreement, and cold block ordering.
+An absent optional block inside a valid cold side is not an invalid tier: work and performance views, and cover-art and custom-metadata proxies, remain legal and empty, with their documented optional-block defaults.
+The performance read gate checks prefix bounds/alignment, whole-entry tail stride, and the widened sum of the first three section counts against `N` in constant time, before creating subspans or subtracting the Performer count.
+It never materializes the list or scans its members; invalid layouts expose no out-of-bounds segment.
+Reserved-word and date validity, name ids, and canonical omission of logically empty performance blocks are enforced by deep validation at write/open time, not repeated by the shallow read gate.
+A directly constructed raw view may therefore expose an invalid date or a present all-zero prefix; structural validity does not prove semantic validity, and date formatting/comparison still require a valid date.
+`PerformanceView::credits()` and `credits(kind)` borrow physical id-entry spans, sharing the cold record's transaction/buffer lifetime; consumers supply logical kind from segment context.
+The canonical write validator additionally checks exact size and zero padding, tag ids and bloom agreement, cold block ordering, and every credit name id.
 Those linear checks do not add a per-row scan to normal decoded access.
 `TrackBuilder::fromCompleteView()` requires both valid sides.
-`fromHotView()` accepts a valid hot-only view but the resulting builder may serialize only hot data, preventing absent cold fields from being written back as defaults.
+It preserves every work/performance field, exact date precision, and canonical credit name/kind/role entry when rebuilding a complete record.
+`fromHotView()` does not fetch cold fields or list entries and the resulting builder may serialize only hot data, preventing absent cold fields from being written back as defaults.
 
 A directly constructed invalid `ListView` retains its raw-view safety behavior: `isValid()` is false and decoded fields are empty or invalid.
 That `ListView` behavior is not the `ListStore` absence contract.
@@ -384,18 +437,21 @@ Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, 
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
-Version `8` gates the portable manifest modification-time record: the 12-byte `FileTimestamp` seconds/nanoseconds instant with its `hasMtime` absence flag replaces the unsigned host file-clock count.
+Version `9` gates the independent work and performance blocks, partial RecordingDate, and segmented Credits described above.
+Only the exact version-9 layout defined here is accepted; alternative layouts labeled version 9 are unsupported.
+The [YAML version 7 reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
+Version `8` gated the portable manifest modification-time record: the 12-byte `FileTimestamp` seconds/nanoseconds instant with its `hasMtime` absence flag replaces the unsigned host file-clock count.
 Version `7` gated scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excluded filesystem URI bytes and opaque List filter source.
 Version `6` gated the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` text remains syntactically opaque to database admission.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../system/query/predicate-evaluation.md).
 A grammar or predicate-semantic change does not by itself increment `kLibraryVersion`; stored text that no longer parses or compiles is an application expression error rather than corrupt storage.
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
-An explicitly tested future migration may replace reset-and-rescan recovery for an old physical version only when it converts or validates every affected record atomically and updates the metadata version after the converted data is valid; no such migration exists today.
-There is no reader for an older physical version and no in-place migration.
-Opening a version-4 through version-7 environment returns `NotSupported`; the environment is neither migrated nor deleted automatically, and recreating the library by rescanning the music root is the supported answer.
-User-authored curation in an old library is not automatically recoverable across this upgrade: an old environment can no longer be opened to export, and the version-5 documents an older build produces are rejected by the current version-6 importer.
-Preserving user-authored curation requires a version-6 portable export or another usable backup made before the upgrade; a library the current build can no longer open can produce neither.
+There is no reader for an older physical version, no in-place migration, and no metadata conversion or backfill.
+A version-8 or earlier environment returns `NotSupported`; opening it never relabels, rewrites, or deletes it automatically.
+Explicit recreation by rescanning abandons database-only curation, lists, and other state not held in the media files; it is a destructive user choice, not a reconstruction guarantee.
+The [YAML version 7](../format/yaml.md) surface likewise rejects version-6 documents rather than accepting an old-layout subset.
+The current build cannot open an old environment to export its curation, and an old-format backup does not become a current-format import merely by changing its version number.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created host-local index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority
@@ -432,6 +488,8 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, the complete Reader range and count surface, physical-side projections, retained point and batch load modes, and ordinary store behavior.
 - [`TrackStoreIntegrityTest.cpp`](../../../../test/unit/library/TrackStoreIntegrityTest.cpp) locks reserved-id rejection and the canonical sweep over persisted records.
 - [`DatabaseWriterTest.cpp`](../../../../test/unit/lmdb/DatabaseWriterTest.cpp) locks the copied-data-only public LMDB writer surface and the source-private reservation encoder constraints and failure paths.
+- [`TrackPerformanceTest.cpp`](../../../../test/unit/library/TrackPerformanceTest.cpp) specifies independent block omission, ordered admission, date precision, complete reconstruction, hot-only preservation, bounds-before-write, and owning prepared snapshots.
+- [`TrackPerformanceValidationTest.cpp`](../../../../test/unit/library/TrackPerformanceValidationTest.cpp) specifies malformed performance and referenced-text rejection, including unchanged stored cold rows after rejected open.
 - Other layout and serialization tests under [`test/unit/library/`](../../../../test/unit/library) lock the remaining record sizes, alignment, validation, and store behavior.
 
 ## Related documents

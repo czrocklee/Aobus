@@ -3,12 +3,14 @@
 
 #include <ao/query/PlanEvaluator.h>
 
+#include "detail/CreditField.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Field.h>
@@ -162,11 +164,8 @@ namespace ao::query
         case Field::GenreId: return static_cast<std::int64_t>(track.metadata().genreId().raw());
         case Field::AlbumArtistId: return static_cast<std::int64_t>(track.metadata().albumArtistId().raw());
         case Field::ComposerId: return static_cast<std::int64_t>(track.metadata().composerId().raw());
-        case Field::ConductorId: return static_cast<std::int64_t>(track.classical().conductorId().raw());
-        case Field::EnsembleId: return static_cast<std::int64_t>(track.classical().ensembleId().raw());
-        case Field::WorkId: return static_cast<std::int64_t>(track.classical().workId().raw());
-        case Field::MovementId: return static_cast<std::int64_t>(track.classical().movementId().raw());
-        case Field::SoloistId: return static_cast<std::int64_t>(track.classical().soloistId().raw());
+        case Field::WorkId: return static_cast<std::int64_t>(track.work().workId().raw());
+        case Field::MovementId: return static_cast<std::int64_t>(track.work().movementId().raw());
         case Field::CoverArtId:
           return static_cast<std::int64_t>(track.coverArt().primary().value_or(library::CoverArt{}).resourceId.raw());
 
@@ -175,8 +174,8 @@ namespace ao::query
         case Field::TrackTotal: return static_cast<std::int64_t>(track.metadata().trackTotal());
         case Field::DiscNumber: return static_cast<std::int64_t>(track.metadata().discNumber());
         case Field::DiscTotal: return static_cast<std::int64_t>(track.metadata().discTotal());
-        case Field::MovementNumber: return static_cast<std::int64_t>(track.classical().movementNumber());
-        case Field::MovementTotal: return static_cast<std::int64_t>(track.classical().movementTotal());
+        case Field::MovementNumber: return static_cast<std::int64_t>(track.work().movementNumber());
+        case Field::MovementTotal: return static_cast<std::int64_t>(track.work().movementTotal());
 
         case Field::TagBloom: return static_cast<std::int64_t>(track.tags().bloom());
         case Field::TagCount: return static_cast<std::int64_t>(track.tags().count());
@@ -192,6 +191,40 @@ namespace ao::query
       return registers[static_cast<std::size_t>(index)];
     }
 
+    bool matchesCreditName(library::TrackView const& track, Field field, DictionaryId nameId)
+    {
+      return nameId != kInvalidDictionaryId &&
+             std::ranges::any_of(detail::creditFieldEntries(track, field),
+                                 [nameId](auto const& entry) { return entry.nameId == nameId; });
+    }
+
+    bool matchesRecordingDateComparison(library::TrackView const& track,
+                                        ExecutionPlan const& plan,
+                                        std::int64_t literalIndex,
+                                        OpCode op)
+    {
+      AO_INVARIANT(literalIndex >= 0 && static_cast<std::size_t>(literalIndex) < plan.recordingDateConstants.size());
+      auto const literal = plan.recordingDateConstants[static_cast<std::size_t>(literalIndex)];
+      auto const optComparison =
+        library::compareRecordingDateAtLiteralPrecision(track.performance().recordingDate(), literal);
+
+      if (!optComparison)
+      {
+        return op == OpCode::Ne;
+      }
+
+      switch (op)
+      {
+        case OpCode::Eq: return *optComparison == 0;
+        case OpCode::Ne: return *optComparison != 0;
+        case OpCode::Lt: return *optComparison < 0;
+        case OpCode::Le: return *optComparison <= 0;
+        case OpCode::Gt: return *optComparison > 0;
+        case OpCode::Ge: return *optComparison >= 0;
+        default: return false;
+      }
+    }
+
     template<typename Op>
     void executeComparison(std::vector<std::int64_t>& registers,
                            library::TrackView const& track,
@@ -204,6 +237,20 @@ namespace ao::query
     {
       auto const field = static_cast<Field>(instr.field);
       auto const rhs = reg(registers, instr.operand);
+
+      if (field == Field::RecordingDate)
+      {
+        reg(registers, instr.operand - 1) = matchesRecordingDateComparison(track, plan, rhs, instr.op) ? 1 : 0;
+        return;
+      }
+
+      if (isCreditField(field))
+      {
+        AO_INVARIANT(instr.op == OpCode::Ne);
+        auto const matches = matchesCreditName(track, field, boundDictionaryId(dictionaryIds, instr.dictionarySymbol));
+        reg(registers, instr.operand - 1) = !matches ? 1 : 0;
+        return;
+      }
 
       if (isStringField(field))
       {
@@ -257,6 +304,20 @@ namespace ao::query
     {
       auto const field = static_cast<Field>(instr.field);
 
+      if (field == Field::RecordingDate)
+      {
+        reg(registers, instr.operand - 1) =
+          matchesRecordingDateComparison(track, plan, reg(registers, instr.operand), instr.op) ? 1 : 0;
+        return;
+      }
+
+      if (isCreditField(field))
+      {
+        reg(registers, instr.operand - 1) =
+          matchesCreditName(track, field, boundDictionaryId(dictionaryIds, instr.dictionarySymbol)) ? 1 : 0;
+        return;
+      }
+
       if (field == Field::Tag)
       {
         auto const tagId = boundDictionaryId(dictionaryIds, instr.dictionarySymbol);
@@ -304,6 +365,17 @@ namespace ao::query
       auto const field = static_cast<Field>(instr.field);
       auto const constantText = stringConstant(plan, reg(registers, instr.operand));
       auto fieldText = std::string_view{};
+
+      if (isCreditField(field))
+      {
+        AO_INVARIANT(dictionary != nullptr);
+        auto const matches = std::ranges::any_of(
+          detail::creditFieldEntries(track, field),
+          [&](auto const& entry)
+          { return cache.keyFor(entry.nameId, dictionary->get(entry.nameId)).contains(constantText); });
+        reg(registers, instr.operand - 1) = matches ? 1 : 0;
+        return;
+      }
 
       if (field == Field::Uri)
       {
@@ -357,11 +429,8 @@ namespace ao::query
         case Field::GenreId:
         case Field::AlbumArtistId:
         case Field::ComposerId:
-        case Field::ConductorId:
-        case Field::EnsembleId:
         case Field::WorkId:
         case Field::MovementId:
-        case Field::SoloistId:
           return readFieldValue(track, field) != static_cast<std::int64_t>(kInvalidDictionaryId.raw());
 
         case Field::CoverArtId:
@@ -379,6 +448,13 @@ namespace ao::query
         case Field::SampleRate:
         case Field::Channels:
         case Field::BitDepth: return readFieldValue(track, field) > 0;
+
+        case Field::RecordingDate: return track.performance().recordingDate().isPresent();
+        case Field::Conductor:
+        case Field::Ensemble:
+        case Field::Soloist:
+        case Field::Performer:
+        case Field::Credit: return !detail::creditFieldEntries(track, field).empty();
 
         case Field::Codec: return track.property().codec() != AudioCodec::Unknown;
 
@@ -451,6 +527,16 @@ namespace ao::query
       }
 
       auto const& values = set.valueKind == InSetValueKind::Dictionary ? dictionarySets[setIndex] : set.numericValues;
+
+      if (auto const field = static_cast<Field>(instr.field); isCreditField(field))
+      {
+        auto const matches = std::ranges::any_of(
+          detail::creditFieldEntries(track, field),
+          [&](auto const& entry) { return values.contains(static_cast<std::int64_t>(entry.nameId.raw())); });
+        reg(registers, instr.operand) = matches ? 1 : 0;
+        return;
+      }
+
       reg(registers, instr.operand) = values.contains(reg(registers, instr.operand)) ? 1 : 0;
     }
   } // namespace

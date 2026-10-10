@@ -7,10 +7,12 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/library/Credits.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <ftxui/component/event.hpp>
 
+#include <bitset>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -84,6 +86,8 @@ namespace ao::tui
      * itself through the notification feed and changes nothing else.
      */
     bool tryOpen(std::vector<TrackId> targetIds, TrackEditorMode mode = TrackEditorMode::Properties);
+
+    bool tryOpenCredits(std::vector<TrackId> targetIds, std::bitset<library::kCreditKindCount> kinds);
 
     /// The editor to render and route input to, or null when none is tryOpen.
     TrackPropertiesEditor const* activeEditor() const noexcept;

@@ -49,11 +49,13 @@ Keyword strings such as `and` or `in` must be quoted.
 | `$album` | Resolved dictionary text |
 | `$albumArtist` | Resolved dictionary text |
 | `$composer` | Resolved dictionary text |
-| `$conductor` | Resolved dictionary text |
-| `$ensemble` | Resolved dictionary text |
+| `$conductor` | All Conductor names joined with `; ` |
+| `$ensemble` | All Ensemble names joined with `; ` |
 | `$work` | Resolved dictionary text |
 | `$movement` | Resolved dictionary text |
-| `$soloist` | Resolved dictionary text |
+| `$soloist` | All Soloist names joined with `; ` |
+| `$performer` | All Performer names joined with `; ` |
+| `$credit` | All credit names joined with `; `, in canonical kind order |
 | `$genre` | Resolved dictionary text |
 | `$year` | Decimal value or empty for zero |
 | `$trackNumber` | Decimal value or empty for zero |
@@ -65,6 +67,11 @@ Keyword strings such as `and` or `in` must be quoted.
 
 The aliases from the predicate language are accepted for the same fields.
 `$coverArt` is rejected because it is not a scalar string field.
+
+Credit fields preserve duplicate names and within-kind order; an empty selection renders empty text.
+Roles are not included. Joined output is a lossy display projection, not an editable value or serialization:
+a name may itself contain `; `. These plans require both cold-record and dictionary access, independently
+of the first-name projections used by table sorting and grouping.
 
 ### Supported property variables
 
@@ -133,7 +140,7 @@ Representative invalid forms are:
 ## Implementation authority
 
 - [`Parser.cpp`](../../../lib/query/Parser.cpp) owns the shared lexical and AST grammar.
-- [`FormatExpression.cpp`](../../../lib/query/FormatExpression.cpp) owns subset validation and scalar field compilation.
+- [`FormatExpression.cpp`](../../../lib/query/FormatExpression.cpp) owns subset validation and text-field compilation, including joined credit-name projections.
 - [`FieldCatalog.cpp`](../../../lib/query/FieldCatalog.cpp) owns canonical variables and aliases.
 
 ## Test authority

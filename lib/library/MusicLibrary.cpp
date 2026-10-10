@@ -430,9 +430,11 @@ namespace ao::library
 
       if (prefixRes->libraryVersion != kLibraryVersion)
       {
-        return makeError(
-          Error::Code::NotSupported,
-          std::format("Unsupported library version {} (current {})", prefixRes->libraryVersion, kLibraryVersion));
+        return makeError(Error::Code::NotSupported,
+                         std::format("Unsupported library version {} (current {}). No automatic migration is provided; "
+                                     "keep this library and use a build supporting its stored version.",
+                                     prefixRes->libraryVersion,
+                                     kLibraryVersion));
       }
 
       if (auto catalogRes = validateCurrentCatalog(mainDatabase, transaction); !catalogRes)
@@ -725,7 +727,7 @@ namespace ao::library
                                     lmdb::IntegerKeyDatabase const& resourceDatabase,
                                     lmdb::ByteKeyDatabase const& manifestDatabase,
                                     lmdb::ReadTransaction const& transaction,
-                                    std::size_t const dictionarySize)
+                                    DictionaryStore const& dictionary)
     {
       auto const hotReader = hotDatabase.reader(transaction);
       auto const coldReader = coldDatabase.reader(transaction);
@@ -768,8 +770,7 @@ namespace ao::library
               "Hot and cold Track keys do not form matching nonzero pairs: {} and {}", *hotIdRes, *coldIdRes));
         }
 
-        if (auto validationRes = validateSerializedTrackReferences(hotPayload, coldPayload, dictionarySize);
-            !validationRes)
+        if (auto validationRes = validateSerializedTrackReferences(hotPayload, coldPayload, dictionary); !validationRes)
         {
           return makeError(
             Error::Code::CorruptData,
@@ -1032,7 +1033,7 @@ namespace ao::library
                                                       schema.resources,
                                                       schema.manifest,
                                                       implPtr->initializationTransaction,
-                                                      implPtr->dictionary.size());
+                                                      implPtr->dictionary);
           !validationRes)
       {
         return std::unexpected{validationRes.error()};

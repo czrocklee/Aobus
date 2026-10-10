@@ -7,12 +7,17 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <bitset>
+#include <functional>
 #include <memory>
+#include <string_view>
+#include <vector>
 
 namespace ao::winui
 {
@@ -32,10 +37,11 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::FontIcon technicalChevron{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel technicalRows{nullptr};
     i18n::MessageCatalog textCatalog;
+    std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)> editCredits;
   };
 
   /**
-   * Read-only WinUI adapter for the shared focused-view track-detail projection.
+   * WinUI adapter for the shared focused-view track-detail projection.
    *
    * The runtime projection owns selection tracking and field aggregation. This
    * control owns only WinUI section state and renders the shared schema,
@@ -62,6 +68,9 @@ namespace ao::winui
     void renderMetadataRows(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& rows,
                             bool expanded,
                             bool showEmpty);
+    void appendCreditsAction(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& rows,
+                             std::string_view label,
+                             std::bitset<library::kCreditKindCount> scope);
     void renderTechnicalRows(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& rows);
     void updateSectionPresentation();
     void applySectionPresentation(bool renderMetadataSection, bool renderTechnicalSection);
@@ -87,6 +96,8 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _technicalHeaderClickRevoker{};
 
     i18n::MessageCatalog _textCatalog;
+    std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)> _editCredits;
+    std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _creditClickRevokers;
     uimodel::TrackFieldGridSchema _schema;
     rt::TrackDetailSnapshot _snapshot;
     std::shared_ptr<rt::TrackDetailProjection> _projectionPtr;

@@ -6,9 +6,11 @@
 #include "PlaybackStatusFormatter.h"
 #include <ao/AudioCodec.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/utility/Path.h>
 
@@ -119,6 +121,13 @@ namespace ao::tui
       append(rt::TrackField::Year, std::format("{}", row.year));
     }
 
+    // A release year never infers a recording date; only a present stored
+    // value renders, at its own precision.
+    if (row.recordingDate.isPresent())
+    {
+      append(rt::TrackField::RecordingDate, library::formatRecordingDate(row.recordingDate));
+    }
+
     if (row.trackNumber != 0)
     {
       auto number = uimodel::formatDisplayTrackNumber(row.discNumber, row.discTotal, row.trackNumber);
@@ -142,13 +151,40 @@ namespace ao::tui
     }
 
     append(rt::TrackField::Composer, row.composer);
-    append(rt::TrackField::Conductor, row.conductor);
-    append(rt::TrackField::Ensemble, row.ensemble);
-    append(rt::TrackField::Soloist, row.soloist);
+    append(
+      rt::TrackField::Conductor, uimodel::formatTrackCreditSummary(textCatalog, row.conductor, row.conductorCount));
+    append(rt::TrackField::Ensemble, uimodel::formatTrackCreditSummary(textCatalog, row.ensemble, row.ensembleCount));
+    append(rt::TrackField::Soloist, uimodel::formatTrackCreditSummary(textCatalog, row.soloist, row.soloistCount));
     append(rt::TrackField::Work, row.work);
     append(rt::TrackField::Movement, row.movement);
     append(rt::TrackField::Genre, row.genre);
     append(rt::TrackField::Tags, row.tags, Kind::Tags);
+
+    return lines;
+  }
+
+  std::vector<TrackDetailLine> trackCreditDetailLines(i18n::MessageCatalog const& textCatalog,
+                                                      uimodel::TrackCreditSections const& credits)
+  {
+    auto lines = std::vector<TrackDetailLine>{};
+
+    // The pane always renders with a focused track, and the TUI has no
+    // show-empty toggle, so only a present or mixed list renders a subsection.
+    if (!uimodel::shouldShowTrackCredits(true, false, true, credits, false))
+    {
+      return lines;
+    }
+
+    lines.push_back({.label = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditsHeading)},
+                     .value = {},
+                     .kind = TrackDetailLine::Kind::Metadata});
+
+    for (auto const& row : uimodel::formatTrackCreditDisplayRows(textCatalog, credits))
+    {
+      lines.push_back({.label = row.kindLabel,
+                       .value = row.role.empty() ? row.name : std::format("{} ({})", row.name, row.role),
+                       .kind = TrackDetailLine::Kind::Metadata});
+    }
 
     return lines;
   }

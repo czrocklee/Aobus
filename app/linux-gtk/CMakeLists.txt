@@ -1,3 +1,43 @@
+# The field-grid task observation is test-only outside its implementation owner.
+set(AO_GTK_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_REGEX
+    "#[ \t]*include[ \t]*[<\"][^\">]*TrackFieldGridOperationProbe\\.h[>\"]|(^|[^A-Za-z0-9_])TrackFieldGridOperationProbe([^A-Za-z0-9_]|$)"
+)
+foreach(AO_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_SPELLING IN ITEMS
+    "#include \"layout/component/track/TrackFieldGridOperationProbe.h\""
+    "detail::TrackFieldGridOperationProbe::hasPendingSubmissions(component)")
+  if(NOT "${AO_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_SPELLING}" MATCHES
+         "${AO_GTK_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_REGEX}")
+    message(FATAL_ERROR
+      "GTK field-grid operation probe guardrail does not reject '${AO_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_SPELLING}'")
+  endif()
+endforeach()
+if("TrackFieldGridOperationProbePolicy" MATCHES "${AO_GTK_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_REGEX}")
+  message(FATAL_ERROR "GTK field-grid operation probe guardrail rejects a longer identifier")
+endif()
+ao_write_guardrail_regex(
+  AO_GTK_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_REGEX_FILE
+  "gtk-field-grid-operation-probe"
+  "${AO_GTK_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_REGEX}"
+)
+set(AO_GTK_FIELD_GRID_OPERATION_PROBE_OWNER_REGEX
+    "/app/linux-gtk/layout/component/track/(TrackFieldGridComponent\\.cpp|TrackFieldGridOperationProbe\\.h)$"
+)
+ao_write_guardrail_regex(
+  AO_GTK_FIELD_GRID_OPERATION_PROBE_OWNER_REGEX_FILE
+  "gtk-field-grid-operation-probe-owners"
+  "${AO_GTK_FIELD_GRID_OPERATION_PROBE_OWNER_REGEX}"
+)
+add_custom_target(ao_gtk_field_grid_operation_probe_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/include;${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/tool"
+          "-DFORBIDDEN_REGEX_FILE=${AO_GTK_FORBIDDEN_FIELD_GRID_OPERATION_PROBE_REGEX_FILE}"
+          "-DEXCLUDE_REGEX_FILE=${AO_GTK_FIELD_GRID_OPERATION_PROBE_OWNER_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking GTK field-grid operation observation stays source-private"
+  VERBATIM
+)
+
 # GResource compilation with automatic dependency tracking
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/resources.c
@@ -132,6 +172,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/track/TrackDetailUndoBarComponent.cpp
     layout/component/track/TrackFieldGridCustomControls.cpp
     layout/component/track/TrackFieldGridComponent.cpp
+    layout/component/track/TrackCreditsEditor.cpp
     layout/component/track/TrackFieldGridRows.cpp
     layout/component/track/TrackFieldGridText.cpp
     layout/component/track/TrackFieldGridWidgets.cpp

@@ -36,6 +36,7 @@ add_library(aobus-tui-lib STATIC
     TerminalTitle.cpp
     TerminalTitleFormat.cpp
     TerminalTrackColumnLayout.cpp
+    TrackCreditsEditor.cpp
     TrackEditController.cpp
     TrackMetadataEditor.cpp
     TrackTagEditor.cpp

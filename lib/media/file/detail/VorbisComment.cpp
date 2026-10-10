@@ -5,7 +5,9 @@
 
 #include "Content.h"
 #include "Decoder.h"
+#include <ao/media/file/Visitor.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/String.h>
 
 #include <boost/endian/detail/order.hpp>
 
@@ -29,20 +31,53 @@ namespace ao::media::file::detail
       (builder.metadata().*Setter)(value);
     }
 
-    [[maybe_unused]] void handleEnsembleFallback(ContentBuilder& builder, std::string_view value)
+    // Work and grouping comments share the scalar work slot; see WorkSource ranks.
+    template<WorkSource Source>
+    void handleWorkCandidate(ContentBuilder& builder, std::string_view value)
     {
-      if (builder.metadata().ensemble().empty())
-      {
-        builder.metadata().ensemble(value);
-      }
+      builder.metadata().work(Source, value);
     }
 
-    [[maybe_unused]] void handleSoloistFallback(ContentBuilder& builder, std::string_view value)
+    [[maybe_unused]] void handleEnsembleFallback(ContentBuilder& builder, std::string_view value)
     {
-      if (builder.metadata().soloist().empty())
+      builder.metadata().orchestra(value);
+    }
+
+    // Appends one PERFORMER value as a list credit, conservatively recognizing
+    // Picard's "name (instrument)" convention: one final isolated "(role)"
+    // suffix separated from a nonempty name by ASCII whitespace, with a
+    // nonempty trimmed role and no other or nested parentheses. Anything else
+    // is one whole trimmed unstructured name; a blank value contributes no
+    // entry, and names are never split on commas. PERFORMER populates only
+    // Performer credits; Soloist stays an explicit SOLOIST import.
+    void appendPerformerCredit(ContentBuilder& builder, std::string_view value)
+    {
+      auto const trimmed = utility::trim(value);
+
+      if (trimmed.empty())
       {
-        builder.metadata().soloist(value);
+        return;
       }
+
+      if (trimmed.back() == ')')
+      {
+        if (auto const openOffset = trimmed.find('('); openOffset != std::string_view::npos && openOffset > 0 &&
+                                                       trimmed.find('(', openOffset + 1) == std::string_view::npos &&
+                                                       trimmed.find(')') == trimmed.size() - 1 &&
+                                                       utility::isAsciiWhitespace(trimmed[openOffset - 1]))
+        {
+          auto const name = utility::trim(trimmed.substr(0, openOffset));
+          auto const role = utility::trim(trimmed.substr(openOffset + 1, trimmed.size() - openOffset - 2));
+
+          if (!name.empty() && !role.empty())
+          {
+            builder.metadata().credit(name, CreditKind::Performer, role);
+            return;
+          }
+        }
+      }
+
+      builder.metadata().credit(trimmed, CreditKind::Performer);
     }
 
     template<NumberSetter Setter>

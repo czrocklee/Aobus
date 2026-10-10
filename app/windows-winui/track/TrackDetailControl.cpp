@@ -10,9 +10,11 @@
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
+#include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -234,6 +236,7 @@ namespace ao::winui
     , _technicalChevron{std::move(config.technicalChevron)}
     , _technicalRows{std::move(config.technicalRows)}
     , _textCatalog{std::move(config.textCatalog)}
+    , _editCredits{std::move(config.editCredits)}
     , _schema{uimodel::buildTrackFieldGridSchema()}
     , _projectionPtr{std::move(projectionPtr)}
   {
@@ -302,6 +305,8 @@ namespace ao::winui
     // TrackDetailProjection borrows services owned by this window's runtime.
     // Stop publication before destroying the projection.
     _subscription.reset();
+    _creditClickRevokers.clear();
+    _editCredits = {};
 
     _projectionPtr.reset();
     _snapshot = {};
@@ -340,10 +345,16 @@ namespace ao::winui
       return;
     }
 
+    _creditClickRevokers.clear();
     rows.Children().Clear();
 
     for (auto const field : _schema.metadataFields)
     {
+      if (trackPropertyCreditKind(field))
+      {
+        continue;
+      }
+
       auto const text = uimodel::formatTrackFieldDisplayText(
         _textCatalog, field, _snapshot, i18n::requiredText(_textCatalog, MessageId::TrackMultipleValues), true);
       auto const visible =
@@ -403,6 +414,72 @@ namespace ao::winui
                   i18n::requiredText(_textCatalog, MessageId::TrackMissingOnSome));
       }
     }
+
+    if (uimodel::shouldShowTrackCredits(expanded, showEmpty, hasSelection(_snapshot), _snapshot.credits, false))
+    {
+      appendCreditsAction(
+        rows, i18n::requiredText(_textCatalog, MessageId::TrackCreditsAllKinds), uimodel::allTrackCreditKinds());
+
+      auto const creditRows = uimodel::formatTrackCreditDisplayRows(_textCatalog, _snapshot.credits);
+
+      for (auto const kind : {library::CreditKind::Conductor,
+                              library::CreditKind::Ensemble,
+                              library::CreditKind::Soloist,
+                              library::CreditKind::Performer})
+      {
+        appendCreditsAction(rows, uimodel::trackCreditKindLabel(_textCatalog, kind), uimodel::trackCreditScope(kind));
+
+        for (auto const& entry : creditRows)
+        {
+          if (entry.kind != kind)
+          {
+            continue;
+          }
+
+          auto name = TextBlock{};
+          name.Text(winrt::to_hstring(entry.name));
+          name.TextWrapping(winrt::Microsoft::UI::Xaml::TextWrapping::Wrap);
+          rows.Children().Append(name);
+
+          if (!entry.role.empty())
+          {
+            auto role = TextBlock{};
+            role.Text(winrt::to_hstring(entry.role));
+            role.TextWrapping(winrt::Microsoft::UI::Xaml::TextWrapping::Wrap);
+            rows.Children().Append(role);
+          }
+        }
+      }
+    }
+  }
+
+  void TrackDetailControl::appendCreditsAction(StackPanel const& rows,
+                                               std::string_view const label,
+                                               std::bitset<library::kCreditKindCount> const scope)
+  {
+    auto text = TextBlock{};
+    text.Text(winrt::to_hstring(i18n::requiredFormat(_textCatalog, MessageId::TrackCreditsScope, {{"scope", label}})));
+    text.TextWrapping(winrt::Microsoft::UI::Xaml::TextWrapping::Wrap);
+
+    if (!_editCredits)
+    {
+      rows.Children().Append(text);
+      return;
+    }
+
+    auto button = winrt::Microsoft::UI::Xaml::Controls::Button{};
+    button.Content(text);
+    button.HorizontalAlignment(HorizontalAlignment::Stretch);
+    _creditClickRevokers.push_back(button.Click(
+      winrt::auto_revoke,
+      [this, scope](winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
+      {
+        if (_editCredits && hasSelection(_snapshot))
+        {
+          _editCredits(_snapshot.trackIds, scope);
+        }
+      }));
+    rows.Children().Append(button);
   }
 
   void TrackDetailControl::renderTechnicalRows(StackPanel const& rows)

@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
@@ -103,7 +104,11 @@ namespace ao::rt
       auto const& dictionary = library.dictionary();
       auto const metadata = view.metadata();
       auto const property = view.property();
-      auto const classical = view.classical();
+      auto const work = view.work();
+      auto const performance = view.performance();
+      auto const conductors = performance.credits(library::CreditKind::Conductor);
+      auto const ensembles = performance.credits(library::CreditKind::Ensemble);
+      auto const soloists = performance.credits(library::CreditKind::Soloist);
 
       std::uint64_t fileSize = 0;
       auto optModifiedTime = std::optional<FileTimestamp>{};
@@ -134,20 +139,24 @@ namespace ao::rt
         .albumArtist = resolveDictionaryId(dictionary, metadata.albumArtistId()),
         .genre = resolveDictionaryId(dictionary, metadata.genreId()),
         .composer = resolveDictionaryId(dictionary, metadata.composerId()),
-        .conductor = resolveDictionaryId(dictionary, classical.conductorId()),
-        .ensemble = resolveDictionaryId(dictionary, classical.ensembleId()),
-        .work = resolveDictionaryId(dictionary, classical.workId()),
-        .movement = resolveDictionaryId(dictionary, classical.movementId()),
-        .soloist = resolveDictionaryId(dictionary, classical.soloistId()),
+        .conductor = conductors.empty() ? std::string{} : resolveDictionaryId(dictionary, conductors.front().nameId),
+        .ensemble = ensembles.empty() ? std::string{} : resolveDictionaryId(dictionary, ensembles.front().nameId),
+        .work = resolveDictionaryId(dictionary, work.workId()),
+        .movement = resolveDictionaryId(dictionary, work.movementId()),
+        .soloist = soloists.empty() ? std::string{} : resolveDictionaryId(dictionary, soloists.front().nameId),
         .tags = joinResolvedTags(view.tags(), dictionary),
         .duration = property.duration(),
+        .conductorCount = static_cast<std::uint16_t>(conductors.size()),
+        .ensembleCount = static_cast<std::uint16_t>(ensembles.size()),
+        .soloistCount = static_cast<std::uint16_t>(soloists.size()),
         .year = metadata.year(),
+        .recordingDate = performance.recordingDate(),
         .discNumber = metadata.discNumber(),
         .discTotal = metadata.discTotal(),
         .trackNumber = metadata.trackNumber(),
         .trackTotal = metadata.trackTotal(),
-        .movementNumber = classical.movementNumber(),
-        .movementTotal = classical.movementTotal(),
+        .movementNumber = work.movementNumber(),
+        .movementTotal = work.movementTotal(),
         .sampleRate = property.sampleRate().raw(),
         .channels = property.channels().raw(),
         .bitDepth = property.bitDepth().raw(),
@@ -241,6 +250,11 @@ namespace ao::rt
     }
   };
 
+  bool LibrarySnapshot::isFor(library::MusicLibrary const& library) const noexcept
+  {
+    return _implPtr && &_implPtr->library == &library;
+  }
+
   LibrarySnapshot::LibrarySnapshot(library::MusicLibrary const& library)
     : _implPtr{std::make_unique<Impl>(library)}
   {
@@ -324,6 +338,67 @@ namespace ao::rt
 
     auto const manifestReader = library.manifest().reader(transaction);
     return readTrackFieldRawValue(field, *optView, library.dictionary(), &manifestReader);
+  }
+
+  std::optional<std::vector<library::Credit>> LibrarySnapshot::trackCredits(TrackId const id) const
+  {
+    auto const& library = _implPtr->library;
+    auto const reader = library.tracks().reader(_implPtr->transaction);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Cold);
+
+    if (!optView || !optView->isColdValid())
+    {
+      return std::nullopt;
+    }
+
+    auto const performance = optView->performance();
+    auto credits = std::vector<library::Credit>{};
+    credits.reserve(performance.credits().size());
+
+    for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+    {
+      auto const kind = static_cast<library::CreditKind>(kindIndex);
+
+      for (auto const& entry : performance.credits(kind))
+      {
+        credits.push_back(library::Credit{
+          .name = resolveDictionaryId(library.dictionary(), entry.nameId),
+          .kind = kind,
+          .role = resolveDictionaryId(library.dictionary(), entry.roleId),
+        });
+      }
+    }
+
+    return credits;
+  }
+
+  std::optional<std::string> LibrarySnapshot::trackCustomMetadataValue(TrackId const id, std::string_view key) const
+  {
+    auto const& library = _implPtr->library;
+    auto const optKeyId = library.dictionary().findId(key);
+
+    if (!optKeyId)
+    {
+      return std::nullopt;
+    }
+
+    auto const reader = library.tracks().reader(_implPtr->transaction);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Cold);
+
+    if (!optView || !optView->isColdValid())
+    {
+      return std::nullopt;
+    }
+
+    for (auto const& [keyId, value] : optView->customMetadata())
+    {
+      if (keyId == *optKeyId)
+      {
+        return std::string{value};
+      }
+    }
+
+    return std::nullopt;
   }
 
   std::string LibrarySnapshot::resolve(DictionaryId id) const

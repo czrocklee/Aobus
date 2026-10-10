@@ -29,7 +29,7 @@ The private application-runtime `readMediaTrack` adapter converts visitor calls 
 - `open()` validates extension and read-only mapping, but parsing remains lazy.
 - `visit()` succeeds only when required parsing and non-empty payload selection succeed.
 - A failed `visit()` invokes no visitor callback.
-- A successful visit emits only accepted non-empty text, non-zero numeric and technical values, a known codec, and accepted non-empty pictures.
+- A successful visit emits only accepted non-empty text, non-zero numeric and technical values, a known codec, accepted non-empty pictures, and one source-ordered Credits callback when that list is nonempty.
 - The visitor boundary does not establish a global scalar-valid UTF-8 invariant; the consuming library builder owns strict validation and NFC admission.
 - `audioPayload().offset` and `bytes.size()` describe a range entirely inside the mapped file.
 - Required parse success or failure is cached and reused by payload and content operations.
@@ -69,11 +69,13 @@ Const operations mutate these caches. Sequential use is required, and external l
 
 `visit(visitor)` first requires successful payload selection, then computes or reuses interpreted content. Only after both operations succeed does it deliver callbacks. Therefore a required failure cannot leave a partially mutated consumer.
 
-Callbacks are synchronous. Their string and byte arguments may be retained only while the same backing `File` remains alive. Calling `visit()` again does not invalidate earlier views.
+Callbacks are synchronous. Their string and byte arguments, including the whole Credits span and each borrowed name/role, may be retained only while the same backing `File` remains alive. Calling `visit()` again does not invalidate earlier views.
+The whole-list callback follows all scalar, technical, and picture callbacks, retaining entry order and duplicates; it is never repeated per tag or per WAVE chunk.
 
 ### Runtime adaptation
 
-`readMediaTrack(path)` opens one `File`, creates an empty `TrackBuilder`, and maps callbacks directly into its metadata, property, and cover builders. The returned `MediaTrack` retains the `File` for the lifetime of its member builder. A copied or moved-out builder that still contains media-derived views must not outlive that `MediaTrack`. Runtime callers may mutate URI, tags, or custom metadata after reading, but those values have independent owners, are library concerns, and are never parsed as a generic public media aggregate.
+`readMediaTrack(path)` opens one `File`, creates an empty `TrackBuilder`, and maps callbacks into its metadata, property, and cover builders.
+It exhaustively maps the media layer's independent kind enum into borrowed library credit views and replaces the whole builder list without unchecked casts, singleton routing, or delimiter joining. The returned `MediaTrack` retains the `File` for the lifetime of its member builder. A copied or moved-out builder that still contains media-derived views must not outlive that `MediaTrack`. Runtime callers may mutate URI, tags, or custom metadata after reading, but those values have independent owners, are library concerns, and are never parsed as a generic public media aggregate.
 This adaptation deliberately performs no repair: malformed text remains detectable by the later library admission step, which can report the scan item without guessing an encoding.
 
 ## Required and optional format behavior
@@ -112,6 +114,27 @@ A stream that reached a complete end of stream at a granule position below its o
 ### RIFF/WAVE
 
 A valid supported WAVE format and non-empty `data` chunk are required. `LIST/INFO` fields are applied only after the entire bounded list validates. A malformed embedded ID3 chunk contributes no ID3 fields. WAVE technical properties and other valid optional evidence remain available.
+
+## Internal credit extraction
+
+Private interpreted `Content` owns credit name/role text and retains source-ordered views with the four fixed media kinds for `Visitor::visitCredits`.
+Repeated supported values and different source forms for one kind contribute separate entries without deduplication.
+The [credit import reference](../../reference/media/audio-file.md#credit-import) owns existing source mappings, whole-file nonblank Ensemble-over-Orchestra precedence, version-aware ID3 values, TMCL pairing, and the conservative Vorbis PERFORMER suffix parser.
+Blank source names are omitted; malformed nonblank text remains subject to strict library UTF-8/NFC admission rather than source-parser repair.
+The list represents supplied credits, not a complete roster or musical-entity identity.
+
+WAVE accumulates all kinds from each valid embedded-ID3 chunk in traversal order, retaining cross-chunk duplicates.
+It copies each entry's name/role into its content owner before the temporary chunk builder dies, so converted and unsynchronised text remains valid for delivery.
+Ensemble and Orchestra candidates remain unresolved across chunk boundaries until whole-file precedence is applied, preserving candidate positions in either source order.
+All formats emit one nonempty accumulated list after all other visitor callbacks, synchronously and at most once per content visit.
+
+Vorbis `PERFORMER` selects Performer, never Soloist; explicit source tags select the other initial kinds.
+Normal rescans preserve curated Credits rather than applying new media candidates to an existing track.
+No recording date is inferred from `DATE`, `YEAR`, `TDRC`, or the stored Year; there is no recording-date file callback or automatic metadata backfill.
+Work precedence, chunk traversal, and non-credit media behavior remain independent.
+
+[`CreditReaderTest.cpp`](../../../test/unit/media/file/id3v2/CreditReaderTest.cpp) and [`VorbisCreditTest.cpp`](../../../test/unit/media/file/VorbisCreditTest.cpp) pin positional and conservative-suffix rules.
+[`ContentCreditTest.cpp`](../../../test/unit/media/file/ContentCreditTest.cpp) and [`WavCreditContentTest.cpp`](../../../test/unit/media/file/WavCreditContentTest.cpp) pin source order, whole-file precedence, duplicates, and backing lifetime.
 
 ## Failure and cancellation
 

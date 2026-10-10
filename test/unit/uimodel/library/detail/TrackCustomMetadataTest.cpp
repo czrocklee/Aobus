@@ -37,39 +37,43 @@ namespace ao::uimodel::test
     CHECK_FALSE(isProtectedTrackCustomMetadataEditText("edited", kMixedText));
   }
 
-  TEST_CASE("validateCustomMetadataAddition rejects duplicate and reserved keys", "[uimodel][unit][library][detail]")
+  TEST_CASE("validateCustomMetadataAddition reserves exact field ids and credits only",
+            "[uimodel][unit][library][detail]")
   {
     auto snap = rt::TrackDetailSnapshot{};
     snap.customMetadata.push_back(rt::CustomMetadataItem{.key = "Mood"});
 
-    CHECK(validateCustomMetadataAddition(snap, "ReplayGain") == CustomMetadataAddValidation::Accepted);
     CHECK(validateCustomMetadataAddition(snap, "Mood") == CustomMetadataAddValidation::DuplicateCustomMetadata);
-    CHECK(validateCustomMetadataAddition(snap, "title") == CustomMetadataAddValidation::ReservedTrackField);
+    CHECK(validateCustomMetadataAddition(snap, "ReplayGain") == CustomMetadataAddValidation::Accepted);
+    CHECK(validateCustomMetadataAddition(snap, "source") == CustomMetadataAddValidation::Accepted);
+    CHECK(validateCustomMetadataAddition(snap, "credits") == CustomMetadataAddValidation::ReservedKey);
+    CHECK(validateCustomMetadataAddition(snap, "musicians") == CustomMetadataAddValidation::Accepted);
 
     for (auto const& definition : rt::trackFieldDefinitions())
     {
       CAPTURE(definition.id);
-      CHECK(validateCustomMetadataAddition(snap, definition.id) == CustomMetadataAddValidation::ReservedTrackField);
+      CHECK(validateCustomMetadataAddition(snap, definition.id) == CustomMetadataAddValidation::ReservedKey);
+    }
+
+    // Case and query-alias spellings are different keys. They are not reserved.
+    for (auto const* const accepted :
+         {"Title", "MUSICIANS", "Recording-Date", "albumArtist", "recordingDate", "trackNumber", "t", "aa", "musician"})
+    {
+      CAPTURE(accepted);
+      CHECK(validateCustomMetadataAddition(snap, accepted) == CustomMetadataAddValidation::Accepted);
     }
   }
 
-  TEST_CASE("undoValueForDeletedTrackCustomMetadata returns safe restore values", "[uimodel][unit][library][detail]")
+  TEST_CASE("validateCustomMetadataAddition prefers an existing custom key over reservation",
+            "[uimodel][unit][library][detail]")
   {
     auto snap = rt::TrackDetailSnapshot{};
-    snap.customMetadata.push_back(
-      rt::CustomMetadataItem{.key = "All", .value = {.optValue = "same"}, .presentOnAll = true, .presentOnAny = true});
-    snap.customMetadata.push_back(rt::CustomMetadataItem{
-      .key = "Partial", .value = {.optValue = "value"}, .presentOnAll = false, .presentOnAny = true});
-    snap.customMetadata.push_back(
-      rt::CustomMetadataItem{.key = "Mixed", .value = {.mixed = true}, .presentOnAll = true, .presentOnAny = true});
-    snap.customMetadata.push_back(
-      rt::CustomMetadataItem{.key = "Empty", .value = {.optValue = ""}, .presentOnAll = true, .presentOnAny = true});
+    snap.customMetadata.push_back(rt::CustomMetadataItem{.key = "title"});
+    snap.customMetadata.push_back(rt::CustomMetadataItem{.key = "credits"});
 
-    CHECK(undoValueForDeletedTrackCustomMetadata(snap, "All") == std::optional<std::string>{"same"});
-    CHECK_FALSE(undoValueForDeletedTrackCustomMetadata(snap, "Partial").has_value());
-    CHECK_FALSE(undoValueForDeletedTrackCustomMetadata(snap, "Mixed").has_value());
-    CHECK(undoValueForDeletedTrackCustomMetadata(snap, "Empty") == std::optional<std::string>{""});
-    CHECK_FALSE(undoValueForDeletedTrackCustomMetadata(snap, "Missing").has_value());
+    CHECK(validateCustomMetadataAddition(snap, "title") == CustomMetadataAddValidation::DuplicateCustomMetadata);
+    CHECK(validateCustomMetadataAddition(snap, "credits") == CustomMetadataAddValidation::DuplicateCustomMetadata);
+    CHECK(validateCustomMetadataAddition(snap, "artist") == CustomMetadataAddValidation::ReservedKey);
   }
 
   TEST_CASE("TrackCustomMetadata - patch helpers write update and delete payloads", "[uimodel][unit][library][detail]")

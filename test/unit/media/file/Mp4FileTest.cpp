@@ -11,20 +11,25 @@
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/utility/Xxh3.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace ao::media::file::mp4::test
 {
   using File = ao::media::file::test::TestFile;
+  using Credit = ao::media::file::test::RecordedContent::Credit;
   using namespace ao::media::mp4;
   using namespace ao::test;
 
@@ -63,7 +68,9 @@ namespace ao::media::file::mp4::test
       return atom;
     }
 
-    std::vector<std::uint8_t> makeFreeformTextAtom(std::string_view name, std::string_view value)
+    std::vector<std::uint8_t> makeFreeformTextAtom(std::string_view name,
+                                                   std::span<std::string_view const> values,
+                                                   std::uint32_t dataType = 1)
     {
       auto freeformBody = std::vector<std::uint8_t>{};
 
@@ -78,17 +85,24 @@ namespace ao::media::file::mp4::test
       addFreeformTextChild("mean", "com.apple.iTunes");
       addFreeformTextChild("name", name);
 
-      auto dataLayout = DataAtomLayout{};
-      dataLayout.common.length = static_cast<std::uint32_t>(sizeof(DataAtomLayout) + value.size());
-      std::memcpy(dataLayout.common.type.data(), "data", 4);
-      dataLayout.dataLength = static_cast<std::uint32_t>(16 + value.size());
-      std::memcpy(dataLayout.magic.data(), "data", 4);
-      dataLayout.type = 1;
-      auto const* dataAddr = reinterpret_cast<std::uint8_t const*>(&dataLayout);
-      freeformBody.insert(freeformBody.end(), dataAddr, dataAddr + sizeof(dataLayout));
-      freeformBody.insert(freeformBody.end(), value.begin(), value.end());
+      for (auto const value : values)
+      {
+        // A data child has one atom header, then type/locale/text. DataAtomLayout
+        // describes a parent plus nested data header, not a child by itself.
+        auto dataBody = std::vector<std::uint8_t>{};
+        ao::test::mp4::appendBe32(dataBody, dataType);
+        ao::test::mp4::appendBe32(dataBody, 0); // Locale.
+        dataBody.insert(dataBody.end(), value.begin(), value.end());
+        auto const child = ao::test::mp4::makeAtom("data", dataBody);
+        freeformBody.insert(freeformBody.end(), child.begin(), child.end());
+      }
 
       return ao::test::mp4::makeAtom("----", freeformBody);
+    }
+
+    std::vector<std::uint8_t> makeFreeformTextAtom(std::string_view name, std::string_view value)
+    {
+      return makeFreeformTextAtom(name, std::array<std::string_view, 1>{value});
     }
 
     std::vector<std::uint8_t> createMinimalM4a(char const* sampleEntryType = "mp4a",
@@ -234,6 +248,67 @@ namespace ao::media::file::mp4::test
       return data;
     }
 
+    // A meta/keys atom whose mdta key entries carry @p keys, in order.
+    std::vector<std::uint8_t> makeMdtaKeysAtom(std::span<std::string_view const> keys)
+    {
+      auto body = std::vector<std::uint8_t>{0, 0, 0, 0}; // version/flags
+      ao::test::mp4::appendBe32(body, static_cast<std::uint32_t>(keys.size()));
+
+      for (auto const key : keys)
+      {
+        ao::test::mp4::appendBe32(body, static_cast<std::uint32_t>((sizeof(std::uint32_t) * 2) + key.size()));
+        body.insert(body.end(), {'m', 'd', 't', 'a'});
+        body.insert(body.end(), key.begin(), key.end());
+      }
+
+      return ao::test::mp4::makeAtom("keys", body);
+    }
+
+    // An ilst child whose atom type is the 1-based index of an mdta key entry,
+    // which is how the mp4 reader resolves mdta metadata values.
+    std::vector<std::uint8_t> makeMdtaTextAtom(std::uint32_t keyIndex,
+                                               std::string_view text,
+                                               std::uint32_t dataType = 1)
+    {
+      auto layout = DataAtomLayout{};
+      layout.common.length = static_cast<std::uint32_t>(sizeof(DataAtomLayout) + text.size());
+      layout.common.type = {static_cast<char>(keyIndex >> 24),
+                            static_cast<char>(keyIndex >> 16),
+                            static_cast<char>(keyIndex >> 8),
+                            static_cast<char>(keyIndex)};
+      layout.dataLength = static_cast<std::uint32_t>(16 + text.size());
+      std::memcpy(layout.magic.data(), "data", 4);
+      layout.type = dataType;
+
+      auto const* ptr = reinterpret_cast<std::uint8_t const*>(&layout);
+      auto atom = std::vector<std::uint8_t>(ptr, ptr + sizeof(layout));
+      atom.insert(atom.end(), text.begin(), text.end());
+      return atom;
+    }
+
+    std::vector<std::uint8_t> createMinimalM4aWithIlstAndKeys(std::vector<std::uint8_t> const& rawIlstChildren,
+                                                              std::vector<std::uint8_t> const& keysAtom)
+    {
+      auto data = std::vector<std::uint8_t>{};
+      auto const ilstAtom = ao::test::mp4::makeAtom("ilst", rawIlstChildren);
+
+      auto metaBody = std::vector<std::uint8_t>{0, 0, 0, 0};
+      metaBody.insert(metaBody.end(), ilstAtom.begin(), ilstAtom.end());
+      metaBody.insert(metaBody.end(), keysAtom.begin(), keysAtom.end());
+
+      auto const metaAtom = ao::test::mp4::makeAtom("meta", metaBody);
+      auto const udtaAtom = ao::test::mp4::makeAtom("udta", metaAtom);
+      auto const trakAtom = ao::test::mp4::makeAudioTrackAtom("mp4a");
+
+      auto moovBody = std::vector<std::uint8_t>{};
+      moovBody.insert(moovBody.end(), udtaAtom.begin(), udtaAtom.end());
+      moovBody.insert(moovBody.end(), trakAtom.begin(), trakAtom.end());
+
+      ao::test::mp4::addAtom(data, "moov", moovBody);
+      ao::test::mp4::addAtom(data, "mdat", {0x01});
+      return data;
+    }
+
     std::vector<std::uint8_t> createMinimalM4aWithRawIlstAtom(std::vector<std::uint8_t> const& rawIlstChild)
     {
       auto data = std::vector<std::uint8_t>{};
@@ -372,11 +447,13 @@ namespace ao::media::file::mp4::test
     CHECK(metadata.number(NumberField::Year) == 2024);
     CHECK(metadata.text(TextField::Genre) == "Genre");
     CHECK(metadata.text(TextField::Composer) == "Composer");
-    CHECK(metadata.text(TextField::Conductor) == "Conductor");
-    CHECK(metadata.text(TextField::Ensemble) == "Ensemble");
-    CHECK(metadata.text(TextField::Work) == "Grouping"); // grp overwrites wrk
+    CHECK(metadata.credits() == std::vector<Credit>{
+                                  {.name = "Conductor", .kind = CreditKind::Conductor},
+                                  {.name = "Ensemble", .kind = CreditKind::Ensemble},
+                                  {.name = "Soloist", .kind = CreditKind::Soloist},
+                                });
+    CHECK(metadata.text(TextField::Work) == "Work"); // ©wrk outranks ©grp
     CHECK(metadata.text(TextField::Movement) == "MovementName");
-    CHECK(metadata.text(TextField::Soloist) == "Soloist");
     CHECK(metadata.number(NumberField::MovementNumber) == 2);
     CHECK(metadata.number(NumberField::MovementTotal) == 4);
     CHECK(metadata.number(NumberField::TrackNumber) == 7);
@@ -460,9 +537,11 @@ namespace ao::media::file::mp4::test
     auto const file = File{temp.path};
     auto const content = readContent(file);
 
-    CHECK(content.text(TextField::Conductor) == "Lower Conductor");
-    CHECK(content.text(TextField::Ensemble) == "Mixed Ensemble");
-    CHECK(content.text(TextField::Soloist) == "Lower Soloist");
+    CHECK(content.credits() == std::vector<Credit>{
+                                 {.name = "Lower Conductor", .kind = CreditKind::Conductor},
+                                 {.name = "Mixed Ensemble", .kind = CreditKind::Ensemble},
+                                 {.name = "Lower Soloist", .kind = CreditKind::Soloist},
+                               });
   }
 
   TEST_CASE("MP4 File - maps orchestra freeform fallback when ensemble is absent", "[media][unit][mp4][file]")
@@ -473,7 +552,350 @@ namespace ao::media::file::mp4::test
     auto const file = File{temp.path};
     auto const content = readContent(file);
 
-    CHECK(content.text(TextField::Ensemble) == "Fallback Ensemble");
+    CHECK(content.credits() == std::vector<Credit>{{.name = "Fallback Ensemble", .kind = CreditKind::Ensemble}});
+  }
+
+  TEST_CASE("MP4 File - supported freeform and mdta credits accumulate repeated values with one final callback",
+            "[media][unit][mp4][file]")
+  {
+    using Event = ao::media::file::test::RecordedContent::CallbackEvent;
+    using Kind = ao::media::file::test::RecordedContent::CallbackKind;
+    auto const keys =
+      makeMdtaKeysAtom(std::to_array<std::string_view>({"CoNdUcToR", "ENSEMBLE", "soloist", "orchestra", "performer"}));
+    auto const owned = [&]
+    {
+      auto children = std::vector<std::uint8_t>{};
+
+      for (auto const& atom : {
+             makeFreeformTextAtom("ORCHESTRA", std::to_array<std::string_view>({"Fallback", "Fallback"})),
+             makeFreeformTextAtom("conductor", std::to_array<std::string_view>({"A/B, C", " \t\n\r\f\v", "A/B, C"})),
+             makeMdtaTextAtom(1, "D"),
+             makeMdtaTextAtom(1, "D"),
+             makeFreeformTextAtom("soloist", "Solo"),
+             makeMdtaTextAtom(3, "Solo"),
+             makeFreeformTextAtom("EnSeMbLe", "Group"),
+             makeMdtaTextAtom(2, "Group"),
+             makeMdtaTextAtom(4, "Discarded"),
+             makeMdtaTextAtom(1, ""),
+             makeMdtaTextAtom(3, " "),
+             makeFreeformTextAtom("ensemble", " "),
+             makeMdtaTextAtom(2, " \t"),
+             makeFreeformTextAtom("performer", "Unsupported"),
+             makeMdtaTextAtom(5, "Unsupported"),
+           })
+      {
+        children.insert(children.end(), atom.begin(), atom.end());
+      }
+
+      auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(children, keys), ".m4a"};
+      auto const file = File{temp.path};
+      auto const content = readContent(file);
+      CHECK(content.events() == std::vector<Event>{
+                                  {Kind::Codec},
+                                  {Kind::Duration},
+                                  {Kind::Bitrate},
+                                  {Kind::SampleRate},
+                                  {Kind::Channels},
+                                  {Kind::BitDepth},
+                                  {Kind::Credits},
+                                });
+      return content.credits();
+    }();
+    CHECK(owned == std::vector<Credit>{
+                     {.name = "A/B, C", .kind = CreditKind::Conductor},
+                     {.name = "A/B, C", .kind = CreditKind::Conductor},
+                     {.name = "D", .kind = CreditKind::Conductor},
+                     {.name = "D", .kind = CreditKind::Conductor},
+                     {.name = "Solo", .kind = CreditKind::Soloist},
+                     {.name = "Solo", .kind = CreditKind::Soloist},
+                     {.name = "Group", .kind = CreditKind::Ensemble},
+                     {.name = "Group", .kind = CreditKind::Ensemble},
+                   });
+  }
+
+  TEST_CASE("MP4 File - credit text requires declared UTF-8 without reinterpreting unsupported data types",
+            "[media][unit][mp4][file]")
+  {
+    auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"ensemble", "conductor"}));
+    // UTF-16BE U+4142 is the valid UTF-8 byte sequence "AB" if misread;
+    // admission must honor the type even when byte validation would succeed.
+    for (auto const dataType : {0U, 2U, 13U, 21U, 0x01000001U})
+    {
+      CAPTURE(dataType);
+      auto children = std::vector<std::uint8_t>{};
+
+      for (auto const& atom : {
+             makeFreeformTextAtom("orchestra", "Fallback"),
+             makeFreeformTextAtom("ensemble", std::to_array<std::string_view>({"AB", "CD"}), dataType),
+             makeMdtaTextAtom(1, "AB", dataType),
+             makeFreeformTextAtom("conductor", "First"),
+             makeMdtaTextAtom(2, "Ignored", dataType),
+             makeFreeformTextAtom("conductor", std::to_array<std::string_view>({"Ignored"}), dataType),
+             makeMdtaTextAtom(2, "Last"),
+             makeMdtaTextAtom(2, "Last"),
+           })
+      {
+        children.insert(children.end(), atom.begin(), atom.end());
+      }
+
+      auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(children, keys), ".m4a"};
+      auto const file = File{temp.path};
+      auto const content = readContent(file);
+      CHECK(content.credits() == std::vector<Credit>{
+                                   {.name = "Fallback", .kind = CreditKind::Ensemble},
+                                   {.name = "First", .kind = CreditKind::Conductor},
+                                   {.name = "Last", .kind = CreditKind::Conductor},
+                                   {.name = "Last", .kind = CreditKind::Conductor},
+                                 });
+      CHECK(content.codec() == AudioCodec::Aac);
+      CHECK(content.sampleRate() == 44100);
+    }
+  }
+
+  TEST_CASE("MP4 File - declared UTF-8 credits retain malformed bytes for library admission",
+            "[media][unit][mp4][file]")
+  {
+    auto const malformed = std::string_view{"bad\xFFname"};
+    auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"conductor"}));
+    auto children = makeFreeformTextAtom("conductor", std::to_array<std::string_view>({malformed, "Valid"}));
+    auto const mdta = makeMdtaTextAtom(1, malformed);
+    children.insert(children.end(), mdta.begin(), mdta.end());
+    auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(children, keys), ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+    CHECK(content.credits() == std::vector<Credit>{
+                                 {.name = std::string{malformed}, .kind = CreditKind::Conductor},
+                                 {.name = "Valid", .kind = CreditKind::Conductor},
+                                 {.name = std::string{malformed}, .kind = CreditKind::Conductor},
+                               });
+  }
+
+  TEST_CASE("MP4 File - mixed freeform and mdta Ensemble precedence is whole-file and nonblank in both orders",
+            "[media][unit][mp4][file]")
+  {
+    auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"ensemble", "orchestra"}));
+
+    for (bool const explicitFirst : {false, true})
+    {
+      for (bool const blankExplicit : {false, true})
+      {
+        CAPTURE(explicitFirst, blankExplicit);
+        auto const* const explicitValue = blankExplicit ? " \t\n\r\f\v" : " Group ";
+        auto explicitAtoms = makeFreeformTextAtom("ensemble", explicitValue);
+        auto const mdtaExplicit = makeMdtaTextAtom(1, explicitValue);
+        explicitAtoms.insert(explicitAtoms.end(), mdtaExplicit.begin(), mdtaExplicit.end());
+        auto fallbackAtoms =
+          makeFreeformTextAtom("orchestra", std::to_array<std::string_view>({"Fallback", "Fallback"}));
+        auto const mdtaFallback = makeMdtaTextAtom(2, "Fallback B");
+        fallbackAtoms.insert(fallbackAtoms.end(), mdtaFallback.begin(), mdtaFallback.end());
+        auto children = explicitFirst ? explicitAtoms : fallbackAtoms;
+        auto const& last = explicitFirst ? fallbackAtoms : explicitAtoms;
+        children.insert(children.end(), last.begin(), last.end());
+        auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(children, keys), ".m4a"};
+        auto const file = File{temp.path};
+
+        if (auto const content = readContent(file); blankExplicit)
+        {
+          CHECK(content.credits() == std::vector<Credit>{
+                                       {.name = "Fallback", .kind = CreditKind::Ensemble},
+                                       {.name = "Fallback", .kind = CreditKind::Ensemble},
+                                       {.name = "Fallback B", .kind = CreditKind::Ensemble},
+                                     });
+        }
+        else
+        {
+          CHECK(content.credits() == std::vector<Credit>{
+                                       {.name = "Group", .kind = CreditKind::Ensemble},
+                                       {.name = "Group", .kind = CreditKind::Ensemble},
+                                     });
+        }
+      }
+    }
+  }
+
+  TEST_CASE("MP4 File - blank Ensemble keeps all Orchestra values in traversal order across mapping forms",
+            "[media][unit][mp4][file]")
+  {
+    auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"orchestra", "soloist", "ensemble"}));
+    auto children = std::vector<std::uint8_t>{};
+
+    for (auto const& atom : {makeFreeformTextAtom("orchestra", "A"),
+                             makeMdtaTextAtom(2, "Solo"),
+                             makeMdtaTextAtom(1, "B"),
+                             makeFreeformTextAtom("conductor", "Conductor"),
+                             makeMdtaTextAtom(3, " "),
+                             makeFreeformTextAtom("ensemble", "")})
+    {
+      children.insert(children.end(), atom.begin(), atom.end());
+    }
+
+    auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(children, keys), ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+    CHECK(content.credits() == std::vector<Credit>{
+                                 {.name = "A", .kind = CreditKind::Ensemble},
+                                 {.name = "Solo", .kind = CreditKind::Soloist},
+                                 {.name = "B", .kind = CreditKind::Ensemble},
+                                 {.name = "Conductor", .kind = CreditKind::Conductor},
+                               });
+  }
+
+  TEST_CASE("MP4 File - blank category data children produce no credit callback", "[media][unit][mp4][file]")
+  {
+    auto const keys =
+      makeMdtaKeysAtom(std::to_array<std::string_view>({"conductor", "ensemble", "soloist", "orchestra"}));
+    auto children = std::vector<std::uint8_t>{};
+
+    for (auto const& atom : {makeFreeformTextAtom("conductor", ""),
+                             makeFreeformTextAtom("ensemble", " \t\n\r\f\v"),
+                             makeFreeformTextAtom("soloist", " "),
+                             makeFreeformTextAtom("orchestra", ""),
+                             makeMdtaTextAtom(1, " "),
+                             makeMdtaTextAtom(2, ""),
+                             makeMdtaTextAtom(3, " \t"),
+                             makeMdtaTextAtom(4, " ")})
+    {
+      children.insert(children.end(), atom.begin(), atom.end());
+    }
+
+    auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(children, keys), ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+    CHECK(content.credits().empty());
+    CHECK_FALSE(std::ranges::contains(content.events(),
+                                      ao::media::file::test::RecordedContent::CallbackEvent{
+                                        .kind = ao::media::file::test::RecordedContent::CallbackKind::Credits}));
+    CHECK(content.codec() == AudioCodec::Aac);
+    CHECK(content.sampleRate() == 44100);
+  }
+
+  TEST_CASE("MP4 File - work atoms and aliases keep their precedence regardless of order", "[media][unit][mp4][file]")
+  {
+    auto const keysAtom = makeMdtaKeysAtom(std::to_array<std::string_view>({"work", "grouping"}));
+
+    auto const wrk = [](std::string_view text)
+    {
+      return makeTextMetadataAtom("\xA9"
+                                  "wrk",
+                                  text);
+    };
+
+    auto const grp = [](std::string_view text)
+    {
+      return makeTextMetadataAtom("\xA9"
+                                  "grp",
+                                  text);
+    };
+
+    auto const mdtaWork = [](std::string_view text) { return makeMdtaTextAtom(1, text); };
+    auto const mdtaGrouping = [](std::string_view text) { return makeMdtaTextAtom(2, text); };
+
+    auto const join = [](std::initializer_list<std::vector<std::uint8_t>> atoms)
+    {
+      auto children = std::vector<std::uint8_t>{};
+
+      for (auto const& atom : atoms)
+      {
+        children.insert(children.end(), atom.begin(), atom.end());
+      }
+
+      return children;
+    };
+
+    // Copy the view out; the file and content die with the lambda.
+    auto const readWork = [&](std::vector<std::uint8_t> const& ilstChildren) -> std::string
+    {
+      auto const data = createMinimalM4aWithIlstAndKeys(ilstChildren, keysAtom);
+      auto const temp = TempFile{data, ".m4a"};
+      auto const file = File{temp.path};
+      return std::string{readContent(file).text(TextField::Work)};
+    };
+
+    // All six ASCII whitespace characters.
+    auto const blank = std::string{" \t\n\r\f\v"};
+
+    SECTION("©wrk wins over every alias in both orders")
+    {
+      CHECK(
+        readWork(join({wrk("AtomWork"), mdtaWork("MdtaWork"), grp("AtomGrouping"), mdtaGrouping("MdtaGrouping")})) ==
+        "AtomWork");
+      CHECK(
+        readWork(join({mdtaGrouping("MdtaGrouping"), grp("AtomGrouping"), mdtaWork("MdtaWork"), wrk("AtomWork")})) ==
+        "AtomWork");
+    }
+
+    SECTION("mdta work wins over the grouping atoms in both orders")
+    {
+      CHECK(readWork(join({mdtaWork("MdtaWork"), grp("AtomGrouping"), mdtaGrouping("MdtaGrouping")})) == "MdtaWork");
+      CHECK(readWork(join({mdtaGrouping("MdtaGrouping"), grp("AtomGrouping"), mdtaWork("MdtaWork")})) == "MdtaWork");
+    }
+
+    SECTION("©grp wins over mdta grouping in both orders")
+    {
+      CHECK(readWork(join({grp("AtomGrouping"), mdtaGrouping("MdtaGrouping")})) == "AtomGrouping");
+      CHECK(readWork(join({mdtaGrouping("MdtaGrouping"), grp("AtomGrouping")})) == "AtomGrouping");
+    }
+
+    SECTION("each single source still fills the work field")
+    {
+      CHECK(readWork(wrk("AtomWork")) == "AtomWork");
+      CHECK(readWork(mdtaWork("MdtaWork")) == "MdtaWork");
+      CHECK(readWork(grp("AtomGrouping")) == "AtomGrouping");
+      CHECK(readWork(mdtaGrouping("MdtaGrouping")) == "MdtaGrouping");
+    }
+
+    SECTION("a blank higher source does not suppress the lower one in either order")
+    {
+      // ©wrk blank around ©grp.
+      CHECK(readWork(join({wrk(blank), grp("AtomGrouping")})) == "AtomGrouping");
+      CHECK(readWork(join({grp("AtomGrouping"), wrk(blank)})) == "AtomGrouping");
+
+      // mdta work blank around ©grp.
+      CHECK(readWork(join({mdtaWork(blank), grp("AtomGrouping")})) == "AtomGrouping");
+      CHECK(readWork(join({grp("AtomGrouping"), mdtaWork(blank)})) == "AtomGrouping");
+
+      // ©grp blank around mdta grouping.
+      CHECK(readWork(join({grp(blank), mdtaGrouping("MdtaGrouping")})) == "MdtaGrouping");
+      CHECK(readWork(join({mdtaGrouping("MdtaGrouping"), grp(blank)})) == "MdtaGrouping");
+    }
+
+    SECTION("repeated same-source atoms keep the last nonempty value")
+    {
+      CHECK(readWork(join({wrk("First"), wrk(blank), wrk("Second")})) == "Second");
+      CHECK(readWork(join({wrk("First"), wrk(blank)})) == "First");
+    }
+
+    SECTION("all-blank sources emit no work callback")
+    {
+      auto const data =
+        createMinimalM4aWithIlstAndKeys(join({wrk(blank), mdtaWork(blank), grp(blank), mdtaGrouping(blank)}), keysAtom);
+      auto const temp = TempFile{data, ".m4a"};
+      auto const file = File{temp.path};
+      auto const content = readContent(file);
+
+      CHECK(content.text(TextField::Work).empty());
+      auto const workEvent = ao::media::file::test::RecordedContent::CallbackEvent{
+        .kind = ao::media::file::test::RecordedContent::CallbackKind::Text,
+        .field = static_cast<std::uint8_t>(TextField::Work),
+      };
+      CHECK_FALSE(std::ranges::contains(content.events(), workEvent));
+    }
+  }
+
+  TEST_CASE("MP4 File - freeform work and grouping names do not populate the work field", "[media][unit][mp4][file]")
+  {
+    auto ilstChildren = makeFreeformTextAtom("work", "Freeform Work");
+    auto const grouping = makeFreeformTextAtom("grouping", "Freeform Grouping");
+    ilstChildren.insert(ilstChildren.end(), grouping.begin(), grouping.end());
+
+    auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    // The freeform handler owns conductor/ensemble/soloist aliases only; work
+    // and grouping stay unsupported there.
+    CHECK(content.text(TextField::Work).empty());
   }
 
   TEST_CASE("MP4 File - a day atom date yields the leading year", "[media][unit][mp4][file]")
@@ -494,7 +916,8 @@ namespace ao::media::file::mp4::test
     auto const content = readContent(file);
 
     CHECK(content.text(TextField::Title) == "Classical Fallback");
-    CHECK(content.text(TextField::Ensemble) == "Fixture Fallback Ensemble");
+    CHECK(content.credits() ==
+          std::vector<Credit>{{.name = "Fixture Fallback Ensemble", .kind = CreditKind::Ensemble}});
   }
 
   TEST_CASE("MP4 File - audio payload range exposes mdat payload", "[media][unit][mp4][file]")

@@ -19,7 +19,9 @@
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::media::file::test
@@ -44,58 +46,83 @@ namespace ao::media::file::test
   void VisitorSpy::text(TextField const field, std::string_view const value)
   {
     _content._texts.insert_or_assign(field, value);
-    _content._events.push_back(
-      {.kind = RecordedContent::CallbackKind::Text, .field = static_cast<std::uint8_t>(field)});
+    record({.kind = RecordedContent::CallbackKind::Text, .field = static_cast<std::uint8_t>(field)});
   }
 
   void VisitorSpy::number(NumberField const field, std::uint16_t const value)
   {
     _content._numbers.insert_or_assign(field, value);
-    _content._events.push_back(
-      {.kind = RecordedContent::CallbackKind::Number, .field = static_cast<std::uint8_t>(field)});
+    record({.kind = RecordedContent::CallbackKind::Number, .field = static_cast<std::uint8_t>(field)});
   }
 
   void VisitorSpy::codec(AudioCodec const value)
   {
     _content._codec = value;
-    _content._events.push_back({.kind = RecordedContent::CallbackKind::Codec});
+    record({.kind = RecordedContent::CallbackKind::Codec});
   }
 
   void VisitorSpy::duration(std::chrono::milliseconds const duration)
   {
     _content._duration = duration;
-    _content._events.push_back({.kind = RecordedContent::CallbackKind::Duration});
+    record({.kind = RecordedContent::CallbackKind::Duration});
   }
 
   void VisitorSpy::bitrate(Bitrate const value)
   {
     _content._bitrate = value;
-    _content._events.push_back({.kind = RecordedContent::CallbackKind::Bitrate});
+    record({.kind = RecordedContent::CallbackKind::Bitrate});
   }
 
   void VisitorSpy::sampleRate(SampleRate const value)
   {
     _content._sampleRate = value;
-    _content._events.push_back({.kind = RecordedContent::CallbackKind::SampleRate});
+    record({.kind = RecordedContent::CallbackKind::SampleRate});
   }
 
   void VisitorSpy::channels(Channels const value)
   {
     _content._channels = value;
-    _content._events.push_back({.kind = RecordedContent::CallbackKind::Channels});
+    record({.kind = RecordedContent::CallbackKind::Channels});
   }
 
   void VisitorSpy::bitDepth(BitDepth const value)
   {
     _content._bitDepth = value;
-    _content._events.push_back({.kind = RecordedContent::CallbackKind::BitDepth});
+    record({.kind = RecordedContent::CallbackKind::BitDepth});
   }
 
   void VisitorSpy::picture(PictureType const type, std::span<std::byte const> const bytes)
   {
     _content._pictures.push_back(RecordedContent::Picture{.type = type, .bytes = bytes});
-    _content._events.push_back(
-      {.kind = RecordedContent::CallbackKind::Picture, .field = static_cast<std::uint8_t>(type)});
+    record({.kind = RecordedContent::CallbackKind::Picture, .field = static_cast<std::uint8_t>(type)});
+  }
+
+  void VisitorSpy::visitCredits(std::span<CreditView const> const entries)
+  {
+    REQUIRE_FALSE(entries.empty());
+
+    // Copy synchronously: neither the span nor its strings escape this callback.
+    auto owned = std::vector<RecordedContent::Credit>{};
+    owned.reserve(entries.size());
+
+    for (auto const& entry : entries)
+    {
+      owned.push_back({.name = std::string{entry.name}, .kind = entry.kind, .role = std::string{entry.role}});
+    }
+
+    _content._credits = std::move(owned);
+    record({.kind = RecordedContent::CallbackKind::Credits});
+  }
+
+  void VisitorSpy::record(RecordedContent::CallbackEvent event)
+  {
+    if (!_content._events.empty())
+    {
+      // Credits is the one final delivery: no scalar, picture, or second list follows.
+      CHECK(_content._events.back().kind != RecordedContent::CallbackKind::Credits);
+    }
+
+    _content._events.push_back(event);
   }
 
   struct TestFile::Impl final

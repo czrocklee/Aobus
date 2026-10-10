@@ -51,13 +51,16 @@ Its public compiler and evaluator interfaces live under `include/ao/query/` and 
 | Title and URI text | The string is non-empty. |
 | Dictionary metadata | The dictionary id is not invalid. |
 | Year, track/disc/movement numbers and totals | The stored value is greater than zero. |
+| Recording date | The stored date has a nonzero year. |
+| Credit member selector | The selected category or all-credit list is nonempty. |
 | Duration, bitrate, sample rate, channels, and bit depth | The stored value is greater than zero. |
 | Codec | The codec is not `UNKNOWN`. |
 | Cover art | Primary cover selection yields a valid resource id. |
 | Tag | The track contains the named tag id. |
 | Custom metadata | The named key is present, even if its value is empty. |
 
-Dictionary metadata includes artist, album, album artist, genre, composer, conductor, ensemble, work, movement, and soloist.
+Dictionary metadata includes artist, album, album artist, genre, composer, work, and movement.
+Conductor, Ensemble, Soloist, and Performer are credit category selectors; Credit selects all categories.
 The canonical missing-value form is a negated existence predicate such as `!$year?`.
 
 ### Comparison
@@ -73,15 +76,31 @@ When a current binding cannot resolve a custom key or dictionary equality consta
 An unresolved custom key also makes existence, ordered, and substring comparisons non-matching rather than treating the missing key as an empty stored value.
 A later binding may resolve the same plan-owned symbol after a committed dictionary generation advance.
 
-`~` requires a direct text or URI field and a direct string constant.
+`~` requires a direct text field, filesystem URI field, or credit member-name field, and a direct string constant.
 For title, custom metadata, and dictionary-backed metadata it performs locale-independent Unicode-caseless substring containment.
 Compilation validates the literal, normalizes it to NFC, applies Unicode default full case folding, normalizes the result to NFC, and stores that key once in the plan.
 Evaluation derives the field key through the same operation and performs substring containment over the two keys.
 Full folding permits length-changing equivalence such as `Straße` matching `STRASSE` and maps Greek final sigma consistently; it does not remove accents or apply Turkish or other locale tailoring.
 For filesystem URI values, `~` preserves the existing byte-exact substring behavior and performs neither normalization nor case folding.
+Credit member-name substring uses the same Unicode-caseless comparison as title and dictionary text, not that byte-exact rule. It does not apply to roles or joined names.
 Ordered text comparison is case-sensitive lexicographic order.
 Numeric fields compare their scaled integer values.
 Codec constants compile to their stored codec values.
+
+RecordingDate and credit member selectors are typed predicate fields, not scalar conversion operands.
+RecordingDate constants are canonical partial-date strings or integer years; comparison uses each literal's precision, with unknown stored month/day retained as zero.
+Absent dates do not match equality or ordering; inequality is equality's complement and therefore matches absence.
+Date-list membership compiles as literal comparisons, preserving each element's precision; inclusive ranges use each endpoint's precision.
+Credit equality and list membership test whether any selected entry's nonzero name ID matches the bound constant IDs, ignoring roles and preserving the stored list.
+Conductor, Ensemble, Soloist, and Performer select their own physical segments; Credit selects all entries.
+Unresolved constants never match. Literals are NFC-admitted without trimming, and equality is case-sensitive.
+Inequality complements the whole-selection match, including an empty selection.
+Credit `~` searches individual names through the same batch-local caseless-key cache; it never flattens the list, queries roles, or writes dictionary entries.
+Empty selections do not match even an empty substring literal. Duplicates do not change Boolean results.
+Neither typed field permits field-to-field comparison, reversed comparison, or implicit conversion; credit ordering and ranges are rejected.
+Credit operands require a direct left member field and direct string literals or literal list entries.
+Operand context is scoped to the direct field: nested predicates contribute Boolean results, not their inner field, dictionary symbol, or literal conversion mode.
+The [language reference](../../reference/query/predicate-language.md) owns accepted syntax.
 
 ### Caseless-key lifetime
 
@@ -93,7 +112,8 @@ The evaluator and its caches are synchronous and never run on an audio realtime 
 
 ### Lists and ranges
 
-List elements may mix literal kinds; every element is compiled using the ordinary equality conversion for the left field.
+List elements use the ordinary equality conversion for the left field; credit member lists require strings, and recording-date lists require admitted date literals.
+Other fields may mix literal kinds where their equality conversion permits it.
 The compiler may use a set representation without changing equality semantics.
 
 Ranges are inclusive.
@@ -113,6 +133,10 @@ The profile is the union of the storage tiers required by all field loads in the
 Supplying every tier required by the plan is a caller precondition of `PlanEvaluator::matches()` and `matchesFullPlan()`.
 The evaluator enforces that contract before any constant-plan shortcut; absence of an individual field within a supplied tier remains ordinary predicate data and follows the field semantics above.
 Constant true and false predicates require no track fields.
+RecordingDate and credit members require cold storage; member-name comparisons bind dictionary symbols in the same bounded batch as existing dictionary predicates.
+Credit existence remains dictionary-free.
+Format expressions are a separate display projection: they join every selected name with `; `, preserving duplicates and canonical kind/within-kind order, and declare cold plus dictionary dependencies.
+That lossy rendering never becomes a scalar accessor or predicate operand.
 The [track-source specification](../library/track-source.md) owns how Saved-List evaluation maps the semantic profile to the concrete TrackStore modes available for batch traversal and row-existence checks.
 
 ## Commands and transitions

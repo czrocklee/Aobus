@@ -96,9 +96,10 @@ namespace ao::lmdb
   /**
    * IntegerKeyDatabase::Reader - Read-only integer-key access within a transaction.
    *
-   * The referenced transaction must remain active while an operation or
-   * iterator access is in progress. Reader and iterator destruction remains
-   * safe after the transaction ends.
+   * The referenced owner must outlive operations on its borrowers and remain
+   * active. Moving or replacing the owner invalidates existing bindings, even
+   * if its native handle returns; self-move preserves them. Reader and iterator
+   * destruction remains safe after the transaction ends.
    */
   class IntegerKeyDatabase::Reader final
   {
@@ -170,6 +171,7 @@ namespace ao::lmdb
     DbiHandle _dbi;
     MDB_txn* _txn;
     ReadTransaction const* _owner;
+    std::uint64_t _bindingGeneration;
 
     friend class IntegerKeyDatabase;
     friend class Writer;
@@ -208,7 +210,9 @@ namespace ao::lmdb
 
     Reader::CursorPtr _cursorPtr;
     Reader::Value _value{Reader::KeyView{std::span<std::byte const>{}}, std::span<std::byte const>{}};
+    MDB_txn* _txn = nullptr;
     ReadTransaction const* _owner = nullptr;
+    std::uint64_t _bindingGeneration = 0;
 
     friend class Reader;
   };
@@ -216,9 +220,10 @@ namespace ao::lmdb
   /**
    * ByteKeyDatabase::Reader - Read-only byte-key access within a transaction.
    *
-   * The referenced transaction must remain active while an operation or
-   * iterator access is in progress. Reader and iterator destruction remains
-   * safe after the transaction ends.
+   * The referenced owner must outlive operations on its borrowers and remain
+   * active. Moving or replacing the owner invalidates existing bindings, even
+   * if its native handle returns; self-move preserves them. Reader and iterator
+   * destruction remains safe after the transaction ends.
    */
   class ByteKeyDatabase::Reader final
   {
@@ -263,6 +268,7 @@ namespace ao::lmdb
     DbiHandle _dbi;
     MDB_txn* _txn;
     ReadTransaction const* _owner;
+    std::uint64_t _bindingGeneration;
 
     friend class ByteKeyDatabase;
     friend class Writer;
@@ -305,7 +311,9 @@ namespace ao::lmdb
 
     Reader::CursorPtr _cursorPtr;
     Reader::Value _value;
+    MDB_txn* _txn = nullptr;
     ReadTransaction const* _owner = nullptr;
+    std::uint64_t _bindingGeneration = 0;
 
     friend class Reader;
   };
@@ -313,8 +321,9 @@ namespace ao::lmdb
   /**
    * IntegerKeyDatabase::Writer - Integer-key write access within a transaction.
    *
-   * The referenced transaction must remain active while an operation is in
-   * progress. Writer destruction remains safe after the transaction ends.
+   * The referenced owner must outlive operations and remain active. Moving or
+   * replacing it invalidates existing bindings, even if its native handle
+   * returns; self-move preserves them. Destruction is safe after owner teardown.
    */
   class [[nodiscard]] IntegerKeyDatabase::Writer final
   {
@@ -328,7 +337,7 @@ namespace ao::lmdb
 
     Result<> create(std::uint32_t id, std::span<std::byte const> data);
 
-    std::uint32_t maxKey() const noexcept { return _lastId; }
+    std::uint32_t maxKey() const noexcept;
     Result<std::uint32_t> append(std::span<std::byte const> data);
 
     Result<> update(std::uint32_t id, std::span<std::byte const> data);
@@ -348,6 +357,8 @@ namespace ao::lmdb
 
     DbiHandle _dbi;
     WriteTransaction* _txn;
+    MDB_txn* _nativeTxn;
+    std::uint64_t _bindingGeneration;
     Reader::CursorPtr _cursorPtr;
     std::uint32_t _lastId = 0;
 
@@ -358,8 +369,9 @@ namespace ao::lmdb
   /**
    * ByteKeyDatabase::Writer - Copied-value byte-key write access within a transaction.
    *
-   * The referenced transaction must remain active while an operation is in
-   * progress. Writer destruction remains safe after the transaction ends.
+   * The referenced owner must outlive operations and remain active. Moving or
+   * replacing it invalidates existing bindings, even if its native handle
+   * returns; self-move preserves them. Destruction is safe after owner teardown.
    */
   class [[nodiscard]] ByteKeyDatabase::Writer final
   {
@@ -384,6 +396,8 @@ namespace ao::lmdb
 
     DbiHandle _dbi;
     WriteTransaction* _txn;
+    MDB_txn* _nativeTxn;
+    std::uint64_t _bindingGeneration;
     Reader::CursorPtr _cursorPtr;
 
     friend class ByteKeyDatabase;

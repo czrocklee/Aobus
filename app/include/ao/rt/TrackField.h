@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/library/Credits.h>
 #include <ao/query/Field.h>
 
 #include <array>
@@ -48,9 +49,11 @@ namespace ao::rt
     TrackNumber,
     Title,
     Duration,
+    RecordingYear,
+    RecordingDate,
   };
 
-  constexpr auto kTrackSortFieldCount = static_cast<std::size_t>(TrackSortField::Duration) + 1;
+  constexpr auto kTrackSortFieldCount = static_cast<std::size_t>(TrackSortField::RecordingDate) + 1;
 
   struct TrackSortTerm final
   {
@@ -97,9 +100,10 @@ namespace ao::rt
     DisplayTrackNumber,
     TechnicalSummary,
     Quality,
+    RecordingDate,
   };
 
-  constexpr auto kTrackFieldCount = static_cast<std::size_t>(TrackField::Quality) + 1;
+  constexpr auto kTrackFieldCount = static_cast<std::size_t>(TrackField::RecordingDate) + 1;
 
   template<typename Value>
   Value& trackFieldArrayAt(std::array<Value, kTrackFieldCount>& values, TrackField const field)
@@ -129,6 +133,7 @@ namespace ao::rt
     TagList,
     FilePath,
     TechnicalText,
+    RecordingDate,
   };
 
   struct TrackFieldDefinition final
@@ -154,6 +159,14 @@ namespace ao::rt
   std::span<TrackFieldDefinition const> trackFieldDefinitions();
   TrackFieldDefinition const* trackFieldDefinition(TrackField field);
   std::optional<TrackField> trackFieldFromId(std::string_view id);
+  // Only the three category projections have TrackField identities; Performer has no table field.
+  std::optional<library::CreditKind> creditKindForTrackField(TrackField field) noexcept;
+
+  inline constexpr std::string_view kCreditsMetadataKey = "credits";
+
+  /// Exact TrackField ids plus the structured Credits list name.
+  /// Matching is case-sensitive and does not accept query aliases.
+  bool isReservedCustomMetadataKey(std::string_view key) noexcept;
   std::optional<TrackSortField> trackSortFieldFromId(std::string_view id);
   std::optional<TrackGroupKey> trackGroupKeyFromId(std::string_view id);
   std::optional<TrackField> trackFieldFromQueryField(query::Field field);

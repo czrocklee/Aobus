@@ -14,6 +14,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/WriteTransaction.h>
@@ -194,42 +195,45 @@ namespace ao::rt::test
             "[runtime][unit][completion][vocabulary][value]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                library::test::TrackSpec{.title = "One",
-                                                                         .artist = "Bach",
-                                                                         .album = "Goldberg",
-                                                                         .albumArtist = "Glenn Gould",
-                                                                         .genre = "Classical",
-                                                                         .composer = "Bach",
-                                                                         .conductor = "Carlos Kleiber",
-                                                                         .ensemble = "Vienna Philharmonic",
-                                                                         .work = "Variations",
-                                                                         .movement = "Aria",
-                                                                         .soloist = "Glenn Gould"});
-    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                library::test::TrackSpec{.title = "Two",
-                                                                         .artist = "Bach",
-                                                                         .album = "Cello Suites",
-                                                                         .albumArtist = "Yo-Yo Ma",
-                                                                         .genre = "Classical",
-                                                                         .composer = "Bach",
-                                                                         .conductor = "Carlos Kleiber",
-                                                                         .ensemble = "Staatskapelle Dresden",
-                                                                         .work = "Suites",
-                                                                         .movement = "Prelude",
-                                                                         .soloist = "Yo-Yo Ma"});
-    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                library::test::TrackSpec{.title = "Three",
-                                                                         .artist = "Glass",
-                                                                         .album = "Glassworks",
-                                                                         .albumArtist = "Philip Glass",
-                                                                         .genre = "Minimal",
-                                                                         .composer = "Glass",
-                                                                         .conductor = "Michael Riesman",
-                                                                         .ensemble = "Philip Glass Ensemble",
-                                                                         .work = "Glassworks",
-                                                                         .movement = "Opening",
-                                                                         .soloist = "Philip Glass"});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "One",
+                               .artist = "Bach",
+                               .album = "Goldberg",
+                               .albumArtist = "Glenn Gould",
+                               .genre = "Classical",
+                               .composer = "Bach",
+                               .work = "Variations",
+                               .movement = "Aria",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Vienna Philharmonic", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Glenn Gould", .kind = library::CreditKind::Soloist}}});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "Two",
+                               .artist = "Bach",
+                               .album = "Cello Suites",
+                               .albumArtist = "Yo-Yo Ma",
+                               .genre = "Classical",
+                               .composer = "Bach",
+                               .work = "Suites",
+                               .movement = "Prelude",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Staatskapelle Dresden", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Yo-Yo Ma", .kind = library::CreditKind::Soloist}}});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "Three",
+                               .artist = "Glass",
+                               .album = "Glassworks",
+                               .albumArtist = "Philip Glass",
+                               .genre = "Minimal",
+                               .composer = "Glass",
+                               .work = "Glassworks",
+                               .movement = "Opening",
+                               .credits = {{.name = "Michael Riesman", .kind = library::CreditKind::Conductor},
+                                           {.name = "Philip Glass Ensemble", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Philip Glass", .kind = library::CreditKind::Soloist}}});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
@@ -282,20 +286,23 @@ namespace ao::rt::test
             "[runtime][unit][completion][vocabulary]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                library::test::TrackSpec{.title = "Shared",
-                                                                         .artist = "Shared",
-                                                                         .album = "Excluded Album",
-                                                                         .conductor = "Excluded Conductor",
-                                                                         .work = "Selected Work",
-                                                                         .tags = {"Shared", "Tag Only"}});
-    library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                library::test::TrackSpec{.title = "Other",
-                                                                         .artist = "Shared",
-                                                                         .album = "Another Excluded Album",
-                                                                         .conductor = "Another Excluded Conductor",
-                                                                         .work = "Selected Work",
-                                                                         .tags = {"Tag Only"}});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "Shared",
+                               .artist = "Shared",
+                               .album = "Excluded Album",
+                               .work = "Selected Work",
+                               .credits = {{.name = "Excluded Conductor", .kind = library::CreditKind::Conductor}},
+                               .tags = {"Shared", "Tag Only"}});
+    library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{
+        .title = "Other",
+        .artist = "Shared",
+        .album = "Another Excluded Album",
+        .work = "Selected Work",
+        .credits = {{.name = "Another Excluded Conductor", .kind = library::CreditKind::Conductor}},
+        .tags = {"Tag Only"}});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
@@ -631,8 +638,11 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = library::test::addTrackWithUniqueFixtureUri(
       libraryFixture.library(),
-      library::test::TrackSpec{
-        .title = "One", .artist = "Bach", .album = "Goldberg", .conductor = "Carlos Kleiber", .work = "Variations"});
+      library::test::TrackSpec{.title = "One",
+                               .artist = "Bach",
+                               .album = "Goldberg",
+                               .work = "Variations",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor}}});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
@@ -651,13 +661,16 @@ namespace ao::rt::test
                                                              });
 
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
-    auto const updateRes = commandsFixture.updateMetadata(std::array{trackId},
-                                                          MetadataPatch{
-                                                            .optArtist = "Glass",
-                                                            .optAlbum = "Glassworks",
-                                                            .optConductor = "Michael Riesman",
-                                                            .optWork = "Etudes",
-                                                          });
+    auto const updateRes = commandsFixture.updateMetadata(
+      std::array{trackId},
+      MetadataPatch{
+        .optArtist = "Glass",
+        .optAlbum = "Glassworks",
+        .optWork = "Etudes",
+        .optCredits =
+          CreditReplacement{
+            .kinds = 1, .entries = {{.name = "Michael Riesman", .kind = library::CreditKind::Conductor}}},
+      });
     REQUIRE(updateRes);
     CHECK_FALSE(updateRes->changes.empty());
 
@@ -679,21 +692,22 @@ namespace ao::rt::test
             "[runtime][unit][completion][vocabulary]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId =
-      library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                  library::test::TrackSpec{.title = "Only Track",
-                                                                           .artist = "Only Artist",
-                                                                           .album = "Only Album",
-                                                                           .albumArtist = "Only Album Artist",
-                                                                           .genre = "Only Genre",
-                                                                           .composer = "Only Composer",
-                                                                           .conductor = "Only Conductor",
-                                                                           .ensemble = "Only Ensemble",
-                                                                           .work = "Only Work",
-                                                                           .movement = "Only Movement",
-                                                                           .soloist = "Only Soloist",
-                                                                           .tags = {"Only Tag"},
-                                                                           .customMetadata = {{"Only Key", "Value"}}});
+    auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "Only Track",
+                               .artist = "Only Artist",
+                               .album = "Only Album",
+                               .albumArtist = "Only Album Artist",
+                               .genre = "Only Genre",
+                               .composer = "Only Composer",
+                               .work = "Only Work",
+                               .movement = "Only Movement",
+                               .credits = {{.name = "Only Conductor", .kind = library::CreditKind::Conductor},
+                                           {.name = "Only Ensemble", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Only Soloist", .kind = library::CreditKind::Soloist},
+                                           {.name = "Only Performer", .role = "Only Role"}},
+                               .tags = {"Only Tag"},
+                               .customMetadata = {{"Only Key", "Value"}}});
 
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
@@ -711,6 +725,9 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(service.tags().empty());
     REQUIRE_FALSE(service.customKeys().empty());
+    REQUIRE_FALSE(service.creditNames().empty());
+    REQUIRE_FALSE(service.creditRoles().empty());
+    REQUIRE_FALSE(service.creditNames(library::CreditKind::Performer).empty());
 
     for (auto const field : kValueFields)
     {
@@ -721,6 +738,9 @@ namespace ao::rt::test
 
     CHECK(service.tags().empty());
     CHECK(service.customKeys().empty());
+    CHECK(service.creditNames().empty());
+    CHECK(service.creditRoles().empty());
+    CHECK(service.creditNames(library::CreditKind::Performer).empty());
 
     for (auto const field : kValueFields)
     {

@@ -271,6 +271,14 @@ namespace ao::rt::test
                << item.optByteMetric->count << '}';
       }
 
+      if (item.optAllocationMetric)
+      {
+        auto const& allocation = *item.optAllocationMetric;
+        output << R"(, "allocation_metric": {"scope": ")" << jsonEscape(allocation.scope)
+               << R"(", "samples": 1, "calls": )" << allocation.calls << R"(, "requested_bytes": )"
+               << allocation.requestedBytes << '}';
+      }
+
       output << '}';
       output << (index + 1 == measurements.size() ? "\n" : ",\n");
     }

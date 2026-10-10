@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -20,13 +21,34 @@
 
 namespace ao::media::file::detail
 {
-  inline constexpr std::size_t kTextFieldCount = static_cast<std::size_t>(TextField::Soloist) + 1;
+  inline constexpr std::size_t kTextFieldCount = static_cast<std::size_t>(TextField::Movement) + 1;
   inline constexpr std::size_t kNumberFieldCount = static_cast<std::size_t>(NumberField::MovementTotal) + 1;
+
+  // Precedence ranks for the work/grouping source forms, ascending with
+  // precedence. Distinct forms within one reader never share a rank, so the
+  // extracted work is independent of tag traversal order:
+  // - Vorbis: WORK > GROUPING
+  // - ID3: TXXX:WORK > TIT1 > TXXX:GROUPING
+  // - MP4: ©wrk > mdta work > ©grp > mdta grouping
+  // These chains are Aobus compatibility policy, not a source-format rule.
+  enum class WorkSource : std::uint8_t
+  {
+    GroupingAlias = 0, // Vorbis GROUPING, ID3 TXXX:GROUPING, MP4 mdta grouping
+    Grouping = 1,      // ID3 TIT1, MP4 ©grp
+    Work = 2,          // Vorbis WORK, ID3 TXXX:WORK, MP4 mdta work
+    WorkAtom = 3,      // MP4 ©wrk
+  };
 
   struct PictureView final
   {
     PictureType type = PictureType::FrontCover;
     std::span<std::byte const> bytes;
+  };
+
+  struct OrchestraCandidate final
+  {
+    std::string_view name{};
+    std::size_t precedingCredits = 0;
   };
 
   struct Content final
@@ -42,6 +64,8 @@ namespace ao::media::file::detail
     void visit(Visitor& visitor) const;
 
     std::array<std::string_view, kTextFieldCount> texts;
+    // Rank of the source that supplied the current work candidate.
+    std::optional<WorkSource> optWorkSource{};
     std::array<std::uint16_t, kNumberFieldCount> numbers{};
     std::chrono::milliseconds duration{};
     Bitrate bitrate{};
@@ -50,6 +74,9 @@ namespace ao::media::file::detail
     Channels channels{};
     BitDepth bitDepth{};
     std::vector<PictureView> pictures;
+    // Source order; Orchestra candidates stay separate until whole-file precedence resolves.
+    std::vector<CreditView> credits;
+    std::vector<OrchestraCandidate> orchestraCandidates;
     std::deque<std::string> ownedStrings;
   };
 
@@ -68,10 +95,17 @@ namespace ao::media::file::detail
       MetadataBuilder& composer(std::string_view value);
       MetadataBuilder& conductor(std::string_view value);
       MetadataBuilder& ensemble(std::string_view value);
+      MetadataBuilder& orchestra(std::string_view value);
       MetadataBuilder& genre(std::string_view value);
-      MetadataBuilder& work(std::string_view value);
+      // Admits one ranked work/grouping candidate: a blank candidate is
+      // absent, and a candidate wins only at or above the stored rank, so
+      // precedence is order-independent and repeats keep the last nonempty.
+      MetadataBuilder& work(WorkSource source, std::string_view value);
       MetadataBuilder& movement(std::string_view value);
       MetadataBuilder& soloist(std::string_view value);
+
+      // Copies text, trims ASCII boundaries, and skips blank source names.
+      MetadataBuilder& credit(std::string_view name, CreditKind kind, std::string_view role = {});
 
       MetadataBuilder& year(std::uint16_t value);
       MetadataBuilder& trackNumber(std::uint16_t value);
@@ -86,12 +120,12 @@ namespace ao::media::file::detail
       std::string_view album() const { return get(TextField::Album); }
       std::string_view albumArtist() const { return get(TextField::AlbumArtist); }
       std::string_view composer() const { return get(TextField::Composer); }
-      std::string_view conductor() const { return get(TextField::Conductor); }
-      std::string_view ensemble() const { return get(TextField::Ensemble); }
       std::string_view genre() const { return get(TextField::Genre); }
       std::string_view work() const { return get(TextField::Work); }
+      std::optional<WorkSource> workSource() const { return _content.optWorkSource; }
       std::string_view movement() const { return get(TextField::Movement); }
-      std::string_view soloist() const { return get(TextField::Soloist); }
+      std::span<CreditView const> credits() const { return _content.credits; }
+      std::span<OrchestraCandidate const> orchestraCandidates() const { return _content.orchestraCandidates; }
 
       std::uint16_t year() const { return get(NumberField::Year); }
       std::uint16_t trackNumber() const { return get(NumberField::TrackNumber); }

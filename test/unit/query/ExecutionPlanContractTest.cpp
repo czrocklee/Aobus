@@ -44,9 +44,12 @@ namespace ao::query::test
     CHECK(static_cast<std::uint8_t>(Field::MovementId) == 25);
     CHECK(static_cast<std::uint8_t>(Field::MovementNumber) == 26);
     CHECK(static_cast<std::uint8_t>(Field::MovementTotal) == 27);
-    CHECK(static_cast<std::uint8_t>(Field::ConductorId) == 28);
-    CHECK(static_cast<std::uint8_t>(Field::EnsembleId) == 29);
-    CHECK(static_cast<std::uint8_t>(Field::SoloistId) == 30);
+    CHECK(static_cast<std::uint8_t>(Field::Conductor) == 28);
+    CHECK(static_cast<std::uint8_t>(Field::Ensemble) == 29);
+    CHECK(static_cast<std::uint8_t>(Field::Soloist) == 30);
+    CHECK(static_cast<std::uint8_t>(Field::RecordingDate) == 31);
+    CHECK(static_cast<std::uint8_t>(Field::Performer) == 32);
+    CHECK(static_cast<std::uint8_t>(Field::Credit) == 33);
   }
 
   TEST_CASE("ExecutionPlan - preserves opcode enum values", "[query][unit][execution-plan][contract]")

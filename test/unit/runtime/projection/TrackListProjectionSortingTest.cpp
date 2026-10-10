@@ -5,6 +5,7 @@
 #include "test/unit/runtime/projection/TrackListProjectionTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackField.h>
@@ -306,14 +307,24 @@ namespace ao::rt::test
   {
     auto env = TrackListProjectionFixture{};
 
-    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A",
-                                                                          .conductor = "Leonard Bernstein",
-                                                                          .ensemble = "New York Philharmonic",
-                                                                          .soloist = "Martha Argerich"});
-    auto const id2 = env.libraryFixture.addTrack(library::test::TrackSpec{
-      .title = "B", .conductor = "Carlos Kleiber", .ensemble = "Vienna Philharmonic", .soloist = "Yo-Yo Ma"});
-    auto const id3 = env.libraryFixture.addTrack(library::test::TrackSpec{
-      .title = "C", .conductor = "Carlos Kleiber", .ensemble = "Staatskapelle Dresden", .soloist = "Glenn Gould"});
+    auto const id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "A",
+                               .credits = {{.name = "Leonard Bernstein", .kind = library::CreditKind::Conductor},
+                                           {.name = "Aaron", .kind = library::CreditKind::Conductor},
+                                           {.name = "New York Philharmonic", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Martha Argerich", .kind = library::CreditKind::Soloist}}});
+    auto const id2 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "B",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Vienna Philharmonic", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Aaron", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Yo-Yo Ma", .kind = library::CreditKind::Soloist}}});
+    auto const id3 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "C",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Staatskapelle Dresden", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Glenn Gould", .kind = library::CreditKind::Soloist},
+                                           {.name = "Zed", .kind = library::CreditKind::Soloist}}});
 
     env.setupFiltered({{id1, id2, id3}});
 
@@ -331,6 +342,60 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(0) == id3);
     CHECK(proj.trackIdAt(1) == id2);
     CHECK(proj.trackIdAt(2) == id1);
+  }
+
+  TEST_CASE("TrackListProjection - category sorts use first names and existing missing-text order",
+            "[runtime][unit][projection][credits]")
+  {
+    auto kind = library::CreditKind::Conductor;
+    auto field = TrackSortField::Conductor;
+
+    SECTION("Conductor")
+    {
+    }
+
+    SECTION("Ensemble")
+    {
+      kind = library::CreditKind::Ensemble;
+      field = TrackSortField::Ensemble;
+    }
+
+    SECTION("Soloist")
+    {
+      kind = library::CreditKind::Soloist;
+      field = TrackSortField::Soloist;
+    }
+
+    auto env = TrackListProjectionFixture{};
+    auto const zulu = env.libraryFixture.addTrack(library::test::TrackSpec{
+      .title = "Zulu", .credits = {{.name = "Zulu", .kind = kind}, {.name = "Aaron", .kind = kind}}});
+    auto const beta = env.libraryFixture.addTrack(library::test::TrackSpec{
+      .title = "Beta", .credits = {{.name = "Beta", .kind = kind}, {.name = "Zed", .kind = kind}}});
+    auto const empty = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Empty"});
+    env.setupFiltered({{zulu, beta, empty}});
+    auto projection = env.createProjection(ViewId{1});
+    auto const subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    projection.setPresentation(TrackPresentationSpec{.sortBy = {{field, true}}});
+    CHECK(projection.trackIdAt(0) == empty);
+    CHECK(projection.trackIdAt(1) == beta);
+    CHECK(projection.trackIdAt(2) == zulu);
+    projection.setPresentation(TrackPresentationSpec{.sortBy = {{field, false}}});
+    CHECK(projection.trackIdAt(0) == zulu);
+    CHECK(projection.trackIdAt(1) == beta);
+    CHECK(projection.trackIdAt(2) == empty);
+
+    // Within-kind reorder changes the primary projection, not just the member set.
+    env.libraryFixture.updateTrack(
+      zulu, [](library::test::TrackSpec& spec) { std::swap(spec.credits[0], spec.credits[1]); });
+    env.source.update(zulu);
+    CHECK(projection.trackIdAt(0) == beta);
+    CHECK(projection.trackIdAt(1) == zulu);
+    CHECK(projection.trackIdAt(2) == empty);
+    auto rebuilt = env.createProjection(ViewId{2});
+    rebuilt.setPresentation(projection.presentation());
+    CHECK(rebuilt.trackIdAt(0) == beta);
+    CHECK(rebuilt.trackIdAt(1) == zulu);
+    CHECK(rebuilt.trackIdAt(2) == empty);
   }
 
   TEST_CASE("TrackListProjection - movement sort keeps performances contiguous", "[runtime][unit][projection]")
@@ -402,7 +467,7 @@ namespace ao::rt::test
       auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
       REQUIRE(optView);
       orderedAlbums.emplace_back(dictionary.get(optView->metadata().albumId()));
-      orderedMovements.push_back(optView->classical().movementNumber());
+      orderedMovements.push_back(optView->work().movementNumber());
     }
 
     // Karajan (alphabetically first) movements 1,2,3, then Kleiber movements 1,2,3.

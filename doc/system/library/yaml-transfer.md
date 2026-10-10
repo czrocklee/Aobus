@@ -8,7 +8,7 @@ id: library.yaml-transfer
 This specification defines library YAML export and import behavior.
 It owns mode semantics, baselines, payload scope, overlays, preview-bound authorization, atomicity, reports, and change publication.
 
-The exact version 6 document shape is defined by the [library YAML format reference](../../reference/library/format/yaml.md).
+The exact version 7 document shape is defined by the [library YAML format reference](../../reference/library/format/yaml.md).
 Library ownership and the storage/change pipeline are defined by [library architecture](structure.md).
 CLI flags and output rendering belong to the [CLI command reference](../../reference/cli/command.md).
 
@@ -28,12 +28,12 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - **File baseline** is a track builder loaded from the audio file named by a Library URI when that file is readable.
 - **Merge baseline** is an existing target track matched by canonical manifest URI.
 - **Import plan** is a move-only, one-shot authorization containing the prepared payload, preview report, exact source bytes, target library identity and revision, and runtime identity.
-- **Present collection** means `tags`, `custom`, or `covers` exists in a track record, including an explicitly empty sequence or map.
+- **Present collection** means `tags`, `custom`, `covers`, or `credits` exists in a track record, including an explicitly empty sequence or map.
 
 ## Invariants
 
 - One export observes metadata, tracks, lists, resources, dictionary values, and manifest facts through one read transaction.
-- Version 6 uses the closed schema and explicit collection scope defined by the format reference.
+- Version 7 uses the closed schema and explicit collection scope defined by the format reference.
 - Every URI crossing YAML, manifest, Writer, or scan boundaries becomes a `LibraryUri`; playback, read-model, fingerprint, export/import baseline, and scan-apply access resolve it again beneath the weakly canonical root and reject escaping or unresolved symlinks. An absent root or ordinary missing suffix remains valid for first-run metadata restore.
 - Import validates the complete document before applying any persistent mutation. In both restore and merge, every track record must name a supported audio file, as [manual creation](mutation.md#create-from-file) does; an unsupported extension rejects the whole document as `FormatRejected`. Supported-extension files may still be absent or unreadable for offline restoration.
 - Track metadata, tags, custom keys and values, and List display text must be scalar-valid UTF-8; canonically decomposed input is accepted and normalized to NFC by core library preparation before persistence.
@@ -49,7 +49,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - A payload has at most one track record for each canonical URI; merge matches tracks only by canonical manifest URI, and payload track IDs exist only for intra-payload references.
 - Lists in the payload are recreated with new target IDs and then have parents remapped.
 - A List filter and saved order are independent: the filter determines local membership, while order references preserve rank only.
-- Complete Track preparation validates UTF-8, canonical custom-key uniqueness, and both hot and cold post-NFC record size/canonicality before interning dictionary text or creating cover resources; no rejected Track leaves an item-relative staged delta.
+- Track preparation validates credit kinds, text, dates, counts, and complete-record bounds before interning dictionary text or creating cover resources. NFC interning can still fail exceptionally after staging begins; the root import transaction must abort on every post-effect failure, with no per-item recovery.
 - A post-effect Track, manifest, List, identifier, or storage failure reaches the root transaction boundary, which aborts the whole import before returning the error; import never catches a private mutation marker to continue with another payload item.
 - Only manifest point-read `NotFound` means an absent merge baseline or dangling URI reference; a post-open malformed row is an `AO_INVARIANT` fault and a non-miss native read failure is `AO_FATAL`, so neither becomes partial import or export output.
 
@@ -61,7 +61,7 @@ The application import path has two operations:
 prepare(path, import mode)
   -> enter sequenced Import Maintenance
   -> read exact source bytes
-  -> parse and validate version 6
+  -> parse and validate version 7
   -> prepare track/list data
   -> capture target runtime + library id + committed revision
   -> run exact preview in one generation-bound lane turn and abort
@@ -93,8 +93,8 @@ It does not reuse a nullable branch inside the live operation and is not the fro
 | Payload mode | Metadata | Custom metadata | Tags | Covers | Technical and manifest facts | Lists |
 |---|---|---|---|---|---|---|
 | `delta` | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
-| `metadata` | All non-empty curated metadata. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
-| `full` | All non-empty curated metadata. | Complete map when non-empty. | Complete sequence when non-empty. | Reference sequence, including empty, plus the `library.resources` table. | Included, including zero values. | Included. |
+| `metadata` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
+| `full` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Reference sequence, including empty, plus the `library.resources` table. | Included, including zero values. | Included. |
 | `listOnly` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references. |
 
 No mode carries a cover byte; `full` carries each cover's digest, length, picture type, and order, and names each distinct cover once.
@@ -152,6 +152,16 @@ Manifest facts start from an existing manifest row, otherwise current filesystem
 A present `fileSize` field overrides that fact.
 A present `mtime` value overrides the modification-time fact: the map form stores its instant, and an explicit YAML null clears the stored modification time to absent; an omitted `mtime` preserves the baseline.
 
+The performance-information fields follow the same overlay shape with two narrow rules.
+A `recording-date` scalar holds its value. Empty scalar text is the clear form that stores the absence sentinel: a quoted empty scalar or a present empty plain scalar (`recording-date:`). The literal texts `null` and `~` are nonempty and are not that clear form. An omitted key preserves the baseline date. The [format reference](../../reference/library/format/yaml.md#recording-date) owns the scalar grammar.
+A `credits` sequence replaces all four categories together; explicitly empty clears all, and omitted preserves the selected baseline.
+Merge into an existing track preserves its stored credits on omission in every mode, including delta; a media read refreshes technical facts without replacing that curated metadata baseline.
+Delta creation/restore uses media credits when file reading succeeds, otherwise the empty-metadata fallback. Metadata creation/restore starts with empty credits even when media supplies technical facts; full creation/restore likewise has no implicit media credits.
+The importer validates the complete date and every credit in document preflight through the [date grammar](../../reference/library/format/yaml.md#recording-date) and [closed credit schema and admission](../../reference/library/format/yaml.md#credits), before any durable effect.
+No media reader populates a recording date, so a delta baseline's date is always absent.
+Full/metadata exports always emit the credits sequence, including empty. Delta compares complete normalized credits against the selected media baseline or empty fallback, including kind, role, duplicates, and within-kind order; a difference emits the whole sequence, including a clear. An unadmissible media baseline compares as different rather than dropping stored credits.
+List-only transfer never carries or changes track credits.
+
 ### Cover terminal state
 
 Covers follow the same overlay rule as any other collection: a present `covers` sequence replaces the baseline's, and an absent one preserves it.
@@ -189,7 +199,7 @@ Every import, preview, and plan returns an `ImportReport`:
 
 | Field | Meaning |
 |---|---|
-| `payloadVersion` | Accepted interchange version; currently `6`. |
+| `payloadVersion` | Accepted interchange version; currently `7`. |
 | `payloadMode` | `delta`, `metadata`, `full`, or `listOnly`. |
 | `targetScope` | `Library` for track-bearing payloads or `Lists` for `listOnly`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
@@ -232,20 +242,22 @@ Before commit, cancellation aborts or prevents the Maintenance mutation and the 
 After durable commit, the command must reach `Published` or coordinated-Closing retirement before cancellation can propagate; a durable import is never reported as rolled back.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
-Version 6 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
+Version 7 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
 No configurable prepared-memory ceiling, streaming path, or additional bounded-transfer proposal is currently defined.
 Adding a limit must preserve the guarantee that the current exporter cannot produce a file the importer rejects solely for size.
 
 ## Persistence and versioning
 
-Version 6 is a portable interchange format, not the physical database format.
+Version 7 is a portable interchange format, not the physical database format.
 Restore and merge always write current `MusicLibrary` records.
-An accepted version-6 document may use a canonically decomposed spelling, but export from physical database version 8 emits NFC because that is the current library admission invariant.
+An accepted version-7 document may use a canonically decomposed spelling, but export from physical database version 9 emits NFC because that is the current library admission invariant.
+Only the exact [version-7 schema](../../reference/library/format/yaml.md) is accepted, including `recording-date` and typed `credits`. Alternative schemas labeled version 7 are unsupported, without aliases, a dual reader, or layout autodetection.
+Empty scalar text, including a present empty plain scalar, is the date's clear form.
 Libraries admitted by earlier version-5 importers could retain unsupported-extension rows; that version-5 history stays visible across the version-5 to version-6 transition, and its export consequences remain policy: export does not filter those rows, while current whole-document admission rejects their reimport, with no migration, purge, or grandfathering performed.
-A fresh version-8 library cannot gain such a row, because current import admission rejects the document and no older physical version can be opened.
-The importer accepts no earlier interchange version, including version 5, and provides no migration or legacy-restore path.
+A fresh version-9 library cannot gain such a row, because current import admission rejects the document and no older physical version can be opened.
+The importer accepts no earlier interchange version, including version 6, and provides no migration or legacy-restore path.
 A version-3 document's embedded cover bytes are therefore never read: the import fails and changes nothing.
-No build can re-export an old physical library into a document the current importer accepts, because the current build opens only physical version 8 while older builds emit interchange versions this importer rejects; recovering such a library means scanning the music files it describes.
+No build can re-export an old physical library into a document the current importer accepts, because the current build opens only physical version 9 while older builds emit interchange versions this importer rejects; recovering such a library means scanning the music files it describes.
 
 ## Frontend observations
 
@@ -294,6 +306,9 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryExportImportListTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
 - [`LibraryYamlSchemaTest.cpp`](../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
+- [`LibraryYamlImporterTest.cpp`](../../../test/unit/runtime/library/LibraryYamlImporterTest.cpp) proves recording-date and credit preflight admission and whole-document rejection.
+- [`LibraryYamlExporterTest.cpp`](../../../test/unit/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.
+- [`LibraryYamlPerformanceMetadataTest.cpp`](../../../test/unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) proves date-precision and list round trips, clear forms, and merge overlay preservation.
 - [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
 - [`LibraryTransferPresentationTest.cpp`](../../../test/unit/uimodel/library/presentation/LibraryTransferPresentationTest.cpp) proves export-option order and the Full default, both restore scopes, complete report arguments, and stable payload-mode tokens.
 - [`LibraryTransferAdapterTest.cpp`](../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping and restore-only destructive admission.

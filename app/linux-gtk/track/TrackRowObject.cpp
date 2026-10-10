@@ -10,12 +10,15 @@
 #include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 
 #include <glibmm/objectbase.h>
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -94,7 +97,8 @@ namespace ao::gtk
   {
     auto const index = static_cast<std::size_t>(field);
 
-    if (index >= _text.size() || !isTextBackedField(field))
+    if (index >= _text.size() || !isTextBackedField(field) || field == rt::TrackField::Conductor ||
+        field == rt::TrackField::Ensemble || field == rt::TrackField::Soloist)
     {
       return false;
     }
@@ -131,7 +135,9 @@ namespace ao::gtk
                                 std::uint32_t bitrate,
                                 std::uint64_t fileSize,
                                 std::optional<FileTimestamp> optModifiedTime,
-                                library::FileStatus status)
+                                library::FileStatus status,
+                                library::RecordingDate recordingDate,
+                                std::array<std::uint16_t, 3> creditCounts)
   {
     _text[static_cast<std::size_t>(rt::TrackField::Title)] = std::move(title);
     _text[static_cast<std::size_t>(rt::TrackField::Artist)] = std::move(artist);
@@ -146,9 +152,19 @@ namespace ao::gtk
     _text[static_cast<std::size_t>(rt::TrackField::Soloist)] = std::move(soloist);
     _text[static_cast<std::size_t>(rt::TrackField::FilePath)] = std::move(filePath);
 
+    _creditCounts = creditCounts;
+    auto const creditFields = std::array{rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist};
+
+    for (std::size_t i = 0; i < creditFields.size(); ++i)
+    {
+      _creditSummaries[i] =
+        uimodel::formatTrackCreditSummary(textCatalog(), stringField(creditFields[i])->raw(), _creditCounts[i]);
+    }
+
     _tags = std::move(tags);
     _duration = duration;
     _year = year;
+    _recordingDate = recordingDate;
     _discNumber = discNumber;
     _discTotal = discTotal;
     _trackNumber = trackNumber;
@@ -178,6 +194,14 @@ namespace ao::gtk
     if (index >= _text.size())
     {
       return nullptr;
+    }
+
+    switch (field)
+    {
+      case rt::TrackField::Conductor: return _creditSummaries.data();
+      case rt::TrackField::Ensemble: return &_creditSummaries[1];
+      case rt::TrackField::Soloist: return &_creditSummaries[2];
+      default: break;
     }
 
     // Text-backed fields are materialized at populate(); the stored slot is the
@@ -221,6 +245,12 @@ namespace ao::gtk
   void TrackRowObject::setYear(std::uint16_t year)
   {
     _year = year;
+    invalidateComputedCache();
+  }
+
+  void TrackRowObject::setRecordingDate(library::RecordingDate date)
+  {
+    _recordingDate = date;
     invalidateComputedCache();
   }
 

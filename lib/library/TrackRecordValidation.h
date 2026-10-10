@@ -10,10 +10,12 @@
 
 namespace ao::library
 {
+  class DictionaryStore;
+
   /** Full canonical validation for serialized Track record sides. */
   Result<> validateSerializedHotTrack(std::span<std::byte const> bytes);
   Result<> validateSerializedColdTrack(std::span<std::byte const> bytes);
   Result<> validateSerializedTrackReferences(std::span<std::byte const> hotBytes,
                                              std::span<std::byte const> coldBytes,
-                                             std::size_t dictionarySize);
+                                             DictionaryStore const& dictionary);
 } // namespace ao::library

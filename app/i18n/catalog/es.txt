@@ -3,6 +3,30 @@
 
 es:table {
   messages:table {
+    track_field_recording_date { "Fecha de grabación" }
+    track_credits_heading { "Créditos de interpretación" }
+    track_credit_performer { "Intérprete" }
+    track_credit_name { "Nombre" }
+    track_credit_role { "Función o instrumento (opcional)" }
+    track_credits_add { "Añadir crédito" }
+    track_credits_replace { "Reemplazar…" }
+    track_credits_clear { "Borrar este ámbito" }
+    track_credits_commit { "Guardar créditos" }
+    track_credits_cancel { "Cancelar" }
+    track_credit_delete { "Eliminar crédito" }
+    track_credit_blank_name { "Fila {row}: introduzca un nombre." }
+    track_credit_invalid_name_text { "Fila {row}: el nombre contiene texto no válido." }
+    track_credit_invalid_role_text { "Fila {row}: la función o el instrumento contiene texto no válido." }
+    track_credit_invalid_kind { "Fila {row}: elija una categoría de crédito válida para este ámbito." }
+    track_credits_cleared { "Créditos borrados" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "Categoría" }
+    track_credits_scope { "Ámbito de créditos: {scope}" }
+    track_credits_all_kinds { "Todas las categorías de créditos" }
+    track_credits_replace_scope { "Reemplazar este ámbito en todas las pistas seleccionadas" }
+    track_credit_move_up { "Mover arriba" }
+    track_credit_move_down { "Mover abajo" }
+    track_recording_date_invalid { "Introduzca una fecha válida como YYYY, YYYY-MM o YYYY-MM-DD, o deje el campo vacío para borrarla." }
     tui_go_to_back { "Atrás" }
     tui_go_to_forward { "Adelante" }
     tui_go_to_cancel { "Cancelar" }

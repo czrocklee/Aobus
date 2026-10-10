@@ -32,7 +32,8 @@ namespace ao::library::detail
 
     TrackColdHeader const& header() const noexcept;
 
-    ClassicalProxy classical() const noexcept { return ClassicalProxy{_classicalPayload}; }
+    WorkView work() const noexcept { return WorkView{_workPayload}; }
+    PerformanceView performance() const noexcept { return PerformanceView{_performancePayload}; }
 
     CoverArtProxy coverArt() const noexcept
     {
@@ -47,8 +48,9 @@ namespace ao::library::detail
     std::span<std::byte const> _coldBytes{};
     TrackColdHeader const* _header = nullptr;
     std::span<std::byte const> _coverPayload{};
-    std::span<std::byte const> _classicalPayload{};
+    std::span<std::byte const> _workPayload{};
     std::span<std::byte const> _customPayload{};
+    std::span<std::byte const> _performancePayload{};
     bool _valid = false;
   };
 } // namespace ao::library::detail

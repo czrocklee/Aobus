@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <span>
+#include <string>
+#include <vector>
+
 namespace CLI
 {
   class App;
@@ -17,5 +21,8 @@ namespace ao::cli
   void configureListCommand(CLI::App& app, CliRuntime& cli);
   void configureScanCommand(CLI::App& app, CliRuntime& cli);
   void configureTagCommand(CLI::App& app, CliRuntime& cli);
-  void configureTrackCommand(CLI::App& app, CliRuntime& cli);
+  void configureTrackCommand(CLI::App& app,
+                             CliRuntime& cli,
+                             std::vector<std::string>& args,
+                             std::span<std::string const> originalArgs);
 } // namespace ao::cli

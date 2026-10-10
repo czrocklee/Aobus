@@ -12,6 +12,7 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
 #include "layout/component/track/TrackDetailUndo.h"
+#include "layout/component/track/TrackFieldGridOperationProbe.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
 #include "list/ListNavigationController.h"
 #include "portal/ImportExportActions.h"
@@ -30,6 +31,7 @@
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/Credits.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
@@ -69,6 +71,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -885,6 +888,269 @@ namespace ao::gtk::layout::test
 
     drainGtkEvents();
     fixture.window().unset_child();
+  }
+
+  TEST_CASE("TrackFieldGrid - custom metadata delete offers the stored value at the bound revision",
+            "[gtk][integration][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_custom_delete_undo_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.customMetadata = {{"Mood", "New"}}}); }};
+    auto& runtime = fixture.runtime();
+
+    // The projection lags the stored value: the row still displays the old
+    // text while the library already holds the newer one.
+    auto& scope = fixture.attachTrackDetailScope();
+    auto snap = rt::TrackDetailSnapshot{};
+    snap.trackIds = {trackId};
+    snap.customMetadata.push_back(rt::CustomMetadataItem{
+      .key = "Mood", .value = {.optValue = std::string{"Old"}}, .presentOnAll = true, .presentOnAny = true});
+    scope.setSnapshot(snap);
+
+    auto undoController = TrackDetailUndoController{};
+    fixture.context().detailUndo = &undoController;
+    auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
+    REQUIRE(componentPtr != nullptr);
+    auto& root = componentPtr->widget();
+    auto* const deleteButton = findWidgetByClass<Gtk::Button>(root, "ao-detail-field-delete");
+    REQUIRE(deleteButton != nullptr);
+
+    emitClicked(*deleteButton);
+
+    REQUIRE(tryPumpGtkEventsUntil([&] { return undoController.pendingCustomMetadataUndo() != nullptr; }));
+    CHECK(undoController.pendingCustomMetadataUndo()->key == "Mood");
+
+    // The undo value is the stored value the delete removed, not the stale
+    // projection PRE the row happened to display.
+    CHECK(undoController.pendingCustomMetadataUndo()->value == "New");
+
+    REQUIRE(runGtkTask(runtime, undoController.undoAsync()));
+    auto const spec = trackSpecFor(runtime, trackId);
+    REQUIRE(spec.customMetadata.size() == 1);
+    CHECK(spec.customMetadata.front() == std::pair{std::string{"Mood"}, std::string{"New"}});
+  }
+
+  TEST_CASE("TrackFieldGrid - mixed custom metadata values delete without an undo opportunity",
+            "[gtk][integration][layout-component][library-authoring]")
+  {
+    auto first = kInvalidTrackId;
+    auto second = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_custom_delete_mixed_test",
+      [&](library::MusicLibrary& musicLibrary)
+      {
+        first = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.customMetadata = {{"Mood", "Bright"}}});
+        second = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.customMetadata = {{"Mood", "Dark"}}});
+      }};
+    auto& runtime = fixture.runtime();
+
+    auto& scope = fixture.attachTrackDetailScope();
+    auto snap = rt::TrackDetailSnapshot{};
+    snap.trackIds = {first, second};
+    snap.customMetadata.push_back(
+      rt::CustomMetadataItem{.key = "Mood", .value = {.mixed = true}, .presentOnAll = true, .presentOnAny = true});
+    scope.setSnapshot(snap);
+
+    auto undoController = TrackDetailUndoController{};
+    fixture.context().detailUndo = &undoController;
+    auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
+    REQUIRE(componentPtr != nullptr);
+    auto* const deleteButton = findWidgetByClass<Gtk::Button>(componentPtr->widget(), "ao-detail-field-delete");
+    REQUIRE(deleteButton != nullptr);
+
+    emitClicked(*deleteButton);
+    REQUIRE(detail::TrackFieldGridOperationProbe::hasPendingSubmissions(*componentPtr));
+
+    // Keep the owner alive until the admitted workflow, including publication
+    // and the frontend completion hop that could offer Undo, has terminated.
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&] { return !detail::TrackFieldGridOperationProbe::hasPendingSubmissions(*componentPtr); }));
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&]
+      {
+        return trackSpecFor(runtime, first).customMetadata.empty() &&
+               trackSpecFor(runtime, second).customMetadata.empty();
+      }));
+    drainGtkEvents();
+
+    // No common value exists to restore, so no undo opportunity is offered.
+    CHECK_FALSE(undoController.pendingCustomMetadataUndo());
+  }
+
+  TEST_CASE("TrackFieldGrid - custom metadata delete eligibility covers common empty and missing values",
+            "[gtk][integration][layout-component][library-authoring]")
+  {
+    auto first = kInvalidTrackId;
+    auto second = kInvalidTrackId;
+    auto undoController = TrackDetailUndoController{};
+
+    auto const deleteThroughGrid =
+      [&](LayoutRuntimeFixture& fixture, FakeTrackDetailScope& scope, rt::TrackDetailSnapshot& snap)
+    {
+      scope.setSnapshot(snap);
+      fixture.context().detailUndo = &undoController;
+      auto componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
+      REQUIRE(componentPtr != nullptr);
+
+      // An empty-valued row stays hidden until empty fields are requested.
+      if (auto* const showEmptyButton =
+            findWidgetByClass<Gtk::Button>(componentPtr->widget(), "ao-detail-show-all-button");
+          showEmptyButton != nullptr)
+      {
+        emitClicked(*showEmptyButton);
+      }
+
+      auto* const deleteButton = findWidgetByClass<Gtk::Button>(componentPtr->widget(), "ao-detail-field-delete");
+      REQUIRE(deleteButton != nullptr);
+      emitClicked(*deleteButton);
+      REQUIRE(detail::TrackFieldGridOperationProbe::hasPendingSubmissions(*componentPtr));
+
+      // Scope settlement is later than both commit and frontend delivery. Do
+      // not retire/cancel the component to manufacture an empty task scope.
+      REQUIRE(tryPumpGtkEventsUntil(
+        [&] { return !detail::TrackFieldGridOperationProbe::hasPendingSubmissions(*componentPtr); }));
+      return componentPtr;
+    };
+
+    SECTION("a common present empty value stays undo-eligible")
+    {
+      auto fixture = LayoutRuntimeFixture{
+        "io.github.aobus.detail_custom_delete_empty_test",
+        [&](library::MusicLibrary& musicLibrary)
+        {
+          first = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.customMetadata = {{"Mood", ""}}});
+          second = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {.customMetadata = {{"Mood", ""}}});
+        }};
+      auto& runtime = fixture.runtime();
+      auto& scope = fixture.attachTrackDetailScope();
+      auto snap = rt::TrackDetailSnapshot{};
+      snap.trackIds = {first, second};
+      snap.customMetadata.push_back(rt::CustomMetadataItem{
+        .key = "Mood", .value = {.optValue = std::string{""}}, .presentOnAll = true, .presentOnAny = true});
+      auto const componentPtr = deleteThroughGrid(fixture, scope, snap);
+
+      REQUIRE(tryPumpGtkEventsUntil(
+        [&]
+        {
+          return undoController.pendingCustomMetadataUndo() != nullptr &&
+                 trackSpecFor(runtime, first).customMetadata.empty() &&
+                 trackSpecFor(runtime, second).customMetadata.empty();
+        }));
+
+      // An empty stored value is a present value: the offered undo restores
+      // the empty entry, not an absent key.
+      CHECK(undoController.pendingCustomMetadataUndo()->value.empty());
+
+      REQUIRE(runGtkTask(runtime, undoController.undoAsync()));
+      REQUIRE(trackSpecFor(runtime, first).customMetadata.size() == 1);
+      CHECK(trackSpecFor(runtime, first).customMetadata.front() == std::pair{std::string{"Mood"}, std::string{""}});
+      REQUIRE(trackSpecFor(runtime, second).customMetadata.size() == 1);
+      CHECK(trackSpecFor(runtime, second).customMetadata.front() == std::pair{std::string{"Mood"}, std::string{""}});
+    }
+
+    SECTION("a target missing the key leaves no undo opportunity")
+    {
+      auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_custom_delete_missing_test",
+                                          [&](library::MusicLibrary& musicLibrary)
+                                          {
+                                            first = library::test::addTrackWithUniqueFixtureUri(
+                                              musicLibrary, {.customMetadata = {{"Mood", "Bright"}}});
+                                            second = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {});
+                                          }};
+      auto& runtime = fixture.runtime();
+      auto& scope = fixture.attachTrackDetailScope();
+      auto snap = rt::TrackDetailSnapshot{};
+      snap.trackIds = {first, second};
+      snap.customMetadata.push_back(rt::CustomMetadataItem{
+        .key = "Mood", .value = {.optValue = std::string{"Bright"}}, .presentOnAll = false, .presentOnAny = true});
+      auto const componentPtr = deleteThroughGrid(fixture, scope, snap);
+
+      REQUIRE(tryPumpGtkEventsUntil(
+        [&]
+        {
+          return trackSpecFor(runtime, first).customMetadata.empty() &&
+                 trackSpecFor(runtime, second).customMetadata.empty();
+        }));
+      drainGtkEvents();
+
+      // One bound target never carried the key, so there is no common value
+      // to restore.
+      CHECK_FALSE(undoController.pendingCustomMetadataUndo());
+    }
+  }
+
+  TEST_CASE("TrackDetailUndoController - an invalidated session cannot displace or resurrect an undo opportunity",
+            "[gtk][integration][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_offer_test",
+                                        [&trackId](library::MusicLibrary& musicLibrary)
+                                        { trackId = library::test::addTrackWithUniqueFixtureUri(musicLibrary, {}); }};
+    auto& runtime = fixture.runtime();
+    auto undoController = TrackDetailUndoController{};
+    std::size_t commitCounter = 0;
+
+    auto const makeStaleSession = [&] -> TrackAuthoringSession
+    {
+      auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+      auto patch = rt::MetadataPatch{};
+      patch.customUpdates["Mood"] = std::string{"Committed by the older operation "} + std::to_string(commitCounter++);
+      auto replyRes = runGtkTask(runtime, sessionPtr.submitMetadataAsync(patch));
+      REQUIRE(replyRes);
+      REQUIRE(replyRes->status == rt::AuthoringStatus::Applied);
+      REQUIRE(runGtkTask(runtime, runtime.library().commands().createListAsync(rt::ListDraft{.name = "Unrelated"})));
+      REQUIRE_FALSE(sessionPtr.isCurrent());
+      return sessionPtr;
+    };
+
+    SECTION("a stale delayed presentation cannot replace a newer current opportunity")
+    {
+      auto staleSession = makeStaleSession();
+
+      auto currentSessionPtr =
+        ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+      undoController.presentCustomMetadataDeletedUndo("Mood", "Newer", std::move(currentSessionPtr));
+      REQUIRE(undoController.pendingCustomMetadataUndo());
+      CHECK(undoController.pendingCustomMetadataUndo()->value == "Newer");
+
+      undoController.presentCustomMetadataDeletedUndo("Mood", "Older", std::move(staleSession));
+      REQUIRE(undoController.pendingCustomMetadataUndo());
+      CHECK(undoController.pendingCustomMetadataUndo()->value == "Newer");
+    }
+
+    SECTION("a stale credits offer cannot displace a newer current custom opportunity")
+    {
+      auto staleCreditSession = makeStaleSession();
+
+      auto currentSessionPtr =
+        ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+      undoController.presentCustomMetadataDeletedUndo("Mood", "Newer", std::move(currentSessionPtr));
+      REQUIRE(undoController.pendingCustomMetadataUndo());
+      CHECK(undoController.pendingCustomMetadataUndo()->value == "Newer");
+
+      undoController.presentCreditsClearedUndo({.kinds = std::bitset<library::kCreditKindCount>{}.set(),
+                                                .entries = {{"Restored", library::CreditKind::Performer, "Piano"}}},
+                                               std::move(staleCreditSession));
+      REQUIRE(undoController.pendingCustomMetadataUndo());
+      CHECK(undoController.pendingCustomMetadataUndo()->value == "Newer");
+      CHECK_FALSE(undoController.pendingCreditsUndo());
+    }
+
+    SECTION("a stale delayed presentation cannot resurrect after intervening commits")
+    {
+      auto staleSession = makeStaleSession();
+
+      undoController.presentCustomMetadataDeletedUndo("Mood", "Older", std::move(staleSession));
+      CHECK_FALSE(undoController.pendingCustomMetadataUndo());
+
+      auto staleCreditSession = makeStaleSession();
+      undoController.presentCreditsClearedUndo({.kinds = std::bitset<library::kCreditKindCount>{}.set(),
+                                                .entries = {{"Restored", library::CreditKind::Performer, "Piano"}}},
+                                               std::move(staleCreditSession));
+      CHECK_FALSE(undoController.pendingCreditsUndo());
+    }
   }
 
   TEST_CASE("TrackFieldGrid - built-in edit failures restore display and notify",

@@ -18,7 +18,7 @@ struct Id3v2FrameDispatchEntry
   FrameHandler handler;
 };
 %%
-TIT1, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
+TIT1, &handleWorkText<ao::media::file::detail::WorkSource::Grouping>
 TIT2, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::title>
 TPE1, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::artist>
 TPE2, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
@@ -33,4 +33,5 @@ TCON, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::gen
 MVNM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movement>
 MVIN, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
 APIC, &handlePicture
+TMCL, &handleTmclCredits
 TXXX, &handleTxxx

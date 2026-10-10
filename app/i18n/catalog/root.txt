@@ -3,6 +3,30 @@
 
 root:table {
   messages:table {
+    track_field_recording_date { "Recording Date" }
+    track_credits_heading { "Credits" }
+    track_credit_performer { "Performer" }
+    track_credit_name { "Name" }
+    track_credit_role { "Role or instrument (optional)" }
+    track_credits_add { "Add credit" }
+    track_credits_replace { "Replace…" }
+    track_credits_clear { "Clear this scope" }
+    track_credits_commit { "Save credits" }
+    track_credits_cancel { "Cancel" }
+    track_credit_delete { "Delete credit" }
+    track_credit_blank_name { "Row {row}: enter a name." }
+    track_credit_invalid_name_text { "Row {row}: the name contains invalid text." }
+    track_credit_invalid_role_text { "Row {row}: the role or instrument contains invalid text." }
+    track_credit_invalid_kind { "Row {row}: choose a valid credit kind for this scope." }
+    track_credits_cleared { "Credits cleared" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "Kind" }
+    track_credits_scope { "Credits scope: {scope}" }
+    track_credits_all_kinds { "All credit kinds" }
+    track_credits_replace_scope { "Replace this scope on all selected tracks" }
+    track_credit_move_up { "Move up" }
+    track_credit_move_down { "Move down" }
+    track_recording_date_invalid { "Enter YYYY, YYYY-MM, or YYYY-MM-DD using a valid calendar date, or leave empty to clear." }
     tui_go_to_back { "Back" }
     tui_go_to_forward { "Forward" }
     tui_go_to_cancel { "Cancel" }

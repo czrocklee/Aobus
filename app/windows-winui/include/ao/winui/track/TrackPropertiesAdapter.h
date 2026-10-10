@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
@@ -31,6 +32,7 @@ namespace ao::winui
     Text,
     Number,
     ReadonlyText,
+    Date,
   };
 
   enum class TrackPropertiesCommitState : std::uint8_t
@@ -61,6 +63,8 @@ namespace ao::winui
                                                               std::string_view prefix,
                                                               std::size_t limit);
   bool canPresentTrackProperties(std::span<TrackId const> selection) noexcept;
+  bool canSubmitTrackProperties(uimodel::TrackPropertiesFormModel const& form, bool auxiliaryDirty);
+  std::optional<library::CreditKind> trackPropertyCreditKind(rt::TrackField field) noexcept;
   bool needsCustomMetadataValueUpdate(bool existed,
                                       std::optional<std::string> const& optOriginalValue,
                                       std::string_view value) noexcept;

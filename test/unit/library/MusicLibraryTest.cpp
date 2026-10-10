@@ -427,6 +427,7 @@ namespace ao::library::test
     constexpr std::uint32_t kPreUnifiedListOrderingLibraryVersion = 4;
     constexpr std::uint32_t kPreNfcTextLibraryVersion = 6;
     constexpr std::uint32_t kPreUnixMtimeLibraryVersion = 7;
+    constexpr std::uint32_t kPrePerformanceMetadataLibraryVersion = 8;
 
     SECTION("future version")
     {
@@ -498,6 +499,29 @@ namespace ao::library::test
       auto const res = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("version 8 before separate Work and Performance blocks")
+    {
+      static_assert(kPrePerformanceMetadataLibraryVersion != kLibraryVersion);
+      createLibraryMetadataHeader(temp.path(), kPrePerformanceMetadataLibraryVersion);
+      auto const readHeaderBytes = [&]
+      {
+        auto optBytes = lmdb::test::readExistingIntegerKeyRecord(temp.path(), "meta", kMetadataHeaderRecordId);
+        REQUIRE(optBytes);
+        return std::move(*optBytes);
+      };
+      auto const before = readHeaderBytes();
+
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
+      CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
+      CHECK(res.error().message.contains("version 8 (current 9)"));
+      CHECK(res.error().message.contains("No automatic migration"));
+      CHECK(res.error().message.contains("keep this library"));
+      CHECK(res.error().message.contains("build supporting its stored version"));
+      CHECK(readHeaderBytes() == before);
     }
   }
 

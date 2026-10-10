@@ -21,7 +21,8 @@ The CLI reads core tracks and prints the resulting strings; the TUI evaluates th
 - **Format plan** is an ordered runtime-only sequence of append-literal and append-field instructions.
 - **Format binding** resolves one plan's owned dictionary symbols for one bounded evaluation batch.
 - **Scalar field** is a field with one string, numeric, codec, or custom value per track.
-- **Missing value** is a supported scalar field whose stored value is absent or its numeric sentinel is zero.
+- **Member field** selects names from one credit kind or from all Credits.
+- **Missing value** is a supported field whose scalar is absent, numeric sentinel is zero, or selected credit list is empty.
 
 ## Invariants
 
@@ -67,7 +68,8 @@ The evaluator enforces that contract before clearing caller-owned output or appe
 Otherwise, it appends each instruction:
 
 - literal instructions append the indexed literal when the index is valid;
-- dictionary fields append resolved text or empty text when unresolved;
+- scalar dictionary fields append resolved text or empty text when unresolved;
+- credit member fields (`$conductor`, `$ensemble`, `$soloist`, `$performer`, `$credit`) append every selected name joined by `; `, retaining duplicates and canonical kind/within-kind order; roles are not rendered;
 - title and custom fields append their stored text, while an unresolved or absent custom key appends empty text;
 - numeric fields append decimal text or empty text for zero;
 - codec appends its canonical name or empty text for `UNKNOWN`.
@@ -75,9 +77,13 @@ Otherwise, it appends each instruction:
 A missing value contributes no characters, but adjacent literal separators remain.
 For example, an absent album artist in `"[" + $albumArtist + "]"` produces `[]`.
 
+Credit joining is an explicit lossy display operation, not serialization, identity, editable input, or predicate comparison; a name may itself contain `; `.
+An empty selected list contributes empty text. Category format output is not the read-only first-name raw field or compact table preview.
+Every credit member instruction declares cold-record and dictionary dependencies; combining it with a hot field yields `HotAndCold`.
+
 ## Failure and cancellation
 
-Invalid subset shapes, unknown fields, and non-scalar fields return `Error::Code::FormatRejected` from the public compile boundary.
+Invalid subset shapes, unknown fields, and unsupported fields (such as tags or cover lists) return `Error::Code::FormatRejected` from the public compile boundary.
 Malformed UTF-8 or text beyond the Unicode operation limit also returns `FormatRejected` without a partial plan.
 Private compiler recursion may use an internal exception, but no exception escapes for user input.
 

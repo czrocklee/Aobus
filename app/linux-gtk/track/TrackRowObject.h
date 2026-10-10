@@ -8,6 +8,7 @@
 #include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 
 #include <glibmm/object.h>
@@ -53,6 +54,9 @@ namespace ao::gtk
 
     std::uint16_t year() const { return _year; }
     void setYear(std::uint16_t year);
+
+    library::RecordingDate recordingDate() const { return _recordingDate; }
+    void setRecordingDate(library::RecordingDate date);
 
     std::uint16_t discNumber() const { return _discNumber; }
     void setDiscNumber(std::uint16_t discNumber);
@@ -108,7 +112,9 @@ namespace ao::gtk
                   std::uint32_t bitrate,
                   std::uint64_t fileSize,
                   std::optional<FileTimestamp> optModifiedTime,
-                  library::FileStatus status = library::FileStatus::Available);
+                  library::FileStatus status = library::FileStatus::Available,
+                  library::RecordingDate recordingDate = {},
+                  std::array<std::uint16_t, 3> creditCounts = {});
 
   protected:
     explicit TrackRowObject();
@@ -132,9 +138,12 @@ namespace ao::gtk
     mutable std::uint32_t _computedFilled = 0;
 
     Glib::ustring _tags;
+    std::array<std::uint16_t, 3> _creditCounts{};
+    std::array<Glib::ustring, 3> _creditSummaries;
 
     std::chrono::milliseconds _duration{0};
     std::uint16_t _year = 0;
+    library::RecordingDate _recordingDate{};
     std::uint16_t _discNumber = 0;
     std::uint16_t _discTotal = 0;
     std::uint16_t _trackNumber = 0;
