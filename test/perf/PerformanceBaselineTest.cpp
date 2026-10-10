@@ -65,6 +65,7 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -402,6 +403,9 @@ namespace ao::rt::test
         case TrackSortField::Ensemble: return lhs.ensembleKey.compare(rhs.ensembleKey);
         case TrackSortField::Work: return lhs.workKey.compare(rhs.workKey);
         case TrackSortField::Soloist: return lhs.soloistKey.compare(rhs.soloistKey);
+        case TrackSortField::RecordingYear:
+        case TrackSortField::RecordingDate:
+          throw std::logic_error{"The historical sort-cache fixture has no recording-date keys"};
       }
 
       return 0;

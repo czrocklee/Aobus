@@ -10,10 +10,13 @@
 #include "QueryHelp.h"
 #include "TrackSelection.h"
 #include <ao/AudioScalars.h>
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -23,15 +26,18 @@
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/String.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
+#include <CLI/Error.hpp>
 #include <CLI/Option.hpp>
 
 #include <algorithm>
@@ -85,7 +91,16 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "invalid --set value '{}'; expected key=value", assignment);
       }
 
-      patch.customUpdates[std::string{assignment.substr(0, separator)}] = std::string{assignment.substr(separator + 1)};
+      auto const key = assignment.substr(0, separator);
+
+      // Reserved metadata keys are rejected instead of being stored as custom
+      // metadata. This command keeps its own diagnostic.
+      if (rt::isReservedCustomMetadataKey(key))
+      {
+        throwCommandError(Error::Code::InvalidInput, "invalid --set key '{}': reserved metadata key", key);
+      }
+
+      patch.customUpdates[std::string{key}] = std::string{assignment.substr(separator + 1)};
       return true;
     }
 
@@ -163,6 +178,14 @@ namespace ao::cli
     std::string artist{};
   };
 
+  // Structured credits preserve kind, order and duplicates; absent roles are omitted.
+  struct TrackCreditRecordDto final
+  {
+    std::string name{};
+    std::string kind{};
+    std::optional<std::string> optRole{};
+  };
+
   struct TrackUpdateReportDto final
   {
     bool dryRun = false;
@@ -192,6 +215,20 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackCreateReportDto>
     if (memberName == "optTrackId")
     {
       return "trackId";
+    }
+
+    return memberName;
+  }
+};
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::TrackCreditRecordDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optRole")
+    {
+      return "role";
     }
 
     return memberName;
@@ -474,11 +511,10 @@ namespace ao::cli
     std::optional<std::string> optAlbumArtist{};
     std::optional<std::string> optGenre{};
     std::optional<std::string> optComposer{};
-    std::optional<std::string> optConductor{};
-    std::optional<std::string> optEnsemble{};
     std::optional<std::string> optWork{};
     std::optional<std::string> optMovement{};
-    std::optional<std::string> optSoloist{};
+    std::optional<std::string> optRecordingDate{};
+    std::vector<TrackCreditRecordDto> credits{};
     std::optional<std::uint16_t> optYear{};
     std::optional<std::uint16_t> optTrackNumber{};
     std::optional<std::uint16_t> optTrackTotal{};
@@ -534,16 +570,6 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackRecordDto>
       return "composer";
     }
 
-    if (memberName == "optConductor")
-    {
-      return "conductor";
-    }
-
-    if (memberName == "optEnsemble")
-    {
-      return "ensemble";
-    }
-
     if (memberName == "optWork")
     {
       return "work";
@@ -554,9 +580,14 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackRecordDto>
       return "movement";
     }
 
-    if (memberName == "optSoloist")
+    if (memberName == "optRecordingDate")
     {
-      return "soloist";
+      return "recordingDate";
+    }
+
+    if (memberName == "credits")
+    {
+      return rt::kCreditsMetadataKey;
     }
 
     if (memberName == "optYear")
@@ -723,17 +754,37 @@ namespace ao::cli
 
       if (view.isColdValid())
       {
-        dto.optConductor = dictionaryNameWhenPresent(dictionary, view.classical().conductorId());
-        dto.optEnsemble = dictionaryNameWhenPresent(dictionary, view.classical().ensembleId());
-        dto.optWork = dictionaryNameWhenPresent(dictionary, view.classical().workId());
-        dto.optMovement = dictionaryNameWhenPresent(dictionary, view.classical().movementId());
-        dto.optSoloist = dictionaryNameWhenPresent(dictionary, view.classical().soloistId());
+        auto const work = view.work();
+        auto const performance = view.performance();
+
+        dto.optWork = dictionaryNameWhenPresent(dictionary, work.workId());
+        dto.optMovement = dictionaryNameWhenPresent(dictionary, work.movementId());
+
+        if (auto const recordingDate = performance.recordingDate(); recordingDate.isPresent())
+        {
+          dto.optRecordingDate = library::formatRecordingDate(recordingDate);
+        }
+
+        dto.credits.reserve(performance.credits().size());
+
+        for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+        {
+          auto const kind = static_cast<library::CreditKind>(kindIndex);
+
+          for (auto const& entry : performance.credits(kind))
+          {
+            dto.credits.push_back(TrackCreditRecordDto{.name = std::string{dictionaryText(dictionary, entry.nameId)},
+                                                       .kind = std::string{library::creditKindToken(kind)},
+                                                       .optRole = dictionaryNameWhenPresent(dictionary, entry.roleId)});
+          }
+        }
+
         dto.optTrackNumber = nonZeroNumber(view.metadata().trackNumber());
         dto.optTrackTotal = nonZeroNumber(view.metadata().trackTotal());
         dto.optDiscNumber = nonZeroNumber(view.metadata().discNumber());
         dto.optDiscTotal = nonZeroNumber(view.metadata().discTotal());
-        dto.optMovementNumber = nonZeroNumber(view.classical().movementNumber());
-        dto.optMovementTotal = nonZeroNumber(view.classical().movementTotal());
+        dto.optMovementNumber = nonZeroNumber(work.movementNumber());
+        dto.optMovementTotal = nonZeroNumber(work.movementTotal());
         dto.optDuration = positiveDurationMillis(view.property().duration());
         dto.optUri = nonEmptyString(view.property().uri());
         dto.optCustom = customMetadataByName(view, dictionary);
@@ -1174,11 +1225,12 @@ namespace ao::cli
       CLI::Option* albumArtist = nullptr;
       CLI::Option* genre = nullptr;
       CLI::Option* composer = nullptr;
-      CLI::Option* conductor = nullptr;
-      CLI::Option* ensemble = nullptr;
       CLI::Option* work = nullptr;
       CLI::Option* movement = nullptr;
-      CLI::Option* soloist = nullptr;
+      CLI::Option* recordingDate = nullptr;
+      CLI::Option* credit = nullptr;
+      CLI::Option* creditScope = nullptr;
+      CLI::Option* clearCredits = nullptr;
       CLI::Option* year = nullptr;
       CLI::Option* trackNumber = nullptr;
       CLI::Option* trackTotal = nullptr;
@@ -1191,26 +1243,131 @@ namespace ao::cli
       CLI::Option* addTag = nullptr;
       CLI::Option* removeTag = nullptr;
       CLI::Option* dryRun = nullptr;
+      std::shared_ptr<std::vector<std::string>> creditValuesPtr;
       std::shared_ptr<std::vector<std::string>> setsPtr;
       std::shared_ptr<std::vector<std::string>> unsetsPtr;
       std::shared_ptr<std::vector<std::string>> addTagsPtr;
       std::shared_ptr<std::vector<std::string>> removeTagsPtr;
     };
 
+    // Surrounding ASCII whitespace is trimmed exactly like the shared edit
+    // paths, so the strict recording-date parser only ever sees canonical
+    // text, and an empty option value is an explicit clear.
+    void applyRecordingDateOption(CLI::Option const* option, rt::MetadataPatch& patch)
+    {
+      auto const value = option->as<std::string>();
+      auto const trimmed = utility::trim(value);
+
+      if (trimmed.empty())
+      {
+        patch.optRecordingDate = library::RecordingDate{};
+        return;
+      }
+
+      auto const dateRes = library::parseRecordingDate(trimmed);
+
+      if (!dateRes)
+      {
+        throwCommandError(
+          Error::Code::InvalidInput, "invalid --recording-date value '{}': {}", value, dateRes.error().message);
+      }
+
+      patch.optRecordingDate = *dateRes;
+    }
+
+    void applyCreditsOptions(TrackUpdateCliOptions const& options, rt::MetadataPatch& patch)
+    {
+      bool const clearRequested = options.clearCredits->count() > 0;
+      bool const replacementRequested = options.credit->count() > 0;
+      bool const hasScope = options.creditScope->count() > 0;
+
+      if (clearRequested && replacementRequested)
+      {
+        throwCommandError(Error::Code::InvalidInput, "--credit and --clear-credits cannot be combined");
+      }
+
+      if (!clearRequested && !replacementRequested)
+      {
+        if (hasScope)
+        {
+          throwCommandError(Error::Code::InvalidInput, "--credit-scope requires --credit or --clear-credits");
+        }
+
+        return;
+      }
+
+      auto replacement = rt::CreditReplacement{};
+
+      if (!hasScope)
+      {
+        replacement.kinds.set();
+      }
+
+      for (auto const& token : options.creditScope->results())
+      {
+        auto const optKind = library::parseCreditKind(token);
+
+        if (!optKind)
+        {
+          throwCommandError(Error::Code::InvalidInput, "invalid --credit-scope kind '{}'", token);
+        }
+
+        replacement.kinds.set(static_cast<std::size_t>(*optKind));
+      }
+
+      // These values bypass CLI11's list and doubled-bracket decoding.
+      auto const& values = *options.creditValuesPtr;
+      auto entries = std::vector<library::CreditView>{};
+
+      for (std::size_t index = 0; index < values.size(); index += 3)
+      {
+        auto const optKind = library::parseCreditKind(values[index]);
+
+        if (!optKind)
+        {
+          throwCommandError(Error::Code::InvalidInput, "invalid --credit kind '{}'", values[index]);
+        }
+
+        if (!replacement.kinds.test(static_cast<std::size_t>(*optKind)))
+        {
+          throwCommandError(Error::Code::InvalidInput, "--credit kind '{}' is outside --credit-scope", values[index]);
+        }
+
+        entries.push_back(library::CreditView{.name = values[index + 1], .kind = *optKind, .role = values[index + 2]});
+      }
+
+      auto creditsRes = library::normalizeCredits(entries);
+
+      if (!creditsRes)
+      {
+        throwCommandError(Error::Code::InvalidInput, "invalid --credit value: {}", creditsRes.error().message);
+      }
+
+      replacement.entries = std::move(*creditsRes);
+      patch.optCredits = std::move(replacement);
+    }
+
     bool tryApplyTrackUpdateFieldOptions(TrackUpdateCliOptions const& options, rt::MetadataPatch& patch)
     {
       bool hasPatch = false;
+      bool const hasRecordingDate = options.recordingDate->count() > 0;
+      bool const hasCredits = options.credit->count() > 0 || options.clearCredits->count() > 0;
+
+      if (hasRecordingDate)
+      {
+        applyRecordingDateOption(options.recordingDate, patch);
+      }
+
+      applyCreditsOptions(options, patch);
+      hasPatch = hasRecordingDate || hasCredits || hasPatch;
       hasPatch = tryAssignStringOption(options.title, patch.optTitle) || hasPatch;
       hasPatch = tryAssignStringOption(options.artist, patch.optArtist) || hasPatch;
       hasPatch = tryAssignStringOption(options.album, patch.optAlbum) || hasPatch;
       hasPatch = tryAssignStringOption(options.albumArtist, patch.optAlbumArtist) || hasPatch;
       hasPatch = tryAssignStringOption(options.genre, patch.optGenre) || hasPatch;
       hasPatch = tryAssignStringOption(options.composer, patch.optComposer) || hasPatch;
-      hasPatch = tryAssignStringOption(options.conductor, patch.optConductor) || hasPatch;
-      hasPatch = tryAssignStringOption(options.ensemble, patch.optEnsemble) || hasPatch;
       hasPatch = tryAssignStringOption(options.work, patch.optWork) || hasPatch;
       hasPatch = tryAssignStringOption(options.movement, patch.optMovement) || hasPatch;
-      hasPatch = tryAssignStringOption(options.soloist, patch.optSoloist) || hasPatch;
       hasPatch = tryAssignUint16Option(options.year, patch.optYear) || hasPatch;
       hasPatch = tryAssignUint16Option(options.trackNumber, patch.optTrackNumber) || hasPatch;
       hasPatch = tryAssignUint16Option(options.trackTotal, patch.optTrackTotal) || hasPatch;
@@ -1296,10 +1453,144 @@ namespace ao::cli
           .metadata = patch, .tagsToAdd = std::move(tagsToAdd), .tagsToRemove = std::move(tagsToRemove)});
     }
 
-    void configureTrackUpdateCommand(CLI::App& track, CliRuntime& cli)
+    // CLI11's protected subclassing surface keeps optional vector operands on
+    // the native classifier, including numeric short-option and parent context.
+    class TrackUpdateCommand final : public CLI::App
     {
-      auto* update = track.add_subcommand("update", "Update track metadata and tags");
-      update->footer(trackUpdateHelpFooter());
+    public:
+      explicit TrackUpdateCommand(CLI::App& track)
+        : CLI::App{"Update track metadata and tags", "update", &track}
+      {
+      }
+
+      CLI::detail::Classifier classifyOperand(std::string const& argument) const { return _recognize(argument, false); }
+    };
+
+    [[noreturn]] void throwLiteralArgumentError(std::string message)
+    {
+      AO_EXCEPTION_CARRIER(ForeignCallbackAdapter);
+      throw CLI::ArgumentMismatch{std::move(message)};
+    }
+
+    std::string_view recognizedLiteralToken(std::vector<std::string> const& args,
+                                            std::span<std::string const> originalArgs)
+    {
+      // CLI11 2.6.2 App::_parse_arg pops the recognized long token before its
+      // immediate zero-arity callback. Child parsing uses the same vector.
+      // Short-option remainders are processed before the next long token;
+      // none of these literal options has a short spelling. Thus the untouched
+      // remaining prefix ends immediately before this original argv slot.
+      AO_INVARIANT(args.size() < originalArgs.size(), "recognized literal option must have an original argv slot");
+      return originalArgs[args.size()];
+    }
+
+    CLI::Option* addCreditOption(CLI::App& update,
+                                 std::vector<std::string>& args,
+                                 std::span<std::string const> originalArgs,
+                                 std::shared_ptr<std::vector<std::string>> const& creditValuesPtr)
+    {
+      // Zero arity delegates recognition to CLI11, not operand transport. The
+      // raw callback deliberately ignores flag results and boolean conversion.
+      return update
+        .add_option(
+          "--credit",
+          CLI::callback_t{[&args, originalArgs, creditValuesPtr](CLI::results_t const&)
+                          {
+                            if (recognizedLiteralToken(args, originalArgs).contains('='))
+                            {
+                              throwLiteralArgumentError("--credit does not accept attached values; use KIND NAME ROLE");
+                            }
+
+                            if (args.size() < 3)
+                            {
+                              throwLiteralArgumentError("--credit requires exactly three arguments: KIND NAME ROLE");
+                            }
+
+                            for (std::size_t index = 0; index < 3; ++index)
+                            {
+                              creditValuesPtr->push_back(std::move(args.back()));
+                              args.pop_back();
+                            }
+
+                            return true;
+                          }},
+          "KIND NAME ROLE; repeatable scoped replacement; empty role means absent")
+        ->expected(0)
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll)
+        ->trigger_on_parse();
+    }
+
+    CLI::Option* addLiteralVectorOption(TrackUpdateCommand& update,
+                                        std::string name,
+                                        std::string description,
+                                        std::vector<std::string>& args,
+                                        std::span<std::string const> originalArgs,
+                                        std::shared_ptr<std::vector<std::string>> const& valuesPtr)
+    {
+      // The command tree owns update. Callbacks borrow it and invocation-owned
+      // argv storage; no callback retains its owning App through shared_ptr.
+      return update
+        .add_option(name,
+                    CLI::callback_t{[&update, name, &args, originalArgs, valuesPtr](CLI::results_t const&)
+                                    {
+                                      auto const token = recognizedLiteralToken(args, originalArgs);
+
+                                      if (auto const separator = token.find('='); separator != std::string_view::npos)
+                                      {
+                                        valuesPtr->emplace_back(token.substr(separator + 1));
+                                      }
+                                      else
+                                      {
+                                        if (args.empty())
+                                        {
+                                          throwLiteralArgumentError(name + " requires at least one argument");
+                                        }
+
+                                        // Like CLI11's vector minimum, the first operand is mandatory
+                                        // even if option-like. Only additional operands are classified.
+                                        valuesPtr->push_back(std::move(args.back()));
+                                        args.pop_back();
+                                      }
+
+                                      // Track update has no required positionals, optional validators or
+                                      // operand limit. This is CLI11's native optional-vector loop.
+                                      while (!args.empty() &&
+                                             update.classifyOperand(args.back()) == CLI::detail::Classifier::NONE)
+                                      {
+                                        valuesPtr->push_back(std::move(args.back()));
+                                        args.pop_back();
+                                      }
+
+                                      // CLI11 consumes the delimiter ending an unlimited vector, then
+                                      // resumes ordinary parsing; it is not a literal optional operand.
+                                      if (!args.empty() && update.classifyOperand(args.back()) ==
+                                                             CLI::detail::Classifier::POSITIONAL_MARK)
+                                      {
+                                        args.pop_back();
+                                      }
+
+                                      return true;
+                                    }},
+                    std::move(description))
+        ->expected(0)
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll)
+        ->trigger_on_parse();
+    }
+
+    void configureTrackUpdateCommand(CLI::App& track,
+                                     CliRuntime& cli,
+                                     std::vector<std::string>& args,
+                                     std::span<std::string const> originalArgs)
+    {
+      auto updatePtr = std::make_shared<TrackUpdateCommand>(track);
+      auto* update = updatePtr.get();
+      track.add_subcommand(std::move(updatePtr));
+      update->footer(trackUpdateHelpFooter() +
+                     "\nWarning: --dry-run in NAME or ROLE is literal text, not a preview flag. "
+                     "Place --dry-run before --credit, or after an explicit empty role.\n"
+                     "  aobus track update 42 --dry-run --credit performer 'Preview only' ''\n"
+                     "Attached --credit=VALUE syntax is not supported.");
+      auto creditValuesPtr = std::make_shared<std::vector<std::string>>();
       auto updateSetsPtr = std::make_shared<std::vector<std::string>>();
       auto updateUnsetsPtr = std::make_shared<std::vector<std::string>>();
       auto updateAddTagsPtr = std::make_shared<std::vector<std::string>>();
@@ -1313,11 +1604,17 @@ namespace ao::cli
         .albumArtist = update->add_option("--album-artist", "album artist"),
         .genre = update->add_option("--genre", "genre"),
         .composer = update->add_option("--composer", "composer"),
-        .conductor = update->add_option("--conductor", "conductor"),
-        .ensemble = update->add_option("--ensemble", "ensemble"),
         .work = update->add_option("--work", "work"),
         .movement = update->add_option("--movement", "movement"),
-        .soloist = update->add_option("--soloist", "soloist"),
+        .recordingDate =
+          update->add_option("--recording-date", "recording date (YYYY, YYYY-MM, or YYYY-MM-DD; empty clears)"),
+        .credit = addCreditOption(*update, args, originalArgs, creditValuesPtr),
+        .creditScope = update
+                         ->add_option("--credit-scope",
+                                      "conductor, ensemble, soloist, or performer; repeatable union; default all kinds")
+                         ->expected(1)
+                         ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll),
+        .clearCredits = update->add_flag("--clear-credits", "clear credits in the selected scope"),
         .year = update->add_option("--year", "year"),
         .trackNumber = update->add_option("--track-number", "track number"),
         .trackTotal = update->add_option("--track-total", "track total"),
@@ -1325,11 +1622,20 @@ namespace ao::cli
         .discTotal = update->add_option("--disc-total", "disc total"),
         .movementNumber = update->add_option("--movement-number", "movement number"),
         .movementTotal = update->add_option("--movement-total", "movement total"),
-        .set = update->add_option("--set", *updateSetsPtr, "set custom metadata key=value"),
-        .unset = update->add_option("--unset", *updateUnsetsPtr, "unset custom metadata key"),
-        .addTag = update->add_option("--add-tag", *updateAddTagsPtr, "tag to add"),
-        .removeTag = update->add_option("--remove-tag", *updateRemoveTagsPtr, "tag to remove"),
+        .set = addLiteralVectorOption(
+          *update, "--set", "key=value ...; repeatable literal assignments", args, originalArgs, updateSetsPtr),
+        .unset = addLiteralVectorOption(
+          *update, "--unset", "key ...; repeatable literal keys", args, originalArgs, updateUnsetsPtr),
+        .addTag = addLiteralVectorOption(
+          *update, "--add-tag", "tag ...; repeatable literal tags to add", args, originalArgs, updateAddTagsPtr),
+        .removeTag = addLiteralVectorOption(*update,
+                                            "--remove-tag",
+                                            "tag ...; repeatable literal tags to remove",
+                                            args,
+                                            originalArgs,
+                                            updateRemoveTagsPtr),
         .dryRun = addDryRunFlag(*update),
+        .creditValuesPtr = creditValuesPtr,
         .setsPtr = updateSetsPtr,
         .unsetsPtr = updateUnsetsPtr,
         .addTagsPtr = updateAddTagsPtr,
@@ -1398,14 +1704,17 @@ namespace ao::cli
     }
   } // namespace
 
-  void configureTrackCommand(CLI::App& app, CliRuntime& cli)
+  void configureTrackCommand(CLI::App& app,
+                             CliRuntime& cli,
+                             std::vector<std::string>& args,
+                             std::span<std::string const> originalArgs)
   {
     auto* track = app.add_subcommand("track", "Track management commands");
     track->footer(trackHelpFooter());
     track->require_subcommand(1);
     configureTrackShowCommand(*track, cli);
     configureTrackCreateCommand(*track, cli);
-    configureTrackUpdateCommand(*track, cli);
+    configureTrackUpdateCommand(*track, cli, args, originalArgs);
     configureTrackDeleteCommand(*track, cli);
     configureTrackDumpCommand(*track, cli);
   }

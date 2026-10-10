@@ -44,6 +44,9 @@ The Windows frontend keeps its database beneath the selected music root. Network
    See [filtering and suggestions](manage-library.md#understand-filtering-and-suggestions) for Quick versus Expression mode and why romanized suggestions must be accepted to search their original text.
    When the current filter is non-empty and valid, choose **Create List from current filter** to open the List editor with the resolved expression already filled in.
    Right-click a selected row and choose **Properties...**, choose the same command from **More** or Classic's **View** menu, or press `Alt+Enter` to edit built-in metadata, tags, and custom metadata for the captured selection.
+   Use category or Full Credits actions to edit complete name/kind/role lists, not the compact first-name `+N` preview.
+   **Save credits** stages the child draft; finish it before Properties Save submits metadata, Credits, and tags together.
+   Mixed scopes require explicit replacement or clear intent; other categories retain each track's values.
    Technical audio properties remain read-only, and Save becomes available only after a valid change.
    The same row menu can add tracks to eligible Playlists or explicitly remove them from the active tag-backed Playlist.
    On a saved List using a flat unsorted presentation, its **Manual Order** submenu moves the selection up, down, to the top, or to the bottom and can reset saved positions; the movement shortcuts are `Alt+Up`, `Alt+Down`, `Alt+Home`, and `Alt+End`.
@@ -51,6 +54,7 @@ The Windows frontend keeps its database beneath the selected music root. Network
    boundary to resize navigation or details; Aobus remembers both widths. On
    medium or narrow windows, use the details button to open it as an overlay;
    the navigation pane becomes compact or minimal automatically.
+   Credits show every name, kind, and optional role; category/all-kind edit actions open Properties at that scope.
    Missing artwork uses a monogram in group headings and a transparent vinyl placeholder in the details pane; these Windows choices are fixed in this version.
 6. Use the persistent Now Playing controls for previous, play/pause, next, shuffle, repeat, seeking, volume, and output.
    Choose **Reveal Current Track** or press `Ctrl+L` to select and scroll the playing track into view when it is visible in its target presentation.
@@ -78,6 +82,7 @@ The status area reports the selected library as ready, rows remain keyboard navi
 - If a selected folder cannot be opened, the successor process reports startup failure and exits; start Aobus normally to return to the previously saved library. A scan failure instead leaves the selected library open and retryable.
 - If the root is on a network share, switching between a mapped drive letter and UNC spelling does not make it a supported database location. Use local storage; a remote desktop connection to Windows does not itself make that host's local disk a network filesystem.
 - If theme reload fails, correct the reported field, type, or color. The last valid theme remains visible. Removing the file and choosing **Reload Theme** restores the Windows appearance.
+- If Properties becomes stale after another library change, use Reload and confirm discarding the draft, or close and reopen it. Busy retains the draft for retry.
 - If an import is rejected, review the notification detail for malformed YAML, an unsupported version, an unsafe path, or source/target evidence that changed after preview. The target remains unchanged when import fails before commit.
 - If no audio device appears, confirm that Windows Audio is running and that the desired endpoint is enabled.
 - If media keys do not work in a remote session, verify them once in an interactive console or RDP desktop; redirected keys may be consumed by the client.
@@ -86,5 +91,6 @@ The status area reports the selected library as ready, rows remain keyboard navi
 
 - [Windows desktop state](../reference/windows/desktop-state.md)
 - [Windows desktop shell specification](../system/frontend/windows.md)
+- [Edit metadata and Credits](edit-metadata.md)
 - [Back up and restore library data](backup-and-restore.md)
 - [Supported audio files](../reference/media/audio-file.md)

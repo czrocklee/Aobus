@@ -121,6 +121,13 @@ namespace ao::media::file::mp4
 
     std::optional<std::string_view> atomTextView(AtomView const& view)
     {
+      // Text support is explicitly UTF-8 (type 1, version 0). In particular,
+      // UTF-16 and binary payloads must not be reinterpreted as UTF-8 bytes.
+      if (auto const* const layout = dataAtomLayout(view); layout == nullptr || layout->type.value() != 1)
+      {
+        return std::nullopt;
+      }
+
       if (auto const optData = atomData(view); optData)
       {
         return utility::bytes::stringView(*optData);
@@ -214,6 +221,16 @@ namespace ao::media::file::mp4
       }
     }
 
+    // Work and grouping atoms share the scalar work slot; see WorkSource ranks.
+    template<detail::WorkSource Source>
+    void handleWorkAtom(detail::ContentBuilder& builder, AtomView const& view)
+    {
+      if (auto const optText = atomTextView(view); optText)
+      {
+        builder.metadata().work(Source, *optText);
+      }
+    }
+
     [[maybe_unused]] std::string_view atomPayloadAfter(std::span<std::byte const> bytes, std::size_t offset)
     {
       if (bytes.size() <= offset)
@@ -228,66 +245,80 @@ namespace ao::media::file::mp4
     {
       auto mean = std::string_view{};
       auto name = std::string_view{};
-      auto value = std::string_view{};
+      auto values = std::vector<std::string_view>{};
       bool malformed = false;
 
-      auto const visitRes = visitChildren(view,
-                                          [&](AtomView const& child)
-                                          {
-                                            if (child.type() == "mean" || child.type() == "name")
-                                            {
-                                              constexpr std::size_t kFullBoxHeaderSize = sizeof(std::uint32_t);
+      auto const visitRes =
+        visitChildren(view,
+                      [&](AtomView const& child)
+                      {
+                        if (child.type() == "mean" || child.type() == "name")
+                        {
+                          constexpr std::size_t kFullBoxHeaderSize = sizeof(std::uint32_t);
 
-                                              if (child.payload().size() < kFullBoxHeaderSize)
-                                              {
-                                                malformed = true;
-                                                return false;
-                                              }
+                          if (child.payload().size() < kFullBoxHeaderSize)
+                          {
+                            malformed = true;
+                            return false;
+                          }
 
-                                              auto const text = atomPayloadAfter(child.payload(), kFullBoxHeaderSize);
+                          auto const text = atomPayloadAfter(child.payload(), kFullBoxHeaderSize);
 
-                                              if (child.type() == "mean")
-                                              {
-                                                mean = text;
-                                              }
-                                              else
-                                              {
-                                                name = text;
-                                              }
-                                            }
-                                            else if (child.type() == "data")
-                                            {
-                                              auto const optValue = atomTextView(child);
+                          if (child.type() == "mean")
+                          {
+                            mean = text;
+                          }
+                          else
+                          {
+                            name = text;
+                          }
+                        }
+                        else if (child.type() == "data")
+                        {
+                          // This is the data child itself, not an enclosing metadata item.
+                          constexpr auto kTypeAndLocaleSize = 2 * sizeof(std::uint32_t);
+                          auto const payload = child.payload();
 
-                                              if (!optValue)
-                                              {
-                                                malformed = true;
-                                                return false;
-                                              }
+                          if (payload.size() < kTypeAndLocaleSize)
+                          {
+                            malformed = true;
+                            return false;
+                          }
 
-                                              value = *optValue;
-                                            }
+                          // Match the enclosing-item text decoder's type/version
+                          // admission, without repairing malformed declared UTF-8.
+                          if (readBigEndianU32(payload, 0) == 1)
+                          {
+                            values.push_back(utility::bytes::stringView(payload.subspan(kTypeAndLocaleSize)));
+                          }
+                        }
 
-                                            return true;
-                                          });
+                        return true;
+                      });
 
       if (!visitRes || malformed || mean != "com.apple.iTunes" || name.empty())
       {
         return;
       }
 
-      if (isEqualIgnoringAsciiCase(name, "conductor"))
+      for (auto const value : values)
       {
-        builder.metadata().conductor(value);
-      }
-      else if (isEqualIgnoringAsciiCase(name, "ensemble") ||
-               (isEqualIgnoringAsciiCase(name, "orchestra") && builder.metadata().ensemble().empty()))
-      {
-        builder.metadata().ensemble(value);
-      }
-      else if (isEqualIgnoringAsciiCase(name, "soloist"))
-      {
-        builder.metadata().soloist(value);
+        if (isEqualIgnoringAsciiCase(name, "conductor"))
+        {
+          builder.metadata().conductor(value);
+        }
+        else if (isEqualIgnoringAsciiCase(name, "ensemble"))
+        {
+          builder.metadata().ensemble(value);
+        }
+        else if (isEqualIgnoringAsciiCase(name, "orchestra"))
+        {
+          builder.metadata().orchestra(value);
+        }
+        else if (isEqualIgnoringAsciiCase(name, "soloist"))
+        {
+          builder.metadata().soloist(value);
+        }
       }
     }
 
@@ -529,18 +560,25 @@ namespace ao::media::file::mp4
       {
         builder.metadata().conductor(value);
       }
-      else if (isEqualIgnoringAsciiCase(key, "ensemble") ||
-               (isEqualIgnoringAsciiCase(key, "orchestra") && builder.metadata().ensemble().empty()))
+      else if (isEqualIgnoringAsciiCase(key, "ensemble"))
       {
         builder.metadata().ensemble(value);
+      }
+      else if (isEqualIgnoringAsciiCase(key, "orchestra"))
+      {
+        builder.metadata().orchestra(value);
       }
       else if (isEqualIgnoringAsciiCase(key, "soloist"))
       {
         builder.metadata().soloist(value);
       }
-      else if (isEqualIgnoringAsciiCase(key, "work") || isEqualIgnoringAsciiCase(key, "grouping"))
+      else if (isEqualIgnoringAsciiCase(key, "work"))
       {
-        builder.metadata().work(value);
+        builder.metadata().work(detail::WorkSource::Work, value);
+      }
+      else if (isEqualIgnoringAsciiCase(key, "grouping"))
+      {
+        builder.metadata().work(detail::WorkSource::GroupingAlias, value);
       }
       else if (isEqualIgnoringAsciiCase(key, "movementname") || isEqualIgnoringAsciiCase(key, "movement_name") ||
                isEqualIgnoringAsciiCase(key, "mvnm"))

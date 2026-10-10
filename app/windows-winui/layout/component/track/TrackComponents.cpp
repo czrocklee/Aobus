@@ -331,19 +331,21 @@ namespace ao::winui::layout
     };
   } // namespace
 
-  void registerTrackComponents(ComponentRegistry& registry,
-                               async::Runtime& asyncRuntime,
-                               rt::ViewService& views,
-                               rt::WorkspaceService& workspace,
-                               rt::CompletionService& completion,
-                               rt::ResourceByteMemoryCache& resourceBytes,
-                               ThemeCoordinator& theme,
-                               TrackListController& trackList,
-                               uimodel::TrackPresentationCatalog& presentationCatalog,
-                               uimodel::ListPresentations& listPresentations,
-                               std::function<void(ListId, std::string)> createList,
-                               i18n::MessageCatalog textCatalog,
-                               std::function<void(std::string)> reportStatus)
+  void registerTrackComponents(
+    ComponentRegistry& registry,
+    async::Runtime& asyncRuntime,
+    rt::ViewService& views,
+    rt::WorkspaceService& workspace,
+    rt::CompletionService& completion,
+    rt::ResourceByteMemoryCache& resourceBytes,
+    ThemeCoordinator& theme,
+    TrackListController& trackList,
+    uimodel::TrackPresentationCatalog& presentationCatalog,
+    uimodel::ListPresentations& listPresentations,
+    std::function<void(ListId, std::string)> createList,
+    i18n::MessageCatalog textCatalog,
+    std::function<void(std::string)> reportStatus,
+    std::function<void(std::vector<TrackId>, std::bitset<library::kCreditKindCount>)> editCredits)
   {
     registry.registerComponent(
       "track.quickFilter",
@@ -372,8 +374,9 @@ namespace ao::winui::layout
       });
 
     registry.registerComponent("track.detail",
-                               [&workspace, textCatalog](LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-                               { return makeTrackDetail(ctx, node, workspace, textCatalog); });
+                               [&workspace, textCatalog, editCredits = std::move(editCredits)](
+                                 LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
+                               { return makeTrackDetail(ctx, node, workspace, textCatalog, editCredits); });
 
     registry.registerComponent(
       "track.coverArt",

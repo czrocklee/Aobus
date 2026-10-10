@@ -176,7 +176,7 @@ library:
     SECTION("Missing library section")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 )",
                 Error::Code::FormatRejected,
@@ -186,7 +186,7 @@ export_mode: full
     SECTION("Track missing URI")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -202,7 +202,7 @@ library:
     SECTION("Track empty URI")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -218,7 +218,7 @@ library:
     SECTION("Duplicate track ID")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -236,7 +236,7 @@ library:
     SECTION("Malformed UTF-8 track metadata")
     {
       auto yaml = std::string{R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -255,7 +255,7 @@ library:
     SECTION("Canonically duplicate custom metadata keys")
     {
       auto yaml = std::string{R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -276,7 +276,7 @@ library:
     SECTION("List missing ID")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -291,7 +291,7 @@ library:
     SECTION("List ID 0 (Reserved)")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -307,7 +307,7 @@ library:
     SECTION("Duplicate list ID")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -325,7 +325,7 @@ library:
     SECTION("List missing name")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -340,7 +340,7 @@ library:
     SECTION("A cover reference the table does not declare rejects the import")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -358,7 +358,7 @@ library:
     SECTION("A resource row no track references rejects the import")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources:
@@ -375,7 +375,7 @@ library:
     SECTION("Unknown export mode is rejected")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: mystery
 library:
   tracks: []
@@ -400,7 +400,7 @@ library:
     SECTION("Malformed track ID is rejected")
     {
       testError(R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -426,7 +426,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -445,7 +445,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 6
+version: 7
 export_mode: full
 library:
   resources: []
@@ -549,7 +549,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 6
+      yaml << R"(version: 7
 export_mode: full
 library:
   resources: []

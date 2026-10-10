@@ -6,11 +6,13 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/resource/ResourceBytes.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 
 #import <AppKit/AppKit.h>
 
 #include <cstddef>
 #include <optional>
+#include <vector>
 
 using AobusInspectorAction = void (^)(void);
 
@@ -27,6 +29,7 @@ using AobusInspectorAction = void (^)(void);
 @property (nonatomic, readonly) NSPanel* sheet;
 - (void)renderSelectionCount:(std::size_t)count
                          row:(std::optional<ao::rt::TrackRow> const&)row
+                     credits:(ao::uimodel::TrackCreditSections const&)credits
                    canReveal:(BOOL)canReveal;
 - (void)renderArtwork:(ao::rt::ResourceBytes const&)bytes;
 - (void)layoutForModern:(BOOL)modern;

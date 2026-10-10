@@ -4,6 +4,7 @@
 #include "track/TrackFieldUi.h"
 
 #include "track/TrackRowObject.h"
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/track/TrackAuthoring.h>
@@ -137,25 +138,16 @@ namespace ao::gtk
           .field = F::Conductor,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Conductor)->raw()}; },
-          .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Ensemble,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Ensemble)->raw()}; },
-          .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Soloist,
           .readRowText = +[](TrackRowObject const& row) -> std::string
           { return std::string{row.stringField(rt::TrackField::Soloist)->raw()}; },
-          .parseInlineEdit = uimodel::parseTextEditValue,
-          .readRowEditValue = readStringEditValue,
-          .applyRowEditValue = tryApplyStringEditValue,
         },
         {
           .field = F::Work,
@@ -172,6 +164,24 @@ namespace ao::gtk
           .parseInlineEdit = uimodel::parseTextEditValue,
           .readRowEditValue = readStringEditValue,
           .applyRowEditValue = tryApplyStringEditValue,
+        },
+        {
+          .field = F::RecordingDate,
+          .readRowText = +[](TrackRowObject const& row) -> std::string
+          { return library::formatRecordingDate(row.recordingDate()); },
+          .parseInlineEdit = uimodel::parseRecordingDateEditValue,
+          .readRowEditValue = +[](TrackRowObject const& row, rt::TrackField) -> TrackFieldEditValue
+          { return TrackFieldEditValue{row.recordingDate()}; },
+          .applyRowEditValue = +[](TrackRowObject& row, TrackFieldEditValue const& value, rt::TrackField) -> bool
+          {
+            if (auto const* date = std::get_if<library::RecordingDate>(&value); date != nullptr && date->isValid())
+            {
+              row.setRecordingDate(*date);
+              return true;
+            }
+
+            return false;
+          },
         },
         // ---- Metadata: number ----
         {

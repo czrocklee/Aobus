@@ -7,6 +7,7 @@
 #include <ao/AudioCodecText.h>
 #include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
@@ -360,6 +361,13 @@ namespace ao::uimodel
 
         return {};
 
+      case F::RecordingDate:
+        if (auto const* date = std::get_if<library::RecordingDate>(&rawValue); date != nullptr)
+        {
+          return library::formatRecordingDate(*date);
+        }
+
+        return {};
       case F::Quality: return {};
     }
 

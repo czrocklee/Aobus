@@ -6,12 +6,15 @@
 #include <ao/AudioCodec.h>
 #include <ao/PictureType.h>
 #include <ao/media/file/Visitor.h>
+#include <ao/utility/String.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ao::media::file::detail
 {
@@ -67,6 +70,13 @@ namespace ao::media::file::detail
     {
       visitor.picture(picture.type, picture.bytes);
     }
+
+    // The ordered whole-list emission borrows this content's storage and
+    // runs only once, after every scalar and property callback.
+    if (!credits.empty())
+    {
+      visitor.visitCredits(credits);
+    }
   }
 
   ContentBuilder ContentBuilder::makeEmpty()
@@ -101,12 +111,12 @@ namespace ao::media::file::detail
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::conductor(std::string_view value)
   {
-    return text(TextField::Conductor, value);
+    return credit(value, CreditKind::Conductor);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::ensemble(std::string_view value)
   {
-    return text(TextField::Ensemble, value);
+    return credit(value, CreditKind::Ensemble);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::genre(std::string_view value)
@@ -114,9 +124,22 @@ namespace ao::media::file::detail
     return text(TextField::Genre, value);
   }
 
-  ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::work(std::string_view value)
+  ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::work(WorkSource source, std::string_view value)
   {
-    return text(TextField::Work, value);
+    // Blank after trimming surrounding ASCII whitespace: absent, it neither
+    // wins nor blocks a lower-ranked source.
+    if (utility::trim(value).empty())
+    {
+      return *this;
+    }
+
+    if (!_content.optWorkSource || source >= *_content.optWorkSource)
+    {
+      _content.texts[static_cast<std::size_t>(TextField::Work)] = value;
+      _content.optWorkSource = source;
+    }
+
+    return *this;
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::movement(std::string_view value)
@@ -126,7 +149,39 @@ namespace ao::media::file::detail
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::soloist(std::string_view value)
   {
-    return text(TextField::Soloist, value);
+    return credit(value, CreditKind::Soloist);
+  }
+
+  ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::credit(std::string_view name,
+                                                                           CreditKind kind,
+                                                                           std::string_view role)
+  {
+    name = utility::trim(name);
+    role = utility::trim(role);
+
+    if (!name.empty())
+    {
+      _content.ownedStrings.emplace_back(name);
+      auto const ownedName = std::string_view{_content.ownedStrings.back()};
+      _content.ownedStrings.emplace_back(role);
+      _content.credits.push_back({.name = ownedName, .kind = kind, .role = _content.ownedStrings.back()});
+    }
+
+    return *this;
+  }
+
+  ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::orchestra(std::string_view value)
+  {
+    value = utility::trim(value);
+
+    if (!value.empty())
+    {
+      _content.ownedStrings.emplace_back(value);
+      _content.orchestraCandidates.push_back(
+        {.name = _content.ownedStrings.back(), .precedingCredits = _content.credits.size()});
+    }
+
+    return *this;
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::year(std::uint16_t value)
@@ -262,6 +317,31 @@ namespace ao::media::file::detail
 
   Content ContentBuilder::finish() &&
   {
+    if (!_content.orchestraCandidates.empty() &&
+        !std::ranges::any_of(_content.credits, [](auto const& entry) { return entry.kind == CreditKind::Ensemble; }))
+    {
+      auto merged = std::vector<CreditView>{};
+      merged.reserve(_content.credits.size() + _content.orchestraCandidates.size());
+      std::size_t candidateIndex = 0;
+
+      for (std::size_t creditIndex = 0; creditIndex <= _content.credits.size(); ++creditIndex)
+      {
+        while (candidateIndex < _content.orchestraCandidates.size() &&
+               _content.orchestraCandidates[candidateIndex].precedingCredits == creditIndex)
+        {
+          merged.push_back({.name = _content.orchestraCandidates[candidateIndex++].name, .kind = CreditKind::Ensemble});
+        }
+
+        if (creditIndex < _content.credits.size())
+        {
+          merged.push_back(_content.credits[creditIndex]);
+        }
+      }
+
+      _content.credits = std::move(merged);
+    }
+
+    _content.orchestraCandidates.clear();
     return std::move(_content);
   }
 } // namespace ao::media::file::detail

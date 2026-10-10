@@ -22,12 +22,9 @@ namespace ao::media::file
     Album,
     AlbumArtist,
     Composer,
-    Conductor,
-    Ensemble,
     Genre,
     Work,
     Movement,
-    Soloist,
   };
 
   enum class NumberField : std::uint8_t
@@ -39,6 +36,22 @@ namespace ao::media::file
     DiscTotal,
     MovementNumber,
     MovementTotal,
+  };
+
+  enum class CreditKind : std::uint8_t
+  {
+    Conductor,
+    Ensemble,
+    Soloist,
+    Performer,
+  };
+
+  // Source credit; trimmed, nonblank name and an optional descriptive role.
+  struct CreditView final
+  {
+    std::string_view name{};
+    CreditKind kind = CreditKind::Performer;
+    std::string_view role{};
   };
 
   class Visitor
@@ -61,5 +74,13 @@ namespace ao::media::file
     virtual void channels(Channels value) = 0;
     virtual void bitDepth(BitDepth value) = 0;
     virtual void picture(PictureType type, std::span<std::byte const> bytes) = 0;
+
+    /**
+     * Ordered whole-list credits, emitted synchronously at most once per visited
+     * content, only when the list is nonempty, after every other callback.
+     * The span and its strings borrow the reader's storage for the lifetime
+     * of the visited content; the default implementation ignores them.
+     */
+    virtual void visitCredits(std::span<CreditView const> /*credits*/) {}
   };
 } // namespace ao::media::file

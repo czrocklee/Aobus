@@ -12,6 +12,7 @@
 #include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
@@ -19,8 +20,10 @@
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
@@ -32,6 +35,7 @@
 #include <ao/yaml/RymlAdapter.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -39,6 +43,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -100,22 +105,6 @@ namespace ao::rt
          return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.composer(); }},
-      {.field = TrackField::Conductor,
-       .stringGetter =
-         [](auto const& view, auto& dictionary)
-       {
-         auto const id = view.classical().conductorId();
-         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
-       },
-       .baseStringGetter = [](auto const& base) { return base.conductor(); }},
-      {.field = TrackField::Ensemble,
-       .stringGetter =
-         [](auto const& view, auto& dictionary)
-       {
-         auto const id = view.classical().ensembleId();
-         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
-       },
-       .baseStringGetter = [](auto const& base) { return base.ensemble(); }},
       {.field = TrackField::Genre,
        .stringGetter =
          [](auto const& view, auto& dictionary)
@@ -128,7 +117,7 @@ namespace ao::rt
        .stringGetter =
          [](auto const& view, auto& dictionary)
        {
-         auto const id = view.classical().workId();
+         auto const id = view.work().workId();
          return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.work(); }},
@@ -136,18 +125,10 @@ namespace ao::rt
        .stringGetter =
          [](auto const& view, auto& dictionary)
        {
-         auto const id = view.classical().movementId();
+         auto const id = view.work().movementId();
          return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
        },
        .baseStringGetter = [](auto const& base) { return base.movement(); }},
-      {.field = TrackField::Soloist,
-       .stringGetter =
-         [](auto const& view, auto& dictionary)
-       {
-         auto const id = view.classical().soloistId();
-         return id != kInvalidDictionaryId ? dictionary.get(id) : std::string_view{};
-       },
-       .baseStringGetter = [](auto const& base) { return base.soloist(); }},
       {.field = TrackField::Year,
        .numberGetter = [](auto const& view) { return view.metadata().year(); },
        .baseNumberGetter = [](auto const& base) { return base.year(); }},
@@ -164,10 +145,10 @@ namespace ao::rt
        .numberGetter = [](auto const& view) { return view.metadata().discTotal(); },
        .baseNumberGetter = [](auto const& base) { return base.discTotal(); }},
       {.field = TrackField::MovementNumber,
-       .numberGetter = [](auto const& view) { return view.classical().movementNumber(); },
+       .numberGetter = [](auto const& view) { return view.work().movementNumber(); },
        .baseNumberGetter = [](auto const& base) { return base.movementNumber(); }},
       {.field = TrackField::MovementTotal,
-       .numberGetter = [](auto const& view) { return view.classical().movementTotal(); },
+       .numberGetter = [](auto const& view) { return view.work().movementTotal(); },
        .baseNumberGetter = [](auto const& base) { return base.movementTotal(); }},
     });
 
@@ -178,10 +159,77 @@ namespace ao::rt
       yaml::setValue(child, value);
     }
 
+    /// Whether a stored list and a delta baseline describe the same credits,
+    /// entry for entry. The baseline is admitted through the shared gate
+    /// before comparing, because stored dictionary text is admitted text and
+    /// a difference that only admission removes is not a real difference. An
+    /// unadmissible baseline compares as different, which only emits the
+    /// stored list.
+    bool hasSameCredits(library::PerformanceView const& performance,
+                        library::DictionaryStore const& dictionary,
+                        library::TrackBuilder::MetadataBuilder const& baseline)
+    {
+      auto baselineRes = library::normalizeCredits(baseline.credits());
+
+      if (!baselineRes || performance.credits().size() != baselineRes->size())
+      {
+        return false;
+      }
+
+      std::size_t index = 0;
+
+      for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+      {
+        auto const kind = static_cast<library::CreditKind>(kindIndex);
+
+        for (auto const& entry : performance.credits(kind))
+        {
+          auto const& baselineEntry = (*baselineRes)[index++];
+          auto const role = entry.roleId != kInvalidDictionaryId ? dictionary.get(entry.roleId) : std::string_view{};
+
+          if (kind != baselineEntry.kind || dictionary.get(entry.nameId) != baselineEntry.name ||
+              role != baselineEntry.role)
+          {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    }
+
+    void emitTrackCredits(ryml::NodeRef& node,
+                          library::PerformanceView const& performance,
+                          library::DictionaryStore const& dictionary)
+    {
+      auto creditsNode = node.append_child();
+      yaml::setKey(creditsNode, kCreditsMetadataKey);
+      creditsNode |= ryml::SEQ;
+
+      for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+      {
+        auto const kind = static_cast<library::CreditKind>(kindIndex);
+
+        for (auto const& entry : performance.credits(kind))
+        {
+          auto entryNode = creditsNode.append_child();
+          entryNode |= ryml::MAP;
+          appendString(entryNode, "name", dictionary.get(entry.nameId));
+          appendString(entryNode, "kind", library::creditKindToken(kind));
+
+          if (entry.roleId != kInvalidDictionaryId)
+          {
+            appendString(entryNode, "role", dictionary.get(entry.roleId));
+          }
+        }
+      }
+    }
+
     void emitTrackMetadata(ryml::NodeRef& node,
                            library::TrackView const& view,
                            library::DictionaryStore const& dictionary,
-                           std::optional<library::TrackBuilder> const& optBaseline)
+                           std::optional<library::TrackBuilder> const& optBaseline,
+                           ExportMode mode)
     {
       auto const optBaselineMetadata = optBaseline ? std::optional{optBaseline->metadata()} : std::nullopt;
       auto const hasBaseline = optBaselineMetadata.has_value();
@@ -210,6 +258,30 @@ namespace ao::rt
             node.append_child() << ryml::key(key) << current;
           }
         }
+      }
+
+      // The recording date and the Credits list are curated metadata, so
+      // every metadata-bearing mode records them, each at its own stored
+      // precision and order. An absent stored date that differs from a
+      // baseline date exports as the explicit empty clear form, which the
+      // portable grammar defines; no media reader populates a recording date
+      // today, so a delta baseline always carries an absent date and this
+      // clear branch is currently unreachable.
+      auto const performance = view.performance();
+
+      if (auto const date = performance.recordingDate();
+          hasBaseline ? (date != optBaselineMetadata->recordingDate()) : date.isPresent())
+      {
+        appendString(node, "recording-date", library::formatRecordingDate(date));
+      }
+
+      bool const emitCredits =
+        mode != ExportMode::Delta ||
+        (hasBaseline ? !hasSameCredits(performance, dictionary, *optBaselineMetadata) : !performance.credits().empty());
+
+      if (emitCredits)
+      {
+        emitTrackCredits(node, performance, dictionary);
       }
 
       if (auto const custom = view.customMetadata(); !custom.empty())
@@ -716,7 +788,7 @@ namespace ao::rt
 
     if (mode != ExportMode::ListOnly)
     {
-      emitTrackMetadata(trackNode, view, dictionary, optBaseline);
+      emitTrackMetadata(trackNode, view, dictionary, optBaseline, mode);
     }
 
     if (mode == ExportMode::Full)

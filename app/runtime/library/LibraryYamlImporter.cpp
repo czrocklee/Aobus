@@ -13,6 +13,7 @@
 #include <ao/Error.h>
 #include <ao/FileTimestamp.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/FileTimeConversion.h>
@@ -22,6 +23,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListWriter.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
@@ -293,12 +295,38 @@ namespace ao::rt
     constexpr auto kLibraryFields = std::to_array<std::string_view>({"resources", "tracks", "lists"});
     constexpr auto kResourceFields = std::to_array<std::string_view>({"digest", "length"});
     constexpr auto kTrackFields = std::to_array<std::string_view>({
-      "id",           "uri",         "title",       "artist",     "album",           "album-artist",   "genre",
-      "composer",     "conductor",   "ensemble",    "work",       "movement",        "soloist",        "year",
-      "track-number", "track-total", "disc-number", "disc-total", "movement-number", "movement-total", "custom",
-      "tags",         "covers",      "duration",    "bitrate",    "sample-rate",     "codec",          "channels",
-      "bit-depth",    "fileSize",    "mtime",
+      "id",
+      "uri",
+      "title",
+      "artist",
+      "album",
+      "album-artist",
+      "genre",
+      "composer",
+      "work",
+      "movement",
+      "year",
+      "track-number",
+      "track-total",
+      "disc-number",
+      "disc-total",
+      "movement-number",
+      "movement-total",
+      "recording-date",
+      kCreditsMetadataKey,
+      "custom",
+      "tags",
+      "covers",
+      "duration",
+      "bitrate",
+      "sample-rate",
+      "codec",
+      "channels",
+      "bit-depth",
+      "fileSize",
+      "mtime",
     });
+    constexpr auto kCreditFields = std::to_array<std::string_view>({"name", "kind", "role"});
     constexpr auto kCoverFields = std::to_array<std::string_view>({"type", "resource"});
     constexpr auto kListFields =
       std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "order"});
@@ -403,6 +431,105 @@ namespace ao::rt
       return {};
     }
 
+    /**
+     * @brief Decodes one portable `recording-date` scalar.
+     *
+     * The portable grammar adds exactly one form the strict core parser
+     * rejects: an explicit empty scalar is the clear form and yields the
+     * absence sentinel, so a document can clear a stored date. Present text
+     * stays strictly canonical, with no trimming.
+     */
+    Result<library::RecordingDate> decodePortableRecordingDate(std::string_view text)
+    {
+      if (text.empty())
+      {
+        return library::RecordingDate{};
+      }
+
+      return library::parseRecordingDate(text);
+    }
+
+    // Strings borrow the document tree through builder preparation. Use the
+    // same closed schema for preflight and overlay; admission owns canonical text.
+    Result<std::vector<library::CreditView>> readCreditEntries(ryml::ConstNodeRef const& creditsNode)
+    {
+      auto entries = std::vector<library::CreditView>{};
+
+      for (auto const& entryNode : creditsNode.children())
+      {
+        if (auto res = requireMap(entryNode, "Track record.credits[]"); !res)
+        {
+          return std::unexpected{res.error()};
+        }
+
+        if (auto res = rejectUnknownFields(entryNode, kCreditFields, "Track credit"); !res)
+        {
+          return std::unexpected{res.error()};
+        }
+
+        auto nameRes = requireScalarField(entryNode, "name", "Track credit");
+
+        if (!nameRes)
+        {
+          return std::unexpected{nameRes.error()};
+        }
+
+        auto kindRes = requireScalarField(entryNode, "kind", "Track credit");
+
+        if (!kindRes)
+        {
+          return std::unexpected{kindRes.error()};
+        }
+
+        auto const optKind = library::parseCreditKind(*kindRes);
+
+        if (!optKind)
+        {
+          return makeError(Error::Code::FormatRejected, std::format("Unknown credit kind '{}'", *kindRes));
+        }
+
+        auto entry = library::CreditView{.name = *nameRes, .kind = *optKind, .role = {}};
+
+        if (auto const roleNode = yaml::findChild(entryNode, "role"); roleNode.readable())
+        {
+          auto roleRes = requireScalar(roleNode, "Track credit.role");
+
+          if (!roleRes)
+          {
+            return std::unexpected{roleRes.error()};
+          }
+
+          entry.role = *roleRes;
+        }
+
+        entries.push_back(entry);
+      }
+
+      return entries;
+    }
+
+    Result<> validateTrackCredits(ryml::ConstNodeRef const& creditsNode)
+    {
+      if (auto res = requireSequence(creditsNode, "Track record.credits"); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      auto entriesRes = readCreditEntries(creditsNode);
+
+      if (!entriesRes)
+      {
+        return std::unexpected{entriesRes.error()};
+      }
+
+      if (auto normalizedRes = library::normalizeCredits(*entriesRes); !normalizedRes)
+      {
+        return yamlRepresentationError(normalizedRes.error(), "Track record.credits");
+      }
+
+      return {};
+    }
+
     Result<> validateTrackNestedSchema(ryml::ConstNodeRef const& trackNode)
     {
       if (auto const custom = yaml::findChild(trackNode, "custom"); custom.readable())
@@ -416,7 +543,15 @@ namespace ao::rt
 
         for (auto const& entry : custom.children())
         {
-          if (auto const key = yaml::keyView(entry); !keys.insert(key).second)
+          auto const key = yaml::keyView(entry);
+
+          if (isReservedCustomMetadataKey(key))
+          {
+            return makeError(
+              Error::Code::FormatRejected, std::format("Track record.custom contains reserved metadata key '{}'", key));
+          }
+
+          if (!keys.insert(key).second)
           {
             return makeError(
               Error::Code::FormatRejected, std::format("Track record.custom contains duplicate field '{}'", key));
@@ -433,6 +568,36 @@ namespace ao::rt
         if (auto parsedRes = parseTrackMtime(mtime); !parsedRes)
         {
           return std::unexpected{parsedRes.error()};
+        }
+      }
+
+      // Like mtime, the recording date and the whole Credits list are
+      // validated here, in the document's preflight: a noncanonical date or a
+      // name the shared admission gate rejects fails the payload before any
+      // durable import effects. The metadata overlay later reuses the same
+      // helpers to apply them.
+      if (auto const date = yaml::findChild(trackNode, "recording-date"); date.readable())
+      {
+        auto textRes = requireScalar(date, "Track record.recording-date");
+
+        if (!textRes)
+        {
+          return std::unexpected{textRes.error()};
+        }
+
+        if (auto parsedRes = decodePortableRecordingDate(*textRes); !parsedRes)
+        {
+          return makeError(Error::Code::FormatRejected,
+                           "Track record.recording-date must be an empty scalar or a canonical "
+                           "YYYY, YYYY-MM, or YYYY-MM-DD date");
+        }
+      }
+
+      if (auto const credits = yaml::findChild(trackNode, kCreditsMetadataKey); credits.readable())
+      {
+        if (auto res = validateTrackCredits(credits); !res)
+        {
+          return res;
         }
       }
 
@@ -1289,7 +1454,11 @@ namespace ao::rt
 
     if (*versionRes != kYamlFormatVersion)
     {
-      return makeError(Error::Code::FormatRejected, std::format("Unsupported YAML version {}", *versionRes));
+      return makeError(Error::Code::FormatRejected,
+                       std::format("Unsupported YAML version {} (current {}). No automatic conversion is provided; "
+                                   "keep this document and use a build supporting its version.",
+                                   *versionRes,
+                                   kYamlFormatVersion));
     }
 
     validated.version = *versionRes;
@@ -2130,19 +2299,18 @@ namespace ao::rt
           .album("")
           .albumArtist("")
           .composer("")
-          .conductor("")
-          .ensemble("")
           .genre("")
           .work("")
           .movement("")
-          .soloist("")
           .year(0)
           .trackNumber(0)
           .trackTotal(0)
           .discNumber(0)
           .discTotal(0)
           .movementNumber(0)
-          .movementTotal(0);
+          .movementTotal(0)
+          .recordingDate(library::RecordingDate{})
+          .credits(std::span<library::CreditView const>{});
         optBuilder->tags().clear();
         optBuilder->customMetadata().clear();
       }
@@ -2193,13 +2361,9 @@ namespace ao::rt
       {.field = rt::TrackField::AlbumArtist,
        .stringSetter = [](auto& metadata, auto value) { metadata.albumArtist(value); }},
       {.field = rt::TrackField::Composer, .stringSetter = [](auto& metadata, auto value) { metadata.composer(value); }},
-      {.field = rt::TrackField::Conductor,
-       .stringSetter = [](auto& metadata, auto value) { metadata.conductor(value); }},
-      {.field = rt::TrackField::Ensemble, .stringSetter = [](auto& metadata, auto value) { metadata.ensemble(value); }},
       {.field = rt::TrackField::Genre, .stringSetter = [](auto& metadata, auto value) { metadata.genre(value); }},
       {.field = rt::TrackField::Work, .stringSetter = [](auto& metadata, auto value) { metadata.work(value); }},
       {.field = rt::TrackField::Movement, .stringSetter = [](auto& metadata, auto value) { metadata.movement(value); }},
-      {.field = rt::TrackField::Soloist, .stringSetter = [](auto& metadata, auto value) { metadata.soloist(value); }},
       {.field = rt::TrackField::Year, .numberSetter = [](auto& metadata, auto value) { metadata.year(value); }},
       {.field = rt::TrackField::TrackNumber,
        .numberSetter = [](auto& metadata, auto value) { metadata.trackNumber(value); }},
@@ -2244,6 +2408,42 @@ namespace ao::rt
           map.numberSetter(builder.metadata(), *valueRes);
         }
       }
+    }
+
+    if (auto const dateNode = yaml::findChild(trackNode, "recording-date"); dateNode.readable())
+    {
+      auto textRes = requireScalarInFieldContext(dateNode, "Track record", "recording-date");
+
+      if (!textRes)
+      {
+        return std::unexpected{textRes.error()};
+      }
+
+      auto parsedRes = decodePortableRecordingDate(*textRes);
+
+      if (!parsedRes)
+      {
+        return makeError(Error::Code::FormatRejected,
+                         "Track record.recording-date must be an empty scalar or a canonical "
+                         "YYYY, YYYY-MM, or YYYY-MM-DD date");
+      }
+
+      // An empty scalar clears the date; an omitted key preserves it.
+      builder.metadata().recordingDate(*parsedRes);
+    }
+
+    if (auto const creditsNode = yaml::findChild(trackNode, kCreditsMetadataKey); creditsNode.readable())
+    {
+      auto entriesRes = readCreditEntries(creditsNode);
+
+      if (!entriesRes)
+      {
+        return std::unexpected{entriesRes.error()};
+      }
+
+      // The list replaces the builder's whole list; admission trims and
+      // normalizes each entry when the track is written.
+      builder.metadata().credits(*entriesRes);
     }
 
     return {};

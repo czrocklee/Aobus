@@ -154,11 +154,8 @@ namespace ao::query::test
       builder.metadata().album(spec.album);
       builder.metadata().albumArtist(spec.albumArtist);
       builder.metadata().composer(spec.composer);
-      builder.metadata().conductor(spec.conductor);
-      builder.metadata().ensemble(spec.ensemble);
       builder.metadata().work(spec.work);
       builder.metadata().movement(spec.movement);
-      builder.metadata().soloist(spec.soloist);
       builder.metadata().genre(spec.genre);
       builder.metadata().year(spec.year);
       builder.metadata().trackNumber(spec.trackNumber);
@@ -167,6 +164,8 @@ namespace ao::query::test
       builder.metadata().discTotal(spec.discTotal);
       builder.metadata().movementNumber(spec.movementNumber);
       builder.metadata().movementTotal(spec.movementTotal);
+      builder.metadata().recordingDate(spec.recordingDate);
+      builder.metadata().credits(spec.credits);
 
       builder.property().uri(spec.uri);
       builder.property().duration(spec.duration);

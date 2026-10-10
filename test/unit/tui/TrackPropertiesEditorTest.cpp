@@ -5,6 +5,7 @@
 
 #include "RenderTestSupport.h"
 #include "TrackPropertiesEditorTestSupport.h"
+#include <ao/library/RecordingDate.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/component/event.hpp>
@@ -465,6 +466,248 @@ namespace ao::tui::test
       REQUIRE(patch.metadata.optYear);
       CHECK(*patch.metadata.optYear == 0);
       CHECK_FALSE(patch.metadata.optTitle);
+    }
+  }
+
+  TEST_CASE("TrackPropertiesEditor - a recording date row edits and clears with its own precision",
+            "[tui][unit][editor]")
+  {
+    auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue", .year = 1959}});
+
+    SECTION("A typed year keeps year precision as a typed date value")
+    {
+      focusRow(editor, "Recording Date");
+      typeText(editor, "1981");
+
+      auto const patch = editor.buildPatch();
+
+      // The edit lands as the typed partial date, never as a string or the
+      // scalar year.
+      REQUIRE(patch.metadata.optRecordingDate);
+      CHECK(*patch.metadata.optRecordingDate == library::RecordingDate{.year = 1981});
+      CHECK(patch.metadata.optRecordingDate->month == 0);
+      CHECK(patch.metadata.optRecordingDate->day == 0);
+      CHECK_FALSE(patch.metadata.optYear);
+    }
+
+    SECTION("A typed month keeps month precision")
+    {
+      focusRow(editor, "Recording Date");
+      typeText(editor, "1981-05");
+
+      auto const patch = editor.buildPatch();
+
+      REQUIRE(patch.metadata.optRecordingDate);
+      CHECK(*patch.metadata.optRecordingDate == library::RecordingDate{.year = 1981, .month = 5});
+      CHECK(patch.metadata.optRecordingDate->day == 0);
+    }
+
+    SECTION("A typed complete date keeps day precision")
+    {
+      focusRow(editor, "Recording Date");
+      typeText(editor, "1981-05-12");
+
+      auto const patch = editor.buildPatch();
+
+      REQUIRE(patch.metadata.optRecordingDate);
+      CHECK(*patch.metadata.optRecordingDate == library::RecordingDate{.year = 1981, .month = 5, .day = 12});
+    }
+
+    SECTION("An invalid date blocks the draft behind its own hint")
+    {
+      focusRow(editor, "Recording Date");
+      typeText(editor, "1981-13");
+
+      REQUIRE(editor.isDirty());
+      CHECK_FALSE(editor.canApply());
+      auto const text = frame(editor);
+      CHECK(text.contains("Enter YYYY"));
+      CHECK_FALSE(text.contains("Whole number required"));
+
+      editor.tryHandleEvent(applyEvent());
+      CHECK(editor.takeRequest() == TrackEditorRequest::None);
+
+      // Removing the bad month restores a valid year-precision draft.
+      editor.tryHandleEvent(ftxui::Event::Backspace);
+      editor.tryHandleEvent(ftxui::Event::Backspace);
+      editor.tryHandleEvent(ftxui::Event::Backspace);
+
+      REQUIRE(editor.canApply());
+      auto const patch = editor.buildPatch();
+      REQUIRE(patch.metadata.optRecordingDate);
+      CHECK(*patch.metadata.optRecordingDate == library::RecordingDate{.year = 1981});
+    }
+
+    SECTION("An explicit clear writes the typed absence sentinel")
+    {
+      // Clear an existing date: clearing an already absent value is a no-op.
+      editor = makeEditor({TrackFixture{.title = "So What",
+                                        .album = "Kind of Blue",
+                                        .year = 1959,
+                                        .recordingDate = {.year = 1981, .month = 5, .day = 12}}});
+      focusRow(editor, "Recording Date");
+      editor.tryHandleEvent(clearEvent());
+
+      CHECK(editor.patchSummary() == TrackEditorPatchSummary{.fieldCount = 1, .clearCount = 1});
+
+      auto const patch = editor.buildPatch();
+
+      // Clearing a date writes the typed all-zero absence, not empty text.
+      REQUIRE(patch.metadata.optRecordingDate);
+      CHECK(*patch.metadata.optRecordingDate == library::RecordingDate{});
+      CHECK(patch.metadata.optRecordingDate->year == 0);
+      CHECK_FALSE(patch.metadata.optYear);
+    }
+  }
+
+  TEST_CASE("TrackPropertiesEditor - a mixed recording date clears and restores without touching year",
+            "[tui][unit][editor]")
+  {
+    auto editor = makeEditor({
+      TrackFixture{.title = "So What",
+                   .album = "Kind of Blue",
+                   .year = 1959,
+                   .recordingDate = {.year = 1981, .month = 5, .day = 12}},
+      TrackFixture{.title = "Blue in Green", .album = "Kind of Blue", .year = 1959},
+    });
+    focusRow(editor, "Recording Date");
+    auto const baseline = frame(editor);
+    CHECK(baseline.contains("<Multiple Values>"));
+    CHECK(baseline.contains("1959"));
+    CHECK_FALSE(baseline.contains("1981"));
+    CHECK_FALSE(editor.isDirty());
+    CHECK_FALSE(editor.buildPatch().metadata.optRecordingDate);
+    CHECK_FALSE(editor.buildPatch().metadata.optYear);
+
+    SECTION("an explicit clear writes absence and restore returns the mixed marker")
+    {
+      editor.tryHandleEvent(clearEvent());
+
+      CHECK(editor.isDirty());
+      CHECK(editor.patchSummary() == TrackEditorPatchSummary{.fieldCount = 1, .clearCount = 1});
+      CHECK(frame(editor).contains("Clear for all 2 tracks"));
+      auto const cleared = editor.buildPatch();
+      REQUIRE(cleared.metadata.optRecordingDate);
+      CHECK(*cleared.metadata.optRecordingDate == library::RecordingDate{});
+      CHECK_FALSE(cleared.metadata.optYear);
+
+      editor.tryHandleEvent(restoreEvent());
+
+      auto const restored = frame(editor);
+      CHECK_FALSE(editor.isDirty());
+      CHECK(restored.contains("<Multiple Values>"));
+      CHECK(restored.contains("1959"));
+      CHECK_FALSE(restored.contains("1981"));
+      CHECK_FALSE(restored.contains("Clear for all 2 tracks"));
+      CHECK_FALSE(editor.buildPatch().metadata.optRecordingDate);
+      CHECK_FALSE(editor.buildPatch().metadata.optYear);
+    }
+
+    SECTION("a typed replacement converges the date and restore returns the mixed marker")
+    {
+      typeText(editor, "1955-06");
+
+      auto const replaced = editor.buildPatch();
+      REQUIRE(replaced.metadata.optRecordingDate);
+      CHECK(*replaced.metadata.optRecordingDate == library::RecordingDate{.year = 1955, .month = 6});
+      CHECK_FALSE(replaced.metadata.optYear);
+      CHECK(frame(editor).contains("1955-06"));
+
+      editor.tryHandleEvent(restoreEvent());
+
+      CHECK_FALSE(editor.isDirty());
+      CHECK(frame(editor).contains("<Multiple Values>"));
+      CHECK_FALSE(frame(editor).contains("1955-06"));
+      CHECK_FALSE(editor.buildPatch().metadata.optRecordingDate);
+      CHECK_FALSE(editor.buildPatch().metadata.optYear);
+    }
+  }
+
+  TEST_CASE("TrackPropertiesEditor - a stale recording-date draft survives reload confirmation", "[tui][unit][editor]")
+  {
+    auto editor = makeEditor({
+      TrackFixture{.title = "So What",
+                   .album = "Kind of Blue",
+                   .year = 1959,
+                   .recordingDate = {.year = 1981, .month = 5, .day = 12}},
+      TrackFixture{.title = "Blue in Green", .album = "Kind of Blue", .year = 1959},
+    });
+    focusRow(editor, "Recording Date");
+    editor.tryHandleEvent(clearEvent());
+    editor.setStatus(TrackEditorStatus::Stale);
+
+    REQUIRE(editor.status() == TrackEditorStatus::Stale);
+    REQUIRE_FALSE(editor.canApply());
+    REQUIRE(frame(editor).contains("library changed"));
+    auto const cleared = editor.buildPatch();
+    REQUIRE(cleared.metadata.optRecordingDate);
+    REQUIRE(*cleared.metadata.optRecordingDate == library::RecordingDate{});
+    REQUIRE_FALSE(cleared.metadata.optYear);
+
+    SECTION("a declined reload keeps the clear and still blocks apply")
+    {
+      editor.tryHandleEvent(reloadEvent());
+      REQUIRE(editor.isConfirmingReload());
+      CHECK(frame(editor).contains("Reload and lose changes?"));
+      typeText(editor, "1981");
+      editor.tryHandleEvent(clearEvent());
+      editor.tryHandleEvent(applyEvent());
+      CHECK(editor.isConfirmingReload());
+      CHECK(editor.takeRequest() == TrackEditorRequest::None);
+      REQUIRE(editor.buildPatch().metadata.optRecordingDate);
+      CHECK(*editor.buildPatch().metadata.optRecordingDate == library::RecordingDate{});
+
+      editor.tryHandleEvent(ftxui::Event::Escape);
+
+      CHECK_FALSE(editor.isConfirmingReload());
+      CHECK(editor.status() == TrackEditorStatus::Stale);
+      CHECK_FALSE(editor.canApply());
+      editor.tryHandleEvent(applyEvent());
+      CHECK(editor.takeRequest() == TrackEditorRequest::None);
+      REQUIRE(editor.buildPatch().metadata.optRecordingDate);
+      CHECK(*editor.buildPatch().metadata.optRecordingDate == library::RecordingDate{});
+      CHECK_FALSE(editor.buildPatch().metadata.optYear);
+    }
+
+    SECTION("a confirmed reload requests reload and does not apply the clear")
+    {
+      editor.tryHandleEvent(reloadEvent());
+      editor.tryHandleEvent(ftxui::Event::Return);
+
+      CHECK(editor.takeRequest() == TrackEditorRequest::Reload);
+      CHECK(editor.takeRequest() == TrackEditorRequest::None);
+      CHECK_FALSE(editor.isConfirmingReload());
+      REQUIRE(editor.buildPatch().metadata.optRecordingDate);
+      CHECK(*editor.buildPatch().metadata.optRecordingDate == library::RecordingDate{});
+      CHECK_FALSE(editor.buildPatch().metadata.optYear);
+    }
+
+    SECTION("restore returns the mixed marker and stale still blocks a later date")
+    {
+      editor.tryHandleEvent(reloadEvent());
+      REQUIRE(editor.isConfirmingReload());
+      editor.tryHandleEvent(ftxui::Event::Escape);
+      editor.tryHandleEvent(restoreEvent());
+
+      CHECK_FALSE(editor.isDirty());
+      CHECK(editor.status() == TrackEditorStatus::Stale);
+      CHECK_FALSE(editor.canApply());
+      auto const restored = frame(editor);
+      CHECK(restored.contains("<Multiple Values>"));
+      CHECK(restored.contains("1959"));
+      CHECK_FALSE(restored.contains("1981"));
+      CHECK_FALSE(editor.buildPatch().metadata.optRecordingDate);
+
+      typeText(editor, "1981");
+
+      CHECK(editor.isDirty());
+      CHECK_FALSE(editor.canApply());
+      editor.tryHandleEvent(applyEvent());
+      CHECK(editor.takeRequest() == TrackEditorRequest::None);
+      auto const typed = editor.buildPatch();
+      REQUIRE(typed.metadata.optRecordingDate);
+      CHECK(*typed.metadata.optRecordingDate == library::RecordingDate{.year = 1981});
+      CHECK_FALSE(typed.metadata.optYear);
     }
   }
 

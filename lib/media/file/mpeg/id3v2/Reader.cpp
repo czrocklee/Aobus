@@ -8,6 +8,7 @@
 #include "Frame.h"
 #include "Layout.h"
 #include <ao/PictureType.h>
+#include <ao/media/file/Visitor.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/String.h>
 
@@ -157,8 +158,12 @@ namespace ao::media::file::mpeg::id3v2
       }
     }
 
-    template<TextSetter Setter>
-    void handleText(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
+    // Decodes a text frame and applies each of its values in order.
+    template<typename Apply>
+    void forEachDecodedTextValue(detail::ContentBuilder& builder,
+                                 std::span<std::byte const> content,
+                                 std::uint8_t version,
+                                 Apply apply)
     {
       auto convertedStorage = std::string{};
 
@@ -167,16 +172,89 @@ namespace ao::media::file::mpeg::id3v2
         // Own the storage once before splitting so every value segment stays stable.
         auto const stableText = optText->requiresOwnership ? builder.own(std::move(convertedStorage)) : optText->value;
 
-        forEachTextValue(stableText,
-                         version,
-                         [&](std::string_view value)
-                         {
-                           if (!value.empty())
-                           {
-                             (builder.metadata().*Setter)(value);
-                           }
-                         });
+        forEachTextValue(stableText, version, apply);
       }
+    }
+
+    template<TextSetter Setter>
+    void handleText(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
+    {
+      forEachDecodedTextValue(builder,
+                              content,
+                              version,
+                              [&](std::string_view value)
+                              {
+                                if (!value.empty())
+                                {
+                                  (builder.metadata().*Setter)(value);
+                                }
+                              });
+    }
+
+    // Work and grouping frames share the scalar work slot; see WorkSource ranks.
+    template<detail::WorkSource Source>
+    void handleWorkText(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
+    {
+      forEachDecodedTextValue(
+        builder, content, version, [&](std::string_view value) { builder.metadata().work(Source, value); });
+    }
+
+    // Only TMCL's musician position is a comma-delimited artist list. Pairing
+    // already supplied its trimmed instrument; blanks contribute no entry.
+    void appendTmclCredits(detail::ContentBuilder& builder, std::string_view role, std::string_view names)
+    {
+      std::size_t offset = 0;
+
+      while (offset <= names.size())
+      {
+        auto const commaOffset = names.find(',', offset);
+        auto const nameLength = commaOffset == std::string_view::npos ? std::string_view::npos : commaOffset - offset;
+        auto const name = utility::trim(names.substr(offset, nameLength));
+
+        if (!name.empty())
+        {
+          builder.metadata().credit(name, CreditKind::Performer, role);
+        }
+
+        if (commaOffset == std::string_view::npos)
+        {
+          break;
+        }
+
+        offset = commaOffset + 1;
+      }
+    }
+
+    // TMCL (v2.4 only) alternates NUL-separated instrument and musician
+    // strings; the standard allows a comma-delimited artist list in the
+    // musician position, including the ambiguity of commas inside a person's name.
+    // Interior empty values retain their positions. Trailing empty values
+    // cannot contribute a name, so the shared decoder may strip them.
+    // TIPL stays unsupported.
+    void handleTmclCredits(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
+    {
+      if (version != kId3v24MajorVersion)
+      {
+        return;
+      }
+
+      // An engaged empty role preserves its position; an odd final role is ignored.
+      auto optRole = std::optional<std::string_view>{};
+      forEachDecodedTextValue(builder,
+                              content,
+                              version,
+                              [&](std::string_view value)
+                              {
+                                if (!optRole)
+                                {
+                                  optRole = utility::trim(value);
+                                }
+                                else
+                                {
+                                  appendTmclCredits(builder, *optRole, value);
+                                  optRole.reset();
+                                }
+                              });
     }
 
     void handleYear(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
@@ -330,19 +408,27 @@ namespace ao::media::file::mpeg::id3v2
       auto const key = stableText.substr(0, nullOffset);
       auto const valueText = stableText.substr(nullOffset + 1);
       auto setter = TextSetter{};
+      auto optWorkSource = std::optional<detail::WorkSource>{};
 
-      if (isEqualIgnoringAsciiCase(key, "work") || isEqualIgnoringAsciiCase(key, "grouping"))
+      if (isEqualIgnoringAsciiCase(key, "work"))
       {
-        setter = &detail::ContentBuilder::MetadataBuilder::work;
+        optWorkSource = detail::WorkSource::Work;
+      }
+      else if (isEqualIgnoringAsciiCase(key, "grouping"))
+      {
+        optWorkSource = detail::WorkSource::GroupingAlias;
       }
       else if (isEqualIgnoringAsciiCase(key, "conductor"))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::conductor;
       }
-      else if (isEqualIgnoringAsciiCase(key, "ensemble") ||
-               (isEqualIgnoringAsciiCase(key, "orchestra") && builder.metadata().ensemble().empty()))
+      else if (isEqualIgnoringAsciiCase(key, "ensemble"))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::ensemble;
+      }
+      else if (isEqualIgnoringAsciiCase(key, "orchestra"))
+      {
+        setter = &detail::ContentBuilder::MetadataBuilder::orchestra;
       }
       else if (isEqualIgnoringAsciiCase(key, "soloist"))
       {
@@ -373,7 +459,13 @@ namespace ao::media::file::mpeg::id3v2
                          });
       }
 
-      if (setter != nullptr)
+      // Work and grouping admit through the rank-aware setter.
+      if (optWorkSource)
+      {
+        forEachTextValue(
+          valueText, version, [&](std::string_view value) { builder.metadata().work(*optWorkSource, value); });
+      }
+      else if (setter != nullptr)
       {
         forEachTextValue(valueText,
                          version,

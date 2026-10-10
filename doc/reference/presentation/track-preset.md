@@ -27,9 +27,9 @@ UIModel joins those values with `builtinTrackPresentation` over `MessageCatalog`
 | 6 | `performers` | Track-artist groups. |
 | 7 | `genres` | Genre groups with album-artist discography order. |
 | 8 | `years` | Year groups with album-artist discography order. |
-| 9 | `classical-composers` | Composer groups with Work and Movement columns. |
-| 10 | `classical-conductors` | Conductor groups with Work, Composer, Ensemble, and Movement columns. |
-| 11 | `classical-works` | Work groups with Movement rows. |
+| 9 | `classical-composers` | Composer groups with Work, Movement, and Recording Date columns. |
+| 10 | `classical-conductors` | Conductor groups with Work, Composer, Ensemble, Movement, and Recording Date columns. |
+| 11 | `classical-works` | Work groups with Movement rows and Recording Date visible. |
 | 12 | `tagging` | Flat curation fields with raw disc/track numbers and tags. |
 | 13 | `technical` | Flat technical summary, file size, and path. |
 
@@ -58,7 +58,7 @@ Labels and descriptions may evolve only with matching UIModel catalog tests and 
 
 ## Test authority
 
-- [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks most established ids and preset shapes; `classical-conductors` currently has neither an id-presence check nor a focused shape assertion.
+- [`TrackPresentationTest.cpp`](../../../test/unit/runtime/TrackPresentationTest.cpp) locks established ids and preset shapes; [`TrackRecordingDateSortTest.cpp`](../../../test/unit/runtime/projection/TrackRecordingDateSortTest.cpp) locks all three classical date-aware presets and absence ordering.
 - [`PresentationTextFeaturesTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp) locks text coverage; UIModel and frontend presentation tests lock selection and rendering adaptation.
 
 ## Related documents

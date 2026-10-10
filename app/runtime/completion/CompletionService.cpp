@@ -5,6 +5,7 @@
 
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -16,6 +17,7 @@
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
+#include <boost/unordered/unordered_flat_set.hpp>
 
 #include <algorithm>
 #include <array>
@@ -23,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -70,6 +73,54 @@ namespace ao::rt
       if (id != kInvalidDictionaryId)
       {
         ++frequencies[id.raw()];
+      }
+    }
+
+    struct CreditDictionaryIds final
+    {
+      boost::unordered_flat_set<std::uint32_t> names;
+      boost::unordered_flat_set<std::uint32_t> roles;
+      boost::unordered_flat_set<std::uint32_t> categoryNames;
+    };
+
+    template<typename CountsForKind>
+    void countTrackCredits(library::PerformanceView const& performance,
+                           DictionaryCounts& nameCounts,
+                           DictionaryCounts& roleCounts,
+                           CreditDictionaryIds& ids,
+                           CountsForKind countsForKind)
+    {
+      ids.names.clear();
+      ids.roles.clear();
+
+      for (auto const kind : {library::CreditKind::Conductor,
+                              library::CreditKind::Ensemble,
+                              library::CreditKind::Soloist,
+                              library::CreditKind::Performer})
+      {
+        ids.categoryNames.clear();
+
+        for (auto const& entry : performance.credits(kind))
+        {
+          ids.names.insert(entry.nameId.raw());
+          ids.roles.insert(entry.roleId.raw());
+          ids.categoryNames.insert(entry.nameId.raw());
+        }
+
+        for (auto const rawId : ids.categoryNames)
+        {
+          countDictionaryId(std::invoke(countsForKind, kind), DictionaryId{rawId});
+        }
+      }
+
+      for (auto const rawId : ids.names)
+      {
+        countDictionaryId(nameCounts, DictionaryId{rawId});
+      }
+
+      for (auto const rawId : ids.roles)
+      {
+        countDictionaryId(roleCounts, DictionaryId{rawId});
       }
     }
 
@@ -160,7 +211,8 @@ namespace ao::rt
         auto const field = fields[index];
         auto const optQueryField = trackFieldQueryField(field);
         auto const precedingFields = fields.first(index);
-        AO_INVARIANT(optQueryField && (field == TrackField::Title || query::isDictionaryField(*optQueryField)));
+        AO_INVARIANT(optQueryField && (field == TrackField::Title || query::isDictionaryField(*optQueryField) ||
+                                       query::isCreditField(*optQueryField)));
         AO_INVARIANT(std::ranges::find(precedingFields, field) == precedingFields.end());
       }
     }
@@ -200,28 +252,12 @@ namespace ao::rt
 
   std::span<VocabularyEntry const> CompletionService::tags()
   {
-    requireOwnerThread();
-    ensureSnapshot();
-
-    if (!_tagsReady)
-    {
-      materializeTags();
-    }
-
-    return _tags;
+    return vocabularyEntries(Vocabulary::Tags);
   }
 
   std::span<VocabularyEntry const> CompletionService::customKeys()
   {
-    requireOwnerThread();
-    ensureSnapshot();
-
-    if (!_customKeysReady)
-    {
-      materializeCustomKeys();
-    }
-
-    return _customKeys;
+    return vocabularyEntries(Vocabulary::CustomKeys);
   }
 
   std::span<VocabularyEntry const> CompletionService::valuesFor(TrackField field)
@@ -236,6 +272,11 @@ namespace ao::rt
       return kEmpty;
     }
 
+    if (auto const optVocabulary = categoryVocabulary(field); optVocabulary)
+    {
+      return vocabularyEntries(*optVocabulary);
+    }
+
     ensureSnapshot();
 
     if (!trackFieldArrayAt(_valuesReady, field))
@@ -244,6 +285,78 @@ namespace ao::rt
     }
 
     return trackFieldArrayAt(_values, field);
+  }
+
+  std::span<VocabularyEntry const> CompletionService::creditNames()
+  {
+    return vocabularyEntries(Vocabulary::CreditNames);
+  }
+
+  std::span<VocabularyEntry const> CompletionService::creditNames(library::CreditKind kind)
+  {
+    return vocabularyEntries(creditVocabulary(kind));
+  }
+
+  std::span<VocabularyEntry const> CompletionService::creditRoles()
+  {
+    return vocabularyEntries(Vocabulary::CreditRoles);
+  }
+
+  CompletionService::Vocabulary CompletionService::creditVocabulary(library::CreditKind kind)
+  {
+    switch (kind)
+    {
+      case library::CreditKind::Conductor: return Vocabulary::ConductorNames;
+      case library::CreditKind::Ensemble: return Vocabulary::EnsembleNames;
+      case library::CreditKind::Soloist: return Vocabulary::SoloistNames;
+      case library::CreditKind::Performer: return Vocabulary::PerformerNames;
+    }
+
+    AO_FATAL("Invalid credit completion kind");
+  }
+
+  std::optional<CompletionService::Vocabulary> CompletionService::categoryVocabulary(TrackField field)
+  {
+    if (auto const optKind = creditKindForTrackField(field); optKind)
+    {
+      return creditVocabulary(*optKind);
+    }
+
+    return std::nullopt;
+  }
+
+  CompletionService::VocabularyCache& CompletionService::vocabularyCache(Vocabulary vocabulary)
+  {
+    return _vocabularies[static_cast<std::size_t>(vocabulary)];
+  }
+
+  std::span<VocabularyEntry const> CompletionService::vocabularyEntries(Vocabulary vocabulary)
+  {
+    requireOwnerThread();
+    ensureSnapshot();
+    auto& cache = vocabularyCache(vocabulary);
+
+    if (!cache.ready)
+    {
+      cache.entries = sortedDictionaryVocabulary(cache.frequencies,
+                                                 _library.dictionary(),
+                                                 _textOrderingPolicy,
+                                                 [this](std::size_t aliasIndex, std::string_view text)
+                                                 { return aliasesForDictionary(aliasIndex, text); });
+      cache.ready = true;
+    }
+
+    return cache.entries;
+  }
+
+  std::span<CompletionService::DictionaryFrequency const> CompletionService::fieldFrequencies(TrackField field)
+  {
+    if (auto const optVocabulary = categoryVocabulary(field); optVocabulary)
+    {
+      return vocabularyCache(*optVocabulary).frequencies;
+    }
+
+    return trackFieldArrayAt(_valueFrequencies, field);
   }
 
   std::span<VocabularyEntry const> CompletionService::aggregateValues(TrackValueVocabularySpec spec)
@@ -302,10 +415,16 @@ namespace ao::rt
     auto titleCounts = OwnedValueFrequencies{};
     // The validated store guarantees matching hot/cold counts; reserve for the first build too.
     titleCounts.reserve(reader.entryCount());
-    auto tagCounts = DictionaryCounts{};
-    tagCounts.reserve(_tagFrequencies.size());
-    auto customKeyCounts = DictionaryCounts{};
-    customKeyCounts.reserve(_customKeyFrequencies.size());
+    auto vocabularyCounts = std::array<DictionaryCounts, static_cast<std::size_t>(Vocabulary::Count)>{};
+
+    for (std::size_t index = 0; index < vocabularyCounts.size(); ++index)
+    {
+      vocabularyCounts[index].reserve(_vocabularies[index].frequencies.size());
+    }
+
+    auto const countsFor = [&](Vocabulary vocabulary) -> DictionaryCounts&
+    { return vocabularyCounts[static_cast<std::size_t>(vocabulary)]; };
+    auto creditIds = CreditDictionaryIds{};
     auto valueCounts = std::array<DictionaryCounts, kTrackFieldCount>{};
     auto fieldSources = std::vector<FieldSource>{};
 
@@ -336,13 +455,20 @@ namespace ao::rt
 
       for (auto const tagId : view.tags())
       {
-        countDictionaryId(tagCounts, tagId);
+        countDictionaryId(countsFor(Vocabulary::Tags), tagId);
       }
 
       for (auto const dictionaryId : view.customMetadata() | std::views::keys)
       {
-        countDictionaryId(customKeyCounts, dictionaryId);
+        countDictionaryId(countsFor(Vocabulary::CustomKeys), dictionaryId);
       }
+
+      countTrackCredits(view.performance(),
+                        countsFor(Vocabulary::CreditNames),
+                        countsFor(Vocabulary::CreditRoles),
+                        creditIds,
+                        [&](library::CreditKind kind) -> DictionaryCounts&
+                        { return countsFor(creditVocabulary(kind)); });
     }
 
     auto compress = [](DictionaryCounts const& counts)
@@ -374,8 +500,11 @@ namespace ao::rt
     }
 
     // Retire every span borrower before replacing the snapshot-owned alias records.
-    _tags.clear();
-    _customKeys.clear();
+    for (auto& cache : _vocabularies)
+    {
+      cache.entries.clear();
+    }
+
     _aggregateValues.clear();
 
     for (auto& values : _values)
@@ -384,71 +513,62 @@ namespace ao::rt
     }
 
     _titleFrequencies = std::move(titleFrequencies);
-    _tagFrequencies = compress(tagCounts);
-    _customKeyFrequencies = compress(customKeyCounts);
+
+    for (std::size_t index = 0; index < vocabularyCounts.size(); ++index)
+    {
+      _vocabularies[index].frequencies = compress(vocabularyCounts[index]);
+      _vocabularies[index].ready = false;
+    }
+
     _valueFrequencies = std::move(valueFrequencies);
 
-    if (_completionAliasPolicy != nullptr)
-    {
-      std::size_t entryCount = _tagFrequencies.size() + _customKeyFrequencies.size();
+    _aggregateValuesReady = false;
+    _valuesReady.fill(false);
 
-      for (auto const source : fieldSources)
-      {
-        entryCount += trackFieldArrayAt(_valueFrequencies, source.field).size();
-      }
-
-      auto aliasIndices = boost::unordered_flat_map<std::uint32_t, std::uint32_t>{};
-      aliasIndices.reserve(entryCount);
-      auto collectAliases = [&](std::span<DictionaryFrequency> const frequencies)
-      {
-        for (auto& entry : frequencies)
-        {
-          entry.aliasIndex =
-            aliasIndices.try_emplace(entry.id.raw(), static_cast<std::uint32_t>(aliasIndices.size())).first->second;
-        }
-      };
-      collectAliases(_tagFrequencies);
-      collectAliases(_customKeyFrequencies);
-
-      for (auto const source : fieldSources)
-      {
-        collectAliases(trackFieldArrayAt(_valueFrequencies, source.field));
-      }
-
-      _dictionaryAliases = std::vector<AliasRecord>(aliasIndices.size());
-      _titleAliases = std::vector<AliasRecord>(_titleFrequencies.size());
-    }
-    else
+    if (_completionAliasPolicy == nullptr)
     {
       _dictionaryAliases = std::vector<AliasRecord>{};
       _titleAliases = std::vector<AliasRecord>{};
+      _snapshotDirty = false;
+      return;
     }
 
-    _tagsReady = false;
-    _customKeysReady = false;
-    _aggregateValuesReady = false;
-    _valuesReady.fill(false);
+    std::size_t entryCount = 0;
+
+    for (auto const& cache : _vocabularies)
+    {
+      entryCount += cache.frequencies.size();
+    }
+
+    for (auto const source : fieldSources)
+    {
+      entryCount += trackFieldArrayAt(_valueFrequencies, source.field).size();
+    }
+
+    auto aliasIndices = boost::unordered_flat_map<std::uint32_t, std::uint32_t>{};
+    aliasIndices.reserve(entryCount);
+    auto collectAliases = [&](std::span<DictionaryFrequency> const frequencies)
+    {
+      for (auto& entry : frequencies)
+      {
+        entry.aliasIndex =
+          aliasIndices.try_emplace(entry.id.raw(), static_cast<std::uint32_t>(aliasIndices.size())).first->second;
+      }
+    };
+
+    for (auto& cache : _vocabularies)
+    {
+      collectAliases(cache.frequencies);
+    }
+
+    for (auto const source : fieldSources)
+    {
+      collectAliases(trackFieldArrayAt(_valueFrequencies, source.field));
+    }
+
+    _dictionaryAliases = std::vector<AliasRecord>(aliasIndices.size());
+    _titleAliases = std::vector<AliasRecord>(_titleFrequencies.size());
     _snapshotDirty = false;
-  }
-
-  void CompletionService::materializeTags()
-  {
-    _tags = sortedDictionaryVocabulary(_tagFrequencies,
-                                       _library.dictionary(),
-                                       _textOrderingPolicy,
-                                       [this](std::size_t const aliasIndex, std::string_view const text)
-                                       { return aliasesForDictionary(aliasIndex, text); });
-    _tagsReady = true;
-  }
-
-  void CompletionService::materializeCustomKeys()
-  {
-    _customKeys = sortedDictionaryVocabulary(_customKeyFrequencies,
-                                             _library.dictionary(),
-                                             _textOrderingPolicy,
-                                             [this](std::size_t const aliasIndex, std::string_view const text)
-                                             { return aliasesForDictionary(aliasIndex, text); });
-    _customKeysReady = true;
   }
 
   void CompletionService::materializeValues(TrackField field)
@@ -531,12 +651,12 @@ namespace ao::rt
     using OwnedAggregateValues =
       boost::unordered_flat_map<std::string, AggregateValue, TransparentStringHash, std::equal_to<>>;
 
-    std::size_t entryCount = _aggregateIncludesTags ? _tagFrequencies.size() : 0;
+    auto const& tagFrequencies = vocabularyCache(Vocabulary::Tags).frequencies;
+    std::size_t entryCount = _aggregateIncludesTags ? tagFrequencies.size() : 0;
 
     for (auto const field : _aggregateFields)
     {
-      entryCount +=
-        field == TrackField::Title ? _titleFrequencies.size() : trackFieldArrayAt(_valueFrequencies, field).size();
+      entryCount += field == TrackField::Title ? _titleFrequencies.size() : fieldFrequencies(field).size();
     }
 
     auto counts = OwnedAggregateValues{};
@@ -579,7 +699,7 @@ namespace ao::rt
         continue;
       }
 
-      for (auto const& entry : trackFieldArrayAt(_valueFrequencies, field))
+      for (auto const& entry : fieldFrequencies(field))
       {
         addAggregateValue(dictionary.getOrDefault(entry.id),
                           entry.frequency,
@@ -589,7 +709,7 @@ namespace ao::rt
 
     if (_aggregateIncludesTags)
     {
-      for (auto const& entry : _tagFrequencies)
+      for (auto const& entry : tagFrequencies)
       {
         addAggregateValue(dictionary.getOrDefault(entry.id),
                           entry.frequency,
@@ -618,9 +738,13 @@ namespace ao::rt
     requireOwnerThread();
     _updatedTextOrderingPolicyPtr = std::move(policyPtr);
     _textOrderingPolicy = _updatedTextOrderingPolicyPtr.get();
+
     // Preserve frequencies and aliases; only materialized ordering is stale.
-    _tagsReady = false;
-    _customKeysReady = false;
+    for (auto& cache : _vocabularies)
+    {
+      cache.ready = false;
+    }
+
     _aggregateValuesReady = false;
     _valuesReady.fill(false);
   }

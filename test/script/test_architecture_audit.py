@@ -145,6 +145,49 @@ class ArchitectureAuditTest(unittest.TestCase):
             (source_root / "app/uimodel/Documented.h").write_text(
                 "// @import AppKit;\n/*\n@import Foundation;\n*/\n", encoding="utf-8"
             )
+            core_value_includes = (
+                "#include <ao/library/RecordingDate.h>\n"
+                '#include "ao/library/RecordingDate.h"\n'
+                "#include <ao/library/Credits.h>\n"
+                '#include "ao/library/Credits.h"\n'
+            )
+            for relative_file in ("app/include/ao/uimodel/CoreValues.h", "app/uimodel/CoreValues.cpp"):
+                (source_root / relative_file).write_text(core_value_includes, encoding="utf-8")
+
+            uimodel_core_rejections = {
+                "MusicLibrary": "#include <ao/library/MusicLibrary.h>\n",
+                "TrackView": '#include "ao/library/TrackView.h"\n',
+                "TrackBuilder": "#include <ao/library/TrackBuilder.h>\n",
+                "ListStore": '#include "ao/library/ListStore.h"\n',
+                "ResourceStore": "#include <ao/library/ResourceStore.h>\n",
+                "DictionaryStore": '#include "ao/library/DictionaryStore.h"\n',
+                "FileManifestStore": "#include <ao/library/FileManifestStore.h>\n",
+                "DateSuffix": "#include <ao/library/RecordingDate.hpp>\n",
+                "DateExtension": '#include "ao/library/RecordingDate.h.extra"\n',
+                "DateTraversal": "#include <ao/library/RecordingDate.h/../MusicLibrary.h>\n",
+                "RetiredMusicians": "#include <ao/library/Musicians.h>\n",
+                "CreditsPrefix": '#include "ao/library/CreditsExtra.h"\n',
+                "CreditsChild": "#include <ao/library/Credits.h/TrackView.h>\n",
+                "CreditsDetail": '#include "ao/library/detail/Credits.h"\n',
+                "LibraryTraversal": "#include <ao/library/../lmdb/Transaction.h>\n",
+                "Lmdb": '#include "ao/lmdb/Transaction.h"\n',
+                "Player": "#include <ao/audio/Player.h>\n",
+                "Backend": '#include "ao/audio/Backend.h"\n',
+                "Engine": "#include <ao/audio/Engine.h>\n",
+                "AudioBackend": '#include "ao/audio/backend/Backend.h"\n',
+                "AudioDetail": "#include <ao/audio/detail/Control.h>\n",
+                "DateDelimiter": '#include <ao/library/RecordingDate.h"\n',
+                "CreditsDelimiter": '#include "ao/library/Credits.h>\n',
+                "WriteTransaction": "ao::library::WriteTransaction& transaction;\n",
+                "WritableLibrary": "ao::library::WritableMusicLibrary& library;\n",
+            }
+            # Each file starts with all four allowed forms: filtering them must
+            # not swallow a later forbidden include or write-authority reference.
+            for name, forbidden_source in uimodel_core_rejections.items():
+                (source_root / f"app/uimodel/CoreValuesThen{name}.cpp").write_text(
+                    core_value_includes + "\n" + forbidden_source, encoding="utf-8"
+                )
+
             (source_root / "app/macos-appkit/Violation.mm").write_text(
                 "#include <ao/rt/CoreRuntime.h>\n#include <ao/yaml/Reflect.h>\n"
                 'PlaybackTransport* transport;\nauto database = "data.mdb";\n',
@@ -167,7 +210,11 @@ class ArchitectureAuditTest(unittest.TestCase):
 
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        self.assertIn("Application architecture audit found 21 violation", output)
+        self.assertIn(f"Application architecture audit found {21 + len(uimodel_core_rejections)} violation", output)
+        for relative_file in ("app/include/ao/uimodel/CoreValues.h", "app/uimodel/CoreValues.cpp"):
+            self.assertNotIn(relative_file, output)
+        for name in uimodel_core_rejections:
+            self.assertIn(f"uimodel_core: app/uimodel/CoreValuesThen{name}.cpp", output)
         self.assertIn("system_media_frontend: app/systemmedia/Gui.cpp", output)
         self.assertIn("system_media_frontend: app/systemmedia/Umbrella.cpp", output)
         self.assertIn("system_media_frontend: app/systemmedia/GdkUmbrella.mm", output)

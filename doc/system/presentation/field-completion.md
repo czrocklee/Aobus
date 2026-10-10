@@ -5,7 +5,7 @@ id: presentation.field-completion
 
 ## Scope
 
-This specification defines live library vocabularies, their use while editing a single metadata field, and the aggregate vocabulary used by Quick-filter completion.
+This specification defines live library vocabularies, their use while editing scalar metadata or scoped Credits, and the aggregate vocabulary used by Quick-filter completion.
 It also owns the shared cache behavior consumed by query-value completion.
 
 Query cursor analysis, operators, and query-string insertion belong to [query expression completion](../query/expression-completion.md).
@@ -20,7 +20,7 @@ This contract belongs primarily to the **application runtime** and frontend adap
 ## Terminology
 
 - **Vocabulary entry** is a distinct non-empty value plus its library frequency.
-- **Value-completable field** is a runtime `TrackFieldDefinition` whose capability flag and dictionary-backed typed query bridge allow live-value suggestions.
+- **Value-completable field** is a runtime `TrackFieldDefinition` whose capability flag and scalar-dictionary or credit-member typed query bridge allow live-value suggestions.
 - **Vocabulary snapshot** is the source-preserving title, tag, custom-key, and dictionary-field frequency state captured by one track-store traversal.
 - **Aggregate specification** is a caller-provided unique set of title or dictionary-backed `TrackField` values plus optional tags.
 - **Materialization** converts selected snapshot frequencies into text entries and applies the ordering required by that consumer without reading track storage.
@@ -29,7 +29,7 @@ This contract belongs primarily to the **application runtime** and frontend adap
 ## Invariants
 
 - The runtime field catalog is the only authority for the value-completable field set.
-- Every field carrying the value-completion flag has a resolvable typed query-field bridge to a dictionary-backed field; the completion service enforces that contract and derives value extraction from the bridge.
+- Every field carrying the value-completion flag has a resolvable typed query-field bridge to a dictionary-backed scalar or credit-member field; category extraction includes every member, not just the raw field's first-name projection.
 - After one invalidation, every live vocabulary is derived from one shared snapshot until the next qualifying library change.
 - Vocabulary values are distinct and non-empty.
 - Tag, custom-key, and individual-field entries sort by descending frequency.
@@ -47,7 +47,10 @@ This contract belongs primarily to the **application runtime** and frontend adap
 
 ## State model
 
-`CompletionService` owns one source-preserving frequency snapshot plus separately materialized tag, custom-key, per-track-field, and aggregate results.
+`CompletionService` owns one source-preserving frequency snapshot plus separately materialized results.
+A private fixed enum/array groups Tags, CustomKeys, all-credit Names/Roles, and four category-name vocabularies, each retaining readiness, frequencies, and materialized entries.
+Category `valuesFor(TrackField)` delegates to that category vocabulary rather than retaining duplicate scalar-field counts; unrelated scalar-field and aggregate caches stay separate.
+Performer has its own name vocabulary without an artificial table `TrackField`.
 The snapshot begins dirty and materialized results begin unavailable.
 
 Any committed track insertion, mutation, deletion, or library reset received through `LibraryChanges` marks the shared snapshot dirty.
@@ -57,8 +60,14 @@ The next non-empty supported live-vocabulary access rebuilds lazily by traversin
 That traversal counts:
 
 - inline titles by owned text;
-- tags and custom metadata keys by dictionary id; and
-- every dictionary-backed runtime track field by its typed query-field extractor.
+- tags and custom metadata keys by dictionary id;
+- scalar dictionary-backed runtime fields by their typed query-field extractor;
+- every credit name once per track across all kinds;
+- every nonempty credit role once per track across all kinds; and
+- every category name once per track per category, including nonfirst members.
+
+Stored duplicates remain distinct credits even though one track contributes only one vote for a name or role in each vocabulary.
+Category predicates reuse complete category-name completion; member fields are not routed through scalar dictionary-id accessors.
 
 The service counts only dictionary ids with live contributions, compresses those
 counts by source, and discards the traversal working storage. Title reservations
@@ -68,7 +77,7 @@ not size completion counters or alias records. Aggregate reservations follow the
 selected live source cardinalities, and equal text is merged directly without an
 additional dictionary-wide frequency array.
 No tag, custom-key, field, or aggregate access scans track storage again until another qualifying library change invalidates the snapshot.
-Individual result vectors remain lazy: tags, custom keys, and requested fields resolve their retained ids and sort in memory only when consumed.
+Individual result vectors remain lazy: tags, custom keys, credit names/roles, and requested fields resolve their retained ids and sort in memory only when consumed.
 Locale keys are materialized once per value before that sort; comparators never
 invoke the ordering policy. Equal locale keys retain a raw NFC byte fallback so
 width, kana, or other secondary-strength ties remain deterministic without
@@ -125,6 +134,15 @@ The limit applies after tiering, and each tier retains the vocabulary's existing
 Word-prefix matching deliberately does not perform fuzzy correction or Unicode word segmentation: `pinnock` may select `Trevor Pinnock`, while `innock` and misspelled `pinnok` do not.
 The typed alias prefix is compacted without ICU by lowercasing ASCII letters, retaining digits, and discarding every other ASCII character; any non-ASCII byte or fewer than three retained characters disables alias matching for that request.
 
+### Scoped Credits completion
+
+Fixed-category editors use that category's complete name vocabulary; the all-kind editor uses the currently selected row's kind.
+Role completion uses the global nonempty role vocabulary. A role never infers or changes kind.
+Accepting a name suggestion replaces only that name, preserving the row's kind and role.
+All-credit names are available for the `$credit` selector, while `$performer` uses Performer names.
+The same source-text/alias selection, query escaping, owner-executor, and revision/locale invalidation rules apply.
+Borrowing materializations retire before cache storage is replaced; frontends retain no stale vocabulary span across invalidation.
+
 ### Which ranking rule should a consumer use?
 
 Metadata items and WinUI tag/custom-key suggestions call `selectCompletionVocabularyEntries()` when their source vocabulary is already in the desired order.
@@ -179,7 +197,7 @@ The runtime provider contains no GTK types.
 - [`CompletionAliasPolicy.h`](../../../app/include/ao/rt/completion/CompletionAliasPolicy.h) defines the optional ICU-free derivation seam.
 - [`IcuCompletionAliases.cpp`](../../../app/i18n/IcuCompletionAliases.cpp) owns the interactive Kana and explicitly Mandarin Han transforms.
 - [`CompletionService.cpp`](../../../app/runtime/completion/CompletionService.cpp) owns the shared scan, source frequencies, materialization, ordering-policy replacement, caching, and thread confinement.
-- [`MetadataValueCompleter.cpp`](../../../app/runtime/completion/MetadataValueCompleter.cpp) adapts one field to completion items.
+- [`MetadataValueCompleter.cpp`](../../../app/runtime/completion/MetadataValueCompleter.cpp) adapts scalar fields, scoped credit names, and global roles to completion items.
 - [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilter.h) adapts an aggregate vocabulary according to Quick-filter policy.
 - [`completionDetail`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationText.h) resolves typed completion detail for interactive frontends.
 - [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK entry adapter.
@@ -187,6 +205,7 @@ The runtime provider contains no GTK types.
 ## Test map
 
 - [`CompletionServiceTest.cpp`](../../../test/unit/runtime/completion/CompletionServiceTest.cpp) protects shared-snapshot coherence, alias reuse and lifetime, tag/custom/field/aggregate materialization, frequency merging, specification replacement, and insertion/mutation/deletion/reset invalidation.
+- [`CreditCompletionTest.cpp`](../../../test/unit/runtime/completion/CreditCompletionTest.cpp) protects all/category name and role votes, duplicate handling, nonfirst members, scoped editor completion, and invalidation.
 - [`MetadataValueCompleterTest.cpp`](../../../test/unit/runtime/completion/MetadataValueCompleterTest.cpp) protects whole-value/word/alias tiering, source-text insertion, field gating, prefix matching, limits, and whole-entry replacement.
 - [`CompletionVocabularyTest.cpp`](../../../test/unit/runtime/completion/CompletionVocabularyTest.cpp) protects bounded input-order tiering, duplicate-value suppression, shared-alias handling, and the runtime item-adapter path.
 - [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects Quick Filter's full-match frequency ranking independently from input-order selection.

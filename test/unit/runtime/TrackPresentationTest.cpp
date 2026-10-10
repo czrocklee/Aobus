@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -251,6 +252,7 @@ namespace ao::rt::test
                 .groupBy = TrackGroupKey::Composer,
                 .sortBy = {{TrackSortField::Composer, true},
                            {TrackSortField::Work, true},
+                           {TrackSortField::RecordingYear, true},
                            {TrackSortField::Year, true},
                            {TrackSortField::Album, true},
                            {TrackSortField::Movement, true},
@@ -263,7 +265,8 @@ namespace ao::rt::test
                                   TrackField::Album,
                                   TrackField::Year,
                                   TrackField::Duration,
-                                  TrackField::DisplayTrackNumber},
+                                  TrackField::DisplayTrackNumber,
+                                  TrackField::RecordingDate},
                 .redundantFields = {TrackField::Composer},
               });
   }
@@ -277,6 +280,7 @@ namespace ao::rt::test
                 .sortBy = {{TrackSortField::Conductor, true},
                            {TrackSortField::Composer, true},
                            {TrackSortField::Work, true},
+                           {TrackSortField::RecordingYear, true},
                            {TrackSortField::Year, true},
                            {TrackSortField::Album, true},
                            {TrackSortField::Movement, true},
@@ -286,11 +290,13 @@ namespace ao::rt::test
                 .visibleFields = {TrackField::Work,
                                   TrackField::Movement,
                                   TrackField::Composer,
+                                  TrackField::Conductor,
                                   TrackField::Ensemble,
                                   TrackField::Album,
                                   TrackField::Year,
-                                  TrackField::Duration},
-                .redundantFields = {TrackField::Conductor},
+                                  TrackField::Duration,
+                                  TrackField::RecordingDate},
+                .redundantFields = {},
               });
   }
 
@@ -302,6 +308,7 @@ namespace ao::rt::test
                 .groupBy = TrackGroupKey::Work,
                 .sortBy = {{TrackSortField::Composer, true},
                            {TrackSortField::Work, true},
+                           {TrackSortField::RecordingYear, true},
                            {TrackSortField::Year, true},
                            {TrackSortField::Album, true},
                            {TrackSortField::Movement, true},
@@ -313,7 +320,8 @@ namespace ao::rt::test
                                   TrackField::Artist,
                                   TrackField::Album,
                                   TrackField::Year,
-                                  TrackField::Duration},
+                                  TrackField::Duration,
+                                  TrackField::RecordingDate},
                 .redundantFields = {TrackField::Composer, TrackField::Work},
               });
   }
@@ -417,6 +425,19 @@ namespace ao::rt::test
     REQUIRE(normalized.redundantFields.size() == 2);
     CHECK(normalized.redundantFields[0] == TrackField::Album);
     CHECK(normalized.redundantFields[1] == TrackField::AlbumArtist);
+  }
+
+  TEST_CASE("normalizeTrackPresentationSpec keeps category columns despite primary-name grouping",
+            "[runtime][unit][presentation]")
+  {
+    auto const normalized = normalizeTrackPresentationSpec(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::Conductor,
+      .visibleFields = {TrackField::Title, TrackField::Conductor, TrackField::Ensemble, TrackField::Soloist},
+      .redundantFields = {TrackField::Conductor, TrackField::Ensemble, TrackField::Soloist, TrackField::Album},
+    });
+    CHECK(normalized.visibleFields ==
+          std::vector<TrackField>{TrackField::Title, TrackField::Conductor, TrackField::Ensemble, TrackField::Soloist});
+    CHECK(normalized.redundantFields == std::vector<TrackField>{TrackField::Album});
   }
 
   TEST_CASE("normalizeTrackPresentationSpec defaults empty id to library", "[runtime][unit][presentation]")

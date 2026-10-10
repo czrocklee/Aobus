@@ -99,6 +99,8 @@ namespace ao::rt::test
       {TrackSortField::TrackNumber, 12},
       {TrackSortField::Title, 13},
       {TrackSortField::Duration, 14},
+      {TrackSortField::RecordingYear, 15},
+      {TrackSortField::RecordingDate, 16},
     });
 
     TrackId addPlayableTrack(AppRuntime& runtime,

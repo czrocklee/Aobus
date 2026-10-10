@@ -5,7 +5,7 @@ id: library.yaml-format
 
 ## Scope and version
 
-This reference defines the exact version 6 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
+This reference defines the exact version 7 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
 Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../system/library/yaml-transfer.md).
@@ -21,7 +21,7 @@ Producer and consumer code lives under `app/runtime/library/`; the format transl
 The root is a closed map with this shape:
 
 ```yaml
-version: 6
+version: 7
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -32,7 +32,7 @@ library:
 
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
-| `version` | Yes. | Always `6`. | Unsigned 32-bit integer; only `6` is accepted. |
+| `version` | Yes. | Always `7`. | Unsigned 32-bit integer; only `7` is accepted. |
 | `libraryId` | No. | Always emitted. | UUID text with hexadecimal digits and hyphens in `8-4-4-4-12` grouping; letter case is ignored. |
 | `export_mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `listOnly`. |
 | `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
@@ -88,6 +88,8 @@ Each track is a closed map.
 | `id` | No. | Unsigned 32-bit integer. | Always emitted; nonzero producer-local identity. |
 | `uri` | Yes. | Library URI string. | Always emitted. |
 | Metadata fields | No. | String or unsigned 16-bit integer according to the tables below. | Mode-dependent. |
+| `recording-date` | No. | Canonical partial-date scalar, or empty scalar text that clears the value. | Mode-dependent; see [recording date](#recording-date). |
+| `credits` | No. | Sequence of closed `name`/`kind`/`role` maps. | Explicit sequence, including empty, in full/metadata; difference from the selected baseline in delta. See [Credits](#credits). |
 | `custom` | No. | Map of arbitrary scalar string keys to scalar string values. | Emitted only when non-empty. |
 | `tags` | No. | Sequence of scalar strings. | Emitted only when non-empty. |
 | `covers` | No. | Sequence of closed cover maps. | Mode-dependent; an empty sequence is meaningful. |
@@ -114,8 +116,7 @@ The following fields are scalar strings:
 |---|---|---|
 | `title` | `artist` | `album` |
 | `album-artist` | `genre` | `composer` |
-| `conductor` | `ensemble` | `work` |
-| `movement` | `soloist` | |
+| `work` | `movement` | |
 
 ### Numeric metadata
 
@@ -129,9 +130,57 @@ The following fields are unsigned 16-bit integers:
 
 These names come from `rt::trackFieldId()` and use hyphens rather than underscores or camel case.
 
+### Recording date
+
+`recording-date` is a scalar string holding one partial date on the proleptic Gregorian calendar, written canonically as `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` with zero-padded components and years `0001` through `9999`.
+The producer emits the stored precision exactly; an import stores that same precision and never invents a missing month or day.
+The importer does not trim the scalar text, and editors trim or clear their input before producing a document.
+The clear form is empty scalar text. A quoted empty scalar (`''` or `""`) and a present empty plain scalar (`recording-date:`) both record the absence sentinel and clear a stored date.
+RapidYAML marks that empty plain scalar `VALNIL`; the importer reads the scalar text and does not treat the flag as a separate null form.
+The literal texts `null` and `~` are nonempty, so they are not the clear form and fail the canonical-date grammar. This field has no separate null acceptance or null-rejection rule, unlike `mtime`.
+Whitespace that remains in the scalar text is rejected. An unquoted plain scalar may already have had surrounding whitespace removed by the YAML lexer, so that form does not carry whitespace into this check.
+An omitted key preserves the baseline value under the mode-specific overlay rules, like any other scalar field.
+
+The importer validates the complete scalar in the document preflight: any other shape, an impossible calendar date such as `1981-02-30`, or year `0000` rejects the complete document with `FormatRejected` before any durable effect.
+The value describes when a performance was recorded and is independent of the scalar `year`; it is never inferred from release metadata, and no media import populates it, so a `delta` file baseline always carries an absent date.
+
+### Credits
+
+`credits` is a sequence of closed maps, one entry per credit:
+
+```yaml
+credits:
+  - name: Example Orchestra
+    kind: ensemble
+  - name: Anne Example
+    kind: soloist
+    role: violin
+```
+
+`name` and `kind` are required scalars; `role` is an optional scalar.
+Kind tokens are exactly `conductor`, `ensemble`, `soloist`, and `performer`.
+The importer groups entries stably in that canonical kind order, and the exporter emits that order.
+Within-kind order, duplicate entries, repeated names and roles, and the same name in different kinds are preserved; there is no deduplication.
+The separate `conductor`, `ensemble`, `soloist`, and `musicians` track keys are unknown fields, not aliases.
+
+An omitted role, `role:`, quoted empty role, or ASCII-blank role means absence; the exporter omits absent roles.
+Literal `null` and `~` role text is nonempty descriptive text and is preserved, not treated as absence.
+Names and roles have only the six ASCII whitespace characters (space, tab, carriage return, line feed, form feed, vertical tab) trimmed at their boundaries, followed by scalar UTF-8 validation and NFC normalization.
+A no-break space (U+00A0) is not trimmed and does not make a name blank.
+Unknown or duplicate keys, unknown kind tokens, wrong node kinds, malformed text, and blank names reject the complete document in preflight with `FormatRejected` before any durable effect.
+
+A present sequence replaces all credits; `credits: []` clears all.
+Null, empty scalar, or map values in place of the sequence are rejected.
+Omission preserves the selected baseline: stored credits on merge into an existing track, media credits on delta creation/restore when readable (otherwise empty), and empty metadata on metadata/full creation or restore.
+Full and metadata exports carry the sequence explicitly even when empty. Delta exports carry it only when complete canonical credits differ from the selected media or empty fallback baseline, including an explicit clear.
+List-only payloads exclude track metadata.
+The runtime-owned `credits` key and every exact [runtime TrackField id](../../../../app/include/ao/rt/TrackField.h) are reserved custom-metadata keys, including technical and display fields.
+Matching is case-sensitive after NFC normalization; query aliases and camel-case spellings are not aliases here.
+For example, `credits` and `sample-rate` are reserved, while `Credits`, `credit`, `albumArtist`, and `musicians` remain ordinary custom keys.
+
 ### Technical properties
 
-The version-6 `duration` scalar remains an unsigned 32-bit millisecond value.
+The `duration` scalar remains an unsigned 32-bit millisecond value.
 Library storage uses signed 32-bit `TrackDuration`, so import rejects values above `2147483647` ms with `FormatRejected` rather than narrowing or clamping them.
 This is a core-storage representability check, not a change to the scalar grammar or database layout; `0` (unknown) and `2147483647` ms round-trip exactly.
 
@@ -235,6 +284,8 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - an unknown or duplicate field in any closed map;
 - a malformed UUID, Library URI, scalar, sequence, or numeric width;
 - an `mtime` value that is neither an explicit YAML null nor a closed `seconds`/`nanoseconds` map, a map missing either key or carrying an extra key, a `seconds` value outside the signed 64-bit range, or a `nanoseconds` value at or above `1000000000`;
+- a `recording-date` scalar whose text is neither empty nor a canonical `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` date naming a real calendar day, including the nonempty texts `null` and `~` and any whitespace that remains in the scalar;
+- a `credits` node that is not a sequence of closed maps with required scalar `name` and `kind` and optional scalar `role`, an unknown kind token, or a name or role the shared Credits admission gate rejects;
 - a track record whose URI is not a supported audio file;
 - malformed UTF-8 in library text or a normalized text value beyond its core storage limit;
 - duplicate nonzero track IDs, duplicate canonical track URIs, raw or canonically equivalent duplicate custom keys, or missing, zero, or duplicate list IDs;
@@ -242,20 +293,23 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - a URI or list representation exceeding its core storage limit;
 - a malformed digest, an out-of-range `length`, a cover naming no row, a row no track references, or two rows carrying one digest.
 
+The recording date and the complete Credits list are validated in the document preflight, so their violations reject the whole document before any durable import effect.
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 6 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
+Version 7 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
 The observable failure and rollback contract is defined by the [transfer specification](../../../system/library/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
-The importer accepts version 6 only.
-It has no reader for versions 1 through 5, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
-A version-5 document is rejected with `FormatRejected` rather than converted.
+The importer accepts version 7 only.
+It has no reader for versions 1 through 6, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
+A version-6 document is rejected with `FormatRejected` rather than converted.
 There is no migration contract for earlier interchange files, and a version-3 document's embedded cover bytes cannot be read by this version.
 
-Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-6 surface.
-Version 6 exists for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
-Version 5 recorded the Unicode-caseless meaning of `~`, which version 6 carries forward; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 8.
+Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.
+Version 7 accepts only the schema defined here, including `recording-date` and typed `credits`; alternative layouts are unsupported even when labeled version 7. There is no dual reader or layout autodetection.
+`recording-date` defines empty scalar text, including quoted empty scalars and a present empty plain scalar, as its clear form.
+Version 6 existed for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
+Version 5 recorded the Unicode-caseless meaning of `~`, which later versions carry forward; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 9.
 Payload versioning is independent of the host-local database's `kLibraryVersion`.
 
 ## Examples
@@ -263,7 +317,7 @@ Payload versioning is independent of the host-local database's `kLibraryVersion`
 Full payload:
 
 ```yaml
-version: 6
+version: 7
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -276,6 +330,11 @@ library:
       title: Example
       album-artist: Ensemble
       track-number: 1
+      recording-date: 1981-05-12
+      credits:
+        - name: Keith
+          kind: performer
+          role: Guitar
       tags: [favorite]
       custom:
         mood: focused
@@ -303,7 +362,7 @@ library:
 List-only payload:
 
 ```yaml
-version: 6
+version: 7
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: listOnly
 library:
@@ -321,6 +380,8 @@ library:
 - [`LibraryYamlExporter.cpp`](../../../../app/runtime/library/LibraryYamlExporter.cpp) defines producer shape and omission rules.
 - [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) defines accepted input and validation.
 - [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines the path namespace.
+- [`RecordingDate.h`](../../../../include/ao/library/RecordingDate.h) defines the partial-date value, its canonical text forms, and the parse behind `recording-date`.
+- [`Credits.h`](../../../../include/ao/library/Credits.h) defines the shared kind/name/role admission gate behind `credits`.
 - [`FileTimestamp.h`](../../../../include/ao/FileTimestamp.h) defines the portable modification-time instant carried by `mtime`.
 - [`TrackField.cpp`](../../../../app/runtime/TrackField.cpp) defines canonical metadata and technical field IDs.
 - [`AudioCodec.h`](../../../../include/ao/AudioCodec.h) defines codec values and their stable storage representation.
@@ -333,6 +394,9 @@ library:
 - [`LibraryExportImportCoverArtTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) covers the resource table's shape, ordering, determinism, closure rules, digest and length rejection, and each mode's cover terminal state.
 - [`LibraryYamlSchemaTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) covers closed-schema, scope, enum, and URI rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) covers scalar validation, duration boundary round trips, and transactional rollback for unrepresentable durations.
+- [`LibraryYamlImporterTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlImporterTest.cpp) covers recording-date and credit-entry admission, whole-document preflight rejection, and version gating before field interpretation.
+- [`LibraryYamlExporterTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlExporterTest.cpp) covers recording-date and credits emission, omission, and delta baselines.
+- [`LibraryYamlPerformanceMetadataTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) covers same-version round trips of date precision, list order and roles, clear forms, and merge overlay preservation.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) covers canonicalization, literal percent text, control-character rejection, absent roots, in-root resolution, and escaping or dangling symlinks.
 
 ## Related documents

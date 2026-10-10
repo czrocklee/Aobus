@@ -6,7 +6,10 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -39,6 +42,9 @@ namespace ao::tui::test
                           .soloist = "Soloist",
                           .tags = "favourite",
                           .duration = std::chrono::seconds{299},
+                          .conductorCount = 1,
+                          .ensembleCount = 1,
+                          .soloistCount = 1,
                           .year = 2014,
                           .trackNumber = 7,
                           .trackTotal = 12,
@@ -216,5 +222,91 @@ namespace ao::tui::test
     CHECK(valueFor(trackDetailLines(catalog, row), "Track") == "2-7 / 12");
     row.trackTotal = 0;
     CHECK(valueFor(trackDetailLines(catalog, row), "Track") == "2-7");
+  }
+
+  TEST_CASE("TrackDetailLines - recording date keeps its precision and does not infer the release year",
+            "[tui][unit][detail]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto row = rt::TrackRow{.id = TrackId{4}, .title = "Goldberg", .year = 2014};
+
+    SECTION("an absent date does not appear beside a release year")
+    {
+      auto const lines = trackDetailLines(catalog, row);
+      CHECK(valueFor(lines, "Year") == "2014");
+      CHECK_FALSE(hasLabel(lines, "Recording Date"));
+    }
+
+    SECTION("year precision stays beside the independent release year")
+    {
+      row.recordingDate = {.year = 1955};
+      auto const lines = trackDetailLines(catalog, row);
+      auto const year = std::ranges::find(lines, std::string_view{"Year"}, &TrackDetailLine::label);
+      auto const date = std::ranges::find(lines, std::string_view{"Recording Date"}, &TrackDetailLine::label);
+      REQUIRE(year != lines.end());
+      REQUIRE(date != lines.end());
+      CHECK(year < date);
+      CHECK(year->value == "2014");
+      CHECK(date->value == "1955");
+    }
+
+    SECTION("month precision")
+    {
+      row.recordingDate = {.year = 1981, .month = 5};
+      auto const lines = trackDetailLines(catalog, row);
+      CHECK(valueFor(lines, "Year") == "2014");
+      CHECK(valueFor(lines, "Recording Date") == "1981-05");
+    }
+
+    SECTION("day precision")
+    {
+      row.recordingDate = {.year = 1981, .month = 5, .day = 12};
+      auto const lines = trackDetailLines(catalog, row);
+      CHECK(valueFor(lines, "Year") == "2014");
+      CHECK(valueFor(lines, "Recording Date") == "1981-05-12");
+    }
+
+    SECTION("a present date does not invent a release year")
+    {
+      row.year = 0;
+      row.recordingDate = {.year = 1981, .month = 5, .day = 12};
+      auto const lines = trackDetailLines(catalog, row);
+      CHECK_FALSE(hasLabel(lines, "Year"));
+      CHECK(valueFor(lines, "Recording Date") == "1981-05-12");
+    }
+  }
+
+  TEST_CASE("TrackDetailLines - credit lines keep kinds ordered duplicates roles and independently mixed sections",
+            "[tui][unit][detail]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto sections = uimodel::TrackCreditSections{};
+    sections[3].optValue = std::vector<library::Credit>{{"Gould", library::CreditKind::Performer, "Piano"},
+                                                        {"Gould", library::CreditKind::Performer, ""},
+                                                        {"Gould", library::CreditKind::Performer, "Piano"}};
+    auto const lines = trackCreditDetailLines(catalog, sections);
+    REQUIRE(lines.size() == 4);
+    CHECK(lines[0].label == "Credits");
+    CHECK(lines[0].value.empty());
+    CHECK(lines[1].label == "Performer");
+    CHECK(lines[1].value == "Gould (Piano)");
+    CHECK(lines[2].label == "Performer");
+    CHECK(lines[2].value == "Gould");
+    CHECK(lines[3].label == "Performer");
+    CHECK(lines[3].value == "Gould (Piano)");
+    sections[0].mixed = true;
+    auto const mixed = trackCreditDetailLines(catalog, sections);
+    REQUIRE(mixed.size() == 5);
+    CHECK(mixed[1].label == "Conductor");
+    CHECK(mixed[1].value == "<Multiple Values>");
+    CHECK(mixed[2].value == "Gould (Piano)");
+    CHECK(trackCreditDetailLines(catalog, {}).empty());
+  }
+
+  TEST_CASE("TrackDetailLines - category summaries count duplicate entries", "[tui][unit][detail]")
+  {
+    auto row = rt::TrackRow{.conductor = "A", .conductorCount = 3};
+    auto const lines = trackDetailLines(ao::test::englishMessageCatalog(), row);
+    CHECK(valueFor(lines, "Conductor") == "A +2");
   }
 } // namespace ao::tui::test

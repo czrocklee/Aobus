@@ -7,10 +7,12 @@
 #include "TextAdmission.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/detail/TrackColdReader.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -37,6 +39,11 @@ namespace ao::library
     bool isZero(std::byte value) noexcept
     {
       return value == std::byte{0};
+    }
+
+    bool isTrimmedNonEmptyText(std::string_view value) noexcept
+    {
+      return !value.empty() && !utility::isAsciiWhitespace(value.front()) && !utility::isAsciiWhitespace(value.back());
     }
   } // namespace
 
@@ -123,7 +130,7 @@ namespace ao::library
 
   Result<> validateSerializedTrackReferences(std::span<std::byte const> const hotBytes,
                                              std::span<std::byte const> const coldBytes,
-                                             std::size_t const dictionarySize)
+                                             DictionaryStore const& dictionary)
   {
     if (auto const validationRes = validateSerializedHotTrack(hotBytes); !validationRes)
     {
@@ -135,7 +142,8 @@ namespace ao::library
       return validationRes;
     }
 
-    auto const validReference = [dictionarySize](DictionaryId const id, bool const optional) noexcept
+    auto const validReference = [dictionarySize = dictionary.size()](
+                                  DictionaryId const id, bool const optional) noexcept
     {
       return (optional && id == kInvalidDictionaryId) ||
              (id != kInvalidDictionaryId && static_cast<std::size_t>(id.raw()) <= dictionarySize);
@@ -160,17 +168,31 @@ namespace ao::library
       }
     }
 
-    auto const classical = view.classical();
+    auto const work = view.work();
+    auto const performance = view.performance();
 
-    for (auto const id : {classical.workId(),
-                          classical.movementId(),
-                          classical.conductorId(),
-                          classical.ensembleId(),
-                          classical.soloistId()})
+    for (auto const id : {work.workId(), work.movementId()})
     {
       if (!validReference(id, true))
       {
-        return makeError(Error::Code::CorruptData, "Track record contains an unresolved classical dictionary id");
+        return makeError(
+          Error::Code::CorruptData, "Track record contains an unresolved work/performance dictionary id");
+      }
+    }
+
+    for (auto const& entry : performance.credits())
+    {
+      if (!validReference(entry.nameId, false) || !validReference(entry.roleId, true))
+      {
+        return makeError(Error::Code::CorruptData, "Track record contains an unresolved credit dictionary id");
+      }
+
+      // Dictionary admission already proves scalar UTF-8 and NFC. Credits
+      // additionally require trimmed nonempty text, without per-entry copies.
+      if (!isTrimmedNonEmptyText(dictionary.get(entry.nameId)) ||
+          (entry.roleId != kInvalidDictionaryId && !isTrimmedNonEmptyText(dictionary.get(entry.roleId))))
+      {
+        return makeError(Error::Code::CorruptData, "Track record contains non-canonical credit text");
       }
     }
 

@@ -73,6 +73,7 @@ namespace ao::tui::test
           case rt::TrackField::Album: return textRaw(track.album);
           case rt::TrackField::Year: return numberRaw(track.year);
           case rt::TrackField::Codec: return textRaw(track.codec);
+          case rt::TrackField::RecordingDate: return rt::TrackFieldRawValue{track.recordingDate};
           default: return rt::TrackFieldRawValue{};
         }
       };

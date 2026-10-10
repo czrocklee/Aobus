@@ -162,6 +162,7 @@ namespace ao::rt
                     {
                       TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::RecordingYear, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Movement, .ascending = true},
@@ -169,8 +170,14 @@ namespace ao::rt
                       TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields =
-                    {F::Work, F::Movement, F::Artist, F::Album, F::Year, F::Duration, F::DisplayTrackNumber},
+                  .visibleFields = {F::Work,
+                                    F::Movement,
+                                    F::Artist,
+                                    F::Album,
+                                    F::Year,
+                                    F::Duration,
+                                    F::DisplayTrackNumber,
+                                    F::RecordingDate},
                   .redundantFields = {F::Composer},
                 },
             },
@@ -184,6 +191,7 @@ namespace ao::rt
                       TrackSortTerm{.field = TrackSortField::Conductor, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::RecordingYear, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Movement, .ascending = true},
@@ -191,8 +199,15 @@ namespace ao::rt
                       TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {F::Work, F::Movement, F::Composer, F::Ensemble, F::Album, F::Year, F::Duration},
-                  .redundantFields = {F::Conductor},
+                  .visibleFields = {F::Work,
+                                    F::Movement,
+                                    F::Composer,
+                                    F::Conductor,
+                                    F::Ensemble,
+                                    F::Album,
+                                    F::Year,
+                                    F::Duration,
+                                    F::RecordingDate},
                 },
             },
             TrackPresentationPreset{
@@ -204,6 +219,7 @@ namespace ao::rt
                     {
                       TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                      TrackSortTerm{.field = TrackSortField::RecordingYear, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Movement, .ascending = true},
@@ -211,7 +227,8 @@ namespace ao::rt
                       TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
                       TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                     },
-                  .visibleFields = {F::DisplayTrackNumber, F::Movement, F::Artist, F::Album, F::Year, F::Duration},
+                  .visibleFields =
+                    {F::DisplayTrackNumber, F::Movement, F::Artist, F::Album, F::Year, F::Duration, F::RecordingDate},
                   .redundantFields = {F::Composer, F::Work},
                 },
             },
@@ -319,6 +336,10 @@ namespace ao::rt
     }
 
     deduplicate(result.redundantFields);
+    // Primary-name headings cannot replace the row's additional-credit count.
+    std::erase_if(result.redundantFields,
+                  [](TrackField field)
+                  { return field == F::Conductor || field == F::Ensemble || field == F::Soloist; });
 
     return result;
   }

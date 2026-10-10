@@ -124,15 +124,18 @@ namespace ao::gtk::layout
     private:
       void render()
       {
-        if (_undoController == nullptr || !_undoController->pendingCustomMetadataUndo())
+        if (_undoController == nullptr || (_undoController->pendingCustomMetadataUndo() == nullptr &&
+                                           _undoController->pendingCreditsUndo() == nullptr))
         {
           _bar.set_visible(false);
           return;
         }
 
-        auto const& pending = *_undoController->pendingCustomMetadataUndo();
+        auto const* pending = _undoController->pendingCustomMetadataUndo();
         auto const text =
-          i18n::requiredFormat(_textCatalog, i18n::MessageId::GtkCustomMetadataDeleted, {{"key", pending.key}});
+          pending != nullptr
+            ? i18n::requiredFormat(_textCatalog, i18n::MessageId::GtkCustomMetadataDeleted, {{"key", pending->key}})
+            : std::string{i18n::requiredText(_textCatalog, i18n::MessageId::TrackCreditsCleared)};
         _label.set_text(text);
         _label.set_tooltip_text(text);
         _bar.set_visible(true);

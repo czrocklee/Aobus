@@ -46,8 +46,10 @@ namespace ao::rt
 
   /**
    * Immutable evidence that a runtime observed an exact set of tracks at one
-   * committed library revision. Construction remains runtime-owned; mutation
-   * revalidates every field before using the evidence.
+   * committed library revision. bindTrackTargets requires nonempty, existing
+   * IDs and preserves the supplied order, including duplicates. Metadata edits
+   * process each target once in first-seen order. Construction remains
+   * runtime-owned; mutation revalidates every field before using the evidence.
    */
   class BoundTrackTargets final
   {

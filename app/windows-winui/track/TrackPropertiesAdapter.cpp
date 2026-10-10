@@ -6,6 +6,8 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/CompletionVocabulary.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -28,6 +30,7 @@ namespace ao::winui
     {
       case uimodel::TrackPropertiesFormEditorKind::Text: return TrackPropertyControlKind::Text;
       case uimodel::TrackPropertiesFormEditorKind::Number: return TrackPropertyControlKind::Number;
+      case uimodel::TrackPropertiesFormEditorKind::Date: return TrackPropertyControlKind::Date;
       case uimodel::TrackPropertiesFormEditorKind::ReadonlyText: return TrackPropertyControlKind::ReadonlyText;
     }
 
@@ -37,7 +40,8 @@ namespace ao::winui
   TrackPropertyRowProjection projectTrackPropertyRow(uimodel::TrackPropertiesFormRow const& row,
                                                      uimodel::TrackPropertiesFormRowView const& view)
   {
-    auto const controlKind = trackPropertyControlKind(row.editorKind);
+    auto const controlKind = trackPropertyCreditKind(row.field) ? TrackPropertyControlKind::ReadonlyText
+                                                                : trackPropertyControlKind(row.editorKind);
     return TrackPropertyRowProjection{
       .field = row.field,
       .label = row.label,
@@ -55,6 +59,7 @@ namespace ao::winui
     {
       case TrackPropertyControlKind::Text: return uimodel::parseTextEditValue(text);
       case TrackPropertyControlKind::Number: return uimodel::parseUint16EditValue(text);
+      case TrackPropertyControlKind::Date: return uimodel::parseRecordingDateEditValue(text);
       case TrackPropertyControlKind::ReadonlyText:
         return makeError(Error::Code::InvalidState, "A read-only property cannot be edited.");
     }
@@ -81,6 +86,16 @@ namespace ao::winui
   bool canPresentTrackProperties(std::span<TrackId const> const selection) noexcept
   {
     return !selection.empty();
+  }
+
+  bool canSubmitTrackProperties(uimodel::TrackPropertiesFormModel const& form, bool const auxiliaryDirty)
+  {
+    return !form.creditsEditor().isEditing() && (form.canSave() || auxiliaryDirty);
+  }
+
+  std::optional<library::CreditKind> trackPropertyCreditKind(rt::TrackField const field) noexcept
+  {
+    return rt::creditKindForTrackField(field);
   }
 
   bool needsCustomMetadataValueUpdate(bool const existed,

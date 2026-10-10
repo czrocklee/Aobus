@@ -478,7 +478,9 @@ namespace ao::gtk::layout::test
       CHECK(wrapperOverallMinHeight == 0);
       CHECK(wrapperOverallNatHeight == 0);
 
-      int const expandedHeight = 600;
+      // Scrolling ownership does not depend on the metadata row count; honor
+      // the current content minimum rather than forcing a too-small height.
+      auto const expandedHeight = std::max(600, rootMinHeight);
       allocate(320, expandedHeight);
       CHECK(root.get_height() == expandedHeight);
       CHECK(grid->get_height() > 0);

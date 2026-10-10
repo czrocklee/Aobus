@@ -131,17 +131,27 @@ Quick Filter adapts the shared completion and filtering policy. Its [Create List
 
 Properties is available for a non-empty track selection from the row context menu, the Modern overflow menu, the Classic View menu, and the fixed window-local `Alt+Enter` accelerator.
 Right-clicking an unselected track selects it before presenting the row menu; group headings do not expose track authoring.
-Opening Properties captures the current stable track ids and begins one revision-bound `TrackAuthoringSession`.
-The native dialog projects the shared compact form: built-in metadata and common custom values are editable, mixed values are identified without becoming replacement text, tags common to all targets can be added or removed, new custom keys can be added, and technical audio properties remain read-only.
-Metadata, tag, and custom-key suggestions use the active runtime completion vocabulary.
+Opening Properties captures the current stable track ids, binds one revision-bound `TrackAuthoringSession`, and copies ordinary fields, tags, custom values, and complete per-kind Credits from the same short-lived snapshot, released before installing controls.
+The native dialog projects the shared compact form: ordinary built-in metadata and common custom values are editable, mixed values are identified without becoming replacement text, tags common to all targets can be added or removed, new custom keys can be added, and technical audio properties remain read-only.
+Credit category raw fields are read-only first-name/count previews; category/all-kind actions open the shared scoped list model, never scalar editing.
+The native Credits child has name/role inputs with suggestions, add/delete and within-kind move controls, and an all-kind-only kind selector.
+Mixed scopes require explicit replacement intent; Clear is a separate scope-labelled action. Invalid rows retain draft/focus/errors and disable child Save.
+Child Save stages only the Properties draft. Sequential scopes overlay one pending replacement, and reopening uses that pending state plus the captured baseline, not a new snapshot.
+An active child blocks parent Save, including programmatic metadata/tag submission; final Save commits one composed patch.
+Metadata, tag, custom-key, scoped credit-name, and global role suggestions use the active runtime completion vocabulary.
 Save is disabled for an unchanged or invalid draft and prevents the dialog's default synchronous close while work is pending. Submitting freezes every mutable built-in, tag, custom-metadata, and suggestion control and rejects repeated Save routing; accepted submission stays frozen through the native deferred close.
-`Busy` and recoverable failures keep the draft open with an actionable message and restore each control's original editable, mixed, or read-only constraint without resetting the draft. Stale or unavailable bindings keep all mutation disabled and require reopening from the current selection.
+`Busy` and recoverable failures keep the draft open with an actionable message and restore each control's original editable, mixed, or read-only constraint without resetting the draft.
+Stale or unavailable bindings keep all mutation disabled. Reload requires an explicit discard decision before replacing the complete draft and binding for the captured targets; declining retains them, and no automatic merge or rebind occurs.
+Closing with pending changes or an active child follows the same discard decision. The Credits child is inline in the existing dialog, not another `ContentDialog`.
 Window retirement closes the dialog and suppresses late completion before releasing its runtime and selection owners.
+WinUI provides no scoped Credits Undo offer.
 
 The selected-row menu also offers [membership and saved-order actions](windows-library-workflows.md#membership-and-saved-order) over a captured stable selection.
 
 The native item view reports the complete display count while materializing rows
 on demand; its row-model least-recently-used cache holds at most 2048 entries.
+Category table cells own only first-name text/count projections and render localized `+N` including duplicates; sorting/grouping uses the primary name, not all-credit membership.
+Inspector Credits use complete owning sections, displaying every name/kind/role and independent per-kind mixed state. Its all-kind/category edit actions open Properties at the requested scope.
 Cover art is asynchronous and ignores results from superseded selections.
 Both shells pin the selection's artwork above the inspector's fields, where it stays put as those fields scroll. Classic caps it smaller than Modern does; neither cap changes what is shown.
 One active-runtime loader coalesces group-heading, Inspector, Now Playing, and SMTC requests and holds at most 128 encoded-byte cache entries.
@@ -251,6 +261,8 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), and [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h) own the grouped lazy table, selection reveal, and display/source index boundary.
 - [`MainWindow.xaml.cpp`](../../../app/windows-winui/MainWindow.xaml.cpp) adapts playback reveal events to the window's own track list. Navigation and List-tree adapters are mapped in [library workflows](windows-library-workflows.md#implementation-map).
 - [`TrackPropertiesCoordinator`](../../../app/windows-winui/track/TrackPropertiesCoordinator.h) owns the native properties workflow, while [`TrackPropertiesAdapter`](../../../app/windows-winui/include/ao/winui/track/TrackPropertiesAdapter.h) keeps shared form and vocabulary mapping WinRT-free.
+- [`TrackPropertiesCredits.cpp`](../../../app/windows-winui/track/TrackPropertiesCredits.cpp) owns parent-draft Credits integration and confirmed discard/reload; [`TrackCreditsEditorControl`](../../../app/windows-winui/track/TrackCreditsEditorControl.h) adapts scoped list controls without storage or normalization policy.
+- [`TrackDetailControl.cpp`](../../../app/windows-winui/track/TrackDetailControl.cpp) renders complete per-kind Credits and routes edit scopes into Properties; [`TrackRowItem.cpp`](../../../app/windows-winui/track/TrackRowItem.cpp) formats compact row projections.
 - [`TrackTable`](../../../app/windows-winui/layout/component/track/TrackTable.cpp), [`ShellBuilder`](../../../app/windows-winui/layout/ShellBuilder.cpp), and [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp) own the row menu, ordinary menu/action route, captured selection, and window-local dialog lifetime.
 - [`CoverArtPlaceholder`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h), [`ResourceByteMemoryCache`](../../../app/include/ao/rt/resource/ResourceByteMemoryCache.h), and [`CoverArtPresenter`](../../../app/windows-winui/image/CoverArtPresenter.h) own shared placeholder policy, runtime byte delivery, and WinUI presentation respectively.
 - [`AobusSoulControl`](../../../app/windows-winui/playback/AobusSoulControl.h) adapts the shared [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h).
@@ -277,6 +289,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   protects Windows startup resolution and the deferred-checkpoint preference update.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
 - [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects control-kind projection, mixed-state preservation, edit parsing, command eligibility, commit outcomes, and vocabulary suggestions on every host.
+- [`WinUiCreditsProbe.cpp`](../../../test/integration/windows/WinUiCreditsProbe.cpp) exercises native Credits controls, parent staging, and guarded submission; the shared scoped editor/form tests own replacement and overlay semantics.
 - [Library workflow tests](windows-library-workflows.md#test-map) cover scan decisions, transfer reports, committed List refresh, and native saved-order accelerators.
 - Tests under [`test/unit/desktop/`](../../../test/unit/desktop) protect shared
   successor arguments, strict root planning, same-root identity, detached

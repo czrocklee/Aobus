@@ -41,6 +41,9 @@ namespace ao::gtk::test
     void mount(Gtk::Widget& widget);
     void present();
     void unmount();
+    // Retire a parent relationship without delivering queued callbacks. The
+    // caller must drain through this living fixture after destroying the owner.
+    void detachWithoutDraining();
     void drain();
 
   private:

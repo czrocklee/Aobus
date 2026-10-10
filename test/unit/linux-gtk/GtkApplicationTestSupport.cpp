@@ -145,13 +145,17 @@ namespace ao::gtk::test
 
   void GtkWindowFixture::unmount()
   {
+    detachWithoutDraining();
+    drain();
+  }
+
+  void GtkWindowFixture::detachWithoutDraining()
+  {
     if (_statePtr->mounted)
     {
       _statePtr->window.unset_child();
       _statePtr->mounted = false;
     }
-
-    drain();
   }
 
   void GtkWindowFixture::drain()

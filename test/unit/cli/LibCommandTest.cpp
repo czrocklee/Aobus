@@ -112,7 +112,7 @@ namespace ao::cli::test
     auto const documentPath = fixture.root() / "mtime-overlay.yaml";
     {
       auto document = std::ofstream{documentPath};
-      document << R"yaml(version: 6
+      document << R"yaml(version: 7
 export_mode: full
 library:
   resources: []
@@ -154,7 +154,7 @@ library:
     auto const documentPath = fixture.root() / "mtime-overlay.yaml";
     {
       auto document = std::ofstream{documentPath};
-      document << R"yaml(version: 6
+      document << R"yaml(version: 7
 export_mode: full
 library:
   resources: []
@@ -605,14 +605,14 @@ library:
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "6");
+    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "7");
     CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
     CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
 
     result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Payload: YAML v6, mode 'full', target scope 'library'."));
+    CHECK(contains(result.out, "Payload: YAML v7, mode 'full', target scope 'library'."));
     CHECK(contains(result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0."));
 
     result = target.run({"track", "show"});

@@ -119,7 +119,7 @@ namespace ao::rt::test
     void writeImportPayload(std::filesystem::path const& path, std::string_view title)
     {
       auto yaml = std::ofstream{path};
-      yaml << "version: 6\n"
+      yaml << "version: 7\n"
               "export_mode: full\n"
               "library:\n"
               "  resources: []\n"
@@ -535,7 +535,7 @@ namespace ao::rt::test
     auto planRes = runQueuedTask(runtime, executor, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
 
     REQUIRE(planRes);
-    CHECK(planRes->report().payloadVersion == 6);
+    CHECK(planRes->report().payloadVersion == 7);
     CHECK(planRes->report().payloadMode == ExportMode::Full);
     CHECK(planRes->report().targetScope == ImportTargetScope::Library);
     CHECK(planRes->report().tracksCreated == 1);

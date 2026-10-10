@@ -7,6 +7,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
@@ -19,6 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -140,16 +142,19 @@ namespace ao::rt::test
                                      .optAlbumArtist = "Album Artist",
                                      .optGenre = "Rock",
                                      .optComposer = "Composer",
-                                     .optConductor = "Conductor",
-                                     .optEnsemble = "Ensemble",
                                      .optWork = "Work",
                                      .optMovement = "Movement",
-                                     .optSoloist = "Soloist",
                                      .optYear = 2024,
                                      .optTrackNumber = 1,
                                      .optTrackTotal = 10,
                                      .optDiscNumber = 1,
-                                     .optDiscTotal = 2};
+                                     .optDiscTotal = 2,
+                                     .optCredits = CreditReplacement{
+                                       .kinds = std::bitset<library::kCreditKindCount>{0b1111},
+                                       .entries = {{.name = "Conductor", .kind = library::CreditKind::Conductor},
+                                                   {.name = "Ensemble", .kind = library::CreditKind::Ensemble},
+                                                   {.name = "Soloist", .kind = library::CreditKind::Soloist}},
+                                     }};
 
     auto const res = commandsFixture.updateMetadata(targetIds, patch);
     REQUIRE(res);
@@ -166,11 +171,16 @@ namespace ao::rt::test
     CHECK(dictionary.get(optView->metadata().albumArtistId()) == "Album Artist");
     CHECK(dictionary.get(optView->metadata().genreId()) == "Rock");
     CHECK(dictionary.get(optView->metadata().composerId()) == "Composer");
-    CHECK(dictionary.get(optView->classical().conductorId()) == "Conductor");
-    CHECK(dictionary.get(optView->classical().ensembleId()) == "Ensemble");
-    CHECK(dictionary.get(optView->classical().workId()) == "Work");
-    CHECK(dictionary.get(optView->classical().movementId()) == "Movement");
-    CHECK(dictionary.get(optView->classical().soloistId()) == "Soloist");
+    auto const performance = optView->performance();
+    REQUIRE(performance.credits(library::CreditKind::Conductor).size() == 1);
+    REQUIRE(performance.credits(library::CreditKind::Ensemble).size() == 1);
+    REQUIRE(performance.credits(library::CreditKind::Soloist).size() == 1);
+    CHECK(performance.credits(library::CreditKind::Performer).empty());
+    CHECK(dictionary.get(performance.credits(library::CreditKind::Conductor)[0].nameId) == "Conductor");
+    CHECK(dictionary.get(performance.credits(library::CreditKind::Ensemble)[0].nameId) == "Ensemble");
+    CHECK(dictionary.get(performance.credits(library::CreditKind::Soloist)[0].nameId) == "Soloist");
+    CHECK(dictionary.get(optView->work().workId()) == "Work");
+    CHECK(dictionary.get(optView->work().movementId()) == "Movement");
     CHECK(optView->metadata().year() == 2024);
     CHECK(optView->metadata().trackNumber() == 1);
     CHECK(optView->metadata().trackTotal() == 10);

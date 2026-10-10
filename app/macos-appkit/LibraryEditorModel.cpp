@@ -9,6 +9,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
@@ -18,6 +19,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/list/ListAuthoring.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -25,9 +27,11 @@
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <algorithm>
+#include <bitset>
 #include <cstddef>
 #include <expected>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -60,14 +64,7 @@ namespace ao::appkit
       return res;
     }
 
-    auto sessionRes = uimodel::TrackAuthoringSession::begin(_runtime.library(), ids);
-
-    if (!sessionRes)
-    {
-      return std::unexpected{sessionRes.error()};
-    }
-
-    auto session = std::move(*sessionRes);
+    auto optSession = std::optional<uimodel::TrackAuthoringSession>{};
     auto const spec = uimodel::buildTrackPropertiesFormSpec(_catalog);
     auto baseline = uimodel::TrackPropertiesFormModel{_catalog};
     auto fields = std::vector<LibraryEditorField>{};
@@ -76,10 +73,14 @@ namespace ao::appkit
     {
       auto snapshot = _runtime.library().snapshot();
 
-      if (snapshot.revision() != session.boundRevision())
+      auto sessionRes = uimodel::TrackAuthoringSession::begin(_runtime.library(), ids, snapshot);
+
+      if (!sessionRes)
       {
-        return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
+        return std::unexpected{sessionRes.error()};
       }
+
+      optSession.emplace(std::move(*sessionRes));
 
       if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, ids, spec, baseline); !res)
       {
@@ -99,6 +100,7 @@ namespace ao::appkit
       tags = snapshot.selectionTags(ids);
     }
 
+    auto& session = *optSession;
     auto invalidatedSub = session.onInvalidated(
       [this]
       {
@@ -262,9 +264,55 @@ namespace ao::appkit
     }
   }
 
+  uimodel::TrackCreditSections LibraryEditorModel::creditSections() const
+  {
+    return _form.creditSections();
+  }
+
+  uimodel::TrackCreditsEditorModel& LibraryEditorModel::creditsEditor() noexcept
+  {
+    return _form.creditsEditor();
+  }
+
+  Result<> LibraryEditorModel::beginCreditsEdit(std::bitset<library::kCreditKindCount> kinds)
+  {
+    if (_state.kind != LibraryEditorKind::Properties || _state.busy || _state.stale || _closing || _state.completed)
+    {
+      return makeError(Error::Code::InvalidState, "Credits editing requires current, idle Track Properties");
+    }
+
+    auto res = _form.beginCreditsEdit(kinds);
+    publishChange();
+    return res;
+  }
+
+  Result<> LibraryEditorModel::acceptCreditsEdit()
+  {
+    if (_state.busy || _state.stale || _closing)
+    {
+      return makeError(Error::Code::InvalidState, "Credits editing requires current, idle Track Properties");
+    }
+
+    auto res = _form.acceptCreditsEdit();
+
+    if (res)
+    {
+      _state.dirty = _state.dirty || _form.canSave();
+    }
+
+    publishChange();
+    return res;
+  }
+
+  void LibraryEditorModel::cancelCreditsEdit()
+  {
+    _form.cancelCreditsEdit();
+    publishChange();
+  }
+
   void LibraryEditorModel::save()
   {
-    if (_state.busy || _state.stale || _closing || _state.completed)
+    if (_state.busy || _state.stale || _closing || _state.completed || _form.creditsEditor().isEditing())
     {
       return;
     }
@@ -302,9 +350,16 @@ namespace ao::appkit
         continue;
       }
 
-      auto valueRes = field.spec.editorKind == uimodel::TrackPropertiesFormEditorKind::Number
-                        ? uimodel::parseUint16EditValue(field.text)
-                        : uimodel::parseTextEditValue(field.text);
+      auto valueRes = [&] -> Result<uimodel::TrackFieldEditValue>
+      {
+        switch (field.spec.editorKind)
+        {
+          case uimodel::TrackPropertiesFormEditorKind::Number: return uimodel::parseUint16EditValue(field.text);
+          case uimodel::TrackPropertiesFormEditorKind::Date: return uimodel::parseRecordingDateEditValue(field.text);
+          case uimodel::TrackPropertiesFormEditorKind::Text:
+          case uimodel::TrackPropertiesFormEditorKind::ReadonlyText: return uimodel::parseTextEditValue(field.text);
+        }
+      }();
 
       if (!valueRes)
       {

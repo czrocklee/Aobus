@@ -32,11 +32,11 @@ The tables list the additional capabilities and exact bridge values.
 | 3 | `AlbumArtist` | `album-artist` | Album Artist | Text | Yes | `AlbumArtist` | `AlbumArtist` | `$albumArtist` | Yes |
 | 4 | `Genre` | `genre` | Genre | Text | Yes | `Genre` | `Genre` | `$genre` | Yes |
 | 5 | `Composer` | `composer` | Composer | Text | Yes | `Composer` | `Composer` | `$composer` | Yes |
-| 6 | `Conductor` | `conductor` | Conductor | Text | Yes | `Conductor` | `Conductor` | `$conductor` | Yes |
-| 7 | `Ensemble` | `ensemble` | Ensemble | Text | Yes | `Ensemble` | `Ensemble` | `$ensemble` | Yes |
+| 6 | `Conductor` | `conductor` | Conductor | Text | No | `Conductor` | `Conductor` | `$conductor` | Yes |
+| 7 | `Ensemble` | `ensemble` | Ensemble | Text | No | `Ensemble` | `Ensemble` | `$ensemble` | Yes |
 | 8 | `Work` | `work` | Work | Text | Yes | `Work` | `Work` | `$work` | Yes |
 | 9 | `Movement` | `movement` | Movement | Text | Yes | `Movement` | — | `$movement` | Yes |
-| 10 | `Soloist` | `soloist` | Soloist | Text | Yes | `Soloist` | — | `$soloist` | Yes |
+| 10 | `Soloist` | `soloist` | Soloist | Text | No | `Soloist` | — | `$soloist` | Yes |
 | 11 | `Year` | `year` | Year | Number | Yes | `Year` | `Year` | `$year` | No |
 | 12 | `DiscNumber` | `disc-number` | Disc | Number | Yes | `DiscNumber` | — | `$discNumber` | No |
 | 13 | `DiscTotal` | `disc-total` | Total Discs | Number | Yes | — | — | `$discTotal` | No |
@@ -44,9 +44,18 @@ The tables list the additional capabilities and exact bridge values.
 | 15 | `TrackTotal` | `track-total` | Total Tracks | Number | Yes | — | — | `$trackTotal` | No |
 | 16 | `MovementNumber` | `movement-number` | Movement No. | Number | Yes | `Movement` | — | `$movementNumber` | No |
 | 17 | `MovementTotal` | `movement-total` | Total Movements | Number | Yes | — | — | `$movementTotal` | No |
+| 31 | `RecordingDate` | `recording-date` | Recording Date | RecordingDate | Yes | `RecordingDate` | — | `$recordingDate` | No |
 
 All rows in this table have category `Metadata`.
 Movement name and movement number intentionally map to the same `Movement` sort key; projection ordering uses the number while the name remains display text.
+Recording date retains year, month, or day precision and is independent of `Year`.
+Credits are the stored authority for all four fixed kinds, not another scalar `TrackField`, joined table column, or sort key.
+Conductor, Ensemble, and Soloist raw fields expose read-only first-name text; their row projections also carry an entry count for compact `first +N` display, counting duplicates.
+Sort and existing group keys use the first name, while category predicates search every name in that segment.
+Their previews open the [scoped Credits editor](../../../system/presentation/metadata-editing.md#credits), not inline scalar mutation.
+Complete owning per-kind lists drive detail/form mixed state and editing; scalar text equality is not credit equality.
+`$performer` searches the fourth segment, and `$credit` searches all kinds; neither requires an artificial table field.
+Category-specific name completion includes every segment member, and role completion uses a separate all-credit vocabulary.
 
 ### Tags and technical fields
 
@@ -95,6 +104,8 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 | 12 | `TrackNumber` | `track-number` |
 | 13 | `Title` | `title` |
 | 14 | `Duration` | `duration` |
+| 15 | `RecordingYear` | `recording-year` |
+| 16 | `RecordingDate` | `recording-date` |
 
 ### Group keys
 
@@ -117,10 +128,10 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 - Field ids and enum values are unique.
 - A sortable field has a valid sort mapping, and a non-sortable field has none.
 - A groupable field has a valid group mapping, and a non-groupable field has none.
-- Every field carrying the value-completion flag has a resolvable typed bridge to a dictionary-backed query field; the runtime support predicate and vocabulary service enforce and derive the same set from those definitions.
+- Every field carrying the value-completion flag has a resolvable typed bridge to a dictionary-backed scalar or credit-member query field; category access delegates to its complete category-name vocabulary rather than scalar first-name frequencies.
 - An absent typed query-field mapping means the application field cannot be converted directly into one fixed filter variable.
-- Every typed runtime bridge resolves to one core `QueryVariableDescriptor`, and no two runtime fields claim the same scalar query field.
-- Every canonical core `$` or `@` query field has one runtime bridge except `$coverArt`, whose resource identity has no application `TrackField` counterpart.
+- Every typed runtime bridge resolves to one core `QueryVariableDescriptor`, and no two runtime fields claim the same query field.
+- Every canonical core `$` or `@` query field has one runtime bridge except `$coverArt`, whose resource identity has no application `TrackField` counterpart, and the structured member selectors `$performer` and `$credit`.
 - Canonical query-variable text is derived from the core descriptor rather than stored as a second string in the runtime catalog.
 - `trackFieldFromId` is case-sensitive and returns no value for unknown, empty, or differently cased ids.
 - Sort-field and group-key stable ids are exhaustive, unique, case-sensitive, and round-trip through their typed lookup helpers.
@@ -130,6 +141,8 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 
 Track-field, sort-field, and group-key ids appear in versioned presentation state and must not be renamed or rebound without an explicit compatibility decision.
 Current presentation documents never serialize their enum raw values.
+RecordingDate is appended after Quality, and both new sort keys are appended after Duration; existing numeric identities remain unchanged.
+RecordingYear derives from the date and does not duplicate storage or supply a separate editable field.
 The playback-session version-4 schema separately persists numeric `TrackSortField` raw values; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
 The raw `TrackField` and `TrackGroupKey` columns remain C++ lookup information rather than current presentation-format tokens.
 
@@ -151,7 +164,8 @@ Adding a field requires coordinated decisions about persistence source, projecti
 - [`TrackField.h`](../../../../app/include/ao/rt/TrackField.h) defines enum and catalog shapes.
 - [`TrackField.cpp`](../../../../app/runtime/TrackField.cpp) defines every row and lookup helper.
 - [`FieldCatalog.h`](../../../../include/ao/query/FieldCatalog.h) and [`FieldCatalog.cpp`](../../../../lib/query/FieldCatalog.cpp) define the core typed descriptors.
-- [`CompletionService.cpp`](../../../../app/runtime/completion/CompletionService.cpp) derives source-preserving dictionary-field frequencies and field materialization for the value-completable subset.
+- [`TrackFieldReader.cpp`](../../../../app/runtime/TrackFieldReader.cpp) owns read-only first-name category projections.
+- [`CompletionService.cpp`](../../../../app/runtime/completion/CompletionService.cpp) derives source-preserving scalar and complete category-name frequencies for the value-completable subset.
 
 ## Test authority
 

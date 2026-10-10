@@ -31,7 +31,8 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 
 ## Invariants
 
-- Edited library metadata is authoritative after initial import; a changed-file scan refreshes technical properties without replacing curated metadata.
+- Edited library metadata is authoritative after initial import; a changed-file scan refreshes technical properties without replacing curated metadata, including exact RecordingDate and canonical Credits, with kind, role, within-kind order, and duplicates.
+- Scan and pending-audio-identity backfill never populate or overwrite RecordingDate or Credits for an existing Track; audio identity backfill is not metadata backfill.
 - An embedded cover is a scan fact rather than curated metadata: the file is the authority on which covers a track has, and a scan is the only writer of that reference set.
 - A scan never admits an unsupported file into its plan.
 - Only the runtime planner can construct an applicable plan; consumers may inspect its immutable items but cannot insert or rewrite them.
@@ -109,13 +110,22 @@ The transaction covers the complete admitted plan and has no item or byte bound.
 This preserves whole-plan all-or-nothing behavior; writer hold time and rollback cost scale with the prepared plan.
 There is no nested LMDB transaction, item savepoint, or partial batch commit.
 
-- `New` parses metadata and technical properties, validates and NFC-normalizes admitted text, then asks the logical Track writer to create the track and available manifest row together.
-- `Changed` preserves curated metadata, replaces the track's cover references with the set the new file carries, then replaces Track data and file/identity facts through one logical operation.
+- `New` parses metadata and technical properties, maps the public source-ordered Credits into the builder, validates text and bounds, and persists NFC text in canonical kind order through the logical Track writer together with the available manifest row. RecordingDate remains absent because there is no file-tag mapping for it.
+- `Changed` preserves curated metadata, including exact recording-date precision and credit kinds, within-kind order, names, duplicates, and optional roles, replaces the track's cover references with the set the new file carries, then replaces Track data and file/identity facts through one logical operation.
 - `Moved` first requires the stored Track URI to equal the plan's old URI, then rebuilds the existing track with the new URI, refreshed technical properties, and the destination file's cover references, and uses the logical relink operation to replace the manifest key while preserving the Track id; a mismatch reports the item failure and aborts the complete scan transaction.
 - `Missing` preserves the previous identity and uses the manifest-only logical update to mark the row missing.
 - `Unchanged` performs no write.
 - Item-level parse/open failures are counted and reported without claiming that item succeeded.
-- Item-level Track validation failures, including malformed UTF-8 or post-NFC size overflow, are reported at the `serialize` stage and leave that new item absent.
+- Item-level Track validation failures, including malformed UTF-8, invalid structured credit input, or post-NFC/aggregate size overflow, are reported at the `serialize` stage and leave that new item absent.
+
+Preparation snapshots own the raw credit names, roles, kinds, duplicates, and source order without normalizing or admitting them.
+Reconstructed builders validate and canonicalize credits at Track admission: invalid new-item text fails that item without preventing valid siblings from committing.
+Changed and moved items reconstruct the live complete Track before replacing technical/file facts and covers; newly parsed Credits never silently replace existing curation, even when stored credits or individual segments are empty.
+Malformed credit text in a changed or moved file therefore does not reject the item merely because that unused metadata was copied during preparation.
+New imports use explicitly mapped credit kinds; `PERFORMER` never implies Soloist, and Ensemble fallback is resolved whole-file before library admission.
+RecordingDate is not inferred from generic Year, `DATE`, `YEAR`, `TDRC`, album text, or audio identity.
+No database migration, scalar/list conversion, or automatic metadata backfill accompanies ordinary scanning.
+An explicit refresh/population workflow for existing tracks would be a separate contract, not a side effect of ordinary scans.
 
 After preparation, once the background command owns the active lane turn and immediately before opening its write transaction, application re-stats every prepared new, changed, or moved file and requires its planned size and modification time, checks that every missing path remains absent, and fingerprints every moved destination again against both the prepared and planned identities.
 Stale new, changed, or missing filesystem evidence increments the stale count and skips that item without rewriting current facts. Path-resolution, permission, and other inspection failures remain per-item failures.
@@ -163,6 +173,7 @@ Cancellation stops hashing at chunk boundaries, commits valid rows already compl
 The successful result contains only completed, skipped, and per-item-failure counts; it never also represents cancellation.
 Earlier committed batches remain durable, and the next run resumes from the pending manifest rows rather than reconstructing partial counts for the cancelled run.
 Backfill changes only manifest identity; each effective batch publishes its committed revision with no track/list category rather than claiming a metadata mutation.
+It never adds recording dates or credits, nor infers either value from a matching hash or another Track.
 
 ## Signature behavior
 
@@ -204,9 +215,11 @@ through `LibraryChanges`; workflow completion performs no independent refresh.
 
 - [`ScanPlanTest.cpp`](../../../test/unit/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors.
 - [`ScanApplyOperationTest.cpp`](../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves library-id binding, stale-new replay protection, atomic application, curated-metadata preservation, cover replacement on `Changed` and `Moved` items, descriptor retention, relinking, failures, progress, and cancellation.
+- [`ScanWorkMetadataTest.cpp`](../../../test/unit/runtime/library/ScanWorkMetadataTest.cpp) distinguishes work-source precedence on new imports from preservation of file-derived and manually curated work on changed-file scans.
+- [`ScanPerformanceMetadataTest.cpp`](../../../test/unit/runtime/library/ScanPerformanceMetadataTest.cpp) protects new credit import and preservation of complete curated Credits and independent RecordingDate on rescans.
 - [`ScanApplyFilesystemRevalidationTest.cpp`](../../../test/unit/runtime/library/ScanApplyFilesystemRevalidationTest.cpp) proves final new, changed, and missing filesystem checks.
 - [`ScanApplyDatabaseAdmissionTest.cpp`](../../../test/unit/runtime/library/ScanApplyDatabaseAdmissionTest.cpp) proves commit-time item evidence, concurrent curation merge, deleted-Track containment, replacement safety, and moved-plan rollback.
-- [`TrackBuilderSnapshotTest.cpp`](../../../test/unit/runtime/library/TrackBuilderSnapshotTest.cpp) proves that scan cover bytes become counted observed descriptors before mutation.
+- [`TrackBuilderSnapshotTest.cpp`](../../../test/unit/runtime/library/TrackBuilderSnapshotTest.cpp) proves raw credit-text ownership through source expiry and move, validation/canonicalization at reconstructed-builder admission, and conversion of scan cover bytes to counted observed descriptors before mutation.
 - [`LibraryScanWorkflowTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) proves frontend-shared plan disposition and mutation reporting.
 - [`AudioIdentityIndexerTest.cpp`](../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
 - [`AudioIdentityTest.cpp`](../../../test/unit/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.

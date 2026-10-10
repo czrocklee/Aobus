@@ -7,6 +7,7 @@
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
@@ -229,9 +230,9 @@ namespace ao::query::test
     spec.album = "Test Album";
     spec.genre = "Test Genre";
     spec.albumArtist = "Test Album Artist";
-    spec.conductor = "Test Conductor";
-    spec.ensemble = "Test Ensemble";
-    spec.soloist = "Test Soloist";
+    spec.credits = {{.name = "Test Conductor", .kind = CreditKind::Conductor},
+                    {.name = "Test Ensemble", .kind = CreditKind::Ensemble},
+                    {.name = "Test Soloist", .kind = CreditKind::Soloist}};
     auto track = TestTrack{spec};
 
     auto const& dictionary = track.dictionary();

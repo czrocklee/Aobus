@@ -42,13 +42,21 @@ namespace ao::rt
       std::size_t expiredAdHocSourcesPruned = 0;
     };
 
-    /** Source-private deterministic instrumentation for incremental-behavior tests. */
+    struct TrackListProjectionStorageSizes final
+    {
+      std::size_t sortKeys = 0;
+      std::size_t orderEntry = 0;
+      std::size_t dictionaryCacheEntry = 0;
+    };
+
+    /** Source-private deterministic instrumentation for tests and performance reports. */
     class RuntimeOperationProbe final
     {
     public:
       static IndexedTrackSequenceOperationCounts counts(IndexedTrackSequence const& sequence) noexcept;
       static SmartListEvaluatorOperationCounts counts(SmartListEvaluator const& evaluator) noexcept;
       static TrackListProjectionOperationCounts counts(TrackListProjection const& projection) noexcept;
+      static TrackListProjectionStorageSizes projectionStorageSizes() noexcept;
       static TrackSourceCacheOperationCounts counts(TrackSourceCache const& cache) noexcept;
     };
   } // namespace detail

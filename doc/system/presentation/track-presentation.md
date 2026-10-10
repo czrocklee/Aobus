@@ -77,9 +77,26 @@ collation.
 
 Only `TrackSortField` values resident in projection snapshots are sortable.
 Manifest-backed file size and modified time remain display-only.
+RecordingYear compares the date's year; RecordingDate compares the full `(year, month, day)` tuple, retaining zero for unknown components.
+Present dates precede absent dates in either direction; descending reverses values, not the presence rule.
+This ordering is separate from query-literal precision comparison.
+Rows materialize the date scalar and compact credit projections, never full credit lists.
 
-When a grouped spec has an empty redundant-field set, normalization may borrow the first built-in preset's suppression set for that group key.
-Custom shapes that require no suppression provide explicit visible-field intent.
+Normalization deduplicates visible/redundant fields and removes credit category fields from redundant-field suppression: a primary-name heading cannot replace a row's additional-entry count.
+
+### Credit projections
+
+Conductor, Ensemble, and Soloist columns retain the first name plus a localized `+N` for additional entries, counting duplicates; empty categories display absence.
+Rows own only first-name text and entry count, not vectors or joined lists.
+Sorting uses the first name with the existing missing-text ordering and tie rules.
+Conductor and Ensemble grouping likewise uses that first name; this adds no Soloist/Performer grouping key or preset.
+Group headings show the primary name, never a per-track `+N`, and grouped category rows retain their compact count-bearing value.
+
+Member predicates search every selected name, not just this first-entry projection.
+A track matching its second conductor can remain grouped under its first; details reveal every name, kind, and optional role in canonical order.
+Reordering within a kind deliberately changes the primary projection; there is no separate primary flag.
+Detail/form mixed state compares complete per-kind lists, including roles, order, and duplicate multiplicity, rather than these compact strings.
+Full lists belong to owning focused/detail/editor snapshots, not per-frame transactions or table-row caches.
 
 ## Classical behavior
 
@@ -87,11 +104,14 @@ Work grouping merges recordings of the same `(composer, work)` into one section.
 The classical presets keep recordings contiguous with this core sort chain, prefixed by their grouping concern where applicable:
 
 ```text
-Composer -> Work -> Year -> Album -> Movement -> DiscNumber -> TrackNumber -> Title
+Composer -> Work -> RecordingYear -> Year -> Album -> Movement -> DiscNumber -> TrackNumber -> Title
 ```
 
+RecordingYear separates recordings without treating partial dates as full sessions; unknown recording years remain after present years.
+Year and Album remain subsequent boundaries, so recordings within the same year retain album-contiguous movement order.
 Album precedes Movement so different performances do not interleave movement-by-movement.
 Movement name is the visible row label, while movement number controls order.
+All three classical presets show RecordingDate; none uses full RecordingDate as a preset sort term.
 
 Classical Works groups by Work and suppresses composer/work fields already represented by its header.
 Classical Composers groups by Composer and keeps Work visible because multiple works occur in the section.

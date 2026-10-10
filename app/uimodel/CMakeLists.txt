@@ -26,6 +26,7 @@ add_library(ao_app_uimodel STATIC
     preference/PreferencesEditorModel.cpp
     field/TrackFieldFormatter.cpp
     library/detail/TrackCustomMetadata.cpp
+    library/detail/TrackCredits.cpp
     library/detail/TrackFieldGrid.cpp
     library/list/ListActions.cpp
     library/list/ListAuthoring.cpp

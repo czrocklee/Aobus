@@ -17,6 +17,7 @@ add_library(ao_appkit OBJECT
   NativeCallback.h
   PlaybackBar.mm PlaybackBar.h
   SoulButton.mm SoulButton.h
+  TrackCreditsEditor.mm TrackCreditsEditor.h
   TrackInspector.mm TrackInspector.h)
 target_link_libraries(ao_appkit PUBLIC
   ao_app_uimodel ao_app_runtime ao_app_i18n ao_app_i18n_ordering ao_app_i18n_completion ao_audio ao_desktop_launch

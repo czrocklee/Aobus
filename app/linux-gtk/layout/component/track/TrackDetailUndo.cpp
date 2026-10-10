@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -16,12 +17,16 @@
 #include <sigc++/signal.h>
 
 #include <algorithm>
+#include <bitset>
 #include <chrono>
+#include <cstdint>
 #include <expected>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -42,17 +47,34 @@ namespace ao::gtk::layout
     disconnectTimer();
   }
 
-  std::optional<TrackDetailCustomMetadataUndo> const& TrackDetailUndoController::pendingCustomMetadataUndo() const
+  TrackDetailCustomMetadataUndo const* TrackDetailUndoController::pendingCustomMetadataUndo() const
   {
-    return _optPendingCustomMetadataUndo;
+    return _optPendingUndo ? std::get_if<TrackDetailCustomMetadataUndo>(&*_optPendingUndo) : nullptr;
+  }
+
+  TrackDetailCreditsUndo const* TrackDetailUndoController::pendingCreditsUndo() const
+  {
+    return _optPendingUndo ? std::get_if<TrackDetailCreditsUndo>(&*_optPendingUndo) : nullptr;
   }
 
   void TrackDetailUndoController::presentCustomMetadataDeletedUndo(std::string key,
                                                                    std::string value,
                                                                    uimodel::TrackAuthoringSession session)
   {
-    _optPendingCustomMetadataUndo.reset();
-    _optPendingCustomMetadataUndo.emplace(
+    // A delayed completion can present an offer bound to a session a
+    // selection change, replacement, or teardown has already invalidated.
+    // That session cannot replay correctly and must not displace a newer
+    // opportunity; an offer accepted while current keeps its existing
+    // stale-after-offer replay behavior.
+    if (!session.isCurrent())
+    {
+      return;
+    }
+
+    _optPendingUndo.reset();
+    ++_opportunityId;
+    _optPendingUndo.emplace(
+      std::in_place_type<TrackDetailCustomMetadataUndo>,
       TrackDetailCustomMetadataUndo{.key = std::move(key), .value = std::move(value), .session = std::move(session)});
     resetTimer();
     _changed.emit();
@@ -61,15 +83,16 @@ namespace ao::gtk::layout
   void TrackDetailUndoController::clearIfAffectsCustomMetadata(std::string_view const key,
                                                                std::vector<TrackId> const& trackIds)
   {
-    if (!_optPendingCustomMetadataUndo || _optPendingCustomMetadataUndo->key != key)
+    auto const* pending = pendingCustomMetadataUndo();
+
+    if (pending == nullptr || pending->key != key)
     {
       return;
     }
 
-    auto const overlaps = std::ranges::any_of(
-      trackIds,
-      [this](TrackId const trackId)
-      { return std::ranges::contains(_optPendingCustomMetadataUndo->session.targetIds(), trackId); });
+    auto const overlaps = std::ranges::any_of(trackIds,
+                                              [pending](TrackId const trackId)
+                                              { return std::ranges::contains(pending->session.targetIds(), trackId); });
 
     if (overlaps)
     {
@@ -77,29 +100,87 @@ namespace ao::gtk::layout
     }
   }
 
-  void TrackDetailUndoController::clear()
+  void TrackDetailUndoController::presentCreditsClearedUndo(rt::CreditReplacement replacement,
+                                                            uimodel::TrackAuthoringSession session)
   {
-    if (!_optPendingCustomMetadataUndo)
+    // Same retirement rule as the custom-metadata offer: an invalidated
+    // session cannot replay and must not displace a newer opportunity.
+    if (!session.isCurrent())
     {
       return;
     }
 
-    _optPendingCustomMetadataUndo.reset();
+    _optPendingUndo.reset();
+    ++_opportunityId;
+    _optPendingUndo.emplace(
+      std::in_place_type<TrackDetailCreditsUndo>,
+      TrackDetailCreditsUndo{.replacement = std::move(replacement), .session = std::move(session)});
+    resetTimer();
+    _changed.emit();
+  }
+
+  void TrackDetailUndoController::clearIfAffectsCredits(std::vector<TrackId> const& trackIds,
+                                                        std::uint64_t const mutationRevision,
+                                                        std::bitset<library::kCreditKindCount> kinds)
+  {
+    // A delayed completion must not invalidate a clear offered after that mutation committed.
+    if (auto const* pending = pendingCreditsUndo();
+        pending != nullptr && (pending->replacement.kinds & kinds).any() &&
+        pending->session.boundRevision() <= mutationRevision &&
+        std::ranges::any_of(trackIds,
+                            [pending](TrackId trackId)
+                            { return std::ranges::contains(pending->session.targetIds(), trackId); }))
+    {
+      clear();
+    }
+  }
+
+  void TrackDetailUndoController::clear()
+  {
+    if (!_optPendingUndo)
+    {
+      return;
+    }
+
+    _optPendingUndo.reset();
+    ++_opportunityId;
     disconnectTimer();
     _changed.emit();
   }
 
   async::Task<Result<>> TrackDetailUndoController::undoAsync()
   {
-    if (!_optPendingCustomMetadataUndo)
+    if (!_optPendingUndo)
     {
       co_return Result<>{};
     }
 
-    auto patch = rt::MetadataPatch{};
-    patch.customUpdates[_optPendingCustomMetadataUndo->key] = _optPendingCustomMetadataUndo->value;
-    auto submission = _optPendingCustomMetadataUndo->session.submitMetadataAsync(std::move(patch));
-    auto clearPending = _presentationCallbacks.guard([this] { clear(); });
+    auto submission = std::visit(
+      [](auto& pending)
+      {
+        auto patch = rt::MetadataPatch{};
+
+        if constexpr (std::is_same_v<std::decay_t<decltype(pending)>, TrackDetailCustomMetadataUndo>)
+        {
+          patch.customUpdates[pending.key] = pending.value;
+        }
+        else
+        {
+          patch.optCredits = pending.replacement;
+        }
+
+        return pending.session.submitMetadataAsync(std::move(patch));
+      },
+      *_optPendingUndo);
+    // A completion from an old replay cannot dismiss a replacement opportunity.
+    auto clearPending = _presentationCallbacks.guard(
+      [this, id = _opportunityId]
+      {
+        if (_opportunityId == id)
+        {
+          clear();
+        }
+      });
 
     auto const replyRes = co_await std::move(submission);
 
@@ -144,9 +225,17 @@ namespace ao::gtk::layout
   {
     disconnectTimer();
 
-    auto timeoutCallback = sigc::slot<bool()>{[this]
+    auto expire = _presentationCallbacks.guard(
+      [this, id = _opportunityId]
+      {
+        if (_opportunityId == id)
+        {
+          clear();
+        }
+      });
+    auto timeoutCallback = sigc::slot<bool()>{[expire = std::move(expire)] mutable
                                               {
-                                                clear();
+                                                expire();
                                                 return false;
                                               }};
 

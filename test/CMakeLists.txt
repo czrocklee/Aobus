@@ -325,6 +325,9 @@ add_executable(ao_core_test
     unit/query/ExecutionPlanTagBloomTest.cpp
     unit/query/ExecutionPlanUnitLiteralTest.cpp
     unit/query/FormatExpressionTest.cpp
+    unit/query/RecordingDatePredicateTest.cpp
+    unit/query/PredicateOperandContextTest.cpp
+    unit/query/CreditPredicateTest.cpp
     unit/query/PlanEvaluatorTestSupport.cpp
     unit/query/PlanEvaluatorCollectionTest.cpp
     unit/query/PlanEvaluatorComparisonTest.cpp
@@ -344,8 +347,13 @@ add_executable(ao_core_test
     unit/media/file/MpegFileTest.cpp
     unit/media/file/Mp4FileTest.cpp
     unit/media/file/id3v2/ReaderTest.cpp
+    unit/media/file/id3v2/TestId3v2.cpp
+    unit/media/file/id3v2/CreditReaderTest.cpp
+    unit/media/file/ContentCreditTest.cpp
+    unit/media/file/VorbisCreditTest.cpp
     unit/media/file/FlacFileTest.cpp
     unit/media/file/WavFileTest.cpp
+    unit/media/file/WavCreditContentTest.cpp
     unit/media/file/OpusFileTest.cpp
     unit/media/file/FileTest.cpp
     unit/media/file/DecoderTest.cpp
@@ -363,7 +371,11 @@ add_executable(ao_core_test
     unit/media/wav/RiffTest.cpp
 
     # library tests
+    unit/library/RecordingDateTest.cpp
+    unit/library/CreditsTest.cpp
     unit/library/TrackLayoutTest.cpp
+    unit/library/TrackPerformanceTest.cpp
+    unit/library/TrackPerformanceValidationTest.cpp
     unit/library/TrackViewTest.cpp
     unit/library/TrackViewTagTest.cpp
     unit/library/TrackViewCustomMetadataTest.cpp
@@ -492,6 +504,7 @@ add_executable(ao_core_test
     unit/uimodel/presentation/CoverArtPlaceholderTest.cpp
     unit/uimodel/presentation/PresentationTextFeaturesTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
+    unit/uimodel/library/detail/TrackCreditsTest.cpp
     unit/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
     unit/uimodel/library/list/ListActionsTest.cpp
@@ -515,13 +528,16 @@ add_executable(ao_core_test
     unit/uimodel/library/presentation/ListPresentationRecommendationTest.cpp
     unit/uimodel/library/property/TagEditTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
+    unit/uimodel/library/property/TrackPropertiesCreditsTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp
     unit/uimodel/library/task/LibraryScanOutcomeTest.cpp
     unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
     unit/uimodel/library/track/ListMembershipAuthoringSessionTest.cpp
     unit/uimodel/library/track/TrackAuthoringSessionTest.cpp
+    unit/uimodel/library/track/TrackAuthoringSnapshotSessionTest.cpp
     unit/uimodel/library/track/TrackAuthoringTest.cpp
+    unit/uimodel/library/track/RecordingDateEditingTest.cpp
     unit/uimodel/library/track/TrackAuthoringTestSupport.cpp
     unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp
     unit/uimodel/library/track/TrackDisplayIndexTest.cpp
@@ -556,10 +572,13 @@ add_executable(ao_core_test
     unit/runtime/ExecutorTestSupportTest.cpp
     unit/runtime/library/LibraryPathsTest.cpp
     unit/runtime/library/LibrarySnapshotTest.cpp
+    unit/runtime/library/LibrarySnapshotCreditsTest.cpp
+    unit/runtime/library/LibrarySnapshotCustomMetadataTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
     unit/runtime/completion/CompletionTextTest.cpp
     unit/runtime/completion/CompletionVocabularyTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
+    unit/runtime/completion/CreditCompletionTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/LogTest.cpp
     unit/runtime/LoopExecutorTest.cpp
@@ -583,6 +602,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryCommandsListMembershipTest.cpp
     unit/runtime/library/LibraryCommandsListOrderTest.cpp
     unit/runtime/TrackFieldTest.cpp
+    unit/runtime/TrackRecordingDateFieldTest.cpp
     unit/runtime/library/LibraryCommandsDryRunTest.cpp
     unit/runtime/library/LibraryChangesTest.cpp
     unit/runtime/projection/TrackListProjectionGroupingTest.cpp
@@ -591,6 +611,7 @@ add_executable(ao_core_test
     unit/runtime/projection/TrackListProjectionLifecycleTest.cpp
     unit/runtime/projection/TrackListProjectionMutationTest.cpp
     unit/runtime/projection/TrackListProjectionSortingTest.cpp
+    unit/runtime/projection/TrackRecordingDateSortTest.cpp
     unit/runtime/projection/TrackListProjectionScaleTest.cpp
     unit/runtime/playback/PlaybackCursorModelTest.cpp
     unit/runtime/playback/PlaybackRestartDeadlineTest.cpp
@@ -618,17 +639,24 @@ add_executable(ao_core_test
     unit/runtime/source/TrackSourceCachePublicationLifetimeTest.cpp
     unit/runtime/source/VirtualListIdsTest.cpp
     unit/runtime/projection/TrackDetailProjectionTest.cpp
+    unit/runtime/projection/TrackDetailPerformanceTest.cpp
     unit/runtime/library/AudioIdentityIndexerTest.cpp
     unit/runtime/library/LibraryScanTest.cpp
     unit/runtime/library/ScanPlanTest.cpp
     unit/runtime/library/ScanApplyDatabaseAdmissionTest.cpp
     unit/runtime/library/ScanApplyFilesystemRevalidationTest.cpp
     unit/runtime/library/ScanApplyOperationTest.cpp
+    unit/runtime/library/ScanWorkMetadataTest.cpp
+    unit/runtime/library/ScanPerformanceMetadataTest.cpp
     unit/runtime/library/TrackBuilderSnapshotTest.cpp
     unit/runtime/library/LibraryJobsTest.cpp
     unit/runtime/library/RuntimeFatalProbeTest.cpp
     unit/runtime/library/LibraryCommandsTest.cpp
     unit/runtime/library/LibraryAuthoringTest.cpp
+    unit/runtime/library/TrackAuthoringSnapshotTest.cpp
+    unit/runtime/library/TrackTargetAdmissionTest.cpp
+    unit/runtime/library/TrackCustomMetadataAdmissionTest.cpp
+    unit/runtime/library/TrackPerformanceAuthoringTest.cpp
     unit/runtime/completion/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
     unit/runtime/NotificationServiceExpiryTest.cpp
@@ -655,6 +683,10 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryExportImportErrorTest.cpp
     unit/runtime/library/LibraryExportImportListTest.cpp
     unit/runtime/library/LibraryYamlSchemaTest.cpp
+    unit/runtime/library/LibraryYamlExporterTest.cpp
+    unit/runtime/library/LibraryYamlImporterTest.cpp
+    unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp
+    unit/runtime/library/LibraryYamlCreditBoundaryTest.cpp
     unit/runtime/library/LibraryExportImportTest.cpp
     unit/runtime/resource/ResourceByteDiskCacheTest.cpp
     unit/runtime/resource/ResourceByteMemoryCacheTest.cpp
@@ -875,6 +907,7 @@ aobus_target_test_sources(ao_tui_test "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
     unit/tui/ExitControllerTest.cpp
     unit/tui/FrameTimerTest.cpp
     unit/tui/LibraryControllerTest.cpp
+    unit/tui/LibraryCreditsCacheTest.cpp
     unit/tui/LibraryNavigationTest.cpp
     unit/tui/LibraryScanControllerTest.cpp
     unit/tui/ListAuthoringControllerTest.cpp
@@ -893,6 +926,7 @@ aobus_target_test_sources(ao_tui_test "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
     unit/tui/TrackListEntryTest.cpp
     unit/tui/TrackEditControllerTest.cpp
     unit/tui/TrackPresentationNavigationTest.cpp
+    unit/tui/TrackCreditsEditorTest.cpp
     unit/tui/TrackPropertiesEditorTest.cpp
     unit/tui/TrackPropertiesEditorCompletionTest.cpp
     unit/tui/TrackTagPopoverTest.cpp
@@ -954,6 +988,8 @@ aobus_target_test_sources(ao_cli_test "${AOBUS_BUILD_CLI}" "AOBUS_BUILD_CLI=OFF"
     unit/cli/ScanCommandTest.cpp
     unit/cli/TagCommandTest.cpp
     unit/cli/TrackCommandTest.cpp
+    unit/cli/TrackPerformanceMetadataCommandTest.cpp
+    unit/cli/TrackLiteralMetadataCommandTest.cpp
     unit/cli/OutputTest.cpp
 )
 
@@ -1066,6 +1102,9 @@ aobus_target_test_sources(ao_gtk_test "${AOBUS_BUILD_GTK}" "AOBUS_BUILD_GTK=OFF"
     unit/linux-gtk/tag/TagEditorTest.cpp
     unit/linux-gtk/tag/TagEditControllerTest.cpp
     unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp
+    unit/linux-gtk/tag/TrackRecordingDatePropertiesTest.cpp
+    unit/linux-gtk/layout/components/TrackCreditsEditorTest.cpp
+    unit/linux-gtk/layout/components/TrackCreditsRefreshTest.cpp
     unit/linux-gtk/image/ImageWidgetTest.cpp
     unit/linux-gtk/image/ImageRenderPolicyTest.cpp
     unit/linux-gtk/image/ImageCacheTest.cpp
@@ -1158,6 +1197,10 @@ aobus_target_test_sources(ao_gtk_test "${AOBUS_BUILD_GTK}" "AOBUS_BUILD_GTK=OFF"
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline EXCLUDE_FROM_ALL
     perf/PerformanceMain.cpp
+    perf/ClassicalMetadataBaselineTest.cpp
+    perf/CreditsBaselineTest.cpp
+    perf/PerformanceMetadataBaselineTest.cpp
+    perf/PerformanceMetadataIncrementalBaselineTest.cpp
     perf/CompletionVocabularyBaselineTest.cpp
     perf/PerformanceReviewTest.cpp
     perf/PerformanceBaselineTest.cpp

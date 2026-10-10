@@ -26,6 +26,12 @@ the window cross-queries all three owners. Only one `ContentDialog` is admitted 
 and admits no other modal workflow. Those history gestures cannot navigate beneath
 an open modal surface; editor targets remain the selection captured at entry.
 
+Properties' Credits editor is an inline child of that already admitted dialog, not a second modal workflow.
+Detail category/all-kind actions route through the same Properties owner with a captured scope.
+Only one child is active; accepting it updates the parent draft, while parent Save remains blocked until it finishes, including metadata- or tag-only Save routes.
+Confirmed Reload replaces the complete draft/binding for the captured targets without nesting another `ShowAsync`; declining discard retains the old draft.
+The [Windows Properties contract](windows.md#commands-and-transitions) owns controls and composed submission.
+
 A generation token reports admission only; it does not retain window, session,
 coordinator, dialog, Runtime, or selection memory. Every owner retires its gate
 before cancellation and remains alive until already admitted dispatcher work

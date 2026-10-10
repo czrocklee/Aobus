@@ -11,6 +11,7 @@
 #include <ao/Error.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/i18n/IcuCompletionAliases.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
@@ -278,11 +279,14 @@ namespace ao::rt::test
             .albumArtist = std::format("Album Artist {:04}", index % (kTrackCount / 50)),
             .genre = std::format("Genre {:02}", index % 50),
             .composer = std::format("Composer {:04}", index % (kTrackCount / 20)),
-            .conductor = std::format("Conductor {:03}", index % (kTrackCount / 100)),
-            .ensemble = std::format("Ensemble {:04}", index % (kTrackCount / 50)),
             .work = std::format("Work {:05}", index % (kTrackCount / 2)),
             .movement = std::format("Movement {:05}", index % (kTrackCount / 5)),
-            .soloist = std::format("Soloist {:05}", index % (kTrackCount / 10)),
+            .credits = {{.name = std::format("Conductor {:03}", index % (kTrackCount / 100)),
+                         .kind = library::CreditKind::Conductor},
+                        {.name = std::format("Ensemble {:04}", index % (kTrackCount / 50)),
+                         .kind = library::CreditKind::Ensemble},
+                        {.name = std::format("Soloist {:05}", index % (kTrackCount / 10)),
+                         .kind = library::CreditKind::Soloist}},
             .uri = std::format("completion-baseline/{:06}.flac", index),
             .tags =
               {

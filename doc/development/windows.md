@@ -212,9 +212,10 @@ probe switches.
 ### Track and navigation probes
 
 The WinUI build also executes `ao_winui_track_item_probe`, a console check of the
-real generated TrackRowItem projection and lazy item view. Its seven scenarios
+real generated TrackRowItem projection and lazy item view. Its eight scenarios
 cover bounded materialization, null retry, cache identity and eviction, IndexOf,
-GetMany, iterator lifetime, and oversized-count rejection. Failure stops the
+GetMany, iterator lifetime, oversized-count rejection, and duplicate-inclusive
+compact Credits counts. Failure stops the
 build; no interactive desktop or audio endpoint is required.
 
 `ao_winui_track_table_probe` is built by native checks but runs only from a
@@ -235,6 +236,18 @@ enablement without an audio endpoint or media playback. Native navigation chrome
 clearance covers the 720/1120 effective-width boundaries, including window-local
 Light. A 90-second dispatcher deadline bounds execution; failure reports a
 nonzero exit rather than a dialog.
+
+`ao_winui_credits_probe` likewise requires a logged-in desktop:
+`<reported-build-dir>\app\windows-winui\credits-probe\Debug\ao_winui_credits_probe.exe`.
+It hosts the shipping Credits controls at a constrained width and exercises empty,
+single, and multiple entries, duplicates, roles, reordering, locked/full kind scope,
+mixed replacement/clear intent, validation, focus, cancellation, and disabled
+callback admission. Steps await native Loaded/template readiness and observed
+TextChanged delivery; a 90-second deadline fails rather than guessing completion
+from dispatcher turns. A disposable application runtime also exercises the shipping
+Properties coordinator's composed Save, durable readback and revision publication,
+staging without writes, discard confirmation, and stale draft reload. It does not
+cover MainWindow modal-root admission or multi-target coordinator workflows.
 
 These are programmatic native XAML observations. The table uses representative
 row templates, and transport checks inspect native properties: passing does not

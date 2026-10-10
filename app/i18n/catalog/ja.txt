@@ -3,6 +3,30 @@
 
 ja:table {
   messages:table {
+    track_field_recording_date { "録音日" }
+    track_credits_heading { "演奏クレジット" }
+    track_credit_performer { "演奏者" }
+    track_credit_name { "名前" }
+    track_credit_role { "役割または楽器（任意）" }
+    track_credits_add { "クレジットを追加" }
+    track_credits_replace { "置き換え…" }
+    track_credits_clear { "この範囲をクリア" }
+    track_credits_commit { "クレジットを保存" }
+    track_credits_cancel { "キャンセル" }
+    track_credit_delete { "クレジットを削除" }
+    track_credit_blank_name { "{row} 行目: 名前を入力してください。" }
+    track_credit_invalid_name_text { "{row} 行目: 名前に無効なテキストが含まれています。" }
+    track_credit_invalid_role_text { "{row} 行目: 役割または楽器に無効なテキストが含まれています。" }
+    track_credit_invalid_kind { "{row} 行目: この範囲で有効なクレジット分類を選択してください。" }
+    track_credits_cleared { "クレジットをクリアしました" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "分類" }
+    track_credits_scope { "クレジットの範囲: {scope}" }
+    track_credits_all_kinds { "すべてのクレジット分類" }
+    track_credits_replace_scope { "選択したすべての曲でこの範囲を置き換える" }
+    track_credit_move_up { "上へ移動" }
+    track_credit_move_down { "下へ移動" }
+    track_recording_date_invalid { "有効な日付を YYYY、YYYY-MM、YYYY-MM-DD の形式で入力してください。空欄にするとクリアします。" }
     tui_go_to_back { "戻る" }
     tui_go_to_forward { "進む" }
     tui_go_to_cancel { "キャンセル" }

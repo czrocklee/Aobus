@@ -19,6 +19,7 @@ namespace ao::detail
   enum class ExceptionCarrierReason
   {
     CancellationTransport,
+    ForeignCallbackAdapter,
     PrivateErrorTransport,
   };
 
@@ -50,6 +51,16 @@ namespace ao::async
     AO_EXCEPTION_CARRIER(CancellationTransport);
     // NEGATIVE
     throw std::runtime_error{"approved cancellation carrier"};
+  }
+}
+
+namespace ao::cli
+{
+  [[noreturn]] void throwCreditArityError()
+  {
+    AO_EXCEPTION_CARRIER(ForeignCallbackAdapter);
+    // NEGATIVE
+    throw std::runtime_error{"approved CLI parser callback carrier"};
   }
 }
 

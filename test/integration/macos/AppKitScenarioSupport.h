@@ -50,5 +50,9 @@ namespace ao::appkit::test
   std::int32_t runDesktopScenario(DesktopLaunch launch, i18n::MessageCatalog catalog, bool successor);
   std::int32_t runMediaScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
   std::int32_t runAuthoringScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
+  std::int32_t runCreditsControlsScenario(std::filesystem::path const& musicRoot,
+                                          std::filesystem::path const& stateRoot);
+  std::int32_t runCreditsPreviewsScenario(std::filesystem::path const& musicRoot,
+                                          std::filesystem::path const& stateRoot);
   std::int32_t runPresentationScenario(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot);
 } // namespace ao::appkit::test

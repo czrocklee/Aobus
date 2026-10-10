@@ -187,7 +187,7 @@ namespace ao::gtk::test
     auto const importPath = fixture.tempDir().path() / "restore.yaml";
     {
       auto yaml = std::ofstream{importPath};
-      yaml << R"(version: 6
+      yaml << R"(version: 7
 export_mode: full
 library:
   resources: []

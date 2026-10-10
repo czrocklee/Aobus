@@ -3,6 +3,30 @@
 
 fr:table {
   messages:table {
+    track_field_recording_date { "Date d’enregistrement" }
+    track_credits_heading { "Crédits d’interprétation" }
+    track_credit_performer { "Interprète" }
+    track_credit_name { "Nom" }
+    track_credit_role { "Rôle ou instrument (facultatif)" }
+    track_credits_add { "Ajouter un crédit" }
+    track_credits_replace { "Remplacer…" }
+    track_credits_clear { "Effacer ce périmètre" }
+    track_credits_commit { "Enregistrer les crédits" }
+    track_credits_cancel { "Annuler" }
+    track_credit_delete { "Supprimer le crédit" }
+    track_credit_blank_name { "Ligne {row} : saisissez un nom." }
+    track_credit_invalid_name_text { "Ligne {row} : le nom contient du texte non valide." }
+    track_credit_invalid_role_text { "Ligne {row} : le rôle ou l’instrument contient du texte non valide." }
+    track_credit_invalid_kind { "Ligne {row} : choisissez une catégorie de crédit valide pour ce périmètre." }
+    track_credits_cleared { "Crédits effacés" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "Catégorie" }
+    track_credits_scope { "Périmètre des crédits : {scope}" }
+    track_credits_all_kinds { "Toutes les catégories de crédits" }
+    track_credits_replace_scope { "Remplacer ce périmètre sur toutes les pistes sélectionnées" }
+    track_credit_move_up { "Monter" }
+    track_credit_move_down { "Descendre" }
+    track_recording_date_invalid { "Saisissez une date valide au format YYYY, YYYY-MM ou YYYY-MM-DD, ou laissez le champ vide pour l’effacer." }
     tui_go_to_back { "Retour" }
     tui_go_to_forward { "Avancer" }
     tui_go_to_cancel { "Annuler" }

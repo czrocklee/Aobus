@@ -43,6 +43,13 @@ namespace ao::rt::test
       std::size_t count = 0;
     };
 
+    struct AllocationMetric final
+    {
+      std::string scope;
+      std::size_t calls = 0;
+      std::size_t requestedBytes = 0;
+    };
+
     std::string capability;
     std::optional<std::string> optPolicy = std::nullopt;
     std::string scenario;
@@ -52,6 +59,7 @@ namespace ao::rt::test
     std::int64_t medianNs = 0;
     std::int64_t percentile95Ns = 0;
     std::optional<ByteMetric> optByteMetric = std::nullopt;
+    std::optional<AllocationMetric> optAllocationMetric = std::nullopt;
   };
 
   std::string environmentText(char const* name, std::string_view fallback = "unknown");

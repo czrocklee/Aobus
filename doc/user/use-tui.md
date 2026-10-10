@@ -73,10 +73,13 @@ Press `t` or run `:tags` for a quick tag edit over all marked tracks, or the foc
 
 Press `e`, run `:edit`, or run `:properties` for the full Track Properties editor. Its target set is captured when it opens.
 
-- Tab/Shift+Tab changes between Metadata, Tags, Properties, and the multi-selection Tracks page.
+- Tab/Shift+Tab changes between Metadata, Tags, Properties, and the multi-selection Tracks page, except while the Credits child uses them to select its controls.
 - Typing edits the focused metadata field; Ctrl+D clears it for all targets and Ctrl+G restores its baseline.
 - On Tags, Enter cycles the selected tag's intended result.
-- Ctrl+S submits metadata and tag changes together.
+- Enter on a Conductor, Ensemble, or Soloist preview opens that category's Credits editor; Ctrl+O on Metadata opens all kinds. Previews are read-only first-name `+N` summaries, not scalar inputs.
+- In Credits, Tab selects Name, Role, Kind, Add/Delete, Move, Replace Scope, Clear, Commit, or Cancel; Enter activates the control. Kind is locked in a category editor, and moves stay within a kind.
+- Mixed scopes require explicit replacement or the separate Clear action. Ctrl+S accepts the child into Properties; Escape cancels just the child.
+- After finishing the child, Ctrl+S submits metadata, staged Credits, and tag changes together. The active child blocks parent Save.
 - Ctrl+R reloads every captured target. Escape closes the editor. Either action asks before discarding a dirty draft.
 
 If the library changes while the editor is open, the draft becomes stale and cannot be saved. Reload it with Ctrl+R or close it and begin again. Input is inert while a submitted write is finishing.
@@ -96,7 +99,9 @@ Use these shipped shortcuts:
 | `g` | Go to current track, artist, album, or workspace history |
 | `c` | reveal the playing track directly |
 
-Detail stays beside the track table while you browse. Escape closes temporary overlays but does not hide Detail. The quality conclusion describes the active playback path, not metadata stored on the track. See [interpreting playback quality](play-music.md#inspect-playback-quality) for source fidelity, pipeline changes, and incomplete evidence.
+Detail stays beside the track table while you browse. Escape closes temporary overlays but does not hide Detail.
+Credits show complete names, kinds, and optional roles. With Detail focused, Ctrl+K opens all Credits for the focused track; `1` through `4` open Conductor, Ensemble, Soloist, or Performer respectively.
+Table category columns stay compact and count duplicate entries; detail and editor show the complete lists. The quality conclusion describes the active playback path, not metadata stored on the track. See [interpreting playback quality](play-music.md#inspect-playback-quality) for source fidelity, pipeline changes, and incomplete evidence.
 
 The playback bar's four-character mode combines sequential or shuffled order with repeat state. Clicking it advances through presets; `S` changes shuffle and `r` cycles repeat independently. The [TUI command reference](../reference/tui/command.md#playback-mode-codes) defines the codes.
 
@@ -168,5 +173,6 @@ Press uppercase `Q`, run `:quit`, or press Ctrl+C. Normal exit—including an ac
 - [TUI interaction specification](../system/frontend/tui.md)
 - [Linux MPRIS behavior](../system/frontend/mpris.md)
 - [TUI track authoring](../system/frontend/tui-track-authoring.md)
+- [Edit metadata and Credits](edit-metadata.md)
 - [Predicate language reference](../reference/query/predicate-language.md)
 - [Track preset reference](../reference/presentation/track-preset.md)

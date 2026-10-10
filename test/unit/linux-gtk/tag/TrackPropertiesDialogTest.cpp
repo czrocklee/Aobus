@@ -15,6 +15,7 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackField.h>
@@ -588,5 +589,62 @@ namespace ao::gtk::test
       dialog.response(Gtk::ResponseType::CLOSE);
       drainGtkEvents();
     }
+  }
+
+  TEST_CASE("TrackPropertiesDialog - active Credits child blocks parent Save and stages one composed patch",
+            "[gtk][integration][track-credits][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& storage)
+      {
+        trackId = library::test::addTrackWithUniqueFixtureUri(
+          storage, {.title = "Before", .credits = {{"Player", library::CreditKind::Performer, "Piano"}}});
+      }};
+    auto& runtime = fixture.runtime();
+    auto catalog = ao::test::englishMessageCatalog();
+    auto cache = TrackRowCache{runtime.library(), catalog};
+    auto parent = Gtk::Window{};
+    parent.present();
+    auto* dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      parent, runtime.async(), runtime.library(), runtime.completion(), catalog, cache, std::vector{trackId});
+    dialog->present();
+    drainGtkEvents();
+    auto entries = collectAll<Gtk::Entry>(*dialog);
+    auto title = std::ranges::find_if(entries, [](auto* entry) { return entry->get_text() == "Before"; });
+    REQUIRE(title != entries.end());
+    (*title)->set_text("After");
+    auto* edit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-edit");
+    REQUIRE(edit != nullptr);
+    emitClicked(*edit);
+    drainGtkEvents();
+    auto* name = findWidgetByClass<Gtk::Entry>(*dialog, "ao-credit-name");
+    REQUIRE(name != nullptr);
+    name->set_text("Changed player");
+    auto* save = findButtonByLabel(*dialog, "Save");
+    REQUIRE(save != nullptr);
+    CHECK_FALSE(save->get_sensitive());
+    // Programmatic responses cannot bypass the active-child guard.
+    dialog->response(Gtk::ResponseType::OK);
+    drainGtkEvents();
+    CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "Before");
+    CHECK(runtime.library().snapshot().trackCredits(trackId) ==
+          std::vector<library::Credit>{{"Player", library::CreditKind::Performer, "Piano"}});
+    auto* commit = findWidgetByClass<Gtk::Button>(*dialog, "ao-credits-commit");
+    REQUIRE(commit != nullptr);
+    emitClicked(*commit);
+    drainGtkEvents();
+    CHECK(save->get_sensitive());
+    CHECK(runtime.library().snapshot().trackCredits(trackId) ==
+          std::vector<library::Credit>{{"Player", library::CreditKind::Performer, "Piano"}});
+    auto finalization = FinalizationObserver{G_OBJECT(dialog->gobj())};
+    emitClicked(*save);
+    REQUIRE(tryPumpGtkEventsUntil([&] { return finalization.isFinalized(); }));
+    CHECK(rt::test::runtimeTrackSpec(runtime, trackId).title == "After");
+    CHECK(runtime.library().snapshot().trackCredits(trackId) ==
+          std::vector<library::Credit>{{"Changed player", library::CreditKind::Performer, "Piano"}});
+    parent.close();
+    drainGtkEvents();
   }
 } // namespace ao::gtk::test

@@ -44,6 +44,10 @@ namespace ao::cli
                    CliRunOptions const options)
   {
     auto cli = CliRuntime{out, err, options.musicLibraryPinnedMapBytes, options.optCacheDirectory};
+    // CLI11 parses args in place. Both vectors outlive the command tree: raw
+    // operands come from args, attached text from the immutable original copy.
+    auto args = std::vector<std::string>{};
+    auto originalArgs = std::vector<std::string>{};
     auto app = CLI::App{"Aobus CLI - aobus"};
     app.require_subcommand(1);
     app.fallthrough();
@@ -57,14 +61,22 @@ namespace ao::cli
 
     try
     {
-      configureTrackCommand(app, cli);
+      app.name(argv[0]);
+
+      for (std::int32_t index = argc - 1; index > 0; --index)
+      {
+        args.emplace_back(argv[index]);
+      }
+
+      originalArgs = args;
+      configureTrackCommand(app, cli, args, originalArgs);
       configureListCommand(app, cli);
       configureInitCommand(app, cli);
       configureScanCommand(app, cli);
       configureTagCommand(app, cli);
       configureLibCommand(app, cli);
 
-      app.parse(argc, argv);
+      app.parse(args);
       return 0;
     }
     catch (CLI::CallForAllHelp const&)

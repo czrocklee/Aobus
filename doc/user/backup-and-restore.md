@@ -17,9 +17,10 @@ Back up the music files separately and preserve their paths relative to the musi
 GTK and the Windows desktop prepare a restore preview and require confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
-Only version 6 YAML is accepted.
-Earlier interchange files have no compatibility or conversion path, and no build can re-export an older library as version 6: the current build opens only the current database version, while older builds write YAML versions it rejects.
-A library from an earlier version is recovered by scanning its music files, which loses curation such as lists and edited metadata unless you already have a version 6 backup.
+Only version 7 YAML is accepted.
+Earlier interchange files, including version 6, have no compatibility or conversion path, and no build can re-export an older library as version 7: the current build opens only the current database version, while older builds write YAML versions it rejects.
+A library from an earlier version can be rebuilt by explicitly scanning its music files, which loses curation such as lists and edited metadata unless you already have a version 7 backup.
+Opening an old library never converts, relabels, or deletes it automatically.
 
 Track paths belong to the selected music root.
 Symlinks whose existing targets remain inside that root are supported, while dangling symlinks and symlinks into another tree are rejected during export, import baselining, scanning, and playback.

@@ -6,12 +6,14 @@
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/library/RecordingDate.h>
 
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <ratio>
+#include <type_traits>
 
 namespace ao::library
 {
@@ -91,11 +93,13 @@ namespace ao::library
   enum class TrackColdBlockSlot : std::uint8_t
   {
     CoverArt = 0,
-    Classical = 1,
+    Work = 1,
     CustomMetadata = 2,
+    Performance = 3,
   };
 
-  constexpr std::size_t kTrackColdKnownBlockSlotCount = 3;
+  constexpr std::size_t kTrackColdKnownBlockSlotCount = 4;
+  // Slot 4 is the last unused cold slot.
   constexpr std::size_t kTrackColdBlockSlotCount = 5;
 
   constexpr std::size_t trackColdBlockSlotIndex(TrackColdBlockSlot slot) noexcept
@@ -103,19 +107,53 @@ namespace ao::library
     return static_cast<std::size_t>(slot);
   }
 
-  struct TrackClassicalBlock final
+  struct TrackWorkBlock final
   {
     DictionaryId workId{};
     DictionaryId movementId{};
-    DictionaryId conductorId{};
-    DictionaryId ensembleId{};
-    DictionaryId soloistId{};
     std::uint16_t movementNumber{};
     std::uint16_t movementTotal{};
   };
 
-  static_assert(sizeof(TrackClassicalBlock) == 24, "TrackClassicalBlock must be exactly 24 bytes");
-  static_assert(alignof(TrackClassicalBlock) == 4, "TrackClassicalBlock must have 4-byte alignment");
+  constexpr std::size_t kTrackWorkBlockSize = 12;
+
+  static_assert(sizeof(TrackWorkBlock) == kTrackWorkBlockSize);
+  static_assert(alignof(TrackWorkBlock) == 4);
+
+  /** Fixed prefix followed by Conductor, Ensemble, Soloist, Performer segments. */
+  struct alignas(4) TrackPerformanceBlock final
+  {
+    RecordingDate recordingDate{};
+    std::array<std::uint16_t, 3> sectionCounts{};
+    std::uint16_t reserved{};
+  };
+
+  struct TrackCreditEntry final
+  {
+    DictionaryId nameId{};
+    DictionaryId roleId{};
+  };
+
+  static_assert(std::is_standard_layout_v<RecordingDate>);
+  static_assert(std::is_trivially_copyable_v<RecordingDate>);
+  static_assert(sizeof(RecordingDate) == 4);
+  static_assert(offsetof(RecordingDate, year) == 0);
+  static_assert(offsetof(RecordingDate, month) == 2);
+  static_assert(offsetof(RecordingDate, day) == 3);
+  static_assert(std::is_standard_layout_v<TrackPerformanceBlock>);
+  static_assert(std::is_trivially_copyable_v<TrackPerformanceBlock>);
+  constexpr std::size_t kTrackPerformanceBlockSize = 12;
+  static_assert(sizeof(TrackPerformanceBlock) == kTrackPerformanceBlockSize);
+  static_assert(alignof(TrackPerformanceBlock) == 4);
+  static_assert(offsetof(TrackPerformanceBlock, recordingDate) == 0);
+  static_assert(offsetof(TrackPerformanceBlock, sectionCounts) == 4);
+  static_assert(offsetof(TrackPerformanceBlock, reserved) == kTrackPerformanceBlockSize - sizeof(std::uint16_t));
+  static_assert(std::is_standard_layout_v<TrackCreditEntry>);
+  static_assert(std::is_trivially_copyable_v<TrackCreditEntry>);
+  static_assert(sizeof(TrackCreditEntry) == 8);
+  static_assert(alignof(TrackCreditEntry) == 4);
+  static_assert(offsetof(TrackCreditEntry, nameId) == 0);
+  static_assert(offsetof(TrackCreditEntry, roleId) == 4);
 
   struct CustomMetadataBlockHeader final
   {
@@ -149,7 +187,7 @@ namespace ao::library
    * Cold fixed fields are those not used in high-frequency filter/sort operations:
    *   - duration, bitrate, channels: audio properties
    *   - trackNumber, trackTotal, discNumber, discTotal: display only
-   *   - extension block area: cover art, classical metadata, custom metadata
+   *   - extension block area: cover art, work, custom metadata, performance
    *   - uri: playback path, stored after the block area
    *
    * Total size: 32 bytes with 4-byte alignment.

@@ -6,11 +6,13 @@
 #include "../TrackField.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/library/Credits.h>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -58,6 +60,10 @@ namespace ao::rt
     std::span<VocabularyEntry const> tags();
     std::span<VocabularyEntry const> customKeys();
     std::span<VocabularyEntry const> valuesFor(TrackField field);
+    /// Ordered credit vocabularies, with frequency counted once per track in the selected scope.
+    std::span<VocabularyEntry const> creditNames();
+    std::span<VocabularyEntry const> creditNames(library::CreditKind kind);
+    std::span<VocabularyEntry const> creditRoles();
     std::span<VocabularyEntry const> aggregateValues(TrackValueVocabularySpec spec);
 
     /// Replaces the retained ordering policy on the owner thread and invalidates materialized vocabulary order.
@@ -70,6 +76,32 @@ namespace ao::rt
       std::uint32_t frequency = 0;
       std::uint32_t aliasIndex = 0;
     };
+
+    enum class Vocabulary : std::uint8_t
+    {
+      Tags,
+      CustomKeys,
+      CreditNames,
+      CreditRoles,
+      ConductorNames,
+      EnsembleNames,
+      SoloistNames,
+      PerformerNames,
+      Count,
+    };
+
+    struct VocabularyCache final
+    {
+      bool ready = false;
+      std::vector<DictionaryFrequency> frequencies;
+      std::vector<VocabularyEntry> entries;
+    };
+
+    static Vocabulary creditVocabulary(library::CreditKind kind);
+    static std::optional<Vocabulary> categoryVocabulary(TrackField field);
+    VocabularyCache& vocabularyCache(Vocabulary vocabulary);
+    std::span<VocabularyEntry const> vocabularyEntries(Vocabulary vocabulary);
+    std::span<DictionaryFrequency const> fieldFrequencies(TrackField field);
 
     struct AliasRecord final
     {
@@ -98,8 +130,6 @@ namespace ao::rt
     void invalidate();
     void ensureSnapshot();
     void rebuildSnapshot();
-    void materializeTags();
-    void materializeCustomKeys();
     void materializeValues(TrackField field);
     void materializeAggregateValues();
     std::span<std::string const> aliasesForDictionary(std::size_t aliasIndex, std::string_view text);
@@ -115,20 +145,15 @@ namespace ao::rt
     async::Subscription _libraryChangeSubscription;
 
     bool _snapshotDirty = true;
-    bool _tagsReady = false;
-    bool _customKeysReady = false;
     bool _aggregateValuesReady = false;
     std::array<bool, kTrackFieldCount> _valuesReady{};
 
     std::vector<VocabularyEntry> _titleFrequencies;
-    std::vector<DictionaryFrequency> _tagFrequencies;
-    std::vector<DictionaryFrequency> _customKeyFrequencies;
+    std::array<VocabularyCache, static_cast<std::size_t>(Vocabulary::Count)> _vocabularies;
     std::array<std::vector<DictionaryFrequency>, kTrackFieldCount> _valueFrequencies;
     std::vector<AliasRecord> _dictionaryAliases;
     std::vector<AliasRecord> _titleAliases;
 
-    std::vector<VocabularyEntry> _tags;
-    std::vector<VocabularyEntry> _customKeys;
     std::vector<TrackField> _aggregateFields;
     bool _aggregateIncludesTags = false;
     std::vector<VocabularyEntry> _aggregateValues;

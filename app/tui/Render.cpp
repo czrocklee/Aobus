@@ -15,7 +15,9 @@
 #include "TrackListEntry.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/detail/TrackFieldGrid.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
@@ -478,6 +480,27 @@ namespace ao::tui
         for (auto const& line : lines)
         {
           elements.push_back(detailField(line, split));
+        }
+
+        if (options.focused)
+        {
+          elements.push_back(
+            text(std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditsHeading)} + " [Ctrl-K]"));
+
+          for (std::size_t index = 0; index < library::kCreditKindCount; ++index)
+          {
+            elements.push_back(
+              text(std::string{uimodel::trackCreditKindLabel(textCatalog, static_cast<library::CreditKind>(index))} +
+                   " [" + std::to_string(index + 1) + "]"));
+          }
+        }
+
+        if (options.credits != nullptr)
+        {
+          for (auto const& line : trackCreditDetailLines(textCatalog, *options.credits))
+          {
+            elements.push_back(detailField(line, split));
+          }
         }
       }
 

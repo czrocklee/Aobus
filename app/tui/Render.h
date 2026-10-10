@@ -9,6 +9,7 @@
 #include "TrackListEntry.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 
 #include <ftxui/screen/box.hpp>
 
@@ -118,6 +119,8 @@ namespace ao::tui
   {
     DetailSectionState sections{};
     std::array<ftxui::Box, 2>* headerBoxes = nullptr;
+    // Owning focused credit sections, cached by revision; consumed synchronously.
+    uimodel::TrackCreditSections const* credits = nullptr;
     bool focused = false;
   };
 

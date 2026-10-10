@@ -99,7 +99,13 @@ namespace ao::cli
     return "\nExamples:\n"
            "  aobus track update 12 13 --genre Jazz --dry-run\n"
            "  aobus track update 12 --genre Jazz --add-tag favourite --remove-tag inbox\n"
-           "  aobus track update --filter 'not $genre?' --genre Jazz";
+           "  aobus track update --filter 'not $genre?' --genre Jazz\n"
+           "  aobus track update 42 --recording-date 1981-05-12 --credit soloist 'Glenn Gould' Piano\n"
+           "  aobus track update 42 --credit conductor 'A=B: C' ''\n"
+           "  aobus track update 42 --credit-scope performer --clear-credits\n"
+           "Each --credit consumes exactly KIND NAME ROLE, including empty or option-like text.\n"
+           "Scope options select a union; without them all kinds are replaced. Clear and replacement cannot be "
+           "combined.";
   }
 
   std::string trackHelpFooter()

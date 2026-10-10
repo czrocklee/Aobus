@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackFieldValue.h>
 
 #include <cstdint>
@@ -39,7 +40,11 @@ namespace ao::rt
     std::string tags{};
 
     TrackFieldDuration duration{0};
+    std::uint16_t conductorCount = 0;
+    std::uint16_t ensembleCount = 0;
+    std::uint16_t soloistCount = 0;
     std::uint16_t year = 0;
+    library::RecordingDate recordingDate{};
     std::uint16_t discNumber = 0;
     std::uint16_t discTotal = 0;
     std::uint16_t trackNumber = 0;

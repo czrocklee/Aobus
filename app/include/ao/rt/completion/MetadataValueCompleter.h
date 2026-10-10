@@ -6,6 +6,7 @@
 #include "../TrackField.h"
 #include "CompletionItem.h"
 #include "CompletionResult.h"
+#include <ao/library/Credits.h>
 
 #include <cstddef>
 #include <string_view>
@@ -14,6 +15,10 @@
 namespace ao::rt
 {
   class CompletionService;
+
+  /** The vocabulary service must outlive either returned credit provider. */
+  CompletionProvider makeCreditNameCompletionProvider(CompletionService& vocabulary, library::CreditKind kind);
+  CompletionProvider makeCreditRoleCompletionProvider(CompletionService& vocabulary);
 
   class MetadataValueCompleter final
   {

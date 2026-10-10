@@ -5,8 +5,10 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
@@ -19,6 +21,7 @@
 #include <span>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::rt
 {
@@ -41,12 +44,9 @@ namespace ao::rt
           case media::file::TextField::Album: metadata.album(value); break;
           case media::file::TextField::AlbumArtist: metadata.albumArtist(value); break;
           case media::file::TextField::Composer: metadata.composer(value); break;
-          case media::file::TextField::Conductor: metadata.conductor(value); break;
-          case media::file::TextField::Ensemble: metadata.ensemble(value); break;
           case media::file::TextField::Genre: metadata.genre(value); break;
           case media::file::TextField::Work: metadata.work(value); break;
           case media::file::TextField::Movement: metadata.movement(value); break;
-          case media::file::TextField::Soloist: metadata.soloist(value); break;
         }
       }
 
@@ -76,7 +76,36 @@ namespace ao::rt
         _builder.coverArt().add(type, bytes);
       }
 
+      void visitCredits(std::span<media::file::CreditView const> entries) override
+      {
+        // The adapted entries stay borrowed views: MediaTrack keeps the file,
+        // and with it the backing content, alive.
+        auto adapted = std::vector<library::CreditView>{};
+        adapted.reserve(entries.size());
+
+        for (auto const& entry : entries)
+        {
+          adapted.push_back(
+            library::CreditView{.name = entry.name, .kind = libraryKind(entry.kind), .role = entry.role});
+        }
+
+        _builder.metadata().credits(adapted);
+      }
+
     private:
+      static library::CreditKind libraryKind(media::file::CreditKind kind)
+      {
+        switch (kind)
+        {
+          case media::file::CreditKind::Conductor: return library::CreditKind::Conductor;
+          case media::file::CreditKind::Ensemble: return library::CreditKind::Ensemble;
+          case media::file::CreditKind::Soloist: return library::CreditKind::Soloist;
+          case media::file::CreditKind::Performer: return library::CreditKind::Performer;
+        }
+
+        AO_FATAL("Unknown media credit kind");
+      }
+
       library::TrackBuilder& _builder;
     };
   } // namespace

@@ -38,26 +38,12 @@ namespace ao::uimodel
       return CustomMetadataAddValidation::DuplicateCustomMetadata;
     }
 
-    if (rt::trackFieldFromId(key))
+    if (rt::isReservedCustomMetadataKey(key))
     {
-      return CustomMetadataAddValidation::ReservedTrackField;
+      return CustomMetadataAddValidation::ReservedKey;
     }
 
     return CustomMetadataAddValidation::Accepted;
-  }
-
-  std::optional<std::string> undoValueForDeletedTrackCustomMetadata(rt::TrackDetailSnapshot const& snap,
-                                                                    std::string_view const key)
-  {
-    for (auto const& item : snap.customMetadata)
-    {
-      if (std::string_view{item.key} == key && item.presentOnAll && !item.value.mixed)
-      {
-        return item.value.optValue.value_or("");
-      }
-    }
-
-    return std::nullopt;
   }
 
   rt::MetadataPatch makeCustomMetadataUpdatePatch(std::string_view const key, std::string_view const value)

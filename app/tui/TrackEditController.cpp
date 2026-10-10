@@ -3,6 +3,7 @@
 
 #include "TrackEditController.h"
 
+#include "TrackCreditsEditor.h"
 #include "TrackPropertiesEditor.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
@@ -13,6 +14,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
@@ -32,6 +34,7 @@
 #include <ftxui/component/event.hpp>
 
 #include <algorithm>
+#include <bitset>
 #include <cstddef>
 #include <exception>
 #include <expected>
@@ -168,14 +171,7 @@ namespace ao::tui
       return suggestions;
     }
 
-    /**
-     * @brief Performs the single coherent preparation an open or a reload gets.
-     *
-     * The session binds first so its revision can be compared with the one
-     * snapshot every value is read through. A mismatch means the library moved
-     * between the two, so the values read would not describe what a write
-     * would land on.
-     */
+    /// Captures binding and owning baselines from one snapshot, released before installation.
     std::expected<PreparedEditor, PreparationError> prepareEditor(
       rt::Library& library,
       i18n::MessageCatalog const& textCatalog,
@@ -183,7 +179,8 @@ namespace ao::tui
       rt::TextOrderingPolicy const* const textOrderingPolicy,
       TrackEditorMode const mode)
     {
-      auto sessionRes = uimodel::TrackAuthoringSession::begin(library, targetIds);
+      auto const snapshot = library.snapshot();
+      auto sessionRes = uimodel::TrackAuthoringSession::begin(library, targetIds, snapshot);
 
       if (!sessionRes)
       {
@@ -194,13 +191,6 @@ namespace ao::tui
         return std::unexpected{PreparationError{
           .messageId = missing ? MessageId::TuiEditorOpenIncomplete : MessageId::TuiEditorOpenUnavailable,
           .detail = sessionRes.error().message}};
-      }
-
-      auto const snapshot = library.snapshot();
-
-      if (snapshot.revision() != sessionRes->boundRevision())
-      {
-        return std::unexpected{PreparationError{.messageId = MessageId::TuiEditorOpenUnavailable}};
       }
 
       // Tags need identities and membership, not per-field metadata aggregation.
@@ -336,7 +326,19 @@ namespace ao::tui
       // The previous observer goes before the session it watches does.
       invalidatedSubscription.reset();
       optSession.emplace(std::move(session));
-      optEditor.emplace(textCatalog, std::move(prepared.preparation), std::move(completionProvider), mode);
+      auto creditCompletionProvider = TrackCreditsEditor::CompletionProvider{
+        [completionService = &completionService](
+          library::CreditKind const kind, bool const role, std::string_view const text, std::size_t const cursor)
+        {
+          auto provider = role ? rt::makeCreditRoleCompletionProvider(*completionService)
+                               : rt::makeCreditNameCompletionProvider(*completionService, kind);
+          return provider(text, cursor);
+        }};
+      optEditor.emplace(textCatalog,
+                        std::move(prepared.preparation),
+                        std::move(completionProvider),
+                        mode,
+                        std::move(creditCompletionProvider));
       invalidatedSubscription = std::move(subscription);
       return true;
     }
@@ -567,6 +569,30 @@ namespace ao::tui
     return true;
   }
 
+  bool TrackEditController::tryOpenCredits(std::vector<TrackId> targetIds,
+                                           std::bitset<library::kCreditKindCount> const kinds)
+  {
+    if (kinds.count() != 1 && !kinds.all())
+    {
+      return false;
+    }
+
+    if (!tryOpen(std::move(targetIds)))
+    {
+      return false;
+    }
+
+    auto& optEditor = _statePtr->optEditor;
+
+    if (!optEditor)
+    {
+      return false;
+    }
+
+    optEditor->beginCreditsEdit(kinds);
+    return optEditor->isEditingCredits();
+  }
+
   TrackPropertiesEditor const* TrackEditController::activeEditor() const noexcept
   {
     return _statePtr->optEditor ? &*_statePtr->optEditor : nullptr;
@@ -641,6 +667,11 @@ namespace ao::tui
     {
       editor.setStatus(TrackEditorStatus::Stale);
       state.requestRefresh();
+      return;
+    }
+
+    if (!editor.canApply())
+    {
       return;
     }
 
