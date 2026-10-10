@@ -411,6 +411,9 @@ add_executable(ao_core_test
 
     # lmdb tests
     unit/lmdb/LmdbTestSupport.cpp
+    unit/lmdb/LmdbTestSupportTest.cpp
+    unit/lmdb/ReadOnlyDatabaseTest.cpp
+    unit/lmdb/ReadOnlyDatabaseLifetimeTest.cpp
     unit/lmdb/EnvironmentTest.cpp
     unit/lmdb/EnvironmentDataFileTest.cpp
     unit/lmdb/MapCapacityPolicyTest.cpp
@@ -419,6 +422,7 @@ add_executable(ao_core_test
     unit/lmdb/DatabaseReaderTest.cpp
     unit/lmdb/DatabaseMaxKeyTest.cpp
     unit/lmdb/DatabaseWriterTest.cpp
+    unit/lmdb/DatabaseWriterLifetimeTest.cpp
     unit/lmdb/DatabaseByteKeyTest.cpp
     unit/lmdb/ResultErrorTest.cpp
 

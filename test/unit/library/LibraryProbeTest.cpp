@@ -16,13 +16,13 @@
 namespace ao::library::test
 {
   TEST_CASE("Library prepared-write contracts - subprocess probes abort with owned diagnostics",
-            "[library][integration][fatal]")
+            "[library][integration][fatal][concurrency]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
     REQUIRE_FALSE(executablePath.empty());
     auto const expectations = libraryFatalProbeExpectations();
-    REQUIRE(expectations.size() == 33);
+    REQUIRE(expectations.size() == 37);
 
     for (auto const& expectation : expectations)
     {
