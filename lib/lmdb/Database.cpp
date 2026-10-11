@@ -40,6 +40,11 @@ namespace ao::lmdb
         return transaction._failureMode == ReadTransaction::ReadFailureMode::Transaction;
       }
 
+      static std::size_t* openCursorCount(ReadTransaction const& transaction) noexcept
+      {
+        return transaction._openCursorCountPtr.get();
+      }
+
       static void acquireOpenAdmission(WriteTransaction& transaction) { transaction.acquireDatabaseOpenAdmission(); }
 
       static IntegerKeyDatabase integerKeyDatabase(DbiHandle const dbi) noexcept { return IntegerKeyDatabase{dbi}; }
@@ -473,9 +478,10 @@ namespace ao::lmdb
 
   void IntegerKeyDatabase::Reader::MdbCursorDeleter::operator()(MDB_cursor* cursor) const noexcept
   {
-    if (cleanup == detail::CursorCleanup::Explicit)
+    if (openCursorCount != nullptr)
     {
       ::mdb_cursor_close(cursor);
+      --*openCursorCount;
     }
   }
 
@@ -483,9 +489,15 @@ namespace ao::lmdb
                                                                            ReadTransaction const& owner,
                                                                            DbiHandle const dbi)
   {
-    auto const isTransactionOwned = detail::DatabaseAccess::isTransactionOwned(owner);
-    auto const cleanup = isTransactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
-    return CursorPtr{openCursor(transaction, dbi, isTransactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
+    auto* const cursor = openCursor(transaction, dbi, detail::DatabaseAccess::isTransactionOwned(owner));
+    auto* const openCursorCount = detail::DatabaseAccess::openCursorCount(owner);
+
+    if (openCursorCount != nullptr)
+    {
+      ++*openCursorCount;
+    }
+
+    return CursorPtr{cursor, MdbCursorDeleter{.openCursorCount = openCursorCount}};
   }
 
   void IntegerKeyDatabase::Reader::ensureActive() const
@@ -620,9 +632,10 @@ namespace ao::lmdb
 
   void ByteKeyDatabase::Reader::MdbCursorDeleter::operator()(MDB_cursor* cursor) const noexcept
   {
-    if (cleanup == detail::CursorCleanup::Explicit)
+    if (openCursorCount != nullptr)
     {
       ::mdb_cursor_close(cursor);
+      --*openCursorCount;
     }
   }
 
@@ -630,9 +643,15 @@ namespace ao::lmdb
                                                                      ReadTransaction const& owner,
                                                                      DbiHandle const dbi)
   {
-    auto const isTransactionOwned = detail::DatabaseAccess::isTransactionOwned(owner);
-    auto const cleanup = isTransactionOwned ? detail::CursorCleanup::WriteTransaction : detail::CursorCleanup::Explicit;
-    return CursorPtr{openCursor(transaction, dbi, isTransactionOwned), MdbCursorDeleter{.cleanup = cleanup}};
+    auto* const cursor = openCursor(transaction, dbi, detail::DatabaseAccess::isTransactionOwned(owner));
+    auto* const openCursorCount = detail::DatabaseAccess::openCursorCount(owner);
+
+    if (openCursorCount != nullptr)
+    {
+      ++*openCursorCount;
+    }
+
+    return CursorPtr{cursor, MdbCursorDeleter{.openCursorCount = openCursorCount}};
   }
 
   void ByteKeyDatabase::Reader::ensureActive() const

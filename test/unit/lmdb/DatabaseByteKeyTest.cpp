@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
+#include <utility>
 
 namespace ao::lmdb::test
 {
@@ -141,7 +142,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("ByteKeyDatabase::Reader::Iterator - destruction remains safe after a read transaction ends",
+  TEST_CASE("ByteKeyDatabase::Reader::Iterator - an open cursor stays counted by its moved read transaction",
             "[lmdb][unit][database][cursor-lifetime]")
   {
     auto const temp = ao::test::TempDir{};
@@ -152,17 +153,16 @@ namespace ao::lmdb::test
     REQUIRE(db.writer(seedTransaction).create(createStringData("key"), createStringData("value")));
     REQUIRE(seedTransaction.commit());
 
-    auto iterator = ByteKeyDatabase::Reader::Iterator{};
+    auto transaction = beginReadTransaction(env);
+    auto iterator = db.reader(transaction).begin();
+    REQUIRE(iterator != ByteKeyDatabase::Reader::Iterator{});
+    CHECK(utility::bytes::stringView(iterator->first) == "key");
 
-    {
-      auto transaction = beginReadTransaction(env);
-      iterator = db.reader(transaction).begin();
-      REQUIRE(iterator != ByteKeyDatabase::Reader::Iterator{});
-      CHECK(utility::bytes::stringView(iterator->first) == "key");
-    }
-
+    // Destroying the moved-to transaction first would end it with an open cursor.
+    auto movedTransaction = std::move(transaction);
     iterator = {};
     CHECK(iterator == ByteKeyDatabase::Reader::Iterator{});
+    CHECK(movedTransaction.isActive());
   }
 
   TEST_CASE("ByteKeyDatabase::Reader::Iterator - destruction remains safe after a write transaction ends",

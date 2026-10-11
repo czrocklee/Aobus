@@ -212,7 +212,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(it->second) == "value");
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - destruction remains safe after a read transaction ends",
+  TEST_CASE("IntegerKeyDatabase::Reader::Iterator - an open cursor stays counted by its move-assigned read transaction",
             "[lmdb][unit][database][cursor-lifetime]")
   {
     auto const temp = ao::test::TempDir{};
@@ -223,17 +223,17 @@ namespace ao::lmdb::test
     REQUIRE(db.writer(seedTransaction).create(1, createStringData("value")));
     REQUIRE(seedTransaction.commit());
 
-    auto iterator = IntegerKeyDatabase::Reader::Iterator{};
+    auto transaction = beginReadTransaction(env);
+    auto iterator = db.reader(transaction).begin();
+    REQUIRE(iterator != IntegerKeyDatabase::Reader::Iterator{});
+    CHECK(static_cast<std::uint32_t>(iterator->first) == 1);
 
-    {
-      auto transaction = beginReadTransaction(env);
-      iterator = db.reader(transaction).begin();
-      REQUIRE(iterator != IntegerKeyDatabase::Reader::Iterator{});
-      CHECK(static_cast<std::uint32_t>(iterator->first) == 1);
-    }
-
+    // The replaced transaction has no open cursor, so it may end here.
+    auto replacement = beginReadTransaction(env);
+    replacement = std::move(transaction);
     iterator = {};
     CHECK(iterator == IntegerKeyDatabase::Reader::Iterator{});
+    CHECK(replacement.isActive());
   }
 
   TEST_CASE("IntegerKeyDatabase::Writer - destruction remains safe after its transaction object is gone",

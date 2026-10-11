@@ -21,7 +21,7 @@ namespace ao::library::test
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
     REQUIRE_FALSE(executablePath.empty());
     auto const expectations = libraryFatalProbeExpectations();
-    REQUIRE(expectations.size() == 31);
+    REQUIRE(expectations.size() == 33);
 
     for (auto const& expectation : expectations)
     {

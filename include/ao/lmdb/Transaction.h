@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/lmdb/Environment.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -22,19 +23,21 @@ namespace ao::lmdb
     class DatabaseAccess;
   }
 
-  // Read-only transaction
+  // Read-only transaction. Every iterator created from it must be destroyed
+  // before it ends: LMDB 1.0 reads the native transaction while closing a
+  // read-only cursor, so ending it with an open cursor violates AO_EXPECTS.
   class [[nodiscard]] ReadTransaction
   {
   public:
     static Result<ReadTransaction> begin(Environment const& env);
 
-    ~ReadTransaction() = default;
+    ~ReadTransaction();
 
     ReadTransaction(ReadTransaction const&) = delete;
     ReadTransaction& operator=(ReadTransaction const&) = delete;
 
-    ReadTransaction(ReadTransaction&&) = default;
-    ReadTransaction& operator=(ReadTransaction&&) = default;
+    ReadTransaction(ReadTransaction&&) noexcept = default;
+    ReadTransaction& operator=(ReadTransaction&& other) noexcept;
 
     bool isActive() const noexcept { return handle() != nullptr; }
 
@@ -63,8 +66,13 @@ namespace ao::lmdb
     MDB_txn* releaseHandle() noexcept { return _txnPtr.release(); }
 
   private:
+    void requireNoOpenCursors() const noexcept;
+
     TxnPtr _txnPtr;
     ReadFailureMode _failureMode = ReadFailureMode::Fatal;
+    // Counts the open cursors of a read-only native transaction across wrapper
+    // moves. Write transactions dispose of their own cursors and have none.
+    std::unique_ptr<std::size_t> _openCursorCountPtr;
     friend class detail::DatabaseAccess;
   };
 
