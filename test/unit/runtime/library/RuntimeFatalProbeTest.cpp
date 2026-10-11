@@ -3,7 +3,7 @@
 
 #include "test/fatal/ProbeProcess.h"
 #include "test/fatal/RuntimeFatalProbeProtocol.h"
-#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/lmdb/LmdbProbeScratch.h"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -23,7 +23,7 @@ namespace ao::rt::test
       constexpr auto kTimeout = std::chrono::seconds{15};
       auto const executablePath = ao::test::currentProbeExecutablePath();
       REQUIRE_FALSE(executablePath.empty());
-      auto scratch = ao::test::TempDir{};
+      auto scratch = ao::test::LmdbProbeScratch{};
       auto argument = std::string{scenario};
       argument.append(":").append(scratch.path().filename().string());
       return ao::test::runProbeProcess(executablePath, argument, kTimeout);

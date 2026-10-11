@@ -111,7 +111,7 @@ add_executable(ao_library_probe
     fatal/LibraryProbeScenario.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_library_probe)
-target_link_libraries(ao_library_probe PRIVATE ao_fatal_probe_support ao_test_support_common ao_library)
+target_link_libraries(ao_library_probe PRIVATE ao_fatal_probe_support ao_test_support_library ao_library)
 add_test(NAME ao_library_probe COMMAND ao_library_probe)
 
 target_link_libraries(ao_test_support_common
@@ -130,6 +130,7 @@ add_library(ao_test_support_library STATIC
     unit/library/TrackTestSupport.cpp
     unit/library/TrackViewTestSupport.cpp
     unit/library/WritableLibraryTestSupport.cpp
+    unit/lmdb/LmdbProbeScratch.cpp
 )
 target_link_libraries(ao_test_support_library
     PUBLIC
@@ -783,6 +784,10 @@ aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/detail/CoreAudioLatencyTest.cpp
   unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
   unit/audio/backend/detail/CoreFoundationStringTest.cpp
+)
+# Only Darwin LMDB keeps lock state that outlives an aborted owner.
+aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
+  unit/macos/lmdb/LmdbProbeScratchTest.cpp
 )
 if(WIN32)
   add_executable(ao_detached_process_probe

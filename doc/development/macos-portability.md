@@ -235,6 +235,7 @@ between Darwin and Linux, and deleting them breaks macOS again.
 | `sigemptyset` and `sigaddset` are function-like macros | `lib/utility/Fatal.cpp`, `app/tui/SignalExitWatcherPosix.cpp` |
 | `environ` is declared only for the main executable | `test/fatal/ProbeProcessPosix.cpp` |
 | No procfs, so `/proc/self/exe` does not resolve | `test/fatal/ProbeProcessPosix.cpp` |
+| LMDB locks through named POSIX semaphores that outlive an aborted owner | `test/unit/lmdb/LmdbProbeScratch.cpp` |
 
 The `Environment.h` mapping is guarded by a `static_assert` against
 `::mdb_mode_t` in `lib/lmdb/Environment.cpp`, so a wrong branch fails the build
@@ -244,6 +245,14 @@ The affected translation units `#undef` the function-like macros after
 including `<signal.h>` and then call the SDK's ordinary POSIX declarations.
 C11 7.1.4 explicitly defines this as the way to ensure that an actual function
 is referenced when a standard header also supplies a macro form.
+
+Darwin LMDB locks each environment through two named semaphores. The last owner
+to close unlinks them, and so does the next exclusive open of the same lock
+file. A fatal probe child aborts with its environment open and its scratch
+directory is then removed, so neither happens: the names hold system-wide slots
+until reboot, and once `kern.posix.sem.max` is exhausted every `mdb_env_open`
+fails with `ENOSPC`. `LmdbProbeScratch` therefore opens and closes each
+environment below its directory before removing it.
 
 ## Validation
 
