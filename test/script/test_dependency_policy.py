@@ -147,10 +147,11 @@ class DependencyPolicyTest(unittest.TestCase):
     def test_initial_contract_is_valid(self):
         self.assertEqual(
             set(self.contract["dependencies"]),
-            {"boost", "fast-float", "ftxui", "icu", "spdlog", "windows-app-sdk", "cppwinrt"},
+            {"boost", "fast-float", "ftxui", "icu", "lmdb", "spdlog", "windows-app-sdk", "cppwinrt"},
         )
         self.assertEqual(self.contract["dependencies"]["fast-float"]["policy"]["version"], "8.2.10")
         self.assertEqual(self.contract["dependencies"]["icu"]["policy"]["version"], "78.3")
+        self.assertEqual(self.contract["dependencies"]["lmdb"]["policy"]["version"], "1.0.1")
         self.assertEqual(self.contract["dependencies"]["windows-app-sdk"]["policy"]["version"], "2.4.0")
         self.assertEqual(self.contract["dependencies"]["cppwinrt"]["policy"]["version"], "3.0.260715.1")
 

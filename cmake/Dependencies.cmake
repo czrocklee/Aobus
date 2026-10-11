@@ -137,6 +137,7 @@ aobus_policy_find_arguments(
   AOBUS_FAST_FLOAT_REQUESTED_VERSION
   AOBUS_FAST_FLOAT_EXCEPTION)
 aobus_policy_find_arguments(icu AOBUS_ICU_FIND_ARGUMENTS AOBUS_ICU_REQUESTED_VERSION AOBUS_ICU_EXCEPTION)
+aobus_policy_find_arguments(lmdb AOBUS_LMDB_FIND_ARGUMENTS AOBUS_LMDB_REQUESTED_VERSION AOBUS_LMDB_EXCEPTION)
 aobus_policy_find_arguments(spdlog AOBUS_SPDLOG_FIND_ARGUMENTS AOBUS_SPDLOG_REQUESTED_VERSION AOBUS_SPDLOG_EXCEPTION)
 aobus_policy_find_arguments(ftxui AOBUS_FTXUI_FIND_ARGUMENTS AOBUS_FTXUI_REQUESTED_VERSION AOBUS_FTXUI_EXCEPTION)
 aobus_policy_find_arguments(
@@ -260,6 +261,39 @@ if(NOT spdlog_FOUND)
     "could not provide an exact compatible package. Considered versions: "
     "'${spdlog_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
 endif()
+# LMDB's release also fixes its file format: 1.0 cannot open 0.9 data or lock
+# files. The resolvers name its imported target differently, so the contract
+# checks the interface target both of them feed.
+if(AOBUS_DEPENDENCY_USES_VCPKG)
+  find_package(unofficial-lmdb ${AOBUS_LMDB_FIND_ARGUMENTS} CONFIG QUIET)
+  if(NOT unofficial-lmdb_FOUND)
+    message(FATAL_ERROR
+      "Aobus dependency 'lmdb' requires ${AOBUS_LMDB_REQUESTED_VERSION}, but the active resolver "
+      "could not provide an exact compatible package. Considered versions: "
+      "'${unofficial-lmdb_CONSIDERED_VERSIONS}'. See doc/development/dependency-upgrade.md.")
+  endif()
+  set(AOBUS_LMDB_RESOLVED_VERSION "${unofficial-lmdb_VERSION}")
+  add_library(PkgLMDB INTERFACE)
+  target_link_libraries(PkgLMDB INTERFACE unofficial::lmdb::lmdb)
+else()
+  # pkg-config compares a single bound, which is all an exact policy needs.
+  if(NOT "EXACT" IN_LIST AOBUS_LMDB_FIND_ARGUMENTS)
+    message(FATAL_ERROR
+      "Linux LMDB discovery verifies only an exact policy, but the contract requests "
+      "${AOBUS_LMDB_REQUESTED_VERSION}. See doc/development/dependency-upgrade.md.")
+  endif()
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LMDB REQUIRED IMPORTED_TARGET lmdb)
+  if(NOT LMDB_VERSION VERSION_EQUAL AOBUS_LMDB_REQUESTED_VERSION)
+    message(FATAL_ERROR
+      "Aobus dependency 'lmdb' requires ${AOBUS_LMDB_REQUESTED_VERSION}, but the active resolver "
+      "provided '${LMDB_VERSION}'. See doc/development/dependency-upgrade.md.")
+  endif()
+  set(AOBUS_LMDB_RESOLVED_VERSION "${LMDB_VERSION}")
+  add_library(PkgLMDB INTERFACE)
+  target_link_libraries(PkgLMDB INTERFACE PkgConfig::LMDB)
+endif()
+
 find_package(ryml CONFIG REQUIRED)
 find_package(c4core CONFIG REQUIRED)
 find_package(mimalloc CONFIG REQUIRED)
@@ -324,6 +358,7 @@ endfunction()
 aobus_validate_dependency_targets(boost)
 aobus_validate_dependency_targets(fast-float)
 aobus_validate_dependency_targets(icu)
+aobus_validate_dependency_targets(lmdb)
 aobus_validate_dependency_targets(spdlog)
 if(AOBUS_BUILD_TUI)
   aobus_validate_dependency_targets(ftxui)
@@ -384,12 +419,14 @@ endif()
 
 if(NOT AOBUS_BOOST_RESOLVED_VERSION OR NOT AOBUS_FAST_FLOAT_RESOLVED_VERSION
    OR NOT AOBUS_ICU_RESOLVED_VERSION
+   OR NOT AOBUS_LMDB_RESOLVED_VERSION
    OR NOT AOBUS_SPDLOG_RESOLVED_VERSION
    OR (AOBUS_BUILD_TUI AND NOT AOBUS_FTXUI_RESOLVED_VERSION))
   message(FATAL_ERROR
     "A governed dependency package did not expose its resolved version. "
     "Boost='${AOBUS_BOOST_RESOLVED_VERSION}', "
     "fast-float='${AOBUS_FAST_FLOAT_RESOLVED_VERSION}', ICU='${AOBUS_ICU_RESOLVED_VERSION}', "
+    "LMDB='${AOBUS_LMDB_RESOLVED_VERSION}', "
     "spdlog='${AOBUS_SPDLOG_RESOLVED_VERSION}', "
     "ftxui='${AOBUS_FTXUI_RESOLVED_VERSION}'. See doc/development/dependency-upgrade.md.")
 endif()
@@ -478,6 +515,7 @@ endfunction()
 aobus_dependency_target_results(boost AOBUS_BOOST_TARGET_RESULTS)
 aobus_dependency_target_results(fast-float AOBUS_FAST_FLOAT_TARGET_RESULTS)
 aobus_dependency_target_results(icu AOBUS_ICU_TARGET_RESULTS)
+aobus_dependency_target_results(lmdb AOBUS_LMDB_TARGET_RESULTS)
 aobus_dependency_target_results(spdlog AOBUS_SPDLOG_TARGET_RESULTS)
 if(AOBUS_BUILD_TUI)
   aobus_dependency_target_results(ftxui AOBUS_FTXUI_TARGET_RESULTS)
@@ -526,6 +564,9 @@ aobus_dependency_report_entry(AOBUS_FAST_FLOAT_REPORT fast-float
 aobus_dependency_report_entry(AOBUS_ICU_REPORT icu
   "${AOBUS_ICU_REQUESTED_VERSION}" "${AOBUS_ICU_RESOLVED_VERSION}"
   "${AOBUS_ICU_EXCEPTION}" "${AOBUS_ICU_TARGET_RESULTS}" "${AOBUS_ICU_CAPABILITIES}")
+aobus_dependency_report_entry(AOBUS_LMDB_REPORT lmdb
+  "${AOBUS_LMDB_REQUESTED_VERSION}" "${AOBUS_LMDB_RESOLVED_VERSION}"
+  "${AOBUS_LMDB_EXCEPTION}" "${AOBUS_LMDB_TARGET_RESULTS}" "{}")
 aobus_dependency_report_entry(AOBUS_SPDLOG_REPORT spdlog
   "${AOBUS_SPDLOG_REQUESTED_VERSION}" "${AOBUS_SPDLOG_RESOLVED_VERSION}"
   "${AOBUS_SPDLOG_EXCEPTION}" "${AOBUS_SPDLOG_TARGET_RESULTS}" "${AOBUS_SPDLOG_CAPABILITIES}")
@@ -665,6 +706,8 @@ string(JSON AOBUS_DEPENDENCY_REPORT SET
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies icu "${AOBUS_ICU_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
+  "${AOBUS_DEPENDENCY_REPORT}" dependencies lmdb "${AOBUS_LMDB_REPORT}")
+string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies spdlog "${AOBUS_SPDLOG_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies windows-app-sdk "${AOBUS_WINDOWS_APP_SDK_REPORT}")
@@ -714,10 +757,6 @@ if(AOBUS_DEPENDENCY_USES_VCPKG)
   find_package(Opus CONFIG REQUIRED)
   add_library(PkgOpus INTERFACE)
   target_link_libraries(PkgOpus INTERFACE Opus::opus)
-
-  find_package(unofficial-lmdb CONFIG REQUIRED)
-  add_library(PkgLMDB INTERFACE)
-  target_link_libraries(PkgLMDB INTERFACE unofficial::lmdb::lmdb)
 
   find_package(xxHash CONFIG REQUIRED)
   add_library(PkgXXHash INTERFACE)
@@ -796,10 +835,6 @@ else()
     add_library(PkgUDEV INTERFACE)
     target_link_libraries(PkgUDEV INTERFACE PkgConfig::UDEV)
   endif()
-
-  pkg_check_modules(LMDB REQUIRED IMPORTED_TARGET lmdb)
-  add_library(PkgLMDB INTERFACE)
-  target_link_libraries(PkgLMDB INTERFACE PkgConfig::LMDB)
 
   pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
   add_library(PkgXXHash INTERFACE)

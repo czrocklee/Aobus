@@ -7,6 +7,8 @@ id: library.database
 
 This reference defines physical library format version `8`, gated by `ao::library::kLibraryVersion`.
 It owns the LMDB environment, named databases, key encodings, record composition, size and alignment requirements, and version policy.
+The environment uses the LMDB 1.0 file format; LMDB 1.0 and 0.9 cannot open each other's environments.
+Opening an environment written by LMDB 0.9 fails with LMDB's version-mismatch diagnostic before the library version gate runs, and Aobus provides no migration.
 
 Entity meaning belongs to the [track](../model/track.md) and [list](../model/list.md) references.
 Scan and identity behavior belongs to the [scan and audio identity specification](../../../system/library/scan-and-identity.md).
@@ -44,6 +46,7 @@ A mutation that exhausts the map rolls back and leaves the recorded peak untouch
 It is for callers that need one known capacity, including tests that mean to reach the end of a map.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
 It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-8 schema only when that catalog is empty.
+LMDB 1.0 keys each named database's catalog entry by its name followed by a terminating NUL byte, so admission compares those exact keys and treats a row keyed by the bare name as an ordinary main-database record.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
 Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
 The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.

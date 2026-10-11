@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 
 namespace ao::lmdb::test
@@ -162,7 +163,9 @@ namespace ao::lmdb::test
     auto mainRes = ByteKeyDatabase::main(transaction);
     REQUIRE(mainRes);
     auto main = std::move(*mainRes);
-    REQUIRE(main.writer(transaction).create(createStringData("ordinary"), createStringData("value")));
+    // LMDB 1.0 keys the named database "ordinary" by its name and terminating NUL.
+    auto const catalogKey = std::string{"ordinary"} + '\0';
+    REQUIRE(main.writer(transaction).create(createStringData(catalogKey), createStringData("value")));
 
     auto ordinaryRes = ByteKeyDatabase::openExisting(transaction, "ordinary");
 

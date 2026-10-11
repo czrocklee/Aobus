@@ -86,6 +86,33 @@ let
     ];
   });
   aobus-icu = pkgs.icu78;
+  # LMDB 1.0 cannot open 0.9 data or lock files, so every platform builds the
+  # contracted release; this is the same GitHub archive the vcpkg port verifies.
+  aobus-lmdb = pkgs.lmdb.overrideAttrs (finalAttrs: oldAttrs: {
+    version = "1.0.1";
+    src = pkgs.fetchFromGitHub {
+      owner = "LMDB";
+      repo = "lmdb";
+      rev = "LMDB_${finalAttrs.version}";
+      hash = "sha256-O/TQliIgR/DYMFAAh1X9VWmylP9aZfeD7UcNfGHqsU8=";
+    };
+    # The Nixpkgs patches edit the 0.9 Makefile, and neither change applies to a
+    # native Linux build.
+    patches = [ ];
+    # The inherited hook writes the 0.9 version into lmdb.pc.
+    postInstall = ''
+      moveToOutput bin "$bin"
+      mkdir -p "$dev/lib/pkgconfig"
+      cat > "$dev/lib/pkgconfig/lmdb.pc" <<EOF
+      Name: lmdb
+      Description: ${oldAttrs.meta.description}
+      Version: ${finalAttrs.version}
+
+      Cflags: -I$dev/include
+      Libs: -L$out/lib -llmdb
+      EOF
+    '';
+  });
   useUnstrippedGtk = builtins.getEnv "AOBUS_NIX_UNSTRIPPED_GTK" == "1";
   aobus-gtk4 =
     if useUnstrippedGtk then
@@ -103,6 +130,7 @@ let
       fast-float = { version = aobus-fast-float.version; storePath = toString aobus-fast-float; };
       ftxui = { version = pkgs.ftxui.version; storePath = toString pkgs.ftxui; };
       icu = { version = aobus-icu.version; storePath = toString aobus-icu; };
+      lmdb = { version = aobus-lmdb.version; storePath = toString aobus-lmdb; };
       spdlog = { version = aobus-spdlog.version; storePath = toString aobus-spdlog; };
       catch2 = { version = pkgs.catch2_3.version; storePath = toString pkgs.catch2_3; };
       cli11 = { version = pkgs.cli11.version; storePath = toString pkgs.cli11; };
@@ -182,8 +210,8 @@ pkgs.mkShell {
       boost.dev
       aobus-icu
       aobus-icu.dev
-      lmdb
-      lmdb.dev
+      aobus-lmdb
+      aobus-lmdb.dev
       xxhash
       aobus-spdlog
       mimalloc
