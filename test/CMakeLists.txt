@@ -29,6 +29,15 @@ set_property(SOURCE
   unit/uimodel/layout/component/LayoutSchemaTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
+# GCC 16 attributes a reply vector destroyed inside this file's Asio coroutine
+# frames to the frame itself after inlining and reports a non-heap free.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17)
+  set_property(SOURCE
+    unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp
+    APPEND PROPERTY COMPILE_OPTIONS -Wno-free-nonheap-object)
+endif()
 
 # This opt-in GUI harness needs a console session and disposable media. It is
 # built by native checks but deliberately excluded from the unattended suites.

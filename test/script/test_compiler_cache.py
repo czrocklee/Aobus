@@ -19,6 +19,14 @@ from ao.__main__ import main as portal_main
 from ao.command import test as test_command
 from ao.core import compiler_cache, msbuild_cache
 
+# Linux and Windows install their exact pins; macOS accepts Homebrew at or above the minimum.
+_POLICY = compiler_cache.load_policy()
+PINNED_CCACHE = {
+    "Linux": _POLICY.linux_version,
+    "Windows": _POLICY.windows_version,
+    "Darwin": _POLICY.local_minimum_version,
+}
+
 
 class CompilerCacheContractTest(unittest.TestCase):
     def test_standalone_contract_entry_point_matches_ci_output(self):
@@ -88,7 +96,7 @@ class CompilerCacheContractTest(unittest.TestCase):
 
         self.assertEqual(policy.default_size, "20G")
         self.assertEqual((policy.local_provider, policy.local_minimum_version), ("ccache", "4.13.6"))
-        self.assertEqual((policy.linux_version, policy.windows_version), ("4.13.6", "4.13.6"))
+        self.assertEqual((policy.linux_version, policy.windows_version), ("4.14.1", "4.13.6"))
         self.assertEqual((policy.ci_provider, policy.ci_version), ("sccache", "v0.17.0"))
         self.assertRegex(policy.windows_sha256, r"^[0-9a-f]{64}$")
         self.assertIn(policy.windows_version, policy.windows_url)
@@ -377,7 +385,7 @@ class CompilerCacheInstallTest(unittest.TestCase):
             environment = {"AOBUS_STATE_ROOT": str(root), "HOME": str(root)}
             with (
                 mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
-                mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                mock.patch.object(compiler_cache, "_executable_version", return_value=PINNED_CCACHE["Linux"]),
                 mock.patch.object(compiler_cache, "_configured_max_size", return_value="32G"),
             ):
                 updates = compiler_cache.setup_local(environ=environment, system="Linux")
@@ -397,7 +405,7 @@ class CompilerCacheInstallTest(unittest.TestCase):
             environment = {"AOBUS_STATE_ROOT": str(root), "HOME": str(root)}
             with (
                 mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
-                mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                mock.patch.object(compiler_cache, "_executable_version", return_value=PINNED_CCACHE["Linux"]),
                 mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
                 mock.patch.object(compiler_cache, "_configured_namespace", return_value="personal"),
             ):
@@ -418,7 +426,7 @@ class CompilerCacheInstallTest(unittest.TestCase):
             executable.write_bytes(b"known executable")
             with (
                 mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
-                mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                mock.patch.object(compiler_cache, "_executable_version", return_value=PINNED_CCACHE["Linux"]),
                 mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
                 mock.patch.object(
                     compiler_cache,
@@ -455,7 +463,7 @@ class CompilerCacheInstallTest(unittest.TestCase):
             environment = {"AOBUS_STATE_ROOT": str(root), "AOBUS_MSBUILD_CL_TOOL_EXE": str(custom)}
             with (
                 mock.patch.object(compiler_cache, "_install_windows_ccache", return_value=executable),
-                mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                mock.patch.object(compiler_cache, "_executable_version", return_value=PINNED_CCACHE["Windows"]),
                 mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
             ):
                 compiler_cache.setup_local(environ=environment, system="Windows")
@@ -485,7 +493,7 @@ class CompilerCacheInstallTest(unittest.TestCase):
 
             with (
                 mock.patch.object(compiler_cache, "_install_windows_ccache", return_value=executable),
-                mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                mock.patch.object(compiler_cache, "_executable_version", return_value=PINNED_CCACHE["Windows"]),
                 mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
                 mock.patch.object(compiler_cache, "_atomic_write", side_effect=fail_wrapper),
             ):
@@ -498,11 +506,11 @@ class CompilerCacheInstallTest(unittest.TestCase):
 
 class CompilerCacheActivationTest(unittest.TestCase):
     @staticmethod
-    def record(executable: Path, size: str = "20G") -> dict[str, object]:
+    def record(executable: Path, size: str = "20G", *, system: str = "Linux") -> dict[str, object]:
         return {
             "schemaVersion": 1,
             "provider": "ccache",
-            "version": "4.13.6",
+            "version": PINNED_CCACHE[system],
             "executable": str(executable),
             "executableSha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
             "cacheSize": size,
@@ -537,7 +545,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
                 executable.write_bytes(b"cache")
                 config = compiler_cache.config_path(root)
                 config.parent.mkdir()
-                config.write_text(json.dumps(self.record(executable)), encoding="utf-8")
+                config.write_text(json.dumps(self.record(executable, system=system)), encoding="utf-8")
                 environment = {
                     "AOBUS_STATE_ROOT": str(root),
                     "AOBUS_MSBUILD_CL_TOOL_EXE": "custom-wrapper",
@@ -785,7 +793,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
             executable.write_bytes(b"cache")
             environment = {"PATH": "C:/VisualStudio/VC/bin"}
             updates = compiler_cache.local_environment(
-                self.record(executable), root=root, system="Windows", environ=environment
+                self.record(executable, system="Windows"), root=root, system="Windows", environ=environment
             )
             wrapper = Path(updates["AOBUS_MSBUILD_CL_TOOL_EXE"])
 
@@ -802,7 +810,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
             executable.write_bytes(b"cache")
             config = compiler_cache.config_path(root)
             config.parent.mkdir()
-            config.write_text(json.dumps(self.record(executable)), encoding="utf-8")
+            config.write_text(json.dumps(self.record(executable, system="Windows")), encoding="utf-8")
             for mode in ("0", "1"):
                 environment = {
                     "AOBUS_STATE_ROOT": str(root),
@@ -827,7 +835,9 @@ class CompilerCacheActivationTest(unittest.TestCase):
             inherited = dict(os.environ)
             with (
                 mock.patch.object(compiler_cache, "state_root", return_value=root),
-                mock.patch.object(compiler_cache, "_trusted_local_config", return_value=self.record(executable)),
+                mock.patch.object(
+                    compiler_cache, "_trusted_local_config", return_value=self.record(executable, system="Windows")
+                ),
                 mock.patch.object(msbuild_cache, "tracking_mode", return_value=("1", None)) as tracking,
             ):
                 result = compiler_cache.msbuild_environment(
@@ -844,7 +854,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
                 root = Path(temporary)
                 executable = root / "ccache.exe"
                 executable.write_bytes(b"cache")
-                record = self.record(executable)
+                record = self.record(executable, system="Windows")
                 config = compiler_cache.config_path(root)
                 config.parent.mkdir()
                 config.write_text(json.dumps(record), encoding="utf-8")
@@ -891,7 +901,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
                 root = Path(temporary)
                 executable = root / "ccache"
                 executable.write_bytes(b"cache")
-                record = self.record(executable)
+                record = self.record(executable, system=system)
                 record["version"] = "4.14"
                 config = compiler_cache.config_path(root)
                 config.parent.mkdir()
@@ -900,7 +910,8 @@ class CompilerCacheActivationTest(unittest.TestCase):
                 if system == "Darwin":
                     self.assertTrue(compiler_cache.activate_local(environ=environment, system=system))
                 else:
-                    with self.assertRaisesRegex(compiler_cache.CompilerCacheError, "requires exactly 4.13.6"):
+                    pinned = PINNED_CCACHE[system]
+                    with self.assertRaisesRegex(compiler_cache.CompilerCacheError, f"requires exactly {pinned}"):
                         compiler_cache.activate_local(environ=environment, system=system)
                     self.assertEqual(environment, {"AOBUS_STATE_ROOT": str(root)})
 
@@ -912,7 +923,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
                 executable.write_bytes(b"cache")
                 config = compiler_cache.config_path(root)
                 config.parent.mkdir()
-                config.write_text(json.dumps(self.record(executable)), encoding="utf-8")
+                config.write_text(json.dumps(self.record(executable, system=system)), encoding="utf-8")
                 policy = replace(compiler_cache.load_policy(), linux_version="4.14", windows_version="4.14")
                 environment = {"AOBUS_STATE_ROOT": str(root)}
                 with mock.patch.object(compiler_cache, "load_policy", return_value=policy):
@@ -1145,7 +1156,7 @@ class CompilerCacheCliTest(unittest.TestCase):
                     mock.patch.object(compiler_cache.platform, "system", return_value=system),
                     mock.patch.object(compiler_cache, "_resolve_posix_ccache", return_value=executable),
                     mock.patch.object(compiler_cache, "_install_windows_ccache", return_value=executable),
-                    mock.patch.object(compiler_cache, "_executable_version", return_value="4.13.6"),
+                    mock.patch.object(compiler_cache, "_executable_version", return_value=PINNED_CCACHE[system]),
                     mock.patch.object(compiler_cache, "_configured_max_size", return_value="20G"),
                     contextlib.redirect_stdout(output),
                 ):

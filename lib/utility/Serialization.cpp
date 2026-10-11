@@ -149,13 +149,13 @@ namespace ao::yaml
 
   void writeScalar(ryml::NodeRef node, bool value)
   {
-    node << c4::fmt::boolalpha(value);
+    node.save(c4::fmt::boolalpha(value));
   }
 
   MapWriter::MapWriter(ryml::NodeRef node)
     : _node{node}
   {
-    _node |= ryml::MAP;
+    _node.set_map();
   }
 
   Result<> MapWriter::finish() &&

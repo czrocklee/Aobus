@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "python": "3.14.6",
-  "ruff": "0.15.22",
+  "python": "3.14.7",
+  "ruff": "0.16.10",
   "mypy": "2.1.0"
 }

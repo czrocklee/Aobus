@@ -60,7 +60,7 @@ class NativePythonEnvironmentTest(unittest.TestCase):
         versions = pythonenv.tool_versions()
         requirements = pythonenv.REQUIREMENTS_FILE.read_text(encoding="utf-8")
 
-        self.assertEqual(versions, {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"})
+        self.assertEqual(versions, {"python": "3.14.7", "ruff": "0.16.10", "mypy": "2.1.0"})
         for package, version in {
             "ast-serialize": "0.6.0",
             "librt": "0.13.0",

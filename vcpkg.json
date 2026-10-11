@@ -63,18 +63,6 @@
     "stb",
     "xxhash"
   ],
-  "overrides": [
-    {
-      "name": "ftxui",
-      "version-semver": "6.1.9",
-      "$reason": "Keep vcpkg hosts aligned with the governed cross-platform FTXUI contract. Remove when the default baseline resolves 6.1.9."
-    },
-    {
-      "name": "lmdb",
-      "version": "1.0.1",
-      "$reason": "LMDB 1.0 cannot open 0.9 files, so vcpkg hosts must build the governed release Nix builds. Remove when the default baseline resolves 1.0.1."
-    }
-  ],
   "features": {
     "tests": {
       "description": "Dependencies needed to build Aobus unit tests.",

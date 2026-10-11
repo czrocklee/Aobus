@@ -92,7 +92,7 @@ namespace ao::rt
     {
       // Nothing was ever written anywhere, so an empty document is the honest
       // answer: every group reads as absent and callers take their defaults.
-      _root.to_map(0);
+      _root.set_map(0);
       _loaded = true;
       return {};
     }
@@ -115,7 +115,7 @@ namespace ao::rt
           Error::Code::NotFound, std::format("Config file not found: {}", utility::pathToUtf8(_filePath)));
       }
 
-      _root.to_map(0);
+      _root.set_map(0);
       _loaded = true;
       return {};
     }

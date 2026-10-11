@@ -10,7 +10,7 @@
       ],
       "policy": {
         "kind": "exact",
-        "version": "1.89.0"
+        "version": "1.91.0"
       },
       "nix": {
         "attribute": "boost"
@@ -75,13 +75,13 @@
       ],
       "policy": {
         "kind": "exact",
-        "version": "6.1.9"
+        "version": "7.0.3"
       },
       "nix": {
         "attribute": "ftxui"
       },
       "vcpkg": {
-        "strategy": "override",
+        "strategy": "baseline",
         "ports": [
           "ftxui"
         ]
@@ -145,7 +145,7 @@
         "attribute": "aobus-lmdb"
       },
       "vcpkg": {
-        "strategy": "override",
+        "strategy": "baseline",
         "ports": [
           "lmdb"
         ]

@@ -60,7 +60,7 @@ namespace ao::uimodel
 
         if constexpr (std::is_same_v<T, std::monostate>)
         {
-          node << nullptr;
+          node.save(nullptr);
           return {};
         }
         else if constexpr (std::is_same_v<T, std::vector<std::string>>)

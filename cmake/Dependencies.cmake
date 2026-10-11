@@ -294,8 +294,14 @@ else()
   target_link_libraries(PkgLMDB INTERFACE PkgConfig::LMDB)
 endif()
 
-find_package(ryml CONFIG REQUIRED)
-find_package(c4core CONFIG REQUIRED)
+# YAML serialization uses the set_seq, set_map, save and save_key API that
+# rapidyaml 0.16 introduced; ryml accepts any newer release.
+find_package(ryml 0.16 CONFIG REQUIRED)
+# vcpkg builds ryml against its separate c4core port, while rapidyaml's own
+# install, which Nixpkgs uses, compiles c4core into ryml and exports no target.
+if(AOBUS_DEPENDENCY_USES_VCPKG)
+  find_package(c4core CONFIG REQUIRED)
+endif()
 find_package(mimalloc CONFIG REQUIRED)
 find_package(gsl-lite CONFIG REQUIRED)
 find_package(lexy CONFIG QUIET)
@@ -377,7 +383,10 @@ if(AOBUS_BUILD_TUI)
 endif()
 
 add_library(PkgRapidYaml INTERFACE)
-target_link_libraries(PkgRapidYaml INTERFACE ryml::ryml c4core::c4core)
+target_link_libraries(PkgRapidYaml INTERFACE ryml::ryml)
+if(AOBUS_DEPENDENCY_USES_VCPKG)
+  target_link_libraries(PkgRapidYaml INTERFACE c4core::c4core)
+endif()
 # c4core 0.5.0 selects C++20 likelihood attributes for C++26 consumers, then
 # uses them where MSVC and Darwin Clang reject an attribute on an expression.
 # Keep the third-party headers in their C++17 compatibility mode without

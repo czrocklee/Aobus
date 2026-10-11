@@ -210,7 +210,7 @@ LMDB 1.0 changed the data and lock file formats and cannot open an environment
 written by 0.9, so every platform moves together and a format change needs an
 explicit migration decision. Update its exact version in
 `dependency-contract.json`, its source tag and hash in `shell.nix`, and the
-vcpkg override together. Nixpkgs still packages 0.9, so the Linux derivation
+vcpkg resolution together. Nixpkgs still packages 0.9, so the Linux derivation
 builds the same GitHub archive the vcpkg port verifies; compare the archive's
 SHA-512 with the port's before accepting a new hash. The vcpkg port exports
 `unofficial::lmdb::lmdb` while Linux resolves `PkgConfig::LMDB`, so the

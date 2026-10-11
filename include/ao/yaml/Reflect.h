@@ -114,7 +114,7 @@ namespace ao::yaml
     template<ReflectSequence T>
     void writeSequenceValue(ryml::NodeRef node, T const& value)
     {
-      node |= ryml::SEQ;
+      node.set_seq();
 
       for (auto const& item : value)
       {
@@ -125,7 +125,7 @@ namespace ao::yaml
     template<ReflectMap T>
     void writeMapValue(ryml::NodeRef node, T const& value)
     {
-      node |= ryml::MAP;
+      node.set_map();
 
       for (auto const& [key, item] : value)
       {
@@ -138,7 +138,7 @@ namespace ao::yaml
     template<ReflectStruct T>
     void writeStructValue(ryml::NodeRef node, T const& value)
     {
-      node |= ryml::MAP;
+      node.set_map();
 
       auto const names = boost::pfr::names_as_array<Bare<T>>();
       std::size_t fieldIndex = 0;
