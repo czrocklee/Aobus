@@ -13,6 +13,26 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SHELL_INPUTS = ("shell.nix", "nixpkgs.json", "script/ao/toolchain.json", "script/ao/compiler-cache.json")
+# Flags and search paths that nix-shell setup hooks extend for each target role rather than replace.
+INHERITED_SEARCH_STATE = (
+    "NIX_CFLAGS_COMPILE",
+    "NIX_CFLAGS_COMPILE_FOR_TARGET",
+    "NIX_CFLAGS_LINK",
+    "NIX_LDFLAGS",
+    "NIX_LDFLAGS_BEFORE",
+    "NIX_LDFLAGS_FOR_BUILD",
+    "NIX_LDFLAGS_FOR_TARGET",
+    "PKG_CONFIG_PATH",
+    "PKG_CONFIG_PATH_FOR_TARGET",
+    "CMAKE_PREFIX_PATH",
+    "NIXPKGS_CMAKE_PREFIX_PATH",
+    "CMAKE_INCLUDE_PATH",
+    "CMAKE_LIBRARY_PATH",
+    "CPATH",
+    "C_INCLUDE_PATH",
+    "CPLUS_INCLUDE_PATH",
+    "LIBRARY_PATH",
+)
 
 
 @unittest.skipUnless(sys.platform == "linux", "Linux Nix portal boundary")
@@ -133,6 +153,34 @@ class NativeNixPortalTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines(), ["unset", "unset"])
+
+    def test_nix_reentry_discards_inherited_dependency_search_state(self):
+        inherited = {name: "/stale" for name in INHERITED_SEARCH_STATE}
+        self._stub("nix-shell", "env -0")
+        # A host shell carries no fingerprint; a shell entered under an earlier pin carries a stale one.
+        for fingerprint in (None, "0" * 64):
+            with self.subTest(fingerprint=fingerprint):
+                environment = {**inherited, "AOBUS_UNRELATED_SETTING": "kept"}
+                if fingerprint is not None:
+                    environment["AO_NIX_SHELL_FINGERPRINT"] = fingerprint
+                result = self._run_portal(**environment)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                entered = dict(entry.split("=", 1) for entry in result.stdout.split("\0") if entry)
+                self.assertEqual(set(inherited) & set(entered), set())
+                self.assertEqual(entered["AOBUS_UNRELATED_SETTING"], "kept")
+
+    def test_reused_shell_keeps_its_dependency_search_state(self):
+        (self.package / "__main__.py").write_text(
+            "import json, os\n"
+            f"print(json.dumps({{name: os.environ.get(name) for name in {list(INHERITED_SEARCH_STATE)!r}}}))\n",
+            encoding="utf-8",
+        )
+        entered = {name: f"/pinned/{name}" for name in INHERITED_SEARCH_STATE}
+        result = self._run_portal(AO_NIX_SHELL_FINGERPRINT=self._fingerprint(), **entered)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), entered)
 
     def test_bash_reuse_check_matches_nix_fingerprints_and_normalizes_gtk_mode(self):
         nix = shutil.which("nix-instantiate")

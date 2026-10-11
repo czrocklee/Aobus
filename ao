@@ -71,6 +71,20 @@ if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
     # Do not let Python modules from a previously entered project shell shadow
     # the versions selected by the current shell.nix.
     unset PYTHONHOME PYTHONPATH
+    # nix-shell adds the pinned compiler and linker flags and dependency search
+    # paths, for every target role, to whatever these already hold; most of its
+    # setup hooks append, so an inherited entry is searched first. Host values
+    # such as an FHS environment's /usr paths, or those of a shell entered under
+    # an earlier pin, would resolve headers, libraries, pkg-config modules and
+    # CMake packages outside the current pin.
+    for inherited in $(compgen -e); do
+        case "$inherited" in
+            NIX_CFLAGS_* | NIX_LDFLAGS* | PKG_CONFIG_PATH* | CMAKE_PREFIX_PATH | NIXPKGS_CMAKE_PREFIX_PATH | \
+                CMAKE_INCLUDE_PATH | CMAKE_LIBRARY_PATH | CPATH | C_INCLUDE_PATH | CPLUS_INCLUDE_PATH | LIBRARY_PATH)
+                unset "$inherited"
+                ;;
+        esac
+    done
     # nix-shell otherwise resolves its launch Bash through ambient <nixpkgs>.
     # A host Bash also prepends its directory (often /usr/bin) ahead of pinned
     # tools, so resolve the launch shell from the same project dependency pin.
