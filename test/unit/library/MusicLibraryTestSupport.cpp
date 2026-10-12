@@ -17,13 +17,14 @@ namespace ao::library::test
     return ao::test::requireValue(
       MusicLibrary::open(std::move(musicRoot),
                          std::move(databasePath),
-                         MusicLibrary::Options{.pinnedMapBytes = kTestMusicLibraryMapBytes}));
+                         MusicLibrary::Options{.pinnedMapBytes = kTestMusicLibraryMapBytes, .flushCommits = false}));
   }
 
   Result<MusicLibrary> openTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
   {
-    return MusicLibrary::open(std::move(musicRoot),
-                              std::move(databasePath),
-                              MusicLibrary::Options{.pinnedMapBytes = kTestMusicLibraryMapBytes});
+    return MusicLibrary::open(
+      std::move(musicRoot),
+      std::move(databasePath),
+      MusicLibrary::Options{.pinnedMapBytes = kTestMusicLibraryMapBytes, .flushCommits = false});
   }
 } // namespace ao::library::test

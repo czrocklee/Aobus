@@ -103,6 +103,11 @@ namespace ao::library
       };
     }
 
+    std::uint32_t environmentFlagsFor(MusicLibrary::Options const& options)
+    {
+      return options.flushCommits ? lmdb::kEnvNoTls : lmdb::kEnvNoTls | lmdb::kEnvNoSync;
+    }
+
     std::chrono::sys_time<std::chrono::milliseconds> currentTimestamp()
     {
       return std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
@@ -964,7 +969,7 @@ namespace ao::library
       detail::resetOpenValidationMetrics();
 
       auto envRes = lmdb::Environment::open(databasePath,
-                                            lmdb::Environment::Options{.flags = lmdb::kEnvNoTls,
+                                            lmdb::Environment::Options{.flags = environmentFlagsFor(options),
                                                                        .mode = kLmdbFileMode,
                                                                        .maxDatabases = kLmdbMaxDatabases,
                                                                        .maxReaders = options.maxReaders,

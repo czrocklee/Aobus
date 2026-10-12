@@ -126,6 +126,7 @@ namespace ao::rt
                                        std::move(dependencies.databasePath),
                                        std::move(dependencies.cacheDirectory),
                                        dependencies.musicLibraryPinnedMapBytes,
+                                       dependencies.musicLibraryDurability,
                                        dependencies.sleeper,
                                        dependencies.textOrderingPolicy,
                                        dependencies.completionAliasPolicy);

@@ -36,7 +36,16 @@ namespace ao::lmdb::test
     constexpr auto kRecordSize = std::size_t{4096};
     constexpr auto kRecordCount = std::uint32_t{256};
 
+    // For tests that bound allocation only from above, or not at all: skipping
+    // the flush keeps the record appends cheap on Windows and macOS.
     Environment::Options largeMapOptions()
+    {
+      return Environment::Options{.flags = kEnvNoTls | kEnvNoSync, .maxDatabases = 4, .pinnedMapBytes = kLargeMapSize};
+    }
+
+    // For tests that require allocation to cover what was written: Windows can
+    // assign space to an unflushed write only later, so each commit is flushed.
+    Environment::Options flushedLargeMapOptions()
     {
       return Environment::Options{.flags = kEnvNoTls, .maxDatabases = 4, .pinnedMapBytes = kLargeMapSize};
     }
@@ -79,7 +88,7 @@ namespace ao::lmdb::test
     auto const dataPath = temp.path() / "data.mdb";
 
     {
-      auto env = openEnvironment(temp.path(), largeMapOptions());
+      auto env = openEnvironment(temp.path(), flushedLargeMapOptions());
       CHECK(env.mapAllocation() == MapAllocation::OnDemand);
       CHECK(utility::allocatedFileBytes(dataPath) < kAllocationCeiling);
       appendRecords(env, kRecordCount);
@@ -96,14 +105,14 @@ namespace ao::lmdb::test
     auto const dataPath = temp.path() / "data.mdb";
 
     {
-      auto env = openEnvironment(temp.path(), largeMapOptions());
+      auto env = openEnvironment(temp.path(), flushedLargeMapOptions());
       appendRecords(env, kRecordCount);
     }
 
     auto const afterFirstSession = utility::allocatedFileBytes(dataPath);
 
     {
-      auto env = openEnvironment(temp.path(), largeMapOptions());
+      auto env = openEnvironment(temp.path(), flushedLargeMapOptions());
       appendRecords(env, kRecordCount);
     }
 

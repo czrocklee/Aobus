@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/rt/library/LibraryDurability.h>
+
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
@@ -15,6 +17,7 @@ namespace ao::cli
   struct CliRunOptions final
   {
     std::uint64_t musicLibraryPinnedMapBytes = 0;
+    rt::LibraryDurability musicLibraryDurability = rt::LibraryDurability::Durable;
 
     /// Where derived caches live, or nothing to resolve the platform location.
     /// An in-process caller supplies one to keep the machine's own cover cache

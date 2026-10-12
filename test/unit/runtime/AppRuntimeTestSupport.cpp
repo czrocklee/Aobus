@@ -17,6 +17,7 @@
 #include <ao/audio/Device.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/library/LibraryDurability.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -170,6 +171,7 @@ namespace ao::rt::test
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .musicLibraryDurability = LibraryDurability::Unflushed,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
       .playbackSessionConfigStore = playbackSessionConfigStore,

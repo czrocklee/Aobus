@@ -42,6 +42,18 @@ namespace ao::lmdb
    * uses no locks at all.
    */
   inline constexpr std::uint32_t kEnvReadOnly = 0x20000U;
+  /**
+   * Commits without flushing to stable storage.
+   *
+   * A committed transaction still survives a process crash. An operating-system
+   * crash or power loss can lose the most recent commits or corrupt the
+   * environment: LMDB then keeps its integrity only on a filesystem that
+   * preserves write order, which nothing here establishes. Use it only for
+   * disposable environments, such as test fixtures, where the per-commit flush
+   * (write-through on Windows, `F_FULLFSYNC` on macOS) dominates the cost of a
+   * small commit.
+   */
+  inline constexpr std::uint32_t kEnvNoSync = 0x10000U;
 
   constexpr EnvMode kDefaultEnvironmentMode = 0644;
 
@@ -131,7 +143,7 @@ namespace ao::lmdb
     struct Options
     {
       /**
-       * Environment flags, restricted to `kEnvNoTls` and `kEnvReadOnly`.
+       * Environment flags, restricted to `kEnvNoTls`, `kEnvReadOnly`, and `kEnvNoSync`.
        *
        * Opening rejects anything else. The data-file preparation below assumes
        * the directory layout and a mapping that never extends the file, so a

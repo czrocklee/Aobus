@@ -114,6 +114,7 @@ When a mocked interface must be returned as `std::unique_ptr`, use existing test
 ## Filesystem and data
 
 - Use `ao::test::TempDir` for unit tests needing files or LMDB storage.
+- Library, runtime, CLI, and GTK fixtures open unflushed libraries (`flushCommits = false` or `rt::LibraryDurability::Unflushed`), because a flush per commit dominates their cost on Windows and macOS. A new fixture that opens its own library or runtime does the same unless the test depends on commit durability or compares disk allocation, which on Windows can lag an unflushed write; `CliFixture` accepts `rt::LibraryDurability::Durable` for that.
 - Use `ao::test::LmdbProbeScratch` instead for scratch handed to a probe child that may terminate with an LMDB environment open. On Darwin it reclaims the [semaphores that owner leaves behind](../macos-portability.md#permanent-platform-differences) before removing the directory; close every other owner first.
 - A new probe child entry that can abort calls `ao::test::suppressProbeChildCrashDump()` before its scenario. Otherwise every intentional Linux abort reaches the host's core-dump handler, such as systemd-coredump.
 - Use integration test data only for integration-style behavior such as real codecs or scanned audio files.

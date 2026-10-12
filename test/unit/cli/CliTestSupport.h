@@ -5,6 +5,7 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/library/LibraryDurability.h>
 
 #include <ryml.hpp>
 
@@ -44,15 +45,22 @@ namespace ao::cli::test
    * one whenever the invocation may read a cover: the CLI otherwise
    * resolves the machine's own cache, where a test would both read entries it
    * did not write and evict the user's.
+   * @param durability Whether the invocation's library commits are flushed.
    */
   CliResult runArgs(std::vector<std::string> args,
-                    std::optional<std::filesystem::path> optCacheDirectory = std::nullopt);
+                    std::optional<std::filesystem::path> optCacheDirectory = std::nullopt,
+                    rt::LibraryDurability durability = rt::LibraryDurability::Unflushed);
   void checkDomainFailure(CliResult const& result, std::string_view expectedError);
   std::size_t countOccurrences(std::string_view text, std::string_view needle);
 
   class CliFixture final
   {
   public:
+    /// Every `run` commits with `durability`. A test that compares disk
+    /// allocation asks for durable commits: on Windows, space for an unflushed
+    /// write can be assigned only later, between two readings.
+    explicit CliFixture(rt::LibraryDurability durability = rt::LibraryDurability::Unflushed);
+
     std::filesystem::path const& root() const;
 
     /// The cache root every `run` of this fixture uses, so cover bytes the CLI
@@ -66,5 +74,6 @@ namespace ao::cli::test
 
   private:
     ao::test::TempDir _temp;
+    rt::LibraryDurability _durability;
   };
 } // namespace ao::cli::test

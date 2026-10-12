@@ -10,6 +10,7 @@
 #include <ao/async/Task.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryDurability.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/PlatformDirectories.h>
 
@@ -51,9 +52,11 @@ namespace ao::cli
   CliRuntime::CliRuntime(std::ostream& out,
                          std::ostream& err,
                          std::uint64_t const musicLibraryPinnedMapBytes,
+                         rt::LibraryDurability const musicLibraryDurability,
                          std::optional<std::filesystem::path> optCacheDirectory)
     : _io{.out = out, .err = err}
     , _musicLibraryPinnedMapBytes{musicLibraryPinnedMapBytes}
+    , _musicLibraryDurability{musicLibraryDurability}
     , _optCacheDirectory{std::move(optCacheDirectory)}
     , _storagePtr{std::make_unique<Storage>()}
   {
@@ -102,7 +105,8 @@ namespace ao::cli
                                                 _options.root,
                                                 rt::LibraryPaths{_options.root}.databasePath(),
                                                 cacheDirectory,
-                                                _musicLibraryPinnedMapBytes);
+                                                _musicLibraryPinnedMapBytes,
+                                                _musicLibraryDurability);
 
       if (!runtimeRes)
       {

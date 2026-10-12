@@ -10,6 +10,7 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/rt/library/LibraryDurability.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/FileAllocation.h>
@@ -274,7 +275,7 @@ library:
 
   TEST_CASE("CLI - database allocation excludes workspace and unrelated descendants", "[cli][unit][lib][stats]")
   {
-    auto fixture = CliFixture{};
+    auto fixture = CliFixture{rt::LibraryDurability::Durable};
     REQUIRE(fixture.run({"init"}).status == 0);
     auto const before = fixture.run({"-O", "json", "lib", "stats"});
     REQUIRE(before.status == 0);

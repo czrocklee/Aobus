@@ -43,7 +43,8 @@ namespace ao::cli
                    std::ostream& err,
                    CliRunOptions const options)
   {
-    auto cli = CliRuntime{out, err, options.musicLibraryPinnedMapBytes, options.optCacheDirectory};
+    auto cli = CliRuntime{
+      out, err, options.musicLibraryPinnedMapBytes, options.musicLibraryDurability, options.optCacheDirectory};
     auto app = CLI::App{"Aobus CLI - aobus"};
     app.require_subcommand(1);
     app.fallthrough();
