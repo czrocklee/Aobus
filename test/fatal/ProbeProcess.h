@@ -54,4 +54,15 @@ namespace ao::test
   ProbeProcessResult runProbeProcess(std::filesystem::path const& executablePath,
                                      std::string_view scenario,
                                      std::chrono::milliseconds timeout);
+
+  /**
+   * Keeps a probe child's intentional abort out of host crash collection.
+   *
+   * A probe child that can abort calls this before running its scenario.
+   * Linux hands a crash to a pipe handler such as systemd-coredump even when
+   * RLIMIT_CORE is zero, so the child makes itself non-dumpable. Windows aborts
+   * already bypass error reporting in the fatal backend, and macOS crash
+   * reporting is unchanged.
+   */
+  void suppressProbeChildCrashDump() noexcept;
 } // namespace ao::test
