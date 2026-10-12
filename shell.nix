@@ -77,6 +77,8 @@ let
   aobus-stb = pkgs.runCommand "aobus-stb" { } ''
     mkdir -p $out/include/stb
     cp -r ${pkgs.stb}/include/stb/. $out/include/stb/
+    # The store copies are read-only, and Nixpkgs stb may already ship the header.
+    chmod -R u+w $out/include/stb
     cp ${stb-image-resize2} $out/include/stb/stb_image_resize2.h
   '';
   aobus-spdlog = pkgs.spdlog.overrideAttrs (oldAttrs: {
@@ -86,6 +88,51 @@ let
     ];
   });
   aobus-icu = pkgs.icu78;
+  # Nixpkgs dropped alac as unmaintained and vulnerable. Until Aobus owns its
+  # ALAC decoder, Linux builds the codec vcpkg ships to macOS and Windows: this
+  # autotools fork's codec sources are identical to macosforge/alac c38887c5.
+  aobus-alac = pkgs.stdenv.mkDerivation {
+    pname = "alac";
+    version = "0.0.7-unstable-2026-04-10";
+    outputs = [
+      "out"
+      "dev"
+    ];
+    src = pkgs.fetchFromGitHub {
+      owner = "mikebrady";
+      repo = "alac";
+      rev = "5d8c5db0dfcadd5872f28e665cf4f4303447352a";
+      hash = "sha256-Wb6I5YHGvBVjVgOutICbRKH96odR3ZgmNS6HQedVahk=";
+    };
+    nativeBuildInputs = [ pkgs.autoreconfHook ];
+  };
+  # LMDB 1.0 cannot open 0.9 data or lock files, so every platform builds the
+  # contracted release; this is the same GitHub archive the vcpkg port verifies.
+  aobus-lmdb = pkgs.lmdb.overrideAttrs (finalAttrs: oldAttrs: {
+    version = "1.0.1";
+    src = pkgs.fetchFromGitHub {
+      owner = "LMDB";
+      repo = "lmdb";
+      rev = "LMDB_${finalAttrs.version}";
+      hash = "sha256-O/TQliIgR/DYMFAAh1X9VWmylP9aZfeD7UcNfGHqsU8=";
+    };
+    # The Nixpkgs patches edit the 0.9 Makefile, and neither change applies to a
+    # native Linux build.
+    patches = [ ];
+    # The inherited hook writes the 0.9 version into lmdb.pc.
+    postInstall = ''
+      moveToOutput bin "$bin"
+      mkdir -p "$dev/lib/pkgconfig"
+      cat > "$dev/lib/pkgconfig/lmdb.pc" <<EOF
+      Name: lmdb
+      Description: ${oldAttrs.meta.description}
+      Version: ${finalAttrs.version}
+
+      Cflags: -I$dev/include
+      Libs: -L$out/lib -llmdb
+      EOF
+    '';
+  });
   useUnstrippedGtk = builtins.getEnv "AOBUS_NIX_UNSTRIPPED_GTK" == "1";
   aobus-gtk4 =
     if useUnstrippedGtk then
@@ -103,12 +150,14 @@ let
       fast-float = { version = aobus-fast-float.version; storePath = toString aobus-fast-float; };
       ftxui = { version = pkgs.ftxui.version; storePath = toString pkgs.ftxui; };
       icu = { version = aobus-icu.version; storePath = toString aobus-icu; };
+      lmdb = { version = aobus-lmdb.version; storePath = toString aobus-lmdb; };
       spdlog = { version = aobus-spdlog.version; storePath = toString aobus-spdlog; };
       catch2 = { version = pkgs.catch2_3.version; storePath = toString pkgs.catch2_3; };
       cli11 = { version = pkgs.cli11.version; storePath = toString pkgs.cli11; };
       rapidyaml = { version = pkgs.rapidyaml.version; storePath = toString pkgs.rapidyaml; };
       gsl-lite = { version = pkgs.gsl-lite.version; storePath = toString pkgs.gsl-lite; };
       lexy = { version = lexy.version; storePath = toString lexy; };
+      alac = { version = aobus-alac.version; storePath = toString aobus-alac; };
       fakeit = { version = fakeit.version; storePath = toString fakeit; };
       stb = {
         version = "${pkgs.stb.version}+resize2-2c980bb";
@@ -152,7 +201,7 @@ let
   ];
 
 in
-assert pkgs.stdenv.isLinux || throw "Aobus shell.nix supports Linux only; on macOS use ./ao with the native vcpkg profile.";
+assert pkgs.stdenv.hostPlatform.isLinux || throw "Aobus shell.nix supports Linux only; on macOS use ./ao with the native vcpkg profile.";
 assert toolchain.schemaVersion == 1;
 assert toolchainMatchesContract;
 assert compilerCache.schemaVersion == 1;
@@ -182,8 +231,8 @@ pkgs.mkShell {
       boost.dev
       aobus-icu
       aobus-icu.dev
-      lmdb
-      lmdb.dev
+      aobus-lmdb
+      aobus-lmdb.dev
       xxhash
       aobus-spdlog
       mimalloc
@@ -196,7 +245,7 @@ pkgs.mkShell {
 
       ffmpeg
       flac
-      alac
+      aobus-alac
       fdk_aac.dev
       mpg123
       libopus

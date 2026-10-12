@@ -414,6 +414,7 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
     )
     owned_by_macos = (
         parts[:2] == ("app", "macos-appkit")
+        or parts[:3] == ("test", "unit", "macos")
         or parts[:3] == ("test", "integration", "macos")
         or "coreaudio" in joined
         or "corefoundation" in joined

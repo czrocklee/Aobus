@@ -27,14 +27,6 @@ namespace ao::lmdb
   {
     class DatabaseAccess;
     class ReservationWriterAccess;
-
-    // Read-only transactions leave cursor disposal to the caller. Write
-    // transactions track every cursor and dispose of them at commit or abort.
-    enum class CursorCleanup : std::uint8_t
-    {
-      Explicit,
-      WriteTransaction
-    };
   } // namespace detail
 
   class ReadTransaction;
@@ -97,8 +89,9 @@ namespace ao::lmdb
    * IntegerKeyDatabase::Reader - Read-only integer-key access within a transaction.
    *
    * The referenced transaction must remain active while an operation or
-   * iterator access is in progress. Reader and iterator destruction remains
-   * safe after the transaction ends.
+   * iterator access is in progress. Reader destruction remains safe after the
+   * transaction ends; an iterator from a read-only transaction must be
+   * destroyed before that transaction ends.
    */
   class IntegerKeyDatabase::Reader final
   {
@@ -157,9 +150,11 @@ namespace ao::lmdb
   private:
     Reader(DbiHandle dbi, MDB_txn* transaction, ReadTransaction const& owner);
 
+    // A read-only transaction's cursor is closed here and counted until then.
+    // A write transaction disposes of its cursors itself, so they carry no count.
     struct MdbCursorDeleter final
     {
-      detail::CursorCleanup cleanup = detail::CursorCleanup::Explicit;
+      std::size_t* openCursorCount = nullptr;
       void operator()(MDB_cursor* cursor) const noexcept;
     };
 
@@ -217,8 +212,9 @@ namespace ao::lmdb
    * ByteKeyDatabase::Reader - Read-only byte-key access within a transaction.
    *
    * The referenced transaction must remain active while an operation or
-   * iterator access is in progress. Reader and iterator destruction remains
-   * safe after the transaction ends.
+   * iterator access is in progress. Reader destruction remains safe after the
+   * transaction ends; an iterator from a read-only transaction must be
+   * destroyed before that transaction ends.
    */
   class ByteKeyDatabase::Reader final
   {
@@ -250,9 +246,11 @@ namespace ao::lmdb
   private:
     Reader(DbiHandle dbi, MDB_txn* transaction, ReadTransaction const& owner);
 
+    // A read-only transaction's cursor is closed here and counted until then.
+    // A write transaction disposes of its cursors itself, so they carry no count.
     struct MdbCursorDeleter final
     {
-      detail::CursorCleanup cleanup = detail::CursorCleanup::Explicit;
+      std::size_t* openCursorCount = nullptr;
       void operator()(MDB_cursor* cursor) const noexcept;
     };
 

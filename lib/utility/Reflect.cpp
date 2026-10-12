@@ -11,15 +11,13 @@ namespace ao::yaml::detail
 {
   void writeQuotedString(ryml::NodeRef node, std::string_view value)
   {
-    node |= ryml::VAL;
-    node |= ryml::VAL_DQUO;
     setValue(node, value);
+    node.set_val_style(ryml::VAL_DQUO);
   }
 
   void writePlainScalar(ryml::NodeRef node, std::string_view value)
   {
-    node |= ryml::VAL;
-    node |= ryml::VAL_PLAIN;
     setValue(node, value);
+    node.set_val_style(ryml::VAL_PLAIN);
   }
 } // namespace ao::yaml::detail

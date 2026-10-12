@@ -211,3 +211,14 @@ add_compile_definitions(
   $<$<CONFIG:Debug>:gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS>
   $<$<NOT:$<CONFIG:Debug>>:gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES>
 )
+
+# Boost.PFR
+# Boost 1.91 walks aggregate fields through C++26 structured binding packs when
+# the compiler offers them, but GCC 16 cannot write such a pack into an LTO
+# object and stops optimized builds with an internal compiler error. Keep the
+# earlier field walk there; every configuration uses the same one.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17)
+  add_compile_definitions(BOOST_PFR_USE_CPP26=0)
+endif()

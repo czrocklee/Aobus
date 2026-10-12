@@ -63,13 +63,6 @@
     "stb",
     "xxhash"
   ],
-  "overrides": [
-    {
-      "name": "ftxui",
-      "version-semver": "6.1.9",
-      "$reason": "Keep vcpkg hosts aligned with the governed cross-platform FTXUI contract. Remove when the default baseline resolves 6.1.9."
-    }
-  ],
   "features": {
     "tests": {
       "description": "Dependencies needed to build Aobus unit tests.",

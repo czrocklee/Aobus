@@ -11,8 +11,10 @@
 
 #include <lmdb.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <memory>
 #include <mutex>
 #include <semaphore>
 #include <thread>
@@ -93,7 +95,33 @@ namespace ao::lmdb
       return std::unexpected{txnPtrRes.error()};
     }
 
-    return ReadTransaction{std::move(*txnPtrRes), ReadFailureMode::Fatal};
+    auto transaction = ReadTransaction{std::move(*txnPtrRes), ReadFailureMode::Fatal};
+    transaction._openCursorCountPtr = std::make_unique<std::size_t>(0);
+    return transaction;
+  }
+
+  ReadTransaction::~ReadTransaction()
+  {
+    requireNoOpenCursors();
+  }
+
+  ReadTransaction& ReadTransaction::operator=(ReadTransaction&& other) noexcept
+  {
+    if (this != &other)
+    {
+      requireNoOpenCursors();
+      _txnPtr = std::move(other._txnPtr);
+      _failureMode = other._failureMode;
+      _openCursorCountPtr = std::move(other._openCursorCountPtr);
+    }
+
+    return *this;
+  }
+
+  void ReadTransaction::requireNoOpenCursors() const noexcept
+  {
+    AO_EXPECTS(_openCursorCountPtr == nullptr || *_openCursorCountPtr == 0,
+               "Read-only LMDB transaction ended while one of its cursors remains open");
   }
 
   Result<WriteTransaction> WriteTransaction::begin(Environment& env)

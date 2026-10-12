@@ -83,7 +83,7 @@ namespace ao::tui::test
     CHECK(ranOnOwner);
   }
 
-  TEST_CASE("Executor - loop checkpoint recovers callbacks queued while terminal hooks are absent",
+  TEST_CASE("Executor - callbacks queued while terminal hooks are reinstalled run after input dispatch",
             "[tui][unit][executor][concurrency]")
   {
     auto completed = std::vector<std::int32_t>{};
@@ -119,18 +119,17 @@ namespace ao::tui::test
             screen.TrackMouse(false);
             enqueueFromWorker(1);
           })();
-        // The queue is already nonempty, so a later callback cannot replace the lost wake.
+        // The queue is already nonempty, so only the wake posted without hooks can drain this callback.
         enqueueFromWorker(2);
         handlingInput = false;
       });
     loop.RunOnce();
-    REQUIRE(completed.empty());
 
-    // App drains here, after the FTXUI turn has unwound its input handlers.
-    executor.drainPendingTasks();
     CHECK(completed == std::vector<std::int32_t>{1, 2});
     CHECK(ranOnOwner == std::vector<bool>{true, true});
     CHECK(ranDuringInput == std::vector<bool>{false, false});
+
+    // The drained queue must leave the next dispatch able to wake the loop.
     enqueueFromWorker(3);
     loop.RunOnce();
     CHECK(completed == std::vector<std::int32_t>{1, 2, 3});

@@ -4,7 +4,7 @@
   "local": {
     "provider": "ccache",
     "minimumVersion": "4.13.6",
-    "linuxVersion": "4.13.6",
+    "linuxVersion": "4.14.1",
     "macosFormula": "ccache",
     "windows": {
       "version": "4.13.6",

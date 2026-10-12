@@ -50,6 +50,14 @@ namespace ao::rt
 {
   namespace
   {
+    template<typename T>
+    void appendKeyValue(ryml::NodeRef node, std::string_view key, T const& value)
+    {
+      auto child = node.append_child();
+      child.save_key(key);
+      child.save(value);
+    }
+
     using MetadataStringGetter = std::string_view (*)(library::TrackView const&, library::DictionaryStore const&);
     using MetadataStringBaseGetter = std::string_view (*)(library::TrackBuilder::MetadataBuilder const&);
     using MetadataNumberGetter = std::uint16_t (*)(library::TrackView const&);
@@ -207,7 +215,7 @@ namespace ao::rt
 
           if (shouldEmit)
           {
-            node.append_child() << ryml::key(key) << current;
+            appendKeyValue(node, key, current);
           }
         }
       }
@@ -216,7 +224,7 @@ namespace ao::rt
       {
         auto customNode = node.append_child();
         yaml::setKey(customNode, "custom");
-        customNode |= ryml::MAP;
+        customNode.set_map();
 
         for (auto const& [dictionaryId, value] : custom)
         {
@@ -272,9 +280,9 @@ namespace ao::rt
 
       if (optMtime)
       {
-        mtimeNode |= ryml::MAP;
-        mtimeNode.append_child() << ryml::key("seconds") << optMtime->seconds;
-        mtimeNode.append_child() << ryml::key("nanoseconds") << optMtime->nanoseconds;
+        mtimeNode.set_map();
+        appendKeyValue(mtimeNode, "seconds", optMtime->seconds);
+        appendKeyValue(mtimeNode, "nanoseconds", optMtime->nanoseconds);
         return;
       }
 
@@ -289,23 +297,23 @@ namespace ao::rt
       {
         if (auto const key = trackFieldId(map.field); map.u64Get != nullptr)
         {
-          node.append_child() << ryml::key(key) << map.u64Get(property);
+          appendKeyValue(node, key, map.u64Get(property));
         }
         else if (map.u32Get != nullptr)
         {
-          node.append_child() << ryml::key(key) << map.u32Get(property);
+          appendKeyValue(node, key, map.u32Get(property));
         }
         else if (map.u16Get != nullptr)
         {
-          node.append_child() << ryml::key(key) << map.u16Get(property);
+          appendKeyValue(node, key, map.u16Get(property));
         }
         else if (map.u8Get != nullptr)
         {
-          node.append_child() << ryml::key(key) << map.u8Get(property);
+          appendKeyValue(node, key, map.u8Get(property));
         }
         else if (map.stringGet != nullptr)
         {
-          node.append_child() << ryml::key(key) << map.stringGet(property);
+          appendKeyValue(node, key, map.stringGet(property));
         }
       }
 
@@ -318,7 +326,7 @@ namespace ao::rt
         optMtime = optManifest->mtime();
       }
 
-      node.append_child() << ryml::key("fileSize") << fileSize;
+      appendKeyValue(node, "fileSize", fileSize);
       emitTrackMtime(node, optMtime);
       return {};
     }
@@ -400,14 +408,14 @@ namespace ao::rt
     {
       auto resourcesNode = node.append_child();
       yaml::setKey(resourcesNode, "resources");
-      resourcesNode |= ryml::SEQ;
+      resourcesNode.set_seq();
 
       for (auto const& [digest, byteLength] : descriptors)
       {
         auto rowNode = resourcesNode.append_child();
-        rowNode |= ryml::MAP;
+        rowNode.set_map();
         appendString(rowNode, "digest", utility::sha256Hex(digest));
-        rowNode.append_child() << ryml::key("length") << byteLength;
+        appendKeyValue(rowNode, "length", byteLength);
       }
     }
 
@@ -423,7 +431,7 @@ namespace ao::rt
 
       auto coversNode = node.append_child();
       yaml::setKey(coversNode, "covers");
-      coversNode |= ryml::SEQ;
+      coversNode.set_seq();
 
       auto const covers = view.coverArt();
 
@@ -431,8 +439,8 @@ namespace ao::rt
       {
         auto const cover = covers.at(i);
         auto coverNode = coversNode.append_child();
-        coverNode |= ryml::MAP;
-        coverNode.append_child() << ryml::key("type") << static_cast<std::uint32_t>(cover.type);
+        coverNode.set_map();
+        appendKeyValue(coverNode, "type", static_cast<std::uint32_t>(cover.type));
 
         // The reference is the digest itself and never a ResourceId: a handle is
         // local to the library that minted it and means nothing in a document.
@@ -452,7 +460,7 @@ namespace ao::rt
       {
         auto tagsNode = node.append_child();
         yaml::setKey(tagsNode, "tags");
-        tagsNode |= ryml::SEQ;
+        tagsNode.set_seq();
 
         for (auto const tagId : tags)
         {
@@ -468,10 +476,10 @@ namespace ao::rt
                       library::TrackStore::Reader const& trackReader)
     {
       auto listNode = listsNode.append_child();
-      listNode |= ryml::MAP;
+      listNode.set_map();
 
-      listNode.append_child() << ryml::key("id") << listId.raw();
-      listNode.append_child() << ryml::key("parentId") << listView.parentId().raw();
+      appendKeyValue(listNode, "id", listId.raw());
+      appendKeyValue(listNode, "parentId", listView.parentId().raw());
       appendString(listNode, "name", listView.name());
 
       if (!listView.description().empty())
@@ -493,13 +501,13 @@ namespace ao::rt
 
       auto orderNode = listNode.append_child();
       yaml::setKey(orderNode, "order");
-      orderNode |= ryml::SEQ;
+      orderNode.set_seq();
 
       for (auto const trackId : orderTrackIds)
       {
         if (mode != ExportMode::ListOnly)
         {
-          orderNode.append_child() << trackId.raw();
+          orderNode.append_child().save(trackId.raw());
           continue;
         }
 
@@ -516,7 +524,7 @@ namespace ao::rt
                      trackId.raw());
 
         auto refNode = orderNode.append_child();
-        refNode |= ryml::MAP;
+        refNode.set_map();
         appendString(refNode, "uri", uriRes->value());
       }
 
@@ -575,18 +583,18 @@ namespace ao::rt
   {
     auto tree = ryml::Tree{};
     auto root = tree.rootref();
-    root |= ryml::MAP;
+    root.set_map();
 
     auto const transaction = ml.readTransaction();
     auto const header = ml.metadataHeader(transaction);
 
-    root.append_child() << ryml::key("version") << kYamlFormatVersion;
+    appendKeyValue(root, "version", kYamlFormatVersion);
     appendString(root, "libraryId", utility::formatUuid(header.libraryId));
     appendString(root, "export_mode", exportModeName(mode));
 
     auto library = root.append_child();
     yaml::setKey(library, "library");
-    library |= ryml::MAP;
+    library.set_map();
 
     if (mode != ExportMode::ListOnly)
     {
@@ -645,7 +653,7 @@ namespace ao::rt
 
     auto tracksNode = node.append_child();
     yaml::setKey(tracksNode, "tracks");
-    tracksNode |= ryml::SEQ;
+    tracksNode.set_seq();
 
     for (auto const& [trackId, view] : trackReader)
     {
@@ -672,9 +680,9 @@ namespace ao::rt
                                                   library::FileManifestStore::Reader const& manifestReader) const
   {
     auto trackNode = node.append_child();
-    trackNode |= ryml::MAP;
+    trackNode.set_map();
 
-    trackNode.append_child() << ryml::key("id") << id.raw();
+    appendKeyValue(trackNode, "id", id.raw());
 
     auto const property = view.property();
     auto uriRes = library::LibraryUri::parse(property.uri());
@@ -739,7 +747,7 @@ namespace ao::rt
   {
     auto listsNode = node.append_child();
     yaml::setKey(listsNode, "lists");
-    listsNode |= ryml::SEQ;
+    listsNode.set_seq();
 
     auto const listReader = ml.lists().reader(transaction);
     auto const trackReader = ml.tracks().reader(transaction);

@@ -547,14 +547,19 @@ class CompileCommandCoverageTest(unittest.TestCase):
         ):
             self.assertTrue(tidyengine._is_platform_incompatible(source, root))
 
-    def test_macos_integration_sources_are_incompatible_with_other_native_graphs(self):
+    def test_macos_test_sources_are_incompatible_with_other_native_graphs(self):
         root = Path("/repo")
-        source = root / "test" / "integration" / "macos" / "AppKitSmokeMain.mm"
+        sources = (
+            root / "test" / "integration" / "macos" / "AppKitSmokeMain.mm",
+            root / "test" / "unit" / "macos" / "lmdb" / "LmdbProbeScratchTest.cpp",
+        )
 
         for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
             with self.subTest(profile=profile.name):
                 with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
-                    self.assertTrue(tidyengine._is_platform_incompatible(source, root))
+                    for source in sources:
+                        with self.subTest(source=source):
+                            self.assertTrue(tidyengine._is_platform_incompatible(source, root))
 
     def test_macos_backend_source_is_incompatible_with_every_other_native_graph(self):
         root = Path("/repo")

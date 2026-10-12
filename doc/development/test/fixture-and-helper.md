@@ -114,6 +114,7 @@ When a mocked interface must be returned as `std::unique_ptr`, use existing test
 ## Filesystem and data
 
 - Use `ao::test::TempDir` for unit tests needing files or LMDB storage.
+- Use `ao::test::LmdbProbeScratch` instead for scratch handed to a probe child that may terminate with an LMDB environment open. On Darwin it reclaims the [semaphores that owner leaves behind](../macos-portability.md#permanent-platform-differences) before removing the directory; close every other owner first.
 - Use integration test data only for integration-style behavior such as real codecs or scanned audio files.
 - Keep malformed fixtures tiny and locally explained by the test name/setup.
 - Open test files in binary mode whenever assertions compare exact bytes or preserve existing bytes; Windows text mode translates line endings and invalidates byte-for-byte evidence.

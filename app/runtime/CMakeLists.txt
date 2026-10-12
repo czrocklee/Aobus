@@ -83,12 +83,12 @@ add_library(ao_app_runtime STATIC
     Log.cpp
 )
 
-# GCC 15 misclassifies Boost.Asio coroutine-frame aligned_alloc/free pairs in
-# these coroutine-heavy translation units after inlining. Keep the workaround
+# GCC 15 and 16 misclassify Boost.Asio coroutine-frame aligned_alloc/free pairs
+# in these coroutine-heavy translation units after inlining. Keep the workaround
 # local so unrelated runtime and frontend code retains the warning.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 15
-    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17)
   set_property(
     SOURCE
       library/LibraryJobs.cpp

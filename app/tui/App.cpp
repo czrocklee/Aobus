@@ -1763,10 +1763,6 @@ namespace ao::tui
     while (!loop.HasQuitted())
     {
       loop.RunOnceBlocking();
-      // FTXUI drops Posts while WithRestoredIO reinstalls terminal hooks. Drain
-      // after input dispatch unwinds so a lost wake cannot strand worker results
-      // or reenter a Settings save that is still publishing its candidate.
-      executor->drainPendingTasks();
 
       refreshSettingsPreview(settings, screen);
       std::ignore = terminalTitle.setFormat(preferences.terminalTitleFormat);

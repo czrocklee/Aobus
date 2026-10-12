@@ -44,7 +44,7 @@ namespace ao::systemmedia::test
 
     struct GFreeDeleter final
     {
-      void operator()(void* value) const noexcept { ::g_free(value); }
+      void operator()(void* value) const noexcept { g_free(value); }
     };
 
     using ObjectPtr = std::unique_ptr<void, GObjectDeleter>;

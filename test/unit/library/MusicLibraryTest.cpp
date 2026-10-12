@@ -189,13 +189,15 @@ namespace ao::library::test
       REQUIRE(::mdb_txn_commit(commitTransaction) == MDB_SUCCESS);
     }
 
-    void addOrdinaryMainCatalogRow(std::filesystem::path const& path, std::string_view const key)
+    // Writes a plain row at the main-catalog key that LMDB 1.0 gives the named database @p name.
+    void addOrdinaryMainCatalogRow(std::filesystem::path const& path, std::string_view const name)
     {
       auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
       auto transaction = beginWriteTransaction(environment);
       auto mainDatabaseRes = ByteKeyDatabase::main(transaction);
       REQUIRE(mainDatabaseRes);
       auto mainDatabase = std::move(*mainDatabaseRes);
+      auto const key = std::string{name} + '\0';
       REQUIRE(mainDatabase.writer(transaction).create(utility::bytes::view(key), createStringData("ordinary")));
       REQUIRE(transaction.commit());
     }

@@ -60,7 +60,7 @@ namespace
 
   struct GFreeDeleter final
   {
-    void operator()(char* const data) const noexcept { ::g_free(data); }
+    void operator()(char* const data) const noexcept { g_free(data); }
   };
 
   template<typename T>

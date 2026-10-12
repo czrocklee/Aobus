@@ -207,7 +207,7 @@ class NativePortalTest(unittest.TestCase):
 
         self.assertNotIn("core.hooksPath", shell)
         self.assertNotIn("export CCACHE_", shell)
-        self.assertIn("pkgs.stdenv.isLinux", shell)
+        self.assertIn("pkgs.stdenv.hostPlatform.isLinux", shell)
         self.assertIn("on macOS use ./ao with the native vcpkg profile", shell)
         self.assertNotIn("isDarwin", shell)
 
@@ -1969,7 +1969,7 @@ class CliParseTest(unittest.TestCase):
             append=False,
         )
 
-    def test_macos_tui_asan_disables_mixed_ftxui_container_annotations(self):
+    def test_macos_tui_asan_keeps_caller_container_annotations(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir) / "custom-build-tree"
             binary = build_dir / "test" / "ao_tui_test"
@@ -1977,31 +1977,16 @@ class CliParseTest(unittest.TestCase):
             binary.touch()
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-                with mock.patch.dict(
-                    "os.environ",
-                    {"ASAN_OPTIONS": ("halt_on_error=1:detect_container_overflow=1:allocator_may_return_null=1")},
-                    clear=True,
-                ):
+                with mock.patch.dict("os.environ", {"ASAN_OPTIONS": "detect_container_overflow=1"}, clear=True):
                     with mock.patch.object(test_command, "run", return_value=0) as run:
                         self.assertEqual(test_command.run_suite("tui", build_dir, asan=True), 0)
 
         run.assert_called_once_with(
             [str(binary)],
-            env={
-                "ASAN_OPTIONS": "halt_on_error=1:allocator_may_return_null=1:detect_container_overflow=0",
-                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
-            },
+            env={"UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"},
             log=None,
             append=False,
         )
-
-    def test_linux_tui_asan_keeps_container_annotations_enabled(self):
-        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-            with mock.patch.dict("os.environ", {"ASAN_OPTIONS": "detect_container_overflow=1"}, clear=True):
-                self.assertEqual(
-                    test_command._macos_tui_asan_env("tui", Path("build-asan"), enabled=True),
-                    {},
-                )
 
     def test_tsan_options_preserve_windows_drive_colons(self):
         value = r"history_size=7:suppressions=C:\temp\external.supp:halt_on_error=0"

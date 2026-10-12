@@ -5,6 +5,7 @@
 #include "test/fatal/LibraryProbeScenario.h"
 #include "test/fatal/ProbeProcess.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/lmdb/LmdbProbeScratch.h"
 
 #include <chrono>
 #ifdef _WIN32
@@ -63,7 +64,7 @@ int main(int argc, char* argv[])
 
   for (auto const& expectation : ao::library::test::libraryFatalProbeExpectations())
   {
-    auto optScratch = std::optional<ao::test::TempDir>{};
+    auto optScratch = std::optional<ao::test::LmdbProbeScratch>{};
     auto scenario = std::string{expectation.scenario};
 
     if (expectation.needsScratchDirectory)

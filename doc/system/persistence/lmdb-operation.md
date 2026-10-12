@@ -49,7 +49,8 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - Environment paths crossing this adapter are UTF-8, matching LMDB's own decoding, and are converted explicitly rather than through a platform's narrow-string default.
 - Native environment handles are private to the adapter; public callers compose transactions and databases rather than bypassing their ownership checks.
 - A byte span, key view, iterator value, or operation through a reader, iterator, or writer does not outlive the active transaction that supplies its storage or cursor state.
-- Destroying a reader, iterator, or writer after that transaction ends is safe and does not inspect the borrowed transaction object.
+- Destroying a reader or writer after that transaction ends is safe and does not inspect the borrowed transaction object; so is destroying an iterator created from a write transaction.
+- An iterator created from a read-only transaction is destroyed before that transaction ends. Ending a read-only transaction, by destruction or move assignment, while one of its iterators remains violates `AO_EXPECTS`.
 - Explicitly aborting or destroying an uncommitted write transaction aborts all of its staged changes.
 - An unexpected failure from a mutating LMDB primitive throws the private `detail::TransactionFailure`. The enclosing library transaction owner must catch it at the root operation boundary, explicitly abort the complete transaction, and only then return or propagate the failure; an inner operation must never swallow it and continue or commit.
 - Calling `commit()` consumes the native write transaction whether commit succeeds or fails; the transaction and every writer created from it are terminal afterward.
@@ -90,7 +91,8 @@ Destruction closes the native handle; the same process may then reopen that path
 An iterator is positioned on one record or is end.
 Construction seeks the first record; increment seeks the next record; `MDB_NOTFOUND` transitions to end.
 Dereference and increment require the positioned state.
-An iterator created from a read-only transaction closes its native cursor explicitly, including when the transaction has already ended.
+An iterator created from a read-only transaction closes its native cursor explicitly, and it must do so before that transaction ends: LMDB 1.0 reads the native transaction while closing a read-only cursor, which the native transaction has already freed once it ends.
+The read-only transaction therefore counts its open cursors for the life of the native transaction, across wrapper moves, and requires the count to be zero when it ends.
 An iterator or writer created from a write transaction leaves cursor disposal to that native transaction, which tracks all of its cursors and closes them during commit or abort.
 Consequently, destroying a write-backed wrapper early may retain its native cursor until the short write transaction ends, but destroying the wrapper after transaction teardown never double-closes a cursor or dereferences a dead transaction wrapper.
 
@@ -336,7 +338,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`EnvironmentDataFileTest.cpp`](../../../test/unit/lmdb/EnvironmentDataFileTest.cpp) protects allocation staying proportional to committed use under a large configured map, across a reopen, over a data file an earlier session left behind, on a non-ASCII path, and under deterministic concurrent preparation and concurrent first opens.
 - [`TransactionTest.cpp`](../../../test/unit/lmdb/TransactionTest.cpp) protects top-level-only construction, read/write lifetime, commit, abort, moves, and bounded deterministic database-open serialization plus commit/abort/destruction release across environments.
 - [`DatabaseTest.cpp`](../../../test/unit/lmdb/DatabaseTest.cpp) protects write-transaction-only database admission, create-capable and existing-only exact flag validation for both named-token types, exact byte-key main-database validation, missing existing databases, and failed-open rollback.
-- [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseByteKeyTest.cpp`](../../../test/unit/lmdb/DatabaseByteKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, byte-key ordering and lower-bound seeks, compile-time key-operation isolation, integer-key coercion, maximum-key behavior, and safe integer-key and byte-key wrapper destruction after read or write transaction teardown.
+- [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseByteKeyTest.cpp`](../../../test/unit/lmdb/DatabaseByteKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, byte-key ordering and lower-bound seeks, compile-time key-operation isolation, integer-key coercion, maximum-key behavior, safe integer-key and byte-key wrapper destruction after write transaction teardown, and open-cursor accounting that follows a moved or move-assigned read-only transaction.
 - [`DatabaseWriterTest.cpp`](../../../test/unit/lmdb/DatabaseWriterTest.cpp) protects compile-time key-operation isolation, the copied-data-only public writer surface, source-private integer reservation encoding and append, clear-and-reappend allocation, exhaustion, update, delete, write reads, conflicts, mutation-failure exception unwinding and rollback, moves, and use-after-commit faults.
 - [`MapCapacityPolicyTest.cpp`](../../../test/unit/lmdb/MapCapacityPolicyTest.cpp) protects the grow-only rule: a default policy leaving the map alone, the floor lifting a smaller map without lowering a larger one, doubling once the peak passes half and repeating until it fits, the ceiling stopping growth without shrinking a map already past it, additive growth and its absence where a file holds no hole, and saturation near the representable limit.
 - [`ResultErrorTest.cpp`](../../../test/unit/lmdb/ResultErrorTest.cpp) protects native-code mapping including the exhausted-map, stale-mapping, full-disk, and full-transaction separation, and caller source-location capture.
@@ -345,7 +347,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
   and the library fatal subprocess scenarios under
   [`test/fatal/`](../../../test/fatal) use the governed read-fault seam to
   protect admission, writer-root, and post-open ownership respectively.
-- [`LibraryProbeTest.cpp`](../../../test/unit/library/LibraryProbeTest.cpp) and its library fatal subprocess scenarios protect adapter call-order contracts that require process isolation, including rejection of an empty lower-bound target.
+- [`LibraryProbeTest.cpp`](../../../test/unit/library/LibraryProbeTest.cpp) and its library fatal subprocess scenarios protect adapter call-order contracts that require process isolation, including rejection of an empty lower-bound target and of a read-only transaction that ends, by destruction or replacement, with an iterator still open.
 
 ## Related documents
 

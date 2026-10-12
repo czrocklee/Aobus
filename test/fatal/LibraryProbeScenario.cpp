@@ -889,6 +889,44 @@ namespace ao::library::test
         return 3;
       }
 
+      if (scenario == "lmdb-read-transaction-ended-with-open-iterator" ||
+          scenario == "lmdb-read-transaction-replaced-with-open-iterator")
+      {
+        if (!databaseRes->writer(*setupRes).create(1, utility::bytes::view(std::string_view{"probe"})) ||
+            !setupRes->commit())
+        {
+          return 3;
+        }
+
+        auto readRes = lmdb::ReadTransaction::begin(*environmentRes);
+
+        if (!readRes)
+        {
+          return 3;
+        }
+
+        auto const iterator = databaseRes->reader(*readRes).begin();
+
+        if (scenario == "lmdb-read-transaction-replaced-with-open-iterator")
+        {
+          auto replacementRes = lmdb::ReadTransaction::begin(*environmentRes);
+
+          if (!replacementRes)
+          {
+            return 3;
+          }
+
+          *readRes = std::move(*replacementRes);
+          return 3;
+        }
+
+        {
+          auto const ending = std::move(*readRes);
+        }
+
+        return 3;
+      }
+
       if (invalidIntegerKey)
       {
         if (!setupRes->commit())
@@ -1246,7 +1284,9 @@ namespace ao::library::test
 
     if (name == "lmdb-reader-moved-from" || name == "lmdb-writer-after-commit" || name == "lmdb-writer-from-finished" ||
         name == "lmdb-reader-after-write-commit" || name == "lmdb-iterator-after-write-commit" ||
-        name == "lmdb-invalid-integer-key" || name == "lmdb-empty-lower-bound-key")
+        name == "lmdb-read-transaction-ended-with-open-iterator" ||
+        name == "lmdb-read-transaction-replaced-with-open-iterator" || name == "lmdb-invalid-integer-key" ||
+        name == "lmdb-empty-lower-bound-key")
     {
       return runLmdbContract(scratchName, name);
     }

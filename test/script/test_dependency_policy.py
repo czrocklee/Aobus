@@ -147,10 +147,11 @@ class DependencyPolicyTest(unittest.TestCase):
     def test_initial_contract_is_valid(self):
         self.assertEqual(
             set(self.contract["dependencies"]),
-            {"boost", "fast-float", "ftxui", "icu", "spdlog", "windows-app-sdk", "cppwinrt"},
+            {"boost", "fast-float", "ftxui", "icu", "lmdb", "spdlog", "windows-app-sdk", "cppwinrt"},
         )
         self.assertEqual(self.contract["dependencies"]["fast-float"]["policy"]["version"], "8.2.10")
         self.assertEqual(self.contract["dependencies"]["icu"]["policy"]["version"], "78.3")
+        self.assertEqual(self.contract["dependencies"]["lmdb"]["policy"]["version"], "1.0.1")
         self.assertEqual(self.contract["dependencies"]["windows-app-sdk"]["policy"]["version"], "2.4.0")
         self.assertEqual(self.contract["dependencies"]["cppwinrt"]["policy"]["version"], "3.0.260715.1")
 
@@ -164,8 +165,8 @@ class DependencyPolicyTest(unittest.TestCase):
     def test_exact_policy_accepts_only_the_contracted_version(self):
         policy = dependency_policy.effective_policy(self.contract, "boost", "linux")
 
-        self.assertTrue(policy.accepts("1.89.0"))
-        self.assertFalse(policy.accepts("1.89.1"))
+        self.assertTrue(policy.accepts("1.91.0"))
+        self.assertFalse(policy.accepts("1.91.1"))
 
     def test_range_policy_enforces_both_boundaries(self):
         contract = copy.deepcopy(self.contract)
@@ -197,7 +198,7 @@ class DependencyPolicyTest(unittest.TestCase):
 
         self.assertEqual(windows.requested, "7.0.0")
         self.assertEqual(windows.exception_id, "DEP-2026-001")
-        self.assertEqual(linux.requested, "6.1.9")
+        self.assertEqual(linux.requested, "7.0.3")
         self.assertIsNone(linux.exception_id)
 
     def test_expired_exception_fails_closed(self):
@@ -241,7 +242,7 @@ class DependencyPolicyTest(unittest.TestCase):
             report["dependencies"]["ftxui"] = {
                 "status": "not-applicable",
                 "policyKind": "exact",
-                "requestedVersion": "6.1.9",
+                "requestedVersion": "7.0.3",
                 "resolvedVersion": None,
                 "exceptionId": None,
                 "targets": {},
@@ -428,7 +429,7 @@ class DependencyPolicyTest(unittest.TestCase):
             versions = self._governed_port_versions()
             versions.update(
                 {
-                    "boost-regex": "1.89.0",
+                    "boost-regex": "1.91.0",
                     "vcpkg-boost": "2025-03-29",
                     "boost-vcpkg-helpers": "1.11.0",
                 }
@@ -458,7 +459,7 @@ class DependencyPolicyTest(unittest.TestCase):
             status_file.parent.mkdir(parents=True)
             triplet = "x64-aobus-osx"
             versions = self._governed_port_versions()
-            versions["boost-regex"] = "1.89.0"
+            versions["boost-regex"] = "1.91.0"
             self._write_vcpkg_status(status_file, versions, triplet=triplet)
             report = {
                 "host": {
@@ -470,7 +471,7 @@ class DependencyPolicyTest(unittest.TestCase):
 
             resolved = dependency_policy._verify_vcpkg_resolution(self.contract, report, build_dir, platform="macos")
 
-        self.assertEqual(resolved["ftxui"]["ftxui"]["upstreamVersion"], "6.1.9")
+        self.assertEqual(resolved["ftxui"]["ftxui"]["upstreamVersion"], "7.0.3")
         self.assertEqual(resolved["boost"]["boost-regex"]["triplet"], triplet)
 
     def test_injected_verification_date_governs_native_resolution(self):

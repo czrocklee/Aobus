@@ -113,7 +113,7 @@ namespace ao::gtk::test
       return true;
     }
 
-    ::g_free(mismatch);
+    g_free(mismatch);
     return false;
   }
 

@@ -29,6 +29,15 @@ set_property(SOURCE
   unit/uimodel/layout/component/LayoutSchemaTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
+# GCC 16 attributes a reply vector destroyed inside this file's Asio coroutine
+# frames to the frame itself after inlining and reports a non-heap free.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17)
+  set_property(SOURCE
+    unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp
+    APPEND PROPERTY COMPILE_OPTIONS -Wno-free-nonheap-object)
+endif()
 
 # This opt-in GUI harness needs a console session and disposable media. It is
 # built by native checks but deliberately excluded from the unattended suites.
@@ -111,7 +120,7 @@ add_executable(ao_library_probe
     fatal/LibraryProbeScenario.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_library_probe)
-target_link_libraries(ao_library_probe PRIVATE ao_fatal_probe_support ao_test_support_common ao_library)
+target_link_libraries(ao_library_probe PRIVATE ao_fatal_probe_support ao_test_support_library ao_library)
 add_test(NAME ao_library_probe COMMAND ao_library_probe)
 
 target_link_libraries(ao_test_support_common
@@ -130,6 +139,7 @@ add_library(ao_test_support_library STATIC
     unit/library/TrackTestSupport.cpp
     unit/library/TrackViewTestSupport.cpp
     unit/library/WritableLibraryTestSupport.cpp
+    unit/lmdb/LmdbProbeScratch.cpp
 )
 target_link_libraries(ao_test_support_library
     PUBLIC
@@ -783,6 +793,10 @@ aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/detail/CoreAudioLatencyTest.cpp
   unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
   unit/audio/backend/detail/CoreFoundationStringTest.cpp
+)
+# Only Darwin LMDB keeps lock state that outlives an aborted owner.
+aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
+  unit/macos/lmdb/LmdbProbeScratchTest.cpp
 )
 if(WIN32)
   add_executable(ao_detached_process_probe

@@ -219,9 +219,11 @@ namespace ao::library
       return header;
     }
 
+    // LMDB 1.0 keys a named database's main-catalog entry by its name and terminating NUL.
     bool matchesCatalogKey(std::span<std::byte const> const key, std::string_view const expected) noexcept
     {
-      return key.size() == expected.size() && std::ranges::equal(key, std::as_bytes(std::span<char const>{expected}));
+      return key.size() == expected.size() + 1 && key.back() == std::byte{0} &&
+             std::ranges::equal(key.first(expected.size()), std::as_bytes(std::span<char const>{expected}));
     }
 
     bool isCatalogEmpty(lmdb::ByteKeyDatabase const& mainDatabase, lmdb::WriteTransaction const& transaction)

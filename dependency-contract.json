@@ -10,7 +10,7 @@
       ],
       "policy": {
         "kind": "exact",
-        "version": "1.89.0"
+        "version": "1.91.0"
       },
       "nix": {
         "attribute": "boost"
@@ -75,13 +75,13 @@
       ],
       "policy": {
         "kind": "exact",
-        "version": "6.1.9"
+        "version": "7.0.3"
       },
       "nix": {
         "attribute": "ftxui"
       },
       "vcpkg": {
-        "strategy": "override",
+        "strategy": "baseline",
         "ports": [
           "ftxui"
         ]
@@ -130,6 +130,32 @@
         "locale-collation",
         "script-transliteration"
       ]
+    },
+    "lmdb": {
+      "platforms": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "policy": {
+        "kind": "exact",
+        "version": "1.0.1"
+      },
+      "nix": {
+        "attribute": "aobus-lmdb"
+      },
+      "vcpkg": {
+        "strategy": "baseline",
+        "ports": [
+          "lmdb"
+        ]
+      },
+      "cmake": {
+        "package": "lmdb",
+        "targets": [
+          "PkgLMDB"
+        ]
+      }
     },
     "spdlog": {
       "platforms": [

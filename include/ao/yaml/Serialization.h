@@ -57,7 +57,7 @@ namespace ao::yaml
       }
     }
 
-    node << value;
+    node.save(value);
   }
 
   template<typename T, typename ElementReader>
@@ -335,7 +335,7 @@ namespace ao::yaml
   template<typename Range, typename ElementWriter>
   inline Result<> writeSequence(ryml::NodeRef node, Range const& values, ElementWriter const& elementWriter)
   {
-    node |= ryml::SEQ;
+    node.set_seq();
 
     for (auto const& value : values)
     {
@@ -375,7 +375,7 @@ namespace ao::yaml
                                  std::string_view context,
                                  ValueWriter const& valueWriter)
   {
-    node |= ryml::MAP;
+    node.set_map();
 
     for (auto const& [keyValue, value] : values)
     {
