@@ -196,6 +196,10 @@ target_link_libraries(ao_test_support_runtime
       Catch2::Catch2
       FakeIt::FakeIt-catch
 )
+if(WIN32)
+  # timeBeginPeriod lets the test executors' 1 ms polls wait about 1 ms.
+  target_link_libraries(ao_test_support_runtime PRIVATE winmm)
+endif()
 
 add_library(ao_test_support_i18n STATIC
     unit/MessageCatalogTestSupport.cpp

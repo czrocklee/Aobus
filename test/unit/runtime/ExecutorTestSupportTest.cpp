@@ -5,11 +5,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <exception>
+#include <semaphore>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -123,5 +127,43 @@ namespace ao::rt::test
     REQUIRE(executor.tryRunOne());
     CHECK(callbackThread == ownerThread);
     CHECK_FALSE(executor.tryRunOne());
+  }
+
+  TEST_CASE("ManualExecutor - draining observes worker-only completion before its deadline",
+            "[runtime][unit][async][concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto completed = std::atomic_bool{false};
+    auto drainStarted = std::binary_semaphore{0};
+    auto worker = std::jthread{[&]
+                               {
+                                 drainStarted.acquire();
+                                 completed.store(true);
+                               }};
+    bool releasedWorker = false;
+    auto const timeout = std::chrono::seconds{10};
+    auto const start = std::chrono::steady_clock::now();
+
+    // The worker completes only after the first check has failed and queues
+    // nothing, as a Runtime task finishing on a worker does; only a recheck
+    // before the deadline can observe it.
+    auto const drained = executor.tryDrainUntil(
+      [&]
+      {
+        if (!std::exchange(releasedWorker, true))
+        {
+          drainStarted.release();
+          return false;
+        }
+
+        return completed.load();
+      },
+      timeout);
+
+    CHECK(drained);
+    // A drain that waits out the guard and then checks once more also succeeds,
+    // so require completion well before the guard.
+    CHECK(std::chrono::steady_clock::now() - start < timeout / 2);
+    CHECK(executor.queuedCount() == 0);
   }
 } // namespace ao::rt::test

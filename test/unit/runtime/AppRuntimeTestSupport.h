@@ -4,6 +4,7 @@
 #pragma once
 
 #include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/async/Task.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/rt/AppRuntime.h>
@@ -67,6 +68,7 @@ namespace ao::rt::test
   template<typename T, typename Pump>
   T runRuntimeTask(AppRuntime& runtime, async::Task<T> task, Pump& pump)
   {
+    requestMillisecondTimerResolution();
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = runtime.async().spawn(flagCompletionAsync(completedPtr, std::move(task)));
     auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};

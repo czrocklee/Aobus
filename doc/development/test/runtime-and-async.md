@@ -40,6 +40,8 @@ If a timeout helper is necessary, keep it centralized and make failure diagnosti
 It waits on the executor's wake signal through `tryRunOneTurnUntil()` instead of spinning, with bounded rechecks for worker completion that does not enqueue a callback.
 The test driver is the bounded wait's current consumer outside its direct regression tests; no production caller uses it yet.
 The operation belongs to `LoopExecutor` because it owns the wake semaphore and turn draining, so the test driver does not need access to private synchronization state.
+`ManualExecutor::tryDrainUntil()` and `QueuedExecutor::tryDrainUntil()` likewise recheck their predicate every millisecond while the queue is empty, because a Runtime task can finish on a worker without queuing anything.
+On Windows these drivers raise the process timer resolution to 1 ms through `requestMillisecondTimerResolution()`; otherwise each recheck lasts a 15.6 ms timer tick.
 Deadlines guard against a hung test; queue observations, barriers, and terminal state establish ordering and correctness.
 `LibraryCommandsFixture` and the short-lived runtime in `addTrackAndPublishImpl()` use two worker threads so sharded service tests retain real concurrency without allocating a machine-sized pool in every process.
 Library-owning fixtures first close write/publication admission while workers can still retire admitted commands, then stop and join the runtime before releasing the Library and its change bus, including assertion-unwinding paths.

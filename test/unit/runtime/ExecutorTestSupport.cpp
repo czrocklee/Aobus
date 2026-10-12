@@ -9,6 +9,20 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+// <timeapi.h> depends on declarations from <windows.h>.
+// clang-format off
+#include <windows.h>
+#include <timeapi.h>
+// clang-format on
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -22,6 +36,14 @@
 
 namespace ao::rt::test
 {
+  void requestMillisecondTimerResolution() noexcept
+  {
+#ifdef _WIN32
+    // Never released: the process keeps the resolution until it exits.
+    [[maybe_unused]] static auto const kPeriodResult = ::timeBeginPeriod(1);
+#endif
+  }
+
   struct ManualExecutor::Impl final
   {
     mutable std::mutex mutex;
@@ -33,6 +55,7 @@ namespace ao::rt::test
   ManualExecutor::ManualExecutor()
     : _implPtr{std::make_unique<Impl>()}
   {
+    requestMillisecondTimerResolution();
   }
 
   ManualExecutor::~ManualExecutor() = default;
@@ -160,6 +183,7 @@ namespace ao::rt::test
   QueuedExecutor::QueuedExecutor()
     : _implPtr{std::make_unique<Impl>()}
   {
+    requestMillisecondTimerResolution();
   }
 
   QueuedExecutor::~QueuedExecutor() = default;
@@ -254,6 +278,7 @@ namespace ao::rt::test
                        compat::MoveOnlyFunction<bool()> predicate,
                        std::chrono::milliseconds const timeout)
   {
+    requestMillisecondTimerResolution();
     auto const deadline = std::chrono::steady_clock::now() + timeout;
 
     while (!predicate() && std::chrono::steady_clock::now() < deadline)
