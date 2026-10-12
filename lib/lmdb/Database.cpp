@@ -35,6 +35,11 @@ namespace ao::lmdb
     public:
       static MDB_txn* handle(ReadTransaction const& transaction) noexcept { return transaction._txnPtr.get(); }
 
+      static std::uint64_t bindingGeneration(ReadTransaction const& transaction) noexcept
+      {
+        return transaction._bindingGeneration;
+      }
+
       static bool isTransactionOwned(ReadTransaction const& transaction) noexcept
       {
         return transaction._failureMode == ReadTransaction::ReadFailureMode::Transaction;
@@ -46,6 +51,9 @@ namespace ao::lmdb
       }
 
       static void acquireOpenAdmission(WriteTransaction& transaction) { transaction.acquireDatabaseOpenAdmission(); }
+
+      // Readonly owners have no affinity under MDB_NOTLS; writer capabilities do.
+      static bool isOnOwnerThread(ReadTransaction const& transaction) noexcept { return transaction.isOwnerThread(); }
 
       static IntegerKeyDatabase integerKeyDatabase(DbiHandle const dbi) noexcept { return IntegerKeyDatabase{dbi}; }
 
@@ -440,7 +448,7 @@ namespace ao::lmdb
   }
 
   IntegerKeyDatabase::Reader::Reader(DbiHandle const dbi, MDB_txn* transaction, ReadTransaction const& owner)
-    : _dbi{dbi}, _txn{transaction}, _owner{&owner}
+    : _dbi{dbi}, _txn{transaction}, _owner{&owner}, _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
   }
 
@@ -502,8 +510,12 @@ namespace ao::lmdb
 
   void IntegerKeyDatabase::Reader::ensureActive() const
   {
-    AO_EXPECTS(
-      _owner != nullptr && _owner->isActive(), "IntegerKeyDatabase::Reader used after its transaction finished");
+    AO_EXPECTS(_owner != nullptr && _owner->isActive() &&
+                 detail::DatabaseAccess::bindingGeneration(*_owner) == _bindingGeneration &&
+                 detail::DatabaseAccess::handle(*_owner) == _txn,
+               "IntegerKeyDatabase::Reader used after its transaction finished or was replaced");
+    AO_EXPECTS(detail::DatabaseAccess::isOnOwnerThread(*_owner),
+               "IntegerKeyDatabase::Reader used off its write transaction's creating thread");
   }
 
   IntegerKeyDatabase::Reader::KeyView::operator std::uint32_t() const
@@ -518,7 +530,10 @@ namespace ao::lmdb
   IntegerKeyDatabase::Reader::Iterator::Iterator(MDB_txn* transaction,
                                                  ReadTransaction const& owner,
                                                  DbiHandle const dbi)
-    : _cursorPtr{Reader::create(transaction, owner, dbi)}, _owner{&owner}
+    : _cursorPtr{Reader::create(transaction, owner, dbi)}
+    , _txn{transaction}
+    , _owner{&owner}
+    , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
     auto record = RawRecord{};
 
@@ -532,7 +547,11 @@ namespace ao::lmdb
   }
 
   IntegerKeyDatabase::Reader::Iterator::Iterator(Iterator&& other) noexcept
-    : _cursorPtr{std::move(other._cursorPtr)}, _value{other._value}, _owner{std::exchange(other._owner, nullptr)}
+    : _cursorPtr{std::move(other._cursorPtr)}
+    , _value{other._value}
+    , _txn{std::exchange(other._txn, nullptr)}
+    , _owner{std::exchange(other._owner, nullptr)}
+    , _bindingGeneration{std::exchange(other._bindingGeneration, 0)}
   {
     other._value = Reader::Value{Reader::KeyView{std::span<std::byte const>{}}, std::span<std::byte const>{}};
   }
@@ -546,7 +565,9 @@ namespace ao::lmdb
 
     _cursorPtr = std::move(other._cursorPtr);
     _value = other._value;
+    _txn = std::exchange(other._txn, nullptr);
     _owner = std::exchange(other._owner, nullptr);
+    _bindingGeneration = std::exchange(other._bindingGeneration, 0);
     other._value = Reader::Value{Reader::KeyView{std::span<std::byte const>{}}, std::span<std::byte const>{}};
     return *this;
   }
@@ -582,8 +603,12 @@ namespace ao::lmdb
 
   void IntegerKeyDatabase::Reader::Iterator::ensureActive() const
   {
-    AO_EXPECTS(_owner != nullptr && _owner->isActive(),
-               "IntegerKeyDatabase::Reader::Iterator used after its transaction finished");
+    AO_EXPECTS(_owner != nullptr && _owner->isActive() &&
+                 detail::DatabaseAccess::bindingGeneration(*_owner) == _bindingGeneration &&
+                 detail::DatabaseAccess::handle(*_owner) == _txn,
+               "IntegerKeyDatabase::Reader::Iterator used after its transaction finished or was replaced");
+    AO_EXPECTS(detail::DatabaseAccess::isOnOwnerThread(*_owner),
+               "IntegerKeyDatabase::Reader::Iterator used off its write transaction's creating thread");
   }
 
   void IntegerKeyDatabase::Reader::Iterator::next()
@@ -601,7 +626,7 @@ namespace ao::lmdb
   }
 
   ByteKeyDatabase::Reader::Reader(DbiHandle const dbi, MDB_txn* transaction, ReadTransaction const& owner)
-    : _dbi{dbi}, _txn{transaction}, _owner{&owner}
+    : _dbi{dbi}, _txn{transaction}, _owner{&owner}, _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
   }
 
@@ -656,11 +681,19 @@ namespace ao::lmdb
 
   void ByteKeyDatabase::Reader::ensureActive() const
   {
-    AO_EXPECTS(_owner != nullptr && _owner->isActive(), "ByteKeyDatabase::Reader used after its transaction finished");
+    AO_EXPECTS(_owner != nullptr && _owner->isActive() &&
+                 detail::DatabaseAccess::bindingGeneration(*_owner) == _bindingGeneration &&
+                 detail::DatabaseAccess::handle(*_owner) == _txn,
+               "ByteKeyDatabase::Reader used after its transaction finished or was replaced");
+    AO_EXPECTS(detail::DatabaseAccess::isOnOwnerThread(*_owner),
+               "ByteKeyDatabase::Reader used off its write transaction's creating thread");
   }
 
   ByteKeyDatabase::Reader::Iterator::Iterator(MDB_txn* transaction, ReadTransaction const& owner, DbiHandle const dbi)
-    : _cursorPtr{Reader::create(transaction, owner, dbi)}, _owner{&owner}
+    : _cursorPtr{Reader::create(transaction, owner, dbi)}
+    , _txn{transaction}
+    , _owner{&owner}
+    , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
     auto record = RawRecord{};
 
@@ -677,7 +710,10 @@ namespace ao::lmdb
                                               ReadTransaction const& owner,
                                               DbiHandle const dbi,
                                               std::span<std::byte const> const lowerBoundKey)
-    : _cursorPtr{Reader::create(transaction, owner, dbi)}, _owner{&owner}
+    : _cursorPtr{Reader::create(transaction, owner, dbi)}
+    , _txn{transaction}
+    , _owner{&owner}
+    , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(owner)}
   {
     auto record = RawRecord{};
 
@@ -692,7 +728,11 @@ namespace ao::lmdb
   }
 
   ByteKeyDatabase::Reader::Iterator::Iterator(Iterator&& other) noexcept
-    : _cursorPtr{std::move(other._cursorPtr)}, _value{other._value}, _owner{std::exchange(other._owner, nullptr)}
+    : _cursorPtr{std::move(other._cursorPtr)}
+    , _value{other._value}
+    , _txn{std::exchange(other._txn, nullptr)}
+    , _owner{std::exchange(other._owner, nullptr)}
+    , _bindingGeneration{std::exchange(other._bindingGeneration, 0)}
   {
     other._value = {};
   }
@@ -706,7 +746,9 @@ namespace ao::lmdb
 
     _cursorPtr = std::move(other._cursorPtr);
     _value = other._value;
+    _txn = std::exchange(other._txn, nullptr);
     _owner = std::exchange(other._owner, nullptr);
+    _bindingGeneration = std::exchange(other._bindingGeneration, 0);
     other._value = {};
     return *this;
   }
@@ -742,8 +784,12 @@ namespace ao::lmdb
 
   void ByteKeyDatabase::Reader::Iterator::ensureActive() const
   {
-    AO_EXPECTS(
-      _owner != nullptr && _owner->isActive(), "ByteKeyDatabase::Reader::Iterator used after its transaction finished");
+    AO_EXPECTS(_owner != nullptr && _owner->isActive() &&
+                 detail::DatabaseAccess::bindingGeneration(*_owner) == _bindingGeneration &&
+                 detail::DatabaseAccess::handle(*_owner) == _txn,
+               "ByteKeyDatabase::Reader::Iterator used after its transaction finished or was replaced");
+    AO_EXPECTS(detail::DatabaseAccess::isOnOwnerThread(*_owner),
+               "ByteKeyDatabase::Reader::Iterator used off its write transaction's creating thread");
   }
 
   void ByteKeyDatabase::Reader::Iterator::next()
@@ -761,7 +807,10 @@ namespace ao::lmdb
   }
 
   IntegerKeyDatabase::Writer::Writer(DbiHandle const dbi, WriteTransaction& transaction)
-    : _dbi{dbi}, _txn{&transaction}
+    : _dbi{dbi}
+    , _txn{&transaction}
+    , _nativeTxn{detail::DatabaseAccess::handle(transaction)}
+    , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(transaction)}
   {
     ensureActive();
     _cursorPtr = Reader::create(detail::DatabaseAccess::handle(transaction), transaction, _dbi);
@@ -775,6 +824,8 @@ namespace ao::lmdb
   IntegerKeyDatabase::Writer::Writer(Writer&& other) noexcept
     : _dbi{other._dbi}
     , _txn{std::exchange(other._txn, nullptr)}
+    , _nativeTxn{std::exchange(other._nativeTxn, nullptr)}
+    , _bindingGeneration{std::exchange(other._bindingGeneration, 0)}
     , _cursorPtr{std::move(other._cursorPtr)}
     , _lastId{other._lastId}
   {
@@ -789,6 +840,8 @@ namespace ao::lmdb
 
     _dbi = other._dbi;
     _txn = std::exchange(other._txn, nullptr);
+    _nativeTxn = std::exchange(other._nativeTxn, nullptr);
+    _bindingGeneration = std::exchange(other._bindingGeneration, 0);
     _cursorPtr = std::move(other._cursorPtr);
     _lastId = other._lastId;
     return *this;
@@ -798,7 +851,12 @@ namespace ao::lmdb
 
   void IntegerKeyDatabase::Writer::ensureActive() const
   {
-    AO_EXPECTS(_txn != nullptr && _txn->isActive(), "IntegerKeyDatabase::Writer used after its transaction finished");
+    AO_EXPECTS(_txn != nullptr && _txn->isActive() &&
+                 detail::DatabaseAccess::bindingGeneration(*_txn) == _bindingGeneration &&
+                 detail::DatabaseAccess::handle(*_txn) == _nativeTxn,
+               "IntegerKeyDatabase::Writer used after its transaction finished or was replaced");
+    AO_EXPECTS(detail::DatabaseAccess::isOnOwnerThread(*_txn),
+               "IntegerKeyDatabase::Writer used off its transaction's creating thread");
   }
 
   Result<> IntegerKeyDatabase::Writer::create(std::uint32_t const id, std::span<std::byte const> const data)
@@ -830,6 +888,12 @@ namespace ao::lmdb
     }
 
     return std::unexpected{resultFromCode("mdb_cursor_put", result.code).error()};
+  }
+
+  std::uint32_t IntegerKeyDatabase::Writer::maxKey() const noexcept
+  {
+    ensureActive();
+    return _lastId;
   }
 
   Result<std::uint32_t> IntegerKeyDatabase::Writer::append(std::span<std::byte const> const data)
@@ -921,14 +985,21 @@ namespace ao::lmdb
   }
 
   ByteKeyDatabase::Writer::Writer(DbiHandle const dbi, WriteTransaction& transaction)
-    : _dbi{dbi}, _txn{&transaction}
+    : _dbi{dbi}
+    , _txn{&transaction}
+    , _nativeTxn{detail::DatabaseAccess::handle(transaction)}
+    , _bindingGeneration{detail::DatabaseAccess::bindingGeneration(transaction)}
   {
     ensureActive();
     _cursorPtr = Reader::create(detail::DatabaseAccess::handle(transaction), transaction, _dbi);
   }
 
   ByteKeyDatabase::Writer::Writer(Writer&& other) noexcept
-    : _dbi{other._dbi}, _txn{std::exchange(other._txn, nullptr)}, _cursorPtr{std::move(other._cursorPtr)}
+    : _dbi{other._dbi}
+    , _txn{std::exchange(other._txn, nullptr)}
+    , _nativeTxn{std::exchange(other._nativeTxn, nullptr)}
+    , _bindingGeneration{std::exchange(other._bindingGeneration, 0)}
+    , _cursorPtr{std::move(other._cursorPtr)}
   {
   }
 
@@ -941,6 +1012,8 @@ namespace ao::lmdb
 
     _dbi = other._dbi;
     _txn = std::exchange(other._txn, nullptr);
+    _nativeTxn = std::exchange(other._nativeTxn, nullptr);
+    _bindingGeneration = std::exchange(other._bindingGeneration, 0);
     _cursorPtr = std::move(other._cursorPtr);
     return *this;
   }
@@ -949,7 +1022,12 @@ namespace ao::lmdb
 
   void ByteKeyDatabase::Writer::ensureActive() const
   {
-    AO_EXPECTS(_txn != nullptr && _txn->isActive(), "ByteKeyDatabase::Writer used after its transaction finished");
+    AO_EXPECTS(_txn != nullptr && _txn->isActive() &&
+                 detail::DatabaseAccess::bindingGeneration(*_txn) == _bindingGeneration &&
+                 detail::DatabaseAccess::handle(*_txn) == _nativeTxn,
+               "ByteKeyDatabase::Writer used after its transaction finished or was replaced");
+    AO_EXPECTS(detail::DatabaseAccess::isOnOwnerThread(*_txn),
+               "ByteKeyDatabase::Writer used off its transaction's creating thread");
   }
 
   Result<> ByteKeyDatabase::Writer::create(std::span<std::byte const> const key, std::span<std::byte const> const data)
@@ -1034,6 +1112,8 @@ namespace ao::lmdb
   {
     AO_EXPECTS(_dbi != kInvalidDbi, "UnvalidatedDatabase used after classification or move");
     AO_EXPECTS(transaction.isActive(), "UnvalidatedDatabase used with an inactive transaction");
+    AO_EXPECTS(DatabaseAccess::isOnOwnerThread(transaction),
+               "UnvalidatedDatabase used off its write transaction's creating thread");
     return readPoint(DatabaseAccess::handle(transaction), _dbi, key, DatabaseAccess::isTransactionOwned(transaction));
   }
 
