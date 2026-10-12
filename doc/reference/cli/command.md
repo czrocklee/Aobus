@@ -84,6 +84,7 @@ Track update field options are:
 ```
 
 `--set`, `--unset`, `--add-tag`, `--remove-tag`, `--credit`, and `--credit-scope` are repeatable.
+`--set` and `--unset` apply in argument order, so the last occurrence naming a custom key wins: `--set mood=calm --unset mood` removes `mood`, while `--unset mood --set mood=calm` stores `calm`.
 Each of `--set`, `--unset`, `--add-tag`, and `--remove-tag` accepts one or more text arguments per occurrence; additional arguments stop at CLI11's next option, subcommand boundary, or delimiter.
 The mandatory first argument may be option-like; use attached `--option=VALUE` to supply an option-like value unambiguously.
 Attached values also allow further space-separated arguments. An attached empty value supplies an empty argument rather than consuming the next token.
@@ -304,7 +305,7 @@ Otherwise the next argument becomes the role: `--credit conductor X "" --dry-run
 - [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects encoding rules.
 - [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal, saved-order cleanup and rejected negated presence flags.
 - [`TrackPerformanceMetadataCommandTest.cpp`](../../../test/unit/cli/TrackPerformanceMetadataCommandTest.cpp) protects recording-date and Credits show/update options, literal fixed-triple arguments, native argv dry-run placement, attached-form rejection, exact arity, option context, scope/clear/conflict/rejection rules, negated-clear rejection, and structured sequence output.
-- [`TrackLiteralMetadataCommandTest.cpp`](../../../test/unit/cli/TrackLiteralMetadataCommandTest.cpp) protects literal tag/custom operands, attached and multiargument forms, contextual recognition, and atomic rejection.
+- [`TrackLiteralMetadataCommandTest.cpp`](../../../test/unit/cli/TrackLiteralMetadataCommandTest.cpp) protects literal tag/custom operands, attached and multiargument forms, argument-order set/unset, contextual recognition, and atomic rejection.
 
 ## Related documents
 

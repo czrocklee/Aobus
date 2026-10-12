@@ -47,6 +47,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -1217,6 +1218,13 @@ namespace ao::cli
         });
     }
 
+    // One --set assignment or --unset key, kept in argument order across both options.
+    struct CustomOperand final
+    {
+      bool set = false;
+      std::string text;
+    };
+
     struct TrackUpdateCliOptions final
     {
       CLI::Option* ids = nullptr;
@@ -1246,8 +1254,7 @@ namespace ao::cli
       CLI::Option* removeTag = nullptr;
       CLI::Option* dryRun = nullptr;
       std::shared_ptr<std::vector<std::string>> creditValuesPtr;
-      std::shared_ptr<std::vector<std::string>> setsPtr;
-      std::shared_ptr<std::vector<std::string>> unsetsPtr;
+      std::shared_ptr<std::vector<CustomOperand>> customOperandsPtr;
       std::shared_ptr<std::vector<std::string>> addTagsPtr;
       std::shared_ptr<std::vector<std::string>> removeTagsPtr;
     };
@@ -1384,20 +1391,12 @@ namespace ao::cli
     {
       bool hasPatch = false;
 
-      if (options.set->count() > 0)
+      // Both options apply in argument order, so a later --set or --unset of a key
+      // replaces an earlier one, as a repeated --set already does.
+      for (auto const& operand : *options.customOperandsPtr)
       {
-        for (auto const& assignment : *options.setsPtr)
-        {
-          hasPatch = tryApplyCustomSet(assignment, patch) || hasPatch;
-        }
-      }
-
-      if (options.unset->count() > 0)
-      {
-        for (auto const& key : *options.unsetsPtr)
-        {
-          hasPatch = tryApplyCustomUnset(key, patch) || hasPatch;
-        }
+        hasPatch =
+          (operand.set ? tryApplyCustomSet(operand.text, patch) : tryApplyCustomUnset(operand.text, patch)) || hasPatch;
       }
 
       return hasPatch;
@@ -1533,19 +1532,19 @@ namespace ao::cli
                                         std::string description,
                                         std::vector<std::string>& args,
                                         std::span<std::string const> originalArgs,
-                                        std::shared_ptr<std::vector<std::string>> const& valuesPtr)
+                                        std::function<void(std::string)> append)
     {
       // The command tree owns update. Callbacks borrow it and invocation-owned
       // argv storage; no callback retains its owning App through shared_ptr.
       return update
         .add_option(name,
-                    CLI::callback_t{[&update, name, &args, originalArgs, valuesPtr](CLI::results_t const&)
+                    CLI::callback_t{[&update, name, &args, originalArgs, append](CLI::results_t const&)
                                     {
                                       auto const token = recognizedLiteralToken(args, originalArgs);
 
                                       if (auto const separator = token.find('='); separator != std::string_view::npos)
                                       {
-                                        valuesPtr->emplace_back(token.substr(separator + 1));
+                                        append(std::string{token.substr(separator + 1)});
                                       }
                                       else
                                       {
@@ -1556,7 +1555,7 @@ namespace ao::cli
 
                                         // Like CLI11's vector minimum, the first operand is mandatory
                                         // even if option-like. Only additional operands are classified.
-                                        valuesPtr->push_back(std::move(args.back()));
+                                        append(std::move(args.back()));
                                         args.pop_back();
                                       }
 
@@ -1565,7 +1564,7 @@ namespace ao::cli
                                       while (!args.empty() &&
                                              update.classifyOperand(args.back()) == CLI::detail::Classifier::NONE)
                                       {
-                                        valuesPtr->push_back(std::move(args.back()));
+                                        append(std::move(args.back()));
                                         args.pop_back();
                                       }
 
@@ -1599,10 +1598,16 @@ namespace ao::cli
                      "  aobus track update 42 --dry-run --credit performer 'Preview only' ''\n"
                      "Attached --credit=VALUE syntax is not supported.");
       auto creditValuesPtr = std::make_shared<std::vector<std::string>>();
-      auto updateSetsPtr = std::make_shared<std::vector<std::string>>();
-      auto updateUnsetsPtr = std::make_shared<std::vector<std::string>>();
+      auto customOperandsPtr = std::make_shared<std::vector<CustomOperand>>();
       auto updateAddTagsPtr = std::make_shared<std::vector<std::string>>();
       auto updateRemoveTagsPtr = std::make_shared<std::vector<std::string>>();
+      auto appendTo = [](std::shared_ptr<std::vector<std::string>> const& valuesPtr)
+      { return [valuesPtr](std::string value) { valuesPtr->push_back(std::move(value)); }; };
+      auto appendCustom = [&customOperandsPtr](bool const set)
+      {
+        return [customOperandsPtr, set](std::string text)
+        { customOperandsPtr->push_back(CustomOperand{.set = set, .text = std::move(text)}); };
+      };
       auto options = TrackUpdateCliOptions{
         .ids = update->add_option("id", "track id to update")->expected(0, -1),
         .filter = update->add_option("-f,--filter", "track filter expression"),
@@ -1631,21 +1636,24 @@ namespace ao::cli
         .movementNumber = update->add_option("--movement-number", "movement number"),
         .movementTotal = update->add_option("--movement-total", "movement total"),
         .set = addLiteralVectorOption(
-          *update, "--set", "key=value ...; repeatable literal assignments", args, originalArgs, updateSetsPtr),
+          *update, "--set", "key=value ...; repeatable literal assignments", args, originalArgs, appendCustom(true)),
         .unset = addLiteralVectorOption(
-          *update, "--unset", "key ...; repeatable literal keys", args, originalArgs, updateUnsetsPtr),
-        .addTag = addLiteralVectorOption(
-          *update, "--add-tag", "tag ...; repeatable literal tags to add", args, originalArgs, updateAddTagsPtr),
+          *update, "--unset", "key ...; repeatable literal keys", args, originalArgs, appendCustom(false)),
+        .addTag = addLiteralVectorOption(*update,
+                                         "--add-tag",
+                                         "tag ...; repeatable literal tags to add",
+                                         args,
+                                         originalArgs,
+                                         appendTo(updateAddTagsPtr)),
         .removeTag = addLiteralVectorOption(*update,
                                             "--remove-tag",
                                             "tag ...; repeatable literal tags to remove",
                                             args,
                                             originalArgs,
-                                            updateRemoveTagsPtr),
+                                            appendTo(updateRemoveTagsPtr)),
         .dryRun = addDryRunFlag(*update),
         .creditValuesPtr = creditValuesPtr,
-        .setsPtr = updateSetsPtr,
-        .unsetsPtr = updateUnsetsPtr,
+        .customOperandsPtr = customOperandsPtr,
         .addTagsPtr = updateAddTagsPtr,
         .removeTagsPtr = updateRemoveTagsPtr,
       };

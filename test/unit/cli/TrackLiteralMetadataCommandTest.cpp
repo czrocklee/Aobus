@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -328,6 +329,45 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["title"]) == "Kept");
     CHECK(tree.rootref()["custom"].num_children() == 0);
     CHECK(literalTags(tree.rootref()) == std::vector<std::string>{"kept"});
+  }
+
+  TEST_CASE("CLI - set and unset of one custom key apply in argument order", "[cli][integration][track][update]")
+  {
+    struct Case final
+    {
+      std::vector<std::string> suffix;
+      std::optional<std::string> optExpected;
+    };
+
+    // The patch is keyed by custom key, so applying every --set before every
+    // --unset used to let --unset win whatever the argument order was.
+    for (auto const& [suffix, optExpected] : std::vector<Case>{
+           {.suffix = {"--set", "mood=bright", "--", "--unset", "mood"}, .optExpected = std::nullopt},
+           {.suffix = {"--unset", "mood", "--", "--set", "mood=bright"}, .optExpected = "bright"},
+           {.suffix = {"--unset=mood", "--set=mood=dark", "--unset=mood", "--set=mood=last"}, .optExpected = "last"}})
+    {
+      CAPTURE(suffix);
+      auto fixture = CliFixture{};
+      auto const trackArg =
+        std::to_string(fixture
+                         .addTrack(library::test::TrackSpec{
+                           .title = "Kept", .uri = "ordered-key.flac", .customMetadata = {{"mood", "calm"}}})
+                         .raw());
+      auto args = std::vector<std::string>{"aobus", "-C", fixture.root().string(), "track", "update", trackArg};
+      args.insert(args.end(), suffix.begin(), suffix.end());
+      auto const result = runArgs(args, fixture.cacheDirectory());
+      REQUIRE(result.status == 0);
+      auto const tree = showLiteralTrack(fixture, trackArg);
+
+      if (auto const custom = tree.rootref()["custom"]; optExpected)
+      {
+        CHECK(yaml::scalarView(custom["mood"]) == *optExpected);
+      }
+      else
+      {
+        CHECK_FALSE(custom.has_child("mood"));
+      }
+    }
   }
 
   TEST_CASE("CLI - empty literal tag operands and custom values retain their existing meaning",
