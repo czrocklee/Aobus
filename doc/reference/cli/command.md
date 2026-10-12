@@ -63,6 +63,8 @@ Exactly one top-level command is required.
 | `lib resource list` | none |
 | `lib resource export` | `<id> -o, --output-file <file>` |
 
+Presence flags such as `--dry-run`, `--descendants`, `--clear-credits`, and `--confirm-destructive-restore` take no value.
+An attached `=true` means the same as the bare flag; every other attached value, including `=false`, is rejected with CLI11 argument-mismatch status `114` before the command runs.
 `--from` and `--to` must be supplied together.
 `--pending` is required by `lib fingerprint`.
 `--raw` dump modes support only plain output.
@@ -300,8 +302,8 @@ Otherwise the next argument becomes the role: `--credit conductor X "" --dry-run
 
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects the command tree and representative exact shapes.
 - [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects encoding rules.
-- [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal and saved-order cleanup.
-- [`TrackPerformanceMetadataCommandTest.cpp`](../../../test/unit/cli/TrackPerformanceMetadataCommandTest.cpp) protects recording-date and Credits show/update options, literal fixed-triple arguments, native argv dry-run placement, attached-form rejection, exact arity, option context, scope/clear/conflict/rejection rules, and structured sequence output.
+- [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal, saved-order cleanup and rejected negated presence flags.
+- [`TrackPerformanceMetadataCommandTest.cpp`](../../../test/unit/cli/TrackPerformanceMetadataCommandTest.cpp) protects recording-date and Credits show/update options, literal fixed-triple arguments, native argv dry-run placement, attached-form rejection, exact arity, option context, scope/clear/conflict/rejection rules, negated-clear rejection, and structured sequence output.
 - [`TrackLiteralMetadataCommandTest.cpp`](../../../test/unit/cli/TrackLiteralMetadataCommandTest.cpp) protects literal tag/custom operands, attached and multiargument forms, contextual recognition, and atomic rejection.
 
 ## Related documents

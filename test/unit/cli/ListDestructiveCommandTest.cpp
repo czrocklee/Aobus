@@ -5,6 +5,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/yaml/RymlAdapter.h>
 
+#include <CLI/Error.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ryml.hpp>
@@ -275,6 +276,37 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     CHECK_FALSE(contains(result.out, "Parent"));
     CHECK_FALSE(contains(result.out, "Child"));
+  }
+
+  TEST_CASE("CLI - negated presence flags reject instead of enabling the flag", "[cli][unit][list][list-delete]")
+  {
+    auto fixture = CliFixture{};
+
+    auto result = fixture.run({"list", "create", "--name", "Parent"});
+    REQUIRE(result.status == 0);
+    auto const parentId = std::to_string(parseCreatedListId(result.out));
+    result = fixture.run({"list", "create", "--name", "Child", "--parent", parentId});
+    REQUIRE(result.status == 0);
+
+    // A counted flag would treat each spelling as present: the first would
+    // delete the subtree, and the second would silently preview.
+    for (auto const* const negated : {"--descendants=false", "--dry-run=false", "--descendants=0"})
+    {
+      CAPTURE(negated);
+      result = fixture.run({"list", "delete", parentId, negated});
+      CHECK(result.status == static_cast<int>(CLI::ExitCodes::ArgumentMismatch));
+      CHECK(result.out.empty());
+      CHECK_FALSE(result.err.empty());
+    }
+
+    result = fixture.run({"list", "show"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Parent"));
+    CHECK(contains(result.out, "Child"));
+
+    result = fixture.run({"list", "delete", parentId, "--descendants=true", "--dry-run"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "would delete list subtree: " + parentId + " (2 Lists)"));
   }
 
   TEST_CASE("CLI - list order reset forgets every saved position of that list only",

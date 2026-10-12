@@ -1,4 +1,5 @@
 add_library(aobus-cli-lib STATIC
+    BooleanFlag.h
     CliRuntime.cpp
     CliRuntime.h
     CommandError.cpp

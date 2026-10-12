@@ -403,6 +403,39 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["tags"][0]) == "kept");
   }
 
+  TEST_CASE("CLI - negated clear-credits spellings reject without clearing credits or applying other edits",
+            "[cli][unit][track][update]")
+  {
+    auto fixture = CliFixture{};
+    auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{
+      .title = "Kept", .credits = {{.name = "Kept credit", .role = "Kept role"}}, .uri = "negated-clear.flac"}));
+
+    // CLI11 records an attached flag value as one more occurrence, so a
+    // negating spelling must reject instead of counting as a clear.
+    for (auto const* attached : {"--clear-credits=false", "--clear-credits=0", "--clear-credits=no"})
+    {
+      CAPTURE(attached);
+      auto const result = fixture.run({"track", "update", trackArg, "--title", "Changed", attached});
+      CHECK(result.status == static_cast<int>(CLI::ExitCodes::ArgumentMismatch));
+      CHECK(result.out.empty());
+      CHECK_FALSE(result.err.empty());
+    }
+
+    auto result = fixture.run({"-O", "json", "track", "show", trackArg});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["title"]) == "Kept");
+    REQUIRE(tree.rootref()["credits"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["credits"][0]["name"]) == "Kept credit");
+
+    result = fixture.run({"track", "update", trackArg, "--clear-credits=true"});
+    REQUIRE(result.status == 0);
+    result = fixture.run({"-O", "json", "track", "show", trackArg});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    CHECK(tree.rootref()["credits"].num_children() == 0);
+  }
+
   TEST_CASE("CLI - credit recognition respects ordinary option operands", "[cli][integration][track][update]")
   {
     auto fixture = CliFixture{};

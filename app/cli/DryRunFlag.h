@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "BooleanFlag.h"
+
 #include <CLI/App.hpp>
 #include <CLI/Option.hpp>
 
@@ -10,7 +12,7 @@ namespace ao::cli
 {
   inline CLI::Option* addDryRunFlag(CLI::App& cmd)
   {
-    return cmd.add_flag("--dry-run", "Preview changes without committing them");
+    return addBooleanFlag(cmd, "--dry-run", "Preview changes without committing them");
   }
 
   inline bool isDryRun(CLI::Option const* option)

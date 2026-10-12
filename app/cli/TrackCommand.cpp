@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "BooleanFlag.h"
 #include "CliRuntime.h"
 #include "CommandError.h"
 #include "CommandRegistrations.h"
@@ -1621,7 +1622,7 @@ namespace ao::cli
                                       "conductor, ensemble, soloist, or performer; repeatable union; default all kinds")
                          ->expected(1)
                          ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll),
-        .clearCredits = update->add_flag("--clear-credits", "clear credits in the selected scope"),
+        .clearCredits = addBooleanFlag(*update, "--clear-credits", "clear credits in the selected scope"),
         .year = update->add_option("--year", "year"),
         .trackNumber = update->add_option("--track-number", "track number"),
         .trackTotal = update->add_option("--track-total", "track total"),
@@ -1692,7 +1693,7 @@ namespace ao::cli
     {
       auto* dumpCmd = track.add_subcommand("dump", "Dump tracks from database");
       auto* dumpId = dumpCmd->add_option("--id", "track id to dump");
-      auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
+      auto* dumpRaw = addBooleanFlag(*dumpCmd, "--raw", "hex dump raw bytes");
 
       dumpCmd->callback(
         [&cli, dumpId, dumpRaw]
