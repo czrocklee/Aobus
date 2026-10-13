@@ -331,4 +331,9 @@ namespace ao::test
 
     return result;
   }
+
+  void suppressProbeChildCrashDump() noexcept
+  {
+    // The fatal backend already clears _CALL_REPORTFAULT before abort().
+  }
 } // namespace ao::test

@@ -45,6 +45,7 @@ int main(int argc, char* argv[])
 {
   if (argc == 3 && std::string_view{argv[1]} == "--aobus-probe-child")
   {
+    ao::test::suppressProbeChildCrashDump();
     return ao::library::test::runLibraryProbeScenario(argv[2]);
   }
 

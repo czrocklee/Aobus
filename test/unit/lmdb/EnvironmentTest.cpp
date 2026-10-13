@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -22,6 +23,10 @@ namespace ao::lmdb::test
   {
     template<typename T>
     concept HasPublicEnvironmentHandle = requires(T const& environment) { environment.handle(); };
+
+    // Commit durability is independent of every rule here, and a flush per fill
+    // commit would dominate these tests on Windows and macOS.
+    constexpr auto kTestEnvFlags = kEnvNoTls | kEnvNoSync;
 
     // Small enough that filling past half of one is quick, large enough that a
     // doubling is unambiguous against LMDB's own 1 MiB starting size.
@@ -43,7 +48,7 @@ namespace ao::lmdb::test
       // depend on whether the filesystem under the temporary directory can hold
       // a hole, which decides which of the two the rule consults.
       return Environment::Options{
-        .flags = kEnvNoTls,
+        .flags = kTestEnvFlags,
         .maxDatabases = 4,
         .capacity = {.minimumMapBytes = floorBytes,
                      .denseMinimumMapBytes = floorBytes,
@@ -79,7 +84,7 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - openEnvironment creates usable environments", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
 
     // Verify by starting a transaction
     auto txn = beginWriteTransaction(env);
@@ -88,7 +93,7 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - open returns IoError for missing directory", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto const res = Environment::open(temp.path() / "missing", {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto const res = Environment::open(temp.path() / "missing", {.flags = kTestEnvFlags, .maxDatabases = 20});
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::IoError);
@@ -97,17 +102,35 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - open returns environment on success", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto envRes = Environment::open(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto envRes = Environment::open(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
     REQUIRE(envRes);
 
     auto txnRes = WriteTransaction::begin(*envRes);
     REQUIRE(txnRes);
   }
 
+  TEST_CASE("Environment - unflushed commits stay readable after the environment closes", "[lmdb][unit][environment]")
+  {
+    auto const temp = ao::test::TempDir{};
+
+    {
+      auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls | kEnvNoSync, .maxDatabases = 4});
+      auto txn = beginWriteTransaction(env);
+      auto database = openIntegerKeyDatabase(txn, "records");
+      REQUIRE(database.writer(txn).create(1, createStringData("kept")));
+      REQUIRE(txn.commit());
+    }
+
+    // Skipping the flush gives up only machine-crash durability, not the commit.
+    auto const optValue = readExistingIntegerKeyRecord(temp.path(), "records", 1);
+    REQUIRE(optValue);
+    CHECK(utility::bytes::stringView(*optValue) == "kept");
+  }
+
   TEST_CASE("Environment - move constructor transfers ownership", "[lmdb][unit][environment]")
   {
     auto const temp = ao::test::TempDir{};
-    auto env1 = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto env1 = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
     auto env2 = Environment{std::move(env1)};
     auto transaction = beginReadTransaction(env2);
     CHECK(transaction.isActive());
@@ -117,8 +140,8 @@ namespace ao::lmdb::test
   {
     auto const firstTemp = ao::test::TempDir{};
     auto const secondTemp = ao::test::TempDir{};
-    auto env1 = openEnvironment(firstTemp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
-    auto env2 = openEnvironment(secondTemp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto env1 = openEnvironment(firstTemp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
+    auto env2 = openEnvironment(secondTemp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
 
     env2 = std::move(env1);
     auto transaction = beginReadTransaction(env2);
@@ -137,7 +160,7 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - helper opens path", "[lmdb][unit][environment]")
   {
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
 
     // Verify we can create transactions.
     auto txn = beginReadTransaction(env);
@@ -158,7 +181,7 @@ namespace ao::lmdb::test
   {
     constexpr std::size_t kMapSize = std::size_t{64} * 1024 * 1024;
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 4, .pinnedMapBytes = kMapSize});
+    auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kMapSize});
 
     auto const empty = env.capacity();
     CHECK(empty.mapBytes == kMapSize);
@@ -190,7 +213,7 @@ namespace ao::lmdb::test
   {
     constexpr std::size_t kMapSize = std::size_t{64} * 1024 * 1024;
     auto temp = ao::test::TempDir{};
-    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 4, .pinnedMapBytes = kMapSize});
+    auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kMapSize});
 
     {
       auto const data = createTestData(4096);
@@ -236,7 +259,7 @@ namespace ao::lmdb::test
     auto temp = ao::test::TempDir{};
 
     {
-      auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 4, .pinnedMapBytes = kWideMap});
+      auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kWideMap});
       fillPastHighWater(env, kFloor / 4);
     }
 
@@ -277,7 +300,8 @@ namespace ao::lmdb::test
   TEST_CASE("Environment - a pinned map size is never raised", "[lmdb][unit][environment][capacity]")
   {
     auto temp = ao::test::TempDir{};
-    auto const pinnedOptions = Environment::Options{.flags = kEnvNoTls, .maxDatabases = 4, .pinnedMapBytes = kFloor};
+    auto const pinnedOptions =
+      Environment::Options{.flags = kTestEnvFlags, .maxDatabases = 4, .pinnedMapBytes = kFloor};
 
     {
       auto env = openEnvironment(temp.path(), pinnedOptions);

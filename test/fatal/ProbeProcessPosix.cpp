@@ -10,6 +10,10 @@
 
 #include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX process control owns kill and SIGKILL.
 #include <spawn.h>
+#ifdef __linux__
+#include <linux/prctl.h>
+#include <sys/prctl.h>
+#endif
 #include <unistd.h>
 
 #include <algorithm>
@@ -359,5 +363,15 @@ namespace ao::test
     }
 
     return result;
+  }
+
+  void suppressProbeChildCrashDump() noexcept
+  {
+#ifdef __linux__
+    // The kernel skips a non-dumpable process before it starts any core handler.
+    // Best effort: these arguments are always valid, and a failure would only
+    // leave the dump to the host's handler as before.
+    [[maybe_unused]] auto const result = ::prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+#endif
   }
 } // namespace ao::test

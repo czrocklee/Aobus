@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/rt/library/LibraryDurability.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -56,6 +57,7 @@ namespace ao::rt
                                       std::filesystem::path databasePath,
                                       std::filesystem::path cacheDirectory = {},
                                       std::uint64_t musicLibraryPinnedMapBytes = 0,
+                                      LibraryDurability musicLibraryDurability = LibraryDurability::Durable,
                                       async::Sleeper* sleeper = nullptr,
                                       TextOrderingPolicy const* textOrderingPolicy = nullptr,
                                       CompletionAliasPolicy const* completionAliasPolicy = nullptr);

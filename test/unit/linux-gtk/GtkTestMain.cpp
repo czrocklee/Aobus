@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "GtkSessionBusTestSupport.h"
+#include "test/fatal/ProbeProcess.h"
 
 #include <catch2/catch_session.hpp>
 #include <glib.h>
@@ -29,6 +30,7 @@ int main(int argc, char* argv[])
 
   if (!probe.empty())
   {
+    ao::test::suppressProbeChildCrashDump();
     ::g_setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/aobus-inert-probe", TRUE);
     ::g_unsetenv("AOBUS_OWNED_GTK_BUS");
     ::g_log_set_always_fatal(static_cast<::GLogLevelFlags>(G_LOG_FATAL_MASK));

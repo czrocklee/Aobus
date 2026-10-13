@@ -29,6 +29,7 @@ namespace ao::lmdb
   static_assert(std::is_same_v<EnvMode, ::mdb_mode_t>);
   static_assert(kEnvNoTls == MDB_NOTLS);
   static_assert(kEnvReadOnly == MDB_RDONLY);
+  static_assert(kEnvNoSync == MDB_NOSYNC);
   // Capacity figures are std::uint64_t so a map size means the same thing
   // everywhere, while LMDB takes std::size_t. The two casts below are only
   // lossless where that holds, and a host where it does not could not address a
@@ -93,7 +94,7 @@ namespace ao::lmdb
      */
     Result<> admitFlags(std::uint32_t const flags)
     {
-      constexpr auto kSupported = kEnvNoTls | kEnvReadOnly;
+      constexpr auto kSupported = kEnvNoTls | kEnvReadOnly | kEnvNoSync;
 
       if ((flags & ~kSupported) != 0)
       {

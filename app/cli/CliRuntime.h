@@ -6,6 +6,7 @@
 #include "Output.h"
 #include <ao/Contract.h>
 #include <ao/async/Task.h>
+#include <ao/rt/library/LibraryDurability.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -51,6 +52,7 @@ namespace ao::cli
     explicit CliRuntime(std::ostream& out,
                         std::ostream& err,
                         std::uint64_t musicLibraryPinnedMapBytes = 0,
+                        rt::LibraryDurability musicLibraryDurability = rt::LibraryDurability::Durable,
                         std::optional<std::filesystem::path> optCacheDirectory = std::nullopt);
     ~CliRuntime();
 
@@ -95,6 +97,7 @@ namespace ao::cli
     CliOptions _options;
     CliIo _io;
     std::uint64_t _musicLibraryPinnedMapBytes = 0;
+    rt::LibraryDurability _musicLibraryDurability = rt::LibraryDurability::Durable;
     std::optional<std::filesystem::path> _optCacheDirectory;
     std::unique_ptr<Storage> _storagePtr;
   };

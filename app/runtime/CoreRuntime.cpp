@@ -15,6 +15,7 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryDurability.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/utility/Path.h>
 
@@ -108,6 +109,7 @@ namespace ao::rt
                                           std::filesystem::path databasePath,
                                           std::filesystem::path cacheDirectory,
                                           std::uint64_t const musicLibraryPinnedMapBytes,
+                                          LibraryDurability const musicLibraryDurability,
                                           async::Sleeper* const sleeper,
                                           TextOrderingPolicy const* const textOrderingPolicy,
                                           CompletionAliasPolicy const* const completionAliasPolicy)
@@ -118,7 +120,10 @@ namespace ao::rt
     }
 
     auto storageRes = library::MusicLibrary::open(
-      musicRoot, databasePath, library::MusicLibrary::Options{.pinnedMapBytes = musicLibraryPinnedMapBytes});
+      musicRoot,
+      databasePath,
+      library::MusicLibrary::Options{.pinnedMapBytes = musicLibraryPinnedMapBytes,
+                                     .flushCommits = musicLibraryDurability == LibraryDurability::Durable});
 
     if (!storageRes)
     {

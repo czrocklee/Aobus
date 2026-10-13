@@ -54,6 +54,16 @@ namespace ao::library
        * tests that have to reach it.
        */
       std::uint64_t pinnedMapBytes = 0;
+
+      /**
+       * Whether each commit is flushed to stable storage before it returns.
+       *
+       * Clearing it keeps commits across a process crash, but an
+       * operating-system crash or power loss can then lose the most recent
+       * commits or corrupt the library. Only disposable libraries, such as test
+       * fixtures, clear it.
+       */
+      bool flushCommits = true;
     };
 
     /**

@@ -10,6 +10,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/rt/library/LibraryDurability.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -62,7 +63,9 @@ namespace ao::cli::test
     return text.contains(expected);
   }
 
-  CliResult runArgs(std::vector<std::string> args, std::optional<std::filesystem::path> optCacheDirectory)
+  CliResult runArgs(std::vector<std::string> args,
+                    std::optional<std::filesystem::path> optCacheDirectory,
+                    rt::LibraryDurability const durability)
   {
     auto out = std::ostringstream{};
     auto err = std::ostringstream{};
@@ -70,6 +73,7 @@ namespace ao::cli::test
                             out,
                             err,
                             CliRunOptions{.musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+                                          .musicLibraryDurability = durability,
                                           .optCacheDirectory = std::move(optCacheDirectory)});
     return {.status = status, .out = out.str(), .err = err.str()};
   }
@@ -93,6 +97,11 @@ namespace ao::cli::test
     }
 
     return count;
+  }
+
+  CliFixture::CliFixture(rt::LibraryDurability const durability)
+    : _durability{durability}
+  {
   }
 
   std::filesystem::path const& CliFixture::root() const
@@ -138,7 +147,7 @@ namespace ao::cli::test
       argv.emplace_back(argument);
     }
 
-    auto result = runArgs(argv, cacheDirectory());
+    auto result = runArgs(argv, cacheDirectory(), _durability);
 
     if (result.status != 0)
     {

@@ -140,9 +140,13 @@ Reclaiming that unused tail requires the environment closed and its committed hi
 
 The path this adapter receives is UTF-8, matching what LMDB itself decodes, and preparation converts it explicitly rather than relying on a platform's narrow-string default.
 
-Opening admits only the two mirrored environment flags, `kEnvNoTls` and `kEnvReadOnly`, and rejects anything else as `InvalidInput`.
+Opening admits only the three mirrored environment flags, `kEnvNoTls`, `kEnvReadOnly`, and `kEnvNoSync`, and rejects anything else as `InvalidInput`.
 Data-file preparation assumes the environment directory holds the data file and that the mapping never extends it; `MDB_NOSUBDIR` makes the path the data file rather than its directory, and `MDB_WRITEMAP` turns an exhausted volume into a mapping fault instead of a returned error.
 Both would break preparation silently, so an unrecognized flag is refused rather than trusted.
+`kEnvNoSync` changes neither assumption: it only skips the flush that makes a commit durable, which is write-through on Windows and `F_FULLFSYNC` on macOS.
+A commit made with it still survives a process crash.
+An operating-system crash or power loss can lose the most recent commits or corrupt the environment, because LMDB then keeps its integrity only on a filesystem that preserves write order, which Aobus does not establish.
+Only disposable environments, such as test fixtures, use it.
 
 The open function takes a native path rather than an encoded string, because its two consumers need different encodings: platform preparation works on the native form, and LMDB decodes what it receives as UTF-8.
 A caller that converted first would have to choose one and be wrong about the other where the platform's narrow encoding is not UTF-8.

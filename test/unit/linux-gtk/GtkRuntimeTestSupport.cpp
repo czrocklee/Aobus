@@ -14,6 +14,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/library/LibraryDurability.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/playback/PlaybackService.h>
 
@@ -69,6 +70,7 @@ namespace ao::gtk::test
           .databasePath = databasePath,
           .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
           .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+          .musicLibraryDurability = rt::LibraryDurability::Unflushed,
           .workspaceConfigStorePtr = std::move(configStorePtr),
           .textOrderingPolicy = textOrderingPolicy,
         })));
@@ -120,6 +122,7 @@ namespace ao::gtk::test
       .databasePath = databasePath,
       .cacheDirectory = runtimeCacheDirectory(tempDir.path()),
       .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .musicLibraryDurability = rt::LibraryDurability::Unflushed,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
       .textOrderingPolicy = textOrderingPolicy,
     })));

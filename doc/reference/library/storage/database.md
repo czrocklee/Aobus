@@ -25,6 +25,9 @@ Application composition keeps only one live environment for a database path in e
 Independent processes may open the same environment under LMDB's normal locking rules.
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and configures the LMDB reader table through `MusicLibrary::Options::maxReaders`.
 That option is a requested table size, defaults to `512`, and skips `mdb_env_set_maxreaders` when zero.
+Every commit is flushed to stable storage unless `MusicLibrary::Options::flushCommits` is cleared.
+Application composition keeps the default through `rt::LibraryDurability::Durable`; test fixtures select `Unflushed`.
+An unflushed commit survives a process crash, but an operating-system crash or power loss can lose the most recent commits or corrupt the library, so only disposable libraries use it.
 The effective capacity comes from the persistent LMDB lock file: an opener that acquires the exclusive environment lock may grow a smaller table to the requested size, a concurrent opener adopts the existing size, and no opener shrinks a larger table.
 Each live `MusicLibrary::readTransaction()` snapshot occupies one effective slot until destruction under `MDB_NOTLS`.
 Exhausting that table follows the existing fatal transaction-begin contract owned by the [library architecture](../../../system/library/structure.md#failure-cancellation-and-lifetime-boundaries); `maxReaders` raises capacity but is not a concurrency throttle.

@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/rt/library/LibraryDurability.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -48,6 +49,7 @@ namespace ao::rt
     /// cache is an optimization and losing it is not a startup failure.
     std::filesystem::path cacheDirectory{};
     std::uint64_t musicLibraryPinnedMapBytes = 0;
+    LibraryDurability musicLibraryDurability = LibraryDurability::Durable;
     /// Required owning store for workspace persistence and the default playback-session store.
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
     /// Optional borrowed override. When non-null, the store must outlive AppRuntime;

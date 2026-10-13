@@ -21,6 +21,16 @@ namespace ao::async
 
 namespace ao::rt::test
 {
+  /**
+   * Lets this process's 1 ms polling waits last about 1 ms.
+   *
+   * The test executors below recheck worker-owned state every millisecond.
+   * Windows otherwise rounds each such wait up to its 15.6 ms default timer
+   * tick, so the first call raises the process's timer resolution until it
+   * exits. Elsewhere this does nothing.
+   */
+  void requestMillisecondTimerResolution() noexcept;
+
   class ManualExecutor final : public async::Executor
   {
   public:
@@ -50,12 +60,19 @@ namespace ao::rt::test
           continue;
         }
 
-        if (auto const now = std::chrono::steady_clock::now();
-            now >= deadline ||
-            !tryWaitUntilQueued(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now)))
+        auto const now = std::chrono::steady_clock::now();
+
+        if (now >= deadline)
         {
           return predicate();
         }
+
+        auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+        auto const pollInterval = std::min(remaining, std::chrono::milliseconds{1});
+
+        // A Runtime task can finish on a worker without queuing anything here,
+        // so periodically recheck the predicate while the queue is empty.
+        std::ignore = tryWaitUntilQueued(pollInterval);
       }
 
       return true;
