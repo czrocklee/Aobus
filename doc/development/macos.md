@@ -110,9 +110,17 @@ See [optimized builds](optimized-builds.md).
 ## Build and tool state
 
 Default build trees are `/tmp/build/<checkout-directory>/<flavor>` and contain
-`build.log`. Sanitizers use sibling suffixes. `AOBUS_BUILD_ROOT` replaces the
-`/tmp/build` base while retaining the checkout-directory component; `BUILD_DIR`
-or `-p` selects one exact tree.
+`build.log`. Sanitizers use sibling suffixes. `AOBUS_BUILD_ROOT` replaces only
+the `/tmp/build` base; the portal still appends `<checkout-directory>/<flavor>`.
+`BUILD_DIR` selects one exact tree for every flavor, so it is never a base, and
+it takes precedence over `AOBUS_BUILD_ROOT`. An explicit `-p` or `--path` takes
+precedence over both.
+
+When `/tmp` does not survive a restart, keep build trees under a persistent
+local base, for example
+`AOBUS_BUILD_ROOT="$HOME/Library/Caches/Aobus/build" ./ao check`. That base
+holds build trees only; `AOBUS_STATE_ROOT` still selects the managed tool and
+package state described below.
 
 Managed state defaults to `$HOME/Library/Caches/Aobus`:
 
@@ -126,14 +134,31 @@ Managed state defaults to `$HOME/Library/Caches/Aobus`:
 a complete pre-bootstrapped checkout; registry and manifest locks still apply.
 Use `./ao setup compiler-cache` for optional managed ccache behavior.
 
+### Shared SMB checkout
+
 Generated state must be on the macOS host's local disk. A source checkout may be
 mounted over SMB, but build trees, vcpkg state, Python environments, and compiler
 caches must not be written to that mount.
 
-For a shared-checkout workflow, mount the intended share read-write and run the
-portal from its root. Connection details and credentials are host configuration,
-not repository policy. Reverify the mount after reboot; do not copy the checkout
-into the guest or run two writers against the same source files.
+For a shared-checkout workflow, mount the intended share read-write with the
+`noatime` option and run the portal from its root. Connection details and
+credentials are host configuration, not repository policy. Reverify the mount
+after reboot; do not copy the checkout into the guest or run two writers against
+the same source files.
+
+Without `noatime`, XNU's `mmap()` asks the server to set the access time of each
+file it maps, and Clang maps inputs of 16 KiB or more. A Linux Samba host applies
+that as a timestamp change, which also moves the file's change time. ccache
+refuses a compilation whose input changed status near or after the compilation
+started, so parallel builds report `modified_input_file` instead of caching.
+smbfs does not support `mount -u`; unmount the share and mount it again with the
+option.
+
+A linked worktree created on another host records that host's private Git
+directory, which the guest cannot reach. Git commands fail in it, and commands
+that use the managed Ruff/mypy environment, such as `./ao hygiene`, cannot store
+the checkout ID that keys `tools/venvs/<checkout>`. Set one stable, unique
+`AOBUS_CHECKOUT_ID` for that worktree, for example its directory name.
 
 ## Native desktop development slice
 
@@ -239,6 +264,11 @@ hardware behavior.
   outside the portal. Remove that manual tree and use `./ao`.
 - If generated state appears under the SMB checkout, stop and select a local
   `AOBUS_BUILD_ROOT`.
+- If ccache statistics for an SMB checkout show `modified_input_file`, confirm
+  that `mount -t smbfs` lists `noatime` for the share. See
+  [shared SMB checkout](#shared-smb-checkout).
+- "cannot create the checkout ID" in a linked worktree means its Git directory
+  belongs to another host; set `AOBUS_CHECKOUT_ID` for that worktree.
 - If no Core Audio outputs appear, confirm a live output in Audio MIDI Setup.
   Aobus does not invent a route when macOS publishes none.
 - If AUHAL or `afplay` fails over SSH, `stat -f "%Su" /dev/console` must name
