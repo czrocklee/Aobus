@@ -17,6 +17,13 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(AOBUS_MANAGED_C_COMPILER_LAUNCHER OFF CACHE BOOL "Portal owns the configured C compiler launcher")
 set(AOBUS_MANAGED_CXX_COMPILER_LAUNCHER OFF CACHE BOOL "Portal owns the configured C++ compiler launcher")
 mark_as_advanced(AOBUS_MANAGED_C_COMPILER_LAUNCHER AOBUS_MANAGED_CXX_COMPILER_LAUNCHER)
+# Objective-C++ is enabled only on macOS, so the ownership marker exists only
+# once the language has been initialized there.
+if(CMAKE_OBJCXX_COMPILER_LOADED)
+  set(AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER OFF CACHE BOOL
+    "Portal owns the configured Objective-C++ compiler launcher")
+  mark_as_advanced(AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER)
+endif()
 
 include(cmake/SharedWorkspaceCache.cmake)
 include(cmake/SharedWorkspaceCacheWindows.cmake)
@@ -192,10 +199,15 @@ else()
 
 endif()
 
-message(STATUS
+string(CONCAT AOBUS_COMPILER_LAUNCHER_STATUS
   "Configured compiler launcher(s): "
   "C='${CMAKE_C_COMPILER_LAUNCHER}' (managed=${AOBUS_MANAGED_C_COMPILER_LAUNCHER}), "
   "CXX='${CMAKE_CXX_COMPILER_LAUNCHER}' (managed=${AOBUS_MANAGED_CXX_COMPILER_LAUNCHER})")
+if(CMAKE_OBJCXX_COMPILER_LOADED)
+  string(APPEND AOBUS_COMPILER_LAUNCHER_STATUS
+    ", OBJCXX='${CMAKE_OBJCXX_COMPILER_LAUNCHER}' (managed=${AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER})")
+endif()
+message(STATUS "${AOBUS_COMPILER_LAUNCHER_STATUS}")
 
 # spdlog
 # Force spdlog call sites to use C++20 std::format instead of the fmt library.

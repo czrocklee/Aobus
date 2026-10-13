@@ -32,10 +32,11 @@ shell. macOS installs the governed Homebrew formula and accepts a compatible
 version at or above the governed minimum. Windows downloads and verifies the
 exact official archive. Setup fails closed on a version or checksum mismatch.
 
-After setup, configure and build commands apply managed C and C++ launchers.
-Existing Ninja trees are reconfigured when their managed launcher changes. The
-WinUI Visual Studio tree uses a host-local verified `cl.exe` wrapper without
-putting its directory on `PATH`.
+After setup, configure and build commands apply managed C and C++ launchers,
+plus an Objective-C++ (`.mm`) launcher on macOS. Existing Ninja trees are
+reconfigured when their managed launcher changes. The WinUI Visual Studio tree
+uses a host-local verified `cl.exe` wrapper without putting its directory on
+`PATH`.
 
 ## State, capacity, and overrides
 
@@ -53,8 +54,8 @@ a larger valid capacity already saved in Aobus state or in that store, and
 ccache's `0` remains unlimited. `CCACHE_MAXSIZE` overrides capacity for the
 current invocation.
 
-Explicit `CMAKE_C_COMPILER_LAUNCHER`,
-`CMAKE_CXX_COMPILER_LAUNCHER`, and `AOBUS_MSBUILD_CL_TOOL_EXE` values remain
+Explicit `CMAKE_C_COMPILER_LAUNCHER`, `CMAKE_CXX_COMPILER_LAUNCHER`,
+`CMAKE_OBJCXX_COMPILER_LAUNCHER`, and `AOBUS_MSBUILD_CL_TOOL_EXE` values remain
 authoritative. An explicitly empty CMake launcher disables that language's
 launcher. An empty environment override clears an existing managed launcher
 and its ownership marker; the resulting empty CMake cache entry remains an
@@ -114,6 +115,11 @@ LLDB: settings set target.source-map <from> <to>
 The portal does not edit debugger or editor configuration. Keep the metadata
 with the tree: it remains useful for objects compiled while normalization was
 enabled.
+
+On macOS, shared mode also requires the managed Objective-C++ launcher and
+applies the same namespace and path normalization to `.mm` compilations. Its
+base and active-configuration Objective-C++ flags must not carry caller prefix
+maps, coverage flags, or raw `-fsanitize` flags.
 
 Coverage and sanitizer builds are deliberately excluded. Disable the saved
 profile for one invocation rather than changing it globally:
@@ -176,7 +182,8 @@ outputs. The decision is per WinUI build and is not a persistent CMake override.
 ## Continuous integration
 
 GitHub Actions uses the sccache action and version pinned by
-`script/ao/compiler-cache.json`; local setup remains ccache-only. The workflow
-uses the same `20G` local-size policy, but that value does not change GitHub's
+`script/ao/compiler-cache.json`; local setup remains ccache-only. On macOS,
+CI activation also covers Objective-C++ with the same explicit-override rules.
+The workflow uses the same `20G` local-size policy, but that value does not change GitHub's
 remote cache quota or retention. CI endpoint, credentials, namespace, and
 transient-error behavior remain owned by the action and workflow.

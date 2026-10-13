@@ -40,6 +40,17 @@ message(STATUS
   "Aobus features: AOBUS_BUILD_GTK=${AOBUS_BUILD_GTK}; "
   "AOBUS_BUILD_SYSTEM_MEDIA=${AOBUS_BUILD_SYSTEM_MEDIA}")
 
+# Initialize Objective-C++ before the compiler-cache policy so its flags and
+# compiler identity are available to that policy.
+if(APPLE)
+  set(CMAKE_OBJCXX_COMPILER "${CMAKE_CXX_COMPILER}")
+  enable_language(OBJCXX)
+  if(NOT CMAKE_OBJCXX26_STANDARD_COMPILE_OPTION)
+    set(CMAKE_OBJCXX26_STANDARD_COMPILE_OPTION "-std=c++26")
+    set(CMAKE_OBJCXX26_EXTENSION_COMPILE_OPTION "-std=gnu++26")
+  endif()
+endif()
+
 include(cmake/CompilerOptions.cmake)
 include(cmake/WindowsUtf8Manifest.cmake)
 
@@ -285,18 +296,6 @@ configure_file(cmake/AppVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/ao/A
 
 if(AOBUS_BUILD_TESTS)
   enable_testing()
-endif()
-
-# Both the AppKit frontend and its native test bundle compile Objective-C++.
-# Enable the language in their common directory so sibling test targets inherit
-# the same governed compiler and C++26 mapping.
-if(APPLE)
-  set(CMAKE_OBJCXX_COMPILER "${CMAKE_CXX_COMPILER}")
-  enable_language(OBJCXX)
-  if(NOT CMAKE_OBJCXX26_STANDARD_COMPILE_OPTION)
-    set(CMAKE_OBJCXX26_STANDARD_COMPILE_OPTION "-std=c++26")
-    set(CMAKE_OBJCXX26_EXTENSION_COMPILE_OPTION "-std=gnu++26")
-  endif()
 endif()
 
 add_subdirectory(lib)

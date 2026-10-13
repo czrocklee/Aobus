@@ -22,7 +22,11 @@ if(AOBUS_SHARED_WORKSPACES)
       "Shared-workspace compiler caching requires the Ninja generator; rerun the portal "
       "command with AOBUS_SHARED_WORKSPACES=0 for this tree")
   endif()
-  foreach(_language IN ITEMS C CXX)
+  set(_shared_workspace_languages C CXX)
+  if(CMAKE_OBJCXX_COMPILER_LOADED)
+    list(APPEND _shared_workspace_languages OBJCXX)
+  endif()
+  foreach(_language IN LISTS _shared_workspace_languages)
     if(NOT CMAKE_${_language}_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
       message(FATAL_ERROR
         "Shared-workspace compiler caching does not support ${CMAKE_${_language}_COMPILER_ID} "
@@ -30,18 +34,30 @@ if(AOBUS_SHARED_WORKSPACES)
     endif()
   endforeach()
   set(_effective_user_flags "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
+  set(_objcxx_user_flags "")
+  if(CMAKE_OBJCXX_COMPILER_LOADED)
+    set(_objcxx_user_flags "${CMAKE_OBJCXX_FLAGS}")
+    string(APPEND _effective_user_flags " ${CMAKE_OBJCXX_FLAGS}")
+  endif()
   if(CMAKE_BUILD_TYPE)
     string(TOUPPER "${CMAKE_BUILD_TYPE}" _build_type_upper)
     string(APPEND _effective_user_flags
       " ${CMAKE_C_FLAGS_${_build_type_upper}} ${CMAKE_CXX_FLAGS_${_build_type_upper}}")
+    if(CMAKE_OBJCXX_COMPILER_LOADED)
+      string(APPEND _effective_user_flags " ${CMAKE_OBJCXX_FLAGS_${_build_type_upper}}")
+      string(APPEND _objcxx_user_flags " ${CMAKE_OBJCXX_FLAGS_${_build_type_upper}}")
+    endif()
   endif()
   if(_effective_user_flags MATCHES "-f(file|debug|macro)-prefix-map")
     message(FATAL_ERROR
-      "Shared-workspace compiler caching owns all C/C++ prefix maps because ccache does not hash "
+      "Shared-workspace compiler caching owns all compiler prefix maps because ccache does not hash "
       "their values; remove the additional map or rerun with AOBUS_SHARED_WORKSPACES=0")
   endif()
   if(AOBUS_ENABLE_ASAN OR AOBUS_ENABLE_TSAN
-     OR _effective_user_flags MATCHES "(--coverage|-fprofile-arcs|-ftest-coverage|-fprofile-instr-generate|-fcoverage-mapping)")
+     OR _effective_user_flags MATCHES "(--coverage|-fprofile-arcs|-ftest-coverage|-fprofile-instr-generate|-fcoverage-mapping)"
+     # Objective-C++ is newly cached, so it rejects raw -fsanitize flags
+     # outright; C and C++ keep their existing behavior.
+     OR (CMAKE_OBJCXX_COMPILER_LOADED AND _objcxx_user_flags MATCHES "-fsanitize"))
     message(FATAL_ERROR
       "Shared-workspace compiler caching does not support coverage or sanitizer builds; "
       "rerun with AOBUS_SHARED_WORKSPACES=0")
@@ -104,7 +120,7 @@ if(AOBUS_SHARED_WORKSPACES)
       "command so the policy fingerprint and namespace can be refreshed")
   endif()
 
-  foreach(_language IN ITEMS C CXX)
+  foreach(_language IN LISTS _shared_workspace_languages)
     if(NOT AOBUS_MANAGED_${_language}_COMPILER_LAUNCHER
        OR NOT "${CMAKE_${_language}_COMPILER_LAUNCHER}" STREQUAL
               "${AOBUS_SHARED_WORKSPACE_CCACHE}")
