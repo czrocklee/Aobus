@@ -13,6 +13,8 @@ AppKit frontend over shared Core and application runtime libraries. Work from th
   selected build tree's `build.log`.
 - Keep abstractions tied to current consumers and an independent contract.
   Keep one-consumer helpers local; do not add speculative registries or policies.
+- Follow the [formatting and validation order](doc/development/test/validation-and-review.md#formatting-before-validation)
+  before completion checks.
 
 ## Read by task
 
