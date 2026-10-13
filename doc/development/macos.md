@@ -134,40 +134,25 @@ Managed state defaults to `$HOME/Library/Caches/Aobus`:
 a complete pre-bootstrapped checkout; registry and manifest locks still apply.
 Use `./ao setup compiler-cache` for optional managed ccache behavior.
 
-### Shared SMB checkout
-
 Generated state must be on the macOS host's local disk. A source checkout may be
-mounted over SMB, but build trees, vcpkg state, Python environments, and compiler
-caches must not be written to that mount.
+local or shared, including over SMB, but build trees, vcpkg state, Python
+environments, and compiler caches must not be written to a network mount.
+Mounting and maintaining a source share is host administration, not portal
+behavior.
 
-For a shared-checkout workflow, mount the intended share read-write with the
-`noatime` option and run the portal from its root. Pass `-o noatime` to
-`mount -t smbfs`, or include the option in the host's automount configuration.
-Connection details and credentials remain host configuration, not repository
-policy. Verify the actual mount options after every new mount, including after
-a reboot or reconnect; do not assume a new Finder "Connect to Server" mount
-retains `noatime`. Do not copy the checkout into the guest or run two writers
-against the same source files.
+### Native checkout identity
 
-Without `noatime`, XNU's `mmap()` asks the server to set the access time of each
-file it maps. Clang considers inputs of 16 KiB or more for memory mapping;
-eligibility also depends on the file and buffer requirements. A Linux Samba
-host applies the atime request as a timestamp change, which also moves the
-file's status change time (`ctime`). ccache refuses to cache a compilation whose
-input changed status near or after the compilation started, so parallel builds
-report `modified_input_file` instead of caching. smbfs does not support
-`mount -u`; unmount the share and mount it again with the option.
+The managed Ruff/mypy environment under `tools/venvs/<checkout>` is keyed by
+the checkout's filesystem identity and an ID stored in its private Git
+directory. If no stored ID can be read or created there, commands such as
+`./ao hygiene` cannot initialize the environment.
+Set one stable, unique `AOBUS_CHECKOUT_ID` for that checkout, per invocation or
+in a directory-scoped environment.
 
-A linked worktree created on another host may record an absolute path to that
-host's private Git directory. If that path is unreachable from the guest, Git
-commands fail, and commands that use the managed Ruff/mypy environment, such as
-`./ao hygiene`, cannot store the checkout ID that keys `tools/venvs/<checkout>`.
-Set one stable, unique `AOBUS_CHECKOUT_ID` for that worktree, for example its
-directory name, per invocation or in a directory-scoped environment. An
-unconditional shell-profile export also overrides native clones' stored IDs
-and can select different managed Python environments for them. The override
-does not repair Git linkage; use explicit file scopes for commands such as
-`./ao hygiene` while Git remains unavailable.
+An unconditional shell-profile export also overrides native clones' stored
+IDs and can select different managed Python environments for them. The
+override does not repair Git linkage; use explicit file scopes for commands
+such as `./ao hygiene` while Git-dependent discovery is unavailable.
 
 ## Native desktop development slice
 
@@ -273,13 +258,9 @@ hardware behavior.
   outside the portal. Remove that manual tree and use `./ao`.
 - If generated state appears under the SMB checkout, stop and select a local
   `AOBUS_BUILD_ROOT`.
-- If ccache statistics for an SMB checkout show `modified_input_file`, confirm
-  that `mount -t smbfs` lists `noatime` for the share. See
-  [shared SMB checkout](#shared-smb-checkout).
-- "cannot create the checkout ID" in a linked worktree can indicate an
-  unreachable or non-writable private Git directory. Set `AOBUS_CHECKOUT_ID`
-  for that worktree as described under
-  [shared SMB checkout](#shared-smb-checkout).
+- "cannot create the checkout ID" can indicate an unreachable or non-writable
+  private Git directory. Follow the scoped override guidance under
+  [native checkout identity](#native-checkout-identity).
 - If no Core Audio outputs appear, confirm a live output in Audio MIDI Setup.
   Aobus does not invent a route when macOS publishes none.
 - If AUHAL or `afplay` fails over SSH, `stat -f "%Su" /dev/console` must name

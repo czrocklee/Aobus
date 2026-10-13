@@ -11,8 +11,8 @@ is, what forces it, and the exact condition under which it stops being
 necessary, so a future toolchain upgrade can retire it deliberately rather than
 leaving it in place because nobody remembers why it exists.
 
-Machine setup, portal behavior, local state, and the SMB workflow belong to
-[macOS development](macos.md).
+Native prerequisites, portal behavior, local state, and source/build-storage
+compatibility belong to [macOS development](macos.md).
 
 ## Current support
 
