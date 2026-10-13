@@ -7,8 +7,6 @@
 #include <ao/Error.h>
 #include <ao/compat/MoveOnlyFunction.h>
 
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <functional>
@@ -49,6 +47,7 @@ namespace ao::library
   class MetadataStore;
   class MusicLibrary;
   class ResourceStore;
+  struct IdSpace;
   struct MetadataHeader;
   class TrackBuilder;
   class TrackWriter;
@@ -126,6 +125,10 @@ namespace ao::library
       }
     }
 
+    // Publishes every staged row and makes the Track and List ids allocated in
+    // this transaction permanent. Until then those ids are provisional: abort
+    // or a failed commit leaves the id space unchanged, so they may be
+    // allocated again.
     Result<> commit();
     // Explicitly terminates an active transaction. The destructor performs the
     // same rollback when an operation unwinds without committing.
@@ -153,7 +156,11 @@ namespace ao::library
     ResourceStore const& resourceStore() const;
     TrackWriter tracks();
     ListWriter lists();
-    Result<> restoreLibraryIdentity(std::array<std::byte, 16> const& libraryId);
+    // The id space as committed before this transaction began.
+    IdSpace committedIdSpace(detail::LibraryIdentity const& identity) const;
+    // The highest Track id ever allocated, including ids this transaction
+    // staged; it equals the Track mark a commit at this point would record.
+    std::uint32_t lastAllocatedTrackId() const;
     std::uint64_t libraryRevision(detail::LibraryIdentity const& identity) const;
     MetadataHeader metadataHeader(detail::LibraryIdentity const& identity) const;
     void requireOperationActive() const;
@@ -163,7 +170,6 @@ namespace ao::library
     friend class FileManifestStore;
     friend class ListStore;
     friend class LibraryWrite;
-    friend class MetadataStore;
     friend class MusicLibrary;
     friend class ResourceStore;
     friend class TrackStore;

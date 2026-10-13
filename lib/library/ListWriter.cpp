@@ -76,6 +76,24 @@ namespace ao::library
     return {};
   }
 
+  // A rank may outlive its Track, but naming an id never allocated would bind
+  // it to whichever Track receives that id later.
+  Result<> ListWriter::validateOrderTrackIds(ListView const& view) const
+  {
+    auto const lastTrackId = _transaction->lastAllocatedTrackId();
+
+    for (auto const trackId : view.orderTrackIds())
+    {
+      if (trackId.raw() > lastTrackId)
+      {
+        return makeError(Error::Code::InvalidInput,
+                         std::format("list order names Track {}, which was never allocated", trackId.raw()));
+      }
+    }
+
+    return {};
+  }
+
   Result<ListId> ListWriter::create(ListBuilder const& list)
   {
     requireActiveOperation();
@@ -91,6 +109,11 @@ namespace ao::library
     AO_INVARIANT(view.isValid(), "Successful List preparation produced an invalid record");
 
     if (auto validationRes = validateParent(kInvalidListId, view.parentId()); !validationRes)
+    {
+      return std::unexpected{validationRes.error()};
+    }
+
+    if (auto validationRes = validateOrderTrackIds(view); !validationRes)
     {
       return std::unexpected{validationRes.error()};
     }
@@ -119,6 +142,11 @@ namespace ao::library
     }
 
     if (auto validationRes = validateParent(id, view.parentId()); !validationRes)
+    {
+      return validationRes;
+    }
+
+    if (auto validationRes = validateOrderTrackIds(view); !validationRes)
     {
       return validationRes;
     }

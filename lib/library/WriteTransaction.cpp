@@ -15,6 +15,7 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryWrite.h>
+#include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListWriter.h>
 #include <ao/library/MetadataLayout.h>
@@ -24,8 +25,7 @@
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 
-#include <array>
-#include <cstddef>
+#include <algorithm>
 #include <cstdint>
 #include <expected>
 #include <functional>
@@ -52,6 +52,7 @@ namespace ao::library
          MetadataStore& metadataValue,
          detail::MetadataState& metadataStateValue,
          detail::MetadataSnapshot metadataSnapshot,
+         IdSpace committedIdSpaceValue,
          detail::LibraryIdentity const& libraryIdentity,
          Options options,
          std::shared_ptr<void const> writerSessionAnchorPtr)
@@ -64,9 +65,10 @@ namespace ao::library
       , manifest{&manifestValue}
       , metadata{&metadataValue}
       , metadataState{&metadataStateValue}
-      , candidateHeader{metadataSnapshot.header}
+      , header{metadataSnapshot.header}
       , previousRevision{metadataSnapshot.revision}
       , candidateRevision{metadataSnapshot.revision + 1U}
+      , committedIdSpace{committedIdSpaceValue}
       , identity{&libraryIdentity}
       , optInjectedCommitFailure{std::move(options.optInjectedCommitFailure)}
       , writerSessionAnchorPtr{std::move(writerSessionAnchorPtr)}
@@ -92,6 +94,28 @@ namespace ao::library
       writerSessionAnchorPtr.reset();
     }
 
+    // The marks cover ids this transaction allocated, including ones it
+    // deleted again, and every key it stored by any path, so the committed id
+    // space always satisfies the admission rule that it covers every row.
+    IdSpace candidateIdSpace(WriteTransaction const& owner) const
+    {
+      auto idSpace = IdSpace{.lastTrackId = candidateLastTrackId(owner),
+                             .lastListId = std::max(committedIdSpace.lastListId, lists->lastStoredId(owner))};
+
+      if (optListWriter)
+      {
+        idSpace.lastListId = std::max(idSpace.lastListId, optListWriter->lastAllocatedId().raw());
+      }
+
+      return idSpace;
+    }
+
+    std::uint32_t candidateLastTrackId(WriteTransaction const& owner) const
+    {
+      auto const staged = optTrackWriter ? optTrackWriter->lastAllocatedId().raw() : 0U;
+      return std::max({committedIdSpace.lastTrackId, tracks->lastStoredId(owner), staged});
+    }
+
     std::unique_lock<std::mutex> writerGate;
     lmdb::WriteTransaction transaction;
     DictionaryStore::Writer dictionaryWriter;
@@ -101,9 +125,10 @@ namespace ao::library
     FileManifestStore* manifest;
     MetadataStore* metadata;
     detail::MetadataState* metadataState;
-    MetadataHeader candidateHeader{};
+    MetadataHeader header{};
     std::uint64_t previousRevision = 0;
     std::uint64_t candidateRevision = 0;
+    IdSpace committedIdSpace{};
     std::unique_lock<std::shared_mutex> metadataPublicationLock;
     std::optional<TrackStore::Writer> optTrackWriter;
     std::optional<ListStore::Writer> optListWriter;
@@ -113,7 +138,6 @@ namespace ao::library
     std::optional<Error> optInjectedCommitFailure;
     std::shared_ptr<void const> writerSessionAnchorPtr;
     bool operationActive = false;
-    bool metadataHeaderDirty = false;
   };
 
   Result<WriteTransaction> WriteTransaction::begin(lmdb::Environment& environment,
@@ -144,6 +168,7 @@ namespace ao::library
     }
 
     auto metadataSnapshot = detail::MetadataSnapshot{};
+    auto committedIdSpace = IdSpace{};
 
     try
     {
@@ -151,6 +176,7 @@ namespace ao::library
       AO_INVARIANT(headerRes, "Library metadata header failed after open validation: {}", headerRes.error().message);
       metadataSnapshot.header = *headerRes;
       metadataSnapshot.revision = metadata.revision(*transactionRes);
+      committedIdSpace = metadata.idSpace(*transactionRes);
     }
     catch (lmdb::detail::TransactionFailure const& failure)
     {
@@ -170,6 +196,7 @@ namespace ao::library
                                           metadata,
                                           metadataState,
                                           metadataSnapshot,
+                                          committedIdSpace,
                                           identity,
                                           std::move(options),
                                           std::move(writerSessionAnchorPtr));
@@ -221,12 +248,17 @@ namespace ao::library
     return *_implPtr->resources;
   }
 
-  Result<> WriteTransaction::restoreLibraryIdentity(std::array<std::byte, 16> const& libraryId)
+  IdSpace WriteTransaction::committedIdSpace(detail::LibraryIdentity const& identity) const
+  {
+    AO_EXPECTS(_implPtr != nullptr, "Library write transaction is no longer active");
+    AO_EXPECTS(_implPtr->identity == &identity, "Write transaction belongs to a different MusicLibrary");
+    return _implPtr->committedIdSpace;
+  }
+
+  std::uint32_t WriteTransaction::lastAllocatedTrackId() const
   {
     requireOperationActive();
-    _implPtr->candidateHeader.libraryId = libraryId;
-    _implPtr->metadataHeaderDirty = true;
-    return {};
+    return _implPtr->candidateLastTrackId(*this);
   }
 
   std::uint64_t WriteTransaction::libraryRevision(detail::LibraryIdentity const& identity) const
@@ -240,7 +272,7 @@ namespace ao::library
   {
     AO_EXPECTS(_implPtr != nullptr, "Library write transaction is no longer active");
     AO_EXPECTS(_implPtr->identity == &identity, "Write transaction belongs to a different MusicLibrary");
-    return _implPtr->candidateHeader;
+    return _implPtr->header;
   }
 
   Result<> WriteTransaction::applyBoundary(compat::MoveOnlyFunction<Result<>(LibraryWrite&)> function)
@@ -314,12 +346,12 @@ namespace ao::library
       AO_INVARIANT(_implPtr->metadataState->_revision <= _implPtr->previousRevision,
                    "Published library revision is ahead of the durable write snapshot");
 
-      if (_implPtr->metadataHeaderDirty)
+      if (auto const candidateIdSpace = _implPtr->candidateIdSpace(*this);
+          candidateIdSpace != _implPtr->committedIdSpace)
       {
-        if (auto headerRes = _implPtr->metadata->update(*this, _implPtr->candidateHeader); !headerRes)
-        {
-          lmdb::detail::throwTransactionFailure(std::move(headerRes.error()));
-        }
+        AO_INVARIANT(candidateIdSpace.lastListId <= kMaxListId,
+                     "Candidate library id space would commit a List mark above kMaxListId");
+        _implPtr->metadata->persistIdSpace(_implPtr->transaction, candidateIdSpace);
       }
 
       _implPtr->metadata->persistRevision(
@@ -354,7 +386,6 @@ namespace ao::library
     }
 
     _implPtr->dictionaryWriter.publish();
-    _implPtr->metadataState->_header = _implPtr->candidateHeader;
     _implPtr->metadataState->_revision = _implPtr->candidateRevision;
     _implPtr->metadataPublicationLock.unlock();
     _implPtr->writerGate.unlock();

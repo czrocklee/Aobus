@@ -3,12 +3,8 @@
 
 #pragma once
 
-#include <ao/Error.h>
 #include <ao/library/ListWriter.h>
 #include <ao/library/TrackWriter.h>
-
-#include <array>
-#include <cstddef>
 
 namespace ao::lmdb
 {
@@ -49,7 +45,6 @@ namespace ao::library
 
     TrackWriter tracks();
     ListWriter lists();
-    Result<> restoreLibraryIdentity(std::array<std::byte, 16> const& libraryId);
 
   private:
     explicit LibraryWrite(WriteTransaction& transaction) noexcept;

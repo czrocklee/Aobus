@@ -5,6 +5,7 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
@@ -15,6 +16,11 @@
 #include <span>
 #include <string_view>
 #include <vector>
+
+namespace ao::lmdb
+{
+  class WriteTransaction;
+}
 
 namespace ao::library
 {
@@ -68,6 +74,17 @@ namespace ao::library::test
                        std::string_view uri,
                        std::span<std::byte const> hotData,
                        std::span<std::byte const> coldData);
+
+  /**
+   * Raises the raw id space record so it covers Track and List ids up to the
+   * given values, as a supported writer's commit does for every row it stores.
+   * Raw seeding calls it so a planted row is admitted or rejected on its own
+   * merits rather than for lying above the id space.
+   */
+  void coverRawIdSpace(lmdb::WriteTransaction& transaction, std::uint32_t lastTrackId, std::uint32_t lastListId = 0);
+
+  /** Reads the committed id space record; every environment for the path must be closed. */
+  IdSpace readRawIdSpace(std::filesystem::path const& path);
 
   /** Requires the intended rejection, not an earlier fail-closed admission guard. */
   void requireCorruptOpen(std::filesystem::path const& path, std::string_view expectedMessage);

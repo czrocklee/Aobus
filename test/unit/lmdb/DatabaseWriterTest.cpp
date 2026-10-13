@@ -363,6 +363,32 @@ namespace ao::lmdb::test
     CHECK_FALSE(reader.get(2));
   }
 
+  TEST_CASE("IntegerKeyDatabase::Writer - raising the cached maximum moves appends above it and never lowers it",
+            "[lmdb][unit][database][writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
+    auto transaction = beginWriteTransaction(env);
+    auto db = openIntegerKeyDatabase(transaction, "test");
+    auto writer = db.writer(transaction);
+    REQUIRE(writer.append(createStringData("first")));
+
+    writer.raiseMaxKey(7);
+    CHECK(writer.maxKey() == 7);
+    auto const raisedIdRes = writer.append(createStringData("raised"));
+    REQUIRE(raisedIdRes);
+    CHECK(*raisedIdRes == 8);
+
+    writer.raiseMaxKey(3);
+    CHECK(writer.maxKey() == 8);
+    REQUIRE(transaction.commit());
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const reader = db.reader(readTransaction);
+    CHECK(reader.entryCount() == 2);
+    CHECK(reader.maxKey() == 8);
+  }
+
   TEST_CASE("IntegerKeyDatabase::Writer - append reports exhausted integer key space", "[lmdb][unit][database][writer]")
   {
     auto const temp = ao::test::TempDir{};

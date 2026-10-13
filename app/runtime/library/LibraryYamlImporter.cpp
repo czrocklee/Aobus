@@ -45,7 +45,6 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -67,12 +66,6 @@ namespace ao::rt
 {
   namespace
   {
-    enum class ImportRunMode : std::uint8_t
-    {
-      Commit,
-      Preview,
-    };
-
     struct ValidatedTrack final
     {
       std::uint32_t yamlId = 0;
@@ -120,7 +113,6 @@ namespace ao::rt
     {
       std::uint32_t version = 0;
       ExportMode payloadMode = ExportMode::Full;
-      std::optional<std::string_view> optLibraryId;
       ValidatedResourceMap resources;
       std::vector<ValidatedTrack> tracks;
       std::vector<ValidatedList> lists;
@@ -291,7 +283,7 @@ namespace ao::rt
       return {};
     }
 
-    constexpr auto kRootFields = std::to_array<std::string_view>({"version", "libraryId", "export_mode", "library"});
+    constexpr auto kRootFields = std::to_array<std::string_view>({"version", "export_mode", "library"});
     constexpr auto kLibraryFields = std::to_array<std::string_view>({"resources", "tracks", "lists"});
     constexpr auto kResourceFields = std::to_array<std::string_view>({"digest", "length"});
     constexpr auto kTrackFields = std::to_array<std::string_view>({
@@ -632,45 +624,6 @@ namespace ao::rt
       return {};
     }
 
-    bool isHexDigit(char ch) noexcept
-    {
-      return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
-    }
-
-    bool isUuidText(std::string_view uuidStr) noexcept
-    {
-      constexpr std::size_t kUuidLength = 36;
-      constexpr std::size_t kFirstHyphen = 8;
-      constexpr std::size_t kSecondHyphen = 13;
-      constexpr std::size_t kThirdHyphen = 18;
-      constexpr std::size_t kFourthHyphen = 23;
-
-      if (uuidStr.size() != kUuidLength)
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < uuidStr.size(); ++index)
-      {
-        auto const expectsHyphen =
-          index == kFirstHyphen || index == kSecondHyphen || index == kThirdHyphen || index == kFourthHyphen;
-
-        if (expectsHyphen)
-        {
-          if (uuidStr[index] != '-')
-          {
-            return false;
-          }
-        }
-        else if (!isHexDigit(uuidStr[index]))
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
-
     std::optional<ExportMode> parseExportMode(std::string_view modeStr)
     {
       if (modeStr == "delta")
@@ -694,52 +647,6 @@ namespace ao::rt
       }
 
       return std::nullopt;
-    }
-
-    constexpr std::uint8_t hexDigit(char ch)
-    {
-      if (ch >= '0' && ch <= '9')
-      {
-        return static_cast<std::uint8_t>(ch - '0');
-      }
-
-      constexpr std::uint8_t kHexBase = 10;
-
-      if (ch >= 'a' && ch <= 'f')
-      {
-        return static_cast<std::uint8_t>(ch - 'a' + kHexBase);
-      }
-
-      if (ch >= 'A' && ch <= 'F')
-      {
-        return static_cast<std::uint8_t>(ch - 'A' + kHexBase);
-      }
-
-      return 0;
-    }
-
-    std::array<std::byte, 16> parseUuid(std::string_view uuidStr)
-    {
-      auto result = std::array<std::byte, 16>{};
-      std::int32_t byteIndex = 0;
-
-      for (std::size_t i = 0; i < uuidStr.size() && byteIndex < 16; ++i)
-      {
-        if (uuidStr[i] == '-')
-        {
-          continue;
-        }
-
-        if (i + 1 < uuidStr.size())
-        {
-          auto const hi = hexDigit(uuidStr[i]);
-          auto const lo = hexDigit(uuidStr[i + 1]);
-          result.at(static_cast<std::size_t>(byteIndex++)) = static_cast<std::byte>((hi << 4U) | lo);
-          ++i;
-        }
-      }
-
-      return result;
     }
 
     Result<> validateListIdentity(ryml::ConstNodeRef const& listNode,
@@ -997,14 +904,10 @@ namespace ao::rt
     }
 
     Result<ImportReport> applyPreparedImport(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
-                                             ImportRunMode runMode,
                                              library::LibraryWrite& transaction) const;
     Result<> applyPreparedRecords(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
                                   library::LibraryWrite& transaction,
                                   ImportReport& report) const;
-    Result<> restoreLibraryIdentity(ValidatedImport const& validated,
-                                    ImportMode mode,
-                                    library::LibraryWrite& transaction) const;
     LibraryChangeSet buildPreparedChangeSet(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
                                             library::LibraryWrite const& transaction) const;
     Result<std::vector<PreparedTrack>> prepareTracks(ValidatedImport const& validated, ImportMode mode) const;
@@ -1252,7 +1155,7 @@ namespace ao::rt
 
   Result<ImportReport> LibraryYamlImportOperation::apply(PreparedImport const& prepared, library::LibraryWrite& write)
   {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Commit, write);
+    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, write);
   }
 
   LibraryChangeSet LibraryYamlImportOperation::buildChangeSet(PreparedImport const& prepared,
@@ -1263,7 +1166,8 @@ namespace ao::rt
 
   Result<ImportReport> LibraryYamlImportOperation::preview(PreparedImport const& prepared, library::LibraryWrite& write)
   {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Preview, write);
+    // Preview runs the apply path unchanged; its caller aborts the transaction.
+    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, write);
   }
 
   Result<> LibraryYamlImporter::Impl::applyPreparedRecords(
@@ -1297,18 +1201,6 @@ namespace ao::rt
     }
 
     return {};
-  }
-
-  Result<> LibraryYamlImporter::Impl::restoreLibraryIdentity(ValidatedImport const& validated,
-                                                             ImportMode mode,
-                                                             library::LibraryWrite& transaction) const
-  {
-    if (mode != ImportMode::Restore || validated.payloadMode == ExportMode::ListOnly || !validated.optLibraryId)
-    {
-      return {};
-    }
-
-    return transaction.restoreLibraryIdentity(parseUuid(*validated.optLibraryId));
   }
 
   LibraryChangeSet LibraryYamlImporter::Impl::buildPreparedChangeSet(
@@ -1364,7 +1256,6 @@ namespace ao::rt
 
   Result<ImportReport> LibraryYamlImporter::Impl::applyPreparedImport(
     LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
-    ImportRunMode runMode,
     library::LibraryWrite& transaction) const
   {
     auto report = prepared.initialReport;
@@ -1373,16 +1264,6 @@ namespace ao::rt
     if (!applyRes)
     {
       return std::unexpected{applyRes.error()};
-    }
-
-    if (runMode == ImportRunMode::Preview)
-    {
-      return report;
-    }
-
-    if (auto identityRes = restoreLibraryIdentity(prepared.validated, prepared.mode, transaction); !identityRes)
-    {
-      return std::unexpected{identityRes.error()};
     }
 
     return report;
@@ -1487,24 +1368,6 @@ namespace ao::rt
     }
 
     validated.payloadMode = *optExportMode;
-
-    if (auto const libraryIdNode = yaml::findChild(root, "libraryId"); libraryIdNode.readable())
-    {
-      auto libraryIdRes = requireScalar(libraryIdNode, "libraryId");
-
-      if (!libraryIdRes)
-      {
-        return std::unexpected{libraryIdRes.error()};
-      }
-
-      if (!isUuidText(*libraryIdRes))
-      {
-        return makeError(Error::Code::FormatRejected, "libraryId must be a UUID");
-      }
-
-      validated.optLibraryId = *libraryIdRes;
-    }
-
     return {};
   }
 

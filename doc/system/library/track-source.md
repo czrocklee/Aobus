@@ -109,7 +109,7 @@ Ad-hoc filtered sources are weak-cached and may be rebuilt after their last leas
 
 A list definition update may rebind its implementation while preserving the shell identity.
 Deleting a list invalidates its source and dependent chain terminally.
-Recreating the same numeric list id creates a new source identity; an old invalidated lease never revives.
+A deleted list id is never allocated again, so an invalidated lease never revives.
 
 For each committed library changeset the cache applies deletions, raw order changes, List definition upserts, and track metadata changes in the order required to expose one coherent derived result.
 Reentrant mutations are rejected while the cache applies a committed revision.

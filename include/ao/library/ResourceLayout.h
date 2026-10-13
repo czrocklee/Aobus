@@ -63,6 +63,11 @@ namespace ao::library
                 "ResourceDescriptor must have 4-byte alignment");
   static_assert(std::is_trivially_copyable_v<ResourceDescriptor>, "ResourceDescriptor must be trivially copyable");
   static_assert(std::is_standard_layout_v<ResourceDescriptor>, "ResourceDescriptor must have standard layout");
+  static_assert(std::has_unique_object_representations_v<ResourceDescriptor>,
+                "ResourceDescriptor must have no padding");
+  static_assert(offsetof(ResourceDescriptor, digest) == 0);
+  static_assert(offsetof(ResourceDescriptor, byteLength) ==
+                offsetof(ResourceDescriptor, digest) + sizeof(ResourceDescriptor::digest));
 
   /**
    * @brief Whether content of @p byteLength has a describable length.

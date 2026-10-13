@@ -421,6 +421,7 @@ namespace ao::rt::test
         .mtime(FileTimestamp{.seconds = 1700000000, .nanoseconds = 125000000});
       auto const manifestKey = library::detail::PaddedFileManifestKey{"missing.flac"};
       REQUIRE(manifestDatabase.writer(transaction).create(manifestKey.bytes(), manifest.serialize()));
+      library::test::coverRawIdSpace(transaction, kLastTrackId);
       REQUIRE(transaction.commit());
     }
 

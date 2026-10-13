@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/library/LibraryYamlExporter.h"
 #include "runtime/library/LibraryYamlImporter.h"
@@ -16,7 +16,10 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/TaskFuture.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/ListWriter.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
@@ -28,7 +31,6 @@
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/library/LibraryTransfer.h>
-#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <c4/yml/tree.hpp>
@@ -217,7 +219,7 @@ namespace ao::rt::test
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
 
-      // A delta document carries no embedded cover in version 7. The library holds
+      // A delta document carries no embedded cover in version 8. The library holds
       // what the last scan saw, so a file retagged since then makes the two
       // differ, and the sequence delta would carry is the stale one: applying it
       // would overwrite the covers the baseline just read from the file with
@@ -280,7 +282,7 @@ namespace ao::rt::test
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 7\n"
+      yaml << "version: 8\n"
            << "export_mode: delta\n"
            << "library:\n"
            << "  tracks:\n"
@@ -316,7 +318,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 7
+      yaml << R"(version: 8
 export_mode: delta
 library:
   tracks:
@@ -366,7 +368,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 7\nexport_mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
+      yaml << "version: 8\nexport_mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
     }
 
     auto executorPtr = std::make_unique<QueuedExecutor>();
@@ -386,15 +388,14 @@ library:
     CHECK(observed.front().libraryRevision == ml.libraryRevision(transaction));
   }
 
-  TEST_CASE("LibraryYaml - restore commits library id and content under one revision",
+  TEST_CASE("LibraryYaml - restore commits content under one revision and keeps the library id",
             "[runtime][integration][import-export][changeset]")
   {
     auto const temp = ao::test::TempDir{};
-    auto const yamlPath = std::filesystem::path{temp.path()} / "restore-with-id.yaml";
+    auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 7
-libraryId: 123E4567-E89B-12D3-A456-426614174000
+      yaml << R"(version: 8
 export_mode: full
 library:
   resources: []
@@ -419,12 +420,13 @@ library:
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
     auto const revisionBefore = core.library().snapshot().revision();
+    auto const libraryIdBefore = ml.metadataHeader().libraryId;
     REQUIRE(importThroughRuntime(core, executor, yamlPath, ImportMode::Restore));
 
     REQUIRE(observed.size() == 1);
     CHECK(observed.front().libraryReset);
     auto transaction = ml.readTransaction();
-    CHECK(utility::formatUuid(ml.metadataHeader(transaction).libraryId) == "123e4567-e89b-12d3-a456-426614174000");
+    CHECK(ml.metadataHeader(transaction).libraryId == libraryIdBefore);
     CHECK(observed.front().libraryRevision == revisionBefore + 1);
     CHECK(ml.libraryRevision(transaction) == revisionBefore + 1);
     auto const optManifest = ml.manifest().reader(transaction).get("restored.flac");
@@ -446,31 +448,90 @@ library:
     CHECK(listIterator == listReader.end());
   }
 
-  TEST_CASE("LibraryYaml - preview preserves library id and revision", "[runtime][integration][import-export][dry-run]")
+  TEST_CASE("LibraryYaml - restore gives restored Tracks and Lists fresh ids", "[runtime][integration][import-export]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto const originalLibraryId = ml.metadataHeader().libraryId;
-    auto const yamlPath = std::filesystem::path{temp.path()} / "preview-with-id.yaml";
+    auto const originalTrackId =
+      library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("kept.flac"));
+    auto const originalListId = [&ml, originalTrackId]
+    {
+      auto builder = library::ListBuilder::makeEmpty();
+      builder.name("Kept").orderTrackIds().add(originalTrackId);
+      auto transaction = library::test::writeTransaction(ml);
+      auto const idRes =
+        transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
+      REQUIRE(idRes);
+      REQUIRE(transaction.commit());
+      return *idRes;
+    }();
+
+    auto const yamlPath = std::filesystem::path{temp.path()} / "backup.yaml";
+    auto exporter = LibraryYamlExporter{ml};
+    REQUIRE(exporter.exportToYaml(yamlPath, ExportMode::Full));
+    auto importer = LibraryYamlImporter{ml};
+    REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
+
+    // A reference saved before the restore must dangle rather than name a
+    // restored object, so neither old id may come back.
+    auto transaction = ml.readTransaction();
+    auto const optManifest = ml.manifest().reader(transaction).get("kept.flac");
+    REQUIRE(optManifest);
+    auto const restoredTrackId = optManifest->trackId();
+    CHECK(restoredTrackId != originalTrackId);
+    CHECK_FALSE(ml.tracks().reader(transaction).get(originalTrackId));
+
+    auto const listReader = ml.lists().reader(transaction);
+    CHECK_FALSE(listReader.get(originalListId));
+    auto iterator = listReader.begin();
+    REQUIRE(iterator != listReader.end());
+    auto const [restoredListId, restoredList] = *iterator;
+    CHECK(restoredListId != originalListId);
+    CHECK(restoredList.name() == "Kept");
+    CHECK(std::ranges::equal(restoredList.orderTrackIds(), std::array{restoredTrackId}));
+    ++iterator;
+    CHECK(iterator == listReader.end());
+  }
+
+  TEST_CASE("LibraryYaml - restore preview leaves revision, content, and id marks unchanged",
+            "[runtime][integration][import-export][dry-run]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const keptId = library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("kept.flac"));
+    auto const yamlPath = std::filesystem::path{temp.path()} / "preview.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 7\n"
-           << "libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
+      yaml << "version: 8\n"
            << "export_mode: full\n"
            << "library:\n"
            << "  resources: []\n"
-           << "  tracks: []\n"
+           << "  tracks:\n"
+           << "    - uri: previewed.flac\n"
            << "  lists: []\n";
     }
 
-    auto revisionTransaction = ml.readTransaction();
-    auto const originalRevision = ml.libraryRevision(revisionTransaction);
+    auto const originalRevision = [&ml]
+    {
+      auto transaction = ml.readTransaction();
+      return ml.libraryRevision(transaction);
+    }();
     auto importer = LibraryYamlImporter{ml};
 
     REQUIRE(importer.previewImportFromYamlOffline(yamlPath, ImportMode::Restore));
 
-    auto afterTransaction = ml.readTransaction();
-    CHECK(ml.metadataHeader(afterTransaction).libraryId == originalLibraryId);
-    CHECK(ml.libraryRevision(afterTransaction) == originalRevision);
+    {
+      auto afterTransaction = ml.readTransaction();
+      CHECK(ml.libraryRevision(afterTransaction) == originalRevision);
+      auto const trackReader = ml.tracks().reader(afterTransaction);
+      CHECK(trackReader.entryCount() == 1);
+      CHECK(trackReader.get(keptId));
+      CHECK_FALSE(ml.manifest().reader(afterTransaction).get("previewed.flac"));
+    }
+
+    // The preview allocated an id it never published, so the next Track
+    // continues from the committed mark.
+    CHECK(library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("next.flac")) ==
+          TrackId{keptId.raw() + 1U});
   }
 } // namespace ao::rt::test

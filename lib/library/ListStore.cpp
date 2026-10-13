@@ -8,6 +8,7 @@
 #include <ao/Error.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
+#include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
@@ -43,7 +44,15 @@ namespace ao::library
 
   ListStore::Writer ListStore::writer(WriteTransaction& transaction) const
   {
-    return Writer{_database.writer(transaction.native(*_identity))};
+    auto writer = Writer{_database.writer(transaction.native(*_identity))};
+    // Ids above every committed one stay unallocated after the highest rows are deleted.
+    writer._writer.raiseMaxKey(transaction.committedIdSpace(*_identity).lastListId);
+    return writer;
+  }
+
+  std::uint32_t ListStore::lastStoredId(WriteTransaction const& transaction) const
+  {
+    return _database.reader(transaction.native(*_identity)).maxKey();
   }
 
   // Reader implementation
@@ -114,6 +123,11 @@ namespace ao::library
 
   Result<ListId> ListStore::Writer::create(ListBuilder::Prepared const& prepared)
   {
+    if (_writer.maxKey() >= kMaxListId)
+    {
+      return makeError(Error::Code::ResourceExhausted, "List id space exhausted");
+    }
+
     auto idRes = _writer.append(prepared.bytes());
 
     if (!idRes)
@@ -140,7 +154,10 @@ namespace ao::library
 
   Result<> ListStore::Writer::clear()
   {
-    return _writer.clear();
+    auto const lastId = _writer.maxKey();
+    auto res = _writer.clear();
+    _writer.raiseMaxKey(lastId);
+    return res;
   }
 
   std::optional<ListView> ListStore::Writer::get(ListId id) const
@@ -157,5 +174,10 @@ namespace ao::library
     AO_INVARIANT(view.isValid(), "List {} record is structurally corrupt after library validation", id);
 
     return view;
+  }
+
+  ListId ListStore::Writer::lastAllocatedId() const noexcept
+  {
+    return ListId{_writer.maxKey()};
   }
 } // namespace ao::library

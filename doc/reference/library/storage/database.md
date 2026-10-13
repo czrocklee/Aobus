@@ -5,7 +5,7 @@ id: library.database
 
 ## Scope and version
 
-This reference defines physical library format version `9`, gated by `ao::library::kLibraryVersion`.
+This reference defines physical library format version `10`, gated by `ao::library::kLibraryVersion`.
 It owns the LMDB environment, named databases, key encodings, record composition, size and alignment requirements, and version policy.
 The environment uses the LMDB 1.0 file format; LMDB 1.0 and 0.9 cannot open each other's environments.
 Opening an environment written by LMDB 0.9 fails with LMDB's version-mismatch diagnostic before the library version gate runs, and Aobus provides no migration.
@@ -48,20 +48,21 @@ A mutation that exhausts the map rolls back and leaves the recorded peak untouch
 `Options::pinnedMapBytes` instead pins the capacity at exactly that many bytes and disables growth, overriding both the floor and whatever the database recorded.
 It is for callers that need one known capacity, including tests that mean to reach the end of a map.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-9 schema only when that catalog is empty.
+It first requires byte-key flags for the main LMDB database, then enumerates that catalog before any named database is created and initializes the exact version-10 schema only when that catalog is empty.
 LMDB 1.0 keys each named database's catalog entry by its name followed by a terminating NUL byte, so admission compares those exact keys and treats a row keyed by the bare name as an ordinary main-database record.
 Fresh and existing admission open all seven named DBIs sequentially and exactly once in that initialization write transaction.
 Existing admission opens `meta` into one source-private, read-only unvalidated token, reads the stable version prefix, and—only for the current version—consumes that same DBI into an `IntegerKeyDatabase` after exact flag validation; it never reopens `meta`.
 The resulting integer-key and byte-key tokens remain internal to the library and are reused by later read and write transactions.
 A nonempty environment must contain the existing `meta` database and metadata header; a partial schema or ordinary main-database record is `CorruptData`, not a partially initialized new library.
-After the version gate accepts version 9, open requires exactly the seven named databases below, their exact key flags, the two allowed metadata records, and every local and cross-Store invariant described below before exposing any store.
+After the version gate accepts version 10, open requires exactly the seven named databases below, their exact key flags, the required header and id space records with at most the optional revision record beside them, and every local and cross-Store invariant described below before exposing any store.
 
-The database is host-local rather than an interchange format.
+The database is a native-format store rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
-Its path must reside on a filesystem local to the host. Network filesystems and
+Its path must reside on a locally attached filesystem. Network filesystems and
 shares are unsupported because neither the writer lease nor LMDB's mapped-file
 locking provides cross-host safety for this database.
-Integer keys use LMDB native word order and record structs are host-endian; [library YAML](../format/yaml.md) is the portable interchange surface.
+Integer keys and record fields are little-endian in LMDB's native word order, and the format is defined only for 64-bit hosts: [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) refuses to compile for another byte order or word size, and every persisted struct asserts its size, field offsets, and absence of padding.
+[Library YAML](../format/yaml.md) is the interchange surface across format versions.
 
 ## Library transaction consequences
 
@@ -78,10 +79,10 @@ These semantic wrappers add no second storage transaction or read-path heap allo
 A failure to begin a snapshot is fatal for an already admitted live library because no recoverable alternate snapshot exists.
 
 `MusicLibrary` exposes no public write-transaction factory.
-A separately acquired `WritableMusicLibrary` is the only authority that can create a write transaction, and production mutation receives only callback-scoped logical Track, List, and identity ports through `LibraryWrite`.
+A separately acquired `WritableMusicLibrary` is the only authority that can create a write transaction, and production mutation receives only callback-scoped logical Track and List ports through `LibraryWrite`.
 Physical Store writers, native transaction handles, and mutable LMDB reservations remain inaccessible to production callers except for the source-private Track encoder described below.
 An active transaction keeps the non-blocking `<database-path>/.aobus-writer.lock` lease alive even if the originating writable capability is destroyed.
-The lock file has no governed payload and is not part of format version `9`; it must not be removed while a writable process is active.
+The lock file has no governed payload and is not part of format version `10`; it must not be removed while a writable process is active.
 
 The logical Track writer preserves the format's hot/cold, manifest, dictionary, and Resource relationships while it:
 
@@ -98,14 +99,15 @@ The logical List writer accepts `ListBuilder`, prepares its physical row interna
 Update first proves that its target exists, so the physical LMDB upsert primitive cannot create a caller-selected List id.
 An ordinary delete returns `NotFound` for an absent id and `Conflict` while a child exists.
 Explicit subtree deletion discovers the complete live subtree, deletes children before parents, and returns the deleted ids in root-first discovery order.
-Clear removes the complete List graph coherently.
+Clear removes the complete List graph coherently and keeps its ids allocated.
+Saved-order Track ids must not exceed the highest Track id ever allocated, including ids the same transaction allocated; a larger id returns `InvalidInput`, because it would bind a rank to whichever Track later receives that id.
 Filter bytes remain opaque throughout these storage operations.
 
 ## Named databases
 
 | Database | Key | Value |
 |---|---|---|
-| `meta` | Fixed integer record id | Record `1`: `MetadataHeader`; record `2`: one `std::uint64_t` library revision. |
+| `meta` | Fixed integer record id | Record `1`: `MetadataHeader`; record `2`: one `std::uint64_t` library revision; record `3`: `IdSpace`. |
 | `tracks_hot` | `TrackId` integer | `TrackHotHeader`, tag-id array, title bytes. |
 | `tracks_cold` | `TrackId` integer | `TrackColdHeader`, optional block payloads, URI bytes. |
 | `lists` | `ListId` integer | `ListHeader`, order-track-id array, name/description/filter bytes, zero padding. |
@@ -119,11 +121,11 @@ One database slot remains spare.
 
 All integer identifiers are 32-bit values and reserve `0` as invalid.
 
-- Track and list writers allocate `maxKey + 1`; the first id is `1`, and exhaustion returns `ResourceExhausted`.
+- Track and List ids are never reused. A writer allocates one above the higher of the table's last stored key and the id space's last committed id, so the first id is `1`, and deleting the highest row or clearing the table leaves that id allocated. Exhaustion returns `ResourceExhausted` and is permanent for that database, even after clearing; a YAML export restored into a new database starts a fresh id space; List ids stop at `UINT32_MAX - 1`, because `UINT32_MAX` is never a stored List id, which leaves it free for frontends to name a virtual List.
 - A track is appended to `tracks_hot` first and written to `tracks_cold` under the same id.
 - A resource key starts from the first four bytes of the content's SHA-256 digest read big-endian, remaps zero to one, and linearly probes with digest comparison, stopping at the first empty slot; identical content reuses the existing id.
 - Dictionary ids produced by current writers are the dense committed range `1..entryCount`; input text is normalized to NFC before identity lookup, new canonical text receives the next id, canonically equivalent text reuses its existing id, and committed ids are never deleted or rebound.
-- Persisted dictionary, Track, and List integer keys are exactly four native bytes before conversion; dictionary keys are the dense range `1..N`, Track keys are nonzero matching hot/cold pairs, and List keys are nonzero.
+- Persisted dictionary, Track, and List integer keys are exactly four native bytes before conversion; dictionary keys are the dense range `1..N`, Track keys are nonzero matching hot/cold pairs, and List keys are nonzero and below `UINT32_MAX`.
 - An aborted transaction-local dictionary tail has no durable identity and its ids may be reused by a later transaction.
 - The dictionary persists id-to-string rows and rebuilds its string-to-id index in memory when opened; that same traversal validates key width, dense order, scalar-valid UTF-8 NFC text, and canonical text uniqueness before the store is exposed.
 - Manifest keys are normalized root-relative URI bytes, limited to 500 bytes, then zero-padded to a four-byte multiple; an oversized key returns `ValueTooLarge`.
@@ -136,15 +138,35 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 |---|---|
 | `magic` | `0x42534C52` |
 | `libraryVersion` | Unsigned 32-bit format version. |
-| `flags` | Unsigned 32-bit flags. |
-| `createdTime` | Millisecond system timestamp. |
-| `libraryId` | 16 UUID bytes. |
+| `flags` | Unsigned 32-bit flags; must be zero. |
+| `reserved` | Unsigned 32-bit word at offset 12; must be zero. |
+| `createdTime` | Millisecond system timestamp at offset 16. |
+| `libraryId` | 16 UUID bytes at offset 24; must not be all zero (the nil id). |
+
+Every header byte is a named field, so no indeterminate padding reaches storage.
+Creating the environment draws a random non-nil `libraryId`, and nothing rewrites the header afterwards.
+The id names this database and its id history, so YAML restore never transfers it: a database rebuilt from a backup keeps its own id, distinct from the original's.
 
 The revision record is an unsigned 64-bit integer.
 Absence means the initial committed revision `0`; a present record must be exactly eight bytes and contain neither `0` nor `UINT64_MAX`.
 The maximum valid committed value is `UINT64_MAX - 1`, a physically unreachable exhaustion sentinel for this desktop application's mutation rate.
 A write transaction computes the next value in memory from the durable revision visible to its already-acquired LMDB writer snapshot, exposes it as its candidate revision, and persists it in that same native transaction immediately before commit.
 Abort, pre-commit rejection, and failed commit leave the previous durable revision unchanged.
+
+The id space record is required and is exactly 8 bytes:
+
+| Field | Representation |
+|---|---|
+| `lastTrackId` | Unsigned 32-bit highest Track id ever committed, at offset 0. |
+| `lastListId` | Unsigned 32-bit highest List id ever committed, at offset 4; at most `UINT32_MAX - 1`, the highest allocatable List id. |
+
+Creating the environment writes the record with both marks at zero.
+A write transaction reads it beside the revision, raises each Track and List writer's allocation floor to its mark, and, when either mark moved, writes the record before the revision.
+A committed mark covers every id the transaction allocated, including ids it deleted again, and every key it stored, so a supported writer cannot commit a row above its mark.
+Clearing the Track or List table keeps the marks, so a cleared id is never allocated again.
+Abort and failed commit leave the record unchanged, so ids allocated by a transaction that never published may be allocated again.
+Within one database, an id therefore names at most one object over its lifetime, and `libraryId` tells one database from another.
+The guarantee does not survive copying the database file: an older copy put back in place rolls the marks back, and two copies used side by side share a `libraryId` while their id histories diverge, so either can later allocate an id the other already used.
 
 ## Track records
 
@@ -175,7 +197,7 @@ Performance is omitted iff RecordingDate is absent and all four credit segments 
 Composer, artist, album artist, and the existing Year retain their hot access paths rather than moving to a logically related cold block.
 These blocks are storage domains, not Work or Performance entities or recording identities.
 
-The performance prefix has this exact layout; integers retain the host-local byte order:
+The performance prefix has this exact layout; integers use the format's little-endian byte order:
 
 | Byte offset | Value | Bytes |
 |---:|---|---:|
@@ -369,11 +391,11 @@ Track encoders validate the bytes they fill with the same canonical local valida
 Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
 After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-9 catalog closure, exact header size, named-database flags, or extra-database checks; no conversion is attempted, even when an existing named database's key flags differ from the current schema.
+A valid non-current version returns `NotSupported` before version-10 catalog closure, exact header size, named-database flags, or extra-database checks; no conversion is attempted, even when an existing named database's key flags differ from the current schema.
 The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
-For version 9, the header is exactly 40 bytes with zero flags and the catalog is exactly the seven named databases above.
+For version 10, the header is exactly 40 bytes with zero flags, a zero reserved word, and a non-nil library id, and the catalog is exactly the seven named databases above.
 Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
-The typed `meta` token contains only header record `1` plus optional revision record `2`.
+The typed `meta` token contains only header record `1`, optional revision record `2`, and the required 8-byte id space record `3`, whose `lastListId` is at most `UINT32_MAX - 1`.
 
 The current-schema gate then validates Resource keys as nonzero four-byte ids and Resource values as exactly 36 parseable descriptor bytes, requires every stored digest to be distinct, and requires every row to be reachable from its digest's initial key along an unbroken run of occupied slots; orphan Resources and orphan dictionary rows are accepted.
 A row whose key is not the first free slot at or above its digest's initial key is `CorruptData`, with the empty slot before it as the cause; a long collision cluster and a cluster spanning the wrap from the maximum key to `1` are both valid.
@@ -385,7 +407,8 @@ Dictionary admission has already proved scalar UTF-8 and NFC, so checking the ex
 The bijection first compares row counts, then performs one canonical manifest point read for each Track URI and requires the manifest's Track id to equal that Track id.
 Equal counts, unique Track ids, and the exact point matches prove that no extra manifest row exists without allocating a Track- or manifest-sized set; duplicate Track URIs and duplicate manifest bindings cannot pass.
 It validates every List key and local record, including scalar-valid UTF-8 NFC text, requires each non-root parent to exist, and rejects parent cycles using memory proportional to the List count.
-Saved-order Track ids must be nonzero and unique, but they may be stale or currently absent because saved rank is intentionally retained outside current membership.
+Every Track key must be at most the id space's `lastTrackId`, and every List key at most its `lastListId` and below `UINT32_MAX`.
+Saved-order Track ids must be nonzero, unique, and at most `lastTrackId`, but they may be stale or currently absent because saved rank is intentionally retained outside current membership.
 Stored filter bytes remain opaque and are not parsed or compiled by database admission.
 These gates all complete in one coherent initialization transaction before exposure; their internal evaluation order after the version gate is not an error-precedence contract.
 The first observed failure returns `CorruptData` for the complete open.
@@ -444,9 +467,10 @@ Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, 
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
-Version `9` gates the independent work and performance blocks, partial RecordingDate, and segmented Credits described above.
-Only the exact version-9 layout defined here is accepted; alternative layouts labeled version 9 are unsupported.
-The [YAML version 7 reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
+Version `10` gates the id space record and its never-reused Track and List ids, the explicit zero reserved word in the metadata header, the non-nil library id, and the `UINT32_MAX` List-key reservation.
+Only the exact version-10 layout defined here is accepted; alternative layouts labeled version 10 are unsupported.
+The [YAML version 8 reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
+Version `9` gated the independent work and performance blocks, partial RecordingDate, and segmented Credits described above.
 Version `8` gated the portable manifest modification-time record: the 12-byte `FileTimestamp` seconds/nanoseconds instant with its `hasMtime` absence flag replaces the unsigned host file-clock count.
 Version `7` gated scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excluded filesystem URI bytes and opaque List filter source.
 Version `6` gated the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` text remains syntactically opaque to database admission.
@@ -456,15 +480,16 @@ A grammar or predicate-semantic change does not by itself increment `kLibraryVer
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
 There is no reader for an older physical version, no in-place migration, and no metadata conversion or backfill.
 An explicitly tested future migration may replace reset-and-rescan recovery for an old physical version only when it converts or validates every affected record atomically and updates the metadata version after the converted data is valid; no such migration exists today.
-A version-8 or earlier environment returns `NotSupported`; opening it never relabels, rewrites, or deletes it automatically.
+A version-9 or earlier environment returns `NotSupported`; opening it never relabels, rewrites, or deletes it automatically.
 Explicit recreation by rescanning abandons database-only curation, lists, and other state not held in the media files; it is a destructive user choice, not a reconstruction guarantee.
-The [YAML version 7](../format/yaml.md) surface likewise rejects version-6 documents rather than accepting an old-layout subset.
+The [YAML version 8](../format/yaml.md) surface likewise rejects version-7 documents rather than accepting an old-layout subset.
 The current build cannot open an old environment to export its curation, and an old-format backup does not become a current-format import merely by changing its version number.
-Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created host-local index and adds no legacy-layout migration or validation path.
+Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority
 
-- [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, version, and metadata sizes.
+- [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, version, metadata and id space records, and the byte-order and word-size guards.
+- [`WriteTransaction.cpp`](../../../../lib/library/WriteTransaction.cpp) owns reading the id space at begin and committing its marks; [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) draws the library id when it creates the environment.
 - [`TrackLayout.h`](../../../../include/ao/library/TrackLayout.h), [`ListLayout.h`](../../../../include/ao/library/ListLayout.h), and [`FileManifestLayout.h`](../../../../include/ao/library/FileManifestLayout.h) own binary structs and static size checks.
 - [`FileTimestamp.h`](../../../../include/ao/FileTimestamp.h) owns the passive `ao::FileTimestamp` value type, while [`FileTimeConversion.h`](../../../../include/ao/library/FileTimeConversion.h) and [`FileTimeConversion.cpp`](../../../../lib/library/FileTimeConversion.cpp) own the native filesystem-clock conversion and last-write-time read.
 - [`TrackRecordValidation.cpp`](../../../../lib/library/TrackRecordValidation.cpp), [`ListRecordValidation.cpp`](../../../../lib/library/ListRecordValidation.cpp), [`FileManifestValidation.cpp`](../../../../lib/library/FileManifestValidation.cpp), and [`LibraryUriValidation.h`](../../../../lib/library/LibraryUriValidation.h) own the canonical persisted-record validation implementations.
@@ -481,9 +506,10 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision admission, non-current-version precedence over current key flags, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
+- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
 - [`FileTimeConversionTest.cpp`](../../../../test/unit/library/FileTimeConversionTest.cpp) locks the native file-clock conversion behind the manifest modification-time record: Unix seconds with a nonnegative fraction, epoch zero, instants beyond the Unix nanosecond range, leap-second mapping, and `FileTimestamp` ordering and normalization.
-- [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, identity publication, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
+- [`IdSpaceTest.cpp`](../../../../test/unit/library/IdSpaceTest.cpp) covers never-reused Track and List ids across deletion, clear, and reopen, the library id across clear, failed-commit rollback, the saved-order mark, and the List id ceiling.
+- [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
 - [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
 - [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks the prepared-only writer surface, pre-mutation validation, and post-open fail-fast point-read, writer-read, and iteration behavior.

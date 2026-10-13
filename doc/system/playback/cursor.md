@@ -38,7 +38,7 @@ It consumes `ViewService`, source leases, live projections, library reads, and t
 - An active cursor always has a valid current `TrackId`.
 - While the source is Live, the anchor index remains in `[0, projection size]`; Bound is strictly below the size and Gap may equal it.
 - A complete projection batch is reconciled before cursor state, prepared commitments, or observers see its result.
-- Source invalidation is terminal for that source identity; recreating the same numeric list id never revives the session.
+- Source invalidation is terminal for that source identity; a deleted list id is never allocated again, so nothing revives the session.
 - Prepared tokens, audio item ids, cancellation generations, projection positions, and library identities retain separate meanings.
 - Cursor and service mutation runs on the runtime callback executor; lower audio callbacks marshal there before changing succession state.
 

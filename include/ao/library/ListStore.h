@@ -44,12 +44,15 @@ namespace ao::library
 
   private:
     Writer writer(WriteTransaction& transaction) const;
+    // The highest List key stored in the transaction's snapshot, or zero.
+    std::uint32_t lastStoredId(WriteTransaction const& transaction) const;
     ListStore(lmdb::IntegerKeyDatabase db, detail::LibraryIdentity const& identity);
 
     lmdb::IntegerKeyDatabase _database;
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
+    friend class WriteTransaction;
     friend class detail::WriteTransactionAccess;
     friend class detail::PhysicalStoreAccess;
   };
@@ -128,7 +131,12 @@ namespace ao::library
   private:
     explicit Writer(lmdb::IntegerKeyDatabase::Writer&& writer);
 
+    // The highest List id allocated through this writer or committed before
+    // it; clearing the rows keeps it, so a later create never reuses an id.
+    ListId lastAllocatedId() const noexcept;
+
     lmdb::IntegerKeyDatabase::Writer _writer;
     friend class ListStore;
+    friend class WriteTransaction;
   };
 } // namespace ao::library

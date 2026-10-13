@@ -426,6 +426,7 @@ add_executable(ao_core_test
     unit/library/ResourceLayoutTest.cpp
     unit/library/ResourceStoreTest.cpp
     unit/library/WriteTransactionTest.cpp
+    unit/library/IdSpaceTest.cpp
     unit/library/TrackWriterTest.cpp
     unit/library/ListWriterTest.cpp
 

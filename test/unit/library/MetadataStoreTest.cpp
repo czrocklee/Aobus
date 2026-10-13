@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/fatal/ProbeProcess.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -8,7 +8,6 @@
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/LibraryWrite.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ReadTransaction.h>
@@ -89,31 +88,6 @@ namespace ao::library::test
 
     CHECK(header.magic == kMetadataMagic);
     CHECK(header.libraryVersion == kLibraryVersion);
-  }
-
-  TEST_CASE("MusicLibrary metadata - identity restore publishes only after commit", "[library][unit][music-library]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto const before = library.metadataHeader();
-    auto replacementId = before.libraryId;
-    replacementId.front() ^= std::byte{0xff};
-    auto transaction = writeTransaction(library);
-
-    REQUIRE(transaction.apply(
-      [&library, &replacementId](LibraryWrite& write) -> Result<>
-      {
-        REQUIRE(write.restoreLibraryIdentity(replacementId));
-        CHECK(library.metadataHeader(write).libraryId == replacementId);
-        return {};
-      }));
-    CHECK(library.metadataHeader().libraryId == before.libraryId);
-    CHECK(library.metadataHeader(transaction).libraryId == replacementId);
-    REQUIRE(transaction.commit());
-
-    auto readTransaction = library.readTransaction();
-    CHECK(library.metadataHeader().libraryId == replacementId);
-    CHECK(library.metadataHeader(readTransaction).libraryId == replacementId);
   }
 
   TEST_CASE("MusicLibrary metadata - revision candidate publishes exactly once at commit",

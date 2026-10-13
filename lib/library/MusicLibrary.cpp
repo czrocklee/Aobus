@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/library/MusicLibrary.h>
 
@@ -20,6 +20,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/library/LibraryWrite.h>
+#include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
@@ -83,7 +84,6 @@ namespace ao::library
     constexpr std::uint64_t kLmdbDenseMapStep = std::uint64_t{256} * 1024 * 1024; // 256 MiB
     constexpr std::uint32_t kLmdbMaxDatabases = 8;                                // Seven named stores plus one spare.
     constexpr std::uint32_t kLmdbFileMode = 0664;
-    constexpr std::size_t kLibraryIdBytes = 16;
 
     /// Capacity management for one open, or none when the caller pinned the map.
     lmdb::CapacityPolicy capacityPolicyFor(MusicLibrary::Options const& options)
@@ -113,13 +113,20 @@ namespace ao::library
       return std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
     }
 
-    Result<std::array<std::byte, kLibraryIdBytes>> generateLibraryId()
+    Result<std::array<std::byte, 16>> generateLibraryId()
     {
       try
       {
-        auto bytes = std::array<std::byte, kLibraryIdBytes>{};
         auto random = std::random_device{};
-        std::ranges::generate(bytes, [&random] { return static_cast<std::byte>(random()); });
+        auto bytes = std::array<std::byte, 16>{};
+
+        // A nil id is reserved, so the draw repeats in the negligible case that
+        // every byte came out zero.
+        while (isNilLibraryId(bytes))
+        {
+          std::ranges::generate(bytes, [&random] { return static_cast<std::byte>(random()); });
+        }
+
         return bytes;
       }
       catch (std::runtime_error const& error)
@@ -142,6 +149,7 @@ namespace ao::library
       return MetadataHeader{.magic = kMetadataMagic,
                             .libraryVersion = kLibraryVersion,
                             .flags = 0,
+                            .reserved = 0,
                             .createdTime = timestamp,
                             .libraryId = *libraryIdRes};
     }
@@ -219,6 +227,17 @@ namespace ao::library
       {
         return makeError(Error::Code::CorruptData,
                          std::format("Library metadata header has unsupported flags 0x{:08x}", header.flags));
+      }
+
+      if (header.reserved != 0)
+      {
+        return makeError(Error::Code::CorruptData,
+                         std::format("Library metadata header has nonzero reserved bytes 0x{:08x}", header.reserved));
+      }
+
+      if (isNilLibraryId(header.libraryId))
+      {
+        return makeError(Error::Code::CorruptData, "Library metadata header has the nil library id");
       }
 
       return header;
@@ -368,15 +387,21 @@ namespace ao::library
       return openSchemaWithMetadata(transaction, create, std::move(*metadataRes));
     }
 
+    struct MetadataRecords final
+    {
+      std::uint64_t revision = 0;
+      IdSpace idSpace;
+    };
+
     struct AdmittedSchema final
     {
       MetadataHeader header;
-      std::uint64_t revision = 0;
+      MetadataRecords records;
       SchemaDatabases databases;
     };
 
-    Result<std::uint64_t> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
-                                                   lmdb::ReadTransaction const& transaction);
+    Result<MetadataRecords> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
+                                                     lmdb::ReadTransaction const& transaction);
 
     Result<AdmittedSchema> createFreshSchema(lmdb::WriteTransaction& transaction)
     {
@@ -394,15 +419,22 @@ namespace ao::library
         return std::unexpected{headerRes.error()};
       }
 
-      auto createRes =
-        schemaRes->metadata.writer(transaction).create(kMetadataHeaderRecordId, utility::bytes::view(*headerRes));
+      auto const idSpace = IdSpace{};
+      auto metadataWriter = schemaRes->metadata.writer(transaction);
 
-      if (!createRes)
+      if (auto createRes = metadataWriter.create(kMetadataHeaderRecordId, utility::bytes::view(*headerRes)); !createRes)
       {
         return std::unexpected{createRes.error()};
       }
 
-      return AdmittedSchema{.header = *headerRes, .revision = 0, .databases = std::move(*schemaRes)};
+      if (auto createRes = metadataWriter.create(kIdSpaceRecordId, utility::bytes::view(idSpace)); !createRes)
+      {
+        return std::unexpected{createRes.error()};
+      }
+
+      return AdmittedSchema{.header = *headerRes,
+                            .records = MetadataRecords{.revision = 0, .idSpace = idSpace},
+                            .databases = std::move(*schemaRes)};
     }
 
     Result<AdmittedSchema> admitCurrentSchema(lmdb::ByteKeyDatabase const& mainDatabase,
@@ -471,14 +503,14 @@ namespace ao::library
         return std::unexpected{schemaRes.error()};
       }
 
-      auto revisionRes = validateMetadataDatabase(schemaRes->metadata, transaction);
+      auto recordsRes = validateMetadataDatabase(schemaRes->metadata, transaction);
 
-      if (!revisionRes)
+      if (!recordsRes)
       {
-        return std::unexpected{revisionRes.error()};
+        return std::unexpected{recordsRes.error()};
       }
 
-      return AdmittedSchema{.header = *headerRes, .revision = *revisionRes, .databases = std::move(*schemaRes)};
+      return AdmittedSchema{.header = *headerRes, .records = *recordsRes, .databases = std::move(*schemaRes)};
     }
 
     Result<std::uint32_t> decodePersistedId(lmdb::IntegerKeyDatabase::Reader::KeyView const key,
@@ -495,11 +527,37 @@ namespace ao::library
       return value;
     }
 
-    Result<std::uint64_t> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
-                                                   lmdb::ReadTransaction const& transaction)
+    Result<IdSpace> validateIdSpaceRecord(std::span<std::byte const> const payload)
+    {
+      if (payload.size() != sizeof(IdSpace))
+      {
+        return makeError(
+          Error::Code::CorruptData,
+          std::format("Library id space record has size {} (expected {})", payload.size(), sizeof(IdSpace)));
+      }
+
+      auto idSpace = IdSpace{};
+      std::memcpy(&idSpace, payload.data(), sizeof(idSpace));
+
+      // No writer allocates a List id above the ceiling, so a higher mark is
+      // corrupt rather than an exhausted id space.
+      if (idSpace.lastListId > kMaxListId)
+      {
+        return makeError(
+          Error::Code::CorruptData,
+          std::format(
+            "Library id space's last List id {} is above the maximum List id {}", idSpace.lastListId, kMaxListId));
+      }
+
+      return idSpace;
+    }
+
+    Result<MetadataRecords> validateMetadataDatabase(lmdb::IntegerKeyDatabase const& database,
+                                                     lmdb::ReadTransaction const& transaction)
     {
       auto const reader = database.reader(transaction);
       bool foundHeader = false;
+      auto optIdSpace = std::optional<IdSpace>{};
       std::uint64_t revision = 0;
 
       for (auto const& [key, payload] : reader)
@@ -519,6 +577,19 @@ namespace ao::library
           }
 
           foundHeader = true;
+          continue;
+        }
+
+        if (*idRes == kIdSpaceRecordId)
+        {
+          auto idSpaceRes = validateIdSpaceRecord(payload);
+
+          if (!idSpaceRes)
+          {
+            return std::unexpected{idSpaceRes.error()};
+          }
+
+          optIdSpace = *idSpaceRes;
           continue;
         }
 
@@ -549,7 +620,12 @@ namespace ao::library
         return makeError(Error::Code::CorruptData, "Metadata database has no header record");
       }
 
-      return revision;
+      if (!optIdSpace)
+      {
+        return makeError(Error::Code::CorruptData, "Metadata database has no id space record");
+      }
+
+      return MetadataRecords{.revision = revision, .idSpace = *optIdSpace};
     }
 
     /// Enough of a digest to spread rows across buckets; the set compares the
@@ -735,7 +811,8 @@ namespace ao::library
                                     lmdb::IntegerKeyDatabase const& resourceDatabase,
                                     lmdb::ByteKeyDatabase const& manifestDatabase,
                                     lmdb::ReadTransaction const& transaction,
-                                    DictionaryStore const& dictionary)
+                                    DictionaryStore const& dictionary,
+                                    std::uint32_t const lastTrackId)
     {
       auto const hotReader = hotDatabase.reader(transaction);
       auto const coldReader = coldDatabase.reader(transaction);
@@ -776,6 +853,12 @@ namespace ao::library
             Error::Code::CorruptData,
             std::format(
               "Hot and cold Track keys do not form matching nonzero pairs: {} and {}", *hotIdRes, *coldIdRes));
+        }
+
+        if (*hotIdRes > lastTrackId)
+        {
+          return makeError(Error::Code::CorruptData,
+                           std::format("Track {} is above the id space's last Track id {}", *hotIdRes, lastTrackId));
         }
 
         if (auto validationRes = validateSerializedTrackReferences(hotPayload, coldPayload, dictionary); !validationRes)
@@ -827,7 +910,45 @@ namespace ao::library
       return {};
     }
 
-    Result<> validateListDatabase(lmdb::IntegerKeyDatabase const& database, lmdb::ReadTransaction const& transaction)
+    /// One List row's key and record, including the id space rules that keep
+    /// its key and saved order inside allocated ids.
+    Result<> validateListRow(std::uint32_t const id, std::span<std::byte const> const payload, IdSpace const& idSpace)
+    {
+      if (id == 0 || id > kMaxListId)
+      {
+        return makeError(Error::Code::CorruptData, std::format("List database contains the reserved id {}", id));
+      }
+
+      if (id > idSpace.lastListId)
+      {
+        return makeError(Error::Code::CorruptData,
+                         std::format("List {} is above the id space's last List id {}", id, idSpace.lastListId));
+      }
+
+      if (auto validationRes = validateSerializedList(payload); !validationRes)
+      {
+        return makeError(Error::Code::CorruptData,
+                         std::format("List {} failed persisted validation: {}", id, validationRes.error().message));
+      }
+
+      for (auto const trackId : ListView{payload}.orderTrackIds())
+      {
+        if (trackId.raw() > idSpace.lastTrackId)
+        {
+          return makeError(Error::Code::CorruptData,
+                           std::format("List {} orders Track {}, above the id space's last Track id {}",
+                                       id,
+                                       trackId.raw(),
+                                       idSpace.lastTrackId));
+        }
+      }
+
+      return {};
+    }
+
+    Result<> validateListDatabase(lmdb::IntegerKeyDatabase const& database,
+                                  lmdb::ReadTransaction const& transaction,
+                                  IdSpace const& idSpace)
     {
       auto const reader = database.reader(transaction);
       enum class Color : std::uint8_t
@@ -853,16 +974,9 @@ namespace ao::library
           return std::unexpected{idRes.error()};
         }
 
-        if (*idRes == 0)
+        if (auto rowRes = validateListRow(*idRes, payload, idSpace); !rowRes)
         {
-          return makeError(Error::Code::CorruptData, "List database contains the reserved id zero");
-        }
-
-        if (auto validationRes = validateSerializedList(payload); !validationRes)
-        {
-          return makeError(
-            Error::Code::CorruptData,
-            std::format("List {} failed persisted validation: {}", *idRes, validationRes.error().message));
+          return rowRes;
         }
 
         auto const [it, inserted] = nodes.emplace(*idRes, Node{.parentId = ListView{payload}.parentId().raw()});
@@ -955,7 +1069,7 @@ namespace ao::library
       , env{std::move(env)}
       , initializationTransaction{std::move(initializationTransaction)}
       , metadataState{metadataHeader, committedRevision}
-      , metadataStore{std::move(metadataDb), identity}
+      , metadataStore{std::move(metadataDb)}
       , tracks{std::move(tracksHotDb), std::move(tracksColdDb), identity}
       , lists{std::move(listsDb), identity}
       , resources{std::move(resourcesDb), identity}
@@ -1015,7 +1129,7 @@ namespace ao::library
                                             std::move(*envRes),
                                             std::move(*initializationTransactionRes),
                                             admittedSchema.header,
-                                            admittedSchema.revision,
+                                            admittedSchema.records.revision,
                                             schema.metadata,
                                             schema.tracksHot,
                                             schema.tracksCold,
@@ -1041,13 +1155,16 @@ namespace ao::library
                                                       schema.resources,
                                                       schema.manifest,
                                                       implPtr->initializationTransaction,
-                                                      implPtr->dictionary);
+                                                      implPtr->dictionary,
+                                                      admittedSchema.records.idSpace.lastTrackId);
           !validationRes)
       {
         return std::unexpected{validationRes.error()};
       }
 
-      if (auto validationRes = validateListDatabase(schema.lists, implPtr->initializationTransaction); !validationRes)
+      if (auto validationRes =
+            validateListDatabase(schema.lists, implPtr->initializationTransaction, admittedSchema.records.idSpace);
+          !validationRes)
       {
         return std::unexpected{validationRes.error()};
       }

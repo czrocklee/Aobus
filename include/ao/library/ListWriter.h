@@ -33,6 +33,11 @@ namespace ao::library
 
     std::optional<ListView> get(ListId id) const;
 
+    /**
+     * The returned id is final only once the transaction commits; an aborted
+     * or failed transaction's ids may be allocated again. Allocation stops at
+     * kMaxListId with ResourceExhausted.
+     */
     Result<ListId> create(ListBuilder const& list);
     Result<> update(ListId id, ListBuilder const& list);
     Result<> remove(ListId id);
@@ -43,6 +48,7 @@ namespace ao::library
     explicit ListWriter(WriteTransaction& transaction);
     void requireActiveOperation() const;
     Result<> validateParent(ListId targetId, ListId parentId) const;
+    Result<> validateOrderTrackIds(ListView const& view) const;
 
     WriteTransaction* _transaction;
 

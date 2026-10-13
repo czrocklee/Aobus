@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 
 namespace ao::library
 {
@@ -83,4 +84,29 @@ namespace ao::library
   static_assert(sizeof(FileManifestHeader) == kFileManifestHeaderSize, "FileManifestHeader must be exactly 52 bytes");
   static_assert(alignof(FileManifestHeader) == kFileManifestHeaderAlignment,
                 "FileManifestHeader must have 4-byte alignment");
+  static_assert(std::has_unique_object_representations_v<FileManifestHeader>,
+                "FileManifestHeader must have no padding");
+  static_assert(offsetof(FileManifestHeader, trackId) == 0);
+  static_assert(offsetof(FileManifestHeader, fileSizeLo) ==
+                offsetof(FileManifestHeader, trackId) + sizeof(FileManifestHeader::trackId));
+  static_assert(offsetof(FileManifestHeader, fileSizeHi) ==
+                offsetof(FileManifestHeader, fileSizeLo) + sizeof(FileManifestHeader::fileSizeLo));
+  static_assert(offsetof(FileManifestHeader, mtimeSecondsLo) ==
+                offsetof(FileManifestHeader, fileSizeHi) + sizeof(FileManifestHeader::fileSizeHi));
+  static_assert(offsetof(FileManifestHeader, mtimeSecondsHi) ==
+                offsetof(FileManifestHeader, mtimeSecondsLo) + sizeof(FileManifestHeader::mtimeSecondsLo));
+  static_assert(offsetof(FileManifestHeader, mtimeNanoseconds) ==
+                offsetof(FileManifestHeader, mtimeSecondsHi) + sizeof(FileManifestHeader::mtimeSecondsHi));
+  static_assert(offsetof(FileManifestHeader, audioPayloadLengthLo) ==
+                offsetof(FileManifestHeader, mtimeNanoseconds) + sizeof(FileManifestHeader::mtimeNanoseconds));
+  static_assert(offsetof(FileManifestHeader, audioPayloadLengthHi) ==
+                offsetof(FileManifestHeader, audioPayloadLengthLo) + sizeof(FileManifestHeader::audioPayloadLengthLo));
+  static_assert(offsetof(FileManifestHeader, audioSignatureBytes) ==
+                offsetof(FileManifestHeader, audioPayloadLengthHi) + sizeof(FileManifestHeader::audioPayloadLengthHi));
+  static_assert(offsetof(FileManifestHeader, status) ==
+                offsetof(FileManifestHeader, audioSignatureBytes) + sizeof(FileManifestHeader::audioSignatureBytes));
+  static_assert(offsetof(FileManifestHeader, hasMtime) ==
+                offsetof(FileManifestHeader, status) + sizeof(FileManifestHeader::status));
+  static_assert(offsetof(FileManifestHeader, padding) ==
+                offsetof(FileManifestHeader, hasMtime) + sizeof(FileManifestHeader::hasMtime));
 } // namespace ao::library

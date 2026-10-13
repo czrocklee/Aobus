@@ -67,14 +67,13 @@ Destroying the originating capability therefore cannot release another process t
 `MusicLibrary` itself exposes no public write-transaction factory.
 
 A `WriteTransaction` owns one native write transaction, the process writer gate, its lease anchor, transaction-local dictionary state, and lazily created physical writers.
-After native begin acquires LMDB's single-writer snapshot, construction reads that snapshot's durable header and revision and computes its candidate revision before exposing the wrapper. Failure to begin or read those facts releases the incomplete transaction, process gate, and transaction lease anchor before the public factory fails fatally; the originating writable capability keeps its session lease.
+After native begin acquires LMDB's single-writer snapshot, construction reads that snapshot's durable header, revision, and id space and computes its candidate revision before exposing the wrapper; the Track and List writers it later creates allocate above the id space's marks. Failure to begin or read those facts releases the incomplete transaction, process gate, and transaction lease anchor before the public factory fails fatally; the originating writable capability keeps its session lease.
 Successive logical operations and successful `apply()` callbacks reuse each touched Store's physical writer and native cursor until commit or abort.
 Every logical operation runs through the non-nested `WriteTransaction::apply()` root.
 The callback receives a `LibraryWrite`, not the transaction owner:
 
-- `LibraryWrite::tracks()` preserves Track, manifest, dictionary, and Resource relationships;
-- `LibraryWrite::lists()` preserves live parent topology and deletion ordering; and
-- `LibraryWrite::restoreLibraryIdentity()` is the narrow metadata mutation used by restore.
+- `LibraryWrite::tracks()` preserves Track, manifest, dictionary, and Resource relationships; and
+- `LibraryWrite::lists()` preserves live parent topology and deletion ordering.
 
 The callback-scoped capability cannot commit or abort.
 Its logical writers must not escape the callback or outlive the transaction owner.
@@ -84,7 +83,7 @@ There are no nested transactions, item savepoints, or supported continuation aft
 
 Track preparation validates both record sides before its first item-relative dictionary, Resource, Track, or manifest effect.
 Once preparation or writing has staged an effect, a later failure must reach the root boundary so the whole transaction rolls back.
-Dictionary rows, Resource descriptors, Track records, manifest bindings, List records, an optional restored identity, and the candidate revision commit atomically when one operation composes them.
+Dictionary rows, Resource descriptors, Track records, manifest bindings, List records, the raised id space, and the candidate revision commit atomically when one operation composes them.
 
 Physical Store writers and mutable LMDB reservations are library implementation details.
 Production callers submit semantic builders to the logical writers rather than serialized records.
@@ -149,7 +148,7 @@ parent TrackSource
 
 The expression owns membership and the rank overlay owns effective order.
 A hidden rank remains stored while its Track is outside membership and becomes visible again when membership returns.
-Deleting a List invalidates its source identity and dependents terminally; recreating the same numeric id creates a new identity.
+Deleting a List invalidates its source identity and dependents terminally, and its id is never allocated again.
 See [track sources](track-source.md) for cache rebinding, error propagation, and delta semantics.
 
 ## Projections and views

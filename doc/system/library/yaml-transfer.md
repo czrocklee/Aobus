@@ -8,7 +8,7 @@ id: library.yaml-transfer
 This specification defines library YAML export and import behavior.
 It owns mode semantics, baselines, payload scope, overlays, preview-bound authorization, atomicity, reports, and change publication.
 
-The exact version 7 document shape is defined by the [library YAML format reference](../../reference/library/format/yaml.md).
+The exact version 8 document shape is defined by the [library YAML format reference](../../reference/library/format/yaml.md).
 Library ownership and the storage/change pipeline are defined by [library architecture](structure.md).
 CLI flags and output rendering belong to the [CLI command reference](../../reference/cli/command.md).
 
@@ -33,13 +33,14 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 ## Invariants
 
 - One export observes metadata, tracks, lists, resources, dictionary values, and manifest facts through one read transaction.
-- Version 7 uses the closed schema and explicit collection scope defined by the format reference.
+- Version 8 uses the closed schema and explicit collection scope defined by the format reference.
 - Every URI crossing YAML, manifest, Writer, or scan boundaries becomes a `LibraryUri`; playback, read-model, fingerprint, export/import baseline, and scan-apply access resolve it again beneath the weakly canonical root and reject escaping or unresolved symlinks. An absent root or ordinary missing suffix remains valid for first-run metadata restore.
 - Import validates the complete document before applying any persistent mutation. In both restore and merge, every track record must name a supported audio file, as [manual creation](mutation.md#create-from-file) does; an unsupported extension rejects the whole document as `FormatRejected`. Supported-extension files may still be absent or unreadable for offline restoration.
 - Track metadata, tags, custom keys and values, and List display text must be scalar-valid UTF-8; canonically decomposed input is accepted and normalized to NFC by core library preparation before persistence.
 - List filter source is scalar-valid UTF-8 but remains byte-exact so URI literals retain filesystem identity.
 - Library URI bytes retain their separate path identity and are never Unicode-normalized by transfer.
-- One committed import applies content and any adopted `libraryId` through one write transaction and one library revision.
+- One committed import applies its content through one write transaction and one library revision.
+- Import never changes the target's `libraryId`; a document carries none.
 - Preview runs the same mutation path in an uncommitted transaction and publishes no content change.
 - Each live preview or apply operation acquires the import background-task lease, enters Maintenance through the library command lane, runs only generation-bound Maintenance commands, and exits Maintenance through that lane before its public Task completes.
 - Revision settlement for a committed import precedes Maintenance workflow settlement; the final `Available` notification and its observers complete before the operation returns.
@@ -61,7 +62,7 @@ The application import path has two operations:
 prepare(path, import mode)
   -> enter sequenced Import Maintenance
   -> read exact source bytes
-  -> parse and validate version 7
+  -> parse and validate version 8
   -> prepare track/list data
   -> capture target runtime + library id + committed revision
   -> run exact preview in one generation-bound lane turn and abort
@@ -111,6 +112,9 @@ A filesystem inspection error fails export with `IoError`.
 
 For `delta`, `metadata`, and `full`, restore clears tracks, manifest rows, and lists inside the import transaction before rebuilding them.
 For `listOnly`, restore preserves tracks and manifest rows and clears only lists.
+Restored rows receive fresh ids above every id the database ever committed, so a reference saved against this database before the restore names no restored object; document ids only bind references inside the document.
+A new database has committed no id, so its restored ids start at `1` and can equal the ids of the document's source or of another database.
+Restore never changes the target's `libraryId`, so a restore into a new database leaves it distinguishable by id from the library the document came from.
 
 Restore chooses a track baseline by payload mode:
 
@@ -118,11 +122,6 @@ Restore chooses a track baseline by payload mode:
 - `delta` starts from a readable file baseline when available;
 - `metadata` may retain file technical properties and the file's current cover references, but clears file-derived curated metadata, tags, and custom metadata before applying the payload;
 - when an optional file baseline cannot be opened or parsed, restore starts from an empty track.
-
-If a track-bearing payload contains `libraryId`, restore writes it in the same transaction as restored content.
-An absent `libraryId` preserves target identity.
-`listOnly` restore always preserves target identity because its target scope is lists rather than the whole library.
-Merge never adopts `libraryId`.
 
 ### Merge
 
@@ -199,7 +198,7 @@ Every import, preview, and plan returns an `ImportReport`:
 
 | Field | Meaning |
 |---|---|
-| `payloadVersion` | Accepted interchange version; currently `7`. |
+| `payloadVersion` | Accepted interchange version; currently `8`. |
 | `payloadMode` | `delta`, `metadata`, `full`, or `listOnly`. |
 | `targetScope` | `Library` for track-bearing payloads or `Lists` for `listOnly`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
@@ -242,22 +241,22 @@ Before commit, cancellation aborts or prevents the Maintenance mutation and the 
 After durable commit, the command must reach `Published` or coordinated-Closing retirement before cancellation can propagate; a durable import is never reported as rolled back.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
-Version 7 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
+Version 8 currently defines no transfer-specific total-document byte budget beyond the exact field and core-storage limits in the format reference; a cover contributes a fixed-size row rather than its content.
 No configurable prepared-memory ceiling, streaming path, or additional bounded-transfer proposal is currently defined.
 Adding a limit must preserve the guarantee that the current exporter cannot produce a file the importer rejects solely for size.
 
 ## Persistence and versioning
 
-Version 7 is a portable interchange format, not the physical database format.
+Version 8 is a portable interchange format, not the physical database format.
 Restore and merge always write current `MusicLibrary` records.
-An accepted version-7 document may use a canonically decomposed spelling, but export from physical database version 9 emits NFC because that is the current library admission invariant.
-Only the exact [version-7 schema](../../reference/library/format/yaml.md) is accepted, including `recording-date` and typed `credits`. Alternative schemas labeled version 7 are unsupported, without aliases, a dual reader, or layout autodetection.
+An accepted version-8 document may use a canonically decomposed spelling, but export from physical database version 10 emits NFC because that is the current library admission invariant.
+Only the exact [version-8 schema](../../reference/library/format/yaml.md) is accepted. Alternative schemas labeled version 8 are unsupported, without aliases, a dual reader, or layout autodetection.
 Empty scalar text, including a present empty plain scalar, is the date's clear form.
 Libraries admitted by earlier version-5 importers could retain unsupported-extension rows; that version-5 history stays visible across the version-5 to version-6 transition, and its export consequences remain policy: export does not filter those rows, while current whole-document admission rejects their reimport, with no migration, purge, or grandfathering performed.
-A fresh version-9 library cannot gain such a row, because current import admission rejects the document and no older physical version can be opened.
-The importer accepts no earlier interchange version, including version 6, and provides no migration or legacy-restore path.
+A fresh version-10 library cannot gain such a row, because current import admission rejects the document and no older physical version can be opened.
+The importer accepts no earlier interchange version, including version 7, and provides no migration or legacy-restore path.
 A version-3 document's embedded cover bytes are therefore never read: the import fails and changes nothing.
-No build can re-export an old physical library into a document the current importer accepts, because the current build opens only physical version 9 while older builds emit interchange versions this importer rejects; recovering such a library means scanning the music files it describes.
+No build can re-export an old physical library into a document the current importer accepts, because the current build opens only physical version 10 while older builds emit interchange versions this importer rejects; recovering such a library means scanning the music files it describes.
 
 ## Frontend observations
 
@@ -301,7 +300,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 ## Test map
 
 - [`LibraryExportImportTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportTest.cpp) proves mode baselines, overlays, reports, and preview equivalence.
-- [`LibraryExportImportDeltaTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportDeltaTest.cpp) proves delta behavior, identity adoption, rollback, and change sets.
+- [`LibraryExportImportDeltaTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportDeltaTest.cpp) proves delta behavior, library id retention, rollback, and change sets.
 - [`LibraryExportImportCoverArtTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) proves the resource table, reference closure, export determinism, and each mode's cover terminal state.
 - [`LibraryExportImportListTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
 - [`LibraryYamlSchemaTest.cpp`](../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.

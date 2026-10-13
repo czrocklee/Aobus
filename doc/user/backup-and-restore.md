@@ -17,9 +17,9 @@ Back up the music files separately and preserve their paths relative to the musi
 GTK and the Windows desktop prepare a restore preview and require confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
-Only version 7 YAML is accepted.
-Earlier interchange files, including version 6, have no compatibility or conversion path, and no build can re-export an older library as version 7: the current build opens only the current database version, while older builds write YAML versions it rejects.
-A library from an earlier version can be rebuilt by explicitly scanning its music files, which loses curation such as lists and edited metadata unless you already have a version 7 backup.
+Only version 8 YAML is accepted.
+Earlier interchange files, including version 7, have no compatibility or conversion path, and no build can re-export an older library as version 8: the current build opens only the current database version, while older builds write YAML versions it rejects.
+A library from an earlier version can be rebuilt by explicitly scanning its music files, which loses curation such as lists and edited metadata unless you already have a version 8 backup.
 Opening an old library never converts, relabels, or deletes it automatically.
 
 Track paths belong to the selected music root.
@@ -79,6 +79,12 @@ Windows defaults to Merge; canceling its mode dialog or picker, or rejecting its
 Covers appear without a rescan. A restored cover is shown as soon as some restored audio file still carries it, or when the machine's cover cache still holds it, which is the usual case when you restore onto the machine that produced the backup.
 A **Metadata** or **Delta** restore instead takes each track's covers from the audio file itself, so a file you retagged since the backup shows its current art.
 A cover with neither a cached copy nor a music file that carries it shows no image; the track keeps its other data, and the picture returns when the file does.
+
+A **Restore** into an existing library gives every restored track and list an ID that library has never used, so numeric IDs in scripts change, and settings that name the old IDs find no record: per-list column layouts, open list views, and the saved playback position.
+A **Merge** keeps the ID of each existing track it updates; every list it imports gets an ID the library has never used.
+A new library numbers its tracks and lists from 1, so after an import its IDs can repeat the numbers in the backup.
+Settings that an earlier library left in the same music root's `.aobus` folder, such as per-list column layouts, are not tied to the new library: each applies by number to whichever restored track or list now has it, which may be a different record.
+Restoring into a new library keeps that library's own **Library ID**, which `aobus lib show` reports; a backup carries no Library ID of its own.
 
 ## Related documents
 

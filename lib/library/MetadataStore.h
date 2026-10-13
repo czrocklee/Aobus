@@ -12,33 +12,29 @@
 
 namespace ao::library
 {
-  namespace detail
-  {
-    class LibraryIdentity;
-  }
-
   class WriteTransaction;
   class MusicLibrary;
+  struct IdSpace;
   struct MetadataHeader;
 
   /** Private physical metadata adapter; public callers use MusicLibrary values. */
   class MetadataStore final
   {
   private:
-    MetadataStore(lmdb::IntegerKeyDatabase db, detail::LibraryIdentity const& identity)
-      : _database{std::move(db)}, _identity{&identity}
+    explicit MetadataStore(lmdb::IntegerKeyDatabase db)
+      : _database{std::move(db)}
     {
     }
 
     Result<MetadataHeader> load(lmdb::ReadTransaction const& transaction) const;
-    Result<> update(WriteTransaction& transaction, MetadataHeader const& header) const;
     std::uint64_t revision(lmdb::ReadTransaction const& transaction) const;
     void persistRevision(lmdb::WriteTransaction& transaction,
                          std::uint64_t candidateRevision,
                          std::uint64_t previousRevision) const;
+    IdSpace idSpace(lmdb::ReadTransaction const& transaction) const;
+    void persistIdSpace(lmdb::WriteTransaction& transaction, IdSpace const& idSpace) const;
 
     lmdb::IntegerKeyDatabase _database;
-    detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
     friend class WriteTransaction;

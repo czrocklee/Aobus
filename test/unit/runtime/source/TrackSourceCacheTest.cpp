@@ -393,7 +393,7 @@ namespace ao::rt::test
     CHECK(missingRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("TrackSourceCache - same-id recreation creates a new identity beside the invalidated lease",
+  TEST_CASE("TrackSourceCache - a List created after a deletion leaves the invalidated lease dead",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -405,7 +405,6 @@ namespace ao::rt::test
     })));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto oldLease = ao::test::requireValue(cache.acquire(listId));
-    auto const* const oldIdentity = &oldLease.source();
     auto oldBatches = std::vector<TrackSourceDelta>{};
     auto oldSubscription =
       oldLease->subscribe([&](TrackSourceDelta const& batch) noexcept { oldBatches.push_back(batch); });
@@ -418,13 +417,14 @@ namespace ao::rt::test
     auto const recreatedId = ao::test::requireValue(commandsFixture.runTask(commands.createListAsync(ListDraft{
       .name = "Recreated",
     })));
-    REQUIRE(recreatedId == listId);
+    // A deleted id is never allocated again, so nothing can revive the old lease.
+    REQUIRE(recreatedId != listId);
     auto newLease = ao::test::requireValue(cache.acquire(recreatedId));
 
-    CHECK(&newLease.source() != oldIdentity);
     CHECK(newLease->state() == TrackSourceState::Live);
     CHECK(oldLease->state() == TrackSourceState::Invalidated);
     CHECK(oldBatches.size() == 1);
+    CHECK_FALSE(cache.acquire(listId));
   }
 
   TEST_CASE("TrackSourceCache - rejected parent deletion leaves its cached dependency graph live",

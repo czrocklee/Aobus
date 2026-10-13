@@ -11,6 +11,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
@@ -18,10 +19,12 @@
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -89,7 +92,34 @@ namespace ao::library::test
       REQUIRE(coldDatabase.writer(transaction).create(rawTrackId, coldData));
     }
 
+    coverRawIdSpace(transaction, rawTrackId);
     REQUIRE(transaction.commit());
+  }
+
+  void coverRawIdSpace(lmdb::WriteTransaction& transaction,
+                       std::uint32_t const lastTrackId,
+                       std::uint32_t const lastListId)
+  {
+    auto metadataDatabase = lmdb::test::openIntegerKeyDatabase(transaction, "meta");
+    auto writer = metadataDatabase.writer(transaction);
+    auto const optBytes = writer.get(kIdSpaceRecordId);
+    REQUIRE(optBytes);
+    REQUIRE(optBytes->size() == sizeof(IdSpace));
+    auto idSpace = IdSpace{};
+    std::memcpy(&idSpace, optBytes->data(), sizeof(idSpace));
+    idSpace.lastTrackId = std::max(idSpace.lastTrackId, lastTrackId);
+    idSpace.lastListId = std::max(idSpace.lastListId, lastListId);
+    REQUIRE(writer.update(kIdSpaceRecordId, utility::bytes::view(idSpace)));
+  }
+
+  IdSpace readRawIdSpace(std::filesystem::path const& path)
+  {
+    auto const optBytes = lmdb::test::readExistingIntegerKeyRecord(path, "meta", kIdSpaceRecordId);
+    REQUIRE(optBytes);
+    REQUIRE(optBytes->size() == sizeof(IdSpace));
+    auto idSpace = IdSpace{};
+    std::memcpy(&idSpace, optBytes->data(), sizeof(idSpace));
+    return idSpace;
   }
 
   void initializeLibraryStorage(std::filesystem::path const& path)

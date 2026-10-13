@@ -45,6 +45,10 @@ namespace ao::library
     /** Looks up one manifest by canonical, root-relative LibraryUri text. */
     std::optional<FileManifestView> manifest(std::string_view uri) const;
 
+    /**
+     * The returned id is final only once the transaction commits; an aborted
+     * or failed transaction's ids may be allocated again.
+     */
     Result<TrackId> create(TrackBuilder const& track, FileManifestBuilder manifest);
     Result<> update(TrackId id, TrackBuilder const& track);
     /** Updates only hot fields; cold fields, including URI, are not consumed. */

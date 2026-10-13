@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/library/ListLayout.h>
 
 #include <cstdint>
 #include <limits>
@@ -11,6 +12,7 @@
 namespace ao::rt
 {
   inline constexpr auto kAllTracksListId = ListId{std::numeric_limits<std::uint32_t>::max()};
+  static_assert(kAllTracksListId.raw() > library::kMaxListId, "All Tracks must use an id the library never stores");
 
   /// Returns true for list IDs that do not reference a user-created list:
   /// kInvalidListId (no selection / root parent) and kAllTracksListId.
