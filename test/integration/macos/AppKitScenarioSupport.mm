@@ -4,8 +4,12 @@
 #include "AppKitScenarioSupport.h"
 
 #include "app/macos-appkit/AppKitText.h"
+#include "test/unit/audio/backend/CoreAudioTestSupport.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/Contract.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/OutputDeviceSelection.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/utility/Path.h>
 
 #include <CoreFoundation/CFRunLoop.h>
@@ -14,6 +18,8 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <print>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -297,12 +303,30 @@ namespace ao::appkit::test
 
   SessionFixture::SessionFixture(std::filesystem::path const& musicRoot, std::filesystem::path const& stateRoot)
   {
+    auto outputRes = audio::test::requestedCoreAudioTestOutput();
+    auto const outputError = outputRes ? std::string{} : outputRes.error().message;
+    AO_INVARIANT(outputRes, "The requested Core Audio test output must be available: {}", outputError);
     auto catalogRes = i18n::MessageCatalog::create("en");
     AO_INVARIANT(catalogRes);
     auto sessionRes =
       LibrarySession::create(musicRoot, stateRoot, false, std::move(*catalogRes), [](DesktopInvalidation) {});
     AO_INVARIANT(sessionRes, "The native fixture must acquire its isolated library");
     _sessionPtr = std::move(*sessionRes);
+
+    if (auto const& optOutput = *outputRes; optOutput)
+    {
+      auto const selection = audio::OutputDeviceSelection{
+        .backendId = optOutput->backendId, .deviceId = optOutput->id, .profileId = audio::kProfileShared};
+      _sessionPtr->selectOutput(selection);
+      requireWaitUntil(
+        [&] { return _sessionPtr->runtime().playback().snapshot().transport.output.selectedDevice == selection; },
+        "The native fixture must acknowledge the exact requested output without default fallback");
+      std::println("AppKit fixture test output selected: backend={} uid={} profile={}",
+                   selection.backendId.raw(),
+                   selection.deviceId.raw(),
+                   selection.profileId.raw());
+    }
+
     _sessionPtr->rescan();
     requireWaitUntil([&] { return !_sessionPtr->state().scanning && _sessionPtr->displayIndex().rowCount() >= 3; },
                      "Native component scenarios require at least three playable fixture tracks");

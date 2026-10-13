@@ -3,14 +3,22 @@
 
 #include "AppKitDesktopScenarioHelpers.h"
 #include "AppKitScenarioSupport.h"
+#include "app/macos-appkit/AppKitText.h"
+#include "test/unit/audio/backend/CoreAudioTestSupport.h"
 #include <ao/Contract.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
 
 #include <CoreFoundation/CFRunLoop.h>
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
+#include <print>
+#include <string>
 #include <utility>
 
 namespace
@@ -82,11 +90,29 @@ namespace
   };
 
   using namespace ao::appkit::test::desktop;
+
+  bool matchesTestOutput(NSDictionary* route, ao::audio::Device const& output)
+  {
+    return [route isKindOfClass:NSDictionary.class] != NO &&
+           [route[@"backend"] isEqual:ao::appkit::nativeText(output.backendId.raw())] != NO &&
+           [route[@"device"] isEqual:ao::appkit::nativeText(output.id.raw())] != NO &&
+           [route[@"profile"] isEqual:ao::appkit::nativeText(ao::audio::kProfileShared.raw())] != NO;
+  }
+
+  void requireSavedTestOutput(std::filesystem::path const& stateRoot, ao::audio::Device const& output)
+  {
+    auto* const settings = [NSDictionary dictionaryWithContentsOfFile:nativePath(stateRoot / "desktop.plist")];
+    auto const saved = matchesTestOutput(settings[@"output"], output);
+    // Persistence and the live native output menu are checked independently.
+    AO_INVARIANT(
+      saved, "The desktop and its successor must retain the exact requested test output UID {}", output.id.raw());
+  }
 } // namespace
 
 @interface AobusDesktopScenarioDriver : NSObject {
   ao::appkit::DesktopLaunch _launch;
   std::filesystem::path _successorRoot;
+  std::optional<ao::audio::Device> _optTestOutput;
   NSTimer* _timer;
   NSWindow* _window;
   NSWindow* _occluder;
@@ -110,6 +136,7 @@ namespace
   std::int32_t _settleTicks;
   BOOL _successor;
   BOOL _completed;
+  BOOL _checkingTestOutput;
 }
 - (instancetype)initWithLaunch:(ao::appkit::DesktopLaunch const&)launch successor:(BOOL)successor;
 - (void)start;
@@ -125,6 +152,19 @@ namespace
 
   if (self != nil)
   {
+    auto outputRes = ao::audio::test::requestedCoreAudioTestOutput();
+    auto const outputError = outputRes ? std::string{} : outputRes.error().message;
+    AO_INVARIANT(outputRes, "The requested Core Audio desktop test output must be available: {}", outputError);
+    _optTestOutput = std::move(*outputRes);
+
+    if (_optTestOutput)
+    {
+      std::println("AppKit desktop test output request: backend={} uid={} profile={}",
+                   _optTestOutput->backendId.raw(),
+                   _optTestOutput->id.raw(),
+                   ao::audio::kProfileShared.raw());
+    }
+
     _launch = launch;
     _successorRoot = launch.stateRoot / "successor-library";
     _successor = successor;
@@ -212,6 +252,78 @@ namespace
   AO_INVARIANT(control.enabled != 0, "Native control is disabled for {}", obligation.UTF8String);
   auto const sent = [NSApp sendAction:control.action to:control.target from:control];
   AO_INVARIANT(sent != 0, "Native control action failed for {}", obligation.UTF8String);
+}
+
+- (BOOL)hasSelectedTestOutput
+{
+  if (!_optTestOutput)
+  {
+    return YES;
+  }
+
+  auto* const control = [self control:@"playback.output"];
+
+  if (control == nil)
+  {
+    return NO;
+  }
+
+  auto const expectedOutput = *_optTestOutput;
+  __block BOOL observed = NO;
+  __block BOOL matched = NO;
+  _checkingTestOutput = YES;
+  auto const observer = [NSNotificationCenter.defaultCenter
+    addObserverForName:NSMenuDidBeginTrackingNotification
+                object:nil
+                 queue:nil
+            usingBlock:^(NSNotification* notification) {
+              if (observed != NO)
+              {
+                return;
+              }
+
+              NSMenu* const menu = notification.object;
+              AO_INVARIANT([menu isKindOfClass:NSMenu.class] != NO, "Native output tracking must expose its menu");
+              observed = YES;
+              std::int32_t checkedCount = 0;
+              bool requestedOutputChecked = false;
+
+              auto* const items = menu.itemArray;
+
+              for (std::size_t itemIndex = 0; itemIndex < items.count; ++itemIndex)
+              {
+                if (auto* const item = items[itemIndex]; item.action == ::NSSelectorFromString(@"selectOutput:") &&
+                                                         item.enabled != NO && item.state == NSControlStateValueOn)
+                {
+                  ++checkedCount;
+                  requestedOutputChecked = matchesTestOutput(item.representedObject, expectedOutput);
+                }
+              }
+
+              // These checkmarks come from the engine-confirmed snapshot, not desktop.plist.
+              matched = static_cast<BOOL>(checkedCount == 1 && requestedOutputChecked);
+              // Popup tracking is synchronous. Dismiss on its own run-loop mode,
+              // after the tracking notification returns, even for a wrong route.
+              ::CFRunLoopPerformBlock(::CFRunLoopGetMain(), (__bridge ::CFStringRef)NSEventTrackingRunLoopMode, ^{
+                [menu cancelTrackingWithoutAnimation];
+              });
+              ::CFRunLoopWakeUp(::CFRunLoopGetMain());
+            }];
+  [self activateControl:control obligation:@"inspect the selected native test output"];
+  [NSNotificationCenter.defaultCenter removeObserver:observer];
+  _checkingTestOutput = NO;
+  AO_INVARIANT(observed != NO, "The native output action must open its observable menu");
+
+  if (matched != NO)
+  {
+    std::println("AppKit desktop test output confirmed: backend={} uid={} profile={} successor={}",
+                 expectedOutput.backendId.raw(),
+                 expectedOutput.id.raw(),
+                 ao::audio::kProfileShared.raw(),
+                 _successor != NO);
+  }
+
+  return matched;
 }
 
 - (void)verifyStoppedEmptyAction
@@ -424,6 +536,16 @@ namespace
     return;
   }
 
+  if (_optTestOutput)
+  {
+    requireSavedTestOutput(_launch.stateRoot, *_optTestOutput);
+
+    if ([self hasSelectedTestOutput] == NO)
+    {
+      return;
+    }
+  }
+
   AO_INVARIANT(seek.enabled == 0 && std::abs(seek.doubleValue) < kControlTolerance,
                "The successor must start with idle native seek state");
   AO_INVARIANT([seek.accessibilityValueDescription isEqual:@"0:00 of 0:00"] != 0,
@@ -441,6 +563,12 @@ namespace
 {
   @autoreleasepool
   {
+    // The output popup runs a nested tracking loop; do not advance this driver on its stack.
+    if (_checkingTestOutput != NO)
+    {
+      return;
+    }
+
     AO_INVARIANT(std::chrono::steady_clock::now() <= _deadline,
                  "Desktop scenario timed out at stage {} search step {}",
                  static_cast<std::int32_t>(_stage),
@@ -483,6 +611,16 @@ namespace
             selectableRowCount(_table) >= 3 && soul.enabled != NO &&
             hasSavedLibrary(_launch.stateRoot, _launch.optRequest->libraryRoot))
         {
+          if (_optTestOutput)
+          {
+            requireSavedTestOutput(_launch.stateRoot, *_optTestOutput);
+
+            if ([self hasSelectedTestOutput] == NO)
+            {
+              break;
+            }
+          }
+
           _idleTransportText = [soul.toolTip copy];
           _stage = Stage::SelectAlbums;
         }
