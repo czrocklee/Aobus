@@ -163,6 +163,7 @@ add_library(ao_test_support_audio STATIC
     unit/audio/AudioFixtureSupport.cpp
     unit/audio/BackendTestSupport.cpp
     unit/audio/DecoderTestSupport.cpp
+    unit/audio/FlacFrameTestSupport.cpp
     unit/audio/EngineTestSupport.cpp
     unit/audio/FakeCapturingBackend.cpp
     unit/audio/ScriptedDecoderSession.cpp
@@ -472,6 +473,7 @@ add_executable(ao_core_test
     unit/audio/AacDecoderMalformedMp4Test.cpp
     unit/audio/FlacDecoderSessionTest.cpp
     unit/audio/FlacDecoderMalformedTest.cpp
+    unit/audio/FlacDecoderFormatStabilityTest.cpp
     unit/audio/AlacDecoderSessionTest.cpp
     unit/audio/AlacDecoderMalformedMp4Test.cpp
     unit/audio/Mp3DecoderSessionTest.cpp

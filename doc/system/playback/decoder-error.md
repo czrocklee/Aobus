@@ -43,7 +43,7 @@ WAV construction uses the RIFF parser's `RequiredAudio` extent and therefore doe
 
 | Operation | Success/normal value | Recoverable code families |
 | --- | --- | --- |
-| `seek(offset)` | decoder positioned for the requested offset | `SeekFailed`, plus a lower packet-source error when the codec delegates seeking |
+| `seek(offset)` | decoder positioned for the requested offset | `SeekFailed`, plus a propagated packet-source or frame-decoding error encountered during seeking |
 | `readNextBlock()` | PCM block or empty end-of-stream block | `DecodeFailed`, `NotSupported`, or a propagated lower read error |
 | `flush()` | codec buffers reset when supported | none; `noexcept` |
 | `streamInfo()` | complete value established by successful construction | none; `noexcept` |
@@ -54,6 +54,11 @@ Codec-specific initialization-time narrowing includes:
 - codec or external decoder initialization/configuration failure: `InitFailed`;
 - malformed accepted stream encountered during initial decode/metadata processing: `DecodeFailed`;
 - AAC/ALAC packet-source `FormatRejected` during initialization is translated to `InitFailed` after the MP4 codec route has already been selected.
+
+FLAC rejects missing STREAMINFO during construction and discontinuous delivered sample positions before returning incorrectly indexed PCM, including when the total sample count is unknown.
+It preserves a frame-format `DecodeFailed` from a frame delivered to the session while seeking instead of replacing it with generic `SeekFailed`.
+It also preserves a recorded cause when a later seek cannot restart an aborted or seek-error codec without an explicit `flush()`; reads in those states fail instead of retrying without progress.
+The diagnostic identifies the inspected and conflicting frame properties; a seek failure that has no stored decoding cause remains `SeekFailed`.
 
 End of stream is `PcmBlock{.endOfStream = true}` rather than an error.
 Unopened and closed states are not part of the public `DecoderSession` surface.
@@ -67,6 +72,8 @@ Unopened and closed states are not part of the public `DecoderSession` surface.
 Public translating methods catch only `DecoderException` and return its error.
 They do not catch allocation, logic, invariant, or unrelated exceptions.
 Public `DecoderSession` methods are `noexcept`; an unrelated escaping exception therefore terminates rather than being reclassified as external-media failure.
+FLAC callbacks are `noexcept`; its allocating write and metadata callbacks also contain unexpected exceptions through [exception-aware fatal handling](../failure/fatal.md#exception-aware-entry), not C++ exception transport through the provider.
+Frame-format and sample-position failures record inline evidence and their detection locations; owning diagnostics are formatted only after the libFLAC call returns.
 
 ## Validation rules
 
