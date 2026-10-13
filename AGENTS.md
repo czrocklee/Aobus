@@ -13,6 +13,8 @@ AppKit frontend over shared Core and application runtime libraries. Work from th
   selected build tree's `build.log`.
 - Keep abstractions tied to current consumers and an independent contract.
   Keep one-consumer helpers local; do not add speculative registries or policies.
+- Do not chain `./ao format` with builds or tests; format once, right before
+  the completion gate. Each rewrite invalidates file text already read.
 
 ## Read by task
 

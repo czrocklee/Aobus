@@ -9,7 +9,7 @@ Checker internals, fixture design, AST proof, and native replay mechanics are in
 Use project commands as the public entry points:
 
 - `./ao tidy` runs C++ clang-tidy plus Python Ruff and mypy for files in scope.
-- `./ao hygiene` is the check-only commit gate: format check first, then tidy.
+- `./ao hygiene` is the check-only commit gate: format check, source audits, then tidy.
 - `./ao test --lint` tests the Aobus clang-tidy plugin fixtures; it is not the Python lint command.
 
 Use the corresponding `ao.bat` commands on native Windows.
