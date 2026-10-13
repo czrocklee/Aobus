@@ -81,6 +81,12 @@ class CompilerCacheContractTest(unittest.TestCase):
                 for language in ("C", "CXX"):
                     self.assertEqual(updates[f"CMAKE_{language}_COMPILER_LAUNCHER"], str(executable.resolve()))
                     self.assertEqual(updates[f"AOBUS_MANAGED_{language}_COMPILER_LAUNCHER"], "1")
+                if system == "Darwin":
+                    self.assertEqual(updates["CMAKE_OBJCXX_COMPILER_LAUNCHER"], str(executable.resolve()))
+                    self.assertEqual(updates["AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER"], "1")
+                else:
+                    self.assertNotIn("CMAKE_OBJCXX_COMPILER_LAUNCHER", updates)
+                    self.assertNotIn("AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER", updates)
                 if system == "Windows":
                     wrapper = Path(updates["AOBUS_MSBUILD_CL_TOOL_EXE"])
                     self.assertTrue(wrapper.is_relative_to(root.resolve() / "state"))
@@ -551,6 +557,7 @@ class CompilerCacheActivationTest(unittest.TestCase):
                     "AOBUS_MSBUILD_CL_TOOL_EXE": "custom-wrapper",
                     "CMAKE_C_COMPILER_LAUNCHER": "",
                     "CMAKE_CXX_COMPILER_LAUNCHER": "",
+                    "CMAKE_OBJCXX_COMPILER_LAUNCHER": "",
                     "CCACHE_DIR": "",
                     "CCACHE_MAXSIZE": "",
                 }
@@ -558,12 +565,14 @@ class CompilerCacheActivationTest(unittest.TestCase):
                     "CMAKE_C_COMPILER_LAUNCHER:STRING=/managed/ccache\n"
                     "AOBUS_MANAGED_C_COMPILER_LAUNCHER:BOOL=ON\n"
                     "CMAKE_CXX_COMPILER_LAUNCHER:STRING=/managed/ccache\n"
-                    "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER:BOOL=ON\n",
+                    "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER:BOOL=ON\n"
+                    "CMAKE_OBJCXX_COMPILER_LAUNCHER:STRING=/managed/ccache\n"
+                    "AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER:BOOL=ON\n",
                     encoding="utf-8",
                 )
 
                 self.assertTrue(compiler_cache.activate_local(environ=environment, system=system))
-                for language in ("C", "CXX"):
+                for language in ("C", "CXX", "OBJCXX"):
                     self.assertEqual(environment[f"CMAKE_{language}_COMPILER_LAUNCHER"], "")
                     self.assertNotIn(f"AOBUS_MANAGED_{language}_COMPILER_LAUNCHER", environment)
                 self.assertTrue(environment["CCACHE_DIR"])
@@ -575,10 +584,17 @@ class CompilerCacheActivationTest(unittest.TestCase):
                     "-DCMAKE_CXX_COMPILER_LAUNCHER=",
                     "-U",
                     "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER",
+                    "-DCMAKE_OBJCXX_COMPILER_LAUNCHER=",
+                    "-U",
+                    "AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER",
                 ]
                 self.assertEqual(compiler_cache.cmake_launcher_arguments(environment, build_dir=root), expected)
                 # A shell can retain ownership markers after clearing a launcher.
-                environment.update(AOBUS_MANAGED_C_COMPILER_LAUNCHER="1", AOBUS_MANAGED_CXX_COMPILER_LAUNCHER="1")
+                environment.update(
+                    AOBUS_MANAGED_C_COMPILER_LAUNCHER="1",
+                    AOBUS_MANAGED_CXX_COMPILER_LAUNCHER="1",
+                    AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER="1",
+                )
                 self.assertEqual(compiler_cache.cmake_launcher_arguments(environment, build_dir=root), expected)
 
     def test_activation_exposes_shared_workspace_state_and_off_override(self):
@@ -988,14 +1004,19 @@ class CompilerCacheActivationTest(unittest.TestCase):
                     "SCCACHE_PATH": str(executable),
                     "CMAKE_C_COMPILER_LAUNCHER": "",
                     "CMAKE_CXX_COMPILER_LAUNCHER": "",
+                    "CMAKE_OBJCXX_COMPILER_LAUNCHER": "",
                 }
                 updates = compiler_cache.ci_environment(environ=environment, system=system, state=root)
-                for language in ("C", "CXX"):
+                for language in ("C", "CXX", "OBJCXX"):
                     self.assertNotIn(f"CMAKE_{language}_COMPILER_LAUNCHER", updates)
                     self.assertNotIn(f"AOBUS_MANAGED_{language}_COMPILER_LAUNCHER", updates)
                 self.assertEqual(
                     compiler_cache.cmake_launcher_arguments({**environment, **updates}),
-                    ["-DCMAKE_C_COMPILER_LAUNCHER=", "-DCMAKE_CXX_COMPILER_LAUNCHER="],
+                    [
+                        "-DCMAKE_C_COMPILER_LAUNCHER=",
+                        "-DCMAKE_CXX_COMPILER_LAUNCHER=",
+                        "-DCMAKE_OBJCXX_COMPILER_LAUNCHER=",
+                    ],
                 )
 
     def test_cmake_arguments_rebind_existing_tree(self):

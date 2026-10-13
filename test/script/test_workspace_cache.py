@@ -699,7 +699,7 @@ class WorkspaceCacheCompilerIntegrationTest(unittest.TestCase):
                 timeout=90,
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("owns all C/C++ prefix maps", result.stdout + result.stderr)
+            self.assertIn("owns all compiler prefix maps", result.stdout + result.stderr)
 
     def test_raw_ninja_rejects_changed_module_until_portal_refreshes_namespace(self):
         cmake = self._tool("cmake")

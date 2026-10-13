@@ -40,6 +40,7 @@ _SIZE_PATTERN = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([kmgt](?:i?b)?)?\s*$", re.IG
 _MANAGED_LAUNCHER_MARKERS = {
     "C": "AOBUS_MANAGED_C_COMPILER_LAUNCHER",
     "CXX": "AOBUS_MANAGED_CXX_COMPILER_LAUNCHER",
+    "OBJCXX": "AOBUS_MANAGED_OBJCXX_COMPILER_LAUNCHER",
 }
 SHARED_WORKSPACES_OVERRIDE = "AOBUS_SHARED_WORKSPACES"
 SHARED_WORKSPACES_EFFECTIVE = "AOBUS_SHARED_WORKSPACES_EFFECTIVE"
@@ -550,6 +551,9 @@ def local_environment(
         if not environ.get(key):
             updates[key] = value
     for language, marker in _MANAGED_LAUNCHER_MARKERS.items():
+        # Objective-C++ is macOS-only; other hosts carry no managed launcher.
+        if language == "OBJCXX" and system != "Darwin":
+            continue
         key = f"CMAKE_{language}_COMPILER_LAUNCHER"
         if key not in environ:
             updates[key] = str(executable)
@@ -665,11 +669,14 @@ def ci_environment(
     updates: dict[str, str] = {"SCCACHE_PATH": str(executable)}
     if system == "Windows":
         updates[msbuild_cache.TRACKING_ENV] = "0"
-    for key in ("CMAKE_C_COMPILER_LAUNCHER", "CMAKE_CXX_COMPILER_LAUNCHER"):
+    for language, marker in _MANAGED_LAUNCHER_MARKERS.items():
+        # Objective-C++ is macOS-only; other hosts carry no managed launcher.
+        if language == "OBJCXX" and system != "Darwin":
+            continue
+        key = f"CMAKE_{language}_COMPILER_LAUNCHER"
         if key not in environ:
             updates[key] = str(executable)
-            language = "CXX" if "CXX" in key else "C"
-            updates[_MANAGED_LAUNCHER_MARKERS[language]] = "1"
+            updates[marker] = "1"
     if not environ.get("SCCACHE_CACHE_SIZE"):
         updates["SCCACHE_CACHE_SIZE"] = policy.default_size
     if system == "Windows" and not environ.get("AOBUS_MSBUILD_CL_TOOL_EXE"):
@@ -714,9 +721,11 @@ def cmake_launcher_arguments(
     environment = os.environ if environ is None else environ
     cache = read_cmake_cache(build_dir / "CMakeCache.txt") if build_dir is not None else {}
     arguments: list[str] = []
-    for language in ("C", "CXX"):
+    # Handle every marker language on every host, including explicit or stale
+    # OBJCXX keys on Linux and Windows; explicit unmanaged launchers are
+    # recognized and preserved, never owned.
+    for language, marker in _MANAGED_LAUNCHER_MARKERS.items():
         key = f"CMAKE_{language}_COMPILER_LAUNCHER"
-        marker = _MANAGED_LAUNCHER_MARKERS[language]
         desired = environment.get(key)
         managed = bool(desired) and environment.get(marker) == "1"
         cached_marker = cache.get(marker) == "ON"
