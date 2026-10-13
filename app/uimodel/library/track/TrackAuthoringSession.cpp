@@ -179,6 +179,20 @@ namespace ao::uimodel
     return TrackAuthoringSession{std::make_shared<State>(library, std::move(*targetsRes))};
   }
 
+  Result<TrackAuthoringSession> TrackAuthoringSession::begin(rt::Library& library,
+                                                             std::span<TrackId const> targetIds,
+                                                             rt::LibrarySnapshot const& snapshot)
+  {
+    auto targetsRes = library.bindTrackTargets(targetIds, snapshot);
+
+    if (!targetsRes)
+    {
+      return std::unexpected{targetsRes.error()};
+    }
+
+    return TrackAuthoringSession{std::make_shared<State>(library, std::move(*targetsRes))};
+  }
+
   TrackAuthoringSession::TrackAuthoringSession(std::shared_ptr<State> statePtr)
     : _statePtr{std::move(statePtr)}
   {

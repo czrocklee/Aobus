@@ -15,6 +15,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 
 #include <cstdint>
 #include <optional>
@@ -78,6 +79,13 @@ namespace ao::tui
     rt::TrackPresentationSpec const& activePresentation() const;
     SelectedTrackView selectedTrackView() const;
 
+    /// Borrowed owning credit sections for the focused track. Valid only for synchronous use
+    /// in the current turn; the next focus change, reload, reset, deletion,
+    /// committed library change, or cache miss invalidates the reference.
+    /// Absent when no loaded track is focused; an engaged empty list is a
+    /// stored value, not a missing track.
+    uimodel::TrackCreditSections const& focusedCredits() const;
+
     void setTextCatalog(i18n::MessageCatalog textCatalog);
     void setFilterDraft(std::string value);
     void clearFilterDraft();
@@ -119,6 +127,7 @@ namespace ao::tui
   private:
     bool trySetSelectedTrackById(TrackId trackId);
     TrackId focusedTrackId() const noexcept;
+    void invalidateFocusedCredits() noexcept;
     bool containsTrackId(TrackId trackId) const noexcept;
     void clearMarkState();
     void reconcileMarks();
@@ -173,6 +182,15 @@ namespace ao::tui
     std::unordered_set<TrackId> _visualBaseIds{};
     std::string _filterDraft{};
     std::string _filterError{};
+    // One focused track. Hits compare that id with the library revision last
+    // observed from a committed change or from the snapshot that filled the
+    // slot. They do not open a read transaction, and trackRowsRevision is not
+    // a library revision.
+    mutable TrackId _focusedCreditsTrackId = kInvalidTrackId;
+    mutable std::uint64_t _focusedCreditsLibraryRevision = 0;
+    mutable std::uint64_t _observedLibraryRevision = 0;
+    mutable bool _focusedCreditsPopulated = false;
+    mutable uimodel::TrackCreditSections _focusedCredits{};
     async::Subscription _customPresetsSub;
     async::Subscription _libraryChangesSub;
   };

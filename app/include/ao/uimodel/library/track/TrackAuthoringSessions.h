@@ -23,6 +23,7 @@
 namespace ao::rt
 {
   class Library;
+  class LibrarySnapshot;
   class TextOrderingPolicy;
 }
 
@@ -51,6 +52,10 @@ namespace ao::uimodel
   {
   public:
     static Result<TrackAuthoringSession> begin(rt::Library& library, std::span<TrackId const> targetIds);
+    /// Binds and validates against one caller-owned baseline snapshot without retaining it.
+    static Result<TrackAuthoringSession> begin(rt::Library& library,
+                                               std::span<TrackId const> targetIds,
+                                               rt::LibrarySnapshot const& snapshot);
 
     ~TrackAuthoringSession();
 

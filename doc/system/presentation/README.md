@@ -81,7 +81,14 @@ projection retains its captured policy and order until released. See
 
 - Runtime has no dependency on UIModel or frontend code.
 - UIModel depends on runtime interfaces and stable Core values, never on a
-  platform UI library.
+  platform UI library. Within `ao/library/`, the only direct include allowances
+  are the exact [`RecordingDate.h`](../../../include/ao/library/RecordingDate.h)
+  and [`Credits.h`](../../../include/ao/library/Credits.h) capsules for
+  independent values and their pure admission/formatting operations, using
+  angle or quoted includes. This value-only allowance does not admit storage
+  views/builders, stores, LMDB, transactions or write authority, or audio
+  control, and does not authorize hiding those dependencies behind wrappers
+  or aliases.
 - UIModel values contain semantic information, not toolkit handles, CSS classes,
   native icon names, or terminal geometry.
 - Frontends retain subscriptions and view models for no longer than the runtime

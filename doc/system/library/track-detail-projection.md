@@ -5,7 +5,7 @@ id: library.track-detail-projection
 
 ## Scope
 
-This specification defines how a live detail projection resolves a selection target and produces frontend-neutral track-field, cover, tag, and custom-metadata snapshots.
+This specification defines how a live detail projection resolves a selection target and produces frontend-neutral track-field, Credits, cover, tag, and custom-metadata snapshots.
 It does not own field definitions, which belong to the [track model reference](../../reference/library/model/track.md).
 
 ## Code boundary
@@ -39,6 +39,13 @@ Unrelated commits need not rebuild the projection, so consumers must use this re
 
 For each non-synthetic field, identical loaded values produce one `optValue`; differing values produce `mixed = true` with no value.
 If no requested track resolves, aggregate fields remain empty.
+
+Credits aggregate independently in four owning kind sections.
+Each section compares complete ordered entries, including names, roles, and duplicate multiplicity; identical loaded sections produce one common value, and differing sections are mixed with no representative list.
+A loaded empty section is a present common empty value, not a missing track.
+Missing requested tracks contribute no values: surviving tracks still supply common or mixed sections, while a selection with no loaded track leaves every section absent.
+Selection kind and requested ids remain unchanged by these display omissions.
+This display contract does not authorize surviving-subset edits; [editor binding](../presentation/metadata-editing.md#preparing-a-coherent-properties-baseline) requires every requested target to exist.
 
 Custom metadata is sorted by key.
 Each item reports whether it appears on any or all loaded tracks, and whether its values differ.
@@ -75,6 +82,7 @@ Its observer signal weak-invalidates outstanding subscriptions when the projecti
 ## Test map
 
 - [`TrackDetailProjectionTest.cpp`](../../../test/unit/runtime/projection/TrackDetailProjectionTest.cpp) proves target following, immediate subscription, tracked-view destruction, intersecting refresh, common/mixed fields, missing tracks and views, single-track tags, custom metadata aggregation, and the distinction between read-backed empty snapshots and unresolved revision-zero snapshots.
+- [`TrackDetailPerformanceTest.cpp`](../../../test/unit/runtime/projection/TrackDetailPerformanceTest.cpp) proves owning per-kind Credits, common empty sections, complete ordered equality, mixed sections, independent common categories, and intersecting refresh.
 
 ## Related documents
 

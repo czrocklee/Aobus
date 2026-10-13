@@ -3,6 +3,8 @@
 
 #include <ao/library/TrackLayout.h>
 
+#include <ao/library/RecordingDate.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
@@ -64,15 +66,32 @@ namespace ao::library::test
 
   TEST_CASE("TrackCold extension blocks - have stable size and alignment", "[library][unit][track]")
   {
-    CHECK(kTrackColdKnownBlockSlotCount == 3);
+    CHECK(kTrackColdKnownBlockSlotCount == 4);
     CHECK(kTrackColdBlockSlotCount == 5);
     CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt) == 0);
-    CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::Classical) == 1);
+    CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::Work) == 1);
     CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::CustomMetadata) == 2);
     CHECK(sizeof(CoverArtEntry) == 8);
     CHECK(alignof(CoverArtEntry) == 4);
-    CHECK(sizeof(TrackClassicalBlock) == 24);
-    CHECK(alignof(TrackClassicalBlock) == 4);
+    CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::Performance) == 3);
+    CHECK(sizeof(TrackWorkBlock) == 12);
+    CHECK(alignof(TrackWorkBlock) == 4);
+    CHECK(offsetof(TrackWorkBlock, workId) == 0);
+    CHECK(offsetof(TrackWorkBlock, movementId) == 4);
+    CHECK(offsetof(TrackWorkBlock, movementNumber) == 8);
+    CHECK(offsetof(TrackWorkBlock, movementTotal) == 10);
+    CHECK(sizeof(TrackPerformanceBlock) == 12);
+    CHECK(alignof(TrackPerformanceBlock) == 4);
+    CHECK(offsetof(TrackPerformanceBlock, recordingDate) == 0);
+    CHECK(offsetof(TrackPerformanceBlock, sectionCounts) == 4);
+    CHECK(offsetof(TrackPerformanceBlock, reserved) == 10);
+    CHECK(offsetof(RecordingDate, year) == 0);
+    CHECK(offsetof(RecordingDate, month) == 2);
+    CHECK(offsetof(RecordingDate, day) == 3);
+    CHECK(sizeof(TrackCreditEntry) == 8);
+    CHECK(alignof(TrackCreditEntry) == 4);
+    CHECK(offsetof(TrackCreditEntry, nameId) == 0);
+    CHECK(offsetof(TrackCreditEntry, roleId) == 4);
     CHECK(sizeof(CustomMetadataBlockHeader) == 8);
     CHECK(alignof(CustomMetadataBlockHeader) <= 4);
     CHECK(sizeof(CustomMetadataEntry) == 8);

@@ -9,6 +9,7 @@
 #include <ao/PictureType.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/CoverArt.h>
+#include <ao/library/Credits.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
@@ -19,10 +20,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <string_view>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -105,11 +108,9 @@ namespace ao::library::test
       .albumArtist(spec.albumArtist)
       .genre(spec.genre)
       .composer(spec.composer)
-      .conductor(spec.conductor)
-      .ensemble(spec.ensemble)
       .work(spec.work)
       .movement(spec.movement)
-      .soloist(spec.soloist)
+      .recordingDate(spec.recordingDate)
       .year(spec.year)
       .discNumber(spec.discNumber)
       .discTotal(spec.discTotal)
@@ -126,6 +127,7 @@ namespace ao::library::test
       .channels(spec.channels)
       .bitDepth(spec.bitDepth);
 
+    builder.metadata().credits(spec.credits);
     builder.tags().clear();
 
     for (auto const& tag : spec.tags)
@@ -157,25 +159,35 @@ namespace ao::library::test
                 .albumArtist = std::string{library.dictionary().getOrDefault(view.metadata().albumArtistId())},
                 .genre = std::string{library.dictionary().getOrDefault(view.metadata().genreId())},
                 .composer = std::string{library.dictionary().getOrDefault(view.metadata().composerId())},
-                .conductor = std::string{library.dictionary().getOrDefault(view.classical().conductorId())},
-                .ensemble = std::string{library.dictionary().getOrDefault(view.classical().ensembleId())},
-                .work = std::string{library.dictionary().getOrDefault(view.classical().workId())},
-                .movement = std::string{library.dictionary().getOrDefault(view.classical().movementId())},
-                .soloist = std::string{library.dictionary().getOrDefault(view.classical().soloistId())},
+                .work = std::string{library.dictionary().getOrDefault(view.work().workId())},
+                .movement = std::string{library.dictionary().getOrDefault(view.work().movementId())},
+                .recordingDate = view.performance().recordingDate(),
                 .uri = std::string{view.property().uri()},
                 .year = view.metadata().year(),
                 .discNumber = view.metadata().discNumber(),
                 .discTotal = view.metadata().discTotal(),
                 .trackNumber = view.metadata().trackNumber(),
                 .trackTotal = view.metadata().trackTotal(),
-                .movementNumber = view.classical().movementNumber(),
-                .movementTotal = view.classical().movementTotal(),
+                .movementNumber = view.work().movementNumber(),
+                .movementTotal = view.work().movementTotal(),
                 .duration = view.property().duration(),
                 .bitrate = view.property().bitrate(),
                 .sampleRate = view.property().sampleRate(),
                 .channels = view.property().channels(),
                 .bitDepth = view.property().bitDepth(),
                 .codec = view.property().codec()};
+
+    for (std::size_t index = 0; index < kCreditKindCount; ++index)
+    {
+      auto const kind = static_cast<CreditKind>(index);
+
+      for (auto const& entry : view.performance().credits(kind))
+      {
+        spec.credits.push_back({.name = std::string{library.dictionary().get(entry.nameId)},
+                                .kind = kind,
+                                .role = std::string{library.dictionary().getOrDefault(entry.roleId)}});
+      }
+    }
 
     for (auto const tagId : view.tags())
     {

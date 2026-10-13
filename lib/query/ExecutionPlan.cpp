@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/query/ExecutionPlan.h>
 
@@ -8,6 +8,7 @@
 #include <ao/AudioCodecText.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/QueryCompilation.h>
@@ -128,8 +129,10 @@ namespace ao::query
       std::uint32_t compileBinary(BinaryExpression const& binary);
       std::uint32_t compileUnary(UnaryExpression const& unary);
       std::uint32_t compileExists(Expression const& operand);
-      std::uint32_t compileVariable(VariableExpression const& var);
+      std::uint32_t compileFieldOperand(Expression const& expr);
+      std::uint32_t compileVariable(VariableExpression const& var, bool allowsTypedField = false);
       CompiledConstant compileConstant(ConstantExpression const& constant);
+      CompiledConstant compileOperandConstant(ConstantExpression const& constant, Field field);
       std::uint32_t compileList(ListExpression const& list);
       std::uint32_t compileRange(RangeExpression const& range);
       std::uint32_t compileIn(Expression const& lhs, Expression const& rhs);
@@ -175,7 +178,7 @@ namespace ao::query
 
     bool supportsUnicodeCaselessSubstring(Field field)
     {
-      return (isStringField(field) && field != Field::Uri) || isDictionaryField(field);
+      return (isStringField(field) && field != Field::Uri) || isDictionaryField(field) || isCreditField(field);
     }
 
     using RequiredTagNames = boost::unordered_flat_set<std::string>;
@@ -779,7 +782,7 @@ namespace ao::query
     }
 
     // Compile the left operand before selecting the field-specific comparison operation.
-    auto const leftReg = compileExpression(binary.operand);
+    auto const leftReg = compileFieldOperand(binary.operand);
 
     // Save the left field (and its Custom symbol) before compiling the right operand,
     // which overwrites _lastField.
@@ -787,18 +790,31 @@ namespace ao::query
     auto const leftCustomSymbol = _lastFieldCustomSymbol;
     auto const opcode = toOpCode(binary.optOperation->op);
 
-    if (opcode == OpCode::Like)
+    if ((leftField == Field::RecordingDate || isCreditField(leftField)) &&
+        std::get_if<ConstantExpression>(&binary.optOperation->operand) == nullptr)
     {
-      if (std::get_if<VariableExpression>(&binary.operand) == nullptr ||
-          (!supportsUnicodeCaselessSubstring(leftField) && leftField != Field::Uri))
-      {
-        detail::throwQueryError("operator '~' requires a text or URI field");
-      }
+      detail::throwQueryError("field '{}' requires a literal operand", fieldDisplayName(leftField));
+    }
 
-      if (!isStringConstantOperand(binary.optOperation->operand))
-      {
-        detail::throwQueryError("operator '~' requires a string operand");
-      }
+    if (leftField == Field::RecordingDate && opcode == OpCode::Like)
+    {
+      detail::throwQueryError("recordingDate does not support substring matching");
+    }
+
+    if (isCreditField(leftField) && opcode != OpCode::Eq && opcode != OpCode::Ne && opcode != OpCode::Like)
+    {
+      detail::throwQueryError("credit members only support equality, inequality, substring, lists, and existence");
+    }
+
+    if (opcode == OpCode::Like && (std::get_if<VariableExpression>(&binary.operand) == nullptr ||
+                                   (!supportsUnicodeCaselessSubstring(leftField) && leftField != Field::Uri)))
+    {
+      detail::throwQueryError("operator '~' requires a text or URI field");
+    }
+
+    if (opcode == OpCode::Like && !isStringConstantOperand(binary.optOperation->operand))
+    {
+      detail::throwQueryError("operator '~' requires a string operand");
     }
 
     // Dictionary fields store interned IDs, so an ordered comparison (<, <=, >, >=)
@@ -821,7 +837,8 @@ namespace ao::query
         _makeStringConstantsCaseless = previousMakeStringConstantsCaseless;
       });
 
-    if (isDictionaryField(leftField) && (opcode == OpCode::Like || isOrderedComparison(opcode)))
+    if ((isDictionaryField(leftField) || isCreditField(leftField)) &&
+        (opcode == OpCode::Like || isOrderedComparison(opcode)))
     {
       _resolveStringConstantsToIds = false;
     }
@@ -833,7 +850,7 @@ namespace ao::query
 
     if (auto const* constant = std::get_if<ConstantExpression>(&binary.optOperation->operand); constant != nullptr)
     {
-      auto const compiled = compileConstant(*constant);
+      auto const compiled = compileOperandConstant(*constant, leftField);
       rightReg = compiled.reg;
       valueDictionarySymbol = compiled.dictionarySymbol;
     }
@@ -844,7 +861,7 @@ namespace ao::query
 
     auto dictionarySymbol = leftCustomSymbol;
 
-    if (isDictionaryField(leftField) && (opcode == OpCode::Eq || opcode == OpCode::Ne))
+    if ((isDictionaryField(leftField) || isCreditField(leftField)) && (opcode == OpCode::Eq || opcode == OpCode::Ne))
     {
       dictionarySymbol = valueDictionarySymbol;
     }
@@ -944,7 +961,29 @@ namespace ao::query
     return reg;
   }
 
-  std::uint32_t QueryCompiler::compileVariable(VariableExpression const& var)
+  std::uint32_t QueryCompiler::compileFieldOperand(Expression const& expr)
+  {
+    if (auto const* variable = std::get_if<VariableExpression>(&expr); variable != nullptr)
+    {
+      return compileVariable(*variable, true);
+    }
+
+    // A non-variable operand is its own scope. A preceding field must not
+    // convert this operand's literals, and a nested predicate yields a Boolean
+    // rather than its inner field or custom-key symbol. TagBloom is the
+    // compiler's no-field context: codec, dictionary, unit, date, and credit
+    // conversions do not apply to it.
+    _lastField = Field::TagBloom;
+    _lastFieldCustomSymbol = kNoDictionarySymbol;
+
+    auto const reg = compileExpression(expr);
+
+    _lastField = Field::TagBloom;
+    _lastFieldCustomSymbol = kNoDictionarySymbol;
+    return reg;
+  }
+
+  std::uint32_t QueryCompiler::compileVariable(VariableExpression const& var, bool allowsTypedField)
   {
     // Tags are hot data
     if (var.type == VariableType::Tag)
@@ -999,6 +1038,12 @@ namespace ao::query
     }
 
     auto const field = *fieldRes;
+
+    if (!allowsTypedField && (field == Field::RecordingDate || isCreditField(field)))
+    {
+      detail::throwQueryError("field '{}' cannot be used as a scalar operand", fieldDisplayName(field));
+    }
+
     _lastField = field; // Track for string resolution context
 
     // Track access profile for hot/cold determination based on field storage location
@@ -1018,7 +1063,7 @@ namespace ao::query
       dictionarySymbol = addDictionarySymbol(var.name);
       _hasDictionaryAccess = true;
     }
-    else if (isDictionaryField(field))
+    else if (isDictionaryField(field) || isCreditField(field))
     {
       _hasDictionaryAccess = true;
     }
@@ -1130,6 +1175,53 @@ namespace ao::query
     return CompiledConstant{.reg = reg, .dictionarySymbol = dictionarySymbol};
   }
 
+  QueryCompiler::CompiledConstant QueryCompiler::compileOperandConstant(ConstantExpression const& constant, Field field)
+  {
+    if (isCreditField(field) && !isStringConstant(constant))
+    {
+      detail::throwQueryError("credit members require string literals");
+    }
+
+    if (field != Field::RecordingDate)
+    {
+      return compileConstant(constant);
+    }
+
+    constexpr std::int64_t kMaxRecordingYear = 9999;
+    auto date = library::RecordingDate{};
+
+    if (auto const* text = std::get_if<std::string>(&constant); text != nullptr)
+    {
+      auto const dateRes = library::parseRecordingDate(*text);
+
+      if (!dateRes)
+      {
+        detail::throwQueryError("invalid recordingDate literal: {}", dateRes.error().message);
+      }
+
+      date = *dateRes;
+    }
+    else if (auto const* year = std::get_if<std::int64_t>(&constant);
+             year != nullptr && *year >= 1 && *year <= kMaxRecordingYear)
+    {
+      date.year = static_cast<std::uint16_t>(*year);
+    }
+    else
+    {
+      detail::throwQueryError("recordingDate requires a canonical quoted date or integer year 1..9999");
+    }
+
+    auto const index = _plan.recordingDateConstants.size();
+    _plan.recordingDateConstants.push_back(date);
+    auto const reg = pushReg();
+    _plan.instructions.push_back(Instruction{
+      .op = OpCode::LoadConstant,
+      .operand = static_cast<std::int32_t>(reg),
+      .constValue = static_cast<std::int64_t>(index),
+    });
+    return CompiledConstant{.reg = reg};
+  }
+
   std::uint32_t QueryCompiler::compileList(ListExpression const& /*list*/)
   {
     detail::throwQueryError("list expressions are only supported as the right operand of 'in'");
@@ -1178,12 +1270,12 @@ namespace ao::query
 
     for (auto const& value : list.values)
     {
-      auto const leftReg = compileExpression(lhs);
+      auto const leftReg = compileFieldOperand(lhs);
 
       auto const leftField = _lastField;
       auto const leftCustomSymbol = _lastFieldCustomSymbol;
 
-      auto const compiledValue = compileConstant(value);
+      auto const compiledValue = compileOperandConstant(value, leftField);
       auto const rightReg = compiledValue.reg;
       auto const valueDictionarySymbol = compiledValue.dictionarySymbol;
       auto dictionarySymbol = leftCustomSymbol;
@@ -1230,7 +1322,7 @@ namespace ao::query
 
   std::uint32_t QueryCompiler::compileInRange(Expression const& lhs, RangeExpression const& range)
   {
-    auto const lhsLowerReg = compileExpression(lhs);
+    auto const lhsLowerReg = compileFieldOperand(lhs);
 
     // A range compiles to Ge/Le bounds, i.e. ordered comparisons. For dictionary
     // fields those must compare resolved text, so require string bounds and keep
@@ -1238,6 +1330,11 @@ namespace ao::query
     auto const leftField = _lastField;
     auto const leftCustomSymbol = _lastFieldCustomSymbol;
     auto const dictionaryBounds = isDictionaryField(leftField);
+
+    if (isCreditField(leftField))
+    {
+      detail::throwQueryError("credit members do not support ranges");
+    }
 
     if (dictionaryBounds && (!isStringConstant(range.lower) || !isStringConstant(range.upper)))
     {
@@ -1254,7 +1351,7 @@ namespace ao::query
       _resolveStringConstantsToIds = false;
     }
 
-    auto const lowerReg = compileConstant(range.lower).reg;
+    auto const lowerReg = compileOperandConstant(range.lower, leftField).reg;
 
     AO_INVARIANT(lowerReg == lhsLowerReg + 1);
     _plan.instructions.push_back(Instruction{
@@ -1269,9 +1366,9 @@ namespace ao::query
     popReg(lowerReg); // Ge result is now in lhsLowerReg
     auto const geReg = lhsLowerReg;
 
-    auto const lhsUpperReg = compileExpression(lhs);
+    auto const lhsUpperReg = compileFieldOperand(lhs);
 
-    auto const upperReg = compileConstant(range.upper).reg;
+    auto const upperReg = compileOperandConstant(range.upper, leftField).reg;
 
     AO_INVARIANT(upperReg == lhsUpperReg + 1);
     _plan.instructions.push_back(Instruction{
@@ -1319,14 +1416,14 @@ namespace ao::query
 
     auto const field = *fieldRes;
 
-    if (isTagField(field))
+    if (isTagField(field) || field == Field::RecordingDate)
     {
       return std::nullopt;
     }
 
     auto set = InSet{};
 
-    if (isDictionaryField(field))
+    if (isDictionaryField(field) || isCreditField(field))
     {
       set.valueKind = InSetValueKind::Dictionary;
     }
@@ -1337,13 +1434,18 @@ namespace ao::query
 
     for (auto const& value : list.values)
     {
+      if (isCreditField(field) && !isStringConstant(value))
+      {
+        detail::throwQueryError("credit member lists require string literals");
+      }
+
       if (auto const valueResult = appendInSetValue(set, value, field); valueResult == InSetValueStatus::NotCompatible)
       {
         return std::nullopt;
       }
     }
 
-    auto const leftReg = compileExpression(lhs);
+    auto const leftReg = compileFieldOperand(lhs);
 
     auto const leftCustomSymbol = _lastFieldCustomSymbol;
     auto const setIndex = addInSet(std::move(set));
@@ -1364,7 +1466,7 @@ namespace ao::query
 
   std::optional<std::uint32_t> QueryCompiler::dictionarySymbolForStringConstant(std::string const& str, Field field)
   {
-    if (!_resolveStringConstantsToIds || (!isDictionaryField(field) && !isTagField(field)))
+    if (!_resolveStringConstantsToIds || (!isDictionaryField(field) && !isTagField(field) && !isCreditField(field)))
     {
       return std::nullopt;
     }
@@ -1428,7 +1530,7 @@ namespace ao::query
             detail::throwQueryError("unknown audio codec '{}'", value);
           }
 
-          if (!isDictionaryField(field) || set.valueKind != InSetValueKind::Dictionary)
+          if ((!isDictionaryField(field) && !isCreditField(field)) || set.valueKind != InSetValueKind::Dictionary)
           {
             return InSetValueStatus::NotCompatible;
           }

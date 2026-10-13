@@ -6,20 +6,27 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/library/Credits.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 
+#include <boost/unordered/unordered_flat_set.hpp>
+
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <format>
+#include <functional>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -37,42 +44,8 @@ namespace ao::rt
       bool changedCold = false;
     };
 
-    Result<MetadataPatch> normalizeMetadataPatch(MetadataPatch const& patch)
+    Result<> normalizeCustomMetadataUpdates(MetadataPatch& normalized)
     {
-      auto normalized = patch;
-      constexpr auto kTextMembers = std::to_array<std::optional<std::string> MetadataPatch::*>({
-        &MetadataPatch::optTitle,
-        &MetadataPatch::optArtist,
-        &MetadataPatch::optAlbum,
-        &MetadataPatch::optAlbumArtist,
-        &MetadataPatch::optGenre,
-        &MetadataPatch::optComposer,
-        &MetadataPatch::optConductor,
-        &MetadataPatch::optEnsemble,
-        &MetadataPatch::optWork,
-        &MetadataPatch::optMovement,
-        &MetadataPatch::optSoloist,
-      });
-
-      for (auto const member : kTextMembers)
-      {
-        auto& optValue = normalized.*member;
-
-        if (!optValue)
-        {
-          continue;
-        }
-
-        auto valueRes = detail::normalizeRuntimeText(*optValue, "Track metadata");
-
-        if (!valueRes)
-        {
-          return std::unexpected{valueRes.error()};
-        }
-
-        optValue = std::move(*valueRes);
-      }
-
       auto customUpdates = std::move(normalized.customUpdates);
       normalized.customUpdates.clear();
 
@@ -94,6 +67,12 @@ namespace ao::rt
 
         if (optValue)
         {
+          // Deletion remains available to clean up an existing reserved custom key.
+          if (isReservedCustomMetadataKey(*keyRes))
+          {
+            return makeError(Error::Code::InvalidInput, std::format("Custom metadata key '{}' is reserved", *keyRes));
+          }
+
           auto valueRes = detail::normalizeRuntimeText(*optValue, "Custom metadata value");
 
           if (!valueRes)
@@ -108,6 +87,79 @@ namespace ao::rt
         {
           return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
         }
+      }
+
+      return {};
+    }
+
+    Result<MetadataPatch> normalizeMetadataPatch(MetadataPatch const& patch)
+    {
+      auto normalized = patch;
+      constexpr auto kTextMembers = std::to_array<std::optional<std::string> MetadataPatch::*>({
+        &MetadataPatch::optTitle,
+        &MetadataPatch::optArtist,
+        &MetadataPatch::optAlbum,
+        &MetadataPatch::optAlbumArtist,
+        &MetadataPatch::optGenre,
+        &MetadataPatch::optComposer,
+        &MetadataPatch::optWork,
+        &MetadataPatch::optMovement,
+      });
+
+      for (auto const member : kTextMembers)
+      {
+        auto& optValue = normalized.*member;
+
+        if (!optValue)
+        {
+          continue;
+        }
+
+        auto valueRes = detail::normalizeRuntimeText(*optValue, "Track metadata");
+
+        if (!valueRes)
+        {
+          return std::unexpected{valueRes.error()};
+        }
+
+        optValue = std::move(*valueRes);
+      }
+
+      if (normalized.optRecordingDate && !normalized.optRecordingDate->isValid())
+      {
+        return makeError(Error::Code::InvalidInput, "Track recording date is not a valid partial date");
+      }
+
+      if (normalized.optCredits)
+      {
+        auto& replacement = *normalized.optCredits;
+
+        if (replacement.kinds.none())
+        {
+          return makeError(Error::Code::InvalidInput, "Credits replacement requires a nonempty scope");
+        }
+
+        for (auto const& entry : replacement.entries)
+        {
+          if (!library::isValidCreditKind(entry.kind) || !replacement.kinds.test(static_cast<std::size_t>(entry.kind)))
+          {
+            return makeError(Error::Code::InvalidInput, "Credit kind is invalid or outside the replacement scope");
+          }
+        }
+
+        auto creditsRes = library::normalizeCredits(std::span<library::Credit const>{replacement.entries});
+
+        if (!creditsRes)
+        {
+          return std::unexpected{creditsRes.error()};
+        }
+
+        replacement.entries = std::move(*creditsRes);
+      }
+
+      if (auto customRes = normalizeCustomMetadataUpdates(normalized); !customRes)
+      {
+        return std::unexpected{customRes.error()};
       }
 
       return normalized;
@@ -200,20 +252,6 @@ namespace ao::rt
         result.changedHot,
         changes);
       applyStringPatch(
-        patch.optConductor,
-        "conductor",
-        metadata.conductor(),
-        [&metadata](std::string_view value) { metadata.conductor(value); },
-        result.changedCold,
-        changes);
-      applyStringPatch(
-        patch.optEnsemble,
-        "ensemble",
-        metadata.ensemble(),
-        [&metadata](std::string_view value) { metadata.ensemble(value); },
-        result.changedCold,
-        changes);
-      applyStringPatch(
         patch.optWork,
         "work",
         metadata.work(),
@@ -225,13 +263,6 @@ namespace ao::rt
         "movement",
         metadata.movement(),
         [&metadata](std::string_view value) { metadata.movement(value); },
-        result.changedCold,
-        changes);
-      applyStringPatch(
-        patch.optSoloist,
-        "soloist",
-        metadata.soloist(),
-        [&metadata](std::string_view value) { metadata.soloist(value); },
         result.changedCold,
         changes);
     }
@@ -292,6 +323,113 @@ namespace ao::rt
         changes);
     }
 
+    void applyRecordingDatePatch(library::TrackBuilder::MetadataBuilder& metadata,
+                                 MetadataPatch const& patch,
+                                 PatchResult& result,
+                                 std::vector<TrackFieldChange>& changes)
+    {
+      if (!patch.optRecordingDate || metadata.recordingDate() == *patch.optRecordingDate)
+      {
+        return;
+      }
+
+      changes.push_back(TrackFieldChange{.field = "recordingDate",
+                                         .oldValue = library::formatRecordingDate(metadata.recordingDate()),
+                                         .newValue = library::formatRecordingDate(*patch.optRecordingDate)});
+      metadata.recordingDate(*patch.optRecordingDate);
+      result.changedCold = true;
+    }
+
+    // Diagnostics only: credit names and roles may contain these separators.
+    // This readable report is never parsed into an edit or retained as Undo.
+    std::string formatCreditsForChangeReport(std::span<library::CreditView const> credits)
+    {
+      auto text = std::string{};
+
+      for (auto const& credit : credits)
+      {
+        if (!text.empty())
+        {
+          text.push_back('\n');
+        }
+
+        text.append(library::creditKindToken(credit.kind));
+        text.append(": ");
+        text.append(credit.name);
+
+        if (!credit.role.empty())
+        {
+          text.append(" (");
+          text.append(credit.role);
+          text.push_back(')');
+        }
+      }
+
+      return text;
+    }
+
+    void applyCreditsPatch(library::TrackBuilder::MetadataBuilder& metadata,
+                           MetadataPatch const& patch,
+                           PatchResult& result,
+                           std::vector<TrackFieldChange>& changes)
+    {
+      if (!patch.optCredits)
+      {
+        return;
+      }
+
+      auto const& replacement = *patch.optCredits;
+      auto const current = metadata.credits();
+      auto merged = std::vector<library::CreditView>{};
+      merged.reserve(current.size() + replacement.entries.size());
+
+      for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+      {
+        auto const kind = static_cast<library::CreditKind>(kindIndex);
+
+        if (replacement.kinds.test(kindIndex))
+        {
+          for (auto const& entry : replacement.entries)
+          {
+            if (entry.kind == kind)
+            {
+              merged.push_back({.name = entry.name, .kind = entry.kind, .role = entry.role});
+            }
+          }
+        }
+        else
+        {
+          for (auto const& entry : current)
+          {
+            if (entry.kind == kind)
+            {
+              merged.push_back(entry);
+            }
+          }
+        }
+      }
+
+      auto const sameList =
+        current.size() == merged.size() &&
+        std::ranges::equal(current,
+                           merged,
+                           [](auto const& lhs, auto const& rhs)
+                           { return lhs.name == rhs.name && lhs.kind == rhs.kind && lhs.role == rhs.role; });
+
+      if (sameList)
+      {
+        return;
+      }
+
+      changes.push_back(TrackFieldChange{
+        .field = std::string{kCreditsMetadataKey},
+        .oldValue = formatCreditsForChangeReport(current),
+        .newValue = formatCreditsForChangeReport(merged),
+      });
+      metadata.credits(merged);
+      result.changedCold = true;
+    }
+
     void applyCustomMetadataPatch(library::TrackBuilder& builder,
                                   MetadataPatch const& patch,
                                   PatchResult& result,
@@ -342,6 +480,8 @@ namespace ao::rt
 
       applyTextMetadataPatch(metadata, patch, result, changes);
       applyNumberMetadataPatch(metadata, patch, result, changes);
+      applyRecordingDatePatch(metadata, patch, result, changes);
+      applyCreditsPatch(metadata, patch, result, changes);
       applyCustomMetadataPatch(builder, patch, result, changes);
 
       return result;
@@ -403,9 +543,17 @@ namespace ao::rt
       auto const& normalizedPatch = *normalizedPatchRes;
       auto writer = transaction.tracks();
       auto changes = std::vector<TrackChangeRecord>{};
+      auto seenTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
+      seenTrackIds.reserve(trackIds.size());
 
       for (auto const trackId : trackIds)
       {
+        // Do not reload dictionary IDs staged by an earlier write of this track.
+        if (!seenTrackIds.insert(trackId).second)
+        {
+          continue;
+        }
+
         auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
         if (!optView)
@@ -504,9 +652,17 @@ namespace ao::rt
       auto writer = transaction.tracks();
       auto metadataChanges = std::vector<TrackChangeRecord>{};
       auto tagChanges = std::vector<TrackTagsChange>{};
+      auto seenTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
+      seenTrackIds.reserve(trackIds.size());
 
       for (auto const trackId : trackIds)
       {
+        // Do not reload dictionary IDs staged by an earlier write of this track.
+        if (!seenTrackIds.insert(trackId).second)
+        {
+          continue;
+        }
+
         auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
         if (!optView)

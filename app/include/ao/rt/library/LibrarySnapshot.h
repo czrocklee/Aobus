@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -15,6 +16,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -55,6 +57,13 @@ namespace ao::rt
     bool containsTrack(TrackId id) const;
     ResourceId trackCoverArtId(TrackId id) const;
     TrackFieldRawValue trackField(TrackId id, TrackField field) const;
+    /// Owns canonical credits at this revision; a present empty list remains
+    /// distinct from a missing or unreadable cold record (nullopt).
+    std::optional<std::vector<library::Credit>> trackCredits(TrackId id) const;
+    /// Current owning value of one custom-metadata key on one track, read under
+    /// this snapshot's transaction. Returns nullopt when the track or key is
+    /// absent; a present value stays engaged even when its text is empty.
+    std::optional<std::string> trackCustomMetadataValue(TrackId id, std::string_view key) const;
 
     // Dictionary
     std::string resolve(DictionaryId id) const;
@@ -82,6 +91,9 @@ namespace ao::rt
 
   private:
     friend class Library;
+    friend class LibraryWriteLane;
+
+    bool isFor(library::MusicLibrary const& library) const noexcept;
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

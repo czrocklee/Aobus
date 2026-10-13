@@ -13,11 +13,13 @@
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/utility/Path.h>
 
@@ -104,6 +106,8 @@ namespace ao::tui
         case F::TrackTotal: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.trackTotal};
         case F::MovementNumber: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.movementNumber};
         case F::MovementTotal: return rt::TrackFieldRawValue{std::in_place_type<std::uint16_t>, row.movementTotal};
+        case F::RecordingDate:
+          return rt::TrackFieldRawValue{std::in_place_type<library::RecordingDate>, row.recordingDate};
         case F::Duration: return rt::TrackFieldRawValue{std::in_place_type<rt::TrackFieldDuration>, row.duration};
         case F::Tags: return rt::TrackFieldRawValue{std::in_place_type<std::string>, row.tags};
         case F::FilePath:
@@ -153,6 +157,20 @@ namespace ao::tui
                                             rt::TrackRow const& row)
     {
       auto value = uimodel::formatTrackFieldRawValue(textCatalog, field, rawValueForField(textCatalog, field, row));
+
+      switch (field)
+      {
+        case rt::TrackField::Conductor:
+          value = uimodel::formatTrackCreditSummary(textCatalog, row.conductor, row.conductorCount);
+          break;
+        case rt::TrackField::Ensemble:
+          value = uimodel::formatTrackCreditSummary(textCatalog, row.ensemble, row.ensembleCount);
+          break;
+        case rt::TrackField::Soloist:
+          value = uimodel::formatTrackCreditSummary(textCatalog, row.soloist, row.soloistCount);
+          break;
+        default: break;
+      }
 
       if (value.empty())
       {

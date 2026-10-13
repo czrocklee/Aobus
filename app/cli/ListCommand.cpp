@@ -3,6 +3,7 @@
 
 #include "ListCommand.h"
 
+#include "BooleanFlag.h"
 #include "CliRuntime.h"
 #include "CommandError.h"
 #include "CommandRegistrations.h"
@@ -1093,7 +1094,7 @@ namespace ao::cli
     auto* del = list->add_subcommand("delete", "Delete a list");
     auto* deleteId = del->add_option("id", "list id")->required();
     auto* deleteDescendants =
-      del->add_flag("--descendants", "delete the complete subtree; use --dry-run to preview it");
+      addBooleanFlag(*del, "--descendants", "delete the complete subtree; use --dry-run to preview it");
     auto* deleteDryRun = addDryRunFlag(*del);
     del->callback(
       [&cli, deleteId, deleteDescendants, deleteDryRun]
@@ -1127,7 +1128,7 @@ namespace ao::cli
       });
 
     auto* dump = list->add_subcommand("dump", "Dump lists from database");
-    auto* dumpRaw = dump->add_flag("--raw", "hex dump raw bytes");
+    auto* dumpRaw = addBooleanFlag(*dump, "--raw", "hex dump raw bytes");
     dump->callback([&cli, dumpRaw]
                    { dumpLists(cli.musicLibrary(), dumpRaw->count() > 0, cli.options().format, cli.io().out); });
   }

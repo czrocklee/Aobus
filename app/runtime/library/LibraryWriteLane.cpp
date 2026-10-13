@@ -18,6 +18,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <boost/asio/associated_executor.hpp>
@@ -661,8 +662,24 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "Cannot bind an empty track target set");
     }
 
-    auto transaction = _library.readTransaction();
-    auto const revision = _library.libraryRevision(transaction);
+    auto snapshot = LibrarySnapshot{_library};
+    return bindTrackTargets(trackIds, snapshot);
+  }
+
+  Result<BoundTrackTargets> LibraryWriteLane::bindTrackTargets(std::span<TrackId const> const trackIds,
+                                                               LibrarySnapshot const& snapshot) const
+  {
+    if (trackIds.empty())
+    {
+      return makeError(Error::Code::InvalidInput, "Cannot bind an empty track target set");
+    }
+
+    if (!snapshot.isFor(_library))
+    {
+      return makeError(Error::Code::InvalidInput, "Track authoring snapshot belongs to different library storage");
+    }
+
+    auto const revision = snapshot.revision();
     std::uint64_t runtimeInstanceId = 0;
 
     {
@@ -676,11 +693,9 @@ namespace ao::rt
       runtimeInstanceId = _runtimeInstanceId;
     }
 
-    auto reader = _library.tracks().reader(transaction);
-
     for (auto const trackId : trackIds)
     {
-      if (trackId == kInvalidTrackId || !reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot))
+      if (trackId == kInvalidTrackId || !snapshot.containsTrack(trackId))
       {
         return makeError(Error::Code::NotFound, std::format("Track authoring target not found: {}", trackId));
       }

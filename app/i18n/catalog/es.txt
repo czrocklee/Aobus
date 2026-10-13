@@ -3,6 +3,37 @@
 
 es:table {
   messages:table {
+    track_field_recording_date { "Fecha de grabación" }
+    track_credits_heading { "Créditos de interpretación" }
+    track_credit_performer { "Intérprete" }
+    track_credit_name { "Nombre" }
+    track_credit_role { "Función o instrumento (opcional)" }
+    track_credits_add { "Añadir crédito" }
+    track_credits_replace { "Reemplazar…" }
+    track_credits_clear { "Borrar este ámbito" }
+    track_credits_commit { "Guardar créditos" }
+    track_credits_cancel { "Cancelar" }
+    track_credit_delete { "Eliminar crédito" }
+    track_credit_blank_name { "Fila {row}: introduzca un nombre." }
+    track_credit_invalid_name_text { "Fila {row}: el nombre contiene texto no válido." }
+    track_credit_invalid_role_text { "Fila {row}: la función o el instrumento contiene texto no válido." }
+    track_credit_invalid_kind { "Fila {row}: elija una categoría de crédito válida para este ámbito." }
+    track_credits_cleared { "Créditos borrados" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "Categoría" }
+    track_credits_scope { "Ámbito de créditos: {scope}" }
+    track_credits_all_kinds { "Todas las categorías de créditos" }
+    track_credits_replace_scope { "Reemplazar este ámbito en todas las pistas seleccionadas" }
+    track_credit_move_up { "Mover arriba" }
+    track_credit_move_down { "Mover abajo" }
+    track_credit_row_move_up { "Mover el crédito {row} hacia arriba" }
+    track_credit_row_move_down { "Mover el crédito {row} hacia abajo" }
+    track_credit_row_delete { "Eliminar el crédito {row}" }
+    track_credit_row_position { "Crédito {row} de {count}" }
+    track_credit_kind_summary { "{kind}: {summary}" }
+    track_credit_kind_value { "Categoría: {kind}" }
+    track_credit_name_role { "{name} ({role})" }
+    track_recording_date_invalid { "Introduzca una fecha válida como YYYY, YYYY-MM o YYYY-MM-DD, o deje el campo vacío para borrarla." }
     tui_go_to_back { "Atrás" }
     tui_go_to_forward { "Adelante" }
     tui_go_to_cancel { "Cancelar" }
@@ -703,6 +734,10 @@ es:table {
     winui_track_properties_save_failed { "Error al guardar: {detail}" }
     winui_track_properties_stale { "La biblioteca cambió mientras este cuadro de diálogo estaba abierto. Vuelve a abrir Propiedades e inténtalo de nuevo." }
     winui_track_properties_invalid_value { "Valor no válido: {detail}" }
+    winui_track_properties_reload { "Recargar" }
+    winui_track_properties_discard_question { "¿Descartar estos cambios?" }
+    winui_track_properties_discard { "Descartar cambios" }
+    winui_track_properties_keep_editing { "Seguir editando" }
     winui_list_create_from_filter { "Crear lista a partir del filtro actual" }
     winui_list_editor_new_title { "Nueva lista" }
     winui_list_editor_edit_title { "Editar lista" }
@@ -787,6 +822,10 @@ es:table {
     gtk_track_save_failed { "Error al guardar" }
     gtk_track_save_stale_title { "No se pudo aplicar el guardado" }
     gtk_track_save_stale { "La biblioteca cambió mientras este cuadro de diálogo estaba abierto. Recarga las propiedades e inténtalo de nuevo." }
+    gtk_track_credits_discard_title { "¿Descartar los cambios en los créditos de interpretación?" }
+    gtk_track_credits_discard_message { "Si cierra Propiedades ahora, se perderán los cambios no guardados en los créditos de interpretación." }
+    gtk_track_credits_discard { "Descartar cambios" }
+    gtk_track_credits_keep_editing { "Seguir editando" }
     gtk_tag_add { "Añadir…" }
     gtk_tag_add_placeholder { "Añadir etiqueta…" }
     gtk_tag_remove { "Eliminar etiqueta {tag}" }

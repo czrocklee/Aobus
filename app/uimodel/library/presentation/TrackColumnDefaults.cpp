@@ -107,6 +107,7 @@ namespace ao::uimodel
       case rt::TrackField::FileSize: return {.width = kWidthTechnical, .alignment = End};
       case rt::TrackField::Codec:
       case rt::TrackField::Quality: return {.width = kWidthTechnical};
+      case rt::TrackField::RecordingDate:
       case rt::TrackField::ModifiedTime: return {.width = kWidthTime, .alignment = End};
       case rt::TrackField::TechnicalSummary: return {.width = kWidthTechnicalSummary};
       default: return {};

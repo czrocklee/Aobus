@@ -145,6 +145,9 @@ Quoted user-variable names must be non-empty.
 | `$work` | `$w` |
 | `$movement` | `$m` |
 | `$soloist` | None |
+| `$recordingDate` | None |
+| `$performer` | None |
+| `$credit` | None |
 | `$genre` | `$g` |
 | `$year` | `$y` |
 | `$trackNumber` | `$tn` |
@@ -184,9 +187,85 @@ A fractional literal is accepted only when scaling produces an integer, so `44.1
 
 `~` performs locale-independent Unicode-caseless substring containment over user-visible text.
 It uses Unicode default full case folding, so expansions such as `Straße` matching `STRASSE` are supported, while accents remain significant.
-Its left operand must be a direct text or URI field and its right operand must be a direct string constant.
+Its left operand must be a direct text or URI field, or a credit member field, and its right operand must be a direct string constant.
 Title, custom metadata, and dictionary-backed metadata use the Unicode-caseless semantic; filesystem URI values retain byte-exact containment without Unicode normalization.
 The [predicate evaluation specification](../../system/query/predicate-evaluation.md) owns normalization, caching, and truth behavior.
+
+### Recording-date predicates
+
+`$recordingDate` is a typed partial calendar date, independent of `$year`, not a text field.
+A present literal must be canonical `"YYYY"`, `"YYYY-MM"`, or `"YYYY-MM-DD"`, with years `0001..9999` and valid proleptic Gregorian components.
+Both quote styles follow the ordinary string grammar; surrounding whitespace inside the literal is rejected.
+An integer `1..9999` is also accepted at year precision, so `$recordingDate = 1981` and `$recordingDate = "1981"` mean the same thing.
+Hyphenated dates must be quoted; booleans, unit literals, zero, timestamps, empty strings, and other implicit conversions are not accepted.
+No recording date is inferred from release Year or file tags such as `TDRC`.
+
+For `=`, `!=`, `<`, `<=`, `>`, and `>=`, compare a present stored date only at the literal's precision.
+Components missing from the stored date remain zero, never filled from the literal.
+This is a deterministic partial-key comparison, not inferred evidence of an actual month or day:
+
+| Stored date | Predicate | Result |
+|---|---|---|
+| `1981-05-12` | `= "1981"` | True |
+| `1981-05-12` | `> "1981"` | False |
+| `1981-05-12` | `<= "1981"` | True |
+| `1981-05-12` | `= "1981-05"` | True |
+| `1981` | `= "1981-05"` | False |
+| `1981` | `< "1981-05"` | True, by zero-component ordering |
+| `1981-05-12` | `> "1981-05-11"` | True |
+
+`in [a, b]` is equality against each literal at that literal's precision.
+`in lower..upper` is exactly `>= lower and <= upper`, each bound retaining its own precision.
+Thus `$recordingDate in 1950..1959` includes `1959-11-02`, while a stored `1950` does not satisfy `>= "1950-01-01"`.
+Bounds are not silently promoted to full dates, and a year-precision upper bound is not a zero-filled tuple that discards later months of that year.
+
+`$recordingDate?` tests presence.
+An absent date does not match equality, ordering, or positive list/range membership; `!=` is the complement of equality and therefore matches absence.
+Use `$recordingDate? and $recordingDate != 1981` to exclude absence, or `!$recordingDate?` to select it.
+Substring matching, field-to-field comparison, and a literal on the left with this field on the right are rejected.
+These predicates require cold data but no dictionary context.
+Outside queries, exact date equality includes every component and stored precision: `1981` and `1981-05-12` are different authoring/aggregation values.
+
+### Credit member predicates
+
+`$conductor`, `$ensemble`, `$soloist`, and `$performer` select their respective credit categories.
+`$credit` selects all four categories; `$performer` does not include the other categories.
+`$musician` is not a field or an alias.
+These selectors test names, never role text, and are not scalar text or ordinary dictionary-id fields:
+
+| Form | Meaning |
+|---|---|
+| `$credit?` | At least one selected entry exists. |
+| `$credit = "X"` | Any selected name equals X by case-sensitive NFC dictionary identity. |
+| `$credit != "X"` | No selected name equals X, including an empty selection. |
+| `$credit ~ "X"` | Any individual selected name contains X under the ordinary Unicode-caseless substring semantic. |
+| `$credit in ["X", "Y"]` | Any selected name equals one of the supplied strings. |
+
+The same operators apply to each category selector.
+
+Equality and list constants bind through the existing batch-scoped dictionary context without interning or writes; an unresolved name matches nothing.
+Substring resolves only member names through the same dictionary text/caseless-key machinery as other admitted text.
+Repeated names or roles do not change the Boolean result, and roles never participate.
+Query literals are NFC-admitted but are not trimmed by the list-input rule: `" Gould"` is not `"Gould"`.
+An empty list does not match equality, substring (even an empty substring literal), or positive membership; inequality matches it.
+To exclude empty selections, combine the same selector's existence test with inequality, such as `$performer? and $performer != "Gould"`.
+Never interpret inequality as "some member differs from X".
+
+Only direct string literals and literal list entries are accepted, with the member field directly on the left.
+Bare member predicates, ordered comparisons, ranges, numeric or Boolean coercions, reversed comparisons, and field operands are rejected.
+Nested predicates yield Booleans and never leak their inner field context into an outer operand or sibling comparison.
+These predicates require cold data; existence needs no dictionary lookup, while name comparison/substring uses the batch context.
+
+### Credit display projections
+
+In format expressions only, each member selector renders all selected names joined by `; `.
+The result preserves duplicates and canonical kind order (Conductor, Ensemble, Soloist, Performer), with stored order within each kind; an empty selection renders empty text.
+Roles are omitted. A name can itself contain `; `, so this is a lossy display operation, not serialization, identity, or editable input.
+The format plan requires both cold data and dictionary access, without making member selectors scalar dictionary fields.
+
+Ordering and compact rows are distinct projections: Conductor, Ensemble, and Soloist ordering uses the first name in the category, and compact rows show that name plus an additional-entry count.
+A track matching its second conductor can therefore remain grouped under its first conductor.
+Member predicates never compare the joined display string or only the first entry.
 
 ## Validation rules
 
@@ -197,7 +276,9 @@ The [predicate evaluation specification](../../system/query/predicate-evaluation
 - Ranges contain two required constant bounds and are executable only as the right operand of `in`.
 - Predicate compilation rejects the shared parser's `+` and adjacency concatenation nodes.
 - Ordered comparisons over dictionary-backed metadata require string operands.
-- Substring `~` requires a direct text or URI field and a direct string constant.
+- Substring `~` requires a direct text, URI, or credit member field and a direct string constant.
+- `$recordingDate` comparisons, lists, and range bounds require canonical date strings or integer years `1..9999`; no field operand or substring conversion is accepted.
+- Credit member comparisons and lists require direct string literals and a direct left member field; ordering, ranges, roles, coercions, reversed comparisons, and field operands are rejected.
 - Unit kinds must match the left field; compound unit segments are supported only for duration.
 - Quoted strings and quoted user-variable names support `\"`, `\\`, `\'`, `\n`, `\t`, and `\r`; other escapes are rejected.
 - Unknown `$` and `@` names are rejected by the shared field catalog.
@@ -233,6 +314,11 @@ $conductor? and !#skip
 #"90s Rock"
 %"Replay Gain" = "-7.4 dB"
 !$movementNumber?
+$recordingDate in 1950..1959
+$recordingDate = "1981-05"
+$recordingDate? and $recordingDate != 1981
+$credit = "Glenn Gould" and $work ~ "Goldberg"
+$performer? and $performer != "Glenn Gould"
 ```
 
 Representative invalid forms are:
@@ -250,6 +336,13 @@ Representative invalid forms are:
 | `@duration ~ "three"` | Substring applies only to text and URI fields. |
 | `@duration >= 10k` | `k` is not a duration unit. |
 | `@codec = VORBIS` | `VORBIS` is not a supported codec constant. |
+| `$recordingDate = 1981-05` | A hyphenated date requires quotes. |
+| `$recordingDate = "1900-02-29"` | The calendar date is invalid. |
+| `$recordingDate = $year` | The date operand must be a literal, not another field. |
+| `$credit > "Gould"` | Member-name ordering is unsupported. |
+| `$creditRole = "piano"` | No role query field exists. |
+| `"Gould" = $soloist` | The member field must be on the left. |
+| `$musician?` | No musician field or alias exists. |
 
 ## Implementation authority
 
@@ -264,6 +357,10 @@ Representative invalid forms are:
 - [`ParserTest.cpp`](../../../test/unit/query/ParserTest.cpp) and [`ExpressionTest.cpp`](../../../test/unit/query/ExpressionTest.cpp) lock grammar and AST shape.
 - Execution-plan tests under [`test/unit/query/`](../../../test/unit/query) lock variables, operators, lists, ranges, units, and invalid forms.
 - [`CompletionVariableTest.cpp`](../../../test/unit/query/CompletionVariableTest.cpp) locks the shared descriptor, variable, alias, and lookup catalog.
+- [`RecordingDatePredicateTest.cpp`](../../../test/unit/query/RecordingDatePredicateTest.cpp) specifies literal precision, absence, lists/ranges, typed rejection, and cold/dictionary-free access.
+- [`CreditPredicateTest.cpp`](../../../test/unit/query/CreditPredicateTest.cpp) specifies category and all-credit name membership, whole-selection inequality, untrimmed literals, empty selections, unresolved bindings, substring matching, and unsupported forms.
+- [`PredicateOperandContextTest.cpp`](../../../test/unit/query/PredicateOperandContextTest.cpp) specifies nested and sibling operand isolation.
+- [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) specifies joined member display and its storage dependencies.
 
 ## Related documents
 

@@ -8,8 +8,11 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/utility/ScopedRegistration.h>
+
+#include <bitset>
 // The loaded theme override is held here, so its type is part of the frame.
 #include <ao/winui/Theme.h>
 #include <ao/winui/layout/ShellState.h>
@@ -140,6 +143,8 @@ namespace winrt::Aobus::implementation
     void stopPlayback();
     void revealCurrentTrack();
     void presentTrackProperties();
+    void presentCapturedTrackProperties(std::vector<ao::TrackId> trackIds,
+                                        std::optional<std::bitset<ao::library::kCreditKindCount>> optScope);
     void toggleInspector();
     void toggleShellMode();
     void reloadTheme();

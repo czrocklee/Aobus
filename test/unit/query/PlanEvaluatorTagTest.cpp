@@ -168,6 +168,7 @@ namespace ao::query::test
     auto plan = ExecutionPlan{
       .instructions = {{.op = OpCode::LoadConstant, .operand = 0, .constValue = 1}},
       .stringConstants = {},
+      .recordingDateConstants = {},
       .inSets = {},
       .dictionarySymbols = {"required"},
       .requiredTagSymbols = {0},

@@ -85,6 +85,7 @@ namespace ao::gtk
     , _multipleTracks{_trackIds.size() > 1}
     , _formModel{_textCatalog}
     , _formSpec{uimodel::buildTrackPropertiesFormSpec(_textCatalog)}
+    , _creditsEditor{_completion, _textCatalog, _formModel, [this] { updateSaveEnabled(); }}
   {
     auto const title =
       _multipleTracks
@@ -129,6 +130,15 @@ namespace ao::gtk
     signal_close_request().connect(
       [this]
       {
+        // Every close route arrives here, including Close, Escape, and the
+        // window manager. A Credits draft is the one unsaved state worth a
+        // question, because rebuilding an edited list is laborious.
+        if (_interactionState == InteractionState::Editing && !_discardConfirmed && hasUnsavedCredits())
+        {
+          promptDiscardCredits();
+          return true;
+        }
+
         if (_interactionState != InteractionState::Closing)
         {
           // A native close need not retire a retained C++ owner. Cancel its
@@ -188,6 +198,13 @@ namespace ao::gtk
 
     for (auto const& row : _formSpec.metadataRows)
     {
+      // The Credits surface owns these scoped previews and their edit actions.
+      if (row.field == rt::TrackField::Conductor || row.field == rt::TrackField::Ensemble ||
+          row.field == rt::TrackField::Soloist)
+      {
+        continue;
+      }
+
       auto* const widget = createEditorWidget(row.field, row.editorKind);
       list->addRow(std::string{row.label}, *widget);
 
@@ -195,6 +212,7 @@ namespace ao::gtk
     }
 
     _metadataBox.append(*list);
+    _metadataBox.append(_creditsEditor);
     _notebook.append_page(_metadataScroll, gtkText(_textCatalog, MessageId::TrackMetadataHeading));
   }
 
@@ -271,7 +289,24 @@ namespace ao::gtk
 
   Result<> TrackPropertiesDialog::prepareEditing()
   {
-    auto sessionRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
+    auto baseline = uimodel::TrackPropertiesFormModel{_textCatalog};
+    auto sessionRes = [&] -> Result<uimodel::TrackAuthoringSession>
+    {
+      auto snapshot = _library.snapshot();
+      auto boundRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds, snapshot);
+
+      if (!boundRes)
+      {
+        return std::unexpected{boundRes.error()};
+      }
+
+      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, baseline); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      return std::move(*boundRes);
+    }();
 
     if (!sessionRes)
     {
@@ -279,21 +314,6 @@ namespace ao::gtk
     }
 
     auto session = std::move(*sessionRes);
-    auto baseline = uimodel::TrackPropertiesFormModel{_textCatalog};
-
-    {
-      auto snapshot = _library.snapshot();
-
-      if (snapshot.revision() != session.boundRevision())
-      {
-        return makeError(Error::Code::InvalidState, "The library changed while Track Properties was opening");
-      }
-
-      if (auto res = uimodel::loadTrackPropertiesFormBaseline(snapshot, _trackIds, _formSpec, baseline); !res)
-      {
-        return res;
-      }
-    }
 
     auto invalidatedSub = session.onInvalidated(
       [this]
@@ -316,6 +336,8 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::applyLoadedFields()
   {
+    _creditsEditor.refresh();
+
     for (auto& editor : _editors)
     {
       applyRowView(editor.widget, _formModel.rowView(editor.field));
@@ -332,7 +354,7 @@ namespace ao::gtk
 
   void TrackPropertiesDialog::handleSaveClicked()
   {
-    if (_interactionState != InteractionState::Editing || _trackIds.empty())
+    if (_interactionState != InteractionState::Editing || _trackIds.empty() || _formModel.creditsEditor().isEditing())
     {
       return;
     }
@@ -340,6 +362,11 @@ namespace ao::gtk
     for (auto const& editor : _editors)
     {
       updateEditorValue(editor.field, editor.widget);
+    }
+
+    if (_hasInvalidRecordingDate)
+    {
+      return;
     }
 
     auto const patch = _formModel.buildPatch();
@@ -412,6 +439,47 @@ namespace ao::gtk
       });
   }
 
+  bool TrackPropertiesDialog::hasUnsavedCredits() const noexcept
+  {
+    return _formModel.creditsEditor().hasDraftChanges() || _formModel.pendingCredits().has_value();
+  }
+
+  void TrackPropertiesDialog::promptDiscardCredits()
+  {
+    // A repeated close request returns to the live question instead of stacking another.
+    if (_discardPrompt != nullptr)
+    {
+      _discardPrompt->present();
+      return;
+    }
+
+    _discardPrompt =
+      AppDialog::presentMessage(*this,
+                                gtkText(_textCatalog, MessageId::GtkTrackCreditsDiscardTitle),
+                                gtkText(_textCatalog, MessageId::GtkTrackCreditsDiscardMessage),
+                                {AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkTrackCreditsKeepEditing),
+                                                 .responseId = Gtk::ResponseType::CANCEL,
+                                                 .role = AppDialogActionRole::Cancel},
+                                 AppDialogAction{.label = gtkText(_textCatalog, MessageId::GtkTrackCreditsDiscard),
+                                                 .responseId = Gtk::ResponseType::REJECT,
+                                                 .role = AppDialogActionRole::Primary}},
+                                Gtk::ResponseType::CANCEL,
+                                _callbackScope.guard(
+                                  [this](std::int32_t const responseId)
+                                  {
+                                    _discardPrompt = nullptr;
+
+                                    if (responseId != Gtk::ResponseType::REJECT)
+                                    {
+                                      return;
+                                    }
+
+                                    _discardConfirmed = true;
+                                    // Leave the prompt's response handler before closing this window.
+                                    Glib::signal_idle().connect_once(sigc::track_object([this] { close(); }, *this));
+                                  }));
+  }
+
   void TrackPropertiesDialog::setInteractionState(InteractionState const state)
   {
     _interactionState = state;
@@ -432,6 +500,7 @@ namespace ao::gtk
   {
     auto const sessionCanEdit = _optEditSession && _optEditSession->isCurrent();
     auto const interactionCanEdit = _interactionState == InteractionState::Editing;
+    _creditsEditor.set_sensitive(sessionCanEdit && interactionCanEdit);
 
     for (auto const& editor : _editors)
     {
@@ -453,7 +522,7 @@ namespace ao::gtk
     {
       auto const sessionCanSave = _optEditSession && _optEditSession->isCurrent();
       _saveButton->set_sensitive(_interactionState == InteractionState::Editing && sessionCanSave &&
-                                 _formModel.canSave());
+                                 !_hasInvalidRecordingDate && _formModel.canSave());
     }
   }
 
@@ -466,7 +535,35 @@ namespace ao::gtk
 
     if (auto* const entry = dynamic_cast<Gtk::Entry*>(widget); entry != nullptr)
     {
-      _formModel.setEditValue(field, uimodel::makeTextEditValue(entry->get_text().raw()));
+      if (field == rt::TrackField::RecordingDate)
+      {
+        // Mixed properties remain unchanged; their placeholder is not date input.
+        if (_formModel.rowView(field).mixed)
+        {
+          return;
+        }
+
+        auto dateRes = uimodel::parseRecordingDateEditValue(entry->get_text().raw());
+        _hasInvalidRecordingDate = !dateRes;
+
+        if (dateRes)
+        {
+          entry->remove_css_class("error");
+          entry->set_tooltip_text("");
+          _formModel.setEditValue(field, std::move(*dateRes));
+        }
+        else
+        {
+          entry->add_css_class("error");
+          entry->set_tooltip_text(gtkText(_textCatalog, MessageId::TrackRecordingDateInvalid));
+          _formModel.setEditValue(field, uimodel::makeTextEditValue(entry->get_text().raw()));
+        }
+      }
+      else
+      {
+        _formModel.setEditValue(field, uimodel::makeTextEditValue(entry->get_text().raw()));
+      }
+
       updateSaveEnabled();
       return;
     }

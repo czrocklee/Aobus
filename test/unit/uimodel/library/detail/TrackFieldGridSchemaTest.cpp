@@ -25,7 +25,8 @@ namespace ao::uimodel::test
                                                    rt::TrackField::Work,
                                                    rt::TrackField::Movement,
                                                    rt::TrackField::Soloist,
-                                                   rt::TrackField::Year});
+                                                   rt::TrackField::Year,
+                                                   rt::TrackField::RecordingDate});
 
     CHECK(projection.compositeMetadataFields ==
           std::vector{TrackFieldGridCompositeFields{

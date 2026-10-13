@@ -27,6 +27,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -38,6 +39,7 @@
 #include <expected>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -105,6 +107,8 @@ namespace ao::tui
     _libraryChangesSub = _library.changes().onChanged(
       [this](rt::LibraryChangeSet const& changeSet)
       {
+        _observedLibraryRevision = std::max(_observedLibraryRevision, changeSet.libraryRevision);
+        invalidateFocusedCredits();
         std::ignore = reloadActiveList();
 
         if (changeSet.libraryReset || !changeSet.listsUpserted.empty() || !changeSet.listsDeleted.empty())
@@ -190,6 +194,37 @@ namespace ao::tui
 
     auto const selectedIndex = clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size());
     return {.track = &_tracks[selectedIndex], .coverArtId = _tracks[selectedIndex].coverArtId};
+  }
+
+  uimodel::TrackCreditSections const& LibraryController::focusedCredits() const
+  {
+    auto const trackId = focusedTrackId();
+
+    if (_focusedCreditsPopulated && _focusedCreditsTrackId == trackId &&
+        _focusedCreditsLibraryRevision == _observedLibraryRevision)
+    {
+      return _focusedCredits;
+    }
+
+    _focusedCredits = {};
+    _focusedCreditsTrackId = trackId;
+
+    if (trackId != kInvalidTrackId)
+    {
+      auto snapshot = _library.snapshot();
+
+      if (auto const sectionsRes = uimodel::loadTrackCreditsEditorBaseline(snapshot, std::span{&trackId, 1});
+          sectionsRes)
+      {
+        _focusedCredits = *sectionsRes;
+      }
+
+      _observedLibraryRevision = std::max(_observedLibraryRevision, snapshot.revision());
+    }
+
+    _focusedCreditsLibraryRevision = _observedLibraryRevision;
+    _focusedCreditsPopulated = true;
+    return _focusedCredits;
   }
 
   std::vector<TrackId> LibraryController::selectedTrackIds() const
@@ -517,6 +552,12 @@ namespace ao::tui
     return _tracks[clampSelection(static_cast<std::size_t>(std::max(0, _selectedTrack)), _tracks.size())].id;
   }
 
+  void LibraryController::invalidateFocusedCredits() noexcept
+  {
+    _focusedCreditsPopulated = false;
+    _focusedCredits = {};
+  }
+
   bool LibraryController::containsTrackId(TrackId const trackId) const noexcept
   {
     return std::ranges::any_of(_tracks, [trackId](TrackListEntry const& entry) { return entry.id == trackId; });
@@ -592,6 +633,11 @@ namespace ao::tui
 
   void LibraryController::afterFocusMove()
   {
+    if (_focusedCreditsTrackId != focusedTrackId())
+    {
+      invalidateFocusedCredits();
+    }
+
     if (_optVisualAnchor)
     {
       applyVisualRange();
@@ -1143,6 +1189,7 @@ namespace ao::tui
 
   Result<> LibraryController::refreshActiveView()
   {
+    invalidateFocusedCredits();
     auto const stateRes = _views.findTrackListState(_activeViewId);
 
     if (!stateRes)

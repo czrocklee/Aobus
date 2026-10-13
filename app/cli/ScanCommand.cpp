@@ -3,6 +3,7 @@
 
 #include "ScanCommand.h"
 
+#include "BooleanFlag.h"
 #include "CliRuntime.h"
 #include "CommandError.h"
 #include "CommandRegistrations.h"
@@ -316,9 +317,9 @@ namespace ao::cli
   void configureScanCommand(CLI::App& app, CliRuntime& cli)
   {
     auto* const cmd = app.add_subcommand("scan", "Scan music root and reconcile the library");
-    auto* const dryRun = cmd->add_flag("--dry-run", "show planned changes without mutating the library");
-    auto* const verbose = cmd->add_flag("--verbose", "print scan progress to stderr");
-    auto* const deferFingerprint = cmd->add_flag("--defer-fingerprint", "defer new-file audio fingerprinting");
+    auto* const dryRun = addBooleanFlag(*cmd, "--dry-run", "show planned changes without mutating the library");
+    auto* const verbose = addBooleanFlag(*cmd, "--verbose", "print scan progress to stderr");
+    auto* const deferFingerprint = addBooleanFlag(*cmd, "--defer-fingerprint", "defer new-file audio fingerprinting");
 
     cmd->callback([&cli, dryRun, verbose, deferFingerprint]
                   { runScan(cli, dryRun->count() > 0, verbose->count() > 0, deferFingerprint->count() > 0); });

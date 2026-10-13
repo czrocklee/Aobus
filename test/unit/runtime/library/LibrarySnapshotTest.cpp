@@ -17,6 +17,7 @@
 #include <ao/FileTimestamp.h>
 #include <ao/PictureType.h>
 #include <ao/async/Runtime.h>
+#include <ao/library/Credits.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
@@ -62,6 +63,10 @@ namespace ao::rt::test
   {
     constexpr auto kTrackUri = "music/song.flac";
     constexpr auto kCoverBytes = std::array{std::byte{0x01}, std::byte{0x23}, std::byte{0x45}, std::byte{0x67}};
+    constexpr auto kCredits =
+      std::array{library::CreditView{.name = "Conductor", .kind = library::CreditKind::Conductor},
+                 library::CreditView{.name = "Ensemble", .kind = library::CreditKind::Ensemble},
+                 library::CreditView{.name = "Soloist", .kind = library::CreditKind::Soloist}};
 
     struct SeededReadModelLibrary final
     {
@@ -103,11 +108,9 @@ namespace ao::rt::test
         .albumArtist("Album Artist")
         .genre("Rock")
         .composer("Composer")
-        .conductor("Conductor")
-        .ensemble("Ensemble")
+        .credits(kCredits)
         .work("Work")
         .movement("Movement")
-        .soloist("Soloist")
         .year(2026)
         .discNumber(2)
         .discTotal(3)

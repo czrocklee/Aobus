@@ -4,6 +4,7 @@
 #include <ao/rt/completion/MetadataValueCompleter.h>
 
 #include "../detail/CompletionVocabulary.h"
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -70,7 +71,46 @@ namespace ao::rt
         .items = std::move(items),
       };
     }
+    CompletionProvider makeCreditCompletionProvider(CompletionService& vocabulary,
+                                                    std::optional<library::CreditKind> optKind)
+    {
+      return [vocabulary = &vocabulary, optKind](
+               std::string_view text, std::size_t cursor) -> std::optional<CompletionResult>
+      {
+        auto items = std::vector<CompletionItem>{};
+        auto const prefix = text.substr(0, std::min(cursor, text.size()));
+        appendVocabularyCompletionItems(items,
+                                        optKind ? vocabulary->creditNames(*optKind) : vocabulary->creditRoles(),
+                                        prefix,
+                                        kCompletionResultLimit,
+                                        [](VocabularyEntry const& entry)
+                                        {
+                                          return CompletionItem{
+                                            .displayText = entry.value,
+                                            .insertText = entry.value,
+                                            .detail = CompletionDetail::makeUsageFrequency(entry.frequency),
+                                          };
+                                        });
+
+        if (items.empty())
+        {
+          return std::nullopt;
+        }
+
+        return CompletionResult{.replaceBegin = 0, .replaceEnd = text.size(), .items = std::move(items)};
+      };
+    }
   } // namespace
+
+  CompletionProvider makeCreditNameCompletionProvider(CompletionService& vocabulary, library::CreditKind kind)
+  {
+    return makeCreditCompletionProvider(vocabulary, kind);
+  }
+
+  CompletionProvider makeCreditRoleCompletionProvider(CompletionService& vocabulary)
+  {
+    return makeCreditCompletionProvider(vocabulary, std::nullopt);
+  }
 
   MetadataValueCompleter::MetadataValueCompleter(CompletionService& vocabulary, TrackField field)
     : _vocabulary{vocabulary}, _field{field}

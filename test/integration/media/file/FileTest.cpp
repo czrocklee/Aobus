@@ -7,25 +7,30 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackView.h>
+#include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -40,6 +45,64 @@ namespace ao::media::file::test
       auto trackRes = rt::readMediaTrack(path);
       REQUIRE(trackRes);
       return std::move(*trackRes);
+    }
+
+    std::vector<library::Credit> copyCredits(std::span<library::CreditView const> entries)
+    {
+      auto owned = std::vector<library::Credit>{};
+      owned.reserve(entries.size());
+
+      for (auto const& entry : entries)
+      {
+        owned.push_back({.name = std::string{entry.name}, .kind = entry.kind, .role = std::string{entry.role}});
+      }
+
+      return owned;
+    }
+
+    std::vector<std::uint8_t> makeAllKindCreditFlac()
+    {
+      auto bytes = std::vector<std::uint8_t>{'f', 'L', 'a', 'C', 0, 0, 0, 34};
+      auto streamInfo = flac::StreamInfoLayout{};
+      streamInfo.packedFields = (44100ULL << 44) | (1ULL << 41) | (15ULL << 36) | 44100ULL;
+      auto const* streamBytes = reinterpret_cast<std::uint8_t const*>(&streamInfo);
+      bytes.insert(bytes.end(), streamBytes, streamBytes + sizeof(streamInfo));
+      auto comments = std::vector<std::uint8_t>{};
+      auto const appendSize = [&](std::size_t size)
+      {
+        for (auto const shift : {0U, 8U, 16U, 24U})
+        {
+          comments.push_back(static_cast<std::uint8_t>(size >> shift));
+        }
+      };
+      auto const values = std::to_array<std::string_view>({
+        "SOLOIST=Solo",
+        "PERFORMER=Ada (Piano)",
+        "ORCHESTRA=Discarded",
+        "CONDUCTOR=First",
+        "ENSEMBLE=Group",
+        "CONDUCTOR=Second",
+        "PERFORMER=Ada (Piano)",
+        "CONDUCTOR=First",
+        "DATE=2024-05-17",
+      });
+      appendSize(0); // Empty vendor.
+      appendSize(values.size());
+
+      for (auto const value : values)
+      {
+        appendSize(value.size());
+        comments.insert(comments.end(), value.begin(), value.end());
+      }
+
+      bytes.insert(bytes.end(),
+                   {0x84,
+                    static_cast<std::uint8_t>(comments.size() >> 16U),
+                    static_cast<std::uint8_t>(comments.size() >> 8U),
+                    static_cast<std::uint8_t>(comments.size())});
+      bytes.insert(bytes.end(), comments.begin(), comments.end());
+      bytes.push_back(0xA0); // Nonempty audio payload; no decoder is needed for metadata extraction.
+      return bytes;
     }
 
     bool hasPngSignature(std::span<std::byte const> bytes)
@@ -81,6 +144,7 @@ namespace ao::media::file::test
     CHECK(metadata.album() == "Test Album");
     CHECK(metadata.genre() == "Rock");
     CHECK(metadata.year() == 2024);
+    CHECK_FALSE(metadata.recordingDate().isPresent());
 
     if (std::string_view{format} != "wav")
     {
@@ -107,6 +171,7 @@ namespace ao::media::file::test
     CHECK(metadata.album() == "HiRes Album");
     CHECK(metadata.genre() == "Electronic");
     CHECK(metadata.year() == 2025);
+    CHECK_FALSE(metadata.recordingDate().isPresent());
 
     if (std::string_view{format} != "wav")
     {
@@ -130,9 +195,12 @@ namespace ao::media::file::test
     CHECK(metadata.album() == "Classical Album");
     CHECK(metadata.genre() == "Classical");
     CHECK(metadata.composer() == "Fixture Composer");
-    CHECK(metadata.conductor() == "Fixture Conductor");
-    CHECK(metadata.ensemble() == "Fixture Ensemble");
-    CHECK(metadata.soloist() == "Fixture Soloist");
+    CHECK(copyCredits(metadata.credits()) == std::vector<library::Credit>{
+                                               {.name = "Fixture Conductor", .kind = library::CreditKind::Conductor},
+                                               {.name = "Fixture Ensemble", .kind = library::CreditKind::Ensemble},
+                                               {.name = "Fixture Soloist", .kind = library::CreditKind::Soloist},
+                                             });
+    CHECK_FALSE(metadata.recordingDate().isPresent());
     CHECK(metadata.work() == "Fixture Work");
     CHECK(metadata.movement() == "Fixture Movement");
     CHECK(metadata.movementNumber() == 2);
@@ -149,16 +217,30 @@ namespace ao::media::file::test
     CAPTURE(format);
     auto const path = kTestDataDir / ("classical_fallback." + std::string{format});
 
-    auto loaded = loadTrack(path);
-    auto& metadata = loaded.builder().metadata();
+    // Copy every borrowed collector view out before the file dies.
+    auto const observed = [path]
+    {
+      auto loaded = loadTrack(path);
+      auto const& metadata = loaded.builder().metadata();
+      CHECK_FALSE(metadata.recordingDate().isPresent());
+      return std::tuple{std::string{metadata.title()}, copyCredits(metadata.credits())};
+    }();
+    auto const& [title, credits] = observed;
 
-    CHECK(metadata.title() == "Classical Fallback");
-    CHECK(metadata.ensemble() == "Fixture Fallback Ensemble");
+    CHECK(title == "Classical Fallback");
 
-    // FLAC and Opus share one Vorbis comment vocabulary, so both map PERFORMER.
+    // PERFORMER is not Soloist; Ensemble itself is also a credit.
     if (std::string_view{format} == "flac" || std::string_view{format} == "opus")
     {
-      CHECK(metadata.soloist() == "Fixture Fallback Soloist");
+      CHECK(credits == std::vector<library::Credit>{
+                         {.name = "Fixture Fallback Ensemble", .kind = library::CreditKind::Ensemble},
+                         {.name = "Fixture Fallback Soloist", .kind = library::CreditKind::Performer},
+                       });
+    }
+    else
+    {
+      CHECK(credits ==
+            std::vector<library::Credit>{{.name = "Fixture Fallback Ensemble", .kind = library::CreditKind::Ensemble}});
     }
   }
 
@@ -342,5 +424,74 @@ namespace ao::media::file::test
     CHECK(metadata.genre().empty());
     CHECK(metadata.trackNumber() == 0);
     CHECK(metadata.year() == 0);
+    CHECK(metadata.credits().empty());
+    CHECK_FALSE(metadata.recordingDate().isPresent());
+  }
+
+  TEST_CASE("Media File - all credit kinds map explicitly and owning copies prepare in canonical library order",
+            "[media][integration][metadata]")
+  {
+    auto const source = []
+    {
+      auto const temp = ao::test::TempFile{makeAllKindCreditFlac(), ".flac"};
+      auto loaded = loadTrack(temp.path);
+      CHECK(loaded.builder().metadata().year() == 2024);
+      CHECK_FALSE(loaded.builder().metadata().recordingDate().isPresent());
+      auto const credits = copyCredits(loaded.builder().metadata().credits());
+      CHECK(credits == std::vector<library::Credit>{
+                         {.name = "Solo", .kind = library::CreditKind::Soloist},
+                         {.name = "Ada", .kind = library::CreditKind::Performer, .role = "Piano"},
+                         {.name = "First", .kind = library::CreditKind::Conductor},
+                         {.name = "Group", .kind = library::CreditKind::Ensemble},
+                         {.name = "Second", .kind = library::CreditKind::Conductor},
+                         {.name = "Ada", .kind = library::CreditKind::Performer, .role = "Piano"},
+                         {.name = "First", .kind = library::CreditKind::Conductor},
+                       });
+      return credits;
+    }();
+
+    // The MediaTrack/file and callback strings have expired. These owning facts
+    // remain alive until builder preparation has copied the necessary IDs.
+    auto builder = library::TrackBuilder::makeEmpty();
+    builder.property().uri("credits.flac");
+    builder.metadata().year(2024).credits(std::span<library::Credit const>{source});
+    auto const tempDir = ao::test::TempDir{};
+    auto musicLibrary = library::test::makeTestMusicLibrary(tempDir.path(), tempDir.path() / "db");
+    auto transaction = library::test::writeTransaction(musicLibrary);
+    auto serializeRes = library::test::physicalSerializeTrack(builder, transaction, musicLibrary.resources());
+    REQUIRE(serializeRes);
+    REQUIRE(transaction.commit());
+    auto const& [hot, cold] = *serializeRes;
+    auto const view = library::TrackView{hot, cold};
+    CHECK(view.metadata().year() == 2024);
+    CHECK_FALSE(view.performance().recordingDate().isPresent());
+    auto const entries = view.performance().credits();
+    REQUIRE(entries.size() == 7);
+    auto const& dictionary = musicLibrary.dictionary();
+    CHECK(dictionary.get(entries[0].nameId) == "First");
+    CHECK(dictionary.get(entries[1].nameId) == "Second");
+    CHECK(dictionary.get(entries[2].nameId) == "First");
+    CHECK(dictionary.get(entries[3].nameId) == "Group");
+    CHECK(dictionary.get(entries[4].nameId) == "Solo");
+    CHECK(dictionary.get(entries[5].nameId) == "Ada");
+    CHECK(dictionary.get(entries[5].roleId) == "Piano");
+    CHECK(entries[6].nameId == entries[5].nameId);
+    CHECK(entries[6].roleId == entries[5].roleId);
+    CHECK(view.performance().credits(library::CreditKind::Conductor).size() == 3);
+    CHECK(view.performance().credits(library::CreditKind::Ensemble).size() == 1);
+    CHECK(view.performance().credits(library::CreditKind::Soloist).size() == 1);
+    CHECK(view.performance().credits(library::CreditKind::Performer).size() == 2);
+
+    builder.metadata().credits(std::span<library::Credit const>{});
+    CHECK(builder.metadata().credits().empty());
+    CHECK(builder.metadata().year() == 2024);
+    auto clearTransaction = library::test::writeTransaction(musicLibrary);
+    auto clearRes = library::test::physicalSerializeTrack(builder, clearTransaction, musicLibrary.resources());
+    REQUIRE(clearRes);
+    auto const& [clearedHot, clearedCold] = *clearRes;
+    auto const cleared = library::TrackView{clearedHot, clearedCold};
+    CHECK(cleared.performance().empty());
+    CHECK(cleared.metadata().year() == 2024);
+    CHECK(cleared.property().uri() == "credits.flac");
   }
 } // namespace ao::media::file::test

@@ -4,6 +4,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/i18n/IcuCompletionAliases.h>
+#include <ao/library/Credits.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
@@ -53,20 +54,20 @@ namespace ao::uimodel::test
             "[uimodel][unit][track-filter-completion]")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto const trackId =
-      library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
-                                                  library::test::TrackSpec{.title = "Title Match",
-                                                                           .artist = "Artist Match",
-                                                                           .album = "Album Match",
-                                                                           .albumArtist = "Album Artist Match",
-                                                                           .genre = "Genre Match",
-                                                                           .composer = "Composer Match",
-                                                                           .conductor = "Conductor Match",
-                                                                           .ensemble = "Ensemble Match",
-                                                                           .work = "Work Match",
-                                                                           .movement = "Movement Match",
-                                                                           .soloist = "Soloist Match",
-                                                                           .tags = {"Tag Match"}});
+    auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+      libraryFixture.library(),
+      library::test::TrackSpec{.title = "Title Match",
+                               .artist = "Artist Match",
+                               .album = "Album Match",
+                               .albumArtist = "Album Artist Match",
+                               .genre = "Genre Match",
+                               .composer = "Composer Match",
+                               .work = "Work Match",
+                               .movement = "Movement Match",
+                               .credits = {{"Conductor Match", library::CreditKind::Conductor, ""},
+                                           {"Ensemble Match", library::CreditKind::Ensemble, ""},
+                                           {"Soloist Match", library::CreditKind::Soloist, ""}},
+                               .tags = {"Tag Match"}});
     auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};

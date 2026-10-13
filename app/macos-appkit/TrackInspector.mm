@@ -6,7 +6,10 @@
 #include "AppKitText.h"
 #include "ArtworkView.h"
 #include "DesktopControls.h"
+#include <ao/library/RecordingDate.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/utility/Path.h>
 
 #include <algorithm>
@@ -138,6 +141,7 @@ namespace
   _properties = [NSButton buttonWithTitle:[self text:MessageId::AppKitEditPropertiesAction]
                                    target:self
                                    action:@selector(editProperties:)];
+  _properties.identifier = @"inspector-properties";
   [self.view addSubview:_properties];
   return self;
 }
@@ -154,6 +158,7 @@ namespace
 
 - (void)renderSelectionCount:(std::size_t)count
                          row:(std::optional<ao::rt::TrackRow> const&)optRow
+                     credits:(ao::uimodel::TrackCreditSections const&)credits
                    canReveal:(BOOL)canReveal
 {
   if (_detached != NO)
@@ -203,6 +208,13 @@ namespace
         detail([self text:MessageId::TrackFieldYear], std::format("{}", row.year));
       }
 
+      // A release year never infers a recording date; only a present stored
+      // value renders, at its own precision.
+      if (row.recordingDate.isPresent())
+      {
+        detail([self text:MessageId::TrackFieldRecordingDate], ao::library::formatRecordingDate(row.recordingDate));
+      }
+
       if (row.trackNumber != 0)
       {
         detail([self text:MessageId::TrackFieldTrackNumber],
@@ -236,6 +248,29 @@ namespace
       NSColor.secondaryLabelColor,
       NO,
       kContentGap);
+  }
+
+  // Full owning sections are captured only at the selection boundary. Common
+  // categories remain visible when another category differs across targets.
+  if (count > 0 && (count != 1 || optRow))
+  {
+    auto const rows = ao::uimodel::formatTrackCreditDisplayRows(*_optCatalog, credits);
+
+    if (!rows.empty())
+    {
+      append([self text:MessageId::TrackCreditsHeading], kSecondaryFontSize, NSColor.secondaryLabelColor, NO, 2);
+
+      for (auto const& row : rows)
+      {
+        append(nativeText(row.kindLabel), kSecondaryFontSize, NSColor.secondaryLabelColor, NO, 2);
+        append(nativeText(row.name), kBodyFontSize, NSColor.labelColor, NO, row.role.empty() ? kContentGap : 2);
+
+        if (!row.role.empty())
+        {
+          append(nativeText(row.role), kBodyFontSize, NSColor.secondaryLabelColor, NO, kContentGap);
+        }
+      }
+    }
   }
 
   [_detailText.textStorage setAttributedString:text];
@@ -359,6 +394,7 @@ namespace
   edit.frame = NSMakeRect(kOuterInset, kContentInset, kInspectorEditButtonWidth, kInspectorSheetButtonHeight);
   edit.bezelStyle = NSBezelStyleRounded;
   edit.controlSize = _modern != NO ? NSControlSizeLarge : NSControlSizeRegular;
+  edit.identifier = @"inspector-properties";
   edit.enabled = _properties.enabled;
   [_sheet.contentView addSubview:edit];
   [window beginSheet:_sheet completionHandler:nil];

@@ -7,12 +7,15 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
+#include <ao/library/Credits.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 
 #include <ftxui/component/event.hpp>
 
+#include <bitset>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace ao::async
@@ -85,6 +88,15 @@ namespace ao::tui
      */
     bool tryOpen(std::vector<TrackId> targetIds, TrackEditorMode mode = TrackEditorMode::Properties);
 
+    /**
+     * @brief Opens a Properties editor whose Credits session over @p kinds has begun.
+     *
+     * The scope must be one kind or all kinds; another scope is refused
+     * silently. A baseline that refuses the scope installs no editor and
+     * reports itself like any other refused open.
+     */
+    bool tryOpenCredits(std::vector<TrackId> targetIds, std::bitset<library::kCreditKindCount> kinds);
+
     /// The editor to render and route input to, or null when none is tryOpen.
     TrackPropertiesEditor const* activeEditor() const noexcept;
     bool isActive() const noexcept { return activeEditor() != nullptr; }
@@ -101,6 +113,10 @@ namespace ao::tui
 
   private:
     struct State;
+
+    bool tryOpenEditor(std::vector<TrackId> const& targetIds,
+                       TrackEditorMode mode,
+                       std::optional<std::bitset<library::kCreditKindCount>> optCreditKinds);
 
     /**
      * @brief Awaits @p submission and settles it on the callback executor.

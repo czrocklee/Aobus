@@ -8,6 +8,7 @@
 #include "lib/media/file/mpeg/id3v2/Layout.h"
 #include "test/unit/media/file/id3v2/TestId3v2.h"
 #include <ao/PictureType.h>
+#include <ao/media/file/Visitor.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -15,8 +16,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -25,91 +24,19 @@ namespace ao::media::file::mpeg::id3v2::test
 {
   namespace
   {
-    using Bytes = std::vector<std::byte>;
-
+    using ao::test::id3v2::appendFrame;
+    using ao::test::id3v2::appendSyncSafe;
+    using ao::test::id3v2::appendText;
+    using ao::test::id3v2::appendUint32Be;
+    using ao::test::id3v2::Bytes;
+    using ao::test::id3v2::byteSpan;
     using ao::test::id3v2::deunsynchronisedSize;
-
-    std::span<std::byte const> byteSpan(Bytes const& bytes)
-    {
-      return {bytes.data(), bytes.size()};
-    }
+    using ao::test::id3v2::makeHeader;
+    using ao::test::id3v2::textContent;
 
     void appendByte(Bytes& out, std::uint8_t value)
     {
       out.push_back(std::byte{value});
-    }
-
-    void appendText(Bytes& out, std::string_view text)
-    {
-      for (auto const character : text)
-      {
-        out.push_back(std::byte{static_cast<std::uint8_t>(character)});
-      }
-    }
-
-    void appendUint32Be(Bytes& out, std::uint32_t value)
-    {
-      out.push_back(std::byte{static_cast<std::uint8_t>(value >> 24)});
-      out.push_back(std::byte{static_cast<std::uint8_t>(value >> 16)});
-      out.push_back(std::byte{static_cast<std::uint8_t>(value >> 8)});
-      out.push_back(std::byte{static_cast<std::uint8_t>(value)});
-    }
-
-    void appendSyncSafe(Bytes& out, std::uint32_t value)
-    {
-      out.push_back(std::byte{static_cast<std::uint8_t>((value >> 21) & 0x7FU)});
-      out.push_back(std::byte{static_cast<std::uint8_t>((value >> 14) & 0x7FU)});
-      out.push_back(std::byte{static_cast<std::uint8_t>((value >> 7) & 0x7FU)});
-      out.push_back(std::byte{static_cast<std::uint8_t>(value & 0x7FU)});
-    }
-
-    HeaderLayout makeHeader(std::uint8_t majorVersion, std::uint8_t flags, std::size_t bodySize)
-    {
-      auto header = HeaderLayout{};
-      header.id = {'I', 'D', '3'};
-      header.majorVersion = majorVersion;
-      header.flags = flags;
-      auto const size = static_cast<std::uint32_t>(bodySize);
-      header.size.data = {static_cast<std::uint8_t>((size >> 21) & 0x7FU),
-                          static_cast<std::uint8_t>((size >> 14) & 0x7FU),
-                          static_cast<std::uint8_t>((size >> 7) & 0x7FU),
-                          static_cast<std::uint8_t>(size & 0x7FU)};
-      return header;
-    }
-
-    // Appends a 10-byte frame header plus content. v2.3 stores a plain
-    // big-endian size, v2.4 a syncsafe size; optDeclaredSize overrides the
-    // header size when it differs from the stored byte count.
-    void appendFrame(Bytes& body,
-                     std::string_view id,
-                     bool v24,
-                     std::uint8_t formatFlags,
-                     Bytes const& content,
-                     std::optional<std::size_t> optDeclaredSize = std::nullopt)
-    {
-      appendText(body, id);
-      auto const size = static_cast<std::uint32_t>(optDeclaredSize.value_or(content.size()));
-
-      if (v24)
-      {
-        appendSyncSafe(body, size);
-      }
-      else
-      {
-        appendUint32Be(body, size);
-      }
-
-      appendByte(body, 0); // status flags
-      appendByte(body, formatFlags);
-      body.insert(body.end(), content.begin(), content.end());
-    }
-
-    Bytes textContent(Encoding encoding, std::string_view text)
-    {
-      auto content = Bytes{};
-      appendByte(content, static_cast<std::uint8_t>(encoding));
-      appendText(content, text);
-      return content;
     }
 
     // Latin-1 APIC body: image/jpeg mime, front cover, empty description.
@@ -861,7 +788,14 @@ namespace ao::media::file::mpeg::id3v2::test
       auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
 
       REQUIRE(optFrames);
-      CHECK(optFrames->metadata().conductor() == "B");
+      auto const credits = optFrames->metadata().credits();
+      REQUIRE(credits.size() == 2);
+      CHECK(credits[0].name == "A");
+      CHECK(credits[0].kind == CreditKind::Conductor);
+      CHECK(credits[0].role.empty());
+      CHECK(credits[1].name == "B");
+      CHECK(credits[1].kind == CreditKind::Conductor);
+      CHECK(credits[1].role.empty());
     }
   }
 
@@ -886,8 +820,30 @@ namespace ao::media::file::mpeg::id3v2::test
       auto const optFrames = readFrames(makeHeader(3, 0x00, body.size()), byteSpan(body));
 
       REQUIRE(optFrames);
-      CHECK(optFrames->metadata().conductor() == "A");
+      auto const credits = optFrames->metadata().credits();
+      REQUIRE(credits.size() == 1);
+      CHECK(credits[0].name == "A");
+      CHECK(credits[0].kind == CreditKind::Conductor);
+      CHECK(credits[0].role.empty());
     }
+  }
+
+  TEST_CASE("ID3v2 credits - v2.3 TPE3 and TXXX stop at the first terminator without splitting slash text",
+            "[media][unit][mpeg][id3v2]")
+  {
+    auto body = Bytes{};
+    appendFrame(body, "TPE3", false, 0, textContent(Encoding::Latin1, std::string_view{"A/B\0C", 5}));
+    appendFrame(body, "TXXX", false, 0, textContent(Encoding::Latin1, std::string_view{"soloist\0D/E\0F", 13}));
+    auto const optFrames = readFrames(makeHeader(3, 0, body.size()), byteSpan(body));
+    REQUIRE(optFrames);
+    auto const credits = optFrames->metadata().credits();
+    REQUIRE(credits.size() == 2);
+    CHECK(credits[0].name == "A/B");
+    CHECK(credits[0].kind == CreditKind::Conductor);
+    CHECK(credits[0].role.empty());
+    CHECK(credits[1].name == "D/E");
+    CHECK(credits[1].kind == CreditKind::Soloist);
+    CHECK(credits[1].role.empty());
   }
 
   TEST_CASE("ID3v2 - parses ordinary v2.3 and v2.4 frames", "[media][unit][mpeg][id3v2]")
@@ -927,6 +883,160 @@ namespace ao::media::file::mpeg::id3v2::test
       CHECK(optFrames->metadata().title() == "Title");
       CHECK(optFrames->metadata().artist() == "Artist");
       CHECK(optFrames->metadata().year() == 2024);
+    }
+  }
+
+  TEST_CASE("ID3v2 - explicit work frames outrank grouping aliases regardless of frame order",
+            "[media][unit][mpeg][id3v2]")
+  {
+    auto const txxxContent = [](Encoding encoding, std::string_view description, std::string_view value)
+    {
+      auto text = std::string{description};
+      text.push_back('\0');
+      text.append(value);
+      return textContent(encoding, text);
+    };
+
+    // Copy the view out; the builder dies with the lambda.
+    auto const readWork = [](bool v24, Bytes const& body) -> std::string
+    {
+      auto const optFrames = readFrames(makeHeader(v24 ? 4 : 3, 0x00, body.size()), byteSpan(body));
+      REQUIRE(optFrames);
+      return std::string{optFrames->metadata().work()};
+    };
+
+    // All six ASCII whitespace characters.
+    auto const blank = std::string{" \t\n\r\f\v"};
+
+    auto const appendTxxxWork = [&](bool v24, Bytes& body, std::string_view value)
+    { appendFrame(body, "TXXX", v24, 0x00, txxxContent(v24 ? Encoding::Utf8 : Encoding::Latin1, "work", value)); };
+
+    auto const txxxWorkFrame = [&](bool v24, std::string_view value)
+    {
+      auto body = Bytes{};
+      appendTxxxWork(v24, body, value);
+      return body;
+    };
+
+    auto const appendTit1 = [&](bool v24, Bytes& body, std::string_view value)
+    { appendFrame(body, "TIT1", v24, 0x00, textContent(v24 ? Encoding::Utf8 : Encoding::Latin1, value)); };
+
+    auto const appendTxxxGrouping = [&](bool v24, Bytes& body, std::string_view value)
+    { appendFrame(body, "TXXX", v24, 0x00, txxxContent(v24 ? Encoding::Utf8 : Encoding::Latin1, "grouping", value)); };
+
+    SECTION("TXXX:WORK wins over TIT1 and TXXX:GROUPING in both orders")
+    {
+      auto workFirst = txxxWorkFrame(true, "TxxxWork");
+      appendTit1(true, workFirst, "Tit1Work");
+      appendTxxxGrouping(true, workFirst, "TxxxGrouping");
+
+      auto groupingFirst = Bytes{};
+      appendTxxxGrouping(true, groupingFirst, "TxxxGrouping");
+      appendTit1(true, groupingFirst, "Tit1Work");
+      auto const workFrame = txxxWorkFrame(true, "TxxxWork");
+      groupingFirst.insert(groupingFirst.end(), workFrame.begin(), workFrame.end());
+
+      CHECK(readWork(true, workFirst) == "TxxxWork");
+      CHECK(readWork(true, groupingFirst) == "TxxxWork");
+    }
+
+    SECTION("TIT1 wins over TXXX:GROUPING in both orders")
+    {
+      auto tit1First = Bytes{};
+      appendTit1(true, tit1First, "Tit1Work");
+      appendTxxxGrouping(true, tit1First, "TxxxGrouping");
+
+      auto groupingFirst = Bytes{};
+      appendTxxxGrouping(true, groupingFirst, "TxxxGrouping");
+      appendTit1(true, groupingFirst, "Tit1Work");
+
+      CHECK(readWork(true, tit1First) == "Tit1Work");
+      CHECK(readWork(true, groupingFirst) == "Tit1Work");
+    }
+
+    SECTION("each single source still fills the work field")
+    {
+      CHECK(readWork(true, txxxWorkFrame(true, "TxxxWork")) == "TxxxWork");
+
+      auto tit1Only = Bytes{};
+      appendTit1(true, tit1Only, "Tit1Work");
+      CHECK(readWork(true, tit1Only) == "Tit1Work");
+
+      auto groupingOnly = Bytes{};
+      appendTxxxGrouping(true, groupingOnly, "TxxxGrouping");
+      CHECK(readWork(true, groupingOnly) == "TxxxGrouping");
+    }
+
+    SECTION("a blank higher source does not suppress the lower one in either order")
+    {
+      // TXXX:WORK blank around TIT1.
+      auto workBlankBeforeTit1 = Bytes{};
+      appendTxxxWork(true, workBlankBeforeTit1, blank);
+      appendTit1(true, workBlankBeforeTit1, "Tit1Work");
+      CHECK(readWork(true, workBlankBeforeTit1) == "Tit1Work");
+
+      auto tit1BeforeBlankWork = Bytes{};
+      appendTit1(true, tit1BeforeBlankWork, "Tit1Work");
+      appendTxxxWork(true, tit1BeforeBlankWork, blank);
+      CHECK(readWork(true, tit1BeforeBlankWork) == "Tit1Work");
+
+      // TIT1 blank around TXXX:GROUPING.
+      auto tit1BlankBeforeGrouping = Bytes{};
+      appendTit1(true, tit1BlankBeforeGrouping, blank);
+      appendTxxxGrouping(true, tit1BlankBeforeGrouping, "TxxxGrouping");
+      CHECK(readWork(true, tit1BlankBeforeGrouping) == "TxxxGrouping");
+
+      auto groupingBeforeBlankTit1 = Bytes{};
+      appendTxxxGrouping(true, groupingBeforeBlankTit1, "TxxxGrouping");
+      appendTit1(true, groupingBeforeBlankTit1, blank);
+      CHECK(readWork(true, groupingBeforeBlankTit1) == "TxxxGrouping");
+    }
+
+    SECTION("all-blank work sources leave the field empty")
+    {
+      auto body = Bytes{};
+      appendTxxxWork(true, body, blank);
+      appendTit1(true, body, blank);
+      appendTxxxGrouping(true, body, blank);
+
+      // An empty builder work is the observable form of no work callback:
+      // Content::visit skips empty text values.
+      CHECK(readWork(true, body).empty());
+    }
+
+    SECTION("repeated same-source frames keep the last nonempty value")
+    {
+      auto body = txxxWorkFrame(true, "First");
+      auto const second = txxxWorkFrame(true, "Second");
+      body.insert(body.end(), second.begin(), second.end());
+      CHECK(readWork(true, body) == "Second");
+
+      auto const blankWork = txxxWorkFrame(true, blank);
+      body.insert(body.end(), blankWork.begin(), blankWork.end());
+      CHECK(readWork(true, body) == "Second");
+    }
+
+    SECTION("a v2.4 TIT1 frame keeps the multi-value last-wins convention")
+    {
+      auto body = Bytes{};
+      appendTit1(true, body, std::string_view{"A\0B", 3});
+      CHECK(readWork(true, body) == "B");
+    }
+
+    SECTION("v2.3 frames keep the same precedence")
+    {
+      auto workFirst = txxxWorkFrame(false, "TxxxWork");
+      appendTit1(false, workFirst, "Tit1Work");
+      appendTxxxGrouping(false, workFirst, "TxxxGrouping");
+
+      auto groupingFirst = Bytes{};
+      appendTxxxGrouping(false, groupingFirst, "TxxxGrouping");
+      appendTit1(false, groupingFirst, "Tit1Work");
+      auto const workFrame = txxxWorkFrame(false, "TxxxWork");
+      groupingFirst.insert(groupingFirst.end(), workFrame.begin(), workFrame.end());
+
+      CHECK(readWork(false, workFirst) == "TxxxWork");
+      CHECK(readWork(false, groupingFirst) == "TxxxWork");
     }
   }
 } // namespace ao::media::file::mpeg::id3v2::test

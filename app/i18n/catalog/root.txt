@@ -3,6 +3,37 @@
 
 root:table {
   messages:table {
+    track_field_recording_date { "Recording Date" }
+    track_credits_heading { "Credits" }
+    track_credit_performer { "Performer" }
+    track_credit_name { "Name" }
+    track_credit_role { "Role or instrument (optional)" }
+    track_credits_add { "Add credit" }
+    track_credits_replace { "Replace…" }
+    track_credits_clear { "Clear this scope" }
+    track_credits_commit { "Save credits" }
+    track_credits_cancel { "Cancel" }
+    track_credit_delete { "Delete credit" }
+    track_credit_blank_name { "Row {row}: enter a name." }
+    track_credit_invalid_name_text { "Row {row}: the name contains invalid text." }
+    track_credit_invalid_role_text { "Row {row}: the role or instrument contains invalid text." }
+    track_credit_invalid_kind { "Row {row}: choose a valid credit kind for this scope." }
+    track_credits_cleared { "Credits cleared" }
+    track_credits_summary { "{first} +{count}" }
+    track_credit_kind { "Kind" }
+    track_credits_scope { "Credits scope: {scope}" }
+    track_credits_all_kinds { "All credit kinds" }
+    track_credits_replace_scope { "Replace this scope on all selected tracks" }
+    track_credit_move_up { "Move up" }
+    track_credit_move_down { "Move down" }
+    track_credit_row_move_up { "Move credit {row} up" }
+    track_credit_row_move_down { "Move credit {row} down" }
+    track_credit_row_delete { "Delete credit {row}" }
+    track_credit_row_position { "Credit {row} of {count}" }
+    track_credit_kind_summary { "{kind}: {summary}" }
+    track_credit_kind_value { "Kind: {kind}" }
+    track_credit_name_role { "{name} ({role})" }
+    track_recording_date_invalid { "Enter YYYY, YYYY-MM, or YYYY-MM-DD using a valid calendar date, or leave empty to clear." }
     tui_go_to_back { "Back" }
     tui_go_to_forward { "Forward" }
     tui_go_to_cancel { "Cancel" }
@@ -705,6 +736,10 @@ root:table {
     winui_track_properties_save_failed { "Save failed: {detail}" }
     winui_track_properties_stale { "The library changed while this dialog was open. Reopen Properties and try again." }
     winui_track_properties_invalid_value { "Invalid value: {detail}" }
+    winui_track_properties_reload { "Reload" }
+    winui_track_properties_discard_question { "Discard these changes?" }
+    winui_track_properties_discard { "Discard Changes" }
+    winui_track_properties_keep_editing { "Keep Editing" }
     winui_list_create_from_filter { "Create List from current filter" }
     winui_list_editor_new_title { "New List" }
     winui_list_editor_edit_title { "Edit List" }
@@ -789,6 +824,10 @@ root:table {
     gtk_track_save_failed { "Save failed" }
     gtk_track_save_stale_title { "Save could not be applied" }
     gtk_track_save_stale { "The library changed while this dialog was open. Reload the properties and try again." }
+    gtk_track_credits_discard_title { "Discard the Credits changes?" }
+    gtk_track_credits_discard_message { "Closing Properties now loses Credits changes that have not been saved." }
+    gtk_track_credits_discard { "Discard Changes" }
+    gtk_track_credits_keep_editing { "Keep Editing" }
     gtk_tag_add { "Add…" }
     gtk_tag_add_placeholder { "Add tag…" }
     gtk_tag_remove { "Remove tag {tag}" }

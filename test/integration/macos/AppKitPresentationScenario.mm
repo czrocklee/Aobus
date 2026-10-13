@@ -10,20 +10,34 @@
 #include "app/macos-appkit/LibrarySession.h"
 #include "app/macos-appkit/TrackInspector.h"
 #include <ao/Contract.h>
+#include <ao/Error.h>
+#include <ao/async/Runtime.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 
+#include <algorithm>
+#include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -282,6 +296,84 @@ namespace
     AO_INVARIANT(window.attachedSheet == nil, "activity presentation must not attach a sheet");
   }
 
+  NSTextView* inspectorDetailTextView(NSView* view)
+  {
+    if ([view isKindOfClass:NSTextView.class] != NO)
+    {
+      return static_cast<NSTextView*>(view);
+    }
+
+    auto* const children = view.subviews;
+
+    for (NSUInteger index = 0; index < children.count; ++index)
+    {
+      if (auto* const found = inspectorDetailTextView(children[index]); found != nil)
+      {
+        return found;
+      }
+    }
+
+    return nil;
+  }
+
+  // The inspector's main view owns exactly one non-editable detail text view;
+  // renderSelectionCount replaces its text storage synchronously, so the
+  // scenario can assert on the rendered rows before any sheet presentation.
+  NSString* inspectorDetailString(NSView* view)
+  {
+    if (auto* const text = inspectorDetailTextView(view); text != nil)
+    {
+      return text.string;
+    }
+
+    return nil;
+  }
+
+  std::size_t countRenderedOccurrences(std::string const& text, std::string const& needle)
+  {
+    std::size_t count = 0;
+    std::size_t position = 0;
+
+    while ((position = text.find(needle, position)) != std::string::npos)
+    {
+      ++count;
+      position += needle.size();
+    }
+
+    return count;
+  }
+
+  // The caller keeps the session and completion outputs alive through its
+  // bounded, fatal-on-timeout native main-loop wait. Binding and patch are
+  // owned by the coroutine. Its nonowning pointers are used only before the
+  // callback-executor completion publication; the caller reads the failure
+  // slot only after observing the atomic flag.
+  ao::async::Task<void> seedPerformanceMetadataSubmissionAsync(ao::appkit::LibrarySession* session,
+                                                               ao::rt::BoundTrackTargets binding,
+                                                               ao::rt::MetadataPatch patch,
+                                                               std::atomic<bool>* done,
+                                                               std::optional<ao::Error>* failure)
+  {
+    AO_INVARIANT(session != nullptr && done != nullptr && failure != nullptr,
+                 "the inspector performance seed requires its live session and completion outputs");
+    co_await session->runtime().async().resumeOnCallbackExecutorAsync();
+    auto res =
+      co_await session->runtime().library().commands().updateMetadataAsync(std::move(binding), std::move(patch));
+    co_await session->runtime().async().resumeOnCallbackExecutorAsync();
+
+    if (!res)
+    {
+      *failure = res.error();
+    }
+    else if (res->status != ao::rt::AuthoringStatus::Applied && res->status != ao::rt::AuthoringStatus::NoOp)
+    {
+      *failure =
+        ao::Error{.code = ao::Error::Code::Conflict, .message = "the inspector performance seed did not apply"};
+    }
+
+    done->store(true);
+  }
+
   void exerciseInspector(ao::appkit::LibrarySession& session,
                          NSWindow* window,
                          ao::TrackId const trackId,
@@ -294,8 +386,253 @@ namespace
       revealHandler:^{ ++revealCount; }
       propertiesHandler:^{ ++propertiesCount; }
       dismissHandler:^{ ++dismissCount; }];
-    auto optRow = session.runtime().library().snapshot().trackRow(trackId);
+
+    auto const utf8Of = [](NSString* value) { return std::string{value != nil ? value.UTF8String : ""}; };
+    auto const dateLabelText =
+      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::TrackFieldRecordingDate));
+    auto const yearLabelText = utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::TrackFieldYear));
+    auto const creditsHeadingText =
+      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::TrackCreditsHeading));
+    auto const performerText =
+      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::TrackCreditPerformer));
+    auto const renderedRows = [inspector, &utf8Of] { return utf8Of(inspectorDetailString(inspector.view)); };
+
+    auto const detailSnapshot = [&](std::vector<ao::TrackId> ids)
+    {
+      return session.runtime()
+        .workspace()
+        .detailProjection(ao::rt::ExplicitSelectionTarget{.trackIds = std::move(ids)})
+        ->snapshot();
+    };
+
+    // Copy the owning display inputs on the owner executor, without waiting or
+    // retaining a read transaction across native rendering or authoring.
+    auto renderFromSnapshot = [&]
+    {
+      auto optSeededRow = std::optional<ao::rt::TrackRow>{};
+      {
+        auto snapshot = session.runtime().library().snapshot();
+        optSeededRow = snapshot.trackRow(trackId);
+      }
+      auto const detail = detailSnapshot({trackId});
+      AO_INVARIANT(optSeededRow, "selected track must remain available to the inspector");
+      [inspector renderSelectionCount:1 row:optSeededRow credits:detail.credits canReveal:YES];
+    };
+
+    // Bounded authoring seed through the public runtime authoring path; the
+    // completion flag is written on the callback executor after both resumes.
+    auto seedPerformanceMetadata =
+      [&](ao::rt::MetadataPatch patch, char const* obligation, ao::TrackId targetId = ao::kInvalidTrackId)
+    {
+      auto bindingRes = session.runtime().library().bindTrackTargets(
+        std::array<ao::TrackId, 1>{targetId == ao::kInvalidTrackId ? trackId : targetId});
+      AO_INVARIANT(bindingRes, "the inspector performance seed must bind its fixture track");
+
+      auto done = std::atomic<bool>{false};
+      auto optFailure = std::optional<ao::Error>{};
+      session.runtime().async().spawnLogged(
+        seedPerformanceMetadataSubmissionAsync(&session, std::move(*bindingRes), std::move(patch), &done, &optFailure),
+        "AppKit presentation inspector performance seed");
+      ao::appkit::test::requireWaitUntil([&] { return done.load(); }, obligation);
+      AO_INVARIANT(!optFailure, "{}: {}", obligation, optFailure->message);
+    };
+
+    // Absent initial: the raw scanned fixture carries neither field.
+    renderFromSnapshot();
+    AO_INVARIANT(!renderedRows().contains(dateLabelText), "an absent recording date must not render its row");
+    AO_INVARIANT(!renderedRows().contains(creditsHeadingText), "an absent Credits list must not render its heading");
+
+    // A stored release year must not infer a recording date on the native surface.
+    seedPerformanceMetadata(
+      ao::rt::MetadataPatch{.optYear = std::uint16_t{1970}}, "the inspector seed year must apply");
+    renderFromSnapshot();
+    AO_INVARIANT(
+      renderedRows().contains(yearLabelText + "\n1970\n"), "the seeded release year must render its own row");
+    AO_INVARIANT(!renderedRows().contains(dateLabelText), "a release year must not infer a recording date");
+
+    // Year-only precision.
+    seedPerformanceMetadata(ao::rt::MetadataPatch{.optRecordingDate = ao::library::RecordingDate{.year = 1981}},
+                            "the inspector seed year-only recording date must apply");
+    renderFromSnapshot();
+    AO_INVARIANT(renderedRows().contains(dateLabelText + "\n1981\n"),
+                 "a year-only recording date must render its stored precision");
+
+    // Month precision replaces the coarser row.
+    seedPerformanceMetadata(
+      ao::rt::MetadataPatch{.optRecordingDate = ao::library::RecordingDate{.year = 1981, .month = 5}},
+      "the inspector seed month recording date must apply");
+    renderFromSnapshot();
+    AO_INVARIANT(renderedRows().contains(dateLabelText + "\n1981-05\n"),
+                 "a month-precision recording date must render its stored precision");
+    AO_INVARIANT(
+      !renderedRows().contains(dateLabelText + "\n1981\n"), "a replaced year-only recording date must not linger");
+
+    // Full precision plus an ordered Credits list with a role, an absent
+    // role, and a repeated credit. The same value restores that state after
+    // the clear and selection-replacement checks below.
+    auto const populatedPatch = ao::rt::MetadataPatch{
+      .optRecordingDate = ao::library::RecordingDate{.year = 1981, .month = 5, .day = 12},
+      .optCredits =
+        ao::rt::CreditReplacement{
+          .kinds = ao::uimodel::allTrackCreditKinds(),
+          .entries = {{.name = "Shared leader", .kind = ao::library::CreditKind::Conductor, .role = "direction"},
+                      {.name = "Ada", .role = "piano"},
+                      {.name = "Bob"},
+                      {.name = "Ada", .role = "piano"}}},
+    };
+    seedPerformanceMetadata(populatedPatch, "the inspector seed full recording date and credits must apply");
+    renderFromSnapshot();
+    AO_INVARIANT(renderedRows().contains(dateLabelText + "\n1981-05-12\n"),
+                 "a full recording date must render its stored precision");
+    AO_INVARIANT(
+      !renderedRows().contains(dateLabelText + "\n1981-05\n"), "a replaced month recording date must not linger");
+    AO_INVARIANT(renderedRows().contains(creditsHeadingText), "a present Credits list must render its heading");
+    {
+      auto const rows = renderedRows();
+      auto const creditedWithPiano = performerText + "\nAda\npiano\n";
+      auto const creditedRoleless = performerText + "\nBob\n";
+      auto const firstAda = rows.find(creditedWithPiano);
+      auto const bob = rows.find(creditedRoleless);
+      auto const secondAda =
+        firstAda == std::string::npos ? std::string::npos : rows.find(creditedWithPiano, firstAda + 1);
+      AO_INVARIANT(firstAda != std::string::npos && bob != std::string::npos && secondAda != std::string::npos,
+                   "the Credits rows must render every credited entry with its kind and optional role");
+      AO_INVARIANT(firstAda < bob && bob < secondAda, "the Credits rows must preserve stored order with duplicates");
+      AO_INVARIANT(
+        countRenderedOccurrences(rows, creditedWithPiano) == std::size_t{2}, "a repeated credit must render twice");
+    }
+
+    // Clear both populated fields, then replace the inspector selection.
+    // Copied row values are rendered only after the snapshot is released, and
+    // that release happens before the restore wait below.
+    auto* const owningDetail = inspectorDetailTextView(inspector.view);
+    AO_INVARIANT(
+      owningDetail != nil && owningDetail.editable == 0, "the inspector must own one non-editable detail text view");
+    seedPerformanceMetadata(
+      ao::rt::MetadataPatch{.optRecordingDate = ao::library::RecordingDate{},
+                            .optCredits = ao::rt::CreditReplacement{.kinds = ao::uimodel::allTrackCreditKinds()}},
+      "the inspector clear of recording date and credits must apply");
+    auto clearedTitle = std::string{};
+    auto optClearedRow = std::optional<ao::rt::TrackRow>{};
+    {
+      auto snapshot = session.runtime().library().snapshot();
+      optClearedRow = snapshot.trackRow(trackId);
+      auto const optCredits = snapshot.trackCredits(trackId);
+      AO_INVARIANT(optClearedRow && !optClearedRow->recordingDate.isPresent(),
+                   "clearing the recording date must store the absence sentinel");
+      AO_INVARIANT(
+        optCredits && optCredits->empty(), "clearing credits must replace the ordered list with an empty list");
+      clearedTitle = optClearedRow->title;
+    }
+    auto const clearedSections = detailSnapshot({trackId}).credits;
+    AO_INVARIANT(!clearedTitle.empty(), "the cleared inspector row must keep its track title");
+    [inspector renderSelectionCount:1 row:optClearedRow credits:clearedSections canReveal:YES];
+    {
+      auto const cleared = renderedRows();
+      AO_INVARIANT(inspectorDetailTextView(inspector.view) == owningDetail,
+                   "the cleared render must replace text in the owning detail view");
+      AO_INVARIANT(cleared.contains(clearedTitle + "\n") && cleared.contains(yearLabelText + "\n1970\n"),
+                   "the cleared inspector must replace rows from the owning snapshot");
+      AO_INVARIANT(!cleared.contains(dateLabelText) && !cleared.contains("1981-05") &&
+                     !cleared.contains(dateLabelText + "\n1981\n"),
+                   "a cleared recording date must not leave a partial or full row");
+      AO_INVARIANT(
+        !cleared.contains(creditsHeadingText) && !cleared.contains("\nAda\n") && !cleared.contains("\nBob\n"),
+        "a cleared Credits list must not leave ordered or duplicate rows");
+    }
+    auto const emptySelection =
+      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::AppKitTrackDetails)) + "\n" +
+      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::AppKitSelectionDetailsHint)) + "\n";
+    auto const multipleSelection =
+      utf8Of(ao::appkit::catalogFormat(
+        session.catalog(), ao::i18n::MessageId::AppKitTracksSelected, {{"count", std::size_t{2}}})) +
+      "\n" + utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::AppKitSharedDetailsHint)) + "\n";
+    [inspector renderSelectionCount:0 row:optClearedRow credits:clearedSections canReveal:YES];
+    AO_INVARIANT(inspectorDetailTextView(inspector.view) == owningDetail && renderedRows() == emptySelection,
+                 "an empty selection must replace the populated inspector text in the owning detail view");
+    [inspector renderSelectionCount:2 row:optClearedRow credits:clearedSections canReveal:YES];
+    AO_INVARIANT(inspectorDetailTextView(inspector.view) == owningDetail && renderedRows() == multipleSelection,
+                 "a multiple selection must replace the empty-selection text in the owning detail view");
+    [inspector renderSelectionCount:1 row:std::nullopt credits:{} canReveal:YES];
+    AO_INVARIANT(inspectorDetailTextView(inspector.view) == owningDetail && renderedRows().empty(),
+                 "a missing selection row must replace the previous detail text in the owning detail view");
+    seedPerformanceMetadata(
+      populatedPatch, "the inspector must restore the populated recording date and credits before scrolling");
+    {
+      auto snapshot = session.runtime().library().snapshot();
+      auto const optRestoredRow = snapshot.trackRow(trackId);
+      auto const optRestoredCredits = snapshot.trackCredits(trackId);
+      AO_INVARIANT(optRestoredRow && populatedPatch.optRecordingDate &&
+                     optRestoredRow->recordingDate == *populatedPatch.optRecordingDate,
+                   "the restored recording date must match the populated seed");
+      AO_INVARIANT(
+        optRestoredCredits && populatedPatch.optCredits && *optRestoredCredits == populatedPatch.optCredits->entries,
+        "the restored Credits list must match the ordered duplicate seed");
+    }
+
+    auto optRow = std::optional<ao::rt::TrackRow>{};
+    {
+      auto snapshot = session.runtime().library().snapshot();
+      optRow = snapshot.trackRow(trackId);
+    }
+    auto const credits = detailSnapshot({trackId}).credits;
     AO_INVARIANT(optRow, "selected track must remain available to the inspector");
+
+    auto const missingId = ao::TrackId{999999};
+    AO_INVARIANT(!session.runtime().library().snapshot().containsTrack(missingId),
+                 "The missing display target must not belong to the fixture library");
+    auto const missingSelection = std::vector{trackId, missingId};
+    auto const survivingDetail = detailSnapshot(missingSelection);
+    [inspector renderSelectionCount:missingSelection.size()
+                                row:std::nullopt
+                            credits:survivingDetail.credits
+                          canReveal:NO];
+    AO_INVARIANT(renderedRows().contains("Shared leader\ndirection\n") &&
+                   countRenderedOccurrences(renderedRows(), performerText + "\nAda\npiano\n") == 2,
+                 "A missing display target must not erase the surviving track's full Credits sections");
+    auto const missingBindingRes = session.runtime().library().bindTrackTargets(missingSelection);
+    AO_INVARIANT(!missingBindingRes && missingBindingRes.error().code == ao::Error::Code::NotFound,
+                 "Skipping missing display targets must not relax edit binding admission");
+    auto const missingDetail = detailSnapshot({missingId});
+    [inspector renderSelectionCount:1 row:std::nullopt credits:missingDetail.credits canReveal:NO];
+    AO_INVARIANT(renderedRows().empty(), "An entirely missing display selection must clear the previous Credits");
+
+    auto otherId = ao::kInvalidTrackId;
+
+    for (std::size_t index = 0; index < session.displayIndex().displayCount(); ++index)
+    {
+      if (auto const* row = session.rowAt(index); row != nullptr && row->id != trackId)
+      {
+        otherId = row->id;
+        break;
+      }
+    }
+
+    AO_INVARIANT(otherId != ao::kInvalidTrackId, "Mixed display requires a second fixture track");
+    auto const optOtherCredits = session.runtime().library().snapshot().trackCredits(otherId);
+    AO_INVARIANT(optOtherCredits, "The second display fixture track must remain available");
+    seedPerformanceMetadata(
+      ao::rt::MetadataPatch{
+        .optCredits =
+          ao::rt::CreditReplacement{
+            .kinds = ao::uimodel::allTrackCreditKinds(),
+            .entries = {{.name = "Shared leader", .kind = ao::library::CreditKind::Conductor, .role = "direction"},
+                        {.name = "Different performer", .role = "cello"}}}},
+      "The second track must supply common and mixed display sections",
+      otherId);
+    auto const mixedDetail = detailSnapshot({trackId, otherId, missingId});
+    [inspector renderSelectionCount:3 row:std::nullopt credits:mixedDetail.credits canReveal:NO];
+    auto const multipleValuesText =
+      utf8Of(ao::appkit::catalogText(session.catalog(), ao::i18n::MessageId::TrackMultipleValues));
+    AO_INVARIANT(renderedRows().contains("Shared leader\ndirection\n") &&
+                   renderedRows().contains(performerText + "\n" + multipleValuesText + "\n") &&
+                   !renderedRows().contains("\nAda\n") && !renderedRows().contains("\nDifferent performer\n"),
+                 "Mixed native details must retain common kinds and never show a first-target list or union");
+    seedPerformanceMetadata(
+      ao::rt::MetadataPatch{.optCredits = ao::rt::CreditReplacement{.kinds = ao::uimodel::allTrackCreditKinds(),
+                                                                    .entries = *optOtherCredits}},
+      "The second display fixture must restore its original Credits",
+      otherId);
 
     for (std::int32_t line = 0; line < 80; ++line)
     {
@@ -303,7 +640,7 @@ namespace
     }
 
     inspector.view.frame = NSMakeRect(0, 0, 270, 340);
-    [inspector renderSelectionCount:1 row:optRow canReveal:YES];
+    [inspector renderSelectionCount:1 row:optRow credits:credits canReveal:YES];
     [inspector renderArtwork:session.state().selectedCover];
     [inspector layoutForModern:YES];
     [inspector presentSheetForWindow:window];
@@ -357,7 +694,7 @@ namespace
     ao::appkit::test::requireWaitUntil([&] { return window.attachedSheet == nil && inspector.sheet == nil; },
                                        "inspector detach must end an attached sheet");
     AO_INVARIANT(dismissCount == 3, "inspector detach must clear handlers before ending its sheet");
-    [inspector renderSelectionCount:1 row:optRow canReveal:YES];
+    [inspector renderSelectionCount:1 row:optRow credits:credits canReveal:YES];
     [inspector layoutForModern:NO];
   }
 

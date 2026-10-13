@@ -20,6 +20,7 @@ namespace ao::uimodel
   {
     Text,
     Number,
+    Date,
     ReadonlyText,
   };
 
@@ -36,6 +37,7 @@ namespace ao::uimodel
   {
     std::vector<TrackPropertiesFormRow> metadataRows;
     std::vector<TrackPropertiesFormRow> propertyRows;
+    std::string creditsLabel;
   };
 
   TrackPropertiesFormSpec buildTrackPropertiesFormSpec(i18n::MessageCatalog const& textCatalog);

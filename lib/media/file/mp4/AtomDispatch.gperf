@@ -20,8 +20,8 @@ disk, &handleDiscNumbers
 "\251ART", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::artist>
 "\251alb", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::album>
 "\251wrt", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::composer>
-"\251wrk", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
-"\251grp", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::work>
+"\251wrk", &handleWorkAtom<ao::media::file::detail::WorkSource::WorkAtom>
+"\251grp", &handleWorkAtom<ao::media::file::detail::WorkSource::Grouping>
 "\251mvn", &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movement>
 "\251mvi", &handleIntegerNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber>
 "\251mvc", &handleIntegerNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>

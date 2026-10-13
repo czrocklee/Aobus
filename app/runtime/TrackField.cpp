@@ -3,6 +3,7 @@
 
 #include <ao/rt/TrackField.h>
 
+#include <ao/library/Credits.h>
 #include <ao/query/Field.h>
 #include <ao/query/FieldCatalog.h>
 
@@ -113,13 +114,13 @@ namespace ao::rt
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
-        .editable = true,
+        .editable = false,
         .sortable = true,
         .groupable = true,
         .valueCompletion = true,
         .optSortField = TrackSortField::Conductor,
         .optGroupKey = TrackGroupKey::Conductor,
-        .optQueryField = Q::ConductorId,
+        .optQueryField = Q::Conductor,
       },
       {
         .field = F::Ensemble,
@@ -127,13 +128,13 @@ namespace ao::rt
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
-        .editable = true,
+        .editable = false,
         .sortable = true,
         .groupable = true,
         .valueCompletion = true,
         .optSortField = TrackSortField::Ensemble,
         .optGroupKey = TrackGroupKey::Ensemble,
-        .optQueryField = Q::EnsembleId,
+        .optQueryField = Q::Ensemble,
       },
       {
         .field = F::Work,
@@ -168,12 +169,12 @@ namespace ao::rt
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
-        .editable = true,
+        .editable = false,
         .sortable = true,
         .groupable = false,
         .valueCompletion = true,
         .optSortField = TrackSortField::Soloist,
-        .optQueryField = Q::SoloistId,
+        .optQueryField = Q::Soloist,
       },
       // --- Metadata: number ---
       {
@@ -355,6 +356,17 @@ namespace ao::rt
         .presentable = true,
         .synthetic = true,
       },
+      {
+        .field = F::RecordingDate,
+        .id = "recording-date",
+        .category = Cat::Metadata,
+        .valueKind = Vk::RecordingDate,
+        .presentable = true,
+        .editable = true,
+        .sortable = true,
+        .optSortField = TrackSortField::RecordingDate,
+        .optQueryField = Q::RecordingDate,
+      },
     });
 
     static_assert(kDefinitions.size() == kTrackFieldCount, "Track Field registry must match kTrackFieldCount");
@@ -375,6 +387,8 @@ namespace ao::rt
       {TrackSortField::TrackNumber, "track-number"},
       {TrackSortField::Title, "title"},
       {TrackSortField::Duration, "duration"},
+      {TrackSortField::RecordingYear, "recording-year"},
+      {TrackSortField::RecordingDate, "recording-date"},
     });
 
     constexpr auto kGroupKeyIds = std::to_array<std::pair<TrackGroupKey, std::string_view>>({
@@ -433,6 +447,17 @@ namespace ao::rt
     }
   } // namespace
 
+  std::optional<library::CreditKind> creditKindForTrackField(TrackField const field) noexcept
+  {
+    switch (field)
+    {
+      case TrackField::Conductor: return library::CreditKind::Conductor;
+      case TrackField::Ensemble: return library::CreditKind::Ensemble;
+      case TrackField::Soloist: return library::CreditKind::Soloist;
+      default: return std::nullopt;
+    }
+  }
+
   std::span<TrackFieldDefinition const> trackFieldDefinitions()
   {
     return kDefinitions;
@@ -450,6 +475,13 @@ namespace ao::rt
     // NOLINTNEXTLINE(readability-qualified-auto) -- std::array iterator representations differ across libraries.
     auto const it = std::ranges::find(kDefinitions, id, &TrackFieldDefinition::id);
     return it != kDefinitions.end() ? std::optional{it->field} : std::nullopt;
+  }
+
+  bool isReservedCustomMetadataKey(std::string_view const key) noexcept
+  {
+    // Structured credits have no scalar TrackField. Match exact field ids,
+    // without case folding or query aliases.
+    return key == kCreditsMetadataKey || trackFieldFromId(key).has_value();
   }
 
   std::optional<TrackSortField> trackSortFieldFromId(std::string_view id)
@@ -530,6 +562,7 @@ namespace ao::rt
     }
 
     auto const* const descriptor = queryVariableDescriptor(*definition);
-    return descriptor != nullptr && query::isDictionaryField(descriptor->field);
+    return descriptor != nullptr &&
+           (query::isDictionaryField(descriptor->field) || query::isCreditField(descriptor->field));
   }
 } // namespace ao::rt

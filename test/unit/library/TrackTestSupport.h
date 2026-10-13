@@ -7,6 +7,8 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 
 #include <chrono>
 #include <cstdint>
@@ -33,11 +35,10 @@ namespace ao::library::test
     std::string albumArtist{};
     std::string genre{};
     std::string composer{};
-    std::string conductor{};
-    std::string ensemble{};
     std::string work{};
     std::string movement{};
-    std::string soloist{};
+    RecordingDate recordingDate{};
+    std::vector<Credit> credits{};
     std::string uri = "test.flac";
     std::vector<std::string> tags{};
     std::vector<std::pair<std::string, std::string>> customMetadata{};

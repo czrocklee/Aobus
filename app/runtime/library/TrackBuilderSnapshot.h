@@ -8,6 +8,8 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
 
@@ -21,7 +23,9 @@
 namespace ao::rt
 {
   // Owning value snapshot of a TrackBuilder. It releases borrowed LMDB, YAML,
-  // and media-file views before a write transaction begins.
+  // and media-file views before a write transaction begins. Credit text, kinds,
+  // duplicates and source order are copied verbatim; admission belongs to the
+  // reconstructed builder's writer, not this transient ownership boundary.
   class TrackBuilderSnapshot final
   {
   public:
@@ -45,12 +49,9 @@ namespace ao::rt
     std::string _album;
     std::string _albumArtist;
     std::string _composer;
-    std::string _conductor;
-    std::string _ensemble;
     std::string _genre;
     std::string _work;
     std::string _movement;
-    std::string _soloist;
     std::string _uri;
     std::uint16_t _year = 0;
     std::uint16_t _trackNumber = 0;
@@ -59,6 +60,7 @@ namespace ao::rt
     std::uint16_t _discTotal = 0;
     std::uint16_t _movementNumber = 0;
     std::uint16_t _movementTotal = 0;
+    library::RecordingDate _recordingDate{};
     std::chrono::milliseconds _duration{0};
     Bitrate _bitrate{};
     SampleRate _sampleRate{};
@@ -68,5 +70,6 @@ namespace ao::rt
     std::vector<std::string> _tags;
     std::vector<Cover> _covers;
     std::vector<std::pair<std::string, std::string>> _customMetadata;
+    std::vector<library::Credit> _credits;
   };
 } // namespace ao::rt

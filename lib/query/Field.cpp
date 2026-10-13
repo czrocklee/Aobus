@@ -3,8 +3,11 @@
 
 #include <ao/query/Field.h>
 
+#include "detail/CreditField.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/FieldCatalog.h>
@@ -17,6 +20,7 @@
 #include <format>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -24,6 +28,19 @@
 
 namespace ao::query::detail
 {
+  std::span<library::TrackCreditEntry const> creditFieldEntries(library::TrackView const& track, Field field)
+  {
+    switch (auto const performance = track.performance(); field)
+    {
+      case Field::Conductor: return performance.credits(library::CreditKind::Conductor);
+      case Field::Ensemble: return performance.credits(library::CreditKind::Ensemble);
+      case Field::Soloist: return performance.credits(library::CreditKind::Soloist);
+      case Field::Performer: return performance.credits(library::CreditKind::Performer);
+      case Field::Credit: return performance.credits();
+      default: return {};
+    }
+  }
+
   namespace
   {
     std::string fieldListText(VariableType type)
@@ -229,9 +246,12 @@ namespace ao::query
       case Field::CoverArtId:
       case Field::WorkId:
       case Field::MovementId:
-      case Field::ConductorId:
-      case Field::EnsembleId:
-      case Field::SoloistId:
+      case Field::Conductor:
+      case Field::Ensemble:
+      case Field::Soloist:
+      case Field::RecordingDate:
+      case Field::Performer:
+      case Field::Credit:
       case Field::TrackNumber:
       case Field::TrackTotal:
       case Field::DiscNumber:
@@ -256,10 +276,20 @@ namespace ao::query
       case Field::AlbumArtistId:
       case Field::ComposerId:
       case Field::WorkId:
-      case Field::MovementId:
-      case Field::ConductorId:
-      case Field::EnsembleId:
-      case Field::SoloistId: return true;
+      case Field::MovementId: return true;
+      default: return false;
+    }
+  }
+
+  bool isCreditField(Field field)
+  {
+    switch (field)
+    {
+      case Field::Conductor:
+      case Field::Ensemble:
+      case Field::Soloist:
+      case Field::Performer:
+      case Field::Credit: return true;
       default: return false;
     }
   }
@@ -355,11 +385,8 @@ namespace ao::query
       case Field::GenreId: return track.metadata().genreId();
       case Field::AlbumArtistId: return track.metadata().albumArtistId();
       case Field::ComposerId: return track.metadata().composerId();
-      case Field::ConductorId: return track.classical().conductorId();
-      case Field::EnsembleId: return track.classical().ensembleId();
-      case Field::WorkId: return track.classical().workId();
-      case Field::MovementId: return track.classical().movementId();
-      case Field::SoloistId: return track.classical().soloistId();
+      case Field::WorkId: return track.work().workId();
+      case Field::MovementId: return track.work().movementId();
       default: return kInvalidDictionaryId;
     }
   }

@@ -4,7 +4,10 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 
+#include <bitset>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -13,6 +16,14 @@
 
 namespace ao::rt
 {
+  struct CreditReplacement final
+  {
+    std::bitset<library::kCreditKindCount> kinds{};
+    std::vector<library::Credit> entries{};
+
+    bool operator==(CreditReplacement const&) const = default;
+  };
+
   struct MetadataPatch final
   {
     std::optional<std::string> optTitle{};
@@ -21,11 +32,8 @@ namespace ao::rt
     std::optional<std::string> optAlbumArtist{};
     std::optional<std::string> optGenre{};
     std::optional<std::string> optComposer{};
-    std::optional<std::string> optConductor{};
-    std::optional<std::string> optEnsemble{};
     std::optional<std::string> optWork{};
     std::optional<std::string> optMovement{};
-    std::optional<std::string> optSoloist{};
     std::optional<std::uint16_t> optYear{};
     std::optional<std::uint16_t> optTrackNumber{};
     std::optional<std::uint16_t> optTrackTotal{};
@@ -33,6 +41,15 @@ namespace ao::rt
     std::optional<std::uint16_t> optDiscTotal{};
     std::optional<std::uint16_t> optMovementNumber{};
     std::optional<std::uint16_t> optMovementTotal{};
+
+    // An absent optional leaves the field unchanged; the all-zero sentinel
+    // clears the stored date; any present value replaces it at its own
+    // precision. Exact value equality includes the stored precision.
+    std::optional<library::RecordingDate> optRecordingDate{};
+    // An absent patch preserves credits. A present nonempty mask replaces
+    // selected segments completely, preserving every unselected segment.
+    // Empty entries clear the selected scope without changing RecordingDate.
+    std::optional<CreditReplacement> optCredits{};
 
     std::map<std::string, std::optional<std::string>> customUpdates{};
   };

@@ -89,7 +89,9 @@ namespace ao::gtk
                      row.bitrate,
                      row.fileSize,
                      row.optModifiedTime,
-                     row.status);
+                     row.status,
+                     row.recordingDate,
+                     {row.conductorCount, row.ensembleCount, row.soloistCount});
 
     return rowPtr;
   }

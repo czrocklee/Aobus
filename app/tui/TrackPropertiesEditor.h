@@ -4,6 +4,7 @@
 #pragma once
 
 #include "MouseBindings.h"
+#include "TrackCreditsEditor.h"
 #include "TrackMetadataEditor.h"
 #include "TrackTagEditor.h"
 #include <ao/CoreIds.h>
@@ -114,7 +115,8 @@ namespace ao::tui
     TrackPropertiesEditor(i18n::MessageCatalog textCatalog,
                           TrackEditorPreparation preparation,
                           CompletionProvider completionProvider = {},
-                          TrackEditorMode mode = TrackEditorMode::Properties);
+                          TrackEditorMode mode = TrackEditorMode::Properties,
+                          TrackCreditsEditor::CompletionProvider creditCompletionProvider = {});
 
     std::size_t targetCount() const noexcept { return _targets.size(); }
     /// The captured targets, in the order they will be written.
@@ -123,6 +125,7 @@ namespace ao::tui
     TrackEditorTab tab() const noexcept { return _tab; }
     /// Whether any field or tag carries intent to write.
     bool isDirty() const noexcept;
+    bool isEditingCredits() const noexcept { return _metadataEditor.isEditingCredits(); }
     /// Whether a dirty Escape or reload is waiting for the user to confirm losing the draft.
     bool isConfirmingDiscard() const noexcept { return _confirmingDiscard; }
     bool isConfirmingReload() const noexcept { return _confirmingReload; }

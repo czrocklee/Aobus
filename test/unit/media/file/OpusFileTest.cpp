@@ -29,6 +29,7 @@
 namespace ao::media::file::opus::test
 {
   using File = ao::media::file::test::TestFile;
+  using Credit = ao::media::file::test::RecordedContent::Credit;
   using namespace ao::media::opus;
   using namespace ao::test;
 
@@ -188,6 +189,10 @@ namespace ao::media::file::opus::test
     CHECK(content.text(TextField::Work) == "Symphony No. 5");
     CHECK(content.number(NumberField::TrackNumber) == 1);
     CHECK(content.number(NumberField::Year) == 2024);
+    CHECK(content.credits().empty());
+    CHECK_FALSE(std::ranges::contains(content.events(),
+                                      ao::media::file::test::RecordedContent::CallbackEvent{
+                                        .kind = ao::media::file::test::RecordedContent::CallbackKind::Credits}));
   }
 
   TEST_CASE("Opus File - reports the decoded signal rather than the encoder input", "[media][unit][opus][file]")
@@ -224,9 +229,11 @@ namespace ao::media::file::opus::test
       auto const file = File{audio::test::requireAudioFixture("classical_metadata.opus")};
       auto const content = readContent(file);
 
-      CHECK(content.text(TextField::Conductor) == "Fixture Conductor");
-      CHECK(content.text(TextField::Ensemble) == "Fixture Ensemble");
-      CHECK(content.text(TextField::Soloist) == "Fixture Soloist");
+      CHECK(content.credits() == std::vector<Credit>{
+                                   {.name = "Fixture Conductor", .kind = CreditKind::Conductor},
+                                   {.name = "Fixture Ensemble", .kind = CreditKind::Ensemble},
+                                   {.name = "Fixture Soloist", .kind = CreditKind::Soloist},
+                                 });
       CHECK(content.text(TextField::Work) == "Fixture Work");
       CHECK(content.text(TextField::Movement) == "Fixture Movement");
       CHECK(content.number(NumberField::MovementNumber) == 2);
@@ -234,17 +241,86 @@ namespace ao::media::file::opus::test
       CHECK(content.number(NumberField::TrackNumber) == 3);
       CHECK(content.number(NumberField::TrackTotal) == 9);
       CHECK(content.number(NumberField::Year) == 2026);
+
+      REQUIRE_FALSE(content.events().empty());
+      CHECK(content.events().back().kind == ao::media::file::test::RecordedContent::CallbackKind::Credits);
     }
 
     SECTION("Fallback aliases fill absent primary fields")
     {
-      auto const file = File{audio::test::requireAudioFixture("classical_fallback.opus")};
-      auto const content = readContent(file);
+      using Event = ao::media::file::test::RecordedContent::CallbackEvent;
+      using Kind = ao::media::file::test::RecordedContent::CallbackKind;
 
-      CHECK(content.text(TextField::Title) == "Classical Fallback");
-      CHECK(content.text(TextField::Ensemble) == "Fixture Fallback Ensemble");
-      CHECK(content.text(TextField::Soloist) == "Fixture Fallback Soloist");
+      auto const owned = []
+      {
+        auto const file = File{audio::test::requireAudioFixture("classical_fallback.opus")};
+        auto const content = readContent(file);
+
+        CHECK(content.text(TextField::Title) == "Classical Fallback");
+        // PERFORMER never implies Soloist. Opus reports no sample depth.
+        CHECK(content.events() == std::vector<Event>{
+                                    {Kind::Text, static_cast<std::uint8_t>(TextField::Title)},
+                                    {Kind::Codec},
+                                    {Kind::Duration},
+                                    {Kind::Bitrate},
+                                    {Kind::SampleRate},
+                                    {Kind::Channels},
+                                    {Kind::Credits},
+                                  });
+        return content.credits();
+      }();
+
+      CHECK(owned == std::vector<Credit>{
+                       {.name = "Fixture Fallback Ensemble", .kind = CreditKind::Ensemble},
+                       {.name = "Fixture Fallback Soloist", .kind = CreditKind::Performer},
+                     });
     }
+  }
+
+  TEST_CASE("Opus File - public visitor owns ordered performer credits after the file dies",
+            "[media][unit][opus][file]")
+  {
+    using Event = ao::media::file::test::RecordedContent::CallbackEvent;
+    using Kind = ao::media::file::test::RecordedContent::CallbackKind;
+
+    auto const owned = []
+    {
+      auto const comments = std::array<std::string_view, 7>{
+        "TITLE=Title",
+        "SOLOIST=Anne",
+        "DATE=2024",
+        "PERFORMER=Ada (Piano)",
+        "PERFORMER=Ada (Piano)",
+        "PERFORMER=Bob",
+        "PERFORMER=Ada (Violin)",
+      };
+      auto spec = StreamSpec{};
+      spec.optTagsPacket = makeTagsPacket(comments);
+      auto const temp = TempFile{makeStreamBytes(spec), ".opus"};
+      auto const file = File{temp.path};
+      auto content = readContent(file);
+
+      CHECK(content.bitDepth() == BitDepth{});
+      CHECK(content.events() == std::vector<Event>{
+                                  {Kind::Text, static_cast<std::uint8_t>(TextField::Title)},
+                                  {Kind::Number, static_cast<std::uint8_t>(NumberField::Year)},
+                                  {Kind::Codec},
+                                  {Kind::Duration},
+                                  {Kind::Bitrate},
+                                  {Kind::SampleRate},
+                                  {Kind::Channels},
+                                  {Kind::Credits},
+                                });
+      return content.credits();
+    }();
+
+    CHECK(owned == std::vector<Credit>{
+                     {.name = "Anne", .kind = CreditKind::Soloist},
+                     {.name = "Ada", .kind = CreditKind::Performer, .role = "Piano"},
+                     {.name = "Ada", .kind = CreditKind::Performer, .role = "Piano"},
+                     {.name = "Bob", .kind = CreditKind::Performer},
+                     {.name = "Ada", .kind = CreditKind::Performer, .role = "Violin"},
+                   });
   }
 
   TEST_CASE("Opus File - imports a Base64 picture comment", "[media][unit][opus][file]")

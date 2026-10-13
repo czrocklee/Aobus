@@ -19,6 +19,11 @@ namespace ao::uimodel
         return TrackPropertiesFormEditorKind::Number;
       }
 
+      if (def.field == rt::TrackField::RecordingDate)
+      {
+        return TrackPropertiesFormEditorKind::Date;
+      }
+
       return TrackPropertiesFormEditorKind::Text;
     }
 
@@ -36,7 +41,10 @@ namespace ao::uimodel
 
   TrackPropertiesFormSpec buildTrackPropertiesFormSpec(i18n::MessageCatalog const& textCatalog)
   {
-    auto spec = TrackPropertiesFormSpec{};
+    auto spec = TrackPropertiesFormSpec{
+      .metadataRows = {},
+      .propertyRows = {},
+      .creditsLabel = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditsHeading)}};
 
     for (auto const& def : rt::trackFieldDefinitions())
     {
@@ -46,6 +54,15 @@ namespace ao::uimodel
           .field = def.field,
           .label = std::string{trackFieldLabel(textCatalog, def.field)},
           .editorKind = editorKindFor(def),
+        });
+      }
+
+      if (rt::creditKindForTrackField(def.field))
+      {
+        spec.metadataRows.push_back(TrackPropertiesFormRow{
+          .field = def.field,
+          .label = std::string{trackFieldLabel(textCatalog, def.field)},
+          .editorKind = TrackPropertiesFormEditorKind::ReadonlyText,
         });
       }
 

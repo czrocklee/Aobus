@@ -6,10 +6,13 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/utility/Sha256.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <span>
@@ -56,13 +59,45 @@ namespace ao::rt::test
     REQUIRE(res);
 
     auto const& metadata = res->builder().metadata();
-    CHECK(metadata.conductor() == "Fixture Conductor");
-    CHECK(metadata.ensemble() == "Fixture Ensemble");
+    auto const expected = std::array{
+      library::CreditView{.name = "Fixture Conductor", .kind = library::CreditKind::Conductor},
+      library::CreditView{.name = "Fixture Ensemble", .kind = library::CreditKind::Ensemble},
+      library::CreditView{.name = "Fixture Soloist", .kind = library::CreditKind::Soloist},
+    };
+    REQUIRE(metadata.credits().size() == expected.size());
+    // Media callbacks retain source traversal order; storage groups the kinds.
+    CHECK(
+      std::ranges::is_permutation(metadata.credits(),
+                                  expected,
+                                  [](auto const& lhs, auto const& rhs)
+                                  { return lhs.name == rhs.name && lhs.kind == rhs.kind && lhs.role == rhs.role; }));
+
     CHECK(metadata.movement() == "Fixture Movement");
-    CHECK(metadata.soloist() == "Fixture Soloist");
     CHECK(metadata.movementNumber() == 2);
     CHECK(metadata.movementTotal() == 4);
     CHECK(metadata.trackTotal() == 9);
+  }
+
+  TEST_CASE("MediaTrack - routes Ensemble and Performer credits into borrowed builder fields across moves",
+            "[runtime][integration][media-track]")
+  {
+    auto res = readMediaTrack(audio::test::requireAudioFixture("classical_fallback.flac"));
+    REQUIRE(res);
+
+    auto moved = std::move(*res);
+    auto movedAgain = std::move(moved);
+    auto const& metadata = movedAgain.builder().metadata();
+    // A PERFORMER source never implies Soloist, even if the supplied name says so.
+    auto const expected = std::array{
+      library::CreditView{.name = "Fixture Fallback Ensemble", .kind = library::CreditKind::Ensemble},
+      library::CreditView{.name = "Fixture Fallback Soloist", .kind = library::CreditKind::Performer},
+    };
+    REQUIRE(metadata.credits().size() == expected.size());
+    CHECK(
+      std::ranges::is_permutation(metadata.credits(),
+                                  expected,
+                                  [](auto const& lhs, auto const& rhs)
+                                  { return lhs.name == rhs.name && lhs.kind == rhs.kind && lhs.role == rhs.role; }));
   }
 
   TEST_CASE("MediaTrack - maps picture callbacks into pending cover entries", "[runtime][integration][media-track]")

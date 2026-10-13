@@ -7,9 +7,11 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
@@ -70,6 +72,61 @@ namespace ao::rt
       {
         aggregate.optValue.reset();
         aggregate.mixed = true;
+      }
+    }
+
+    std::vector<library::Credit> resolveCreditSection(std::span<library::TrackCreditEntry const> entries,
+                                                      library::CreditKind const kind,
+                                                      library::DictionaryStore const& dictionary)
+    {
+      auto credits = std::vector<library::Credit>{};
+      credits.reserve(entries.size());
+
+      for (auto const& entry : entries)
+      {
+        credits.push_back(library::Credit{
+          .name = std::string{dictionary.getOrDefault(entry.nameId)},
+          .kind = kind,
+          .role = std::string{dictionary.getOrDefault(entry.roleId)},
+        });
+      }
+
+      return credits;
+    }
+
+    struct CreditAggregationState final
+    {
+      bool engaged = false;
+      bool mixed = false;
+      std::vector<library::TrackCreditEntry> common{};
+    };
+
+    // Compare full ordered physical sections before resolving owning text.
+    // A difference in roles, duplicates or nonfirst entries is also mixed.
+    void aggregateCreditSection(std::span<library::TrackCreditEntry const> entries, CreditAggregationState& state)
+    {
+      if (state.mixed)
+      {
+        return;
+      }
+
+      if (!state.engaged)
+      {
+        state.engaged = true;
+        state.common.assign(entries.begin(), entries.end());
+        return;
+      }
+
+      auto const sameEntries = entries.size() == state.common.size() &&
+                               std::ranges::equal(entries,
+                                                  state.common,
+                                                  [](auto const& lhs, auto const& rhs)
+                                                  { return lhs.nameId == rhs.nameId && lhs.roleId == rhs.roleId; });
+
+      if (!sameEntries)
+      {
+        state.mixed = true;
+        state.common.clear();
       }
     }
 
@@ -144,6 +201,12 @@ namespace ao::rt
 
         trackFieldArrayAt(snapshot.fields, definition.field).optValue =
           readTrackFieldRawValue(definition.field, view, dictionary, manifestReader);
+      }
+
+      for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+      {
+        auto const kind = static_cast<library::CreditKind>(kindIndex);
+        snapshot.credits[kindIndex].optValue = resolveCreditSection(view.performance().credits(kind), kind, dictionary);
       }
 
       for (auto const& [dictionaryId, value] : view.customMetadata())
@@ -375,6 +438,7 @@ namespace ao::rt
     }
 
     auto customAggregates = std::map<std::string, CustomAggregationState>{};
+    auto creditAggregates = std::array<CreditAggregationState, library::kCreditKindCount>{};
     std::size_t loadedCount = 0;
 
     for (auto const trackId : ids)
@@ -388,7 +452,26 @@ namespace ao::rt
 
       loadedCount++;
       aggregateFields(*optView, dictionary, &manifestReader, snap.fields);
+
+      for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+      {
+        aggregateCreditSection(
+          optView->performance().credits(static_cast<library::CreditKind>(kindIndex)), creditAggregates[kindIndex]);
+      }
+
       aggregateCustom(*optView, dictionary, customAggregates);
+    }
+
+    for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
+    {
+      auto const& state = creditAggregates[kindIndex];
+      auto& section = snap.credits[kindIndex];
+      section.mixed = state.mixed;
+
+      if (state.engaged && !state.mixed)
+      {
+        section.optValue = resolveCreditSection(state.common, static_cast<library::CreditKind>(kindIndex), dictionary);
+      }
     }
 
     if (loadedCount == 0)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "BooleanFlag.h"
 #include "CliRuntime.h"
 #include "CommandError.h"
 #include "CommandRegistrations.h"
@@ -1439,8 +1440,8 @@ namespace ao::cli
 
     auto* fingerprintCmd = lib->add_subcommand("fingerprint", "Fingerprint pending manifest audio identities");
     auto* fingerprintPendingFlag =
-      fingerprintCmd->add_flag("--pending", "fingerprint manifest rows with pending audio identity");
-    auto* fingerprintVerbose = fingerprintCmd->add_flag("--verbose", "print fingerprint progress to stderr");
+      addBooleanFlag(*fingerprintCmd, "--pending", "fingerprint manifest rows with pending audio identity");
+    auto* fingerprintVerbose = addBooleanFlag(*fingerprintCmd, "--verbose", "print fingerprint progress to stderr");
     fingerprintCmd->callback(
       [&cli, fingerprintPendingFlag, fingerprintVerbose]
       {
@@ -1467,8 +1468,9 @@ namespace ao::cli
     auto* importPath = importCmd->add_option("input,-i,--input", "Input YAML file path")->required();
     auto* importMode = importCmd->add_option("-m,--mode", "Import mode (restore, merge)")->default_val("merge");
     auto* importDryRun = addDryRunFlag(*importCmd);
-    auto* importConfirmRestore = importCmd->add_flag(
-      "--confirm-destructive-restore", "Confirm replacing the payload-selected target scope in restore mode");
+    auto* importConfirmRestore = addBooleanFlag(*importCmd,
+                                                "--confirm-destructive-restore",
+                                                "Confirm replacing the payload-selected target scope in restore mode");
     importCmd->callback(
       [&cli, importPath, importMode, importDryRun, importConfirmRestore]
       {
@@ -1482,11 +1484,11 @@ namespace ao::cli
       });
 
     auto* dumpCmd = lib->add_subcommand("dump", "Dump infrastructure databases");
-    auto* dumpDictionary = dumpCmd->add_flag("--dict", "dump dictionary only");
-    auto* dumpManifest = dumpCmd->add_flag("--manifest", "dump manifest only");
-    auto* dumpMetadataFlag = dumpCmd->add_flag("--meta", "dump metadata only");
-    auto* dumpResources = dumpCmd->add_flag("--resources", "dump resources only");
-    auto* dumpRaw = dumpCmd->add_flag("--raw", "hex dump raw bytes");
+    auto* dumpDictionary = addBooleanFlag(*dumpCmd, "--dict", "dump dictionary only");
+    auto* dumpManifest = addBooleanFlag(*dumpCmd, "--manifest", "dump manifest only");
+    auto* dumpMetadataFlag = addBooleanFlag(*dumpCmd, "--meta", "dump metadata only");
+    auto* dumpResources = addBooleanFlag(*dumpCmd, "--resources", "dump resources only");
+    auto* dumpRaw = addBooleanFlag(*dumpCmd, "--raw", "hex dump raw bytes");
 
     dumpCmd->callback(
       [&cli, dumpDictionary, dumpManifest, dumpMetadataFlag, dumpResources, dumpRaw]

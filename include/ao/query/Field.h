@@ -65,13 +65,19 @@ namespace ao::query
     // Custom field (for %custom_key lookups from cold storage)
     Custom = 24,
 
-    // Cold classical metadata.
+    // Cold work and performance metadata.
     MovementId = 25,
     MovementNumber = 26,
     MovementTotal = 27,
-    ConductorId = 28,
-    EnsembleId = 29,
-    SoloistId = 30,
+    // Member selectors, not scalar dictionary IDs.
+    Conductor = 28,
+    Ensemble = 29,
+    Soloist = 30,
+
+    // Independent typed performance fields.
+    RecordingDate = 31,
+    Performer = 32,
+    Credit = 33,
   };
 
   /**
@@ -87,6 +93,7 @@ namespace ao::query
 
   bool isColdField(Field field);
   bool isDictionaryField(Field field);
+  bool isCreditField(Field field);
   bool isStringField(Field field);
   bool isTagField(Field field);
 

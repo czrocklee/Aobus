@@ -6,8 +6,10 @@
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
+#include <ao/library/Credits.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -37,6 +39,12 @@ namespace ao::rt
                                             library::DictionaryStore const& dictionary,
                                             library::FileManifestStore::Reader const* manifestReader)
   {
+    auto const firstCreditName = [&](library::CreditKind kind)
+    {
+      auto const entries = view.performance().credits(kind);
+      return entries.empty() ? std::string{} : resolve(dictionary, entries.front().nameId);
+    };
+
     switch (field)
     {
       case TrackField::Title: return TrackFieldRawValue{std::in_place_type<std::string>, view.metadata().title()};
@@ -52,15 +60,25 @@ namespace ao::rt
       case TrackField::Composer:
         return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.metadata().composerId())};
       case TrackField::Conductor:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().conductorId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, firstCreditName(library::CreditKind::Conductor)};
       case TrackField::Ensemble:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().ensembleId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, firstCreditName(library::CreditKind::Ensemble)};
       case TrackField::Work:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().workId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.work().workId())};
       case TrackField::Movement:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().movementId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.work().movementId())};
       case TrackField::Soloist:
-        return TrackFieldRawValue{std::in_place_type<std::string>, resolve(dictionary, view.classical().soloistId())};
+        return TrackFieldRawValue{std::in_place_type<std::string>, firstCreditName(library::CreditKind::Soloist)};
+
+      case TrackField::RecordingDate:
+      {
+        if (auto const date = view.performance().recordingDate(); date.isPresent())
+        {
+          return TrackFieldRawValue{std::in_place_type<library::RecordingDate>, date};
+        }
+
+        return std::monostate{};
+      }
 
       case TrackField::Year: return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().year()};
       case TrackField::DiscNumber:
@@ -72,9 +90,9 @@ namespace ao::rt
       case TrackField::TrackTotal:
         return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.metadata().trackTotal()};
       case TrackField::MovementNumber:
-        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.classical().movementNumber()};
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.work().movementNumber()};
       case TrackField::MovementTotal:
-        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.classical().movementTotal()};
+        return TrackFieldRawValue{std::in_place_type<std::uint16_t>, view.work().movementTotal()};
 
       case TrackField::Duration:
         return TrackFieldRawValue{std::in_place_type<TrackFieldDuration>, view.property().duration()};

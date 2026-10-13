@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/library/RecordingDate.h>
 
 #include <cstdint>
 #include <string>
@@ -20,11 +21,12 @@ namespace ao::rt
 namespace ao::uimodel
 {
   /** Values and pure rules shared by track-authoring frontends. */
-  using TrackFieldEditValue = std::variant<std::monostate, std::string, std::uint16_t>;
+  using TrackFieldEditValue = std::variant<std::monostate, std::string, std::uint16_t, library::RecordingDate>;
 
   TrackFieldEditValue makeTextEditValue(std::string_view value);
   Result<TrackFieldEditValue> parseTextEditValue(std::string_view value);
   Result<TrackFieldEditValue> parseUint16EditValue(std::string_view value);
+  Result<TrackFieldEditValue> parseRecordingDateEditValue(std::string_view value);
 
   bool canWriteTrackFieldPatch(rt::TrackField field) noexcept;
   bool tryWriteTrackFieldPatch(rt::MetadataPatch& patch, rt::TrackField field, TrackFieldEditValue const& value);

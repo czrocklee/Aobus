@@ -179,7 +179,7 @@ namespace ao::query::test
   TEST_CASE("FieldCatalog - lists query variable descriptors in UI order", "[query][unit][field-catalog]")
   {
     auto const metadata = queryVariableDescriptors(VariableType::Metadata);
-    REQUIRE(metadata.size() == 19);
+    REQUIRE(metadata.size() == 22);
     CHECK(metadata[0].canonicalName == "title");
     CHECK(metadata[1].canonicalName == "artist");
     CHECK(metadata[2].canonicalName == "album");
@@ -188,9 +188,12 @@ namespace ao::query::test
     CHECK(metadata[6].canonicalName == "ensemble");
     CHECK(metadata[8].canonicalName == "movement");
     CHECK(metadata[9].canonicalName == "soloist");
-    CHECK(metadata[10].canonicalName == "genre");
-    CHECK(metadata[16].canonicalName == "movementNumber");
-    CHECK(metadata[18].canonicalName == "coverArt");
+    CHECK(metadata[10].canonicalName == "recordingDate");
+    CHECK(metadata[11].canonicalName == "performer");
+    CHECK(metadata[12].canonicalName == "credit");
+    CHECK(metadata[13].canonicalName == "genre");
+    CHECK(metadata[19].canonicalName == "movementNumber");
+    CHECK(metadata[21].canonicalName == "coverArt");
 
     auto const properties = queryVariableDescriptors(VariableType::Property);
     REQUIRE(properties.size() == 6);
@@ -205,25 +208,11 @@ namespace ao::query::test
   TEST_CASE("Completion - completes canonical query variables", "[query][unit][completion]")
   {
     CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "")) ==
-          std::vector<std::string_view>{"title",
-                                        "artist",
-                                        "album",
-                                        "albumArtist",
-                                        "composer",
-                                        "conductor",
-                                        "ensemble",
-                                        "work",
-                                        "movement",
-                                        "soloist",
-                                        "genre",
-                                        "year",
-                                        "trackNumber",
-                                        "trackTotal",
-                                        "discNumber",
-                                        "discTotal",
-                                        "movementNumber",
-                                        "movementTotal",
-                                        "coverArt"});
+          std::vector<std::string_view>{"title",         "artist",     "album",      "albumArtist", "composer",
+                                        "conductor",     "ensemble",   "work",       "movement",    "soloist",
+                                        "recordingDate", "performer",  "credit",     "genre",       "year",
+                                        "trackNumber",   "trackTotal", "discNumber", "discTotal",   "movementNumber",
+                                        "movementTotal", "coverArt"});
     CHECK(canonicalNames(completeQueryVariable(VariableType::Property, "")) ==
           std::vector<std::string_view>{"duration", "bitrate", "sampleRate", "channels", "bitDepth", "codec"});
     CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "al")) ==
@@ -315,6 +304,8 @@ namespace ao::query::test
 
     // Unknown property/metadata names degrade to nullopt instead of throwing.
     CHECK_FALSE(detail::lookupVariableField(VariableType::Metadata, "not_a_field").has_value());
+    CHECK_FALSE(detail::lookupVariableField(VariableType::Metadata, "musician"));
+    CHECK(completeQueryVariable(VariableType::Metadata, "musician").empty());
     CHECK_FALSE(detail::lookupVariableField(VariableType::Property, "not_a_field").has_value());
   }
 
@@ -367,11 +358,11 @@ namespace ao::query::test
            .aliases = std::span{kC}},
       Case{.type = VariableType::Metadata,
            .canonicalName = "conductor",
-           .field = Field::ConductorId,
+           .field = Field::Conductor,
            .aliases = std::span{kNoAliases}},
       Case{.type = VariableType::Metadata,
            .canonicalName = "ensemble",
-           .field = Field::EnsembleId,
+           .field = Field::Ensemble,
            .aliases = std::span{kNoAliases}},
       Case{.type = VariableType::Metadata, .canonicalName = "work", .field = Field::WorkId, .aliases = std::span{kW}},
       Case{.type = VariableType::Metadata,
@@ -380,7 +371,19 @@ namespace ao::query::test
            .aliases = std::span{kM}},
       Case{.type = VariableType::Metadata,
            .canonicalName = "soloist",
-           .field = Field::SoloistId,
+           .field = Field::Soloist,
+           .aliases = std::span{kNoAliases}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "recordingDate",
+           .field = Field::RecordingDate,
+           .aliases = std::span{kNoAliases}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "performer",
+           .field = Field::Performer,
+           .aliases = std::span{kNoAliases}},
+      Case{.type = VariableType::Metadata,
+           .canonicalName = "credit",
+           .field = Field::Credit,
            .aliases = std::span{kNoAliases}},
       Case{.type = VariableType::Metadata, .canonicalName = "genre", .field = Field::GenreId, .aliases = std::span{kG}},
       Case{.type = VariableType::Metadata, .canonicalName = "year", .field = Field::Year, .aliases = std::span{kY}},

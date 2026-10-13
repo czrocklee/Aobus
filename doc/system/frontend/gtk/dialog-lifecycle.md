@@ -30,7 +30,7 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 - Custom dialogs place visible cancel/close/apply/save actions in their `AppDialog` header bar and hide window-manager title buttons.
 - Application-owned modal child dialogs are transient for and destroyed with their parent window.
 - Preferences has one application-owned instance and is non-modal.
-- Object editors do not commit a draft on cancel or ordinary close.
+- Object editors do not commit a draft on cancel or ordinary close. Track Properties confirms before discarding a Credits draft; see [Properties composition](track-detail.md#properties-composition).
 - Saved-List create/edit dialogs remain open with their draft intact when submission fails and close only after success or cancellation.
 - Track Properties routes its Save response into one asynchronous submission. From submission through deferred successful close, every mutable metadata control and completion surface is frozen and repeated Save responses are rejected. Busy, stale, or failed outcomes keep the draft open and restore only the field sensitivity allowed by the original mixed/editable state and the current authoring session; Applied or NoOp stays frozen and queues closing for the next GTK main-context turn.
 - Native chooser cancellation is a no-op.
@@ -132,7 +132,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`MainContextCallbackScopeTest.cpp`](../../../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
 - [`ImportExportCoordinatorTest.cpp`](../../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.
 - Layout-editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../../test/unit/linux-gtk/layout/editor) protect draft, preview, and action behavior.
-- [`TrackPropertiesDialogTest.cpp`](../../../../test/unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp) protects pending-draft freezing, repeated-Save rejection, managed-and-presented Save success, retained failure outcomes, and post-publication owner teardown around admitted completion.
+- [`TrackPropertiesDialogTest.cpp`](../../../../test/unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp) protects pending-draft freezing, repeated-Save rejection, managed-and-presented Save success, retained failure outcomes, unchanged-Credits close without a discard prompt, and post-publication owner teardown around admitted completion.
 - [`ShellLayoutControllerTest.cpp`](../../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects persistence-failure feedback and editor retention.
 
 ## Related documents

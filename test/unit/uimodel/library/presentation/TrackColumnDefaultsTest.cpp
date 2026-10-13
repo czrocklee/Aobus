@@ -52,6 +52,7 @@ namespace ao::uimodel::test
       F::Bitrate,
       F::FileSize,
       F::ModifiedTime,
+      F::RecordingDate,
       F::DisplayTrackNumber,
     });
 

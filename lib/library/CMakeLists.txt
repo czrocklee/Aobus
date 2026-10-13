@@ -14,6 +14,9 @@ add_library(ao_library STATIC
     ResourceStore.cpp
     DictionaryStore.cpp
     TextAdmission.cpp
+    RecordingDate.cpp
+    Credits.cpp
+    CreditAdmission.cpp
     detail/LibraryError.cpp
     FileManifestStore.cpp
     FileManifestValidation.cpp

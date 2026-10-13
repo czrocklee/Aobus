@@ -91,6 +91,10 @@ namespace ao::rt
     async::Subscription onAuthoringAvailabilityChanged(
       compat::MoveOnlyFunction<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
+    /// Validates targets at this storage's snapshot revision, which must still be available.
+    /// Later commits can invalidate the returned binding before submission.
+    Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds,
+                                               LibrarySnapshot const& snapshot) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
 
