@@ -78,6 +78,7 @@ combine routes when a change spans several rows.
 
 Alongside the selected completion route, use [design review](../design-review.md) for structural acceptance and refactor evidence when work changes ownership or a public boundary, introduces an abstraction, or structurally refactors a subsystem.
 
+Follow the [formatting order](#formatting-before-validation) before completion checks.
 Run commands from the project root through `./ao`, or `ao.bat` on Windows.
 For changes requiring the full native gate, run it in this order:
 
@@ -145,6 +146,19 @@ explicit request. Such a request uses:
 ```
 
 If the task is explicitly about coverage percentage or missing lines, use `coverage-workflow.md` instead of guessing from source files.
+
+### Formatting before validation
+
+Finish source edits and any needed `./ao format` before the required completion
+checks. Run formatting as a separate step, review its diff, and re-read rewritten
+files before relying on earlier file text. Do not chain source-rewriting format
+with builds or tests, or repeat it merely because another build or test starts.
+For a route requiring both gates, the order is source edits and formatting,
+`./ao check`, then check-only `./ao hygiene`.
+
+If a later correction rewrites validated inputs, rerun the affected checks under
+the reuse rules above. A passing check from before that rewrite is not evidence
+for the new inputs.
 
 ### Continuous integration
 

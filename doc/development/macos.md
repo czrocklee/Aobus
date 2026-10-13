@@ -110,17 +110,30 @@ See [optimized builds](optimized-builds.md).
 ## Build and tool state
 
 Default build trees are `/tmp/build/<checkout-directory>/<flavor>` and contain
-`build.log`. Sanitizers use sibling suffixes. `AOBUS_BUILD_ROOT` replaces only
-the `/tmp/build` base; the portal still appends `<checkout-directory>/<flavor>`.
-`BUILD_DIR` selects one exact tree for every flavor, so it is never a base, and
-it takes precedence over `AOBUS_BUILD_ROOT`. An explicit `-p` or `--path` takes
-precedence over both.
+`build.log`. Default sanitizer trees use sibling suffixes; tidy and analyzer
+use separate tool trees. `<checkout-directory>` is only the checkout folder's
+final name, not a unique identity. Same-named checkouts sharing one base select
+the same paths; use distinct names or absolute local build bases.
 
-When `/tmp` does not survive a restart, keep build trees under a persistent
-local base, for example
-`AOBUS_BUILD_ROOT="$HOME/Library/Caches/Aobus/build" ./ao check`. That base
-holds build trees only; `AOBUS_STATE_ROOT` still selects the managed tool and
-package state described below.
+`AOBUS_BUILD_ROOT` replaces only the `/tmp/build` base; the portal still appends
+the checkout name and flavor or tool suffix. `BUILD_DIR` selects one exact tree
+instead, bypassing flavor, sanitizer, tidy, and analyzer path separation. It is
+never a base and takes precedence over `AOBUS_BUILD_ROOT`. An explicit `-p` or
+`--path` takes precedence over both.
+
+By default, C++ tidy/hygiene without `-p` refreshes the selected tree with the
+`macos-debug` lint preset, even when selected through `BUILD_DIR`; this can
+reconfigure a Release tree as Debug. `tidy --no-build` skips that provisioning.
+Prefer `AOBUS_BUILD_ROOT` to retain independent product and tool trees.
+An explicit tidy/hygiene `-p` suppresses that forced preset refresh, but does
+not make the selected tree read-only.
+
+The default `/tmp` location is temporary storage, not a persistence guarantee.
+For a persistent local base, for example, use
+`AOBUS_BUILD_ROOT="$HOME/Library/Caches/Aobus/build" ./ao check`.
+Repeat the assignment for related invocations, or use a directory-scoped
+environment. That base holds build trees only; `AOBUS_STATE_ROOT` still selects
+the managed tool and package state described below.
 
 Managed state defaults to `$HOME/Library/Caches/Aobus`:
 
@@ -134,25 +147,37 @@ Managed state defaults to `$HOME/Library/Caches/Aobus`:
 a complete pre-bootstrapped checkout; registry and manifest locks still apply.
 Use `./ao setup compiler-cache` for optional managed ccache behavior.
 
-Generated state must be on the macOS host's local disk. A source checkout may be
-local or shared, including over SMB, but build trees, vcpkg state, Python
-environments, and compiler caches must not be written to a network mount.
-Mounting and maintaining a source share is host administration, not portal
-behavior.
+Keep build trees, vcpkg state, managed Python environments, and compiler-cache
+stores on the macOS host's local disk. A source checkout may be local or shared,
+including over SMB. Mounting and maintaining a source share is host
+administration, not portal behavior. Keep source files stable while building
+or collecting validation evidence; do not edit the same shared files
+concurrently from multiple hosts.
+
+This storage requirement does not imply a write-free source checkout.
+Checkout IDs live in private Git metadata, and Ruff/Python may create
+`.ruff_cache` and `__pycache__` beside sources. Darwin's mypy cache is kept in
+the managed Python environment. `AOBUS_BUILD_ROOT` moves only build trees,
+not those metadata or source-side caches.
 
 ### Native checkout identity
 
 The managed Ruff/mypy environment under `tools/venvs/<checkout>` is keyed by
-the checkout's filesystem identity and an ID stored in its private Git
-directory. If no stored ID can be read or created there, commands such as
+the normalized absolute checkout path supplied to the native bootstrap and an
+ID stored in its private Git directory. macOS does not canonicalize every path
+alias for this key; a different symlink or path spelling can select another
+environment. If no stored ID can be read or created, commands such as
 `./ao hygiene` cannot initialize the environment.
 Set one stable, unique `AOBUS_CHECKOUT_ID` for that checkout, per invocation or
 in a directory-scoped environment.
 
 An unconditional shell-profile export also overrides native clones' stored
-IDs and can select different managed Python environments for them. The
-override does not repair Git linkage; use explicit file scopes for commands
-such as `./ao hygiene` while Git-dependent discovery is unavailable.
+IDs and can select different managed Python environments for them.
+The override does not repair Git linkage. Default Git-based scope discovery
+can fail during preflight, before managed-tool setup. Select explicit files,
+`--folder <dir>`, or `--all` for format/tidy/hygiene to avoid that discovery;
+these scopes still need a usable managed-tool identity. `--commit` remains
+Git-dependent.
 
 ## Native desktop development slice
 
@@ -256,11 +281,19 @@ hardware behavior.
   [verified archive recovery](dependency-upgrade.md#recovering-a-regenerated-macos-vcpkg-archive).
 - `AOBUS_LIBCXX_EXPECTED_SHIM` missing at configure time means CMake was run
   outside the portal. Remove that manual tree and use `./ao`.
-- If generated state appears under the SMB checkout, stop and select a local
-  `AOBUS_BUILD_ROOT`.
-- "cannot create the checkout ID" can indicate an unreachable or non-writable
-  private Git directory. Follow the scoped override guidance under
+- If a build tree is selected on a source share, choose an absolute local path
+  with `-p` or `BUILD_DIR`, or omit `-p` and unset `BUILD_DIR` before selecting
+  an absolute local `AOBUS_BUILD_ROOT`. Also check `AOBUS_STATE_ROOT` for managed
+  tool and package state; these settings do not relocate Git metadata or
+  source-side caches.
+- "cannot locate the private Git directory", "cannot create the checkout ID",
+  or "checkout ID remained empty" can prevent managed-tool initialization.
+  Follow the scoped override guidance under
   [native checkout identity](#native-checkout-identity).
+- "git branch --show-current failed" during default source discovery can occur
+  before checkout-ID initialization. Use the Git-independent scopes described
+  under [native checkout identity](#native-checkout-identity); an ID override
+  alone does not repair Git linkage.
 - If no Core Audio outputs appear, confirm a live output in Audio MIDI Setup.
   Aobus does not invent a route when macOS publishes none.
 - If AUHAL or `afplay` fails over SSH, `stat -f "%Su" /dev/console` must name
