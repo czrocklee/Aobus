@@ -7,6 +7,7 @@
 #include "lib/audio/backend/detail/CoreAudioDeviceDiscovery.h"
 #include "lib/audio/detail/DecoderOutput.h"
 #include "test/unit/audio/BackendTestSupport.h"
+#include "test/unit/audio/backend/CoreAudioTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
@@ -28,6 +29,7 @@
 #include <memory>
 #include <semaphore>
 #include <span>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -111,6 +113,31 @@ namespace ao::audio::backend::test
       std::counting_semaphore<> _renderEntered{0};
       std::atomic_bool _releaseRender{false};
     };
+
+    Device requireNativeTestOutput()
+    {
+      auto const requestedRes = audio::test::requestedCoreAudioTestOutput();
+
+      // A present but unresolvable UID is a configuration error, not a device skip.
+      if (!requestedRes)
+      {
+        FAIL("AOBUS_TEST_COREAUDIO_DEVICE_UID: " << requestedRes.error().message);
+      }
+
+      if (auto const& optDevice = *requestedRes; optDevice)
+      {
+        return *optDevice;
+      }
+
+      auto const devices = detail::enumerateCoreAudioOutputDevices();
+
+      if (devices.empty())
+      {
+        SKIP("macOS host has no live Core Audio output device");
+      }
+
+      return devices.front();
+    }
   } // namespace
 
   TEST_CASE("CoreAudioBackend - caches software volume and mute before native open",
@@ -144,15 +171,11 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioBackend - native AUHAL open confirms the exact lossless client stream",
             "[audio][integration][coreaudio][backend]")
   {
-    auto const devices = detail::enumerateCoreAudioOutputDevices();
-
-    if (devices.empty())
-    {
-      SKIP("macOS host has no live Core Audio output device");
-    }
+    auto const device = requireNativeTestOutput();
+    CAPTURE(device.id.raw());
 
     auto target = ao::audio::test::NoopRenderTarget{};
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
+    auto backend = CoreAudioBackend{device, kProfileShared};
     auto const openedRes = backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target);
     REQUIRE(openedRes);
@@ -176,18 +199,14 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioBackend - native AUHAL keeps common high-resolution clients lossless",
             "[audio][integration][coreaudio][backend]")
   {
-    auto const devices = detail::enumerateCoreAudioOutputDevices();
-
-    if (devices.empty())
-    {
-      SKIP("macOS host has no live Core Audio output device");
-    }
+    auto const device = requireNativeTestOutput();
+    CAPTURE(device.id.raw());
 
     constexpr auto kSourceFormats = std::array{
       SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .sampleKind = SampleKind::Integer},
       SignalFormat{.sampleRate = 96000, .channels = 2, .precisionBits = 24, .sampleKind = SampleKind::Integer}};
     auto target = ao::audio::test::NoopRenderTarget{};
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
+    auto backend = CoreAudioBackend{device, kProfileShared};
 
     for (auto const& sourceFormat : kSourceFormats)
     {
@@ -203,15 +222,11 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioBackend - native drain renders once and completes after the presentation tail",
             "[audio][integration][coreaudio][backend][concurrency]")
   {
-    auto const devices = detail::enumerateCoreAudioOutputDevices();
-
-    if (devices.empty())
-    {
-      SKIP("macOS host has no live Core Audio output device");
-    }
+    auto const device = requireNativeTestOutput();
+    CAPTURE(device.id.raw());
 
     auto target = DrainingRenderTarget{};
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
+    auto backend = CoreAudioBackend{device, kProfileShared};
     auto const openedRes = backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target);
     REQUIRE(openedRes);
@@ -230,22 +245,18 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioBackend - graph observer may close backend without recursive clear",
             "[audio][integration][coreaudio][backend]")
   {
-    auto const devices = detail::enumerateCoreAudioOutputDevices();
-
-    if (devices.empty())
-    {
-      SKIP("macOS host has no live Core Audio output device");
-    }
+    auto const device = requireNativeTestOutput();
+    CAPTURE(device.id.raw());
 
     std::size_t graphCalls = 0;
     auto graphs = std::vector<flow::Graph>{};
     auto graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
     auto target = ao::audio::test::NoopRenderTarget{};
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared, graphRegistryPtr};
+    auto backend = CoreAudioBackend{device, kProfileShared, graphRegistryPtr};
     REQUIRE(backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target));
 
-    auto sub = graphRegistryPtr->subscribe(devices.front().id.raw(),
+    auto sub = graphRegistryPtr->subscribe(device.id.raw(),
                                            [&](flow::Graph const& graph)
                                            {
                                              ++graphCalls;
@@ -261,8 +272,8 @@ namespace ao::audio::backend::test
     CHECK(graphCalls == 2U);
     REQUIRE(graphs.size() == 2U);
     REQUIRE(graphs[0].nodes.size() == 2U);
-    CHECK(graphs[0].nodes[0].id == devices.front().id.raw() + ":client");
-    CHECK(graphs[0].nodes[1].id == devices.front().id.raw());
+    CHECK(graphs[0].nodes[0].id == device.id.raw() + ":client");
+    CHECK(graphs[0].nodes[1].id == device.id.raw());
     CHECK(graphs[1] == flow::Graph{});
     CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
 
@@ -273,15 +284,11 @@ namespace ao::audio::backend::test
   TEST_CASE("CoreAudioBackend - stop fences a blocked render and cancels its drain",
             "[audio][integration][coreaudio][backend][concurrency]")
   {
-    auto const devices = detail::enumerateCoreAudioOutputDevices();
-
-    if (devices.empty())
-    {
-      SKIP("macOS host has no live Core Audio output device");
-    }
+    auto const device = requireNativeTestOutput();
+    CAPTURE(device.id.raw());
 
     auto target = BlockingDrainingRenderTarget{};
-    auto backend = CoreAudioBackend{devices.front(), kProfileShared};
+    auto backend = CoreAudioBackend{device, kProfileShared};
     auto stopEntered = std::binary_semaphore{0};
     auto stopReturned = std::binary_semaphore{0};
     auto stopThread = std::jthread{};

@@ -4,7 +4,10 @@
 #include "AppKitDesktopScenarioHelpers.h"
 
 #include "AppKitScenarioSupport.h"
+#include "app/macos-appkit/AppKitText.h"
+#include "test/unit/audio/backend/CoreAudioTestSupport.h"
 #include <ao/Contract.h>
+#include <ao/audio/BackendIds.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -321,6 +324,19 @@ namespace ao::appkit::test::desktop
     if (settings == nil)
     {
       settings = [NSMutableDictionary dictionary];
+    }
+
+    auto outputRes = audio::test::requestedCoreAudioTestOutput();
+    auto const outputError = outputRes ? std::string{} : outputRes.error().message;
+    AO_INVARIANT(outputRes, "The requested Core Audio desktop test output must be available: {}", outputError);
+
+    if (auto const& optOutput = *outputRes; optOutput)
+    {
+      settings[@"output"] = @{
+        @"backend": nativeText(optOutput->backendId.raw()),
+        @"device": nativeText(optOutput->id.raw()),
+        @"profile": nativeText(audio::kProfileShared.raw())
+      };
     }
 
     settings[@"libraryRoot"] = nativePath(launch.optRequest->libraryRoot);

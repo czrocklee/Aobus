@@ -215,8 +215,63 @@ is invoked over SSH. The portal neither creates a login session nor changes
 power policy. At the login window, device enumeration may succeed while AUHAL
 startup fails.
 
+### Silent Core Audio test output
+
+A host without usable audio hardware, such as a VM, can run the native Core
+Audio cases against a software HAL endpoint such as BlackHole 2ch. That is
+still a real Core Audio route, not the application's null backend. Installing,
+reloading, or removing the driver is host administration that `ao` never
+performs, and the system default output does not need to change.
+
+Select the endpoint by its exact UID for the test process:
+
+```bash
+AOBUS_TEST_COREAUDIO_DEVICE_UID=BlackHole2ch_UID ./ao check release
+AOBUS_TEST_COREAUDIO_DEVICE_UID=BlackHole2ch_UID ./ao test --appkit --scenario presentation \
+  --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
+```
+
+Only test support reads the variable. Shipping executables, production device
+ordering, and system defaults are unchanged.
+
+- Core Audio backend cases open the matching live output instead of the first
+  enumerated device.
+- AppKit component fixtures select it and wait until the playback snapshot
+  reports that backend, device, and the shared profile.
+- The `desktop` scenario seeds the request in its isolated `desktop.plist`,
+  checks that the parent and its successor keep it, and opens each process's
+  native output menu to verify the exact checked backend, device, and profile.
+  The checkmark reflects the engine-confirmed selection, independently of the
+  saved request; it is not a readback of the AudioUnit route or rendered PCM.
+
+An empty, missing, or ambiguous UID fails instead of skipping or falling back
+to the default output; display names, case differences, and surrounding
+whitespace do not match. With the variable unset, the cases keep their existing
+selection and skip on a host without an output device. Take the UID from native
+device enumeration; numeric device IDs do not survive a Core Audio reload.
+
+A dedicated development VM may keep the driver installed and set a default in
+the development user's `~/.zshenv`:
+
+```zsh
+export AOBUS_TEST_COREAUDIO_DEVICE_UID="${AOBUS_TEST_COREAUDIO_DEVICE_UID-BlackHole2ch_UID}"
+```
+
+An explicit value, including an empty one, still wins. GUI or service launches
+that do not inherit the shell environment need the setting passed explicitly.
+To exercise the host's normal output from such a shell, remove it for one
+command:
+
+```bash
+env -u AOBUS_TEST_COREAUDIO_DEVICE_UID ./ao test --core "CoreAudioBackend*"
+```
+
+A pass on a software endpoint covers only that native software path. It does
+not prove physical routing, audibility, hardware removal, or latency.
+
 For audio-backend changes, additionally run the opt-in audible probe on a host
-where a short tone is acceptable:
+where a short tone is acceptable. It ignores `AOBUS_TEST_COREAUDIO_DEVICE_UID`
+and uses the host's normal output:
 
 ```bash
 ./ao test --integration "[coreaudio][.manual]"

@@ -39,9 +39,20 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     APPEND PROPERTY COMPILE_OPTIONS -Wno-free-nonheap-object)
 endif()
 
-# This opt-in GUI harness needs a console session and disposable media. It is
-# built by native checks but deliberately excluded from the unattended suites.
 if(APPLE)
+  # Resolves AOBUS_TEST_COREAUDIO_DEVICE_UID for the Core Audio backend cases
+  # and the AppKit scenarios.
+  add_library(ao_test_support_coreaudio STATIC
+    unit/audio/backend/CoreAudioTestSupport.cpp
+  )
+  target_include_directories(ao_test_support_coreaudio PUBLIC "${CMAKE_SOURCE_DIR}")
+  target_link_libraries(ao_test_support_coreaudio PUBLIC ao_audio PRIVATE ao_test_options)
+
+  add_executable(ao_coreaudio_output_probe helper/CoreAudioOutputProbeMain.cpp)
+  target_link_libraries(ao_coreaudio_output_probe PRIVATE ao_test_support_coreaudio)
+
+  # This opt-in GUI harness needs a console session and disposable media. It is
+  # built by native checks but deliberately excluded from the unattended suites.
   add_executable(ao_appkit_smoke MACOSX_BUNDLE
     integration/macos/AppKitSmokeMain.mm
     integration/macos/AppKitScenarioSupport.mm
@@ -60,7 +71,7 @@ if(APPLE)
     unit/media/wav/TestWav.cpp
     unit/media/wav/TestWav.h
   )
-  target_link_libraries(ao_appkit_smoke PRIVATE ao_appkit)
+  target_link_libraries(ao_appkit_smoke PRIVATE ao_appkit ao_test_support_coreaudio)
   target_include_directories(ao_appkit_smoke PRIVATE "${CMAKE_SOURCE_DIR}")
   set_target_properties(ao_appkit_smoke PROPERTIES
     OBJCXX_STANDARD 26 OBJCXX_STANDARD_REQUIRED ON
@@ -826,6 +837,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/CoreAudioBackendTest.cpp
   unit/audio/backend/CoreAudioProviderTest.cpp
+  unit/audio/backend/CoreAudioTestOutputTest.cpp
   unit/audio/backend/detail/CoreAudioErrorTest.cpp
   unit/audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
   unit/audio/backend/detail/CoreAudioFormatTest.cpp
@@ -834,6 +846,10 @@ aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
   unit/audio/backend/detail/CoreFoundationStringTest.cpp
 )
+if(APPLE)
+  target_link_libraries(ao_core_test PRIVATE ao_test_support_coreaudio)
+  add_dependencies(ao_core_test ao_coreaudio_output_probe)
+endif()
 # Only Darwin LMDB keeps lock state that outlives an aborted owner.
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/macos/lmdb/LmdbProbeScratchTest.cpp

@@ -296,11 +296,25 @@ namespace ao::appkit::test
       auto const before = media.diagnostics();
       auto const handler = media.remoteCommandHandler();
       auto snapshots = std::vector<rt::PlaybackTransportSnapshot>{};
+      auto lastTransport = started;
       bool queuedMute = false;
       bool handedOff = false;
       auto const subscription = playback.events().onSnapshot(
         [&](rt::PlaybackSnapshot const& snapshot)
         {
+          // A track start's Core Audio system-graph observation lands
+          // asynchronously and may publish a quality-only snapshot here. It is
+          // orthogonal to the command backlog, so it neither counts nor queues.
+          auto withoutQuality = snapshot.transport;
+          withoutQuality.quality = lastTransport.quality;
+          bool const qualityOnly = withoutQuality == lastTransport;
+          lastTransport = snapshot.transport;
+
+          if (qualityOnly)
+          {
+            return;
+          }
+
           snapshots.push_back(snapshot.transport);
 
           if (!queuedMute)
