@@ -14,6 +14,7 @@
 
 #include <lmdb.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -894,6 +895,12 @@ namespace ao::lmdb
   {
     ensureActive();
     return _lastId;
+  }
+
+  void IntegerKeyDatabase::Writer::raiseMaxKey(std::uint32_t const key) noexcept
+  {
+    ensureActive();
+    _lastId = std::max(_lastId, key);
   }
 
   Result<std::uint32_t> IntegerKeyDatabase::Writer::append(std::span<std::byte const> const data)

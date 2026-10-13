@@ -53,6 +53,8 @@ namespace ao::library
 
   private:
     Writer writer(WriteTransaction& transaction) const;
+    // The highest Track key stored in the transaction's snapshot, or zero.
+    std::uint32_t lastStoredId(WriteTransaction const& transaction) const;
     TrackStore(lmdb::IntegerKeyDatabase hotDb,
                lmdb::IntegerKeyDatabase coldDb,
                detail::LibraryIdentity const& identity);
@@ -62,6 +64,7 @@ namespace ao::library
     detail::LibraryIdentity const* _identity;
 
     friend class MusicLibrary;
+    friend class WriteTransaction;
     friend class detail::WriteTransactionAccess;
     friend class detail::PhysicalStoreAccess;
   };
@@ -254,10 +257,15 @@ namespace ao::library
   private:
     Writer(lmdb::IntegerKeyDatabase::Writer hotWriter, lmdb::IntegerKeyDatabase::Writer coldWriter);
 
+    // The highest Track id allocated through this writer or committed before
+    // it; clearing the rows keeps it, so a later append never reuses an id.
+    TrackId lastAllocatedId() const noexcept;
+
     lmdb::IntegerKeyDatabase::Writer _hotWriter;
     lmdb::IntegerKeyDatabase::Writer _coldWriter;
 
     friend class TrackStore;
+    friend class WriteTransaction;
     friend class detail::TrackWriteAccess;
   };
 } // namespace ao::library

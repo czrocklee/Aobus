@@ -90,6 +90,9 @@ namespace ao::library::test
       REQUIRE(libraryRes);
     }
 
+    // A planted Track or List row also raises the id space to cover it, as a
+    // supported writer's commit would, so the row is admitted or rejected on its
+    // own merits.
     void createRawIntegerRow(std::filesystem::path const& path,
                              std::string const& databaseName,
                              std::uint32_t const id,
@@ -99,6 +102,26 @@ namespace ao::library::test
       auto transaction = beginWriteTransaction(environment);
       auto database = openIntegerKeyDatabase(transaction, databaseName);
       REQUIRE(database.writer(transaction).create(id, payload));
+
+      if (databaseName == "tracks_hot")
+      {
+        coverRawIdSpace(transaction, id);
+      }
+      else if (databaseName == "lists")
+      {
+        coverRawIdSpace(transaction, 0, id);
+      }
+
+      REQUIRE(transaction.commit());
+    }
+
+    void coverRawIdSpace(std::filesystem::path const& path,
+                         std::uint32_t const lastTrackId,
+                         std::uint32_t const lastListId)
+    {
+      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto transaction = beginWriteTransaction(environment);
+      library::test::coverRawIdSpace(transaction, lastTrackId, lastListId);
       REQUIRE(transaction.commit());
     }
 
@@ -430,6 +453,7 @@ namespace ao::library::test
     constexpr std::uint32_t kPreNfcTextLibraryVersion = 6;
     constexpr std::uint32_t kPreUnixMtimeLibraryVersion = 7;
     constexpr std::uint32_t kPrePerformanceMetadataLibraryVersion = 8;
+    constexpr std::uint32_t kPreIdSpaceLibraryVersion = 9;
 
     SECTION("future version")
     {
@@ -519,12 +543,23 @@ namespace ao::library::test
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
-      CHECK(res.error().message.contains("version 8 (current 9)"));
+      CHECK(res.error().message.contains("version 8 (current 10)"));
       CHECK(res.error().message.contains("No automatic migration"));
       CHECK(res.error().message.contains("keep this library"));
       CHECK(res.error().message.contains("build supporting its stored version"));
       CHECK(res.error().message.contains("Rebuilding it from media files loses the tags, lists, and custom fields"));
       CHECK(readHeaderBytes() == before);
+    }
+
+    SECTION("version 9 before the id space record")
+    {
+      static_assert(kPreIdSpaceLibraryVersion != kLibraryVersion);
+      createLibraryMetadataHeader(temp.path(), kPreIdSpaceLibraryVersion);
+
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
+      CHECK(res.error().message.contains("version 9 (current 10)"));
     }
   }
 
@@ -592,6 +627,35 @@ namespace ao::library::test
       updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, utility::bytes::view(header));
       requireCorruptLibrary(temp.path());
     }
+
+    SECTION("nonzero reserved word")
+    {
+      header.reserved = 1;
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, utility::bytes::view(header));
+      requireCorruptOpen(temp.path(), "Library metadata header has nonzero reserved bytes 0x00000001");
+    }
+
+    SECTION("nil library id")
+    {
+      header.libraryId = {};
+      updateRawIntegerRow(temp.path(), "meta", kMetadataHeaderRecordId, utility::bytes::view(header));
+      requireCorruptOpen(temp.path(), "Library metadata header has the nil library id");
+    }
+  }
+
+  TEST_CASE("MusicLibrary - a fresh header carries zero reserved bytes and a non-nil id",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    auto const optBytes = readExistingIntegerKeyRecord(temp.path(), "meta", kMetadataHeaderRecordId);
+    REQUIRE(optBytes);
+    REQUIRE(optBytes->size() == sizeof(MetadataHeader));
+    auto header = MetadataHeader{};
+    std::memcpy(&header, optBytes->data(), sizeof(header));
+    CHECK(header.reserved == 0);
+    CHECK_FALSE(isNilLibraryId(header.libraryId));
   }
 
   TEST_CASE("MusicLibrary - admits only the current metadata record set and revision range",
@@ -625,6 +689,88 @@ namespace ao::library::test
       constexpr auto kReservedRevision = std::numeric_limits<std::uint64_t>::max();
       createRawIntegerRow(temp.path(), "meta", kLibraryRevisionRecordId, utility::bytes::view(kReservedRevision));
       requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("missing id space")
+    {
+      {
+        auto environment = openEnvironment(temp.path(), {.flags = MDB_NOTLS, .maxDatabases = 8});
+        auto transaction = beginWriteTransaction(environment);
+        auto database = openIntegerKeyDatabase(transaction, "meta");
+        REQUIRE(database.writer(transaction).tryDelete(kIdSpaceRecordId));
+        REQUIRE(transaction.commit());
+      }
+
+      requireCorruptOpen(temp.path(), "Metadata database has no id space record");
+    }
+
+    SECTION("id space with wrong size")
+    {
+      auto const bytes = std::array<std::byte, sizeof(IdSpace) + 4U>{};
+      updateRawIntegerRow(temp.path(), "meta", kIdSpaceRecordId, bytes);
+      requireCorruptOpen(temp.path(), "Library id space record has size 12 (expected 8)");
+    }
+
+    SECTION("id space with a List mark above the maximum List id")
+    {
+      auto const idSpace = IdSpace{.lastTrackId = 0, .lastListId = kMaxListId + 1U};
+      updateRawIntegerRow(temp.path(), "meta", kIdSpaceRecordId, utility::bytes::view(idSpace));
+      requireCorruptOpen(
+        temp.path(),
+        std::format("Library id space's last List id {} is above the maximum List id {}", kMaxListId + 1U, kMaxListId));
+    }
+  }
+
+  TEST_CASE("MusicLibrary - the id space covers every stored Track, List, and saved-order id",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+    auto const lowerMarks = [&temp](std::uint32_t const lastTrackId, std::uint32_t const lastListId)
+    {
+      auto const idSpace = IdSpace{.lastTrackId = lastTrackId, .lastListId = lastListId};
+      updateRawIntegerRow(temp.path(), "meta", kIdSpaceRecordId, utility::bytes::view(idSpace));
+    };
+
+    SECTION("Track above the last Track id")
+    {
+      createRawTrackPair(temp.path(), TrackId{2}, "track.flac");
+      createRawManifestRow(temp.path(), "track.flac", TrackId{2});
+      lowerMarks(1, 0);
+      requireCorruptOpen(temp.path(), "Track 2 is above the id space's last Track id 1");
+    }
+
+    SECTION("List above the last List id")
+    {
+      auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
+      createRawIntegerRow(temp.path(), "lists", 2, payload);
+      lowerMarks(0, 1);
+      requireCorruptOpen(temp.path(), "List 2 is above the id space's last List id 1");
+    }
+
+    SECTION("List keyed by the reserved maximum id")
+    {
+      auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
+      createRawIntegerRow(temp.path(), "lists", std::numeric_limits<std::uint32_t>::max(), payload);
+      // Keep the mark admissible so the key itself is what open rejects.
+      lowerMarks(0, kMaxListId);
+      requireCorruptOpen(temp.path(), "List database contains the reserved id 4294967295");
+    }
+
+    SECTION("saved order above the last Track id")
+    {
+      coverRawIdSpace(temp.path(), 4, 0);
+      auto builder = ListBuilder::makeEmpty();
+      builder.orderTrackIds().add(TrackId{5});
+      createRawIntegerRow(temp.path(), "lists", 1, ao::test::requireValue(builder.serialize()));
+      requireCorruptOpen(temp.path(), "List 1 orders Track 5, above the id space's last Track id 4");
+    }
+
+    SECTION("marks above every row open")
+    {
+      coverRawIdSpace(temp.path(), 10, 10);
+      std::ignore = makeTestMusicLibrary(temp.path(), temp.path());
+      CHECK(readRawIdSpace(temp.path()) == IdSpace{.lastTrackId = 10, .lastListId = 10});
     }
   }
 
@@ -917,6 +1063,8 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     initializeLibrary(temp.path());
+    // Track 999 was allocated and deleted, so its rank outlives it.
+    coverRawIdSpace(temp.path(), 999, 0);
     auto builder = ListBuilder::makeEmpty();
     builder.orderTrackIds().add(TrackId{999});
     auto const payload = ao::test::requireValue(builder.serialize());

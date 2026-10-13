@@ -96,7 +96,7 @@ namespace ao::gtk::layout::test
     {
       auto output = std::ofstream{path};
       REQUIRE(output);
-      output << "version: 7\n"
+      output << "version: 8\n"
                 "export_mode: full\n"
                 "library:\n";
 
@@ -122,17 +122,23 @@ namespace ao::gtk::layout::test
                   "          resource: "
                << utility::sha256Hex(utility::computeSha256(*optCover)) << '\n';
       }
+      else
+      {
+        output << "      covers: []\n";
+      }
 
       output << "  lists: []\n";
       REQUIRE(output.good());
     }
 
+    // Merge updates the Track matched by URI in place, so the playing Track keeps
+    // its id while its cover changes; a restore would recreate it under a new id.
     void importCoverAndWait(rt::AppRuntime& runtime, std::filesystem::path const& path)
     {
       auto pump = [] { ao::gtk::test::drainGtkEvents(); };
       auto& jobs = runtime.library().jobs();
       auto planRes =
-        rt::test::runRuntimeTask(runtime, jobs.prepareLibraryImportAsync(path, rt::ImportMode::Restore), pump);
+        rt::test::runRuntimeTask(runtime, jobs.prepareLibraryImportAsync(path, rt::ImportMode::Merge), pump);
       REQUIRE(planRes);
       auto const importRes =
         rt::test::runRuntimeTask(runtime, jobs.applyLibraryImportPlanAsync(std::move(*planRes)), pump);
@@ -650,6 +656,8 @@ namespace ao::gtk::layout::test
       ao::gtk::test::installCoverCacheEntry(fixture.cacheDirectory(), secondCover);
       writeCoverImport(importPath, std::span<std::byte const>{secondCover});
       importCoverAndWait(runtime, importPath);
+      // A missing Track would also report no cover, so prove the merge kept it.
+      REQUIRE(runtime.library().snapshot().containsTrack(mutableCoverTrackId));
       CHECK(runtime.library().snapshot().trackCoverArtId(mutableCoverTrackId) != coverResourceId);
       auto const showsSecondCover = [&]
       {
@@ -669,6 +677,7 @@ namespace ao::gtk::layout::test
 
       writeCoverImport(importPath, std::nullopt);
       importCoverAndWait(runtime, importPath);
+      REQUIRE(runtime.library().snapshot().containsTrack(mutableCoverTrackId));
       CHECK(runtime.library().snapshot().trackCoverArtId(mutableCoverTrackId) == kInvalidResourceId);
       REQUIRE(
         ao::gtk::test::tryPumpGtkEventsUntil([&] { return coverArt->isShowingPlaceholder(); }, kCoverMutationTimeout));

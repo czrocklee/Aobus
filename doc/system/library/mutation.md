@@ -48,7 +48,7 @@ The private `LibraryWriteLane` owns the one core writable capability and exposes
 - One writer command owns at most one write transaction and is independently atomic.
 - A sequence of writer calls is a sequence of commits; the API exposes no caller-controlled multi-command transaction.
 - Every transaction-dependent command body runs through the root operation boundary and returns `Result<T>`.
-- Logical mutation ports and library-identity restore are unavailable on the transaction owner and are valid only while its `apply()` callback is active.
+- Logical mutation ports are unavailable on the transaction owner and are valid only while its `apply()` callback is active.
 - Any error returned by that body aborts and terminalizes the complete root before the error is exposed; an unexpected exception does the same before being rethrown.
 - Private `lmdb::detail::TransactionFailure` and `library::detail::LibraryException` carriers may unwind lower mutation helpers only as far as `WriteTransaction`, which catches them exactly, aborts, and returns the carried error.
 - Library code does not expose nested transactions or item savepoints, so no batch owner continues after a failed root body.

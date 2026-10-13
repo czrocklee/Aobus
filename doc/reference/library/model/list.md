@@ -17,14 +17,14 @@ The persisted list model belongs to the **core libraries** layer in the [system 
 
 | Field | Type | Meaning |
 |---|---|---|
-| `ListId` | Unsigned 32-bit | Durable list identity; zero is invalid. |
+| `ListId` | Unsigned 32-bit | Durable list identity, never reused after deletion; zero is invalid and `UINT32_MAX` is never stored. |
 | `parentId` | `ListId` | Parent list; zero means the All Tracks root. |
 | `name` | Scalar-valid UTF-8 NFC text | User-visible list name. |
 | `description` | Scalar-valid UTF-8 NFC text | Optional description. |
 | `filter` | Syntactically opaque scalar-valid UTF-8 text | Byte-exact local predicate source interpreted by the application; empty is the identity expression `true`. |
-| `orderTrackIds` | Unique ordered `TrackId` sequence | Optional rank overlay; it never defines membership. |
+| `orderTrackIds` | Unique ordered `TrackId` sequence | Optional rank overlay; it never defines membership, and it names only Track ids already allocated. |
 
-The All Tracks root uses the reserved runtime identity `kAllTracksListId` and is not a normal stored list row.
+The All Tracks root uses the reserved runtime identity `kAllTracksListId`, which is `UINT32_MAX`, and is not a normal stored list row.
 
 ## Unified semantics
 

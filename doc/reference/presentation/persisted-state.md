@@ -141,7 +141,7 @@ It is not a complete workspace root schema version.
 - TUI loads each group independently before connecting model-save observers, preserving a seeded group when its sibling succeeds or it is rejected.
 - Serialization rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
 - GTK and TUI submit both schemas through one `saveTogether()` candidate, so a serialization or replacement failure cannot persist only one new group in those transactions. WinUI writes each group by itself, from the persist port of the store that changed.
-- Restoring a document installs only entries whose list the library still has; a virtual list id needs no live list to vouch for it. This retires state that outlived a deletion the store never observed, so a reused list id cannot inherit it.
+- Restoring a document installs only entries whose list the library still has; a virtual list id needs no live list to vouch for it. This retires state that outlived a deletion the store never observed, and entries carried over from a rebuilt, restored, or replaced database that lacks their list id.
 - Layout documents are frontend-local: no writer converts or copies a positive `width` between desktop pixel units and terminal cells.
 
 ## Compatibility and versioning

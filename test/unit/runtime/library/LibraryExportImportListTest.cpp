@@ -27,6 +27,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -188,15 +189,12 @@ namespace ao::rt::test
     auto temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
 
-    auto trackId = kInvalidTrackId;
-    {
-      trackId = library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("song.flac"));
-    }
+    std::ignore = library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("song.flac"));
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 7
+      yaml << R"(version: 8
 export_mode: full
 library:
   resources: []
@@ -221,6 +219,10 @@ library:
     {
       auto transaction = ml.readTransaction();
       auto const listReader = ml.lists().reader(transaction);
+      // Restore recreates the Track under a fresh id, so the order must name that one.
+      auto const optManifest = ml.manifest().reader(transaction).get("song.flac");
+      REQUIRE(optManifest);
+      auto const trackId = optManifest->trackId();
 
       auto optParent = std::optional<ListView>{};
       auto optChild = std::optional<ListView>{};
@@ -262,7 +264,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 7
+version: 8
 export_mode: full
 library:
   resources: []
@@ -284,7 +286,7 @@ library:
 
     auto const reportRes = importer.importFromYamlOffline(yamlPath);
     REQUIRE(reportRes);
-    CHECK(reportRes->payloadVersion == 7);
+    CHECK(reportRes->payloadVersion == 8);
     CHECK(reportRes->payloadMode == ExportMode::Full);
     CHECK(reportRes->targetScope == ImportTargetScope::Library);
     CHECK(reportRes->danglingReferencesIgnored == 3);
@@ -334,7 +336,7 @@ library:
 
     {
       auto yaml = std::ofstream{inputPath};
-      yaml << R"(version: 7
+      yaml << R"(version: 8
 export_mode: full
 library:
   resources: []

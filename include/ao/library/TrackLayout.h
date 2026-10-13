@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -78,6 +78,29 @@ namespace ao::library
 
   static_assert(sizeof(TrackHotHeader) == kTrackHotHeaderSize, "TrackHotHeader must be exactly 36 bytes");
   static_assert(alignof(TrackHotHeader) == kTrackHotHeaderAlignment, "TrackHotHeader must have 4-byte alignment");
+  static_assert(std::has_unique_object_representations_v<TrackHotHeader>, "TrackHotHeader must have no padding");
+  static_assert(offsetof(TrackHotHeader, tagBloom) == 0);
+  static_assert(offsetof(TrackHotHeader, artistId) ==
+                offsetof(TrackHotHeader, tagBloom) + sizeof(TrackHotHeader::tagBloom));
+  static_assert(offsetof(TrackHotHeader, albumId) ==
+                offsetof(TrackHotHeader, artistId) + sizeof(TrackHotHeader::artistId));
+  static_assert(offsetof(TrackHotHeader, genreId) ==
+                offsetof(TrackHotHeader, albumId) + sizeof(TrackHotHeader::albumId));
+  static_assert(offsetof(TrackHotHeader, albumArtistId) ==
+                offsetof(TrackHotHeader, genreId) + sizeof(TrackHotHeader::genreId));
+  static_assert(offsetof(TrackHotHeader, composerId) ==
+                offsetof(TrackHotHeader, albumArtistId) + sizeof(TrackHotHeader::albumArtistId));
+  static_assert(offsetof(TrackHotHeader, sampleRate) ==
+                offsetof(TrackHotHeader, composerId) + sizeof(TrackHotHeader::composerId));
+  static_assert(offsetof(TrackHotHeader, year) ==
+                offsetof(TrackHotHeader, sampleRate) + sizeof(TrackHotHeader::sampleRate));
+  static_assert(offsetof(TrackHotHeader, titleLength) == offsetof(TrackHotHeader, year) + sizeof(TrackHotHeader::year));
+  static_assert(offsetof(TrackHotHeader, tagLength) ==
+                offsetof(TrackHotHeader, titleLength) + sizeof(TrackHotHeader::titleLength));
+  static_assert(offsetof(TrackHotHeader, bitDepth) ==
+                offsetof(TrackHotHeader, tagLength) + sizeof(TrackHotHeader::tagLength));
+  static_assert(offsetof(TrackHotHeader, codec) ==
+                offsetof(TrackHotHeader, bitDepth) + sizeof(TrackHotHeader::bitDepth));
 
   /** Storage representation for one typed cover-art resource reference. */
   struct CoverArtEntry final
@@ -89,6 +112,10 @@ namespace ao::library
 
   static_assert(sizeof(CoverArtEntry) == 8, "CoverArtEntry must be exactly 8 bytes");
   static_assert(alignof(CoverArtEntry) == 4, "CoverArtEntry must have 4-byte alignment");
+  static_assert(std::has_unique_object_representations_v<CoverArtEntry>, "CoverArtEntry must have no padding");
+  static_assert(offsetof(CoverArtEntry, id) == 0);
+  static_assert(offsetof(CoverArtEntry, type) == offsetof(CoverArtEntry, id) + sizeof(CoverArtEntry::id));
+  static_assert(offsetof(CoverArtEntry, reserved) == offsetof(CoverArtEntry, type) + sizeof(CoverArtEntry::type));
 
   enum class TrackColdBlockSlot : std::uint8_t
   {
@@ -119,6 +146,14 @@ namespace ao::library
 
   static_assert(sizeof(TrackWorkBlock) == kTrackWorkBlockSize);
   static_assert(alignof(TrackWorkBlock) == 4);
+  static_assert(std::has_unique_object_representations_v<TrackWorkBlock>);
+  static_assert(offsetof(TrackWorkBlock, workId) == 0);
+  static_assert(offsetof(TrackWorkBlock, movementId) ==
+                offsetof(TrackWorkBlock, workId) + sizeof(TrackWorkBlock::workId));
+  static_assert(offsetof(TrackWorkBlock, movementNumber) ==
+                offsetof(TrackWorkBlock, movementId) + sizeof(TrackWorkBlock::movementId));
+  static_assert(offsetof(TrackWorkBlock, movementTotal) ==
+                offsetof(TrackWorkBlock, movementNumber) + sizeof(TrackWorkBlock::movementNumber));
 
   /** Fixed prefix followed by Conductor, Ensemble, Soloist, Performer segments. */
   struct alignas(4) TrackPerformanceBlock final
@@ -148,12 +183,14 @@ namespace ao::library
   static_assert(offsetof(TrackPerformanceBlock, recordingDate) == 0);
   static_assert(offsetof(TrackPerformanceBlock, sectionCounts) == 4);
   static_assert(offsetof(TrackPerformanceBlock, reserved) == kTrackPerformanceBlockSize - sizeof(std::uint16_t));
+  static_assert(std::has_unique_object_representations_v<TrackPerformanceBlock>);
   static_assert(std::is_standard_layout_v<TrackCreditEntry>);
   static_assert(std::is_trivially_copyable_v<TrackCreditEntry>);
   static_assert(sizeof(TrackCreditEntry) == 8);
   static_assert(alignof(TrackCreditEntry) == 4);
   static_assert(offsetof(TrackCreditEntry, nameId) == 0);
   static_assert(offsetof(TrackCreditEntry, roleId) == 4);
+  static_assert(std::has_unique_object_representations_v<TrackCreditEntry>);
 
   struct CustomMetadataBlockHeader final
   {
@@ -165,6 +202,14 @@ namespace ao::library
 
   static_assert(sizeof(CustomMetadataBlockHeader) == 8, "CustomMetadataBlockHeader must be exactly 8 bytes");
   static_assert(alignof(CustomMetadataBlockHeader) <= 4, "CustomMetadataBlockHeader must fit cold record alignment");
+  static_assert(std::has_unique_object_representations_v<CustomMetadataBlockHeader>);
+  static_assert(offsetof(CustomMetadataBlockHeader, entryCount) == 0);
+  static_assert(offsetof(CustomMetadataBlockHeader, valueOffset) ==
+                offsetof(CustomMetadataBlockHeader, entryCount) + sizeof(CustomMetadataBlockHeader::entryCount));
+  static_assert(offsetof(CustomMetadataBlockHeader, payloadLength) ==
+                offsetof(CustomMetadataBlockHeader, valueOffset) + sizeof(CustomMetadataBlockHeader::valueOffset));
+  static_assert(offsetof(CustomMetadataBlockHeader, reserved) ==
+                offsetof(CustomMetadataBlockHeader, payloadLength) + sizeof(CustomMetadataBlockHeader::payloadLength));
 
   /**
    * CustomMetadataEntry - Binary entry for custom key-value metadata in the custom block payload.
@@ -179,6 +224,12 @@ namespace ao::library
 
   static_assert(sizeof(CustomMetadataEntry) == 8, "CustomMetadataEntry must be exactly 8 bytes");
   static_assert(alignof(CustomMetadataEntry) == 4, "CustomMetadataEntry must have 4-byte alignment");
+  static_assert(std::has_unique_object_representations_v<CustomMetadataEntry>);
+  static_assert(offsetof(CustomMetadataEntry, keyId) == 0);
+  static_assert(offsetof(CustomMetadataEntry, valueOffset) ==
+                offsetof(CustomMetadataEntry, keyId) + sizeof(CustomMetadataEntry::keyId));
+  static_assert(offsetof(CustomMetadataEntry, valueLength) ==
+                offsetof(CustomMetadataEntry, valueOffset) + sizeof(CustomMetadataEntry::valueOffset));
 
   /**
    * TrackColdHeader - POD struct for cold track fixed fields and extension block offsets.
@@ -233,6 +284,28 @@ namespace ao::library
 
   static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 32 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
+  static_assert(std::has_unique_object_representations_v<TrackColdHeader>, "TrackColdHeader must have no padding");
+  static_assert(offsetof(TrackColdHeader, duration) == 0);
+  static_assert(offsetof(TrackColdHeader, bitrate) ==
+                offsetof(TrackColdHeader, duration) + sizeof(TrackColdHeader::duration));
+  static_assert(offsetof(TrackColdHeader, trackNumber) ==
+                offsetof(TrackColdHeader, bitrate) + sizeof(TrackColdHeader::bitrate));
+  static_assert(offsetof(TrackColdHeader, trackTotal) ==
+                offsetof(TrackColdHeader, trackNumber) + sizeof(TrackColdHeader::trackNumber));
+  static_assert(offsetof(TrackColdHeader, discNumber) ==
+                offsetof(TrackColdHeader, trackTotal) + sizeof(TrackColdHeader::trackTotal));
+  static_assert(offsetof(TrackColdHeader, discTotal) ==
+                offsetof(TrackColdHeader, discNumber) + sizeof(TrackColdHeader::discNumber));
+  static_assert(offsetof(TrackColdHeader, blockOffsets) ==
+                offsetof(TrackColdHeader, discTotal) + sizeof(TrackColdHeader::discTotal));
+  static_assert(offsetof(TrackColdHeader, uriOffset) ==
+                offsetof(TrackColdHeader, blockOffsets) + sizeof(TrackColdHeader::blockOffsets));
+  static_assert(offsetof(TrackColdHeader, uriLength) ==
+                offsetof(TrackColdHeader, uriOffset) + sizeof(TrackColdHeader::uriOffset));
+  static_assert(offsetof(TrackColdHeader, channels) ==
+                offsetof(TrackColdHeader, uriLength) + sizeof(TrackColdHeader::uriLength));
+  static_assert(offsetof(TrackColdHeader, reserved8) ==
+                offsetof(TrackColdHeader, channels) + sizeof(TrackColdHeader::channels));
 
   static_assert(sizeof(DictionaryId) == 4, "DictionaryId must stay 4 bytes");
   static_assert(alignof(DictionaryId) == 4, "DictionaryId must stay 4-byte aligned");

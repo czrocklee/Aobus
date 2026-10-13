@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <type_traits>
 
 namespace ao::library
 {
+  // The highest storable List id. UINT32_MAX is never stored, so frontends can
+  // use it to name a virtual List without colliding with a library List.
+  constexpr std::uint32_t kMaxListId = std::numeric_limits<std::uint32_t>::max() - 1U;
+
   /**
    * Binary List record header.
    *
@@ -58,4 +64,5 @@ namespace ao::library
   static_assert(offsetof(ListHeader, descLength) == 8);
   static_assert(offsetof(ListHeader, filterLength) == kListFilterLengthOffset);
   static_assert(offsetof(ListHeader, parentId) == 16);
+  static_assert(std::has_unique_object_representations_v<ListHeader>, "ListHeader must have no padding");
 } // namespace ao::library

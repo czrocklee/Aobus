@@ -12,7 +12,6 @@
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/LibraryWrite.h>
-#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/WritableMusicLibrary.h>
@@ -24,7 +23,6 @@
 #include <catch2/matchers/catch_matchers.hpp>
 #include <lmdb.h>
 
-#include <array>
 #include <cstddef>
 #include <expected>
 #include <stdexcept>
@@ -34,32 +32,6 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("WriteTransaction - logical identity restore changes only the library id",
-            "[library][unit][write-transaction]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto const before = library.metadataHeader();
-    auto replacementId = std::array<std::byte, 16>{};
-
-    for (std::size_t index = 0; index < replacementId.size(); ++index)
-    {
-      replacementId[index] = static_cast<std::byte>(index + 1U);
-    }
-
-    auto transaction = writeTransaction(library);
-    REQUIRE(
-      transaction.apply([&replacementId](LibraryWrite& write) { return write.restoreLibraryIdentity(replacementId); }));
-    REQUIRE(transaction.commit());
-
-    auto const after = library.metadataHeader();
-    CHECK(after.libraryId == replacementId);
-    CHECK(after.magic == before.magic);
-    CHECK(after.libraryVersion == before.libraryVersion);
-    CHECK(after.flags == before.flags);
-    CHECK(after.createdTime == before.createdTime);
-  }
-
   TEST_CASE("MusicLibrary - aborted write does not advance the snapshot revision",
             "[library][unit][write-transaction][revision]")
   {

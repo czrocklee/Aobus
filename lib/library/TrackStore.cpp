@@ -68,7 +68,15 @@ namespace ao::library
   TrackStore::Writer TrackStore::writer(WriteTransaction& transaction) const
   {
     auto& native = transaction.native(*_identity);
-    return Writer{_hotDb.writer(native), _coldDb.writer(native)};
+    auto writer = Writer{_hotDb.writer(native), _coldDb.writer(native)};
+    // Ids above every committed one stay unallocated after the highest rows are deleted.
+    writer._hotWriter.raiseMaxKey(transaction.committedIdSpace(*_identity).lastTrackId);
+    return writer;
+  }
+
+  std::uint32_t TrackStore::lastStoredId(WriteTransaction const& transaction) const
+  {
+    return _hotDb.reader(transaction.native(*_identity)).maxKey();
   }
 
   // TrackStore::Reader implementation
@@ -345,6 +353,8 @@ namespace ao::library
 
   Result<> TrackStore::Writer::clear()
   {
+    auto const lastId = _hotWriter.maxKey();
+
     if (auto res = _hotWriter.clear(); !res)
     {
       lmdb::detail::throwTransactionFailure(std::move(res.error()));
@@ -355,6 +365,12 @@ namespace ao::library
       lmdb::detail::throwTransactionFailure(std::move(res.error()));
     }
 
+    _hotWriter.raiseMaxKey(lastId);
     return {};
+  }
+
+  TrackId TrackStore::Writer::lastAllocatedId() const noexcept
+  {
+    return TrackId{_hotWriter.maxKey()};
   }
 } // namespace ao::library

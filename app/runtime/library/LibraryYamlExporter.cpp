@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/library/LibraryYamlExporter.h"
 
@@ -18,7 +18,6 @@
 #include <ao/library/LibraryUri.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
-#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceStore.h>
@@ -31,7 +30,6 @@
 #include <ao/utility/AtomicFile.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
-#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <array>
@@ -675,10 +673,8 @@ namespace ao::rt
     root.set_map();
 
     auto const transaction = ml.readTransaction();
-    auto const header = ml.metadataHeader(transaction);
 
     appendKeyValue(root, "version", kYamlFormatVersion);
-    appendString(root, "libraryId", utility::formatUuid(header.libraryId));
     appendString(root, "export_mode", exportModeName(mode));
 
     auto library = root.append_child();

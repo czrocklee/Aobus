@@ -335,7 +335,12 @@ namespace ao::lmdb
 
     Result<> create(std::uint32_t id, std::span<std::byte const> data);
 
+    // The cached allocation value: the highest key stored at open, appended,
+    // or raised since. It can exceed every stored key.
     std::uint32_t maxKey() const noexcept;
+    // Raises the cached allocation value to at least `key`, so later appends
+    // allocate above it even when no row with that key exists.
+    void raiseMaxKey(std::uint32_t key) noexcept;
     Result<std::uint32_t> append(std::span<std::byte const> data);
 
     Result<> update(std::uint32_t id, std::span<std::byte const> data);

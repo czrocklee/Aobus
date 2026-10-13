@@ -85,3 +85,8 @@ After acquiring that writer, the transaction reads the durable revision in its n
 
 Supersedes [Decision 0006](0006-validate-open-fail-fast-live-iterator.md).
 It retains Decision 0006's complete pre-exposure validation rationale and replaces only its post-open general-exception unwind choice with the unified fatal facility from [Decision 0007](0007-unify-fatal-diagnostics-and-abort.md).
+
+Library format version 10 later changed two facts this decision describes; its admission and fatal-fault choices stand.
+The library-identity restore operation was removed, because the library id is fixed when the environment is created and restore keeps the target's id.
+The database is also no longer described as host-local; it carries a native-format contract for little-endian 64-bit hosts.
+The [library database reference](../reference/library/storage/database.md) owns both current contracts.

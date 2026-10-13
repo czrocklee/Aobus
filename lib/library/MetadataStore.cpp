@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "MetadataStore.h"
 
@@ -7,7 +7,6 @@
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
@@ -40,18 +39,13 @@ namespace ao::library
     auto header = MetadataHeader{};
     std::memcpy(&header, optBytes->data(), sizeof(header));
 
-    if (header.magic != kMetadataMagic || header.libraryVersion != kLibraryVersion || header.flags != 0)
+    if (header.magic != kMetadataMagic || header.libraryVersion != kLibraryVersion || header.flags != 0 ||
+        header.reserved != 0 || isNilLibraryId(header.libraryId))
     {
       return makeError(Error::Code::CorruptData, "Library metadata header changed after open validation");
     }
 
     return header;
-  }
-
-  Result<> MetadataStore::update(WriteTransaction& transaction, MetadataHeader const& header) const
-  {
-    return _database.writer(transaction.native(*_identity))
-      .update(kMetadataHeaderRecordId, utility::bytes::view(header));
   }
 
   std::uint64_t MetadataStore::revision(lmdb::ReadTransaction const& transaction) const
@@ -86,6 +80,25 @@ namespace ao::library
                                      : writer.update(kLibraryRevisionRecordId, utility::bytes::view(candidateRevision));
 
     if (!res)
+    {
+      lmdb::detail::throwTransactionFailure(std::move(res.error()));
+    }
+  }
+
+  IdSpace MetadataStore::idSpace(lmdb::ReadTransaction const& transaction) const
+  {
+    auto const optBytes = _database.reader(transaction).get(kIdSpaceRecordId);
+    AO_INVARIANT(
+      optBytes && optBytes->size() == sizeof(IdSpace), "Library id space record changed after open validation");
+
+    auto value = IdSpace{};
+    std::memcpy(&value, optBytes->data(), sizeof(value));
+    return value;
+  }
+
+  void MetadataStore::persistIdSpace(lmdb::WriteTransaction& transaction, IdSpace const& idSpace) const
+  {
+    if (auto res = _database.writer(transaction).update(kIdSpaceRecordId, utility::bytes::view(idSpace)); !res)
     {
       lmdb::detail::throwTransactionFailure(std::move(res.error()));
     }

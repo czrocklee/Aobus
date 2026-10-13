@@ -5,7 +5,7 @@ id: library.yaml-format
 
 ## Scope and version
 
-This reference defines the exact version 7 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
+This reference defines the exact version 8 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
 Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../system/library/yaml-transfer.md).
@@ -14,15 +14,14 @@ CLI commands and output conventions belong to the [CLI command reference](../../
 ## Code boundary
 
 This interchange surface belongs to the **application runtime** boundary in the [system architecture](../../../system/overview.md).
-Producer and consumer code lives under `app/runtime/library/`; the format translates core library values but is independent of the host-local `ao::library` storage layout.
+Producer and consumer code lives under `app/runtime/library/`; the format translates core library values but is independent of the native `ao::library` storage layout.
 
 ## Document root
 
 The root is a closed map with this shape:
 
 ```yaml
-version: 7
-libraryId: 123e4567-e89b-12d3-a456-426614174000
+version: 8
 export_mode: full
 library:
   resources: []
@@ -32,8 +31,7 @@ library:
 
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
-| `version` | Yes. | Always `7`. | Unsigned 32-bit integer; only `7` is accepted. |
-| `libraryId` | No. | Always emitted. | UUID text with hexadecimal digits and hyphens in `8-4-4-4-12` grouping; letter case is ignored. |
+| `version` | Yes. | Always `8`. | Unsigned 32-bit integer; only `8` is accepted. |
 | `export_mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `listOnly`. |
 | `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
 
@@ -298,30 +296,30 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 
 The recording date and the complete Credits list are validated in the document preflight, so their violations reject the whole document before any durable import effect.
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 7 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
+Version 8 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
 The observable failure and rollback contract is defined by the [transfer specification](../../../system/library/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
-The importer accepts version 7 only.
-It has no reader for versions 1 through 6, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
-A version-6 document is rejected with `FormatRejected` rather than converted.
+The importer accepts version 8 only.
+It has no reader for versions 1 through 7, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
+A version-7 document is rejected with `FormatRejected` rather than converted.
 There is no migration contract for earlier interchange files, and a version-3 document's embedded cover bytes cannot be read by this version.
 
 Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.
-Version 7 accepts only the schema defined here, including `recording-date` and typed `credits`; alternative layouts are unsupported even when labeled version 7. There is no dual reader or layout autodetection.
+Version 8 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 8. There is no dual reader or layout autodetection.
+Version 8 removed the root `libraryId`: a library id names only the database that drew it, so a document has none to carry; version 7 introduced `recording-date` and typed `credits`.
 `recording-date` defines empty scalar text, including quoted empty scalars and a present empty plain scalar, as its clear form.
 Version 6 existed for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
-Version 5 recorded the Unicode-caseless meaning of `~`, which later versions carry forward; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 9.
-Payload versioning is independent of the host-local database's `kLibraryVersion`.
+Version 5 recorded the Unicode-caseless meaning of `~`, which later versions carry forward; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 10.
+Payload versioning is independent of the database's `kLibraryVersion`.
 
 ## Examples
 
 Full payload:
 
 ```yaml
-version: 7
-libraryId: 123e4567-e89b-12d3-a456-426614174000
+version: 8
 export_mode: full
 library:
   resources:
@@ -365,8 +363,7 @@ library:
 List-only payload:
 
 ```yaml
-version: 7
-libraryId: 123e4567-e89b-12d3-a456-426614174000
+version: 8
 export_mode: listOnly
 library:
   lists:

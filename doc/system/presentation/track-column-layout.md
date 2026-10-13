@@ -69,7 +69,8 @@ When constructed with `LibraryChanges`, it removes every layout named by a commi
 A full library reset carries no incremental List ids, so it clears the complete layout map and emits every removed key.
 
 That lifecycle only covers deletions the owner observed while it was alive.
-`restore()` therefore takes the library's live list ids and drops every entry naming a list that no longer exists, so a document written before a deletion, or one whose cleanup write never landed, cannot reintroduce a layout that a reused list id would inherit.
+`restore()` therefore takes the library's live list ids and drops every entry naming a list that no longer exists, so a document written before a deletion, or one whose cleanup write never landed, keeps no layout for a list the library no longer has.
+A list id is never reused within one database, but the document lives outside it and can meet a rebuilt, restored, or replaced database; pruning also drops every entry whose id that database lacks.
 A virtual list id references no user-created list and is retained without appearing among the live ids.
 
 The invalid list id cannot receive an update.
