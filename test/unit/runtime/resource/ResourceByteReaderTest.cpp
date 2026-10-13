@@ -166,6 +166,9 @@ namespace ao::rt::test
 
   TEST_CASE("ResourceByteReader - interactive encoded-byte limit is exact", "[runtime][unit][resource]")
   {
+    // Full-size verification needs headroom on sanitizer hosts; this is a hang guard, not a latency assertion.
+    constexpr auto kEncodedResourceCompletionTimeout = std::chrono::seconds{30};
+
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor};
@@ -179,7 +182,7 @@ namespace ao::rt::test
       auto const resourceId = writeResource(libraryFixture.library(), bytes);
       installCacheEntry(cacheRoot, bytes);
       auto res =
-        runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kLargeResourceCompletionTimeout);
+        runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kEncodedResourceCompletionTimeout);
 
       REQUIRE(res);
       REQUIRE(*res);
@@ -202,13 +205,13 @@ namespace ao::rt::test
       }};
       oversizedCache.store(utility::computeSha256(bytes), bytes);
       auto res =
-        runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kLargeResourceCompletionTimeout);
+        runQueuedTask(runtime, executor, reader.readInteractiveAsync(resourceId), kEncodedResourceCompletionTimeout);
 
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::ValueTooLarge);
 
       auto exportRes =
-        runQueuedTask(runtime, executor, reader.readForExportAsync(resourceId), kLargeResourceCompletionTimeout);
+        runQueuedTask(runtime, executor, reader.readForExportAsync(resourceId), kEncodedResourceCompletionTimeout);
       REQUIRE(exportRes);
       REQUIRE(*exportRes);
       CHECK((*exportRes)->size() == bytes.size());
