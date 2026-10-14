@@ -37,6 +37,7 @@ Its value is one mapping with these required fields in canonical emitted order:
 | Field | YAML shape | Meaning |
 |---|---|---|
 | `presentationVersion` | Unsigned 32-bit scalar. | Required and exactly `1`. |
+| `libraryId` | Canonical UUID string. | Library the session was saved for; its `openViews` list ids belong to that library. |
 | `openViews` | Sequence of view mappings. | Ordered semantic view reconstruction records. |
 | `activeViewIndex` | Unsigned 32-bit scalar. | Zero-based position of the exact active entry in `openViews`. |
 | `customPresets` | Sequence of custom-preset mappings. | Complete workspace custom-preset collection. |
@@ -96,6 +97,7 @@ Every `customPresets` entry contains:
 - The explicit schema validates each mapping and sequence recursively; every listed member is required.
 - Unknown members, missing members, wrong node kinds, malformed scalar values, and malformed vector elements reject the whole workspace document.
 - `presentationVersion` must be `1`.
+- `libraryId` must be a canonical 8-4-4-4-12 hexadecimal UUID; whether it matches the open library is decided at restore, not deserialization.
 - When `openViews` is empty, `activeViewIndex` must be `0`.
 - When `openViews` is nonempty, `activeViewIndex` must be smaller than `openViews.size()`.
 - Deserialization violations of either active-index rule return `FormatRejected` before candidate-view creation.
@@ -122,6 +124,7 @@ Those remaining compatibility limits are why this payload is not described as a 
 
 The root field set is exact.
 Alternate root field names are not parsed, migrated, retained as aliases, or emitted.
+`libraryId` joined that set without a presentation-version change, so a document written before it lacks the field and is rejected as malformed.
 
 Changing a stable presentation token requires an explicit compatibility decision.
 Built-in and custom presentation ids remain opaque references, while the exact field/sort/group/direction vocabulary is closed for a given presentation version.
@@ -133,6 +136,7 @@ This example contains one filtered All Tracks view and one custom presentation:
 ```yaml
 workspace:
   presentationVersion: 1
+  libraryId: 123e4567-e89b-12d3-a456-426614174000
   openViews:
     - listId: 4294967295
       filterExpression: '$genre = "Classical"'

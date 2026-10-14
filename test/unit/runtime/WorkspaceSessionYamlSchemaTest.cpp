@@ -9,6 +9,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceSessionState.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -288,6 +289,7 @@ namespace ao::rt::test
   {
     auto const presentation = makePresentation();
     auto const state = WorkspaceSessionState{
+      .libraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value(),
       .openViews =
         {
           TrackListViewConfig{
@@ -313,19 +315,23 @@ namespace ao::rt::test
     REQUIRE(detail::WorkspaceSessionYamlSchema{}.serialize(tree.rootref(), state));
     auto const encoded = ryml::emitrs_yaml<std::string>(tree);
     auto const versionPosition = encoded.find("presentationVersion:");
+    auto const libraryPosition = encoded.find("libraryId:");
     auto const viewsPosition = encoded.find("openViews:");
     auto const activePosition = encoded.find("activeViewIndex:");
     auto const presetsPosition = encoded.find("customPresets:");
     REQUIRE(versionPosition != std::string::npos);
+    REQUIRE(libraryPosition != std::string::npos);
     REQUIRE(viewsPosition != std::string::npos);
     REQUIRE(activePosition != std::string::npos);
     REQUIRE(presetsPosition != std::string::npos);
-    CHECK(tree.rootref().num_children() == 4);
-    CHECK(versionPosition < viewsPosition);
+    CHECK(tree.rootref().num_children() == 5);
+    CHECK(versionPosition < libraryPosition);
+    CHECK(libraryPosition < viewsPosition);
     CHECK(viewsPosition < activePosition);
     CHECK(activePosition < presetsPosition);
     auto const root = tree.rootref();
     CHECK(yaml::scalarView(root["presentationVersion"]) == "1");
+    CHECK(yaml::scalarView(root["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
     CHECK(yaml::scalarView(root["activeViewIndex"]) == "0");
 
     REQUIRE(root["openViews"].num_children() == 1);
@@ -365,6 +371,7 @@ namespace ao::rt::test
 
     auto const decodedRes = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
     REQUIRE(decodedRes);
+    CHECK(decodedRes->libraryId == state.libraryId);
     REQUIRE(decodedRes->openViews.size() == 1);
     CHECK(decodedRes->openViews[0].listId == ListId{10});
     CHECK(decodedRes->openViews[0].optPresentation == state.openViews[0].optPresentation);
@@ -387,7 +394,8 @@ namespace ao::rt::test
   {
     SECTION("Missing required fields are rejected")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\n";
+      auto const* source =
+        "presentationVersion: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nopenViews: []\nactiveViewIndex: 0\n";
       auto const decodedRes = decodeWorkspaceSessionYaml(source);
 
       REQUIRE_FALSE(decodedRes);
@@ -395,9 +403,31 @@ namespace ao::rt::test
       CHECK(decodedRes.error().message.contains("customPresets"));
     }
 
+    SECTION("Missing library id is rejected")
+    {
+      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\ncustomPresets: []\n";
+      auto const decodedRes = decodeWorkspaceSessionYaml(source);
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("libraryId"));
+    }
+
+    SECTION("A library id that is not a UUID is rejected")
+    {
+      auto const* source =
+        "presentationVersion: 1\nlibraryId: 123e4567\nopenViews: []\nactiveViewIndex: 0\ncustomPresets: []\n";
+      auto const decodedRes = decodeWorkspaceSessionYaml(source);
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("libraryId"));
+    }
+
     SECTION("Missing active view index is rejected")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: []\ncustomPresets: []\n";
+      auto const* source =
+        "presentationVersion: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nopenViews: []\ncustomPresets: []\n";
       auto const decodedRes = decodeWorkspaceSessionYaml(source);
 
       REQUIRE_FALSE(decodedRes);
@@ -411,8 +441,8 @@ namespace ao::rt::test
   {
     SECTION("Unknown structural keys are rejected")
     {
-      auto const* source =
-        "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\ncustomPresets: []\nfuture: true\n";
+      auto const* source = "presentationVersion: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nopenViews: "
+                           "[]\nactiveViewIndex: 0\ncustomPresets: []\nfuture: true\n";
       auto const decodedRes = decodeWorkspaceSessionYaml(source);
 
       REQUIRE_FALSE(decodedRes);
@@ -424,6 +454,7 @@ namespace ao::rt::test
     {
       auto const* source = R"(
         presentationVersion: 1
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         openViews:
           - listId: 10
             filterExpression: ""
@@ -448,6 +479,7 @@ namespace ao::rt::test
     {
       auto const* source = R"(
         presentationVersion: 1
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         openViews:
           - listId: 10
             filterExpression: ""
@@ -472,6 +504,7 @@ namespace ao::rt::test
     {
       auto const* source = R"(
         presentationVersion: 1
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         openViews:
           - listId: 10
             filterExpression: ""
@@ -498,6 +531,7 @@ namespace ao::rt::test
     {
       auto const* source = R"(
         presentationVersion: 1
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         openViews: []
         activeViewIndex: 0
         customPresets:
@@ -524,7 +558,8 @@ namespace ao::rt::test
   {
     SECTION("Malformed view sequence elements are rejected")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: [malformed]\nactiveViewIndex: 0\ncustomPresets: []\n";
+      auto const* source = "presentationVersion: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nopenViews: "
+                           "[malformed]\nactiveViewIndex: 0\ncustomPresets: []\n";
       auto const decodedRes = decodeWorkspaceSessionYaml(source);
 
       REQUIRE_FALSE(decodedRes);
@@ -535,6 +570,7 @@ namespace ao::rt::test
     {
       auto const* source = R"(
         presentationVersion: 1
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         openViews:
           - listId: 10
             filterExpression: ""
@@ -555,7 +591,8 @@ namespace ao::rt::test
 
     SECTION("Malformed custom-preset sequence elements are rejected")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\ncustomPresets: [malformed]\n";
+      auto const* source = "presentationVersion: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nopenViews: "
+                           "[]\nactiveViewIndex: 0\ncustomPresets: [malformed]\n";
       auto const decodedRes = decodeWorkspaceSessionYaml(source);
 
       REQUIRE_FALSE(decodedRes);
@@ -566,6 +603,7 @@ namespace ao::rt::test
     {
       auto const* source = R"(
         presentationVersion: 1
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         openViews:
           - listId: 10
             filterExpression: ""
@@ -586,7 +624,8 @@ namespace ao::rt::test
   {
     SECTION("Negative active view index is rejected as unsigned 32-bit state")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveViewIndex: -1\ncustomPresets: []\n";
+      auto const* source = "presentationVersion: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nopenViews: "
+                           "[]\nactiveViewIndex: -1\ncustomPresets: []\n";
       auto const decodedRes = decodeWorkspaceSessionYaml(source);
 
       REQUIRE_FALSE(decodedRes);
@@ -597,7 +636,8 @@ namespace ao::rt::test
 
     SECTION("Active view index wider than unsigned 32-bit is rejected")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 4294967296\ncustomPresets: []\n";
+      auto const* source = "presentationVersion: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nopenViews: "
+                           "[]\nactiveViewIndex: 4294967296\ncustomPresets: []\n";
       auto const decodedRes = decodeWorkspaceSessionYaml(source);
 
       REQUIRE_FALSE(decodedRes);

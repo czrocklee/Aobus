@@ -605,6 +605,7 @@ add_executable(ao_core_test
     unit/runtime/completion/CompletionVocabularyTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/completion/CreditCompletionTest.cpp
+    unit/runtime/LibraryRestoreStateIdentityTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/LogTest.cpp
     unit/runtime/LoopExecutorTest.cpp

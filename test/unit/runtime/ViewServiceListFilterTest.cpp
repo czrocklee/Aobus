@@ -206,7 +206,7 @@ namespace ao::rt::test
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
     auto service = ViewService{executor, libraryFixture.library(), sources, changes};
-    auto workspace = WorkspaceService{executor, service, changes};
+    auto workspace = WorkspaceService{executor, service, libraryFixture.library(), changes};
     auto const viewId = ao::test::requireValue(workspace.navigate(NavigationRequest{
       .target = FilteredListTarget{.listId = childId, .filterExpression = {}},
     }));

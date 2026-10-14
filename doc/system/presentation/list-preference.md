@@ -89,6 +89,7 @@ Changing the presentation through a normal user-selection path installs the new 
 When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 A full library reset carries no incremental List ids, so it clears the complete preference map and emits every removed key.
 That lifecycle covers only deletions the owner observed while it was alive, so `restore()` takes the library's live list ids and drops every preference naming a list that no longer exists; a virtual list id is retained without appearing among them.
+Because a library never reuses a list id, that pruning also retires preferences for lists a restore replaced; a document saved for another library keeps only its virtual-list preferences when loaded, since that library's ids may name unrelated lists here.
 
 WinUI retains one `ListPresentations` for the active library session and resolves every saved id through `presentationForList()` before applying it to a newly bound or navigated view.
 An unavailable id therefore applies the source-aware recommendation without deleting or rewriting the opaque saved id.
@@ -108,7 +109,7 @@ An unknown or removed presentation id is recoverable and selects the recommendat
 An empty built-in catalog may produce an empty fallback spec; ordinary application composition supplies the built-in catalog.
 
 UIModel preference operations, recommendation, deletion cleanup, and persistence conversion are synchronous and have no cancellation point.
-An unsupported version, duplicate or invalid list id, empty id, or structural mismatch rejects the complete persisted preference group and preserves the caller's seeded state.
+An unsupported version, missing or malformed library id, duplicate or invalid list id, empty id, or structural mismatch rejects the complete persisted preference group and preserves the caller's seeded state.
 An unknown nonempty presentation id remains a valid extensible reference and follows recommendation fallback.
 Frontend load/save failures do not mutate library list records.
 Bulk installation during GTK restore suppresses persistence callbacks, so loading one valid sibling group cannot rewrite another rejected group.
@@ -129,7 +130,7 @@ Workspace/history replay retains exact specs, and live List deletion retires the
 
 WinUI persists the group with desktop column-layout state in the library-specific `winui_layout.yaml` store, keeps opaque ids across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
 It loads that store when the runtime graph binds rather than at startup, because the list ids the group is keyed by only mean anything against an open library.
-The `trackView.presentations` group carries required `version: 1` and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
+The `trackView.presentations` group carries required `version: 2` and the `libraryId` it was saved for, and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
 The exact fields belong to the [persisted presentation-state reference](../../reference/presentation/persisted-state.md); group registration belongs to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
 
 The persisted value is a presentation id, so changing or removing a built-in id requires a compatibility path.

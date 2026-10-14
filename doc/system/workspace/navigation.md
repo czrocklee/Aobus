@@ -122,6 +122,7 @@ Failed target recreation or presentation restoration leaves the live cursor, sna
 Closing an id not present in the workspace succeeds without publication and does not call view destruction.
 
 A committed library-list deletion closes every matching open view in one `ListDeletion` commit, even when several filtered views use the same base list.
+A complete library reset, such as a YAML restore, names no deleted list, so the workspace instead closes, in the same kind of commit, every open view whose base list the library no longer has; All Tracks and other virtual lists stay open.
 History points remain semantic snapshots; replaying a point for a deleted list fails during reconstruction.
 
 ### Edit custom presets
@@ -182,7 +183,7 @@ The [workspace session specification](session.md) owns capture and restore, and 
 ## Test map
 
 - [`NavigationHistoryTest.cpp`](../../../test/unit/runtime/NavigationHistoryTest.cpp) proves cursor and capacity mechanics.
-- [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion batching, and album reveal.
+- [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves validation, command results, complete observations, reentrancy, observer delivery, deletion and reset batching, and album reveal.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) proves atomic history replay and boundary availability.
 - [`WorkspacePresentationTest.cpp`](../../../test/unit/runtime/WorkspacePresentationTest.cpp) proves presentation and preset commands.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves atomic multi-view restore and failure cleanup.

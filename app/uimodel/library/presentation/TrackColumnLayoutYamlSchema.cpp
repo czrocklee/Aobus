@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 
+#include "RetainKnownLists.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -10,6 +11,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnDefaults.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/utility/StrongTypeFormatter.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>
@@ -69,7 +71,9 @@ namespace ao::uimodel
     Result<> writeDocument(ryml::NodeRef node, TrackColumnLayoutDocument const& document)
     {
       auto writer = yaml::MapWriter{node};
-      writer.scalar("version", document.version).sequence("layouts", document.layouts, writeLayout);
+      writer.scalar("version", document.version)
+        .scalar("libraryId", utility::formatUuid(document.libraryId))
+        .sequence("layouts", document.layouts, writeLayout);
       return std::move(writer).finish();
     }
 
@@ -95,11 +99,12 @@ namespace ao::uimodel
           Error::Code::NotSupported, std::format("Unsupported track column layout version {}", *versionRes));
       }
 
-      constexpr auto kKeys = std::to_array<std::string_view>({"version", "layouts"});
+      constexpr auto kKeys = std::to_array<std::string_view>({"version", "libraryId", "layouts"});
 
       auto document = TrackColumnLayoutDocument{.version = *versionRes};
       auto reader = yaml::MapReader{node, kKeys, kContext};
-      reader.requiredSequence("layouts", document.layouts, readLayout);
+      reader.requiredValue("libraryId", document.libraryId, yaml::uuidScalar)
+        .requiredSequence("layouts", document.layouts, readLayout);
       return std::move(reader).finish(std::move(document));
     }
 
@@ -126,9 +131,10 @@ namespace ao::uimodel
     }
   } // namespace
 
-  Result<TrackColumnLayoutDocument> toTrackColumnLayoutDocument(TrackColumnLayouts::Snapshot const& state)
+  Result<TrackColumnLayoutDocument> toTrackColumnLayoutDocument(TrackColumnLayouts::Snapshot const& state,
+                                                                utility::UuidBytes const& libraryId)
   {
-    auto document = TrackColumnLayoutDocument{};
+    auto document = TrackColumnLayoutDocument{.libraryId = libraryId};
     document.layouts.reserve(state.size());
 
     for (auto const& [listId, columns] : state)
@@ -229,7 +235,7 @@ namespace ao::uimodel
 
   Result<> TrackColumnLayoutYamlSchema::serialize(ryml::NodeRef node, TrackColumnLayouts::Snapshot const& state) const
   {
-    auto documentRes = toTrackColumnLayoutDocument(state);
+    auto documentRes = toTrackColumnLayoutDocument(state, _libraryId);
 
     if (!documentRes)
     {
@@ -250,6 +256,13 @@ namespace ao::uimodel
       return std::unexpected{documentRes.error()};
     }
 
-    return trackColumnLayoutsFromDocument(*documentRes);
+    auto stateRes = trackColumnLayoutsFromDocument(*documentRes);
+
+    if (stateRes && documentRes->libraryId != _libraryId)
+    {
+      retainVirtualLists(*stateRes);
+    }
+
+    return stateRes;
   }
 } // namespace ao::uimodel

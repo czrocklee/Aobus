@@ -15,6 +15,8 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/utility/Uuid.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,6 +36,7 @@
 namespace
 {
   void writeWorkspaceConfig(std::filesystem::path const& path,
+                            ao::utility::UuidBytes const& libraryId,
                             std::initializer_list<std::uint32_t> listIds,
                             std::uint32_t activeViewIndex,
                             std::string_view group = "none",
@@ -42,6 +45,7 @@ namespace
     auto file = std::ofstream{path};
     file << "workspace:\n";
     file << "  presentationVersion: " << presentationVersion << "\n";
+    file << "  libraryId: " << ao::utility::formatUuid(libraryId) << "\n";
     file << "  openViews:";
 
     if (std::empty(listIds))
@@ -77,6 +81,11 @@ namespace ao::rt::test
 
   namespace
   {
+    utility::UuidBytes libraryIdOf(AppRuntime& runtime)
+    {
+      return runtime.library().snapshot().libraryId();
+    }
+
     ListId createList(AppRuntime& runtime, std::string name)
     {
       return ao::test::requireValue(
@@ -237,6 +246,43 @@ namespace ao::rt::test
     CHECK(replayed.presentation == (expectedActiveIndex == 0 ? firstPresentation : secondPresentation));
   }
 
+  TEST_CASE("WorkspaceService - a session saved for another library restores only its custom presets",
+            "[runtime][unit][workspace][session]")
+  {
+    auto savedDir = TempDir{};
+    auto restoringDir = TempDir{};
+    auto const configPath = restoringDir.path() / "other-library.yaml";
+    auto savedListId = kInvalidListId;
+    auto customPreset = CustomTrackPresentationPreset{};
+
+    {
+      auto runtimePtr = makeStateOnlyRuntime(savedDir);
+      savedListId = createList(*runtimePtr, "Saved");
+      REQUIRE(runtimePtr->workspace().navigate({.target = savedListId}));
+      auto const* songsPreset = builtinTrackPresentationPreset("songs");
+      REQUIRE(songsPreset != nullptr);
+      auto customSpec = songsPreset->spec;
+      customSpec.id = "custom.portable";
+      customPreset = CustomTrackPresentationPreset{.label = "Portable", .basePresetId = "songs", .spec = customSpec};
+      REQUIRE(runtimePtr->workspace().addCustomPreset(customPreset));
+      auto store = ConfigStore{configPath};
+      runtimePtr->workspace().saveSession(store);
+    }
+
+    auto runtimePtr = makeStateOnlyRuntime(restoringDir);
+    // A fresh library numbers its lists from 1 as well, so the saved id names an unrelated list here.
+    REQUIRE(createList(*runtimePtr, "Unrelated") == savedListId);
+    auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly};
+
+    REQUIRE(runtimePtr->workspace().restoreSession(store));
+    settleRuntimeCallbacks(*runtimePtr);
+    auto const restored = runtimePtr->workspace().snapshot();
+    CHECK(restored.openViews.empty());
+    CHECK(restored.activeViewId == kInvalidViewId);
+    REQUIRE(runtimePtr->workspace().customPresets().size() == 1);
+    CHECK(runtimePtr->workspace().customPresets().front().spec.id == "custom.portable");
+  }
+
   TEST_CASE("WorkspaceService - multi-view restore publishes one complete snapshot",
             "[runtime][unit][workspace][session]")
   {
@@ -330,7 +376,7 @@ namespace ao::rt::test
     settleRuntimeCallbacks(*runtimePtr);
     auto const beforeSnapshot = runtimePtr->workspace().snapshot();
     auto const configPath = tempDir.path() / "config.yaml";
-    writeWorkspaceConfig(configPath, {storedListId.raw()}, 1);
+    writeWorkspaceConfig(configPath, libraryIdOf(*runtimePtr), {storedListId.raw()}, 1);
     std::int32_t changeCount = 0;
     auto const sub = runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
     auto destroyed = std::vector<ViewService::ViewDestroyed>{};
@@ -359,13 +405,13 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const configPath = tempDir.path() / "empty.yaml";
-    writeWorkspaceConfig(configPath, {}, 0);
+    writeWorkspaceConfig(configPath, libraryIdOf(*runtimePtr), {}, 0);
     auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly};
 
     SECTION("Empty workspace remains unfocused")
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       std::int32_t changeCount = 0;
       auto const sub = runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
 
@@ -379,7 +425,6 @@ namespace ao::rt::test
 
     SECTION("Existing workspace selects its first view")
     {
-      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const firstListId = createList(*runtimePtr, "First existing");
       auto const secondListId = createList(*runtimePtr, "Second existing");
       auto const firstViewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = firstListId}));
@@ -410,7 +455,7 @@ namespace ao::rt::test
     auto const listId = createList(*runtimePtr, "Valid");
     auto const configPath = tempDir.path() / "partial.yaml";
 
-    writeWorkspaceConfig(configPath, {listId.raw(), 999999}, 0);
+    writeWorkspaceConfig(configPath, libraryIdOf(*runtimePtr), {listId.raw(), 999999}, 0);
 
     auto destroyed = std::vector<ViewService::ViewDestroyed>{};
     auto const destroyedSub = runtimePtr->views().onViewDestroyed([&](ViewService::ViewDestroyed const& event) noexcept
@@ -459,18 +504,18 @@ namespace ao::rt::test
 
     SECTION("Unsupported presentation version")
     {
-      writeWorkspaceConfig(configPath, {listId.raw()}, 0, "none", 2);
+      writeWorkspaceConfig(configPath, libraryIdOf(*runtimePtr), {listId.raw()}, 0, "none", 2);
       expectedCode = Error::Code::NotSupported;
     }
 
     SECTION("Unknown group id")
     {
-      writeWorkspaceConfig(configPath, {listId.raw()}, 0, "future-group");
+      writeWorkspaceConfig(configPath, libraryIdOf(*runtimePtr), {listId.raw()}, 0, "future-group");
     }
 
     SECTION("Unknown root field")
     {
-      writeWorkspaceConfig(configPath, {listId.raw()}, 0);
+      writeWorkspaceConfig(configPath, libraryIdOf(*runtimePtr), {listId.raw()}, 0);
       std::ofstream{configPath, std::ios::app} << "  unexpected: true\n";
     }
 

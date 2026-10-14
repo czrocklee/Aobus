@@ -192,7 +192,7 @@ namespace ao::rt::test::playback_succession
     , commandsFixture{transport.libraryFixture.library(), changes, transport.executor}
     , sources{transport.libraryFixture.library(), changes}
     , views{transport.executor, transport.libraryFixture.library(), sources, changes}
-    , workspace{transport.executor, views, changes}
+    , workspace{transport.executor, views, transport.libraryFixture.library(), changes}
   {
     transport.onDevicesChangedCb(transport.status.devices);
     transport.executor.drain();

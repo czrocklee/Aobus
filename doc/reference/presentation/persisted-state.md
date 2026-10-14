@@ -5,16 +5,18 @@ id: presentation.persisted-state
 
 ## Scope and version
 
-This reference owns the exact version-2 `trackView.columnLayouts` payload and
-version-1 `trackView.presentations` payload stored by interactive frontends.
+This reference owns the exact version-3 `trackView.columnLayouts` payload and
+version-2 `trackView.presentations` payload stored by interactive frontends.
 GTK stores them per library in `gtk_layout.yaml`; TUI stores them per library in `tui_layout.yaml`; WinUI stores them per library in `winui_layout.yaml`.
 It also routes the stable textual vocabulary shared with nested workspace presentation state.
 
 The [workspace session-state reference](../workspace/session-state.md) owns the exact workspace group.
 The [application managed-state surface](../persistence/application-config.md) owns group-to-document registration and writer identity, while presentation specifications own runtime behavior and fallback.
 
-Column-layout version 2 adds required per-field visibility to the canonical
-sizing and order state. List-presentation preferences remain at version 1.
+Column-layout version 3 and list-presentation version 2 add a required
+`libraryId` that binds each document to the library whose list ids it names.
+Column-layout version 2 had added required per-field visibility to the
+canonical sizing and order state.
 There is no migration from earlier or unversioned payloads.
 
 ## Code boundary
@@ -23,7 +25,7 @@ This surface spans the application runtime, UIModel, and interactive-frontend pe
 Stable `TrackField`, `TrackSortField`, and `TrackGroupKey` ids belong to application runtime in `TrackField.h` and `TrackField.cpp`.
 The two payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
 `GtkLayoutStateStore`, `LayoutStateStore`, and the WinUI `LibrarySession` own their respective files but do not redefine either payload; the schema headers own the shared literal group names.
-Every writer keys entries by a list id that is only meaningful inside one library, which is why all three documents are per-library.
+Every writer keys entries by a list id that is only meaningful inside one library, which is why all three documents are per-library and why both schemas are constructed with the open library's id, which they write and check.
 
 ## Stable vocabulary
 
@@ -47,7 +49,8 @@ Its exact shape is:
 
 ```yaml
 trackView.columnLayouts:
-  version: 2
+  version: 3
+  libraryId: 123e4567-e89b-12d3-a456-426614174000
   layouts:
     - listId: 10
       columns:
@@ -65,7 +68,8 @@ trackView.columnLayouts:
 
 | Field | Type | Requirement |
 |---|---|---|
-| `version` | Unsigned 32-bit integer. | Required and exactly `2`. |
+| `version` | Unsigned 32-bit integer. | Required and exactly `3`. |
+| `libraryId` | Canonical UUID string. | Required; the library the layouts were saved for. |
 | `layouts` | Sequence of layout mappings. | Required; may be empty. |
 
 ### Layout fields
@@ -98,7 +102,8 @@ Its exact shape is:
 
 ```yaml
 trackView.presentations:
-  version: 1
+  version: 2
+  libraryId: 123e4567-e89b-12d3-a456-426614174000
   preferences:
     - listId: 10
       presentationId: albums
@@ -108,7 +113,8 @@ trackView.presentations:
 
 | Field | Type | Requirement |
 |---|---|---|
-| `version` | Unsigned 32-bit integer. | Required and exactly `1`. |
+| `version` | Unsigned 32-bit integer. | Required and exactly `2`. |
+| `libraryId` | Canonical UUID string. | Required; the library the preferences were saved for. |
 | `preferences` | Sequence of preference mappings. | Required; may be empty. |
 
 ### Preference fields
@@ -134,6 +140,7 @@ It is not a complete workspace root schema version.
 - Both groups use explicit UIModel schemas that validate each mapping and sequence recursively.
 - Every declared field is required; unknown fields, missing fields, wrong node kinds, malformed vector elements, and unsupported versions reject the complete containing group.
 - Semantic conversion occurs into a temporary candidate; no column or preference entry is installed before the whole group succeeds.
+- A valid group whose `libraryId` differs from the schema's library is not rejected: deserialization keeps only its virtual-list entries, because another library's list ids may name unrelated lists here.
 - A missing or rejected group leaves the caller's seeded state unchanged.
 - The two groups are independent on load, so rejection of one does not reject a valid sibling group.
 - The GTK coordinator suppresses save callbacks while installing loaded candidates, so a valid sibling cannot overwrite a rejected group during restore.
@@ -141,17 +148,17 @@ It is not a complete workspace root schema version.
 - TUI loads each group independently before connecting model-save observers, preserving a seeded group when its sibling succeeds or it is rejected.
 - Serialization rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
 - GTK and TUI submit both schemas through one `saveTogether()` candidate, so a serialization or replacement failure cannot persist only one new group in those transactions. WinUI writes each group by itself, from the persist port of the store that changed.
-- Restoring a document installs only entries whose list the library still has; a virtual list id needs no live list to vouch for it. This retires state that outlived a deletion the store never observed, and entries carried over from a rebuilt, restored, or replaced database that lacks their list id.
+- Restoring a document installs only entries whose list the library still has; a virtual list id needs no live list to vouch for it. This retires state that outlived a deletion the store never observed, and, because a library never reuses a list id, entries for lists a restore replaced.
 - Layout documents are frontend-local: no writer converts or copies a positive `width` between desktop pixel units and terminal cells.
 
 ## Compatibility and versioning
 
-Writers emit column-layout version 2 and list-presentation version 1 with stable
+Writers emit column-layout version 3 and list-presentation version 2 with stable
 text ids and canonical member names.
 Unversioned legacy state, numeric field values, unknown closed tokens, and future versions are rejected without an automatic rewrite.
 Future versions return `NotSupported` before version-specific sibling fields are interpreted.
 
-This textual-id contract does not make C++ enum ordinals freely reorderable across all consumers. Playback-session version 4 separately serializes numeric `TrackSortField` values; changing them requires a playback-schema compatibility decision even when these presentation tokens stay unchanged. See the [track-field compatibility boundary](../library/model/track-field.md#compatibility-and-versioning) and [playback session state](../playback/session-state.md).
+This textual-id contract does not make C++ enum ordinals freely reorderable across all consumers. Playback-session version 5 separately serializes numeric `TrackSortField` values; changing them requires a playback-schema compatibility decision even when these presentation tokens stay unchanged. See the [track-field compatibility boundary](../library/model/track-field.md#compatibility-and-versioning) and [playback session state](../playback/session-state.md).
 
 Changing a stable token's meaning or spelling requires an explicit compatibility decision.
 Adding a token does not change the meaning of existing documents, but older
@@ -168,14 +175,15 @@ Each literal group carries and gates its own payload version.
 - [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns GTK group selection, load policy, and the file save boundary.
 - [`LayoutStateStore.cpp`](../../../app/tui/LayoutStateStore.cpp) owns TUI group selection, independent-load policy, and the terminal file save boundary.
 - [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) owns the WinUI group selection, load policy, and atomic file save boundary.
-- [`RetainKnownLists.h`](../../../app/uimodel/library/presentation/RetainKnownLists.h) owns the rule both stores apply when restoring a document.
+- [`RetainKnownLists.h`](../../../app/uimodel/library/presentation/RetainKnownLists.h) owns the rule both stores apply when restoring a document and the virtual-list rule both schemas apply to another library's document.
 
 ## Test authority
 
 - [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) proves stable token coverage, uniqueness, and round trip.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects layout conversion and rejection.
 - [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects opaque preference ids and rejection.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries.
+- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protect exact group integration, seeded fallback, canonical output, and distinct file boundaries; the GTK test also protects a file saved for another library.
+- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/unit/runtime/LibraryRestoreStateIdentityTest.cpp) protects that neither group resumes another list after a library restore into the same or a new database.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects the shared workspace vocabulary.
 
 ## Related documents

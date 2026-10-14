@@ -21,6 +21,7 @@
 #include <memory>
 #include <optional>
 #include <source_location>
+#include <string>
 
 namespace ao::library
 {
@@ -106,6 +107,9 @@ namespace ao::rt
     {
       NowPlayingInfo item{};
       audio::PlaybackInput input{};
+      // Root-relative URI read with the track, so a saved session names the file
+      // that played even after the track's id disappears from the library.
+      std::string trackUri{};
     };
 
     // PlaybackTransport takes exclusive ownership of its direct audio collaborator.

@@ -6,17 +6,25 @@
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/utility/Uuid.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
+  } // namespace
+
   TEST_CASE("GtkLayoutStateStore - missing and rejected groups preserve caller state", "[gtk][unit][app][config]")
   {
     auto const tempDir = ao::test::TempDir{};
@@ -30,7 +38,7 @@ namespace ao::gtk::test
 
     SECTION("Load non-existent config returns default")
     {
-      auto const store = GtkLayoutStateStore{libraryPath};
+      auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
       auto newState = seededLayouts;
       auto newPrefState = seededPreferences;
       store.load(newState, newPrefState);
@@ -50,7 +58,7 @@ namespace ao::gtk::test
                 "        width: 321\n";
       output.close();
 
-      auto const store = GtkLayoutStateStore{libraryPath};
+      auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
       auto state = seededLayouts;
       auto prefState = seededPreferences;
       store.load(state, prefState);
@@ -68,7 +76,7 @@ namespace ao::gtk::test
                 "    42: albums\n";
       output.close();
 
-      auto const store = GtkLayoutStateStore{libraryPath};
+      auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
       auto state = seededLayouts;
       auto prefState = seededPreferences;
       store.load(state, prefState);
@@ -91,13 +99,14 @@ namespace ao::gtk::test
     auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
 
     {
-      auto store = GtkLayoutStateStore{libraryPath};
+      auto store = GtkLayoutStateStore{libraryPath, kLibraryId};
       store.save(expectedState, expectedPrefState);
     }
 
     auto const serialized = ao::test::readFile(libraryPath / "gtk_layout.yaml");
     CHECK(serialized == "trackView.columnLayouts:\n"
-                        "  version: 2\n"
+                        "  version: 3\n"
+                        "  libraryId: \"123e4567-e89b-12d3-a456-426614174000\"\n"
                         "  layouts:\n"
                         "    - listId: 10\n"
                         "      columns:\n"
@@ -112,12 +121,13 @@ namespace ao::gtk::test
                         "          weight: -1\n"
                         "          visible: true\n"
                         "trackView.presentations:\n"
-                        "  version: 1\n"
+                        "  version: 2\n"
+                        "  libraryId: \"123e4567-e89b-12d3-a456-426614174000\"\n"
                         "  preferences:\n"
                         "    - listId: 10\n"
                         "      presentationId: \"albums\"\n");
 
-    auto const freshStore = GtkLayoutStateStore{libraryPath};
+    auto const freshStore = GtkLayoutStateStore{libraryPath, kLibraryId};
     auto state = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{99}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .width = 999}}},
     };
@@ -135,10 +145,11 @@ namespace ao::gtk::test
     auto const libraryPath = std::filesystem::path{tempDir.path()};
     std::filesystem::create_directories(libraryPath);
     auto const stored = std::string{"trackView.columnLayouts:\n"
-                                    "  version: 3\n"
+                                    "  version: 4\n"
                                     "  layouts: []\n"
                                     "trackView.presentations:\n"
-                                    "  version: 1\n"
+                                    "  version: 2\n"
+                                    "  libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
                                     "  preferences:\n"
                                     "    - listId: 42\n"
                                     "      presentationId: albums\n"};
@@ -149,7 +160,7 @@ namespace ao::gtk::test
        {uimodel::TrackColumnState{.field = rt::TrackField::Artist, .width = 123, .weight = -1.0, .visible = true}}},
     };
     auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{42}, "albums"}};
-    auto const store = GtkLayoutStateStore{libraryPath};
+    auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
     auto state = expectedState;
     auto prefState = uimodel::ListPresentations::Snapshot{{ListId{7}, "artists"}};
     store.load(state, prefState);
@@ -159,6 +170,34 @@ namespace ao::gtk::test
     // Reading a group this build cannot understand must not cost the user the
     // document a later build can: loading never rewrites the file.
     CHECK(ao::test::readFile(libraryPath / "gtk_layout.yaml") == stored);
+  }
+
+  TEST_CASE("GtkLayoutStateStore - a file saved for another library restores only virtual-list entries",
+            "[gtk][unit][app][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const libraryPath = std::filesystem::path{tempDir.path()};
+    auto const allTracksColumns =
+      std::vector{uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 90, .weight = -1.0}};
+    auto const otherLibraryId = utility::parseUuid("00000000-0000-4000-8000-000000000001").value();
+
+    {
+      auto store = GtkLayoutStateStore{libraryPath, otherLibraryId};
+      store.save(
+        uimodel::TrackColumnLayouts::Snapshot{
+          {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .weight = -1.0}}},
+          {rt::kAllTracksListId, allTracksColumns},
+        },
+        uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}, {rt::kAllTracksListId, "songs"}});
+    }
+
+    auto const store = GtkLayoutStateStore{libraryPath, kLibraryId};
+    auto state = uimodel::TrackColumnLayouts::Snapshot{};
+    auto prefState = uimodel::ListPresentations::Snapshot{};
+    store.load(state, prefState);
+
+    CHECK(state == uimodel::TrackColumnLayouts::Snapshot{{rt::kAllTracksListId, allTracksColumns}});
+    CHECK(prefState == uimodel::ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
   }
 
   TEST_CASE("GtkLayoutStateStore - failed serialization leaves both durable groups unchanged",
@@ -171,7 +210,7 @@ namespace ao::gtk::test
        {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 123, .weight = -1.0, .visible = true}}},
     };
     auto const expectedPrefState = uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}};
-    auto store = GtkLayoutStateStore{libraryPath};
+    auto store = GtkLayoutStateStore{libraryPath, kLibraryId};
     store.save(expectedState, expectedPrefState);
     auto const before = ao::test::readFile(libraryPath / "gtk_layout.yaml");
     REQUIRE_FALSE(before.empty());
@@ -187,7 +226,7 @@ namespace ao::gtk::test
 
     CHECK(ao::test::readFile(libraryPath / "gtk_layout.yaml") == before);
 
-    auto const freshStore = GtkLayoutStateStore{libraryPath};
+    auto const freshStore = GtkLayoutStateStore{libraryPath, kLibraryId};
     auto loadedState = uimodel::TrackColumnLayouts::Snapshot{};
     auto loadedPrefState = uimodel::ListPresentations::Snapshot{};
     freshStore.load(loadedState, loadedPrefState);

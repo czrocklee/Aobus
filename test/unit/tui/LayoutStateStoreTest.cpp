@@ -10,6 +10,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/utility/Uuid.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,6 +27,11 @@
 
 namespace ao::tui::test
 {
+  namespace
+  {
+    auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
+  } // namespace
+
   TEST_CASE("LayoutStateStore - missing file preserves shared seeds and restores TUI defaults", "[tui][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
@@ -34,7 +40,7 @@ namespace ao::tui::test
       {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.0}}},
     };
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
-    auto const store = LayoutStateStore{libraryPath};
+    auto const store = LayoutStateStore{libraryPath, kLibraryId};
     auto const seededColumns = columns;
     auto const seededPresentations = presentations;
 
@@ -103,7 +109,7 @@ namespace ao::tui::test
 
     CHECK(layoutStatePath(libraryPath) == libraryPath / ".aobus" / "tui_layout.yaml");
 
-    auto store = LayoutStateStore{libraryPath};
+    auto store = LayoutStateStore{libraryPath, kLibraryId};
     auto const runtimeSessionPath = libraryPath / ".aobus" / "tui-workspace.yaml";
     std::ofstream{runtimeSessionPath, std::ios::binary} << "workspace-sentinel\n";
     auto columnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
@@ -125,7 +131,8 @@ namespace ao::tui::test
                         "  version: 1\n"
                         "  enabled: true\n"
                         "trackView.columnLayouts:\n"
-                        "  version: 2\n"
+                        "  version: 3\n"
+                        "  libraryId: \"123e4567-e89b-12d3-a456-426614174000\"\n"
                         "  layouts:\n"
                         "    - listId: 10\n"
                         "      columns:\n"
@@ -138,14 +145,15 @@ namespace ao::tui::test
                         "          weight: -1\n"
                         "          visible: true\n"
                         "trackView.presentations:\n"
-                        "  version: 1\n"
+                        "  version: 2\n"
+                        "  libraryId: \"123e4567-e89b-12d3-a456-426614174000\"\n"
                         "  preferences:\n"
                         "    - listId: 10\n"
                         "      presentationId: \"albums\"\n");
 
     auto loadedColumns = uimodel::TrackColumnLayouts::Snapshot{};
     auto loadedPresentations = uimodel::ListPresentations::Snapshot{};
-    auto const reopenedStore = LayoutStateStore{libraryPath};
+    auto const reopenedStore = LayoutStateStore{libraryPath, kLibraryId};
     auto widths = PanelWidths{.navigation = 32, .detail = 48};
     bool navigationEnabled = false;
     reopenedStore.load(loadedColumns, loadedPresentations, navigationEnabled, widths);
@@ -168,12 +176,13 @@ namespace ao::tui::test
                                     "  version: 99\n"
                                     "  layouts: []\n"
                                     "trackView.presentations:\n"
-                                    "  version: 1\n"
+                                    "  version: 2\n"
+                                    "  libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
                                     "  preferences:\n"
                                     "    - listId: 42\n"
                                     "      presentationId: albums\n"};
     std::ofstream{configPath, std::ios::binary} << stored;
-    auto const store = LayoutStateStore{libraryPath};
+    auto const store = LayoutStateStore{libraryPath, kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{7}, {uimodel::TrackColumnState{.field = rt::TrackField::Title, .weight = 2.0}}},
     };
@@ -197,7 +206,8 @@ namespace ao::tui::test
     auto const configPath = layoutStatePath(libraryPath);
     std::filesystem::create_directories(configPath.parent_path());
     auto const stored = std::string{"trackView.columnLayouts:\n"
-                                    "  version: 2\n"
+                                    "  version: 3\n"
+                                    "  libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
                                     "  layouts:\n"
                                     "    - listId: 42\n"
                                     "      columns:\n"
@@ -209,7 +219,7 @@ namespace ao::tui::test
                                     "  version: 99\n"
                                     "  preferences: []\n"};
     std::ofstream{configPath, std::ios::binary} << stored;
-    auto const store = LayoutStateStore{libraryPath};
+    auto const store = LayoutStateStore{libraryPath, kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
 
@@ -233,7 +243,7 @@ namespace ao::tui::test
     auto const configPath = layoutStatePath(libraryPath);
     std::filesystem::create_directories(configPath.parent_path());
     std::ofstream{configPath, std::ios::binary} << "future.owner:\n  value: keep-me\n";
-    auto store = LayoutStateStore{libraryPath};
+    auto store = LayoutStateStore{libraryPath, kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{
       {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 17}}},
     };
@@ -261,7 +271,7 @@ namespace ao::tui::test
 
     auto const after = ao::test::readFile(configPath);
     CHECK(after.contains("future.owner:\n  value: keep-me\n"));
-    auto const reopened = LayoutStateStore{libraryPath};
+    auto const reopened = LayoutStateStore{libraryPath, kLibraryId};
     auto loadedColumns = uimodel::TrackColumnLayouts::Snapshot{};
     auto loadedPresentations = uimodel::ListPresentations::Snapshot{};
     auto loadedWidths = PanelWidths{};
@@ -277,11 +287,11 @@ namespace ao::tui::test
             "[tui][unit][config]")
   {
     auto const directory = ao::test::TempDir{};
-    auto store = LayoutStateStore{directory.path()};
+    auto store = LayoutStateStore{directory.path(), kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
     REQUIRE(store.save(columns, presentations, false, PanelWidths{}));
-    auto reopened = LayoutStateStore{directory.path()};
+    auto reopened = LayoutStateStore{directory.path(), kLibraryId};
     auto widths = PanelWidths{};
     bool enabled = true;
     presentations.clear();
@@ -289,7 +299,7 @@ namespace ao::tui::test
     CHECK_FALSE(enabled);
     CHECK(presentations.at(ListId{7}) == "songs");
     REQUIRE(reopened.save(columns, presentations, true, widths));
-    auto again = LayoutStateStore{directory.path()};
+    auto again = LayoutStateStore{directory.path(), kLibraryId};
     enabled = false;
     again.load(columns, presentations, enabled, widths);
     CHECK(enabled);
@@ -309,7 +319,7 @@ namespace ao::tui::test
         auto output = std::ofstream{path};
         output << group << "\n";
       }
-      auto store = LayoutStateStore{directory.path()};
+      auto store = LayoutStateStore{directory.path(), kLibraryId};
       auto columns = uimodel::TrackColumnLayouts::Snapshot{};
       auto presentations = uimodel::ListPresentations::Snapshot{{ListId{7}, "songs"}};
       auto widths = PanelWidths{};
@@ -318,7 +328,7 @@ namespace ao::tui::test
       CHECK(enabled);
       CHECK(presentations.at(ListId{7}) == "songs");
       REQUIRE(store.save(columns, presentations, false, widths));
-      auto reopened = LayoutStateStore{directory.path()};
+      auto reopened = LayoutStateStore{directory.path(), kLibraryId};
       reopened.load(columns, presentations, enabled, widths);
       CHECK_FALSE(enabled);
     }
@@ -327,12 +337,12 @@ namespace ao::tui::test
   TEST_CASE("LayoutStateStore - panel widths round trip", "[tui][unit][config][panel-resize]")
   {
     auto const directory = ao::test::TempDir{};
-    auto store = LayoutStateStore{directory.path()};
+    auto store = LayoutStateStore{directory.path(), kLibraryId};
     auto columns = uimodel::TrackColumnLayouts::Snapshot{};
     auto presentations = uimodel::ListPresentations::Snapshot{};
     auto widths = PanelWidths{.navigation = 32, .detail = 48};
     REQUIRE(store.save(columns, presentations, true, widths));
-    auto reopened = LayoutStateStore{directory.path()};
+    auto reopened = LayoutStateStore{directory.path(), kLibraryId};
     auto loaded = PanelWidths{};
     bool enabled = false;
     reopened.load(columns, presentations, enabled, loaded);
@@ -352,7 +362,7 @@ namespace ao::tui::test
                                  "panels: {version: 1, navigation: 32, detail: broken}\n"})
     {
       std::ofstream{path} << document;
-      auto invalid = LayoutStateStore{directory.path()};
+      auto invalid = LayoutStateStore{directory.path(), kLibraryId};
       auto columns = uimodel::TrackColumnLayouts::Snapshot{};
       auto presentations = uimodel::ListPresentations::Snapshot{};
       auto loaded = PanelWidths{.navigation = 32, .detail = 48};

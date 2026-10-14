@@ -391,6 +391,7 @@ namespace ao::rt
       request.input.filePath = *optFilePath;
     }
 
+    request.trackUri = std::string{property.uri()};
     return request;
   }
 
@@ -893,6 +894,7 @@ namespace ao::rt
       return PlaybackTransportSessionState{
         .sourceListId = currentRequest.item.sourceListId,
         .trackId = currentRequest.item.trackId,
+        .trackUri = currentRequest.trackUri,
         .positionMs = static_cast<std::uint64_t>(elapsed.count()),
         .volume = normalizePlaybackVolume(state.volume.level),
         .muted = state.volume.muted,

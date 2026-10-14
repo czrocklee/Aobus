@@ -87,7 +87,8 @@ namespace ao::gtk
   struct MainWindow::Impl final
   {
     Impl(Gtk::Window& window, rt::AppRuntime& runtime, i18n::MessageCatalog catalog)
-      : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
+      : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath(),
+                         runtime.library().snapshot().libraryId()}
       , trackRowCache{runtime.library(), catalog}
       , imageCache{100}
       , resourceImageLoader{runtime.resourceBytes(), imageCache, runtime.async()}

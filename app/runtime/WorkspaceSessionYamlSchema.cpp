@@ -11,6 +11,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceSessionState.h>
 #include <ao/utility/StrongTypeFormatter.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>
@@ -300,6 +301,7 @@ namespace ao::rt::detail
     {
       auto writer = yaml::MapWriter{node};
       writer.scalar("presentationVersion", document.presentationVersion)
+        .scalar("libraryId", utility::formatUuid(document.libraryId))
         .sequence("openViews", document.openViews, writeView)
         .scalar("activeViewIndex", document.activeViewIndex)
         .sequence("customPresets", document.customPresets, writePreset);
@@ -328,12 +330,13 @@ namespace ao::rt::detail
                          std::format("Unsupported workspace presentation version {}", *presentationVersionRes));
       }
 
-      constexpr auto kKeys =
-        std::to_array<std::string_view>({"presentationVersion", "openViews", "activeViewIndex", "customPresets"});
+      constexpr auto kKeys = std::to_array<std::string_view>(
+        {"presentationVersion", "libraryId", "openViews", "activeViewIndex", "customPresets"});
 
       auto document = WorkspaceSessionDocument{.presentationVersion = *presentationVersionRes};
       auto reader = yaml::MapReader{node, kKeys, kContext};
-      reader.requiredSequence("openViews", document.openViews, readView)
+      reader.requiredValue("libraryId", document.libraryId, yaml::uuidScalar)
+        .requiredSequence("openViews", document.openViews, readView)
         .requiredScalar("activeViewIndex", document.activeViewIndex)
         .requiredSequence("customPresets", document.customPresets, readPreset);
       return std::move(reader).finish(std::move(document));
@@ -351,6 +354,7 @@ namespace ao::rt::detail
 
     auto document = WorkspaceSessionDocument{
       .presentationVersion = kWorkspacePresentationVersion,
+      .libraryId = state.libraryId,
       .activeViewIndex = static_cast<std::uint32_t>(state.activeViewIndex),
     };
     document.openViews.reserve(state.openViews.size());
@@ -410,7 +414,7 @@ namespace ao::rt::detail
       return std::unexpected{res.error()};
     }
 
-    auto state = WorkspaceSessionState{.activeViewIndex = document.activeViewIndex};
+    auto state = WorkspaceSessionState{.libraryId = document.libraryId, .activeViewIndex = document.activeViewIndex};
     state.openViews.reserve(document.openViews.size());
 
     for (auto const& stored : document.openViews)

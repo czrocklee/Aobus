@@ -6,6 +6,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/WorkspaceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
@@ -18,6 +19,9 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibraryImportPlan.h>
+#include <ao/rt/library/LibraryJobs.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 
@@ -152,6 +156,57 @@ namespace ao::rt::test
     CHECK(changes.front().snapshot.openViews.empty());
     CHECK(changes.front().snapshot.activeViewId == kInvalidViewId);
     CHECK(changes.front().snapshot.revision == before.revision + 1);
+  }
+
+  TEST_CASE("WorkspaceService - a library restore closes the views of lists it replaced",
+            "[runtime][integration][workspace]")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto listViewId = kInvalidViewId;
+    auto allTracksViewId = kInvalidViewId;
+
+    SECTION("All Tracks is focused")
+    {
+      listViewId = requireNavigation(runtime, fixture.firstListId);
+      allTracksViewId = requireNavigation(runtime, GlobalViewKind::AllTracks);
+    }
+
+    SECTION("The replaced list's view is focused")
+    {
+      allTracksViewId = requireNavigation(runtime, GlobalViewKind::AllTracks);
+      listViewId = requireNavigation(runtime, fixture.firstListId);
+    }
+
+    auto const before = runtime.workspace().snapshot();
+    auto const yamlPath = fixture.tempDir.path() / "backup.yaml";
+    REQUIRE(runRuntimeTask(runtime, runtime.library().jobs().exportLibraryAsync(yamlPath, ExportMode::Full)));
+    auto planRes =
+      runRuntimeTask(runtime, runtime.library().jobs().prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    REQUIRE(planRes);
+    auto changes = std::vector<WorkspaceChanged>{};
+    auto const sub =
+      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { changes.push_back(changed); });
+    auto destroyed = std::vector<ViewService::ViewDestroyed>{};
+    auto const destroyedSub = runtime.views().onViewDestroyed([&](ViewService::ViewDestroyed const& event) noexcept
+                                                              { destroyed.push_back(event); });
+
+    REQUIRE(runRuntimeTask(runtime, runtime.library().jobs().applyLibraryImportPlanAsync(std::move(*planRes))));
+    settleRuntimeCallbacks(runtime);
+
+    // The restored lists carry new ids, so the old view names no list; All Tracks survives any restore
+    // and, as the last remaining view, takes focus from a closed active view.
+    REQUIRE(changes.size() == 1);
+    CHECK(changes.front().cause == WorkspaceChangeCause::ListDeletion);
+    CHECK(changes.front().snapshot.openViews == std::vector{allTracksViewId});
+    CHECK(changes.front().snapshot.activeViewId == allTracksViewId);
+    CHECK(changes.front().snapshot.revision == before.revision + 1);
+    CHECK(runtime.workspace().snapshot() == changes.front().snapshot);
+    REQUIRE(destroyed.size() == 1);
+    CHECK(destroyed.front().viewId == listViewId);
+    auto const staleRes = runtime.views().findTrackListState(listViewId);
+    REQUIRE_FALSE(staleRes);
+    CHECK(staleRes.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("AppRuntime - jumpToAlbum reveals valid tracks in album presentation",

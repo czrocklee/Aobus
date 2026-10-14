@@ -48,12 +48,17 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibraryImportPlan.h>
+#include <ao/rt/library/LibraryJobs.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/utility/ScopedRegistration.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_message.hpp>
@@ -83,7 +88,7 @@ namespace ao::rt::test
 {
   namespace
   {
-    constexpr auto kPlaybackSessionV4SortFieldOrdinals = std::to_array<std::pair<TrackSortField, std::int32_t>>({
+    constexpr auto kPlaybackSessionV5SortFieldOrdinals = std::to_array<std::pair<TrackSortField, std::int32_t>>({
       {TrackSortField::Artist, 0},
       {TrackSortField::Album, 1},
       {TrackSortField::AlbumArtist, 2},
@@ -221,6 +226,21 @@ namespace ao::rt::test
       REQUIRE(store.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{}));
     }
 
+    // Stamps a payload with the identity a save on @p runtime records, so the
+    // restore reaches the restore matrix instead of failing the identity check.
+    PlaybackSessionState savedFor(AppRuntime& runtime, PlaybackSessionState session)
+    {
+      auto const reader = runtime.library().snapshot();
+      session.libraryId = reader.libraryId();
+      session.currentTrackUri = reader.trackUri(session.currentTrackId).value_or("");
+      return session;
+    }
+
+    void storeSavedSession(AppRuntime& runtime, ConfigStore& store, PlaybackSessionState const& session)
+    {
+      storeSession(store, savedFor(runtime, session));
+    }
+
     struct OrderedListView final
     {
       ListId listId = kInvalidListId;
@@ -342,14 +362,17 @@ namespace ao::rt::test
 
     std::string rawPlaybackSessionYaml(TrackId const trackId,
                                        std::string_view const schemaLine,
-                                       std::string_view const sortBy)
+                                       std::string_view const sortBy,
+                                       std::string_view const libraryIdLine)
     {
       return std::format("playback-session:\n"
+                         "{}"
                          "{}"
                          "  sourceListId: {}\n"
                          "  quickFilterExpression: ''\n"
                          "  sortBy: {}\n"
                          "  currentTrackId: {}\n"
+                         "  currentTrackUri: current.flac\n"
                          "  anchorIndex: 0\n"
                          "  positionMs: 0\n"
                          "  shuffleMode: 0\n"
@@ -357,6 +380,7 @@ namespace ao::rt::test
                          "  volume: 1\n"
                          "  muted: false\n",
                          schemaLine,
+                         libraryIdLine,
                          kAllTracksListId.raw(),
                          sortBy,
                          trackId.raw());
@@ -667,12 +691,12 @@ namespace ao::rt::test
     CHECK(sessionPtr->preparedNextRegistry().size() == 0);
   }
 
-  TEST_CASE("PlaybackSession - schema v4 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
+  TEST_CASE("PlaybackSession - schema v5 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
   {
-    static_assert(kPlaybackSessionV4SortFieldOrdinals.size() == kTrackSortFieldCount);
-    CHECK(kPlaybackSessionSchemaVersion == 4);
+    static_assert(kPlaybackSessionV5SortFieldOrdinals.size() == kTrackSortFieldCount);
+    CHECK(kPlaybackSessionSchemaVersion == 5);
 
-    for (auto const& [field, ordinal] : kPlaybackSessionV4SortFieldOrdinals)
+    for (auto const& [field, ordinal] : kPlaybackSessionV5SortFieldOrdinals)
     {
       CHECK(static_cast<std::int32_t>(field) == ordinal);
     }
@@ -681,10 +705,12 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSessionYamlSchema - owns the exact YAML mapping", "[runtime][unit][playback-session][schema]")
   {
     auto const state = PlaybackSessionState{
+      .libraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value(),
       .sourceListId = kAllTracksListId,
       .quickFilterExpression = "$year > 2000",
       .sortBy = {{.field = TrackSortField::Title, .ascending = false}},
       .currentTrackId = TrackId{42},
+      .currentTrackUri = "albums/first.flac",
       .anchorIndex = 3,
       .positionMs = 900,
       .shuffleMode = ShuffleMode::On,
@@ -695,7 +721,9 @@ namespace ao::rt::test
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(PlaybackSessionYamlSchema{}.serialize(tree.rootref(), state));
-    CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "4");
+    CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "5");
+    CHECK(yaml::scalarView(tree.rootref()["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
+    CHECK(yaml::scalarView(tree.rootref()["currentTrackUri"]) == "albums/first.flac");
     CHECK(yaml::scalarView(tree.rootref()["sortBy"][0]["field"]) == "13");
 
     auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
@@ -708,7 +736,7 @@ namespace ao::rt::test
   {
     SECTION("Previous version is rejected before interpreting its payload")
     {
-      auto const* source = "schemaVersion: 3\nsortBy: malformed\n";
+      auto const* source = "schemaVersion: 4\nsortBy: malformed\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
@@ -731,11 +759,13 @@ namespace ao::rt::test
     SECTION("Unknown structural keys are rejected")
     {
       auto const* source = R"(
-        schemaVersion: 4
+        schemaVersion: 5
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         sourceListId: 1
         quickFilterExpression: ""
         sortBy: []
         currentTrackId: 42
+        currentTrackUri: first.flac
         anchorIndex: 0
         positionMs: 0
         shuffleMode: 0
@@ -779,11 +809,13 @@ namespace ao::rt::test
     CHECK(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
     auto const saved = storedSession(playbackSessionStore);
-    CHECK(saved.schemaVersion == 4);
+    CHECK(saved.schemaVersion == 5);
+    CHECK(saved.libraryId == runtimePtr->library().snapshot().libraryId());
     CHECK(saved.sourceListId == kAllTracksListId);
     CHECK(saved.quickFilterExpression == "$year > 2000");
     CHECK(saved.sortBy == sortBy);
     CHECK(saved.currentTrackId == alpha);
+    CHECK(saved.currentTrackUri == runtimePtr->library().snapshot().trackUri(alpha));
     CHECK(saved.anchorIndex == 1);
     CHECK(saved.positionMs == 500);
     CHECK(saved.shuffleMode == ShuffleMode::On);
@@ -848,7 +880,7 @@ namespace ao::rt::test
       .volume = 0.999F,
       .muted = true,
     };
-    storeSession(playbackSessionStore, session);
+    storeSavedSession(*runtimePtr, playbackSessionStore, session);
 
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     executor->drain();
@@ -960,7 +992,7 @@ namespace ao::rt::test
     auto sentinel = storedSession(playbackSessionStore);
     sentinel.positionMs = 0;
     sentinel.shuffleMode = ShuffleMode::Off;
-    storeSession(playbackSessionStore, sentinel);
+    storeSavedSession(*runtimePtr, playbackSessionStore, sentinel);
 
     runtimePtr->playback().commands().setShuffleMode(ShuffleMode::On);
 
@@ -1078,7 +1110,7 @@ namespace ao::rt::test
     auto normalizedPayload = storedSession(runtimePtr->workspaceConfigStore());
     normalizedPayload.anchorIndex = 999;
     normalizedPayload.positionMs = 400;
-    storeSession(runtimePtr->workspaceConfigStore(), normalizedPayload);
+    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), normalizedPayload);
 
     std::uint32_t snapshotCount = 0;
     bool nestedCommandRequested = false;
@@ -1191,12 +1223,12 @@ namespace ao::rt::test
       .currentTrackId = trackId,
       .positionMs = 250,
     };
-    storeSession(runtimePtr->workspaceConfigStore(), session);
+    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), session);
     REQUIRE(runtimePtr->restorePlaybackSession());
     auto const before = runtimePtr->playback().snapshot();
     REQUIRE(before.transport.elapsed == std::chrono::milliseconds{250});
     session.positionMs = 750;
-    storeSession(runtimePtr->workspaceConfigStore(), session);
+    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), session);
 
     auto const restoredRes = runtimePtr->restorePlaybackSession();
 
@@ -1285,7 +1317,7 @@ namespace ao::rt::test
       payload.volume = 5.0F;
     }
 
-    storeSession(runtimePtr->workspaceConfigStore(), payload);
+    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     REQUIRE_FALSE(restoredRes);
     CHECK(restoredRes.error().code == expectedError);
@@ -1298,12 +1330,23 @@ namespace ao::rt::test
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const trackId = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->sources().reloadAllTracks();
-    auto schemaLine = std::string_view{"  schemaVersion: 4\n"};
+    auto schemaLine = std::string_view{"  schemaVersion: 5\n"};
     auto sortBy = std::string_view{"[]"};
+    auto libraryIdLine = std::string_view{"  libraryId: 123e4567-e89b-12d3-a456-426614174000\n"};
 
     SECTION("missing schemaVersion")
     {
       schemaLine = {};
+    }
+
+    SECTION("missing libraryId")
+    {
+      libraryIdLine = {};
+    }
+
+    SECTION("libraryId that is not a UUID")
+    {
+      libraryIdLine = "  libraryId: 123e4567\n";
     }
 
     SECTION("scalar sort element")
@@ -1321,7 +1364,7 @@ namespace ao::rt::test
       sortBy = "\n    - field: 13\n      ascending: true\n    - broken";
     }
 
-    writeWorkspaceYaml(tempDir, rawPlaybackSessionYaml(trackId, schemaLine, sortBy));
+    writeWorkspaceYaml(tempDir, rawPlaybackSessionYaml(trackId, schemaLine, sortBy, libraryIdLine));
     auto const restoredRes = runtimePtr->restorePlaybackSession();
 
     REQUIRE_FALSE(restoredRes);
@@ -1350,7 +1393,7 @@ namespace ao::rt::test
     SECTION("projected current is bound and retains position")
     {
       payload.anchorIndex = 0;
-      storeSession(runtimePtr->workspaceConfigStore(), payload);
+      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
       auto const restoredRes = runtimePtr->restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
@@ -1362,7 +1405,7 @@ namespace ao::rt::test
     {
       payload.quickFilterExpression = "$year > 2000";
       payload.anchorIndex = 1;
-      storeSession(runtimePtr->workspaceConfigStore(), payload);
+      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
       auto const restoredRes = runtimePtr->restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
@@ -1376,7 +1419,7 @@ namespace ao::rt::test
       payload.currentTrackId = TrackId{999'999};
       payload.anchorIndex = 1;
       payload.shuffleMode = ShuffleMode::On;
-      storeSession(runtimePtr->workspaceConfigStore(), payload);
+      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
       auto const restoredRes = runtimePtr->restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
@@ -1389,7 +1432,7 @@ namespace ao::rt::test
       payload.currentTrackId = TrackId{999'999};
       payload.anchorIndex = 3;
       payload.repeatMode = RepeatMode::All;
-      storeSession(runtimePtr->workspaceConfigStore(), payload);
+      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
       auto const restoredRes = runtimePtr->restorePlaybackSession();
       REQUIRE(restoredRes);
       REQUIRE(restoredRes->restored);
@@ -1401,12 +1444,119 @@ namespace ao::rt::test
     {
       payload.currentTrackId = TrackId{999'999};
       payload.anchorIndex = 3;
-      storeSession(runtimePtr->workspaceConfigStore(), payload);
+      storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), payload);
       auto const restoredRes = runtimePtr->restorePlaybackSession();
       REQUIRE(restoredRes);
       CHECK_FALSE(restoredRes->restored);
       CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
     }
+  }
+
+  TEST_CASE("PlaybackSession - an identity failure drops the session instead of replacing its track",
+            "[runtime][unit][playback-session][restore-matrix]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
+    addReadyAudioProvider(*runtimePtr);
+    auto const first = addPlayableTrack(*runtimePtr, "First", 1990);
+    auto const second = addPlayableTrack(*runtimePtr, "Second", 2022);
+    runtimePtr->sources().reloadAllTracks();
+    auto const reader = runtimePtr->library().snapshot();
+    auto const libraryId = reader.libraryId();
+    auto const firstUri = reader.trackUri(first).value();
+    auto const secondUri = reader.trackUri(second).value();
+
+    // Every section names All Tracks, which survives any library change, at an
+    // anchor that would otherwise select a replacement.
+    auto payload = PlaybackSessionState{
+      .libraryId = libraryId,
+      .sourceListId = kAllTracksListId,
+      .currentTrackId = first,
+      .currentTrackUri = firstUri,
+      .anchorIndex = 0,
+      .positionMs = 400,
+    };
+
+    SECTION("a session saved for another library")
+    {
+      payload.libraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
+    }
+
+    SECTION("a present track whose file changed")
+    {
+      payload.currentTrackUri = secondUri;
+    }
+
+    SECTION("an absent track whose file another id now holds")
+    {
+      payload.currentTrackId = TrackId{999'999};
+    }
+
+    storeSession(runtimePtr->workspaceConfigStore(), payload);
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    CHECK_FALSE(restoredRes->restored);
+    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+  }
+
+  TEST_CASE("PlaybackSession - an absent track whose file left the library keeps anchor replacement",
+            "[runtime][unit][playback-session][restore-matrix]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
+    addReadyAudioProvider(*runtimePtr);
+    std::ignore = addPlayableTrack(*runtimePtr, "First", 1990);
+    auto const second = addPlayableTrack(*runtimePtr, "Second", 2022);
+    runtimePtr->sources().reloadAllTracks();
+    storeSession(runtimePtr->workspaceConfigStore(),
+                 PlaybackSessionState{
+                   .libraryId = runtimePtr->library().snapshot().libraryId(),
+                   .sourceListId = kAllTracksListId,
+                   .currentTrackId = TrackId{999'999},
+                   .currentTrackUri = "deleted.flac",
+                   .anchorIndex = 1,
+                   .positionMs = 400,
+                 });
+
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    REQUIRE(restoredRes->restored);
+    CHECK(restoredRes->trackId == second);
+    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
+  }
+
+  TEST_CASE("PlaybackSession - a session saved after a live library restore is not resumed",
+            "[runtime][integration][playback-session][restore-matrix]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto backupDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    addReadyAudioProvider(*runtimePtr);
+    std::ignore = addPlayableTrack(*runtimePtr, *executor, "Alpha");
+    auto const beta = addPlayableTrack(*runtimePtr, *executor, "Beta");
+    auto const viewId = createView(*runtimePtr);
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, beta));
+    auto const yamlPath = backupDir.path() / "backup.yaml";
+    auto& jobs = runtimePtr->library().jobs();
+    REQUIRE(runRuntimeTask(*runtimePtr, jobs.exportLibraryAsync(yamlPath, ExportMode::Full)));
+    auto planRes = runRuntimeTask(*runtimePtr, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    REQUIRE(planRes);
+    REQUIRE(runRuntimeTask(*runtimePtr, jobs.applyLibraryImportPlanAsync(std::move(*planRes))));
+    executor->drain();
+
+    // The restore leaves the subject playing under an id the library no longer has.
+    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const saved = storedSession(runtimePtr->workspaceConfigStore());
+    auto const reader = runtimePtr->library().snapshot();
+    CHECK(saved.currentTrackId == beta);
+    CHECK_FALSE(reader.containsTrack(beta));
+    CHECK(reader.containsTrackUri(saved.currentTrackUri));
+
+    runtimePtr->playback().commands().stop();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    CHECK_FALSE(restoredRes->restored);
   }
 
   TEST_CASE("PlaybackSession - missing-source fallback preserves order and clears filter",
@@ -1418,14 +1568,15 @@ namespace ao::rt::test
     auto const current = addPlayableTrack(*runtimePtr, "Current", 1990);
     runtimePtr->sources().reloadAllTracks();
     auto const sortBy = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
-    storeSession(runtimePtr->workspaceConfigStore(),
-                 PlaybackSessionState{
-                   .sourceListId = ListId{999'999},
-                   .quickFilterExpression = "$year > 2000",
-                   .sortBy = sortBy,
-                   .currentTrackId = current,
-                   .positionMs = 250,
-                 });
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      PlaybackSessionState{
+                        .sourceListId = ListId{999'999},
+                        .quickFilterExpression = "$year > 2000",
+                        .sortBy = sortBy,
+                        .currentTrackId = current,
+                        .positionMs = 250,
+                      });
 
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     REQUIRE(restoredRes);
@@ -1438,11 +1589,12 @@ namespace ao::rt::test
     CHECK(corrected.sortBy == sortBy);
 
     runtimePtr->playback().commands().stop();
-    storeSession(runtimePtr->workspaceConfigStore(),
-                 PlaybackSessionState{
-                   .sourceListId = ListId{999'999},
-                   .currentTrackId = TrackId{888'888},
-                 });
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      PlaybackSessionState{
+                        .sourceListId = ListId{999'999},
+                        .currentTrackId = TrackId{888'888},
+                      });
     auto const discardedRes = runtimePtr->restorePlaybackSession();
     REQUIRE(discardedRes);
     CHECK_FALSE(discardedRes->restored);
@@ -1455,12 +1607,13 @@ namespace ao::rt::test
     addReadyAudioProvider(*runtimePtr);
     auto const current = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->sources().reloadAllTracks();
-    storeSession(runtimePtr->workspaceConfigStore(),
-                 PlaybackSessionState{
-                   .sourceListId = kAllTracksListId,
-                   .currentTrackId = current,
-                   .positionMs = 10'000,
-                 });
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      PlaybackSessionState{
+                        .sourceListId = kAllTracksListId,
+                        .currentTrackId = current,
+                        .positionMs = 10'000,
+                      });
 
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     REQUIRE(restoredRes);
@@ -1481,12 +1634,13 @@ namespace ao::rt::test
     executor->runUntilIdle();
     auto const current = addPlayableTrack(*runtimePtr, *executor, "Restored endpoint");
     runtimePtr->sources().reloadAllTracks();
-    storeSession(runtimePtr->workspaceConfigStore(),
-                 PlaybackSessionState{
-                   .sourceListId = kAllTracksListId,
-                   .currentTrackId = current,
-                   .positionMs = 250,
-                 });
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      PlaybackSessionState{
+                        .sourceListId = kAllTracksListId,
+                        .currentTrackId = current,
+                        .positionMs = 250,
+                      });
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     REQUIRE(restoredRes);
     REQUIRE(restoredRes->restored);
@@ -1552,12 +1706,13 @@ namespace ao::rt::test
     executor->runUntilIdle();
     auto const current = addTrackWithOwnedMedia(*runtimePtr, *executor, "session-resume.flac", "Deferred resume");
     runtimePtr->sources().reloadAllTracks();
-    storeSession(runtimePtr->workspaceConfigStore(),
-                 PlaybackSessionState{
-                   .sourceListId = kAllTracksListId,
-                   .currentTrackId = current,
-                   .positionMs = 250,
-                 });
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      PlaybackSessionState{
+                        .sourceListId = kAllTracksListId,
+                        .currentTrackId = current,
+                        .positionMs = 250,
+                      });
 
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     REQUIRE(restoredRes);
@@ -1634,12 +1789,13 @@ namespace ao::rt::test
     executor->runUntilIdle();
     auto const current = addPlayableTrack(*runtimePtr, *executor, "Stopped while deferred");
     runtimePtr->sources().reloadAllTracks();
-    storeSession(runtimePtr->workspaceConfigStore(),
-                 PlaybackSessionState{
-                   .sourceListId = kAllTracksListId,
-                   .currentTrackId = current,
-                   .positionMs = 250,
-                 });
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      PlaybackSessionState{
+                        .sourceListId = kAllTracksListId,
+                        .currentTrackId = current,
+                        .positionMs = 250,
+                      });
 
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     REQUIRE(restoredRes);
@@ -1686,12 +1842,13 @@ namespace ao::rt::test
     auto const sequenceBefore = snapshotBefore.succession;
     auto const playbackBefore = snapshotBefore.transport;
 
-    auto const payload = PlaybackSessionState{
-      .sourceListId = kAllTracksListId,
-      .currentTrackId = current,
-      .volume = 0.75F,
-      .muted = true,
-    };
+    auto const payload = savedFor(*runtimePtr,
+                                  PlaybackSessionState{
+                                    .sourceListId = kAllTracksListId,
+                                    .currentTrackId = current,
+                                    .volume = 0.75F,
+                                    .muted = true,
+                                  });
     storeSession(runtimePtr->workspaceConfigStore(), payload);
 
     bool muteAttempted = false;
@@ -2147,7 +2304,7 @@ namespace ao::rt::test
     stopSentinel.positionMs = 1;
     stopSentinel.shuffleMode = ShuffleMode::Off;
     REQUIRE(stopSentinel != expected);
-    storeSession(runtimePtr->workspaceConfigStore(), stopSentinel);
+    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), stopSentinel);
 
     runtimePtr->playback().commands().stop();
 
@@ -2157,7 +2314,7 @@ namespace ao::rt::test
     shutdownSentinel.positionMs = 2;
     shutdownSentinel.repeatMode = RepeatMode::Off;
     REQUIRE(shutdownSentinel != expected);
-    storeSession(runtimePtr->workspaceConfigStore(), shutdownSentinel);
+    storeSavedSession(*runtimePtr, runtimePtr->workspaceConfigStore(), shutdownSentinel);
 
     runtimePtr->shutdown();
 
@@ -2293,13 +2450,14 @@ namespace ao::rt::test
     REQUIRE(runtimePtr->savePlaybackSession());
     auto const sequenceBefore = runtimePtr->playback().snapshot().succession;
     auto const playbackBefore = runtimePtr->playback().snapshot().transport;
-    storeSession(runtimePtr->workspaceConfigStore(),
-                 PlaybackSessionState{
-                   .sourceListId = ListId{999'999},
-                   .quickFilterExpression = "$year >",
-                   .currentTrackId = live,
-                   .volume = 0.75F,
-                 });
+    storeSavedSession(*runtimePtr,
+                      runtimePtr->workspaceConfigStore(),
+                      PlaybackSessionState{
+                        .sourceListId = ListId{999'999},
+                        .quickFilterExpression = "$year >",
+                        .currentTrackId = live,
+                        .volume = 0.75F,
+                      });
 
     auto const restoredRes = runtimePtr->restorePlaybackSession();
     REQUIRE_FALSE(restoredRes);

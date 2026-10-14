@@ -64,7 +64,7 @@ namespace ao::rt::test
         , commandsFixture{libraryFixture.library(), changes, executor}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources, changes}
-        , workspace{executor, views, changes}
+        , workspace{executor, views, libraryFixture.library(), changes}
       {
       }
 

@@ -7,7 +7,7 @@ id: reference.windows-desktop-state
 
 This reference exhaustively defines the Windows-owned `desktop` group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml` and the complete `%LOCALAPPDATA%\Aobus\windows-theme.yaml` document for the unpackaged native Windows frontend.
 The `desktop` group is version 3.
-The shared version-2 `trackView.columnLayouts` and version-1 `trackView.presentations` groups defined by the [persisted presentation-state reference](../presentation/persisted-state.md) are not in this file: they are keyed by list id and live in the per-library `winui_layout.yaml` document instead.
+The shared version-3 `trackView.columnLayouts` and version-2 `trackView.presentations` groups defined by the [persisted presentation-state reference](../presentation/persisted-state.md) are not in this file: they are keyed by list id and live in the per-library `winui_layout.yaml` document instead.
 The theme document is strict and unversioned.
 
 ## Code boundary

@@ -9,6 +9,7 @@
 #include <ao/async/Task.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/utility/Uuid.h>
 
 #include <chrono>
 #include <cstdint>
@@ -78,6 +79,7 @@ namespace ao::rt
 
     ConfigStore& _config;
     Library& _library;
+    utility::UuidBytes _libraryId{};
     PlaybackSuccession& _succession;
     PlaybackTransport& _playbackTransport;
     PlaybackService& _playback;

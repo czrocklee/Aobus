@@ -5,6 +5,7 @@
 
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/utility/Uuid.h>
 
 #include <filesystem>
 #include <memory>
@@ -19,12 +20,13 @@ namespace ao::gtk
   /**
    * @brief Manages persistence of GTK layout state (column widths, etc.).
    *
-   * This class exclusively owns the `gtk_layout.yaml` file within a library.
+   * This class exclusively owns the `gtk_layout.yaml` file within a library,
+   * and stamps what it saves with the id of the library that file belongs to.
    */
   class GtkLayoutStateStore final
   {
   public:
-    explicit GtkLayoutStateStore(std::filesystem::path const& libraryPath);
+    GtkLayoutStateStore(std::filesystem::path const& libraryPath, utility::UuidBytes const& libraryId);
     ~GtkLayoutStateStore();
 
     GtkLayoutStateStore(GtkLayoutStateStore const&) = delete;
@@ -46,5 +48,6 @@ namespace ao::gtk
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;
+    utility::UuidBytes _libraryId;
   };
 } // namespace ao::gtk

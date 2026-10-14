@@ -9,6 +9,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/utility/Uuid.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -49,12 +50,18 @@ namespace ao::rt
 
     /// Committed library revision observed when this snapshot's transaction began.
     std::uint64_t revision() const noexcept;
+    /// Identity of the database this snapshot reads, fixed when that database was created.
+    utility::UuidBytes libraryId() const;
 
     // Tracks
     std::optional<TrackRow> trackRow(TrackId id) const;
     /// Evaluates one compiled scalar format; missing or unreadable tracks return nullopt.
     std::optional<std::string> formatTrack(TrackId id, query::FormatPlan const& plan) const;
     bool containsTrack(TrackId id) const;
+    /// Root-relative URI of one track; nullopt when the track is absent or its record is unreadable.
+    std::optional<std::string> trackUri(TrackId id) const;
+    /// True when some track's file has @p uri.
+    bool containsTrackUri(std::string_view uri) const;
     ResourceId trackCoverArtId(TrackId id) const;
     TrackFieldRawValue trackField(TrackId id, TrackField field) const;
     /// Owns canonical credits at this revision; a present empty list remains

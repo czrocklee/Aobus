@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/utility/StrongType.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <ryml.hpp>
@@ -38,6 +39,8 @@ namespace ao::yaml
                            std::string_view context,
                            UnknownKeyPolicy unknownKeyPolicy = UnknownKeyPolicy::Reject);
   Result<ryml::ConstNodeRef> requireChild(ryml::ConstNodeRef node, std::string_view key, std::string_view context);
+  /** Reads a scalar in the canonical UUID text form that utility::formatUuid writes. */
+  Result<utility::UuidBytes> uuidScalar(ryml::ConstNodeRef node, std::string_view context);
   ryml::NodeRef appendChild(ryml::NodeRef node, std::string_view key);
   void writeScalar(ryml::NodeRef node, std::string_view value);
   void writeScalar(ryml::NodeRef node, std::string const& value);

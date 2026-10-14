@@ -88,7 +88,7 @@ namespace ao::rt::test::playback_succession
     , commandsFixture{libraryFixture.library(), changes, executor}
     , sources{libraryFixture.library(), changes}
     , views{executor, libraryFixture.library(), sources, changes}
-    , workspace{executor, views, changes}
+    , workspace{executor, views, libraryFixture.library(), changes}
     , playbackTransport{makePlaybackTransport(asyncRuntime, libraryFixture.library(), notifications)}
   {
     PlaybackBootstrap{playbackTransport}.addProvider(makeReadyAudioProvider());

@@ -4,9 +4,14 @@
 #include <ao/utility/Uuid.h>
 
 #include <array>
+#include <charconv>
 #include <cstddef>
+#include <cstdint>
 #include <format>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <system_error>
 
 namespace ao::utility
 {
@@ -44,6 +49,51 @@ namespace ao::utility
       {
         result += std::format("{:02x}", static_cast<unsigned char>(id.at(byteIndex)));
         ++byteIndex;
+      }
+    }
+
+    return result;
+  }
+
+  std::optional<UuidBytes> parseUuid(std::string_view const text)
+  {
+    if (text.size() != kUuidTextLength)
+    {
+      return std::nullopt;
+    }
+
+    auto result = UuidBytes{};
+    std::size_t byteIndex = 0;
+    std::size_t charIndex = 0;
+
+    for (std::size_t groupIndex = 0; groupIndex < kUuidGroupByteCounts.size(); ++groupIndex)
+    {
+      if (groupIndex > 0)
+      {
+        if (text[charIndex] != '-')
+        {
+          return std::nullopt;
+        }
+
+        ++charIndex;
+      }
+
+      for (std::size_t groupByte = 0; groupByte < kUuidGroupByteCounts.at(groupIndex); ++groupByte)
+      {
+        auto const digits = text.substr(charIndex, kHexCharsPerByte);
+        std::uint8_t value = 0;
+        auto const [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), value, 16);
+
+        // For an unsigned type from_chars accepts no sign and no 0x prefix, so
+        // the pair is consumed only when both characters are hexadecimal digits.
+        if (error != std::errc{} || end != digits.data() + digits.size())
+        {
+          return std::nullopt;
+        }
+
+        result.at(byteIndex) = std::byte{value};
+        ++byteIndex;
+        charIndex += kHexCharsPerByte;
       }
     }
 

@@ -80,11 +80,12 @@ Covers appear without a rescan. A restored cover is shown as soon as some restor
 A **Metadata** or **Delta** restore instead takes each track's covers from the audio file itself, so a file you retagged since the backup shows its current art.
 A cover with neither a cached copy nor a music file that carries it shows no image; the track keeps its other data, and the picture returns when the file does.
 
-A **Restore** into an existing library gives every restored track and list an ID that library has never used, so numeric IDs in scripts change, and settings that name the old IDs find no record: per-list column layouts, open list views, and the saved playback position.
+A **Restore** into an existing library gives every restored track and list an ID that library has never used, so numeric IDs in scripts change, and settings that name the old IDs find no record: per-list column layouts and presentation choices and open list views are dropped, and the saved playback position is not resumed.
 A **Merge** keeps the ID of each existing track it updates; every list it imports gets an ID the library has never used.
 A new library numbers its tracks and lists from 1, so after an import its IDs can repeat the numbers in the backup.
-Settings that an earlier library left in the same music root's `.aobus` folder, such as per-list column layouts, are not tied to the new library: each applies by number to whichever restored track or list now has it, which may be a different record.
 Restoring into a new library keeps that library's own **Library ID**, which `aobus lib show` reports; a backup carries no Library ID of its own.
+Settings that an earlier library saved, such as those left in the same music root's `.aobus` folder, record that library's ID, so the new library ignores everything in them that names a track or list: open list views, per-list column layouts and presentation choices, and the playback position.
+Custom presentation presets and the **All Tracks** layout name no record and still apply.
 
 ## Related documents
 

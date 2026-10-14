@@ -5,23 +5,31 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 namespace ao::uimodel::test
 {
+  namespace
+  {
+    auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
+  } // namespace
+
   TEST_CASE("ListPresentationPreferenceYamlSchema - round-trip preserves opaque presentation ids",
             "[uimodel][unit][presentation-preference]")
   {
     auto state = ListPresentations::Snapshot{};
     state[ListId{10}] = "plugin-preset";
 
-    auto const documentRes = toListPresentationPreferenceDocument(state);
+    auto const documentRes = toListPresentationPreferenceDocument(state, kLibraryId);
 
     REQUIRE(documentRes);
-    CHECK(documentRes->version == 1);
+    CHECK(documentRes->version == 2);
+    CHECK(documentRes->libraryId == kLibraryId);
     REQUIRE(documentRes->preferences.size() == 1);
     CHECK(documentRes->preferences[0].listId == 10);
     CHECK(documentRes->preferences[0].presentationId == "plugin-preset");
@@ -45,7 +53,7 @@ namespace ao::uimodel::test
 
     SECTION("Unsupported version")
     {
-      document.version = 2;
+      document.version = 3;
       auto const res = listPresentationPreferenceStateFromDocument(document);
 
       REQUIRE_FALSE(res);
@@ -87,16 +95,34 @@ namespace ao::uimodel::test
     state[ListId{10}] = "plugin-preset";
     auto tree = ryml::Tree{yaml::callbacks()};
 
-    REQUIRE(ListPresentationPreferenceYamlSchema{}.serialize(tree.rootref(), state));
-    CHECK(yaml::scalarView(tree.rootref()["version"]) == "1");
+    REQUIRE(ListPresentationPreferenceYamlSchema{kLibraryId}.serialize(tree.rootref(), state));
+    CHECK(tree.rootref().num_children() == 3);
+    CHECK(yaml::scalarView(tree.rootref()["version"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(tree.rootref()["preferences"].is_seq());
     REQUIRE(tree.rootref()["preferences"].num_children() == 1);
     CHECK(yaml::scalarView(tree.rootref()["preferences"][0]["presentationId"]) == "plugin-preset");
 
     auto const decodedRes =
-      ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+      ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
     REQUIRE(decodedRes);
     CHECK((*decodedRes) == state);
+  }
+
+  TEST_CASE(
+    "ListPresentationPreferenceYamlSchema - a document saved for another library keeps only virtual-list preferences",
+    "[uimodel][unit][presentation-preference][yaml]")
+  {
+    auto state = ListPresentations::Snapshot{{ListId{10}, "albums"}, {rt::kAllTracksListId, "songs"}};
+    auto const otherLibraryId = utility::parseUuid("00000000-0000-4000-8000-000000000001").value();
+    auto tree = ryml::Tree{yaml::callbacks()};
+    REQUIRE(ListPresentationPreferenceYamlSchema{otherLibraryId}.serialize(tree.rootref(), state));
+
+    auto const decodedRes = ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), {});
+
+    REQUIRE(decodedRes);
+    // List 10 names an unrelated list here; All Tracks is the same view in every library.
+    CHECK((*decodedRes) == ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
   }
 
   TEST_CASE("ListPresentationPreferenceYamlSchema - rejects invalid YAML candidates",
@@ -108,7 +134,7 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::NotSupported);
@@ -116,24 +142,51 @@ namespace ao::uimodel::test
 
     SECTION("Missing required fields are rejected")
     {
-      auto const* source = "version: 1\n";
+      auto const* source = "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
       CHECK(decodedRes.error().message.contains("preferences"));
     }
 
-    SECTION("Unknown structural keys are rejected")
+    SECTION("Missing library id is rejected")
     {
-      auto const* source = "version: 1\npreferences: []\nfuture: true\n";
+      auto const* source = "version: 2\npreferences: []\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("libraryId"));
+    }
+
+    SECTION("Malformed library id is rejected")
+    {
+      auto const* source = "version: 2\nlibraryId: 123e4567\npreferences: []\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes =
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("libraryId"));
+    }
+
+    SECTION("Unknown structural keys are rejected")
+    {
+      auto const* source =
+        "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences: []\nfuture: true\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes =
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -143,7 +196,8 @@ namespace ao::uimodel::test
     SECTION("Unknown preference keys are rejected")
     {
       auto const* source = R"(
-        version: 1
+        version: 2
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         preferences:
           - listId: 1
             presentationId: albums
@@ -152,7 +206,7 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -161,11 +215,11 @@ namespace ao::uimodel::test
 
     SECTION("Preference sequence entries must be mappings")
     {
-      auto const* source = "version: 1\npreferences:\n  - malformed\n";
+      auto const* source = "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences:\n  - malformed\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -174,11 +228,11 @@ namespace ao::uimodel::test
 
     SECTION("Missing nested presentation id is rejected")
     {
-      auto const* source = "version: 1\npreferences:\n  - listId: 1\n";
+      auto const* source = "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences:\n  - listId: 1\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -188,7 +242,8 @@ namespace ao::uimodel::test
     SECTION("Malformed nested entries reject the whole candidate")
     {
       auto const* source = R"(
-        version: 1
+        version: 2
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         preferences:
           - listId: malformed
             presentationId: albums
@@ -196,7 +251,7 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
-        ListPresentationPreferenceYamlSchema{}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
+        ListPresentationPreferenceYamlSchema{kLibraryId}.deserialize(tree.rootref(), ListPresentations::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);

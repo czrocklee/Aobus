@@ -44,7 +44,7 @@ namespace ao::rt::test::playback_succession
     , commandsFixture{libraryFixture.library(), changes, executor}
     , sources{libraryFixture.library(), changes}
     , views{executor, libraryFixture.library(), sources, changes}
-    , workspace{executor, views, changes}
+    , workspace{executor, views, libraryFixture.library(), changes}
   {
     // A 48 kHz clock represents every whole millisecond exactly, including
     // the 3001 ms edge immediately above the strict restart threshold.

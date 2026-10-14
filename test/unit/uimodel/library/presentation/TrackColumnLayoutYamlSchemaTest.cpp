@@ -6,7 +6,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -15,6 +17,11 @@
 
 namespace ao::uimodel::test
 {
+  namespace
+  {
+    auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
+  } // namespace
+
   TEST_CASE("TrackColumnLayoutYamlSchema - round-trip uses stable field ids", "[uimodel][unit][track-column-layout]")
   {
     auto state = TrackColumnLayouts::Snapshot{};
@@ -23,10 +30,11 @@ namespace ao::uimodel::test
       TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .visible = false},
     };
 
-    auto const documentRes = toTrackColumnLayoutDocument(state);
+    auto const documentRes = toTrackColumnLayoutDocument(state, kLibraryId);
 
     REQUIRE(documentRes);
-    CHECK(documentRes->version == 2);
+    CHECK(documentRes->version == 3);
+    CHECK(documentRes->libraryId == kLibraryId);
     REQUIRE(documentRes->layouts.size() == 1);
     CHECK(documentRes->layouts[0].listId == 10);
     REQUIRE(documentRes->layouts[0].columns.size() == 2);
@@ -58,7 +66,7 @@ namespace ao::uimodel::test
 
     SECTION("Unsupported version")
     {
-      document.version = 3;
+      document.version = 4;
       auto const res = trackColumnLayoutsFromDocument(document);
 
       REQUIRE_FALSE(res);
@@ -192,10 +200,11 @@ namespace ao::uimodel::test
     };
     auto tree = ryml::Tree{yaml::callbacks()};
 
-    REQUIRE(TrackColumnLayoutYamlSchema{}.serialize(tree.rootref(), state));
+    REQUIRE(TrackColumnLayoutYamlSchema{kLibraryId}.serialize(tree.rootref(), state));
     auto const root = tree.rootref();
-    CHECK(root.num_children() == 2);
-    CHECK(yaml::scalarView(root["version"]) == "2");
+    CHECK(root.num_children() == 3);
+    CHECK(yaml::scalarView(root["version"]) == "3");
+    CHECK(yaml::scalarView(root["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(root["layouts"].is_seq());
     REQUIRE(root["layouts"].num_children() == 1);
     auto const layout = root["layouts"][0];
@@ -216,9 +225,27 @@ namespace ao::uimodel::test
     CHECK(yaml::scalarView(fixedColumn["weight"]) == "-1");
     CHECK(yaml::scalarView(fixedColumn["visible"]) == "false");
 
-    auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+    auto const decodedRes =
+      TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
     REQUIRE(decodedRes);
     CHECK((*decodedRes) == state);
+  }
+
+  TEST_CASE("TrackColumnLayoutYamlSchema - a document saved for another library keeps only virtual-list layouts",
+            "[uimodel][unit][track-column-layout][yaml]")
+  {
+    auto state = TrackColumnLayouts::Snapshot{};
+    state[ListId{10}] = {TrackColumnState{.field = rt::TrackField::Duration, .width = 200}};
+    state[rt::kAllTracksListId] = {TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.5}};
+    auto const otherLibraryId = utility::parseUuid("00000000-0000-4000-8000-000000000001").value();
+    auto tree = ryml::Tree{yaml::callbacks()};
+    REQUIRE(TrackColumnLayoutYamlSchema{otherLibraryId}.serialize(tree.rootref(), state));
+
+    auto const decodedRes = TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), {});
+
+    REQUIRE(decodedRes);
+    // List 10 names an unrelated list here; All Tracks is the same view in every library.
+    CHECK((*decodedRes) == TrackColumnLayouts::Snapshot{{rt::kAllTracksListId, state.at(rt::kAllTracksListId)}});
   }
 
   TEST_CASE("TrackColumnLayoutYamlSchema - rejects invalid YAML candidates",
@@ -229,7 +256,8 @@ namespace ao::uimodel::test
       auto const* source = "version: 99\nlayouts: malformed\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::NotSupported);
@@ -237,22 +265,50 @@ namespace ao::uimodel::test
 
     SECTION("Missing required fields are rejected")
     {
-      auto const* source = "version: 2\n";
+      auto const* source = "version: 3\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
       CHECK(decodedRes.error().message.contains("layouts"));
     }
 
-    SECTION("Unknown structural keys are rejected")
+    SECTION("Missing library id is rejected")
     {
-      auto const* source = "version: 2\nlayouts: []\nfuture: true\n";
+      auto const* source = "version: 3\nlayouts: []\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("libraryId"));
+    }
+
+    SECTION("Malformed library id is rejected")
+    {
+      auto const* source = "version: 3\nlibraryId: 123e4567\nlayouts: []\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+
+      REQUIRE_FALSE(decodedRes);
+      CHECK(decodedRes.error().code == Error::Code::FormatRejected);
+      CHECK(decodedRes.error().message.contains("libraryId"));
+    }
+
+    SECTION("Unknown structural keys are rejected")
+    {
+      auto const* source = "version: 3\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nlayouts: []\nfuture: true\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -262,7 +318,8 @@ namespace ao::uimodel::test
     SECTION("Unknown layout keys are rejected")
     {
       auto const* source = R"(
-        version: 2
+        version: 3
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         layouts:
           - listId: 10
             columns: []
@@ -270,7 +327,8 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -279,10 +337,11 @@ namespace ao::uimodel::test
 
     SECTION("Layout sequence entries must be mappings")
     {
-      auto const* source = "version: 2\nlayouts:\n  - malformed\n";
+      auto const* source = "version: 3\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nlayouts:\n  - malformed\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -291,10 +350,11 @@ namespace ao::uimodel::test
 
     SECTION("Layout columns are required")
     {
-      auto const* source = "version: 2\nlayouts:\n  - listId: 10\n";
+      auto const* source = "version: 3\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nlayouts:\n  - listId: 10\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -304,7 +364,8 @@ namespace ao::uimodel::test
     SECTION("Unknown column keys are rejected")
     {
       auto const* source = R"(
-        version: 2
+        version: 3
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         layouts:
           - listId: 10
             columns:
@@ -316,7 +377,8 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -325,10 +387,12 @@ namespace ao::uimodel::test
 
     SECTION("Column sequence entries must be mappings")
     {
-      auto const* source = "version: 2\nlayouts:\n  - listId: 10\n    columns:\n      - malformed\n";
+      auto const* source = "version: 3\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\nlayouts:\n  - listId: 10\n    "
+                           "columns:\n      - malformed\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -338,7 +402,8 @@ namespace ao::uimodel::test
     SECTION("Malformed nested entries reject the whole candidate")
     {
       auto const* source = R"(
-        version: 2
+        version: 3
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         layouts:
           - listId: 10
             columns:
@@ -349,7 +414,8 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);
@@ -359,7 +425,8 @@ namespace ao::uimodel::test
     SECTION("Column visibility is required")
     {
       auto const* source = R"(
-        version: 2
+        version: 3
+        libraryId: 123e4567-e89b-12d3-a456-426614174000
         layouts:
           - listId: 10
             columns:
@@ -369,7 +436,8 @@ namespace ao::uimodel::test
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-      auto const decodedRes = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
+      auto const decodedRes =
+        TrackColumnLayoutYamlSchema{kLibraryId}.deserialize(tree.rootref(), TrackColumnLayouts::Snapshot{});
 
       REQUIRE_FALSE(decodedRes);
       CHECK(decodedRes.error().code == Error::Code::FormatRejected);

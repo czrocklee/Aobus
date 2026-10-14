@@ -15,6 +15,7 @@
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/library/RecordingDate.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/TrackMutation.h>
@@ -1080,13 +1081,16 @@ namespace
                    delegate.membershipRequestCount == membershipRequestCount,
                  "late native callbacks after session release must not reach the delegate");
   }
-  ao::uimodel::ListPresentations::Snapshot readPreferences(std::filesystem::path const& musicRoot)
+  ao::uimodel::ListPresentations::Snapshot readPreferences(std::filesystem::path const& musicRoot,
+                                                           ao::rt::AppRuntime& runtime)
   {
     auto store = ao::rt::ConfigStore{ao::rt::LibraryPaths{musicRoot}.databasePath() / "appkit-workspace.yaml",
                                      ao::rt::ConfigStore::OpenMode::ReadOnly};
     auto result = ao::uimodel::ListPresentations::Snapshot{};
-    auto const loadedRes = store.load(
-      ao::uimodel::kListPresentationsConfigGroup, result, ao::uimodel::ListPresentationPreferenceYamlSchema{});
+    auto const loadedRes =
+      store.load(ao::uimodel::kListPresentationsConfigGroup,
+                 result,
+                 ao::uimodel::ListPresentationPreferenceYamlSchema{runtime.library().snapshot().libraryId()});
     AO_INVARIANT(loadedRes && *loadedRes, "Preferences must be durably readable through the shared schema");
     return result;
   }
@@ -1111,7 +1115,7 @@ namespace
     auto text = readText(workspaceStorePath(musicRoot));
     auto const group = text.find("trackView.presentations:");
     AO_INVARIANT(group != std::string::npos, "The preference group must be persisted before the version probe");
-    constexpr auto kCurrentVersion = std::string_view{"version: 1"};
+    constexpr auto kCurrentVersion = std::string_view{"version: 2"};
     auto const version = text.find(kCurrentVersion, group);
     AO_INVARIANT(version != std::string::npos, "The preference group must carry its current version");
     text.replace(version, kCurrentVersion.size(), "version: 99");
@@ -1157,11 +1161,11 @@ namespace
       deletedId = createList("Deleted preference List");
       session.navigate(firstId);
       auto const songsRes = session.setPresentation("songs");
-      AO_INVARIANT(songsRes && readPreferences(musicRoot).at(firstId) == "songs",
+      AO_INVARIANT(songsRes && readPreferences(musicRoot, runtime).at(firstId) == "songs",
                    "An accepted normal choice must durably pin only the base List");
       auto const plainViewId = runtime.workspace().snapshot().activeViewId;
       auto const sortRes = session.sort(rt::TrackSortField::Title, false);
-      AO_INVARIANT(sortRes && readPreferences(musicRoot).at(firstId) == "songs",
+      AO_INVARIANT(sortRes && readPreferences(musicRoot, runtime).at(firstId) == "songs",
                    "A native column sort must not overwrite the pinned presentation");
       session.navigate(secondId);
       auto const artistsRes = session.setPresentation("artists");
@@ -1188,17 +1192,17 @@ namespace
       AO_INVARIANT(backRes);
       auto replayRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
       AO_INVARIANT(replayRes && replayRes->presentation.id == "appkit-column-sort" &&
-                     replayRes->filterExpression.empty() && readPreferences(musicRoot).at(firstId) == "songs",
+                     replayRes->filterExpression.empty() && readPreferences(musicRoot, runtime).at(firstId) == "songs",
                    "History must replay exact specs without pinning them");
       auto const forwardRes = runtime.workspace().goForward();
       AO_INVARIANT(forwardRes);
-      auto const beforeRejected = readPreferences(musicRoot);
+      auto const beforeRejected = readPreferences(musicRoot, runtime);
       auto const unknownRes = session.setPresentation("unknown-preference-probe");
-      AO_INVARIANT(!unknownRes && readPreferences(musicRoot) == beforeRejected,
+      AO_INVARIANT(!unknownRes && readPreferences(musicRoot, runtime) == beforeRejected,
                    "A rejected selection must leave the preference map unchanged");
       auto const autoRes = session.setPresentation("");
       AO_INVARIANT(
-        autoRes && !readPreferences(musicRoot).contains(firstId), "Auto must clear rather than pin its spec");
+        autoRes && !readPreferences(musicRoot, runtime).contains(firstId), "Auto must clear rather than pin its spec");
       auto autoViewRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
       AO_INVARIANT(autoViewRes && autoViewRes->presentation.id == "tagging",
                    "A tag-backed List's Auto command must apply its recommendation");
@@ -1206,7 +1210,7 @@ namespace
       AO_INVARIANT(customRes);
       session.navigate(secondId);
       auto const selectedCustomRes = session.setPresentation(custom.spec.id);
-      AO_INVARIANT(selectedCustomRes && readPreferences(musicRoot).at(secondId) == custom.spec.id,
+      AO_INVARIANT(selectedCustomRes && readPreferences(musicRoot, runtime).at(secondId) == custom.spec.id,
                    "Restorable custom presets must be eligible normal choices");
       auto const deletionAdmissionRes = model.beginDeletion(deletedId);
       AO_INVARIANT(deletionAdmissionRes);
@@ -1234,16 +1238,16 @@ namespace
       }
 
       // Hand-authored state through the same retained writer, including an offline deletion.
-      auto const seededRes =
-        runtime.workspaceConfigStore().save(uimodel::kListPresentationsConfigGroup,
-                                            uimodel::ListPresentations::Snapshot{{firstId, "unavailable-custom"},
-                                                                                 {secondId, custom.spec.id},
-                                                                                 {deletedId, "songs"},
-                                                                                 {rt::kAllTracksListId, "songs"}},
-                                            uimodel::ListPresentationPreferenceYamlSchema{});
+      auto const seededRes = runtime.workspaceConfigStore().save(
+        uimodel::kListPresentationsConfigGroup,
+        uimodel::ListPresentations::Snapshot{{firstId, "unavailable-custom"},
+                                             {secondId, custom.spec.id},
+                                             {deletedId, "songs"},
+                                             {rt::kAllTracksListId, "songs"}},
+        uimodel::ListPresentationPreferenceYamlSchema{runtime.library().snapshot().libraryId()});
       AO_INVARIANT(seededRes);
       session.checkpoint();
-      AO_INVARIANT(readPreferences(musicRoot).at(firstId) == "unavailable-custom",
+      AO_INVARIANT(readPreferences(musicRoot, runtime).at(firstId) == "unavailable-custom",
                    "A later workspace checkpoint must preserve the preference sibling group");
     }
 
@@ -1268,7 +1272,7 @@ namespace
       model.save();
       appkit::test::requireWaitUntil([&] { return model.state().completed; }, "The picker-less List edit must save");
       model.cancel();
-      AO_INVARIANT(readPreferences(musicRoot).at(firstId) == "unavailable-custom",
+      AO_INVARIANT(readPreferences(musicRoot, runtime).at(firstId) == "unavailable-custom",
                    "A picker-less editor must not replace a dangling presentation choice");
       session.navigate(secondId);
       auto customViewRes = runtime.views().findTrackListState(runtime.workspace().snapshot().activeViewId);
@@ -1276,7 +1280,7 @@ namespace
                    "The restored catalog must resolve a saved custom specification exactly");
       auto const songsRes = session.setPresentation("songs");
       AO_INVARIANT(songsRes);
-      auto const loadedPreferences = readPreferences(musicRoot);
+      auto const loadedPreferences = readPreferences(musicRoot, runtime);
       AO_INVARIANT(loadedPreferences.at(firstId) == "unavailable-custom" &&
                      loadedPreferences.at(rt::kAllTracksListId) == "songs" && !loadedPreferences.contains(deletedId),
                    "An unrelated save must retain opaque/virtual ids and omit deleted ids pruned at restore");
@@ -1287,11 +1291,11 @@ namespace
       model.save();
       appkit::test::requireWaitUntil([&] { return model.state().completed; }, "Preference deletion must commit");
       model.cancel();
-      AO_INVARIANT(!readPreferences(musicRoot).contains(secondId),
+      AO_INVARIANT(!readPreferences(musicRoot, runtime).contains(secondId),
                    "A live committed List deletion must retire and persist its preference");
       session.navigate(firstId);
       auto const autoRes = session.setPresentation("");
-      AO_INVARIANT(autoRes && !readPreferences(musicRoot).contains(firstId),
+      AO_INVARIANT(autoRes && !readPreferences(musicRoot, runtime).contains(firstId),
                    "Explicit Auto must clear even an unavailable persisted id");
       session.navigate(rt::kAllTracksListId);
       session.checkpoint();

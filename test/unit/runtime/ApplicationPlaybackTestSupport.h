@@ -71,7 +71,7 @@ namespace ao::rt::test
     LibraryCommandsFixture commandsFixture{libraryFixture.library(), changes, executor};
     TrackSourceCache sources{libraryFixture.library(), changes};
     ViewService views{executor, libraryFixture.library(), sources, changes};
-    WorkspaceService workspace{executor, views, changes};
+    WorkspaceService workspace{executor, views, libraryFixture.library(), changes};
     NotificationService notifications{asyncRuntime};
     PlaybackTransport playbackTransport{makePlaybackTransport(asyncRuntime, libraryFixture.library(), notifications)};
     PlaybackSuccession

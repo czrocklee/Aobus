@@ -30,6 +30,7 @@ Frontends choose lifecycle points and inject the store but do not deserialize wo
 ## Invariants
 
 - Workspace session state belongs to one selected library and is not global preference state.
+- A session saved for another library opens none of its views; only its custom presets, which name no library object, are restored.
 - A session never persists `ViewId`, source leases, projection rows, selection, history, scroll, widget, or playback state.
 - Every persisted view is reconstructed against the active runtime's library and source cache.
 - Restore publishes no workspace aggregate until every candidate view has been created.
@@ -60,7 +61,7 @@ For each live view it records list, filter, group, sort, and exact presentation.
 For a nonempty workspace, the active view contributes its position in that ordered sequence.
 An empty workspace contributes the canonical index `0`.
 A nonempty live snapshot must contain its active id. `saveSession()` deliberately seeds an out-of-range index until it encounters that id, so a broken live aggregate violates the serialization contract instead of being written as an ambiguous session.
-The session also copies the snapshot's complete custom-preset collection.
+The session also copies the snapshot's complete custom-preset collection and records the open library's id.
 
 The command passes the captured semantic state and `WorkspaceSessionYamlSchema` to one `ConfigStore::save("workspace", state, schema)` call.
 The schema converts through its private document and emits the canonical YAML subtree.
@@ -76,6 +77,7 @@ The schema strictly deserializes its private document and returns one complete s
 - File, parse, node-shape, missing/extra field, sequence-element, version, or stable-vocabulary failure returns before view creation.
 - An empty candidate requires active-view index `0`; a nonempty candidate requires an index smaller than `openViews.size()`.
 - Index validation completes before the first candidate view is created.
+- A candidate whose `libraryId` differs from the open library's id loses its views and active index before view creation, because its list ids were issued by another library; restore then continues as an empty candidate carrying the saved custom presets.
 - Successful deserialize attempts to create every configured view through `ViewService`.
 - If a later creation fails, all earlier candidate ids are destroyed and the error returns.
 
@@ -173,7 +175,8 @@ The [workspace session state reference](../../reference/workspace/session-state.
 
 ## Test map
 
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, exact same-list view focus, one-event multi-view restore, initial history, index rejection, empty candidates, and candidate cleanup.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, exact same-list view focus, one-event multi-view restore, initial history, index rejection, empty candidates, another library's session, and candidate cleanup.
+- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/unit/runtime/LibraryRestoreStateIdentityTest.cpp) proves that a session saved before a library restore opens no view over another list.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
