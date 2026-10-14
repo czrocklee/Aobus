@@ -29,7 +29,8 @@ namespace ao::rt
     std::string quickFilterExpression{};
     std::vector<TrackSortTerm> sortBy{};
     TrackId currentTrackId = kInvalidTrackId;
-    // Empty when the current track had no URI when it played.
+    // Canonical library URI of the current track's file as the library last
+    // confirmed it, which follows a relink while the app runs.
     std::string currentTrackUri{};
     std::uint64_t anchorIndex = 0;
     std::uint64_t positionMs = 0;

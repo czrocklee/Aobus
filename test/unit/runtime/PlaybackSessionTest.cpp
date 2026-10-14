@@ -29,6 +29,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/rt/AppRuntime.h>
@@ -52,6 +53,7 @@
 #include <ao/rt/library/LibraryJobs.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/rt/ordering/TextOrderingPolicy.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -170,6 +172,29 @@ namespace ao::rt::test
       return trackId;
     }
 
+    // Moves a track's file under the music root and relinks it with a scan,
+    // which matches the moved file by its indexed audio identity.
+    template<typename ExecutorT>
+    void relinkByScan(AppRuntime& runtime,
+                      ExecutorT& executor,
+                      std::string_view const fromName,
+                      std::string_view const toName,
+                      TrackId const trackId)
+    {
+      auto& jobs = runtime.library().jobs();
+      REQUIRE(runRuntimeTask(runtime, jobs.backfillAudioIdentityAsync()));
+      auto const destination = runtime.musicRoot() / toName;
+      std::filesystem::create_directories(destination.parent_path());
+      std::filesystem::rename(runtime.musicRoot() / fromName, destination);
+      auto planRes = runRuntimeTask(runtime, jobs.buildScanPlanAsync());
+      REQUIRE(planRes);
+      REQUIRE(planRes->count(ScanClassification::Moved) == 1);
+      auto const appliedRes = runRuntimeTask(runtime, jobs.applyScanPlanAsync(std::move(*planRes)));
+      REQUIRE(appliedRes);
+      REQUIRE(appliedRes->relinkedIds == std::vector{trackId});
+      settlePublication(executor);
+    }
+
     ViewId createView(AppRuntime& runtime, std::string filterExpression = {}, std::vector<TrackSortTerm> sortBy = {})
     {
       runtime.sources().reloadAllTracks();
@@ -232,7 +257,8 @@ namespace ao::rt::test
     {
       auto const reader = runtime.library().snapshot();
       session.libraryId = reader.libraryId();
-      session.currentTrackUri = reader.trackUri(session.currentTrackId).value_or("");
+      // An absent track keeps a file no track holds, as an ordinary deletion does.
+      session.currentTrackUri = reader.trackUri(session.currentTrackId).value_or("deleted.flac");
       return session;
     }
 
@@ -1373,6 +1399,81 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
+  TEST_CASE("PlaybackSession - rejects a missing or non-canonical current track URI",
+            "[runtime][unit][playback-session][schema]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
+    auto const trackId = addPlayableTrack(*runtimePtr, "Current");
+    runtimePtr->sources().reloadAllTracks();
+
+    SECTION("a missing currentTrackUri")
+    {
+      // The open library's id, so parsing alone can reject the document.
+      auto const libraryIdLine =
+        std::format("  libraryId: {}\n", utility::formatUuid(runtimePtr->library().snapshot().libraryId()));
+      auto yaml = rawPlaybackSessionYaml(trackId, "  schemaVersion: 5\n", "[]", libraryIdLine);
+      auto const uriLine = std::string_view{"  currentTrackUri: current.flac\n"};
+      auto const uriPosition = yaml.find(uriLine);
+      REQUIRE(uriPosition != std::string::npos);
+      yaml.erase(uriPosition, uriLine.size());
+      writeWorkspaceYaml(tempDir, yaml);
+
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE_FALSE(restoredRes);
+      CHECK(restoredRes.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("a URI that no library track can carry")
+    {
+      auto uri = std::string{};
+      auto currentTrackId = trackId;
+
+      // An absent id would otherwise reach anchor replacement as an ordinary deletion.
+      SECTION("for a present track")
+      {
+      }
+
+      SECTION("for an absent track")
+      {
+        currentTrackId = TrackId{999'999};
+      }
+
+      SECTION("empty")
+      {
+      }
+
+      SECTION("absolute")
+      {
+        uri = "/music/current.flac";
+      }
+
+      SECTION("with a backslash separator")
+      {
+        uri = "albums\\current.flac";
+      }
+
+      SECTION("longer than a library URI")
+      {
+        uri = std::string(library::LibraryUri::kMaxLength + 1, 'a');
+      }
+
+      storeSession(runtimePtr->workspaceConfigStore(),
+                   PlaybackSessionState{
+                     .libraryId = runtimePtr->library().snapshot().libraryId(),
+                     .sourceListId = kAllTracksListId,
+                     .currentTrackId = currentTrackId,
+                     .currentTrackUri = uri,
+                   });
+
+      auto const restoredRes = runtimePtr->restorePlaybackSession();
+      REQUIRE_FALSE(restoredRes);
+      CHECK(restoredRes.error().code == Error::Code::CorruptData);
+    }
+
+    CHECK(runtimePtr->playback().snapshot().succession.sourceState == PlaybackSourceState::Inactive);
+  }
+
   TEST_CASE("PlaybackSession - restore resolves bound, gap, and replacement rows",
             "[runtime][unit][playback-session][restore-matrix]")
   {
@@ -1482,9 +1583,16 @@ namespace ao::rt::test
       payload.libraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
     }
 
-    SECTION("a present track whose file changed")
+    SECTION("a present track whose file another track holds")
     {
       payload.currentTrackUri = secondUri;
+    }
+
+    SECTION("a present track whose saved file no track holds")
+    {
+      // A relink made while the app was closed and an id reissued by a rolled-back
+      // database look the same here, so neither resumes.
+      payload.currentTrackUri = "elsewhere/first.flac";
     }
 
     SECTION("an absent track whose file another id now holds")
@@ -1551,6 +1659,101 @@ namespace ao::rt::test
     auto const reader = runtimePtr->library().snapshot();
     CHECK(saved.currentTrackId == beta);
     CHECK_FALSE(reader.containsTrack(beta));
+    CHECK(reader.containsTrackUri(saved.currentTrackUri));
+
+    runtimePtr->playback().commands().stop();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    CHECK_FALSE(restoredRes->restored);
+  }
+
+  TEST_CASE("PlaybackSession - a session saved after a live relink restores the relinked track at its position",
+            "[runtime][integration][playback-session][restore-matrix]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    addReadyAudioProvider(*runtimePtr);
+    auto const trackId = addTrackWithOwnedMedia(*runtimePtr, *executor, "before-move.flac", "Moved");
+    auto const viewId = createView(*runtimePtr);
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
+    runtimePtr->playback().commands().seek(std::chrono::milliseconds{500});
+    relinkByScan(*runtimePtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
+
+    // The relink keeps the id and changes the file, so the save records the library's URI.
+    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const saved = storedSession(runtimePtr->workspaceConfigStore());
+    CHECK(saved.currentTrackId == trackId);
+    CHECK(saved.currentTrackUri == "moved/after-move.flac");
+    CHECK(saved.positionMs == 500);
+
+    runtimePtr->playback().commands().stop();
+    auto const restoredRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restoredRes);
+    CHECK(restoredRes->restored);
+    CHECK(restoredRes->trackId == trackId);
+    // A replacement would start from zero; the relinked track keeps its position.
+    CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{500});
+  }
+
+  TEST_CASE("PlaybackSession - a relink of the current track requests a debounced save",
+            "[runtime][integration][playback-session][timing]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto sleeper = ControlledSleeper{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    runtimePtr->startPlaybackSessionPersistence();
+    addReadyAudioProvider(*runtimePtr);
+    executor->runUntilIdle();
+    auto const trackId = addTrackWithOwnedMedia(*runtimePtr, *executor, "before-move.flac", "Moved");
+    auto const viewId = createView(*runtimePtr);
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
+    REQUIRE(runtimePtr->savePlaybackSession());
+    executor->runUntilIdle();
+    REQUIRE(storedSession(playbackSessionStore).currentTrackUri == "before-move.flac");
+
+    // No playback change follows the relink, so only the relink can schedule this save.
+    relinkByScan(*runtimePtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
+    REQUIRE(sleeper.tryFireNext(std::chrono::seconds{1}));
+    executor->checkQueued();
+    REQUIRE(executor->tryRunOne());
+    CHECK(storedSession(playbackSessionStore).currentTrackUri == "moved/after-move.flac");
+  }
+
+  TEST_CASE("PlaybackSession - a session saved after a live relink and a live library restore is not resumed",
+            "[runtime][integration][playback-session][restore-matrix]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto backupDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtimePtr = makePlaybackSessionRuntime(tempDir, executor);
+    // Frontends start observation after restore; it sees the relink publish.
+    runtimePtr->startPlaybackSessionPersistence();
+    addReadyAudioProvider(*runtimePtr);
+    auto const trackId = addTrackWithOwnedMedia(*runtimePtr, *executor, "before-move.flac", "Moved");
+    auto const viewId = createView(*runtimePtr);
+    REQUIRE(startFromViewAndWait(*runtimePtr, *executor, viewId, trackId));
+    relinkByScan(*runtimePtr, *executor, "before-move.flac", "moved/after-move.flac", trackId);
+
+    // The backup holds the relinked file, which the restore gives a new id.
+    auto const yamlPath = backupDir.path() / "backup.yaml";
+    auto& jobs = runtimePtr->library().jobs();
+    REQUIRE(runRuntimeTask(*runtimePtr, jobs.exportLibraryAsync(yamlPath, ExportMode::Full)));
+    auto planRes = runRuntimeTask(*runtimePtr, jobs.prepareLibraryImportAsync(yamlPath, ImportMode::Restore));
+    REQUIRE(planRes);
+    REQUIRE(runRuntimeTask(*runtimePtr, jobs.applyLibraryImportPlanAsync(std::move(*planRes))));
+    executor->drain();
+
+    // The save keeps the file the track last played, not the one the transport opened.
+    REQUIRE(runtimePtr->savePlaybackSession());
+    auto const saved = storedSession(runtimePtr->workspaceConfigStore());
+    auto const reader = runtimePtr->library().snapshot();
+    CHECK(saved.currentTrackId == trackId);
+    CHECK_FALSE(reader.containsTrack(trackId));
+    CHECK(saved.currentTrackUri == "moved/after-move.flac");
     CHECK(reader.containsTrackUri(saved.currentTrackUri));
 
     runtimePtr->playback().commands().stop();

@@ -26,7 +26,7 @@ The schema requires every root field:
 | `quickFilterExpression` | String | Empty | Ad-hoc filter applied over the source. |
 | `sortBy` | Sequence of `TrackSortTerm` | Empty | Ordered field/direction terms. |
 | `currentTrackId` | `TrackId` | Invalid id | Last restorable subject. |
-| `currentTrackUri` | String | Empty | Library URI of that subject's file when it was resolved for playback; empty when none was. |
+| `currentTrackUri` | String | Empty | Library URI of that subject's file as the library last confirmed it, including after a relink while the app runs; the URI it was opened with when the library never confirmed another. A saved value is never empty. |
 | `anchorIndex` | Unsigned 64-bit integer | `0` | Saved semantic cursor anchor. |
 | `positionMs` | Unsigned 64-bit integer | `0` | Transport offset in milliseconds. |
 | `shuffleMode` | `ShuffleMode` | `Off` | Current shuffle policy. |
@@ -61,6 +61,7 @@ The payload contains none of these:
 
 - `schemaVersion` must equal `5`.
 - `libraryId` must be a canonical 8-4-4-4-12 hexadecimal UUID.
+- `currentTrackUri` must be a canonical library URI.
 - List and track identities must satisfy semantic restore validation against the active library.
 - Anchor and position must convert to their runtime index/duration representations without overflow.
 - Shuffle and repeat values must be supported enumerators.

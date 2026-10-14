@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/utility/Uuid.h>
@@ -24,6 +25,7 @@
 #include <fstream>
 #include <ios>
 #include <string>
+#include <vector>
 
 namespace ao::tui::test
 {
@@ -162,6 +164,42 @@ namespace ao::tui::test
     CHECK(loadedPresentations == presentations);
     CHECK(navigationEnabled);
     CHECK(widths == PanelWidths{});
+  }
+
+  TEST_CASE("LayoutStateStore - a file saved for another library restores only virtual-list entries",
+            "[tui][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const libraryPath = std::filesystem::path{tempDir.path()};
+    auto const allTracksColumns =
+      std::vector{uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 9, .weight = -1.0}};
+    auto const otherLibraryId = utility::parseUuid("00000000-0000-4000-8000-000000000001").value();
+    auto const savedWidths = PanelWidths{.navigation = 32, .detail = 48};
+
+    {
+      auto store = LayoutStateStore{libraryPath, otherLibraryId};
+      REQUIRE(store.save(
+        uimodel::TrackColumnLayouts::Snapshot{
+          {ListId{10}, {uimodel::TrackColumnState{.field = rt::TrackField::Duration, .width = 20, .weight = -1.0}}},
+          {rt::kAllTracksListId, allTracksColumns},
+        },
+        uimodel::ListPresentations::Snapshot{{ListId{10}, "albums"}, {rt::kAllTracksListId, "songs"}},
+        false,
+        savedWidths));
+    }
+
+    auto const store = LayoutStateStore{libraryPath, kLibraryId};
+    auto columns = uimodel::TrackColumnLayouts::Snapshot{};
+    auto presentations = uimodel::ListPresentations::Snapshot{};
+    auto widths = PanelWidths{};
+    bool navigationEnabled = true;
+    store.load(columns, presentations, navigationEnabled, widths);
+
+    CHECK(columns == uimodel::TrackColumnLayouts::Snapshot{{rt::kAllTracksListId, allTracksColumns}});
+    CHECK(presentations == uimodel::ListPresentations::Snapshot{{rt::kAllTracksListId, "songs"}});
+    // Terminal geometry and navigation name no library object, so they still apply.
+    CHECK_FALSE(navigationEnabled);
+    CHECK(widths == savedWidths);
   }
 
   TEST_CASE("LayoutStateStore - loads valid groups independently and never rewrites on load", "[tui][unit][config]")

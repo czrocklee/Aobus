@@ -81,6 +81,7 @@ A **Metadata** or **Delta** restore instead takes each track's covers from the a
 A cover with neither a cached copy nor a music file that carries it shows no image; the track keeps its other data, and the picture returns when the file does.
 
 A **Restore** into an existing library gives every restored track and list an ID that library has never used, so numeric IDs in scripts change, and settings that name the old IDs find no record: per-list column layouts and presentation choices and open list views are dropped, and the saved playback position is not resumed.
+After a restore made while the app was closed, the **All Tracks** layout and presentation choice name no record and still apply; a restore applied in the running app resets every column layout and presentation choice, **All Tracks** included.
 A **Merge** keeps the ID of each existing track it updates; every list it imports gets an ID the library has never used.
 A new library numbers its tracks and lists from 1, so after an import its IDs can repeat the numbers in the backup.
 Restoring into a new library keeps that library's own **Library ID**, which `aobus lib show` reports; a backup carries no Library ID of its own.

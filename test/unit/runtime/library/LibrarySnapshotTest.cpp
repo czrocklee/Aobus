@@ -21,6 +21,7 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -279,6 +280,34 @@ namespace ao::rt::test
 
     CHECK(scope.resolve(seeded.artistId) == "An Artist");
     CHECK(scope.resolve(seeded.albumId) == "The Album");
+  }
+
+  TEST_CASE("LibrarySnapshot - looks up a track's URI and whether any track holds a URI",
+            "[runtime][unit][library][readmodel]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto const seeded = seedLibrary(tempDir);
+    auto runtimePtr = makeCoreRuntime(tempDir);
+    auto const snapshot = runtimePtr->library().snapshot();
+
+    SECTION("trackUri reads a live track and reports a missing one as absent")
+    {
+      CHECK(snapshot.trackUri(seeded.trackId) == kTrackUri);
+      CHECK(snapshot.trackUri(seeded.otherTrackId) == "other.flac");
+      CHECK_FALSE(snapshot.trackUri(TrackId{999'999}));
+      CHECK_FALSE(snapshot.trackUri(kInvalidTrackId));
+    }
+
+    SECTION("containsTrackUri matches only the canonical URI of a live track")
+    {
+      CHECK(snapshot.containsTrackUri(kTrackUri));
+      CHECK(snapshot.containsTrackUri("other.flac"));
+      CHECK_FALSE(snapshot.containsTrackUri("music/missing.flac"));
+      CHECK_FALSE(snapshot.containsTrackUri(""));
+      CHECK_FALSE(snapshot.containsTrackUri("music\\song.flac"));
+      CHECK_FALSE(snapshot.containsTrackUri("/music/song.flac"));
+      CHECK_FALSE(snapshot.containsTrackUri(std::string(library::LibraryUri::kMaxLength + 1, 'a')));
+    }
   }
 
   TEST_CASE("Library - published facade identity is nonmovable", "[runtime][unit][library]")

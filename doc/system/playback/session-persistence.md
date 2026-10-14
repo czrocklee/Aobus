@@ -70,7 +70,7 @@ The save debounce is one second.
 
 ### Validate
 
-Restore rejects a schema mismatch, invalid ids, overflowing anchor/position, unsupported shuffle/repeat/volume, invalid or duplicate sort fields, excess sort terms, and a filter that cannot parse and compile.
+Restore rejects a schema mismatch, invalid ids, a current-track URI that is not a canonical library URI, overflowing anchor/position, unsupported shuffle/repeat/volume, invalid or duplicate sort fields, excess sort terms, and a filter that cannot parse and compile.
 This occurs before source lookup, so source absence cannot hide malformed serialized state.
 
 ### Check identity
@@ -81,14 +81,16 @@ Restore drops the payload, reporting no restored session and leaving live state 
 | Finding | Why the payload is dropped |
 |---|---|
 | `libraryId` differs from the open library's id. | Its ids were issued by another library and may name unrelated objects here. |
-| `currentTrackId` names a track whose URI differs from `currentTrackUri`. | The track no longer plays the file whose position was saved. |
+| `currentTrackId` names a track whose URI differs from `currentTrackUri`. | The id now names another file. A relink made while the app was closed moves the same audio, but a database rolled back to an older copy can reissue the id to an unrelated file, and the two look alike here. |
 | `currentTrackId` names no track, but some track has `currentTrackUri`. | The library replaced the saved track, as a restore does, so the saved anchor and position describe a record that is gone. |
 
 When the id names a track with the saved URI, or neither the id nor the URI is present, restore continues to source resolution.
 The second case is an ordinary deletion and keeps anchor replacement.
 That includes restoring an older backup that lacks the saved Track: the Track is gone and no Track holds its file, so restore may select a replacement at the saved anchor and start it from the beginning.
-Because a library never reissues a track id, these checks compare the saved subject with the one record that id can name.
-A live library restore leaves the current subject playing under its old id, so a later save records that id with its URI and the next restore drops the payload by the last rule.
+A library never reissues a track id while its database moves forward, so these checks compare the saved subject with the one record that id can name; only a rollback to an older database copy breaks that, and the URI check guards it.
+Save records the URI the library last confirmed for the subject, because a relink while the app runs keeps the id and changes the file; such a session resumes.
+That URI is the subject's current one while it is a live track, refreshed when the library publishes the subject as mutated; that refresh also requests a debounced save, so a relink reaches disk without another playback change.
+A live library restore leaves the current subject playing under an id the library no longer has, so a later save records that id with its last confirmed URI, or with the URI it was opened with when the library never confirmed another, and the next restore drops the payload by the last rule when the restored library holds that file.
 
 ### Resolve current and source
 
@@ -275,7 +277,7 @@ The exact ordering belongs to interactive lifecycle architecture.
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, the identity check, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, structural failure atomicity, and repeated frozen writes across stop and shutdown.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, the identity check, resumption after a live relink, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, structural failure atomicity, and repeated frozen writes across stop and shutdown.
 - [`LibraryRestoreStateIdentityTest.cpp`](../../../test/unit/runtime/LibraryRestoreStateIdentityTest.cpp) protects that playback, workspace, and presentation state naming objects in a restored backup binds to none of the objects the restore recreated, whether the restore renumbered the same database or replaced it.
 - [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the successor root-commit gate and no-I/O playback-write seal against natural, explicit, window, and shutdown playback saves while ordinary window, output, layout, and workspace saves continue over the shared GTK store.
 - [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
