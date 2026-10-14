@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/library/TrackRecordValidation.h"
 #include "test/unit/library/TrackBuilderTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
+#include <ao/library/RecordingDate.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 
@@ -17,7 +20,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::library::test
@@ -66,123 +71,75 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - cold serialization rejects values that exceed header fields",
+  TEST_CASE("TrackBuilder - cold serialization names the component that crosses the record limit",
             "[library][unit][track-builder][overflow]")
   {
-    constexpr std::size_t kUint16Max = std::numeric_limits<std::uint16_t>::max();
-    constexpr auto kUint16Overflow = kUint16Max + 1;
-
     auto context = TrackSerializationFixture{};
+    auto builder = TrackBuilder::makeEmpty();
+    builder.property().uri("track.flac");
 
-    SECTION("URI length")
+    auto const checkRejectedAt = [&context, &builder](std::string_view const component)
     {
-      auto builder = TrackBuilder::makeEmpty();
-      auto const uri = std::string(kUint16Overflow, 'u');
-      builder.property().uri(uri);
-
       auto const res = context.trySerializeCold(builder);
       REQUIRE_FALSE(res);
+      INFO(res.error().message);
       CHECK(res.error().code == Error::Code::ValueTooLarge);
-    }
+      CHECK(res.error().message.starts_with(component));
+    };
 
-    SECTION("Custom metadata value length")
+    SECTION("A custom metadata value longer than the limit")
     {
-      auto builder = TrackBuilder::makeEmpty();
-      auto const value = std::string(kUint16Overflow, 'v');
-      builder.property().uri("track.flac");
+      auto const value = std::string(kTrackColdRecordSizeLimit + 1, 'v');
       builder.customMetadata().add("key", value);
-
-      auto const res = context.trySerializeCold(builder);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::ValueTooLarge);
+      checkRejectedAt("Custom metadata");
     }
 
-    SECTION("Cover art payload length")
+    SECTION("Custom metadata values that cross the limit together")
     {
-      constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CoverArtEntry)) + 1;
+      constexpr std::size_t kValueCount = 2;
+      constexpr std::size_t kValueSize =
+        (kTrackColdRecordSizeLimit + 1 - sizeof(TrackColdHeader) - (kValueCount * sizeof(CustomMetadataEntry))) /
+        kValueCount;
 
-      auto builder = TrackBuilder::makeEmpty();
-      builder.property().uri("track.flac");
+      auto const value = std::string(kValueSize, 'v');
+      builder.customMetadata().add("first", value).add("second", value);
+      checkRejectedAt("Custom metadata");
+    }
+
+    SECTION("A custom metadata entry table longer than the limit")
+    {
+      constexpr std::size_t kOverflowCount = (kTrackColdRecordSizeLimit / sizeof(CustomMetadataEntry)) + 1;
+
+      auto keys = std::vector<std::string>{};
+      keys.reserve(kOverflowCount);
+
+      for (std::size_t i = 0; i < kOverflowCount; ++i)
+      {
+        keys.push_back("key" + std::to_string(i));
+        builder.customMetadata().add(keys.back(), {});
+      }
+
+      checkRejectedAt("Custom metadata");
+    }
+
+    SECTION("Cover-art references longer than the limit")
+    {
+      constexpr std::size_t kOverflowCount = (kTrackColdRecordSizeLimit / sizeof(CoverArtEntry)) + 1;
 
       for (std::size_t i = 0; i < kOverflowCount; ++i)
       {
         builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
       }
 
-      auto const res = context.trySerializeCold(builder);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::ValueTooLarge);
+      checkRejectedAt("Cover art references");
     }
 
-    SECTION("Custom metadata count")
+    SECTION("A work block after cover-art references that nearly fill the record")
     {
-      auto builder = TrackBuilder::makeEmpty();
-      builder.property().uri("track.flac");
+      constexpr std::size_t kCoverCount = (kTrackColdRecordSizeLimit - sizeof(TrackColdHeader)) / sizeof(CoverArtEntry);
+      static_assert(sizeof(TrackColdHeader) + (kCoverCount * sizeof(CoverArtEntry)) + sizeof(TrackWorkBlock) >
+                    kTrackColdRecordSizeLimit);
 
-      for (std::size_t i = 0; i < kUint16Overflow; ++i)
-      {
-        builder.customMetadata().add("key", {});
-      }
-
-      auto const res = context.trySerializeCold(builder);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::ValueTooLarge);
-    }
-
-    SECTION("Custom metadata table offset")
-    {
-      constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CustomMetadataEntry)) + 1;
-
-      auto builder = TrackBuilder::makeEmpty();
-      builder.property().uri("track.flac");
-
-      for (std::size_t i = 0; i < kOverflowCount; ++i)
-      {
-        builder.customMetadata().add("key", {});
-      }
-
-      auto const res = context.trySerializeCold(builder);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::ValueTooLarge);
-    }
-
-    SECTION("URI offset after aligned custom payload")
-    {
-      constexpr std::size_t kValueSize = kUint16Max - sizeof(CustomMetadataBlockHeader) - sizeof(CustomMetadataEntry);
-
-      auto builder = TrackBuilder::makeEmpty();
-      auto const value = std::string(kValueSize, 'v');
-      builder.property().uri("track.flac");
-      builder.customMetadata().add("key", value);
-
-      auto const res = context.trySerializeCold(builder);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::ValueTooLarge);
-    }
-
-    SECTION("URI offset after accumulated custom metadata values")
-    {
-      constexpr std::size_t kValueCount = 2;
-      constexpr std::size_t kValueSize =
-        (kUint16Overflow - sizeof(TrackColdHeader) - (kValueCount * sizeof(CustomMetadataEntry))) / kValueCount;
-
-      auto builder = TrackBuilder::makeEmpty();
-      auto const value = std::string(kValueSize, 'v');
-
-      builder.property().uri("track.flac");
-      builder.customMetadata().add("first", value).add("second", value);
-
-      auto const res = context.trySerializeCold(builder);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::ValueTooLarge);
-    }
-
-    SECTION("URI offset after multiple aligned payloads")
-    {
-      constexpr std::size_t kCoverCount = kUint16Max / sizeof(CoverArtEntry);
-
-      auto builder = TrackBuilder::makeEmpty();
-      builder.property().uri("track.flac");
       builder.metadata().movementNumber(1);
 
       for (std::size_t i = 0; i < kCoverCount; ++i)
@@ -190,9 +147,102 @@ namespace ao::library::test
         builder.coverArt().add(PictureType::Other, ResourceId{static_cast<std::uint32_t>(i + 1)});
       }
 
+      checkRejectedAt("Work");
+    }
+  }
+
+  TEST_CASE("TrackBuilder - the cold record limit covers the whole record including padding",
+            "[library][unit][track-builder][overflow]")
+  {
+    // The limit is format: pin its value independently of the production constant.
+    STATIC_REQUIRE(kTrackColdRecordSizeLimit == 65'535);
+    // Records are padded to four bytes, so this is the largest stored record.
+    constexpr auto kLargestRecordSize = kTrackColdRecordSizeLimit & ~std::size_t{3};
+    constexpr auto kOneEntryCustomOverhead = sizeof(CustomMetadataBlockHeader) + sizeof(CustomMetadataEntry);
+    constexpr auto kAlignedUri = std::string_view{"track01.flac"};
+    constexpr auto kFillingValueSize =
+      kLargestRecordSize - sizeof(TrackColdHeader) - kOneEntryCustomOverhead - kAlignedUri.size();
+    static_assert(kAlignedUri.size() % 4 == 0 && kFillingValueSize % 4 == 0);
+
+    auto context = TrackSerializationFixture{};
+    auto const fillingValue = std::string(kFillingValueSize, 'v');
+    auto builder = TrackBuilder::makeEmpty();
+    builder.customMetadata().add("key", fillingValue);
+    builder.property().uri(kAlignedUri);
+
+    auto const checkRejectedAt = [&context, &builder](std::string_view const component)
+    {
       auto const res = context.trySerializeCold(builder);
       REQUIRE_FALSE(res);
+      INFO(res.error().message);
       CHECK(res.error().code == Error::Code::ValueTooLarge);
+      CHECK(res.error().message.starts_with(component));
+    };
+
+    SECTION("A record of the largest size is accepted and admitted")
+    {
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE(res);
+      CHECK(res->size() == 65'532);
+      CHECK(validateSerializedColdTrack(*res));
+    }
+
+    SECTION("One more URI byte crosses the limit once padded")
+    {
+      builder.property().uri("track001.flac");
+      checkRejectedAt("URI");
+    }
+
+    SECTION("A recording date after a fuller custom block crosses the limit at the performance block")
+    {
+      // The date-only performance block is 12 bytes, so leave less room for it.
+      auto const fullerValue = fillingValue + "vvvv";
+      builder.customMetadata().clear().add("key", fullerValue);
+      builder.metadata().recordingDate(RecordingDate{.year = 1999});
+      checkRejectedAt("Recording date and credit references");
+    }
+
+    SECTION("A credit after a filled custom block crosses the limit at the performance block")
+    {
+      auto const credit = CreditView{.name = "Soloist", .kind = CreditKind::Soloist, .role = {}};
+      builder.metadata().credits(std::span{&credit, 1});
+      checkRejectedAt("Recording date and credit references");
+    }
+  }
+
+  TEST_CASE("TrackBuilder - cold preflight reports invalid input before an oversized record",
+            "[library][unit][track-builder][overflow]")
+  {
+    auto context = TrackSerializationFixture{};
+    auto builder = TrackBuilder::makeEmpty();
+    builder.property().uri("track.flac");
+    auto const oversizedValue = std::string(kTrackColdRecordSizeLimit + 1, 'v');
+    builder.customMetadata().add("oversized", oversizedValue);
+
+    auto const checkInvalidInput = [&context, &builder]
+    {
+      auto const res = context.trySerializeCold(builder);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+    };
+
+    SECTION("A blank credit name")
+    {
+      auto const credit = CreditView{.name = " ", .kind = CreditKind::Soloist, .role = {}};
+      builder.metadata().credits(std::span{&credit, 1});
+      checkInvalidInput();
+    }
+
+    SECTION("A later custom metadata key that is not UTF-8")
+    {
+      builder.customMetadata().add("\xFF", "value");
+      checkInvalidInput();
+    }
+
+    SECTION("A later custom metadata value that is not UTF-8")
+    {
+      builder.customMetadata().add("later", "\xFF");
+      checkInvalidInput();
     }
   }
 

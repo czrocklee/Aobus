@@ -20,6 +20,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/Sha256.h>
@@ -31,6 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <string_view>
 #include <type_traits>
 
@@ -165,6 +167,53 @@ namespace ao::library::test
     CHECK_FALSE(library.manifest().reader(readTransaction).get("missing-resource.flac"));
     REQUIRE(library.manifest().reader(readTransaction).get("accepted.flac"));
     CHECK(library.dictionary().size() == 0);
+  }
+
+  TEST_CASE("TrackWriter - create and update reject an oversized cold record before mutation",
+            "[library][unit][track-writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto const existingId = addTrack(library, TrackSpec{.title = "Existing", .uri = "existing.flac"});
+    auto const dictionarySize = library.dictionary().size();
+    auto const oversizedValue = std::string(kTrackColdRecordSizeLimit, 'v');
+    auto transaction = writeTransaction(library);
+
+    auto createRes = transaction.apply(
+      [&library, &oversizedValue, existingId](LibraryWrite& write) -> Result<TrackId>
+      {
+        auto writer = write.tracks();
+        auto created = TrackBuilder::makeEmpty();
+        created.metadata().artist("Must not be interned");
+        created.property().uri("oversized.flac");
+        created.customMetadata().add("oversized-key", oversizedValue);
+        auto const createRejectedRes = writer.create(created, FileManifestBuilder::makeEmpty());
+        REQUIRE_FALSE(createRejectedRes);
+        CHECK(createRejectedRes.error().code == Error::Code::ValueTooLarge);
+
+        auto updated = builderFrom(library, writer, existingId);
+        updated.metadata().artist("Must not be interned");
+        updated.customMetadata().add("oversized-key", oversizedValue);
+        auto const updateRejectedRes = writer.update(existingId, updated);
+        REQUIRE_FALSE(updateRejectedRes);
+        CHECK(updateRejectedRes.error().code == Error::Code::ValueTooLarge);
+
+        auto fallback = TrackBuilder::makeEmpty();
+        fallback.property().uri("accepted.flac");
+        return writer.create(fallback, FileManifestBuilder::makeEmpty());
+      });
+
+    REQUIRE(createRes);
+    REQUIRE(transaction.commit());
+
+    auto readTransaction = library.readTransaction();
+    CHECK(library.tracks().reader(readTransaction).entryCount() == 2);
+    CHECK_FALSE(library.manifest().reader(readTransaction).get("oversized.flac"));
+    auto const optExisting = library.tracks().reader(readTransaction).get(existingId);
+    REQUIRE(optExisting);
+    CHECK(library.dictionary().getOrDefault(optExisting->metadata().artistId()) == "Artist");
+    CHECK(optExisting->customMetadata().empty());
+    CHECK(library.dictionary().size() == dictionarySize);
   }
 
   TEST_CASE("TrackWriter - create rejects a duplicate manifest URI without aliasing it",

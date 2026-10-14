@@ -17,7 +17,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <limits>
 #include <span>
 #include <tuple>
 #include <utility>
@@ -509,9 +508,9 @@ namespace ao::library::test
       CHECK(view.work().workId() == DictionaryId{1});
     }
 
-    SECTION("record size exceeds the writer's uint16 maximum")
+    SECTION("record size exceeds the cold record limit")
     {
-      constexpr auto kOversizedRecordSize = static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1U;
+      constexpr auto kOversizedRecordSize = kTrackColdRecordSizeLimit + 1U;
       auto data = std::vector<std::byte>(kOversizedRecordSize, std::byte{0});
       writePod(data,
                0,

@@ -289,7 +289,7 @@ namespace ao::rt::test
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::ValueTooLarge);
     CHECK(res.error().message.contains("Failed to update track data"));
-    CHECK(res.error().message.contains("exceeds uint16_t"));
+    CHECK(res.error().message.contains("Custom metadata would make the padded cold Track record exceed"));
 
     CHECK(mutated.empty());
 

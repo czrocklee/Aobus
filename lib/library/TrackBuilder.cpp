@@ -80,6 +80,28 @@ namespace ao::library
       return byteCount;
     }
 
+    [[noreturn]] void throwColdRecordTooLarge(std::string_view component)
+    {
+      detail::throwLibraryError(
+        Error::Code::ValueTooLarge,
+        std::format(
+          "{} would make the padded cold Track record exceed {} bytes", component, kTrackColdRecordSizeLimit));
+    }
+
+    // The size of a fixed prefix followed by count entries, when it fits a cold record.
+    std::size_t coldTableSize(std::size_t prefixSize,
+                              std::size_t count,
+                              std::size_t entrySize,
+                              std::string_view component)
+    {
+      if (count > (kTrackColdRecordSizeLimit - prefixSize) / entrySize)
+      {
+        throwColdRecordTooLarge(component);
+      }
+
+      return prefixSize + (count * entrySize);
+    }
+
     Result<> validateColdProperties(TrackBuilder::PropertyBuilder const& property)
     {
       auto uriRes = LibraryUri::parse(property.uri());
@@ -693,131 +715,114 @@ namespace ao::library
       return std::unexpected{propertyRes.error()};
     }
 
+    auto const& metadata = _metadataBuilder;
+
+    if (!metadata._recordingDate.isValid())
+    {
+      return makeError(Error::Code::InvalidInput, "Track recording date is invalid");
+    }
+
+    for (auto const& [value, context] : {
+           std::pair{metadata._work, std::string_view{"Track work"}},
+           std::pair{metadata._movement, std::string_view{"Track movement"}},
+         })
+    {
+      if (auto textRes = detail::validateLibraryText(value, context); !textRes)
+      {
+        return std::unexpected{textRes.error()};
+      }
+    }
+
+    auto const entryCount = _customMetadataBuilder._customPairs.size();
+    auto normalizedKeys = std::unordered_set<std::string>{};
+    std::size_t customValueSize = 0;
+
+    if (entryCount != 0)
+    {
+      normalizedKeys.reserve(entryCount);
+    }
+
+    for (auto const& [key, value] : _customMetadataBuilder._customPairs)
+    {
+      auto normalizedKeyRes = detail::normalizeLibraryText(key, "Custom metadata key");
+
+      if (!normalizedKeyRes)
+      {
+        return std::unexpected{normalizedKeyRes.error()};
+      }
+
+      if (!normalizedKeys.insert(std::move(*normalizedKeyRes)).second)
+      {
+        return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
+      }
+
+      auto const valueLengthRes = detail::normalizedLibraryTextSize(value, "Custom metadata value");
+
+      if (!valueLengthRes)
+      {
+        return std::unexpected{valueLengthRes.error()};
+      }
+
+      customValueSize += *valueLengthRes;
+    }
+
+    if (auto creditRes = validateCreditEntries(metadata._credits); !creditRes)
+    {
+      return creditRes;
+    }
+
     try
     {
-      auto offset = sizeof(TrackColdHeader);
-      auto addBlock = [&offset](std::size_t const payloadSize)
+      // Input is valid before sizing, so a size rejection never hides invalid
+      // input. Components are sized in their physical order and share one
+      // record limit, so a rejection names the component that crosses it.
+      auto recordSize = sizeof(TrackColdHeader);
+      auto const addComponent = [&recordSize](std::size_t const size, std::string_view const component)
       {
-        checkedUint16(payloadSize, "Cold block payload length");
-        auto const alignedSize = align4(payloadSize);
-
-        if (alignedSize < payloadSize || alignedSize > kU16Max - offset)
+        if (size > kTrackColdRecordSizeLimit - recordSize || align4(recordSize + size) > kTrackColdRecordSizeLimit)
         {
-          detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold block length exceeds uint16_t");
+          throwColdRecordTooLarge(component);
         }
 
-        offset += alignedSize;
+        recordSize = align4(recordSize + size);
       };
 
       if (!_coverArtBuilder._entries.empty())
       {
-        addBlock(
-          checkedPayloadBytes(_coverArtBuilder._entries.size(), sizeof(CoverArtEntry), "Cover art payload length"));
+        addComponent(coldTableSize(0, _coverArtBuilder._entries.size(), sizeof(CoverArtEntry), "Cover art references"),
+                     "Cover art references");
       }
 
-      auto const& metadata = _metadataBuilder;
-      auto const hasWork = !metadata._work.empty() || !metadata._movement.empty() || metadata._movementNumber != 0 ||
-                           metadata._movementTotal != 0;
-
-      if (hasWork)
+      if (!metadata._work.empty() || !metadata._movement.empty() || metadata._movementNumber != 0 ||
+          metadata._movementTotal != 0)
       {
-        addBlock(sizeof(TrackWorkBlock));
-      }
-
-      if (!metadata._recordingDate.isValid())
-      {
-        return makeError(Error::Code::InvalidInput, "Track recording date is invalid");
-      }
-
-      auto const hasPerformance = metadata._recordingDate.isPresent() || !metadata._credits.empty();
-
-      if (hasPerformance)
-      {
-        auto const entryBytes =
-          checkedPayloadBytes(metadata._credits.size(), sizeof(TrackCreditEntry), "Credits entry payload length");
-        addBlock(sizeof(TrackPerformanceBlock) + entryBytes);
-      }
-
-      for (auto const& [value, context] : {
-             std::pair{metadata._work, std::string_view{"Track work"}},
-             std::pair{metadata._movement, std::string_view{"Track movement"}},
-           })
-      {
-        if (auto textRes = detail::validateLibraryText(value, context); !textRes)
-        {
-          return std::unexpected{textRes.error()};
-        }
-      }
-
-      auto const entryCount = _customMetadataBuilder._customPairs.size();
-      auto const entryBytes =
-        checkedPayloadBytes(entryCount, sizeof(CustomMetadataEntry), "Custom metadata entry table length");
-      auto const valueOffset = sizeof(CustomMetadataBlockHeader) + entryBytes;
-      checkedUint16(entryCount, "Custom metadata count");
-      checkedUint16(valueOffset, "Custom metadata value offset");
-
-      std::size_t totalValueSize = 0;
-      auto normalizedKeys = std::unordered_set<std::string>{};
-
-      if (entryCount != 0)
-      {
-        normalizedKeys.reserve(entryCount);
-      }
-
-      for (auto const& [key, value] : _customMetadataBuilder._customPairs)
-      {
-        auto normalizedKeyRes = detail::normalizeLibraryText(key, "Custom metadata key");
-
-        if (!normalizedKeyRes)
-        {
-          return std::unexpected{normalizedKeyRes.error()};
-        }
-
-        if (!normalizedKeys.insert(std::move(*normalizedKeyRes)).second)
-        {
-          return makeError(Error::Code::InvalidInput, "Custom metadata keys must be unique after NFC normalization");
-        }
-
-        auto const valueLengthRes = detail::normalizedLibraryTextSize(value, "Custom metadata value");
-
-        if (!valueLengthRes)
-        {
-          return std::unexpected{valueLengthRes.error()};
-        }
-
-        checkedUint16(*valueLengthRes, "Custom metadata value length");
-
-        if (*valueLengthRes > kU16Max - totalValueSize)
-        {
-          detail::throwLibraryError(Error::Code::ValueTooLarge, "Custom metadata payload length exceeds uint16_t");
-        }
-
-        totalValueSize += *valueLengthRes;
+        addComponent(sizeof(TrackWorkBlock), "Work");
       }
 
       if (entryCount != 0)
       {
-        auto const payloadSize = valueOffset + totalValueSize;
-        checkedUint16(payloadSize, "Custom metadata payload length");
-        addBlock(payloadSize);
+        auto const tableSize =
+          coldTableSize(sizeof(CustomMetadataBlockHeader), entryCount, sizeof(CustomMetadataEntry), "Custom metadata");
+
+        if (customValueSize > kTrackColdRecordSizeLimit - tableSize)
+        {
+          throwColdRecordTooLarge("Custom metadata");
+        }
+
+        addComponent(tableSize + customValueSize, "Custom metadata");
       }
 
-      checkedUint16(offset, "Cold record URI offset");
-      checkedUint16(_propertyBuilder._uri.size(), "URI length");
-
-      if (_propertyBuilder._uri.size() > kU16Max - offset)
+      if (metadata._recordingDate.isPresent() || !metadata._credits.empty())
       {
-        detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold record size exceeds uint16_t");
+        constexpr auto kPerformanceComponent = std::string_view{"Recording date and credit references"};
+        addComponent(
+          coldTableSize(
+            sizeof(TrackPerformanceBlock), metadata._credits.size(), sizeof(TrackCreditEntry), kPerformanceComponent),
+          kPerformanceComponent);
       }
 
-      auto const unalignedSize = offset + _propertyBuilder._uri.size();
-
-      if (auto const recordSize = align4(unalignedSize); recordSize < unalignedSize || recordSize > kU16Max)
-      {
-        detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold record size exceeds uint16_t");
-      }
-
-      return validateCreditEntries(metadata._credits);
+      addComponent(_propertyBuilder._uri.size(), "URI");
+      return {};
     }
     catch (detail::LibraryException const& error)
     {
@@ -1276,10 +1281,9 @@ namespace ao::library
     auto const unalignedSize = offset + uriSize;
     auto const recordSize = align4(unalignedSize);
 
-    if (recordSize < unalignedSize || recordSize > kU16Max)
+    if (recordSize < unalignedSize || recordSize > kTrackColdRecordSizeLimit)
     {
-      detail::throwLibraryError(
-        Error::Code::ValueTooLarge, std::format("Cold record size {} exceeds uint16_t", recordSize));
+      throwColdRecordTooLarge("URI");
     }
 
     _size = recordSize;
