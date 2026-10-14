@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <ratio>
 #include <type_traits>
 
@@ -241,7 +242,8 @@ namespace ao::library
    *   - extension block area: cover art, work, custom metadata, performance
    *   - uri: playback path, stored after the block area
    *
-   * Total size: 32 bytes with 4-byte alignment.
+   * Total size: 32 bytes with 4-byte alignment. The whole record, header
+   * included, is at most kTrackColdRecordSizeLimit bytes.
    *
    * Layout:
    *   ┌─────────────────────────────────────┐  ← cold data begin
@@ -281,7 +283,12 @@ namespace ao::library
   // Binary layout constants
   constexpr std::size_t kTrackColdHeaderSize = 32;
   constexpr std::size_t kTrackColdHeaderAlignment = 4;
+  // Covers the header, every block, and the URI. Records are four-byte
+  // aligned, so the largest stored record is 65,532 bytes.
+  constexpr std::size_t kTrackColdRecordSizeLimit = 65'535;
 
+  static_assert(kTrackColdRecordSizeLimit == std::numeric_limits<decltype(TrackColdHeader::uriOffset)>::max(),
+                "The cold record limit must match the range of its 16-bit offsets");
   static_assert(sizeof(TrackColdHeader) == kTrackColdHeaderSize, "TrackColdHeader must be exactly 32 bytes");
   static_assert(alignof(TrackColdHeader) == kTrackColdHeaderAlignment, "TrackColdHeader must have 4-byte alignment");
   static_assert(std::has_unique_object_representations_v<TrackColdHeader>, "TrackColdHeader must have no padding");

@@ -186,6 +186,11 @@ Defined block slots are written in slot order:
 
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
+The whole cold record, including the header, every present block, the URI, and padding, is at most 65,535 bytes (`kTrackColdRecordSizeLimit`); because the record is padded to a four-byte multiple, the largest stored record is 65,532 bytes.
+Cover-art references, the work block, custom metadata, the recording date and credit references, and the URI share that one budget; no block or value has a separate allowance.
+Only inline bytes count: cover-art image bytes are Resources, and work, credit, and custom-metadata key text is stored in the dictionary, so each cover-art reference, credit, and custom-metadata entry costs eight bytes.
+In practice, custom-metadata values dominate the record; the URI is separately capped at 500 bytes (`LibraryUri::kMaxLength`) but still consumes the shared budget.
+Track preflight sizes these components in physical order and rejects a record that would exceed the limit with `ValueTooLarge`, naming the first component that crosses it, before any mutation; open applies the same limit and rejects a larger record as `CorruptData`.
 The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI bytes.
 Inline title and custom-metadata value bytes are scalar-valid UTF-8 in NFC.
 Every dictionary-backed metadata field, tag, and custom-metadata key inherits the same text invariant from its dictionary row.
@@ -524,6 +529,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`DatabaseWriterTest.cpp`](../../../../test/unit/lmdb/DatabaseWriterTest.cpp) locks the copied-data-only public LMDB writer surface and the source-private reservation encoder constraints and failure paths.
 - [`TrackPerformanceTest.cpp`](../../../../test/unit/library/TrackPerformanceTest.cpp) specifies independent block omission, ordered admission, date precision, complete reconstruction, hot-only preservation, bounds-before-write, and owning prepared snapshots.
 - [`TrackPerformanceValidationTest.cpp`](../../../../test/unit/library/TrackPerformanceValidationTest.cpp) specifies malformed performance and referenced-text rejection, including unchanged stored cold rows after rejected open.
+- [`TrackBuilderOverflowTest.cpp`](../../../../test/unit/library/TrackBuilderOverflowTest.cpp) locks the cold-record limit: the largest record is written and admitted, one more byte is rejected, and each rejection names the component that crosses the limit.
 - Other layout and serialization tests under [`test/unit/library/`](../../../../test/unit/library) lock the remaining record sizes, alignment, validation, and store behavior.
 
 ## Related documents

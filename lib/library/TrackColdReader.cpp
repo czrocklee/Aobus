@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -176,8 +175,8 @@ namespace ao::library::detail
 
       auto const uriEnd = uriOffset + uriLength;
 
-      if (auto const recordSize = align4(uriEnd); recordSize < uriEnd || recordSize != coldBytes.size() ||
-                                                  recordSize > std::numeric_limits<std::uint16_t>::max())
+      if (auto const recordSize = align4(uriEnd);
+          recordSize < uriEnd || recordSize != coldBytes.size() || recordSize > kTrackColdRecordSizeLimit)
       {
         return std::nullopt;
       }
