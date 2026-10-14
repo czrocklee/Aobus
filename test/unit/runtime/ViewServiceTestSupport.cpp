@@ -26,7 +26,7 @@ namespace ao::rt::test
     , commandsFixture{libraryFixture.library(), changes, executor}
     , cachePtr{std::make_unique<TrackSourceCache>(libraryFixture.library(), changes)}
     , service{executor, libraryFixture.library(), *cachePtr, changes}
-    , workspace{executor, service, changes}
+    , workspace{executor, service, libraryFixture.library(), changes}
   {
   }
 

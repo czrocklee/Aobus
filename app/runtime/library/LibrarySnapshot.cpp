@@ -14,6 +14,7 @@
 #include <ao/library/LibraryUri.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -23,6 +24,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/utility/Uuid.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -269,6 +271,11 @@ namespace ao::rt
     return _implPtr->revision;
   }
 
+  utility::UuidBytes LibrarySnapshot::libraryId() const
+  {
+    return _implPtr->library.metadataHeader(_implPtr->transaction).libraryId;
+  }
+
   std::optional<TrackRow> LibrarySnapshot::trackRow(TrackId id) const
   {
     auto const& library = _implPtr->library;
@@ -306,6 +313,32 @@ namespace ao::rt
   {
     auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
     return reader.get(id, library::TrackStore::Reader::LoadMode::Hot).has_value();
+  }
+
+  std::optional<std::string> LibrarySnapshot::trackUri(TrackId const id) const
+  {
+    auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Cold);
+
+    if (!optView || !optView->isColdValid())
+    {
+      return std::nullopt;
+    }
+
+    return std::string{optView->property().uri()};
+  }
+
+  bool LibrarySnapshot::containsTrackUri(std::string_view const uri) const
+  {
+    // No track can carry text that is not a canonical library URI, and the
+    // manifest lookup requires one.
+    if (auto const parsedRes = library::LibraryUri::parse(uri); !parsedRes || parsedRes->value() != uri)
+    {
+      return false;
+    }
+
+    // Open admission binds every manifest row to exactly one live track.
+    return _implPtr->library.manifest().reader(_implPtr->transaction).get(uri).has_value();
   }
 
   ResourceId LibrarySnapshot::trackCoverArtId(TrackId id) const

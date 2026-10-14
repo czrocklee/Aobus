@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
+#include <ao/utility/Uuid.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -16,16 +17,20 @@
 namespace ao::rt
 {
   inline constexpr auto kPlaybackSessionConfigGroup = std::string_view{"playback-session"};
-  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 4;
+  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 5;
   inline constexpr std::size_t kPlaybackSessionMaxSortTerms = kTrackSortFieldCount;
 
   struct PlaybackSessionState final
   {
     std::uint32_t schemaVersion = kPlaybackSessionSchemaVersion;
+    // The library the session was saved for; its ids mean nothing in another.
+    utility::UuidBytes libraryId{};
     ListId sourceListId = kInvalidListId;
     std::string quickFilterExpression{};
     std::vector<TrackSortTerm> sortBy{};
     TrackId currentTrackId = kInvalidTrackId;
+    // Empty when the current track had no URI when it played.
+    std::string currentTrackUri{};
     std::uint64_t anchorIndex = 0;
     std::uint64_t positionMs = 0;
     ShuffleMode shuffleMode = ShuffleMode::Off;
@@ -41,6 +46,7 @@ namespace ao::rt
   {
     ListId sourceListId = kInvalidListId;
     TrackId trackId = kInvalidTrackId;
+    std::string trackUri{};
     std::uint64_t positionMs = 0;
     float volume = 1.0F;
     bool muted = false;

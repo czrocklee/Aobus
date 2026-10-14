@@ -26,6 +26,11 @@ namespace ao::async
   class Executor;
 }
 
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
 namespace ao::rt
 {
   class ViewService;
@@ -67,7 +72,10 @@ namespace ao::rt
   class WorkspaceService final
   {
   public:
-    WorkspaceService(async::Executor& executor, ViewService& views, LibraryChanges const& changes);
+    WorkspaceService(async::Executor& executor,
+                     ViewService& views,
+                     library::MusicLibrary const& library,
+                     LibraryChanges const& changes);
     ~WorkspaceService();
 
     WorkspaceService(WorkspaceService const&) = delete;

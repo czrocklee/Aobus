@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/utility/Uuid.h>
 
 #include <filesystem>
 #include <memory>
@@ -27,7 +28,8 @@ namespace ao::tui
   class LayoutStateStore final
   {
   public:
-    explicit LayoutStateStore(std::filesystem::path const& musicRoot);
+    // Presentation groups are stamped with, and checked against, @p libraryId.
+    LayoutStateStore(std::filesystem::path const& musicRoot, utility::UuidBytes const& libraryId);
     ~LayoutStateStore();
 
     LayoutStateStore(LayoutStateStore const&) = delete;
@@ -46,5 +48,6 @@ namespace ao::tui
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;
+    utility::UuidBytes _libraryId;
   };
 } // namespace ao::tui

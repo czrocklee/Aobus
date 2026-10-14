@@ -64,8 +64,9 @@ delivered. Queued delivery retains only weak signal state and becomes harmless
 after service destruction. An observer exception enters the signal boundary's
 fatal handling; it does not turn a completed command into a failure.
 
-Committed list deletion closes every open view over the deleted list in one
-workspace commit. Destroying a view releases its projection and source leases.
+Committed list deletion, or a library reset that removes a view's base list,
+closes every affected open view in one workspace commit. Destroying a view
+releases its projection and source leases.
 
 ## Navigation and session boundaries
 

@@ -23,7 +23,7 @@ namespace ao::uimodel::test
     rt::LibraryChanges changes{executor, 0, "test-library"};
     rt::TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
     rt::ViewService viewService{executor, libraryFixture.library(), trackSourceCache, changes};
-    rt::WorkspaceService workspace{executor, viewService, changes};
+    rt::WorkspaceService workspace{executor, viewService, libraryFixture.library(), changes};
     i18n::MessageCatalog textCatalog{ao::test::englishMessageCatalog()};
     TrackPresentationCatalog catalog{workspace, textCatalog};
     ListPresentations listPresentations{catalog, changes};

@@ -10,6 +10,7 @@
 #include <ao/query/QueryCompilation.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>
@@ -133,10 +134,12 @@ namespace ao::rt
   {
     auto writer = yaml::MapWriter{node};
     writer.scalar("schemaVersion", state.schemaVersion)
+      .scalar("libraryId", utility::formatUuid(state.libraryId))
       .scalar("sourceListId", state.sourceListId.raw())
       .scalar("quickFilterExpression", state.quickFilterExpression)
       .sequence("sortBy", state.sortBy, writeSortTerm)
       .scalar("currentTrackId", state.currentTrackId.raw())
+      .scalar("currentTrackUri", state.currentTrackUri)
       .scalar("anchorIndex", state.anchorIndex)
       .scalar("positionMs", state.positionMs)
       .scalar("shuffleMode", static_cast<std::int32_t>(state.shuffleMode))
@@ -170,10 +173,12 @@ namespace ao::rt
     }
 
     constexpr auto kKeys = std::to_array<std::string_view>({"schemaVersion",
+                                                            "libraryId",
                                                             "sourceListId",
                                                             "quickFilterExpression",
                                                             "sortBy",
                                                             "currentTrackId",
+                                                            "currentTrackUri",
                                                             "anchorIndex",
                                                             "positionMs",
                                                             "shuffleMode",
@@ -187,10 +192,12 @@ namespace ao::rt
     std::int32_t repeatMode = 0;
     auto state = PlaybackSessionState{.schemaVersion = *schemaVersionRes};
     auto reader = yaml::MapReader{node, kKeys, kContext};
-    reader.requiredScalar("sourceListId", sourceListId)
+    reader.requiredValue("libraryId", state.libraryId, yaml::uuidScalar)
+      .requiredScalar("sourceListId", sourceListId)
       .requiredScalar("quickFilterExpression", state.quickFilterExpression)
       .requiredSequence("sortBy", state.sortBy, readSortTerm)
       .requiredScalar("currentTrackId", currentTrackId)
+      .requiredScalar("currentTrackUri", state.currentTrackUri)
       .requiredScalar("anchorIndex", state.anchorIndex)
       .requiredScalar("positionMs", state.positionMs)
       .requiredScalar("shuffleMode", shuffleMode)

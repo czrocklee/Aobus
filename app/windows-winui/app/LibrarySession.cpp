@@ -45,6 +45,7 @@
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
+#include <ao/utility/Uuid.h>
 #include <ao/winui/CallbackAdmissionGate.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>
 #include <ao/winui/WinUiErrorBoundary.h>
@@ -645,10 +646,12 @@ namespace ao::winui
     // Both groups are read here rather than during initialize(): they are keyed
     // by ListId, which only means anything against the library that is open by
     // now. A rejected or absent group leaves the seeded default in place.
+    auto const libraryId = graph.runtime.library().snapshot().libraryId();
     auto restoredColumnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
 
-    if (auto const loadedRes = storage.layoutStorePtr->load(
-          uimodel::kTrackColumnLayoutsConfigGroup, restoredColumnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
+    if (auto const loadedRes = storage.layoutStorePtr->load(uimodel::kTrackColumnLayoutsConfigGroup,
+                                                            restoredColumnLayouts,
+                                                            uimodel::TrackColumnLayoutYamlSchema{libraryId});
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows column layouts: {}", loadedRes.error().message);
@@ -658,7 +661,7 @@ namespace ao::winui
 
     if (auto const loadedRes = storage.layoutStorePtr->load(uimodel::kListPresentationsConfigGroup,
                                                             restoredListPresentations,
-                                                            uimodel::ListPresentationPreferenceYamlSchema{});
+                                                            uimodel::ListPresentationPreferenceYamlSchema{libraryId});
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows presentation preferences: {}", loadedRes.error().message);
@@ -674,13 +677,15 @@ namespace ao::winui
         .restoredColumnLayouts = std::move(restoredColumnLayouts),
         .knownListIds = std::move(knownListIds),
         .persistListPresentations =
-          [this](ListId const)
+          [this, libraryId](ListId const)
         {
           auto& callbackStorage = *_storagePtr;
           auto const listPresentations =
             callbackStorage.optRuntimeGraph->optInteractiveBorrowers->listPresentations.snapshot();
-          auto const savedRes = callbackStorage.layoutStorePtr->save(
-            uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
+          auto const savedRes =
+            callbackStorage.layoutStorePtr->save(uimodel::kListPresentationsConfigGroup,
+                                                 listPresentations,
+                                                 uimodel::ListPresentationPreferenceYamlSchema{libraryId});
 
           if (!savedRes)
           {
@@ -688,12 +693,12 @@ namespace ao::winui
           }
         },
         .persistColumnLayouts =
-          [this](ListId const)
+          [this, libraryId](ListId const)
         {
           auto& callbackStorage = *_storagePtr;
           auto const columnLayouts = callbackStorage.optRuntimeGraph->optInteractiveBorrowers->columnLayouts.snapshot();
           auto const savedRes = callbackStorage.layoutStorePtr->save(
-            uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
+            uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{libraryId});
 
           if (!savedRes)
           {

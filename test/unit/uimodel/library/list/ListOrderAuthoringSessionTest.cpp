@@ -83,7 +83,7 @@ namespace ao::uimodel::test
         , commandsFixture{libraryFixture.library(), changes, executor}
         , cachePtr{std::make_unique<rt::TrackSourceCache>(libraryFixture.library(), changes)}
         , service{executor, libraryFixture.library(), *cachePtr, changes}
-        , workspace{executor, service, changes}
+        , workspace{executor, service, libraryFixture.library(), changes}
       {
         first = commandsFixture.addTrack(library::test::TrackSpec{.title = "First"});
         second = commandsFixture.addTrack(library::test::TrackSpec{.title = "Second"});

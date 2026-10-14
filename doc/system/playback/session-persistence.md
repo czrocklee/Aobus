@@ -6,7 +6,7 @@ id: playback.session-persistence
 ## Scope
 
 This specification defines current behavior for capturing, validating, restoring, normalizing, saving on natural application events, discarding, terminally retiring for a library switch, and shutting down the last restorable playback state.
-The [playback session state reference](../../reference/playback/session-state.md) owns the exact version 4 payload.
+The [playback session state reference](../../reference/playback/session-state.md) owns the exact version 5 payload.
 
 It does not persist a materialized queue, workspace selection, prepared-next token, Engine generation, or decoder/output state.
 
@@ -25,7 +25,8 @@ This contract belongs to the **application runtime** layer in the [system archit
 
 ## Invariants
 
-- Restore validates the complete version 4 payload before resolving a source.
+- Restore validates the complete version 5 payload before resolving a source.
+- Restore never resumes a payload saved for another library, or whose current track's id no longer names the file it named when saved.
 - A candidate is prepared completely before it replaces live sequence or transport state.
 - Restore never autoplays, arms an output route, or creates a frontend view.
 - A restore failure before volume/mute application leaves prior public playback and restorable state unchanged.
@@ -71,6 +72,23 @@ The save debounce is one second.
 
 Restore rejects a schema mismatch, invalid ids, overflowing anchor/position, unsupported shuffle/repeat/volume, invalid or duplicate sort fields, excess sort terms, and a filter that cannot parse and compile.
 This occurs before source lookup, so source absence cannot hide malformed serialized state.
+
+### Check identity
+
+A valid payload is then compared with the open library before any lookup that could reinterpret it.
+Restore drops the payload, reporting no restored session and leaving live state unchanged, when:
+
+| Finding | Why the payload is dropped |
+|---|---|
+| `libraryId` differs from the open library's id. | Its ids were issued by another library and may name unrelated objects here. |
+| `currentTrackId` names a track whose URI differs from `currentTrackUri`. | The track no longer plays the file whose position was saved. |
+| `currentTrackId` names no track, but some track has `currentTrackUri`. | The library replaced the saved track, as a restore does, so the saved anchor and position describe a record that is gone. |
+
+When the id names a track with the saved URI, or neither the id nor the URI is present, restore continues to source resolution.
+The second case is an ordinary deletion and keeps anchor replacement.
+That includes restoring an older backup that lacks the saved Track: the Track is gone and no Track holds its file, so restore may select a replacement at the saved anchor and start it from the beginning.
+Because a library never reissues a track id, these checks compare the saved subject with the one record that id can name.
+A live library restore leaves the current subject playing under its old id, so a later save records that id with its URI and the next restore drops the payload by the last rule.
 
 ### Resolve current and source
 
@@ -196,7 +214,7 @@ Terminal retirement instead cancels and enters `Retired` without a final save.
 ## Persistence and versioning
 
 The literal group is `playback-session`.
-Only schema version `4` is accepted; older or newer values are rejected rather than migrated.
+Only schema version `5` is accepted; older or newer values are rejected rather than migrated.
 
 GTK injects its global application config as the playback-session store. WinUI
 injects its separate global `windows-playback.yaml` store. Current TUI
@@ -205,7 +223,7 @@ injected. AppKit likewise supplies no separate playback store: its runtime-owned
 workspace store is `appkit-workspace.yaml` under the active library's database
 path, so `AppRuntime` uses that same per-library store for the playback-session
 group.
-The payload itself contains library-scoped track/list ids but no durable library identity.
+The payload records the library it was saved for, so a payload that outlives a library switch or a database replacement is dropped on [restore](#check-identity) rather than interpreted against another library.
 GTK and WinUI checkpoint the active graph, physically remove this group from
 their application-global playback store, and terminally seal playback
 persistence in the parent before that graph is destroyed.
@@ -257,7 +275,8 @@ The exact ordering belongs to interactive lifecycle architecture.
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, structural failure atomicity, and repeated frozen writes across stop and shutdown.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, the identity check, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, structural failure atomicity, and repeated frozen writes across stop and shutdown.
+- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/unit/runtime/LibraryRestoreStateIdentityTest.cpp) protects that playback, workspace, and presentation state naming objects in a restored backup binds to none of the objects the restore recreated, whether the restore renumbered the same database or replaced it.
 - [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the successor root-commit gate and no-I/O playback-write seal against natural, explicit, window, and shutdown playback saves while ordinary window, output, layout, and workspace saves continue over the shared GTK store.
 - [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
   and [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)

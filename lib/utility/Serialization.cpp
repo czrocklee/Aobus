@@ -4,12 +4,14 @@
 #include <ao/yaml/Serialization.h>
 
 #include <ao/Error.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <c4/format.hpp>
 #include <ryml.hpp>
 
 #include <algorithm>
+#include <expected>
 #include <span>
 #include <string>
 #include <string_view>
@@ -127,6 +129,23 @@ namespace ao::yaml
     }
 
     return child;
+  }
+
+  Result<utility::UuidBytes> uuidScalar(ryml::ConstNodeRef node, std::string_view context)
+  {
+    auto textRes = scalarAs<std::string>(node, context);
+
+    if (!textRes)
+    {
+      return std::unexpected{std::move(textRes.error())};
+    }
+
+    if (auto const optId = utility::parseUuid(*textRes); optId)
+    {
+      return *optId;
+    }
+
+    return makeError(Error::Code::FormatRejected, boundedErrorContext(context) + " must be a UUID");
   }
 
   ryml::NodeRef appendChild(ryml::NodeRef node, std::string_view key)

@@ -12,6 +12,7 @@
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/Serialization.h>
 
 #include <array>
@@ -214,7 +215,8 @@ namespace ao::tui
     return {};
   }
 
-  LayoutStateStore::LayoutStateStore(std::filesystem::path const& musicRoot)
+  LayoutStateStore::LayoutStateStore(std::filesystem::path const& musicRoot, utility::UuidBytes const& libraryId)
+    : _libraryId{libraryId}
   {
     auto const configPath = layoutStatePath(musicRoot);
     auto ec = std::error_code{};
@@ -254,16 +256,17 @@ namespace ao::tui
       APP_LOG_WARN("TUI: failed to load List navigation preference: {}", res.error().message);
     }
 
-    auto const columnsRes =
-      _storePtr->load(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{});
+    auto const columnsRes = _storePtr->load(
+      uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{_libraryId});
 
     if (!columnsRes && columnsRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("TUI: failed to load terminal column layouts: {}", columnsRes.error().message);
     }
 
-    auto const presentationsRes = _storePtr->load(
-      uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{});
+    auto const presentationsRes = _storePtr->load(uimodel::kListPresentationsConfigGroup,
+                                                  listPresentations,
+                                                  uimodel::ListPresentationPreferenceYamlSchema{_libraryId});
 
     if (!presentationsRes && presentationsRes.error().code != Error::Code::NotFound)
     {
@@ -279,8 +282,10 @@ namespace ao::tui
     return _storePtr->saveTogether(
       rt::configWrite("panels", widths, PanelWidthsSchema{}),
       rt::configWrite("navigation", navigationEnabled, NavigationSchema{}),
-      rt::configWrite(uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{}),
       rt::configWrite(
-        uimodel::kListPresentationsConfigGroup, listPresentations, uimodel::ListPresentationPreferenceYamlSchema{}));
+        uimodel::kTrackColumnLayoutsConfigGroup, columnLayouts, uimodel::TrackColumnLayoutYamlSchema{_libraryId}),
+      rt::configWrite(uimodel::kListPresentationsConfigGroup,
+                      listPresentations,
+                      uimodel::ListPresentationPreferenceYamlSchema{_libraryId}));
   }
 } // namespace ao::tui

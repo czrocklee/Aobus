@@ -74,7 +74,7 @@ namespace ao::rt
                                                          playbackSuccession,
                                                          core.musicLibrary(),
                                                          core.library().changes())}
-      , workspaceService{core.async().callbackExecutor(), viewService, core.library().changes()}
+      , workspaceService{core.async().callbackExecutor(), viewService, core.musicLibrary(), core.library().changes()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
       , playbackSessionPersistence{
           playbackSessionConfigStoreValue != nullptr ? *playbackSessionConfigStoreValue : *workspaceConfigStorePtr,

@@ -169,7 +169,9 @@ namespace ao::appkit
       auto preferences = uimodel::ListPresentations::Snapshot{};
 
       if (auto res = runtime.workspaceConfigStore().load(
-            uimodel::kListPresentationsConfigGroup, preferences, uimodel::ListPresentationPreferenceYamlSchema{});
+            uimodel::kListPresentationsConfigGroup,
+            preferences,
+            uimodel::ListPresentationPreferenceYamlSchema{runtime.library().snapshot().libraryId()});
           !res)
       {
         runtime.notifications().post(
@@ -449,7 +451,7 @@ namespace ao::appkit
       storage.catalog,
       [&storage](auto const& state) { storage.renderPresentation(state); });
     storage.presentationPreferencesSub = storage.listPresentationsPtr->signalChanged().connect(
-      [&storage, &runtime](ListId)
+      [&storage, &runtime, libraryId = runtime.library().snapshot().libraryId()](ListId)
       {
         if (!storage.presentationPreferencesWritable)
         {
@@ -459,7 +461,7 @@ namespace ao::appkit
 
         if (auto res = runtime.workspaceConfigStore().save(uimodel::kListPresentationsConfigGroup,
                                                            storage.listPresentationsPtr->snapshot(),
-                                                           uimodel::ListPresentationPreferenceYamlSchema{});
+                                                           uimodel::ListPresentationPreferenceYamlSchema{libraryId});
             !res)
         {
           runtime.notifications().post(

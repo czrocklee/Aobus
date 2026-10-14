@@ -23,6 +23,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/utility/Uuid.h>
 
 #include <algorithm>
 #include <chrono>
@@ -32,6 +33,7 @@
 #include <memory>
 #include <optional>
 #include <stop_token>
+#include <string>
 #include <utility>
 
 namespace ao::rt
@@ -59,17 +61,21 @@ namespace ao::rt
       bool _previous = false;
     };
 
-    PlaybackSessionState snapshotState(PlaybackLaunchSpec launchSpec,
+    PlaybackSessionState snapshotState(utility::UuidBytes const& libraryId,
+                                       PlaybackLaunchSpec launchSpec,
                                        TrackId const currentTrackId,
+                                       std::string currentTrackUri,
                                        std::size_t const anchorIndex,
                                        std::chrono::milliseconds const elapsed,
                                        PlaybackSnapshot const& snapshot)
     {
       return PlaybackSessionState{
+        .libraryId = libraryId,
         .sourceListId = launchSpec.sourceListId,
         .quickFilterExpression = std::move(launchSpec.quickFilterExpression),
         .sortBy = std::move(launchSpec.order.sortBy),
         .currentTrackId = currentTrackId,
+        .currentTrackUri = std::move(currentTrackUri),
         .anchorIndex = static_cast<std::uint64_t>(anchorIndex),
         .positionMs = static_cast<std::uint64_t>(std::max(elapsed, std::chrono::milliseconds{0}).count()),
         .shuffleMode = snapshot.succession.shuffle,
@@ -77,6 +83,31 @@ namespace ao::rt
         .volume = snapshot.transport.volume.level,
         .muted = snapshot.transport.volume.muted,
       };
+    }
+
+    /**
+     * True when the saved current track still names the track it was saved for.
+     *
+     * Ids are never reused within one library, so a present id names the same
+     * track unless its file changed. An absent id is an ordinary deletion only
+     * while no track holds the saved file: a live track with that URI means the
+     * library renumbered it, as a restore or a rescan after deletion does.
+     */
+    bool isSavedTrackIdentityIntact(LibrarySnapshot const& reader,
+                                    utility::UuidBytes const& libraryId,
+                                    PlaybackSessionState const& loaded)
+    {
+      if (loaded.libraryId != libraryId)
+      {
+        return false;
+      }
+
+      if (auto const optUri = reader.trackUri(loaded.currentTrackId); optUri)
+      {
+        return *optUri == loaded.currentTrackUri;
+      }
+
+      return !reader.containsTrackUri(loaded.currentTrackUri);
     }
   } // namespace
 
@@ -88,6 +119,7 @@ namespace ao::rt
                                                          async::Runtime& asyncRuntime)
     : _config{config}
     , _library{library}
+    , _libraryId{library.snapshot().libraryId()}
     , _succession{succession}
     , _playbackTransport{playbackTransport}
     , _playback{playback}
@@ -304,7 +336,8 @@ namespace ao::rt
                    (!hasActiveSession() || publicSubjectMatches),
                  "Playback cursor and transport current tracks disagree during save");
 
-    auto const session = snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, elapsed, snapshot);
+    auto const session = snapshotState(
+      _libraryId, std::move(launchSpec), currentTrackId, transportSession.trackUri, anchorIndex, elapsed, snapshot);
 
     return _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
   }
@@ -332,6 +365,14 @@ namespace ao::rt
 
     {
       auto reader = _library.snapshot();
+
+      // An identity failure drops the whole session instead of reporting an
+      // absent track, so it never reaches anchor replacement below.
+      if (!isSavedTrackIdentityIntact(reader, _libraryId, loaded))
+      {
+        return PlaybackSessionRestoreResult{};
+      }
+
       auto const currentExists = reader.containsTrack(loaded.currentTrackId);
       auto const sourceExists = loaded.sourceListId == kAllTracksListId || reader.listNode(loaded.sourceListId);
 

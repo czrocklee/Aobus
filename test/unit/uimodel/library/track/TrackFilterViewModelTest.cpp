@@ -39,7 +39,7 @@ namespace ao::uimodel::test
       LibraryChanges changes{executor, 0, "test-library"};
       TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
       ViewService viewService{executor, libraryFixture.library(), trackSourceCache, changes};
-      WorkspaceService workspaceService{executor, viewService, changes};
+      WorkspaceService workspaceService{executor, viewService, libraryFixture.library(), changes};
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel;
 
@@ -98,7 +98,7 @@ namespace ao::uimodel::test
     auto changes = LibraryChanges{executor, 0, "test-library"};
     auto sources = TrackSourceCache{library.library(), changes};
     auto views = ViewService{executor, library.library(), sources, changes};
-    auto workspace = WorkspaceService{executor, views, changes};
+    auto workspace = WorkspaceService{executor, views, library.library(), changes};
     auto log = ao::test::RenderLog<TrackFilterViewState>{};
     auto model = TrackFilterViewModel{
       views, workspace, ao::test::englishMessageCatalog(), [&log](auto const& state) { log.render(state); }};
@@ -341,7 +341,7 @@ namespace ao::uimodel::test
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
     auto views = ViewService{executor, libraryFixture.library(), sources, changes};
-    auto workspace = WorkspaceService{executor, views, changes};
+    auto workspace = WorkspaceService{executor, views, libraryFixture.library(), changes};
     auto renderLog = ao::test::RenderLog<TrackFilterViewState>{};
     auto viewModel = TrackFilterViewModel{
       views, workspace, ao::test::englishMessageCatalog(), [&renderLog](auto const& view) { renderLog.render(view); }};

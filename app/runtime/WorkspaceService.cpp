@@ -11,6 +11,10 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ReadTransaction.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NavigationHistory.h>
@@ -24,6 +28,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/utility/StrongTypeFormatter.h>
+#include <ao/utility/Uuid.h>
 
 #include <algorithm>
 #include <array>
@@ -86,14 +91,23 @@ namespace ao::rt
 
     async::Executor& executor;
     ViewService& views;
+    library::MusicLibrary const& library;
+    utility::UuidBytes libraryId{};
     LibraryChanges const& changes;
     WorkspaceSnapshot currentSnapshot;
     NavigationHistory navigationHistory;
     async::Signal<WorkspaceChanged const&> changedSignal;
     async::Subscription listsMutatedSub;
 
-    Impl(async::Executor& callbackExecutor, ViewService& viewService, LibraryChanges const& changes)
-      : executor{callbackExecutor}, views{viewService}, changes{changes}
+    Impl(async::Executor& callbackExecutor,
+         ViewService& viewService,
+         library::MusicLibrary const& musicLibrary,
+         LibraryChanges const& changes)
+      : executor{callbackExecutor}
+      , views{viewService}
+      , library{musicLibrary}
+      , libraryId{musicLibrary.metadataHeader().libraryId}
+      , changes{changes}
     {
       listsMutatedSub =
         changes.onChanged([this](LibraryChangeSet const& changeSet) { handleLibraryChange(changeSet); });
@@ -575,29 +589,54 @@ namespace ao::rt
     void handleLibraryChange(LibraryChangeSet const& changeSet)
     {
       ensureOnExecutor();
-      auto toClose = std::vector<ViewId>{};
-
-      for (auto const listId : changeSet.listsDeleted)
-      {
-        for (auto const viewId : currentSnapshot.openViews)
-        {
-          if (auto const state = views.trackListState(viewId);
-              state.listId == listId && !std::ranges::contains(toClose, viewId))
-          {
-            toClose.push_back(viewId);
-          }
-        }
-      }
+      auto const toClose =
+        changeSet.libraryReset ? viewsOfAbsentLists() : viewsOfLists(std::span{changeSet.listsDeleted});
 
       if (!toClose.empty())
       {
         std::ignore = closeViews(toClose, WorkspaceChangeCause::ListDeletion);
       }
     }
+
+    std::vector<ViewId> viewsOfLists(std::span<ListId const> const listIds) const
+    {
+      auto result = std::vector<ViewId>{};
+
+      for (auto const viewId : currentSnapshot.openViews)
+      {
+        if (std::ranges::contains(listIds, views.trackListState(viewId).listId))
+        {
+          result.push_back(viewId);
+        }
+      }
+
+      return result;
+    }
+
+    // A reset publishes no per-List deletion, so each open base List is looked up instead.
+    std::vector<ViewId> viewsOfAbsentLists() const
+    {
+      auto const transaction = library.readTransaction();
+      auto const reader = library.lists().reader(transaction);
+      auto result = std::vector<ViewId>{};
+
+      for (auto const viewId : currentSnapshot.openViews)
+      {
+        if (auto const listId = views.trackListState(viewId).listId; !isVirtualListId(listId) && !reader.get(listId))
+        {
+          result.push_back(viewId);
+        }
+      }
+
+      return result;
+    }
   };
 
-  WorkspaceService::WorkspaceService(async::Executor& executor, ViewService& views, LibraryChanges const& changes)
-    : _implPtr{std::make_unique<Impl>(executor, views, changes)}
+  WorkspaceService::WorkspaceService(async::Executor& executor,
+                                     ViewService& views,
+                                     library::MusicLibrary const& library,
+                                     LibraryChanges const& changes)
+    : _implPtr{std::make_unique<Impl>(executor, views, library, changes)}
   {
   }
 
@@ -713,7 +752,7 @@ namespace ao::rt
   {
     _implPtr->ensureOnExecutor();
     auto const snapshotValue = _implPtr->currentSnapshot;
-    auto state = WorkspaceSessionState{};
+    auto state = WorkspaceSessionState{.libraryId = _implPtr->libraryId};
     // A nonempty snapshot starts one past the valid range so the schema rejects a missing active id.
     state.activeViewIndex = snapshotValue.openViews.empty() ? 0 : snapshotValue.openViews.size();
     state.customPresets = snapshotValue.customPresets;
@@ -762,6 +801,14 @@ namespace ao::rt
     if (!*loadedRes)
     {
       return {};
+    }
+
+    // Another library's list ids name nothing here, so only its custom presets,
+    // which name no library object, are restored.
+    if (state.libraryId != _implPtr->libraryId)
+    {
+      state.openViews.clear();
+      state.activeViewIndex = 0;
     }
 
     auto createdViewIds = std::vector<ViewId>{};

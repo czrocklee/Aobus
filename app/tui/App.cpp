@@ -1426,7 +1426,7 @@ namespace ao::tui
     auto const runtimeShutdown = gsl_lite::finally([&runtime] { runtime.shutdown(); });
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
     auto shell = ShellInteractionModel{};
-    auto layoutStateStore = LayoutStateStore{options.libraryRoot};
+    auto layoutStateStore = LayoutStateStore{options.libraryRoot, runtime.library().snapshot().libraryId()};
     auto restoredColumnLayouts = uimodel::TrackColumnLayouts::Snapshot{};
     auto restoredListPresentations = uimodel::ListPresentations::Snapshot{};
     bool restoredNavigationEnabled = true;

@@ -5,7 +5,7 @@ id: playback.session-state
 
 ## Scope and version
 
-This reference owns the exact serialized `PlaybackSessionState` payload in schema version `4`.
+This reference owns the exact serialized `PlaybackSessionState` payload in schema version `5`.
 Capture, validation, restore, normalization, save scheduling, failure, discard, and shutdown behavior belongs to the [playback session persistence specification](../../system/playback/session-persistence.md).
 
 ## Code boundary
@@ -20,11 +20,13 @@ The schema requires every root field:
 
 | Field | C++ type | Default | Meaning |
 |---|---|---|---|
-| `schemaVersion` | Unsigned 32-bit integer | `4` | Exact compatibility gate. |
+| `schemaVersion` | Unsigned 32-bit integer | `5` | Exact compatibility gate. |
+| `libraryId` | Canonical UUID string | Nil UUID | Library the session was saved for. |
 | `sourceListId` | `ListId` | Invalid id | Library-scoped source list. |
 | `quickFilterExpression` | String | Empty | Ad-hoc filter applied over the source. |
 | `sortBy` | Sequence of `TrackSortTerm` | Empty | Ordered field/direction terms. |
 | `currentTrackId` | `TrackId` | Invalid id | Last restorable subject. |
+| `currentTrackUri` | String | Empty | Library URI of that subject's file when it was resolved for playback; empty when none was. |
 | `anchorIndex` | Unsigned 64-bit integer | `0` | Saved semantic cursor anchor. |
 | `positionMs` | Unsigned 64-bit integer | `0` | Transport offset in milliseconds. |
 | `shuffleMode` | `ShuffleMode` | `Off` | Current shuffle policy. |
@@ -57,7 +59,8 @@ The payload contains none of these:
 
 ## Validation rules
 
-- `schemaVersion` must equal `4`.
+- `schemaVersion` must equal `5`.
+- `libraryId` must be a canonical 8-4-4-4-12 hexadecimal UUID.
 - List and track identities must satisfy semantic restore validation against the active library.
 - Anchor and position must convert to their runtime index/duration representations without overflow.
 - Shuffle and repeat values must be supported enumerators.
@@ -70,28 +73,31 @@ The payload contains none of these:
 
 ## Compatibility and versioning
 
-Only version `4` is accepted.
+Only version `5` is accepted.
 There is no migration or seeded missing-field fallback for another/malformed version.
-Version `4` includes the accepted predicate grammar, field binding, and Unicode-caseless `~` evaluation meaning of `quickFilterExpression`.
-A predicate change that can emit quick-filter text an existing version-4 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `4` or provide an explicit tested migration.
+Version `5` includes the accepted predicate grammar, field binding, and Unicode-caseless `~` evaluation meaning of `quickFilterExpression`.
+A predicate change that can emit quick-filter text an existing version-5 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `5` or provide an explicit tested migration.
 The expression carries no separate language version.
 
-Version `4` also includes the current numeric `TrackSortField` mapping.
-Changing a sort-field raw value requires a playback schema version or an explicit version-4 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
+Version `5` also includes the current numeric `TrackSortField` mapping.
+Changing a sort-field raw value requires a playback schema version or an explicit version-5 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
-List and track ids are scoped to one library, but version 4 stores no library UUID.
-The current GTK lifecycle prevents cross-library interpretation by physically deleting the group and terminally sealing persistence in the old process, fully destroying that graph, and activating a successor process with idle playback.
+List and track ids are scoped to one library, so version 5 records that library's UUID and the current subject's URI.
+The [persistence specification](../../system/playback/session-persistence.md#check-identity) drops a payload whose library or subject no longer matches.
+Independently, the GTK library-switch lifecycle physically deletes the group and terminally seals persistence in the old process, fully destroys that graph, and activates a successor process with idle playback.
 The successor admits future playback writes only after the matching root is durable; root-commit failure keeps the prior root, no payload, and a permanent write seal.
 
 ## Examples
 
 ```yaml
 playback-session:
-  schemaVersion: 4
+  schemaVersion: 5
+  libraryId: "123e4567-e89b-12d3-a456-426614174000"
   sourceListId: 1
   quickFilterExpression: "$artist = 'Example'"
   sortBy: []
   currentTrackId: 42
+  currentTrackUri: "Example/Album/01 Opening.flac"
   anchorIndex: 7
   positionMs: 12500
   shuffleMode: 0
@@ -100,7 +106,7 @@ playback-session:
   muted: false
 ```
 
-The runtime schema writes strong ids through their explicit unsigned raw values and writes playback and sort enums through the version-4 numeric mappings above.
+The runtime schema writes strong ids through their explicit unsigned raw values and writes playback and sort enums through the version-5 numeric mappings above.
 
 ## Implementation authority
 

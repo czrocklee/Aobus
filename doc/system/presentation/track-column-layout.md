@@ -70,7 +70,8 @@ A full library reset carries no incremental List ids, so it clears the complete 
 
 That lifecycle only covers deletions the owner observed while it was alive.
 `restore()` therefore takes the library's live list ids and drops every entry naming a list that no longer exists, so a document written before a deletion, or one whose cleanup write never landed, keeps no layout for a list the library no longer has.
-A list id is never reused within one database, but the document lives outside it and can meet a rebuilt, restored, or replaced database; pruning also drops every entry whose id that database lacks.
+A list id is never reused within one database, so pruning also retires every entry for a list that a restore replaced.
+The document lives outside the database, though, and can meet a rebuilt or replaced one that numbers its lists afresh, so it records the id of the library it was saved for; loading it for another library keeps only its virtual-list entries.
 A virtual list id references no user-created list and is retained without appearing among the live ids.
 
 The invalid list id cannot receive an update.
@@ -120,8 +121,8 @@ Unknown resize fields are no-ops.
 TUI pointer cancellation is a frontend interaction boundary: an interrupted preview performs no model update and therefore no persistence write.
 
 Persistence deserialization validates one complete layout group before replacing the caller's state.
-An unsupported version, unknown or duplicate field, duplicate or invalid list
-id, missing or malformed visibility, dimensions that are noncanonical or do not
+An unsupported version, missing or malformed library id, unknown or duplicate
+field, duplicate or invalid list id, missing or malformed visibility, dimensions that are noncanonical or do not
 match the field's sizing role, or structural mismatch rejects the group and
 preserves the seeded state.
 Persistence I/O failures belong to the [persistence and managed-state architecture](../persistence/README.md) and do not change solver behavior.
@@ -130,9 +131,9 @@ Persistence I/O failures belong to the [persistence and managed-state architectu
 
 Column state is UI-local per-library managed state keyed by list id.
 GTK stores desktop geometry in `gtk_layout.yaml`; WinUI stores desktop geometry in `winui_layout.yaml`; TUI stores terminal geometry in `tui_layout.yaml`.
-All three are per-library documents, so a list id keyed in one is only ever read back against the library that produced it.
-The `trackView.columnLayouts` group carries required `version: 2` and stores
-field id, canonical dimensions, and visibility.
+All three are per-library documents that record the id of the library they were saved for, so a list id keyed in one is never read back against another library's lists.
+The `trackView.columnLayouts` group carries required `version: 3` and
+`libraryId`, and stores field id, canonical dimensions, and visibility.
 The exact group shape is owned by the [persisted presentation-state reference](../../reference/presentation/persisted-state.md), while its containing document is registered by the [application managed-state reference](../../reference/persistence/application-config.md).
 
 Loading uses strict recursive structure plus semantic validation and never installs a partial column vector.

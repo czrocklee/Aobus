@@ -3,6 +3,7 @@
 
 #include <ao/Error.h>
 #include <ao/utility/StrongType.h>
+#include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
@@ -177,6 +178,25 @@ namespace ao::test
     REQUIRE_FALSE(readRes);
     CHECK(readRes.error().code == Error::Code::FormatRejected);
     CHECK(readRes.error().message.contains("values.1"));
+  }
+
+  TEST_CASE("YamlSerialization - UUID scalars accept only the canonical text form", "[core][unit][yaml]")
+  {
+    auto tree = parseYaml("{id: 123e4567-e89b-12d3-a456-426614174000, short: 123e4567, nested: [1]}");
+    auto const root = tree.rootref();
+
+    auto const idRes = yaml::uuidScalar(root["id"], "state.id");
+    REQUIRE(idRes);
+    CHECK(utility::formatUuid(*idRes) == "123e4567-e89b-12d3-a456-426614174000");
+
+    auto const shortRes = yaml::uuidScalar(root["short"], "state.short");
+    REQUIRE_FALSE(shortRes);
+    CHECK(shortRes.error().code == Error::Code::FormatRejected);
+    CHECK(shortRes.error().message == "state.short must be a UUID");
+
+    auto const nestedRes = yaml::uuidScalar(root["nested"], "state.nested");
+    REQUIRE_FALSE(nestedRes);
+    CHECK(nestedRes.error().code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("YamlSerialization - field context is bounded", "[core][unit][yaml]")

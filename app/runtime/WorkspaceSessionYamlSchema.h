@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/utility/Uuid.h>
 
 #include <ryml.hpp>
 
@@ -53,6 +54,7 @@ namespace ao::rt::detail
   struct WorkspaceSessionDocument final
   {
     std::uint32_t presentationVersion = kWorkspacePresentationVersion;
+    utility::UuidBytes libraryId{};
     std::vector<StoredTrackListViewConfig> openViews{};
     std::uint32_t activeViewIndex = 0;
     std::vector<StoredCustomTrackPresentationPreset> customPresets{};

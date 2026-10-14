@@ -27,4 +27,17 @@ namespace ao::uimodel
                   [knownListIds](auto const& entry)
                   { return !rt::isVirtualListId(entry.first) && !std::ranges::contains(knownListIds, entry.first); });
   }
+
+  /**
+   * Drops every entry keyed by a user-created list.
+   *
+   * Both presentation schemas apply this to a document saved for another
+   * library, whose list ids name unrelated lists here; a virtual id names the
+   * same view in every library.
+   */
+  template<typename Value>
+  void retainVirtualLists(std::map<ListId, Value>& entries)
+  {
+    std::erase_if(entries, [](auto const& entry) { return !rt::isVirtualListId(entry.first); });
+  }
 } // namespace ao::uimodel

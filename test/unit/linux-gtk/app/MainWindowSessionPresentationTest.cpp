@@ -22,6 +22,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
@@ -52,14 +53,13 @@ namespace ao::gtk::test
       return std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
     }
 
-    void savePresentationPreference(ao::test::TempDir const& tempDir,
-                                    ListId const listId,
-                                    std::string const& presentationId)
+    void savePresentationPreference(rt::AppRuntime& runtime, ListId const listId, std::string const& presentationId)
     {
       auto layoutState = uimodel::TrackColumnLayouts::Snapshot{};
       auto preferenceState = uimodel::ListPresentations::Snapshot{};
       preferenceState.emplace(listId, presentationId);
-      auto store = GtkLayoutStateStore{rt::LibraryPaths{tempDir.path()}.managedDataPath()};
+      auto store = GtkLayoutStateStore{
+        rt::LibraryPaths{runtime.musicRoot()}.managedDataPath(), runtime.library().snapshot().libraryId()};
       store.save(layoutState, preferenceState);
     }
 
@@ -112,7 +112,7 @@ namespace ao::gtk::test
           },
       }));
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
-      savePresentationPreference(tempDir, rt::kAllTracksListId, "albums");
+      savePresentationPreference(*runtimePtr, rt::kAllTracksListId, "albums");
     }
 
     auto runtimePtr = makeRuntime(tempDir);
@@ -140,7 +140,7 @@ namespace ao::gtk::test
 
     {
       auto runtimePtr = makeRuntime(tempDir);
-      savePresentationPreference(tempDir, rt::kAllTracksListId, "songs");
+      savePresentationPreference(*runtimePtr, rt::kAllTracksListId, "songs");
     }
 
     auto runtimePtr = makeRuntime(tempDir);
@@ -164,7 +164,7 @@ namespace ao::gtk::test
     {
       auto runtimePtr = makeRuntime(tempDir);
       listId = createList(*runtimePtr, "Preferred list");
-      savePresentationPreference(tempDir, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, "albums");
     }
 
     auto runtimePtr = makeRuntime(tempDir);
@@ -213,7 +213,7 @@ namespace ao::gtk::test
       REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
-      savePresentationPreference(tempDir, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, "albums");
       runtimePtr->playback().commands().stop();
     }
 
@@ -291,7 +291,7 @@ namespace ao::gtk::test
       REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
-      savePresentationPreference(tempDir, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, "albums");
       runtimePtr->playback().commands().stop();
     }
 
@@ -343,7 +343,7 @@ namespace ao::gtk::test
       REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
       REQUIRE(tryWaitForPlaybackSettlement(*runtimePtr, trackId));
       REQUIRE(runtimePtr->savePlaybackSession());
-      savePresentationPreference(tempDir, listId, "albums");
+      savePresentationPreference(*runtimePtr, listId, "albums");
       runtimePtr->playback().commands().stop();
     }
 
