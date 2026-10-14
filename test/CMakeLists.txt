@@ -395,6 +395,7 @@ add_executable(ao_core_test
     unit/media/mp4/SampleDescriptionTest.cpp
     unit/media/wav/TestWav.cpp
     unit/media/wav/RiffTest.cpp
+    unit/media/wav/RiffChannelMaskTest.cpp
 
     # library tests
     unit/library/RecordingDateTest.cpp
