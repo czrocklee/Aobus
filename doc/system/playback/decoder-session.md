@@ -106,7 +106,21 @@ Lossy and unknown sessions use the drain path until delay/padding trim is parsed
 ## Failure behavior
 
 Malformed external media and unsupported requests return recoverable decoder errors.
-FLAC treats corrupted metadata, headers, frames, CRC mismatches, missing frames, and premature end before the declared sample count as `DecodeFailed`; a standalone loss-of-sync notice may remain recoverable for resynchronization.
+FLAC requires STREAMINFO to establish a valid source and output format before construction succeeds; missing required metadata is `DecodeFailed`.
+FLAC treats corrupted metadata, headers, frames, CRC mismatches, detected missing frames, and premature end before the declared sample count as `DecodeFailed`; a standalone loss-of-sync notice may remain recoverable for resynchronization.
+Delivered frame sample positions must continue the decoded timeline, or begin at the requested seek target.
+A missing-sample gap or additional write over pending PCM is rejected before any incorrectly positioned block is returned, even when libFLAC suppresses its missing-frame notice or the total sample count is unknown.
+A healthy FLAC `flush()` resets provider buffers without skipping unread PCM: the byte cursor is restored to the decoded boundary, and already decoded seek-target PCM remains consumable at its original sample position.
+Before emitting PCM, FLAC rejects any frame delivered to the session whose rate, channel count, or bit depth differs from the inspected STREAMINFO properties.
+This includes the first frame and the possibly partial block containing a seek target.
+This is a fixed-session support restriction, not a claim that every property-changing FLAC stream is invalid.
+Seeking does not validate every intervening frame: frames that libFLAC skips or decodes without delivering to the session are outside this per-frame check.
+A contradicting frame delivered during seeking produces a preserved `DecodeFailed`; repeated reads retain the failure rather than converting it into end of stream, and `flush()` alone does not clear it.
+A seek attempted while the codec is aborted or in seek-error state does not clear a recorded decoding cause; it returns that cause, or `SeekFailed` when none was recorded, until the caller flushes the codec.
+Reads preserve a recorded decoding cause, or return `DecodeFailed` when none was recorded, rather than retry without progress.
+After flushing the failed codec, a successful decoder-level seek can restart at an intact frame and revalidates every subsequent frame delivered to the session.
+Flushing does not repair missing frames: a stream with no decodable seek target still returns a seek failure.
+This isolated decoder recovery does not change [Engine's error-state seek admission](audio-execution.md#seek-admission-and-failure), which requires a new playback start.
 
 Decoder operations and streaming-source entry points use `Result` for external media, IO, and capability failures.
 The source-private `openDecoderSession` construction boundary returns a non-null ready session or a recoverable error; `nullptr` is not an alternate error channel.
