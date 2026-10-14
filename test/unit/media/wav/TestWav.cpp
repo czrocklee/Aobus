@@ -10,7 +10,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -196,11 +198,17 @@ namespace ao::test::wav
     }();
     auto const bytesPerSample = static_cast<std::uint16_t>((spec.bitsPerSample + 7U) / 8U);
     auto const blockAlign = static_cast<std::uint16_t>(spec.channels * bytesPerSample);
+    auto const byteRate = static_cast<std::uint64_t>(spec.sampleRate) * blockAlign;
+
+    if (byteRate > std::numeric_limits<std::uint32_t>::max())
+    {
+      throw std::overflow_error{"WAV fixture byte rate exceeds DWORD storage"};
+    }
 
     appendLe16(payload, formatTag);
     appendLe16(payload, spec.channels);
     appendLe32(payload, spec.sampleRate);
-    appendLe32(payload, spec.sampleRate * blockAlign);
+    appendLe32(payload, static_cast<std::uint32_t>(byteRate));
     appendLe16(payload, blockAlign);
     appendLe16(payload, spec.bitsPerSample);
 
@@ -208,7 +216,8 @@ namespace ao::test::wav
     {
       appendLe16(payload, 22);
       appendLe16(payload, spec.validBitsPerSample == 0 ? spec.bitsPerSample : spec.validBitsPerSample);
-      appendLe32(payload, 0);
+      // Raw mask DWORD at fmt payload offset 20, stored without validation.
+      appendLe32(payload, spec.channelMask);
       appendGuid(payload, spec.sampleFormat);
     }
 
@@ -229,11 +238,10 @@ namespace ao::test::wav
     return payload;
   }
 
-  std::vector<std::uint8_t> makeWav(Spec const& spec)
+  std::vector<std::uint8_t> makeWav(Spec const& spec, std::span<std::uint8_t const> const fmtPayload)
   {
     auto body = std::vector<std::uint8_t>{'W', 'A', 'V', 'E'};
-    auto fmt = makeFmtChunk(spec);
-    appendChunk(body, "fmt ", fmt);
+    appendChunk(body, "fmt ", fmtPayload);
 
     if (!spec.infoFields.empty())
     {
@@ -253,5 +261,10 @@ namespace ao::test::wav
     appendLe32(riff, static_cast<std::uint32_t>(body.size()));
     riff.insert(riff.end(), body.begin(), body.end());
     return riff;
+  }
+
+  std::vector<std::uint8_t> makeWav(Spec const& spec)
+  {
+    return makeWav(spec, makeFmtChunk(spec));
   }
 } // namespace ao::test::wav

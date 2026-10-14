@@ -40,6 +40,8 @@ namespace ao::test::wav
     std::uint32_t sampleRate = 1000;
     std::uint16_t bitsPerSample = 16;
     std::uint16_t validBitsPerSample = 0;
+    // Raw extensible mask DWORD; ignored for legacy formats with no mask slot.
+    std::uint32_t channelMask = 0;
     std::vector<std::uint8_t> audioData = {0, 0};
     std::vector<InfoField> infoFields = {};
     std::vector<Chunk> extraChunks = {};
@@ -72,9 +74,18 @@ namespace ao::test::wav
 
   void appendGuid(std::vector<std::uint8_t>& output, SampleFormat sampleFormat);
 
+  // Throws std::overflow_error if the computed byte rate cannot fit its DWORD.
+  // Deliberately incoherent rates must be authored in a raw fmt payload passed
+  // to the makeWav overload. This helper does not depend on a test framework.
   std::vector<std::uint8_t> makeFmtChunk(Spec const& spec);
 
   std::vector<std::uint8_t> makeInfoList(std::span<InfoField const> fields);
+
+  // Builds a complete RIFF WAVE file with the same framing as the
+  // single-argument makeWav, but the fmt chunk carries the supplied payload
+  // bytes verbatim; the Spec supplies the audio data and any optional INFO
+  // and extra chunks.
+  std::vector<std::uint8_t> makeWav(Spec const& spec, std::span<std::uint8_t const> fmtPayload);
 
   std::vector<std::uint8_t> makeWav(Spec const& spec);
 } // namespace ao::test::wav

@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -33,6 +34,9 @@ namespace ao::media::wav
     std::uint16_t blockAlign = 0;
     std::uint16_t bitsPerSample = 0;
     std::uint16_t validBitsPerSample = 0;
+    // Raw extensible declaration, not an inferred or admitted playback layout.
+    // An engaged zero mask is distinct from a legacy format with no declaration.
+    std::optional<std::uint32_t> optChannelMask{};
     bool isFloat = false;
   };
 

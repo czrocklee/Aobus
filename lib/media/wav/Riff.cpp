@@ -29,6 +29,7 @@ namespace ao::media::wav
     constexpr std::size_t kFormatBitsPerSampleOffset = 14;
     constexpr std::size_t kFormatExtensionSizeOffset = 16;
     constexpr std::size_t kExtensibleValidBitsOffset = 18;
+    constexpr std::size_t kExtensibleChannelMaskOffset = 20;
     constexpr std::size_t kExtensibleSubFormatOffset = 24;
     constexpr std::uint16_t kExtensibleMinimumExtensionSize = 22;
 
@@ -127,13 +128,17 @@ namespace ao::media::wav
 
       if (format.formatTag == kFormatExtensible)
       {
+        // cbSize counts bytes inside the fmt payload, excluding RIFF padding.
+        // Complete additional format bytes are allowed beyond the known prefix.
         if (bytes.size() < kExtensibleSubFormatOffset + kPcmGuid.size() ||
-            readLe16(bytes, kFormatExtensionSizeOffset) < kExtensibleMinimumExtensionSize)
+            readLe16(bytes, kFormatExtensionSizeOffset) < kExtensibleMinimumExtensionSize ||
+            readLe16(bytes, kFormatExtensionSizeOffset) > bytes.size() - kExtensibleValidBitsOffset)
         {
           return makeError(Error::Code::CorruptData, "WAV extensible fmt chunk is truncated");
         }
 
         format.validBitsPerSample = readLe16(bytes, kExtensibleValidBitsOffset);
+        format.optChannelMask = readLe32(bytes, kExtensibleChannelMaskOffset);
         auto const subFormat = bytes.subspan(kExtensibleSubFormatOffset, kPcmGuid.size());
 
         if (std::ranges::equal(subFormat, kPcmGuid))
@@ -200,7 +205,7 @@ namespace ao::media::wav
       auto const bytesPerSample = static_cast<std::uint16_t>((format.bitsPerSample + 7U) / 8U);
 
       if (format.blockAlign != format.channels * bytesPerSample ||
-          format.byteRate != format.sampleRate * format.blockAlign)
+          format.byteRate != static_cast<std::uint64_t>(format.sampleRate) * format.blockAlign)
       {
         return makeError(Error::Code::CorruptData, "WAV fmt chunk byte layout is inconsistent");
       }

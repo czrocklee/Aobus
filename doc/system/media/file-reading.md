@@ -115,6 +115,13 @@ A stream that reached a complete end of stream at a granule position below its o
 
 A valid supported WAVE format and non-empty `data` chunk are required. `LIST/INFO` fields are applied only after the entire bounded list validates. A malformed embedded ID3 chunk contributes no ID3 fields. WAVE technical properties and other valid optional evidence remain available.
 
+The reusable [RIFF parser](../../../include/ao/media/wav/Riff.h) retains the unnormalized channel-mask integer decoded from an extensible format's little-endian field, distinguishing explicit zero from a legacy PCM or IEEE-float format with no declaration.
+Channel count remains the byte-stride authority: preserving a mask neither infers missing speakers nor rejects partial, excess, reserved, or wildcard bits by population count.
+This is container evidence, not playback admission or routing verification; the media visitor and decoder PCM formats do not expose or act on it. Admitting or routing the declaration requires a separate playback-contract change.
+For a file both extents accept, complete and required-audio parsing select the same declaration and borrowed data range.
+An extensible format requires its full 40-byte prefix and a declared extension of at least 22 bytes that fits inside the `fmt` payload; RIFF alignment padding is not extension data. Complete additional format bytes beyond the known prefix are accepted and ignored.
+The declared byte rate must equal sample rate times block alignment without arithmetic wraparound; an inconsistent byte layout is `CorruptData`, not a device-capability decision.
+
 ## Internal credit extraction
 
 Private interpreted `Content` owns credit name/role text and retains source-ordered views with the four fixed media kinds for `Visitor::visitCredits`.
