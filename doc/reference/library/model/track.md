@@ -45,7 +45,7 @@ Work and performance are independently optional storage domains.
 The work block is absent when both ids and both movement numbers are zero; performance is absent when RecordingDate is absent and there are no credits.
 A date-only or credits-only performance therefore needs no work block.
 Movement is a leaf value inside the work block; composer remains hot, and application grouping and sorting rules belong to the runtime field and presentation contracts.
-Credits are the only stored authority for Conductor, Ensemble, Soloist, and Performer participants.
+Credits are the only stored authority for credited participants of every kind: Conductor, Ensemble, Soloist, Performer, Lyricist, Arranger, Writer, Producer, Engineer, Mixer, DJ-mixer, and Remixer.
 Category fields are projections, not scalar storage mirrors; Composer, Artist, and AlbumArtist remain separate concepts.
 Neither block establishes a musical entity or a unique recording identity.
 All curated text is scalar-valid UTF-8 in NFC: title is normalized before inline persistence, and dictionary-backed values are normalized before interning.
@@ -146,7 +146,7 @@ The [predicate reference](../../query/predicate-language.md#recording-date-predi
 It trims only space, tab, carriage return, line feed, form feed, and vertical tab at name/role boundaries, validates scalar UTF-8, and stores NFC.
 A blank authored name or invalid kind rejects the complete input; a blank role becomes absent, represented by an empty string.
 NBSP and other non-ASCII whitespace remain text. No case folding or heuristic name splitting occurs.
-Canonical order is Conductor, Ensemble, Soloist, Performer, with stable within-kind order.
+Canonical order is `CreditKind` order (Conductor, Ensemble, Soloist, Performer, Lyricist, Arranger, Writer, Producer, Engineer, Mixer, DJ-mixer, Remixer), with stable within-kind order.
 Duplicates, repeated names/roles, and the same name in different kinds remain distinct entries.
 Equality, NoOp, stored/editor snapshots, Undo, and interchange compare normalized name, kind, role, duplicate multiplicity, and within-kind order. Reordering within a kind is a real edit.
 Role is descriptive free text: it never determines kind and is not independently queryable, sortable, or groupable.

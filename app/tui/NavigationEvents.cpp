@@ -9,6 +9,7 @@
 #include "SelectionNavigation.h"
 #include "ShellInteractionModel.h"
 #include "SmartListEditor.h"
+#include "TrackDetailLines.h"
 #include "TrackEditController.h"
 #include <ao/CoreIds.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -290,7 +291,7 @@ namespace ao::tui
     auto scope = uimodel::allTrackCreditKinds();
     bool creditsRequested = event == ftxui::Event::CtrlK;
 
-    for (std::size_t index = 0; index < library::kCreditKindCount; ++index)
+    for (std::size_t index = 0; index < kTrackCreditShortcutCount; ++index)
     {
       if (event == ftxui::Event::Character(std::to_string(index + 1)))
       {

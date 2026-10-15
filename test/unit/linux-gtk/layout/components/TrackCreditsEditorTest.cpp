@@ -506,13 +506,14 @@ namespace ao::gtk::layout::test
 
     for (auto* action : collectAll<Gtk::Button>(editor))
     {
-      if (action->has_css_class("ao-credit-category"))
+      if (action->has_css_class("ao-credit-category") && action->get_visible())
       {
         origins.push_back(action);
       }
     }
 
-    REQUIRE(origins.size() == library::kCreditKindCount + 1);
+    // Edit and the four performance kinds; empty kinds after Performer have no preview.
+    REQUIRE(origins.size() == 5);
 
     for (auto* origin : origins)
     {
@@ -530,6 +531,103 @@ namespace ao::gtk::layout::test
     }
 
     windowFixture.unmount();
+  }
+
+  TEST_CASE("TrackCreditsEditor - emptying an optional kind returns focus to Full Credits",
+            "[gtk][unit][track-credits]")
+  {
+    auto id = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.credits_emptied_kind_focus_test",
+                                        [&](library::MusicLibrary& storage)
+                                        {
+                                          id = library::test::addTrackWithUniqueFixtureUri(
+                                            storage, {.credits = {{.name = "Lee", .kind = CreditKind::Lyricist}}});
+                                        }};
+    auto& runtime = fixture.runtime();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto form = uimodel::TrackPropertiesFormModel{catalog};
+    REQUIRE(uimodel::loadTrackPropertiesFormBaseline(
+      runtime.library().snapshot(), std::array{id}, uimodel::buildTrackPropertiesFormSpec(catalog), form));
+    auto windowFixture = CreditsEditorWindowFixture{};
+    auto editor = TrackCreditsEditor{runtime.completion(), catalog, form, [] {}};
+    windowFixture.mount(editor);
+    windowFixture.present();
+    editor.updateVisibility(true, false);
+    drainGtkEvents();
+    auto const actions = collectAll<Gtk::Button>(editor);
+    auto const lyricistIt = std::ranges::find_if(
+      actions,
+      [](auto* action)
+      { return action->has_css_class("ao-credit-category") && action->get_label() == "Lyricist: Lee"; });
+    REQUIRE(lyricistIt != actions.end());
+    auto* const lyricist = *lyricistIt;
+    REQUIRE(lyricist->get_visible());
+    emitClicked(*lyricist);
+    drainGtkEvents();
+    checkFocusWithin(entry(editor, "ao-credit-name"));
+    click(editor, "ao-credit-delete");
+    click(editor, "ao-credits-commit");
+    REQUIRE(form.pendingCredits());
+    CHECK(form.pendingCredits()->kinds == uimodel::trackCreditScope(CreditKind::Lyricist));
+    CHECK(form.pendingCredits()->entries.empty());
+    CHECK_FALSE(lyricist->get_visible());
+    checkFocusWithin(button(editor, "ao-credits-edit"));
+    windowFixture.unmount();
+  }
+
+  TEST_CASE("TrackCreditsEditor - kinds after Performer preview only with credits or show-empty",
+            "[gtk][unit][track-credits]")
+  {
+    auto id = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.credits_optional_kinds_test",
+      [&](library::MusicLibrary& storage)
+      {
+        id = library::test::addTrackWithUniqueFixtureUri(
+          storage,
+          {.credits = {{.name = "Lee", .kind = CreditKind::Lyricist}, {.name = "Rex", .kind = CreditKind::Remixer}}});
+      }};
+    auto& runtime = fixture.runtime();
+    auto& scope = fixture.attachTrackDetailScope(detail(runtime, {id}));
+    auto undo = TrackDetailUndoController{};
+    auto windowFixture = CreditsEditorWindowFixture{};
+    auto editor = TrackCreditsEditor{runtime.async(),
+                                     runtime.library(),
+                                     runtime.completion(),
+                                     runtime.notifications(),
+                                     ao::test::englishMessageCatalog(),
+                                     &scope,
+                                     &undo};
+    windowFixture.mount(editor);
+    windowFixture.present();
+    auto const visiblePreviews = [&editor]
+    {
+      auto labels = std::vector<std::string>{};
+
+      for (auto* action : collectAll<Gtk::Button>(editor))
+      {
+        if (action->has_css_class("ao-credit-category") && action->get_visible())
+        {
+          labels.push_back(action->get_label());
+        }
+      }
+
+      return labels;
+    };
+    auto const withCredits = std::vector<std::string>{
+      "Conductor: ", "Ensemble: ", "Soloist: ", "Performer: ", "Lyricist: Lee", "Remixer: Rex"};
+
+    editor.updateVisibility(true, false);
+    drainGtkEvents();
+    CHECK(visiblePreviews() == withCredits);
+
+    editor.updateVisibility(true, true);
+    drainGtkEvents();
+    CHECK(visiblePreviews().size() == library::kCreditKindCount);
+
+    editor.updateVisibility(true, false);
+    drainGtkEvents();
+    CHECK(visiblePreviews() == withCredits);
   }
 
   TEST_CASE("TrackCreditsEditor - validation identifies a later row in the active locale", "[gtk][unit][track-credits]")

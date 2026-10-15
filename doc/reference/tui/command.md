@@ -133,7 +133,7 @@ Except for rows marked **fixed protocol**, each action is configurable through i
 | `L` | toggle pinned Lists; pinning the chooser promotes it into the sidebar | configurable |
 | `d` | toggle the persistent Detail sidebar | configurable |
 | `D` | show and focus Detail | configurable |
-| `Ctrl+K`, `1`–`4` in focused Detail | open Credits over the current selection for all kinds, or for Conductor, Ensemble, Soloist, or Performer | fixed protocol inside Detail |
+| `Ctrl+K`, `1`–`9` in focused Detail | open Credits over the current selection for all kinds, or for one of the first nine kinds in `CreditKind` order, Conductor through Engineer | fixed protocol inside Detail |
 | `g` | open the Go to menu for current track, artist, album, or workspace history | configurable |
 | `Ctrl+W` | begin keyboard panel resizing; Tab selects a divider, Left/Right moves it, Enter commits, Esc cancels | configurable entry; fixed protocol inside resize mode |
 | `Shift+Left` / `Shift+Right` | resize the focused Lists or Detail sidebar | fixed protocol |

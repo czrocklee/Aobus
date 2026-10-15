@@ -78,6 +78,20 @@ namespace ao::query::test
     }
   }
 
+  TEST_CASE("CreditPredicate - credit selects kinds that have no selector of their own", "[query][unit][credit]")
+  {
+    auto fixture = TrackFixture{TrackSpec{.credits = {
+                                            {.name = "Lee", .kind = CreditKind::Lyricist},
+                                            {.name = "Rex", .kind = CreditKind::Remixer, .role = "Club mix"},
+                                          }}};
+
+    CHECK(matchesCredit("$credit = 'Lee'", fixture));
+    CHECK(matchesCredit("$credit ~ 'rex'", fixture));
+    CHECK_FALSE(matchesCredit("$credit = 'Club mix'", fixture));
+    CHECK_FALSE(matchesCredit("$performer?", fixture));
+    CHECK_FALSE(matchesCredit("$conductor?", fixture));
+  }
+
   TEST_CASE("CreditPredicate - empty selections include absence in inequality only", "[query][unit][credit]")
   {
     auto fixture = TrackFixture{};

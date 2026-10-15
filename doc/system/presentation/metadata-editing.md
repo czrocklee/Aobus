@@ -35,7 +35,7 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 
 ## Invariants
 
-- `TrackDetailSnapshot` contains one coherent selection kind, id set, aggregate field array, four owning credit sections, custom metadata set, common-tag ids, single-selection cover id, and `libraryRevision`.
+- `TrackDetailSnapshot` contains one coherent selection kind, id set, aggregate field array, one owning credit section per kind, custom metadata set, common-tag ids, single-selection cover id, and `libraryRevision`.
   The revision follows the [captured-read revision semantics](../library/track-detail-projection.md#which-revision-does-a-snapshot-represent), not a guarantee of the latest library revision.
 - Synthetic display fields and tags are excluded from the built-in field grid; tags have their own editing surface.
 - Technical fields are never editable through metadata UI policy.
@@ -60,7 +60,7 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 
 `TrackDetailSnapshot` uses `SelectionKind::{None, Single, Multiple}` and retains selected `TrackId` values.
 Each built-in raw field is an `AggregateValue<TrackFieldRawValue>`.
-Credits use four `AggregateValue<vector<Credit>>` sections: section position supplies kind, and every contained entry agrees with it.
+Credits use one `AggregateValue<vector<Credit>>` section per kind: section position supplies kind, and every contained entry agrees with it.
 Complete sections compare name, kind, role, order, and duplicate multiplicity; present empty is a common value, while absence means no track was loaded.
 A common whole-list value is assembled only when every section is common; no independently updated full-list mirror or per-track before-value cache is retained.
 `LibrarySnapshot::trackCredits(id)` returns one owning canonical list and distinguishes a missing track from present empty credits.
@@ -111,10 +111,10 @@ An empty metadata display value remains hidden by default unless show-empty is a
 
 ### Credits
 
-`MetadataPatch::optCredits` is the only participant mutation: a typed `CreditReplacement` with a fixed four-kind mask and owning entries.
+`MetadataPatch::optCredits` is the only participant mutation: a typed `CreditReplacement` with a fixed mask of one bit per kind and owning entries.
 An absent patch preserves credits. A present mask must be nonempty, all kinds valid, and every entry inside its scope.
 Each selected segment is replaced completely; a selected kind absent from entries is cleared, while every unselected segment is preserved independently per target.
-All four bits mean full replacement. Empty entries clear only the selected scope, never RecordingDate or unrelated metadata.
+All bits mean full replacement. Empty entries clear only the selected scope, never RecordingDate or unrelated metadata.
 Runtime normalizes once at the command boundary, compares complete affected segments for NoOp, and validates each resulting full record, not only the incoming list.
 Bindings retain exact duplicate target occurrences, but mutation deduplicates first-seen targets before reconstruction or reuse of staged dictionary ids.
 Failure on any target rolls back the entire command; one effective command commits and publishes once, while NoOp publishes nothing.
@@ -122,13 +122,14 @@ Failure on any target rolls back the entire command; one effective command commi
 Category raw fields are read-only first-name text projections, not list values or editable scalars.
 Compact previews use first name plus localized `+N`, counting duplicates; full detail/form surfaces use complete scoped sections instead.
 A mixed category displays “Multiple values,” never the first target's compact summary, a union, or a common subset. Other common categories remain displayable and editable independently.
+Conductor, Ensemble, Soloist, and Performer always offer a one-kind entry point. Every other kind offers one only when some target has its credits, a mixed value included, or while show-empty is active, so empty optional kinds do not crowd the detail; every kind stays editable in Full Credits.
 
 One shared `TrackCreditsEditorModel` handles empty, singleton, and larger lists:
 
 | Entry | Immutable session scope | Kind control |
 |---|---|---|
 | Category preview | One kind | Hidden or locked |
-| Full Credits | All four kinds | Editable |
+| Full Credits | All kinds | Editable |
 
 Binding and owning baseline come from the same short-lived snapshot, released before UI work, submission, or waiting.
 Opening or cancelling emits no replacement. A common scope loads every entry; a mixed scope starts unseeded and requires explicit **Replace this scope on all selected tracks** intent.

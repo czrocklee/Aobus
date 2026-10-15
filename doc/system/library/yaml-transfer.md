@@ -154,7 +154,7 @@ A present `mtime` value overrides the modification-time fact: the map form store
 
 The performance-information fields follow the same overlay shape with two narrow rules.
 A `recording-date` scalar holds its value. Empty scalar text is the clear form that stores the absence sentinel: a quoted empty scalar or a present empty plain scalar (`recording-date:`). The literal texts `null` and `~` are nonempty and are not that clear form. An omitted key preserves the baseline date. The [format reference](../../reference/library/format/yaml.md#recording-date) owns the scalar grammar.
-A `credits` sequence replaces all four categories together; explicitly empty clears all, and omitted preserves the selected baseline.
+A `credits` sequence replaces every credit kind together; explicitly empty clears all, and omitted preserves the selected baseline.
 Merge into an existing track preserves its stored credits on omission in every mode, including delta; a media read refreshes technical facts without replacing that curated metadata baseline.
 Delta creation/restore uses media credits when file reading succeeds, otherwise the empty-metadata fallback. Metadata creation/restore starts with empty credits even when media supplies technical facts; full creation/restore likewise has no implicit media credits.
 The importer validates the complete date and every credit in document preflight through the [date grammar](../../reference/library/format/yaml.md#recording-date) and [closed credit schema and admission](../../reference/library/format/yaml.md#credits), before any durable effect.

@@ -100,7 +100,7 @@ Use these shipped shortcuts:
 | `c` | reveal the playing track directly |
 
 Detail stays beside the track table while you browse. Escape closes temporary overlays but does not hide Detail.
-Credits show complete names, kinds, and optional roles. With Detail focused, Ctrl+K opens all Credits for the current selection: every marked track, or the focused track when none is marked. `1` through `4` open Conductor, Ensemble, Soloist, or Performer for the same tracks.
+Credits show complete names, kinds, and optional roles. With Detail focused, Ctrl+K opens all Credits for the current selection: every marked track, or the focused track when none is marked. `1` through `9` open one of the first nine kinds, Conductor through Engineer, for the same tracks; edit Mixer, DJ-mixer, and Remixer with Ctrl+K.
 Table category columns stay compact and count duplicate entries; detail and editor show the complete lists. The quality conclusion describes the active playback path, not metadata stored on the track. See [interpreting playback quality](play-music.md#inspect-playback-quality) for source fidelity, pipeline changes, and incomplete evidence.
 
 The playback bar's four-character mode combines sequential or shuffled order with repeat state. Clicking it advances through presets; `S` changes shuffle and `r` cycles repeat independently. The [TUI command reference](../reference/tui/command.md#playback-mode-codes) defines the codes.

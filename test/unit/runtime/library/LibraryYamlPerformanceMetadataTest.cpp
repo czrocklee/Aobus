@@ -114,13 +114,29 @@ namespace ao::rt::test
                                            {.name = " Keith ", .role = " Guitar "},
                                            {.name = "Boulez", .kind = CreditKind::Conductor},
                                            {.name = "Orchestra", .kind = CreditKind::Ensemble},
-                                           {.name = "Jose\xcc\x81", .kind = CreditKind::Soloist, .role = " \t "}};
+                                           {.name = "Jose\xcc\x81", .kind = CreditKind::Soloist, .role = " \t "},
+                                           {.name = "Rex", .kind = CreditKind::Remixer},
+                                           {.name = "Lee", .kind = CreditKind::Lyricist},
+                                           {.name = "Ann", .kind = CreditKind::Arranger, .role = "strings"},
+                                           {.name = "Wes", .kind = CreditKind::Writer},
+                                           {.name = "Pat", .kind = CreditKind::Producer},
+                                           {.name = "Eve", .kind = CreditKind::Engineer},
+                                           {.name = "Max", .kind = CreditKind::Mixer},
+                                           {.name = "Dee", .kind = CreditKind::DjMixer}};
     auto const expected = std::vector<Credit>{{.name = "Boulez", .kind = CreditKind::Conductor},
                                               {.name = "Orchestra", .kind = CreditKind::Ensemble},
                                               {.name = "Anne", .kind = CreditKind::Soloist},
                                               {.name = "Jos\xc3\xa9", .kind = CreditKind::Soloist},
                                               {.name = "Keith", .role = "Guitar"},
-                                              {.name = "Keith", .role = "Guitar"}};
+                                              {.name = "Keith", .role = "Guitar"},
+                                              {.name = "Lee", .kind = CreditKind::Lyricist},
+                                              {.name = "Ann", .kind = CreditKind::Arranger, .role = "strings"},
+                                              {.name = "Wes", .kind = CreditKind::Writer},
+                                              {.name = "Pat", .kind = CreditKind::Producer},
+                                              {.name = "Eve", .kind = CreditKind::Engineer},
+                                              {.name = "Max", .kind = CreditKind::Mixer},
+                                              {.name = "Dee", .kind = CreditKind::DjMixer},
+                                              {.name = "Rex", .kind = CreditKind::Remixer}};
 
     for (auto const mode : {ExportMode::Full, ExportMode::Metadata, ExportMode::Delta})
     {

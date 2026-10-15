@@ -48,7 +48,7 @@ This contract belongs primarily to the **application runtime** and frontend adap
 ## State model
 
 `CompletionService` owns one source-preserving frequency snapshot plus separately materialized results.
-A private fixed enum/array groups Tags, CustomKeys, all-credit Names/Roles, and four category-name vocabularies, each retaining readiness, frequencies, and materialized entries.
+A private fixed enum/array groups Tags, CustomKeys, all-credit Names/Roles, and one name vocabulary per credit kind, each retaining readiness, frequencies, and materialized entries.
 Category `valuesFor(TrackField)` delegates to that category vocabulary rather than retaining duplicate scalar-field counts; unrelated scalar-field and aggregate caches stay separate.
 Performer has its own name vocabulary without an artificial table `TrackField`.
 The snapshot begins dirty and materialized results begin unavailable.

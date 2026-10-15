@@ -218,7 +218,7 @@ namespace ao::rt::test
       spec.recordingDate = *value;
     }
 
-    // Assemble the complete desired value from the four owning sections.
+    // Assemble the complete desired value from every kind's owning section.
     for (auto const& section : detail.credits)
     {
       REQUIRE_FALSE(section.mixed);

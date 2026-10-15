@@ -74,6 +74,13 @@ namespace ao::uimodel
                               bool hasTargets,
                               TrackCreditSections const& sections,
                               bool editing);
+  // Whether a frontend offers a kind's one-kind entry point. Conductor,
+  // Ensemble, Soloist, and Performer always have one; every other kind has
+  // one only with credits on some target or while show-empty is active, and
+  // stays editable through the all-kind editor.
+  bool shouldShowTrackCreditKind(library::CreditKind kind,
+                                 rt::AggregateValue<std::vector<library::Credit>> const& section,
+                                 bool showEmpty);
   std::optional<rt::CreditReplacement> undoValueForClearedTrackCredits(TrackCreditSections const& sections,
                                                                        std::bitset<library::kCreditKindCount> kinds);
   enum class TrackCreditValidationReason : std::uint8_t

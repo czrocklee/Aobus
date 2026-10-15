@@ -288,17 +288,99 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 TMCL - is v2.4-only and TIPL stays unsupported", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - is v2.4-only", "[media][unit][mpeg][id3v2]")
   {
     auto oldBody = Bytes{};
     appendFrame(oldBody, "TMCL", false, 0, textContent(Encoding::Latin1, nulJoined({"Guitar", "Keith"})));
     CHECK(readCredits(3, oldBody).empty());
+  }
 
-    for (auto const version : {3, 4})
+  TEST_CASE("ID3v2 TIPL and IPLS - map Picard involvements to credit kinds", "[media][unit][mpeg][id3v2]")
+  {
+    // Matching ignores ASCII case and surrounding whitespace. Other involvements,
+    // empty names, and an odd final involvement contribute nothing.
+    auto const text = nulJoined({"arranger",
+                                 "Ann",
+                                 " Producer ",
+                                 "Smith, John",
+                                 "composer",
+                                 "Carl",
+                                 "engineer",
+                                 "",
+                                 "ENGINEER",
+                                 "Eve",
+                                 "mix",
+                                 "Max",
+                                 "DJ-mix",
+                                 "Dee",
+                                 "producer"});
+    auto const expected = std::vector<Credit>{
+      {.name = "Ann", .kind = CreditKind::Arranger},
+      {.name = "Smith, John", .kind = CreditKind::Producer},
+      {.name = "Eve", .kind = CreditKind::Engineer},
+      {.name = "Max", .kind = CreditKind::Mixer},
+      {.name = "Dee", .kind = CreditKind::DjMixer},
+    };
+
+    SECTION("TIPL in a v2.4 tag")
     {
       auto body = Bytes{};
-      appendFrame(body, "TIPL", version == 4, 0, textContent(Encoding::Latin1, nulJoined({"Producer", "X"})));
-      CHECK(readCredits(static_cast<std::uint8_t>(version), body).empty());
+      appendFrame(body, "TIPL", true, 0, textContent(Encoding::Utf8, text));
+      CHECK(readCredits(4, body) == expected);
+    }
+
+    SECTION("IPLS in a v2.3 tag splits every NUL even though v2.3 text frames hold one value")
+    {
+      auto body = Bytes{};
+      appendFrame(body, "IPLS", false, 0, textContent(Encoding::Latin1, text));
+      CHECK(readCredits(3, body) == expected);
+    }
+
+    SECTION("IPLS in UCS-2 with a BOM on every string")
+    {
+      auto body = Bytes{};
+      appendFrame(body, "IPLS", false, 0, utf16Content(Encoding::Ucs2, true, {"producer", "Ann", "mix", "Max"}, true));
+      CHECK(readCredits(3, body) == std::vector<Credit>{{.name = "Ann", .kind = CreditKind::Producer},
+                                                        {.name = "Max", .kind = CreditKind::Mixer}});
+    }
+
+    SECTION("each frame is read only in its own version")
+    {
+      auto oldBody = Bytes{};
+      appendFrame(oldBody, "TIPL", false, 0, textContent(Encoding::Latin1, text));
+      CHECK(readCredits(3, oldBody).empty());
+
+      auto newBody = Bytes{};
+      appendFrame(newBody, "IPLS", true, 0, textContent(Encoding::Utf8, text));
+      CHECK(readCredits(4, newBody).empty());
+    }
+  }
+
+  TEST_CASE("ID3v2 credits - TEXT TPE4 and TXXX Writer name lyricists remixers and writers",
+            "[media][unit][mpeg][id3v2]")
+  {
+    SECTION("v2.4 frames apply each NUL-separated value")
+    {
+      auto body = Bytes{};
+      appendFrame(body, "TEXT", true, 0, textContent(Encoding::Utf8, nulJoined({"Lee", " ", "Lou"})));
+      appendFrame(body, "TPE4", true, 0, textContent(Encoding::Utf8, "Rex"));
+      appendFrame(body, "TXXX", true, 0, textContent(Encoding::Utf8, nulJoined({"WRITER", "Wes", "Wyn"})));
+      CHECK(readCredits(4, body) == std::vector<Credit>{
+                                      {.name = "Lee", .kind = CreditKind::Lyricist},
+                                      {.name = "Lou", .kind = CreditKind::Lyricist},
+                                      {.name = "Rex", .kind = CreditKind::Remixer},
+                                      {.name = "Wes", .kind = CreditKind::Writer},
+                                      {.name = "Wyn", .kind = CreditKind::Writer},
+                                    });
+    }
+
+    SECTION("v2.3 frames stop at the first terminator without splitting slash text")
+    {
+      auto body = Bytes{};
+      appendFrame(body, "TEXT", false, 0, textContent(Encoding::Latin1, std::string_view{"A/B\0C", 5}));
+      appendFrame(body, "TXXX", false, 0, textContent(Encoding::Latin1, std::string_view{"Writer\0W/X\0Y", 12}));
+      CHECK(readCredits(3, body) == std::vector<Credit>{{.name = "A/B", .kind = CreditKind::Lyricist},
+                                                        {.name = "W/X", .kind = CreditKind::Writer}});
     }
   }
 

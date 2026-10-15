@@ -9,6 +9,7 @@
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/media/file/File.h>
+#include <ao/media/file/Visitor.h>
 #include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/AtomLayout.h>
 #include <ao/media/mp4/TrackSelection.h>
@@ -228,6 +229,31 @@ namespace ao::media::file::mp4
       return true;
     }
 
+    // Picard's freeform names for non-performing credits, also read as mdta keys.
+    std::optional<CreditKind> creditKindForName(std::string_view name) noexcept
+    {
+      constexpr auto kKinds = std::to_array<std::pair<std::string_view, CreditKind>>({
+        {"lyricist", CreditKind::Lyricist},
+        {"arranger", CreditKind::Arranger},
+        {"writer", CreditKind::Writer},
+        {"producer", CreditKind::Producer},
+        {"engineer", CreditKind::Engineer},
+        {"mixer", CreditKind::Mixer},
+        {"djmixer", CreditKind::DjMixer},
+        {"remixer", CreditKind::Remixer},
+      });
+
+      for (auto const& [candidate, kind] : kKinds)
+      {
+        if (isEqualIgnoringAsciiCase(name, candidate))
+        {
+          return kind;
+        }
+      }
+
+      return std::nullopt;
+    }
+
     struct NumberPair final
     {
       std::uint16_t number = 0;
@@ -364,6 +390,10 @@ namespace ao::media::file::mp4
         else if (isEqualIgnoringAsciiCase(name, "soloist"))
         {
           builder.metadata().soloist(value);
+        }
+        else if (auto const optKind = creditKindForName(name); optKind)
+        {
+          builder.metadata().credit(value, *optKind);
         }
       }
     }
@@ -618,6 +648,10 @@ namespace ao::media::file::mp4
       else if (isEqualIgnoringAsciiCase(key, "soloist"))
       {
         builder.metadata().soloist(value);
+      }
+      else if (auto const optKind = creditKindForName(key); optKind)
+      {
+        builder.metadata().credit(value, *optKind);
       }
       else if (isEqualIgnoringAsciiCase(key, "work"))
       {

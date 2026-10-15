@@ -44,6 +44,14 @@ namespace ao::media::file
     Ensemble,
     Soloist,
     Performer,
+    Lyricist,
+    Arranger,
+    Writer,
+    Producer,
+    Engineer,
+    Mixer,
+    DjMixer,
+    Remixer,
   };
 
   // Source credit; trimmed, nonblank name and an optional descriptive role.

@@ -16,7 +16,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <format>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -735,6 +737,72 @@ namespace ao::cli::test
     tree = parseYaml(result.out);
     CHECK(tree.rootref()["credits"].num_children() == 0);
     CHECK(yaml::scalarView(tree.rootref()["recordingDate"]) == "1955");
+  }
+
+  TEST_CASE("CLI - every credit kind token round trips through update and show", "[cli][integration][track][update]")
+  {
+    auto fixture = CliFixture{};
+    auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{.title = "Song", .uri = "song.flac"}));
+    auto const tokens = std::to_array<std::string_view>({"remixer",
+                                                         "djmixer",
+                                                         "mixer",
+                                                         "engineer",
+                                                         "producer",
+                                                         "writer",
+                                                         "arranger",
+                                                         "lyricist",
+                                                         "performer",
+                                                         "soloist",
+                                                         "ensemble",
+                                                         "conductor"});
+    auto argv = std::vector<std::string>{"aobus", "-C", fixture.root().string(), "track", "update", trackArg};
+
+    for (auto const token : tokens)
+    {
+      argv.insert(argv.end(), {"--credit", std::string{token}, std::format("{} name", token), ""});
+    }
+
+    auto result = runArgs(argv, fixture.cacheDirectory());
+    REQUIRE(result.status == 0);
+    result = fixture.run({"-O", "json", "track", "show", trackArg});
+    REQUIRE(result.status == 0);
+    auto tree = parseYaml(result.out);
+    auto const credits = tree.rootref()["credits"];
+    REQUIRE(credits.num_children() == tokens.size());
+
+    // Show reports CreditKind order, the reverse of the supplied order.
+    for (std::size_t index = 0; index < tokens.size(); ++index)
+    {
+      auto const token = tokens[tokens.size() - 1 - index];
+      CAPTURE(token);
+      CHECK(yaml::scalarView(credits[index]["kind"]) == token);
+      CHECK(yaml::scalarView(credits[index]["name"]) == std::format("{} name", token));
+    }
+
+    result = fixture.run({"track", "update", trackArg, "--credit-scope", "lyricist", "--clear-credits"});
+    REQUIRE(result.status == 0);
+    result = fixture.run({"-O", "json", "track", "show", trackArg});
+    REQUIRE(result.status == 0);
+    tree = parseYaml(result.out);
+    auto const remaining = tree.rootref()["credits"];
+    REQUIRE(remaining.num_children() == tokens.size() - 1);
+    std::size_t remainingIndex = 0;
+
+    // Only Lyricist is cleared; every other kind keeps its name in CreditKind order.
+    for (std::size_t index = 0; index < tokens.size(); ++index)
+    {
+      auto const token = tokens[tokens.size() - 1 - index];
+
+      if (token == "lyricist")
+      {
+        continue;
+      }
+
+      CAPTURE(token);
+      CHECK(yaml::scalarView(remaining[remainingIndex]["kind"]) == token);
+      CHECK(yaml::scalarView(remaining[remainingIndex]["name"]) == std::format("{} name", token));
+      ++remainingIndex;
+    }
   }
 
   TEST_CASE("CLI - structured update reports carry performance metadata changes", "[cli][integration][track][update]")

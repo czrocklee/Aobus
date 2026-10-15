@@ -118,19 +118,10 @@ namespace ao::media::file::mpeg::id3v2
       return DecodedTextView{.value = convertedStorage, .requiresOwnership = true};
     }
 
-    // Applies the text once per value. ID3v2.3 strings end at their first
-    // terminator; ID3v2.4 frames may hold several NUL-separated values, which
-    // apply in order like repeated frames, so each field's setter folds them.
+    // Applies each NUL-separated string in order, empty ones included.
     template<typename Apply>
-    void forEachTextValue(std::string_view text, std::uint8_t version, Apply apply)
+    void forEachNulSeparatedValue(std::string_view text, Apply apply)
     {
-      if (version != kId3v24MajorVersion)
-      {
-        auto const terminatorOffset = text.find('\0');
-        apply(terminatorOffset == std::string_view::npos ? text : text.substr(0, terminatorOffset));
-        return;
-      }
-
       std::size_t offset = 0;
 
       while (offset < text.size())
@@ -156,6 +147,22 @@ namespace ao::media::file::mpeg::id3v2
 
         offset = terminatorOffset + 1;
       }
+    }
+
+    // Applies the text once per value. ID3v2.3 strings end at their first
+    // terminator; ID3v2.4 frames may hold several NUL-separated values, which
+    // apply in order like repeated frames, so each field's setter folds them.
+    template<typename Apply>
+    void forEachTextValue(std::string_view text, std::uint8_t version, Apply apply)
+    {
+      if (version != kId3v24MajorVersion)
+      {
+        auto const terminatorOffset = text.find('\0');
+        apply(terminatorOffset == std::string_view::npos ? text : text.substr(0, terminatorOffset));
+        return;
+      }
+
+      forEachNulSeparatedValue(text, apply);
     }
 
     // Decodes a text frame and applies each of its values in order.
@@ -189,6 +196,14 @@ namespace ao::media::file::mpeg::id3v2
                                   (builder.metadata().*Setter)(value);
                                 }
                               });
+    }
+
+    // A credit text frame such as TEXT holds names without roles.
+    template<CreditKind Kind>
+    void handleCreditText(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
+    {
+      forEachDecodedTextValue(
+        builder, content, version, [&](std::string_view value) { builder.metadata().credit(value, Kind); });
     }
 
     // Work and grouping frames share the scalar work slot; see WorkSource ranks.
@@ -230,7 +245,6 @@ namespace ao::media::file::mpeg::id3v2
     // musician position, including the ambiguity of commas inside a person's name.
     // Interior empty values retain their positions. Trailing empty values
     // cannot contribute a name, so the shared decoder may strip them.
-    // TIPL stays unsupported.
     void handleTmclCredits(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
       if (version != kId3v24MajorVersion)
@@ -386,6 +400,70 @@ namespace ao::media::file::mpeg::id3v2
       return true;
     }
 
+    // Picard's TIPL involvements for non-performing credits.
+    std::optional<CreditKind> involvementCreditKind(std::string_view involvement) noexcept
+    {
+      if (isEqualIgnoringAsciiCase(involvement, "arranger"))
+      {
+        return CreditKind::Arranger;
+      }
+
+      if (isEqualIgnoringAsciiCase(involvement, "producer"))
+      {
+        return CreditKind::Producer;
+      }
+
+      if (isEqualIgnoringAsciiCase(involvement, "engineer"))
+      {
+        return CreditKind::Engineer;
+      }
+
+      if (isEqualIgnoringAsciiCase(involvement, "mix"))
+      {
+        return CreditKind::Mixer;
+      }
+
+      if (isEqualIgnoringAsciiCase(involvement, "DJ-mix"))
+      {
+        return CreditKind::DjMixer;
+      }
+
+      return std::nullopt;
+    }
+
+    // TIPL (v2.4) and IPLS (v2.3) alternate NUL-separated involvement and
+    // name strings in either version. Unlike TMCL, the name position holds
+    // one name. An involvement outside the credit vocabulary is ignored, and
+    // an odd final involvement has no name.
+    template<std::uint8_t Version>
+    void handleInvolvedPeople(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
+    {
+      auto convertedStorage = std::string{};
+      auto const optText = decodeFrameText(content, convertedStorage);
+
+      if (version != Version || !optText)
+      {
+        return;
+      }
+
+      bool atName = false;
+      auto optKind = std::optional<CreditKind>{};
+      forEachNulSeparatedValue(optText->value,
+                               [&](std::string_view value)
+                               {
+                                 if (!atName)
+                                 {
+                                   optKind = involvementCreditKind(utility::trim(value));
+                                 }
+                                 else if (optKind)
+                                 {
+                                   builder.metadata().credit(value, *optKind);
+                                 }
+
+                                 atName = !atName;
+                               });
+    }
+
     void handleTxxx(detail::ContentBuilder& builder, std::span<std::byte const> content, std::uint8_t version)
     {
       auto convertedStorage = std::string{};
@@ -409,6 +487,7 @@ namespace ao::media::file::mpeg::id3v2
       auto const valueText = stableText.substr(nullOffset + 1);
       auto setter = TextSetter{};
       auto optWorkSource = std::optional<detail::WorkSource>{};
+      auto optCreditKind = std::optional<CreditKind>{};
 
       if (isEqualIgnoringAsciiCase(key, "work"))
       {
@@ -433,6 +512,10 @@ namespace ao::media::file::mpeg::id3v2
       else if (isEqualIgnoringAsciiCase(key, "soloist"))
       {
         setter = &detail::ContentBuilder::MetadataBuilder::soloist;
+      }
+      else if (isEqualIgnoringAsciiCase(key, "writer"))
+      {
+        optCreditKind = CreditKind::Writer;
       }
       else if (isEqualIgnoringAsciiCase(key, "movementname") || isEqualIgnoringAsciiCase(key, "movement_name") ||
                isEqualIgnoringAsciiCase(key, "mvnm"))
@@ -464,6 +547,11 @@ namespace ao::media::file::mpeg::id3v2
       {
         forEachTextValue(
           valueText, version, [&](std::string_view value) { builder.metadata().work(*optWorkSource, value); });
+      }
+      else if (optCreditKind)
+      {
+        forEachTextValue(
+          valueText, version, [&](std::string_view value) { builder.metadata().credit(value, *optCreditKind); });
       }
       else if (setter != nullptr)
       {

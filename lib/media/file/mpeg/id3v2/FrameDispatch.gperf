@@ -23,6 +23,8 @@ TIT2, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::tit
 TPE1, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::artist>
 TPE2, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::albumArtist>
 TPE3, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::conductor>
+TPE4, &handleCreditText<ao::media::file::CreditKind::Remixer>
+TEXT, &handleCreditText<ao::media::file::CreditKind::Lyricist>
 TALB, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::album>
 TCOM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::composer>
 TYER, &handleYear
@@ -34,4 +36,6 @@ MVNM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::mov
 MVIN, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::movementNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::movementTotal>
 APIC, &handlePicture
 TMCL, &handleTmclCredits
+TIPL, &handleInvolvedPeople<kId3v24MajorVersion>
+IPLS, &handleInvolvedPeople<kId3v23MajorVersion>
 TXXX, &handleTxxx

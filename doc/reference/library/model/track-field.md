@@ -49,7 +49,7 @@ The tables list the additional capabilities and exact bridge values.
 All rows in this table have category `Metadata`.
 Movement name and movement number intentionally map to the same `Movement` sort key; projection ordering uses the number while the name remains display text.
 Recording date retains year, month, or day precision and is independent of `Year`.
-Credits are the stored authority for all four fixed kinds, not another scalar `TrackField`, joined table column, or sort key.
+Credits are the stored authority for every fixed kind, not another scalar `TrackField`, joined table column, or sort key.
 Conductor, Ensemble, and Soloist raw fields expose read-only first-name text; their row projections also carry an entry count for compact `first +N` display, counting duplicates.
 Sort and existing group keys use the first name, while category predicates search every name of that kind.
 Their previews open the [scoped Credits editor](../../../system/presentation/metadata-editing.md#credits), not inline scalar mutation.

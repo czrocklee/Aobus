@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 
@@ -42,6 +43,11 @@ namespace ao::tui
     std::string value{};
     Kind kind = Kind::Metadata;
   };
+
+  /// Focused Detail opens one kind's Credits editor with digits 1-9 in
+  /// CreditKind order; a later kind is edited in the all-kind editor.
+  inline constexpr std::size_t kTrackCreditShortcutCount = 9;
+  static_assert(kTrackCreditShortcutCount <= library::kCreditKindCount);
 
   /// Labeled fields used to size the pane independently of the current selection.
   std::span<rt::TrackField const> trackDetailFields();

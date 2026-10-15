@@ -74,6 +74,29 @@ namespace ao::media::file::vorbis::test
     }
   }
 
+  TEST_CASE("VorbisComment - Picard credit comments name their kinds without a role", "[media][unit][vorbis-comment]")
+  {
+    // Only PERFORMER parses a role suffix; a blank value contributes nothing.
+    CHECK(creditsAfterComments({{"LYRICIST", "Lee"},
+                                {"arranger", "Ann (Strings)"},
+                                {"WRITER", "Wes"},
+                                {"PRODUCER", " Pat "},
+                                {"ENGINEER", "Eve"},
+                                {"MIXER", "Max"},
+                                {"DJMIXER", "Dee"},
+                                {"REMIXER", "Rex"},
+                                {"LYRICIST", " \t"}}) == std::vector<Credit>{
+                                                           {.name = "Lee", .kind = CreditKind::Lyricist},
+                                                           {.name = "Ann (Strings)", .kind = CreditKind::Arranger},
+                                                           {.name = "Wes", .kind = CreditKind::Writer},
+                                                           {.name = "Pat", .kind = CreditKind::Producer},
+                                                           {.name = "Eve", .kind = CreditKind::Engineer},
+                                                           {.name = "Max", .kind = CreditKind::Mixer},
+                                                           {.name = "Dee", .kind = CreditKind::DjMixer},
+                                                           {.name = "Rex", .kind = CreditKind::Remixer},
+                                                         });
+  }
+
   TEST_CASE("VorbisComment - PERFORMER falls back to one whole unstructured name", "[media][unit][vorbis-comment]")
   {
     auto const examples = std::to_array<std::string_view>({

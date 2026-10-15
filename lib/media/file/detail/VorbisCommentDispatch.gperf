@@ -24,6 +24,14 @@ ENSEMBLE, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder:
 ORCHESTRA, &handleEnsembleFallback
 SOLOIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::soloist>
 PERFORMER, &appendPerformerCredit
+LYRICIST, &handleCredit<ao::media::file::CreditKind::Lyricist>
+ARRANGER, &handleCredit<ao::media::file::CreditKind::Arranger>
+WRITER, &handleCredit<ao::media::file::CreditKind::Writer>
+PRODUCER, &handleCredit<ao::media::file::CreditKind::Producer>
+ENGINEER, &handleCredit<ao::media::file::CreditKind::Engineer>
+MIXER, &handleCredit<ao::media::file::CreditKind::Mixer>
+DJMIXER, &handleCredit<ao::media::file::CreditKind::DjMixer>
+REMIXER, &handleCredit<ao::media::file::CreditKind::Remixer>
 TRACKNUMBER, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 TRACK, &handleSlashNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackNumber, &ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>
 TRACKTOTAL, &handleNumber<&ao::media::file::detail::ContentBuilder::MetadataBuilder::trackTotal>

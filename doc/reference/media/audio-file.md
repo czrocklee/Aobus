@@ -49,7 +49,7 @@ Visitor text has undergone the source format's declared legacy-encoding conversi
 Mappings are case-insensitive for FLAC/Vorbis keys, MP4 metadata/freeform aliases where stated, and ID3 `TXXX` keys. A dash means no mapping.
 
 Opus carries its metadata as a Vorbis comment list in its `OpusTags` packet and therefore uses the FLAC/Vorbis column below unchanged, including whole-file `ORCHESTRA` fallback and repeated `PERFORMER` credits.
-Conductor, Ensemble, Soloist, and Performer rows below emit credit kinds, not scalar `TextField` callbacks. WAVE embedded ID3 uses every supported ID3 mapping, not just `TMCL`; `INFO` has no credit mapping.
+Conductor, Ensemble, Soloist, and every credits row below emit credit kinds, not scalar `TextField` callbacks; the non-performing credit rows follow MusicBrainz Picard's tag names. WAVE embedded ID3 uses every supported ID3 mapping, not just `TMCL`; `INFO` has no credit mapping.
 
 | Visitor field | FLAC/Vorbis | MP4/iTunes or `mdta` | ID3v2 | WAVE `INFO` |
 |---|---|---|---|---|
@@ -65,6 +65,14 @@ Conductor, Ensemble, Soloist, and Performer rows below emit credit kinds, not sc
 | `Movement` | `MOVEMENTNAME` | `©mvn`; `movementname`, `movement_name`, `mvnm` | `MVNM`; equivalent `TXXX` aliases | — |
 | `Soloist` | `SOLOIST` | freeform/`mdta` `soloist` | `TXXX:soloist` | — |
 | Performer credits | Repeated `PERFORMER` | — | ID3v2.4 `TMCL` | Embedded ID3, not `INFO` |
+| Lyricist credits | `LYRICIST` | freeform/`mdta` `lyricist` | `TEXT` | Embedded ID3, not `INFO` |
+| Arranger credits | `ARRANGER` | freeform/`mdta` `arranger` | `TIPL`/`IPLS` `arranger` | Embedded ID3, not `INFO` |
+| Writer credits | `WRITER` | freeform/`mdta` `writer` | `TXXX:writer` | Embedded ID3, not `INFO` |
+| Producer credits | `PRODUCER` | freeform/`mdta` `producer` | `TIPL`/`IPLS` `producer` | Embedded ID3, not `INFO` |
+| Engineer credits | `ENGINEER` | freeform/`mdta` `engineer` | `TIPL`/`IPLS` `engineer` | Embedded ID3, not `INFO` |
+| Mixer credits | `MIXER` | freeform/`mdta` `mixer` | `TIPL`/`IPLS` `mix` | Embedded ID3, not `INFO` |
+| DJ-mixer credits | `DJMIXER` | freeform/`mdta` `djmixer` | `TIPL`/`IPLS` `DJ-mix` | Embedded ID3, not `INFO` |
+| Remixer credits | `REMIXER` | freeform/`mdta` `remixer` | `TPE4` | Embedded ID3, not `INFO` |
 | `Year` | `DATE`, `YEAR` | `©day`; `date`, `year` | `TYER`, `TDRC` | first four decimal digits of `ICRD` |
 | Track number/total | `TRACKNUMBER`, `TRACK` as `n` or `n/total`; `TRACKTOTAL`, `TOTALTRACKS` | `trkn`; `track`, `tracknumber` slash value | `TRCK` slash value | — |
 | Disc number/total | `DISCNUMBER`, `DISC` slash value; `DISCTOTAL`, `TOTALDISCS` | `disk`; `disc`, `disk`, `discnumber` slash value | `TPOS` slash value | — |
@@ -119,7 +127,7 @@ MP4 integer movement payloads accept widths 1, 2, 3, 4, or 8, data type `0` or `
 ## Credit import
 
 Credits carry supplied participants with a fixed kind and optional descriptive role/instrument text; they need not be a complete personnel roster.
-They are the stored authority for Conductor, Ensemble, Soloist, and Performer, while Composer, Artist, and AlbumArtist remain separate.
+They are the stored authority for every credit kind, while Composer, Artist, and AlbumArtist remain separate.
 Source tags select initial kinds; roles never classify entries, and curated kinds do not retain source provenance.
 The public callback and runtime adapter carry the complete list into `MetadataBuilder::credits` through an exhaustive explicit media-to-library kind mapping.
 The media layer has its own small kind/view types and does not depend on library storage.
@@ -127,17 +135,22 @@ Core applies the [credit input gate](../library/model/track.md#metadata-input-va
 Media skips blank source names, unlike explicitly authored editor/CLI/YAML entries, whose blank names reject the replacement.
 Invalid nonblank text fails library admission rather than receiving replacement-character repair or silent fallback.
 
-ID3 TPE3 and supported TXXX credit mappings reuse version-aware text decoding: ID3v2.4 NUL-separated values contribute separate entries; older-version decoding stays unchanged.
-Neither commas nor slashes split these fields. Supported MP4 freeform and `mdta` mappings retain their existing keys; no new metadata scheme is inferred.
+ID3 TPE3, TPE4, TEXT, and supported TXXX credit mappings reuse version-aware text decoding: ID3v2.4 NUL-separated values contribute separate entries; older-version decoding stays unchanged.
+Neither commas nor slashes split these fields. MP4 freeform and `mdta` credit names are exactly those in the table; no other metadata scheme is inferred.
 
 ID3v2.4 `TMCL` consumes alternating instrument and musician strings after decoding.
 Empty decoded positions must remain in place before pairing.
 Split only the musician position on commas, trim the six ASCII whitespace characters from each resulting name and the instrument text, and emit each nonempty name with that pair's optional role.
 An empty instrument means no role, an empty musician position contributes no entry, and an unpaired final instrument is ignored without discarding earlier complete pairs.
 Repeated frames retain entry order and duplicates.
-ID3v2.3 `TMCL`, `TIPL`, and other contributor schemes are not interpreted as credit sources.
+ID3v2.3 `TMCL` and other contributor schemes are not interpreted as credit sources.
 Each emitted TMCL entry is Performer, with instrument as role. A comma inside one person's name remains ambiguous; no surname heuristic repairs it.
-This comma splitting is not applied to `ARTIST`, `SOLOIST`, TPE3/TXXX, or Vorbis `PERFORMER`.
+This comma splitting is not applied to `ARTIST`, `SOLOIST`, other ID3 credit frames, or Vorbis comments.
+
+ID3v2.4 `TIPL` and ID3v2.3 `IPLS` alternate involvement and name strings; each NUL separates a string in either version, and each frame is read only in its own version.
+A trimmed, ASCII-case-insensitive involvement of `arranger`, `producer`, `engineer`, `mix`, or `DJ-mix` makes the following name an Arranger, Producer, Engineer, Mixer, or DJ-mixer credit without a role.
+The name position holds one name; commas do not split it.
+Other involvements, blank names, and an unpaired final involvement contribute nothing, so an `IPLS` instrument pair, which some taggers write in place of the ID3v2.4-only `TMCL`, does not become a Performer credit.
 
 For each Vorbis `PERFORMER`, trim surrounding ASCII whitespace and omit a blank value.
 Recognize only a nonempty name followed by one final `(role)` suffix separated by one or more ASCII whitespace characters, with a nonempty trimmed role and no other or nested parentheses.
@@ -145,6 +158,7 @@ Consume the whole separating whitespace run and trim both parts: `John Smith  (P
 Otherwise retain the complete trimmed value as an unstructured name with absent role.
 Commas and semicolons are not separators, and repeated comments remain separate ordered entries.
 This is conservative support for the Picard convention, not verified identity or proof that a parenthesized suffix is an instrument.
+Every other Vorbis credit comment, such as `LYRICIST`, holds one trimmed name without a role; a parenthesized suffix stays part of the name.
 
 `PERFORMER` never implies Soloist. New scans populate Credits; ordinary rescans preserve complete curated credits, including kinds left empty, roles, order, and duplicates.
 

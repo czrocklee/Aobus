@@ -235,7 +235,7 @@ Keep such instrumented diagnostic runs separate from acceptance timing and disti
 
 [`CreditsBaselineTest.cpp`](../../../test/perf/CreditsBaselineTest.cpp) records 104 rows:
 100 sampled operations and four fixed-object size observations. Its 10k-track fixtures cover
-empty, single, and many-entry lists, all four kinds, duplicates, and nonfirst roles.
+empty, single, and many-entry lists, the four performance kinds, duplicates, and nonfirst roles.
 Operations exercise physical first-entry extraction, compact rows, member predicates, first-name
 projections, fresh/cached completion vocabularies, and scoped replacement, clear, and NoOp.
 Typed readback verifies each target's retained segments, unaffected tracks, date/title preservation,

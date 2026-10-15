@@ -4,8 +4,16 @@
 ja:table {
   messages:table {
     track_field_recording_date { "録音日" }
-    track_credits_heading { "演奏クレジット" }
+    track_credits_heading { "クレジット" }
     track_credit_performer { "演奏者" }
+    track_credit_lyricist { "作詞者" }
+    track_credit_arranger { "編曲者" }
+    track_credit_writer { "ソングライター" }
+    track_credit_producer { "プロデューサー" }
+    track_credit_engineer { "エンジニア" }
+    track_credit_mixer { "ミキシングエンジニア" }
+    track_credit_dj_mixer { "DJミキサー" }
+    track_credit_remixer { "リミキサー" }
     track_credit_name { "名前" }
     track_credit_role { "役割または楽器（任意）" }
     track_credits_add { "クレジットを追加" }
@@ -822,8 +830,8 @@ ja:table {
     gtk_track_save_failed { "保存に失敗しました" }
     gtk_track_save_stale_title { "変更を保存できませんでした" }
     gtk_track_save_stale { "このダイアログが開いている間にライブラリが変更されました。プロパティを再読み込みして再試行してください。" }
-    gtk_track_credits_discard_title { "演奏クレジットの変更を破棄しますか？" }
-    gtk_track_credits_discard_message { "今プロパティを閉じると、保存していない演奏クレジットの変更は失われます。" }
+    gtk_track_credits_discard_title { "クレジットの変更を破棄しますか？" }
+    gtk_track_credits_discard_message { "今プロパティを閉じると、保存していないクレジットの変更は失われます。" }
     gtk_track_credits_discard { "変更を破棄" }
     gtk_track_credits_keep_editing { "編集を続ける" }
     gtk_tag_add { "追加…" }

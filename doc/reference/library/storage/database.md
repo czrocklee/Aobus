@@ -268,7 +268,7 @@ Private serialization helpers used by representation tests follow the same prefl
 Those gates validate scalar UTF-8, canonical Track URI, representable inline post-NFC sizes, and complete encoded record bounds before dictionary interning, Resource creation, or Track mutation begins.
 Already-NFC inline scalar input uses a quick check to avoid a temporary normalized allocation during size preflight.
 Credit preflight independently checks valid kinds, trimmed nonempty names, name/role UTF-8, date validity, counters, and full cold-record bounds, without requiring upstream normalization.
-Preparation stably groups the four fixed kinds, trims and interns names/nonempty roles, and obtains NFC from dictionary admission.
+Preparation stably groups credits in `CreditKind` order, trims and interns names/nonempty roles, and obtains NFC from dictionary admission.
 The owning-input setter still retains copied borrowed descriptors; all supplied text must survive through preparation.
 Failures after interning starts abort the enclosing root write; there is no per-call rollback or permission to continue and commit that transaction, and private dictionary changes are not published early.
 Prepared values own every byte their encoder emits, including performance entries and the exact date precision.

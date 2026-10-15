@@ -156,7 +156,7 @@ credits:
 ```
 
 `name` and `kind` are required scalars; `role` is an optional scalar.
-Kind tokens are exactly `conductor`, `ensemble`, `soloist`, and `performer`.
+Kind tokens are exactly `conductor`, `ensemble`, `soloist`, `performer`, `lyricist`, `arranger`, `writer`, `producer`, `engineer`, `mixer`, `djmixer`, and `remixer`.
 The importer groups entries stably in that canonical kind order, and the exporter emits that order.
 Within-kind order, duplicate entries, repeated names and roles, and the same name in different kinds are preserved; there is no deduplication.
 The separate `conductor`, `ensemble`, `soloist`, and `musicians` track keys are unknown fields, not aliases.

@@ -179,7 +179,16 @@ namespace ao::library::test
                                     CreditView{.name = "Soloist", .kind = CreditKind::Soloist},
                                     CreditView{.name = "A", .role = "piano"},
                                     CreditView{.name = "B"},
-                                    CreditView{.name = "A", .role = "piano"}};
+                                    CreditView{.name = "A", .role = "piano"},
+                                    CreditView{.name = "Lyricist", .kind = CreditKind::Lyricist},
+                                    CreditView{.name = "Arranger", .kind = CreditKind::Arranger, .role = "strings"},
+                                    CreditView{.name = "Writer", .kind = CreditKind::Writer},
+                                    CreditView{.name = "Producer", .kind = CreditKind::Producer},
+                                    CreditView{.name = "Engineer", .kind = CreditKind::Engineer, .role = "recording"},
+                                    CreditView{.name = "Mixer", .kind = CreditKind::Mixer},
+                                    CreditView{.name = "DJ", .kind = CreditKind::DjMixer},
+                                    CreditView{.name = "Remixer", .kind = CreditKind::Remixer},
+                                    CreditView{.name = "Remixer", .kind = CreditKind::Remixer}};
     auto const date = RecordingDate{.year = 1981, .month = 5};
     original.metadata()
       .title("Title")

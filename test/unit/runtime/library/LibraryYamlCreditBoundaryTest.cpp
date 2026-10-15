@@ -17,6 +17,7 @@
 
 #include <array>
 #include <cstddef>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -47,6 +48,8 @@ namespace ao::rt::test
   {
     auto expected = library::test::makeEmptyTrackSpec("x.wav");
     expected.recordingDate = RecordingDate{.year = 1981, .month = 5};
+    // Kinds after Performer follow the Performer fill in canonical order.
+    auto trailing = std::vector<Credit>{};
 
     SECTION("all entries are Performers")
     {
@@ -60,6 +63,21 @@ namespace ao::rt::test
                           {.name = "Soloist", .kind = CreditKind::Soloist, .role = "Piano (solo)"}};
     }
 
+    SECTION("every kind shares the maximum capacity")
+    {
+      expected.credits = {{.name = "Conductor", .kind = CreditKind::Conductor},
+                          {.name = "Ensemble", .kind = CreditKind::Ensemble},
+                          {.name = "Soloist", .kind = CreditKind::Soloist, .role = "Violin"}};
+      trailing = {{.name = "Lyricist", .kind = CreditKind::Lyricist},
+                  {.name = "Arranger", .kind = CreditKind::Arranger, .role = "Strings"},
+                  {.name = "Writer", .kind = CreditKind::Writer},
+                  {.name = "Producer", .kind = CreditKind::Producer},
+                  {.name = "Engineer", .kind = CreditKind::Engineer, .role = "Mastering"},
+                  {.name = "Mixer", .kind = CreditKind::Mixer},
+                  {.name = "DJ-mixer", .kind = CreditKind::DjMixer},
+                  {.name = "Remixer", .kind = CreditKind::Remixer, .role = "Club mix"}};
+    }
+
     // The supported URI x.wav fits 5,457 entries within the whole cold-record bound without Work,
     // custom metadata, or covers. The date uses the existing prefix.
     auto const performers = std::array{Credit{.name = "José: A=B", .role = "Guitar; voice (guest)"},
@@ -69,11 +87,13 @@ namespace ao::rt::test
     expected.credits.reserve(5457);
     std::size_t performerIndex = 0;
 
-    while (expected.credits.size() < 5457)
+    while (expected.credits.size() + trailing.size() < 5457)
     {
       expected.credits.push_back(performers[performerIndex % performers.size()]);
       ++performerIndex;
     }
+
+    expected.credits.insert(expected.credits.end(), trailing.begin(), trailing.end());
 
     auto const sourceTemp = ao::test::TempDir{};
     auto const sourceDatabase = sourceTemp.path() / "db";

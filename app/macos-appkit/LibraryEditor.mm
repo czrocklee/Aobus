@@ -606,6 +606,14 @@ namespace
   for (std::size_t index = 0; index <= ao::library::kCreditKindCount; ++index)
   {
     auto const all = index == ao::library::kCreditKindCount;
+
+    // The editor has no show-empty mode, so an empty optional kind stays in the all-kind editor.
+    if (!all && !ao::uimodel::shouldShowTrackCreditKind(
+                  static_cast<ao::library::CreditKind>(index), sections[index], /*showEmpty=*/false))
+    {
+      continue;
+    }
+
     auto* const button =
       [NSButton buttonWithTitle:all ? [self text:MessageId::TrackCreditsAllKinds]
                                     : nativeText(ao::uimodel::trackCreditKindLabel(

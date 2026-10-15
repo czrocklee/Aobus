@@ -15,7 +15,7 @@ The selected tracks contain the intended curated metadata and tags, and list, qu
 2. Open the detail surface.
 3. Use the edit button beside an ordinary built-in metadata value.
    Press Enter or click outside to commit; press Escape to cancel.
-   Conductor, Ensemble, and Soloist previews instead open a scoped Credits list editor; the full Credits action edits all four kinds.
+   Conductor, Ensemble, and Soloist previews instead open a scoped Credits list editor; the full Credits action edits every kind.
 4. Use **Add...** in the Metadata section to add custom metadata.
    Custom keys must not duplicate a built-in or existing key.
 5. Add or remove tags in the tag-chip editor.
@@ -45,7 +45,7 @@ Busy keeps your draft for retry.
 
 ### Edit Credits
 
-Credits have four kinds: Conductor, Ensemble, Soloist, and Performer. Artist, Album Artist, and Composer are separate fields.
+Credits have twelve kinds: Conductor, Ensemble, Soloist, Performer, Lyricist, Arranger, Writer, Producer, Engineer, Mixer, DJ-mixer, and Remixer. A kind after Performer appears in Detail only when a selected track has its credits or empty fields are shown; otherwise add the first one from the full Credits action. Artist, Album Artist, and Composer are separate fields.
 A category preview shows the first name and `+N` for additional entries, including duplicates; details show every entry and its optional role.
 A category editor keeps its kind fixed. Full Credits lets you change kind, which moves the entry to the end of its new category; Up/Down moves only within a category.
 Changing a name preserves its role and kind. Blank names prevent Save; a blank role means no role.

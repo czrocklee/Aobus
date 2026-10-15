@@ -57,9 +57,16 @@ namespace ao::tui::test
                          .text;
     CHECK(frame.contains("Credits [Ctrl-K]"));
     CHECK(frame.contains("Performer [4]"));
+    // An empty kind after Performer keeps its digit but stays out of the legend.
+    CHECK_FALSE(frame.contains("Lyricist [5]"));
 
-    for (auto const& event :
-         {Event::CtrlK, Event::Character('1'), Event::Character('2'), Event::Character('3'), Event::Character('4')})
+    for (auto const& event : {Event::CtrlK,
+                              Event::Character('1'),
+                              Event::Character('2'),
+                              Event::Character('3'),
+                              Event::Character('4'),
+                              Event::Character('5'),
+                              Event::Character('9')})
     {
       REQUIRE(events.tryHandleEvent(event));
       REQUIRE(fixture.trackEditPtr->isActive());
@@ -92,6 +99,8 @@ namespace ao::tui::test
     }
 
     credits[0].optValue->push_back({"Bernstein", library::CreditKind::Conductor, ""});
+    credits[4].optValue->push_back({"Lee", library::CreditKind::Lyricist, ""});
+    credits[9].optValue->push_back({"Max", library::CreditKind::Mixer, ""});
 
     for (bool const focused : {false, true})
     {
@@ -119,6 +128,11 @@ namespace ao::tui::test
       CHECK(frame.contains("Bernstein"));
       CHECK(frame.contains("Credits [Ctrl-K]") == focused);
       CHECK(frame.contains("Performer [4]") == focused);
+      CHECK(frame.contains("Lyricist [5]") == focused);
+      CHECK_FALSE(frame.contains("Writer [7]"));
+      // The tenth kind has no digit; its credit still lists.
+      CHECK(frame.contains("Max"));
+      CHECK_FALSE(frame.contains("Mixer ["));
     }
   }
 

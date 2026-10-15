@@ -59,6 +59,43 @@ namespace ao::rt::test
                             {.name = "Ada", .role = "Piano"}, {.name = "Bob"}, {.name = "Ada", .role = "Violin"}});
   }
 
+  TEST_CASE("ScanApplyOperation - new scans store Picard non-performing credits in their own kinds",
+            "[runtime][integration][library-scan]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    writeScanFlacMetadataFixture(musicRoot / "song.flac",
+                                 {"TITLE=Scan Title",
+                                  "REMIXER=Rex",
+                                  "PERFORMER=Ada (Piano)",
+                                  "LYRICIST=Lee",
+                                  "ARRANGER=Ann",
+                                  "WRITER=Wes",
+                                  "PRODUCER=Pat",
+                                  "ENGINEER=Eve",
+                                  "MIXER=Max",
+                                  "DJMIXER=Dee",
+                                  "COMPOSER=Carl"});
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto const trackId = importOne(ml);
+
+    auto const spec = storedTrackSpec(ml, trackId);
+    CHECK(spec.composer == "Carl");
+    CHECK(spec.credits == std::vector<library::Credit>{
+                            {.name = "Ada", .role = "Piano"},
+                            {.name = "Lee", .kind = library::CreditKind::Lyricist},
+                            {.name = "Ann", .kind = library::CreditKind::Arranger},
+                            {.name = "Wes", .kind = library::CreditKind::Writer},
+                            {.name = "Pat", .kind = library::CreditKind::Producer},
+                            {.name = "Eve", .kind = library::CreditKind::Engineer},
+                            {.name = "Max", .kind = library::CreditKind::Mixer},
+                            {.name = "Dee", .kind = library::CreditKind::DjMixer},
+                            {.name = "Rex", .kind = library::CreditKind::Remixer},
+                          });
+  }
+
   TEST_CASE("ScanApplyOperation - explicit SOLOIST stays independent of PERFORMER in either order",
             "[runtime][integration][library-scan]")
   {

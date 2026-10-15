@@ -124,7 +124,7 @@ The declared byte rate must equal sample rate times block alignment without arit
 
 ## Internal credit extraction
 
-Private interpreted `Content` owns credit name/role text and retains source-ordered views with the four fixed media kinds for `Visitor::visitCredits`.
+Private interpreted `Content` owns credit name/role text and retains source-ordered views, each with one of the fixed media credit kinds, for `Visitor::visitCredits`.
 Repeated supported values and different source forms for one kind contribute separate entries without deduplication.
 The [credit import reference](../../reference/media/audio-file.md#credit-import) owns existing source mappings, whole-file nonblank Ensemble-over-Orchestra precedence, version-aware ID3 values, TMCL pairing, and the conservative Vorbis PERFORMER suffix parser.
 Blank source names are omitted; malformed nonblank text remains subject to strict library UTF-8/NFC admission rather than source-parser repair.

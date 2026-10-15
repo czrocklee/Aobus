@@ -6,6 +6,14 @@ de:table {
     track_field_recording_date { "Aufnahmedatum" }
     track_credits_heading { "Mitwirkende" }
     track_credit_performer { "Interpret" }
+    track_credit_lyricist { "Texter" }
+    track_credit_arranger { "Arrangeur" }
+    track_credit_writer { "Songwriter" }
+    track_credit_producer { "Produzent" }
+    track_credit_engineer { "Toningenieur" }
+    track_credit_mixer { "Mischtechniker" }
+    track_credit_dj_mixer { "DJ-Mixer" }
+    track_credit_remixer { "Remixer" }
     track_credit_name { "Name" }
     track_credit_role { "Rolle oder Instrument (optional)" }
     track_credits_add { "Mitwirkung hinzufügen" }
