@@ -149,6 +149,8 @@ The resolved file must be a supported regular audio file inside that root and mu
 
 The command parses tags and technical properties, stages or reuses dictionary mappings, creates hot and cold track records and cover resources, writes an available manifest row, and commits these facts together.
 Missing or out-of-root paths, unsupported or malformed media, filesystem failures, record limits, and duplicate manifest rows return a recoverable `Result` error.
+A path inside the root whose relative form exceeds the 1,976-byte URI limit returns `ValueTooLarge` with its byte count, even when the platform cannot resolve a path that long; such a path is measured by its spelling under either the configured or the resolved music root.
+A path whose URI fits but whose full path the platform cannot resolve returns `IoError`, and a name inside the root that forms no URI returns `InvalidInput` with the URI rule it breaks.
 
 The preview validates and prepares the same import but does not expose a `TrackId`, because allocation is not durable before commit.
 

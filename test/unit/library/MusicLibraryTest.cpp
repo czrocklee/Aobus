@@ -444,6 +444,27 @@ namespace ao::library::test
     requireCorruptLibrary(temp.path());
   }
 
+  TEST_CASE("MusicLibrary - rejects a database whose pages cannot hold the longest manifest key",
+            "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+
+    {
+      auto* rawEnvironment = static_cast<MDB_env*>(nullptr);
+      REQUIRE(::mdb_env_create(&rawEnvironment) == MDB_SUCCESS);
+      auto environmentPtr = std::unique_ptr<MDB_env, decltype(&::mdb_env_close)>{rawEnvironment, &::mdb_env_close};
+      // An existing database keeps the page size it was created with.
+      REQUIRE(::mdb_env_set_pagesize(environmentPtr.get(), 1'024) == MDB_SUCCESS);
+      REQUIRE(::mdb_env_open(environmentPtr.get(), temp.path().string().c_str(), MDB_NOTLS, 0644) == MDB_SUCCESS);
+      REQUIRE(::mdb_env_get_maxkeysize(environmentPtr.get()) < 1'976);
+    }
+
+    auto const res = openTestMusicLibrary(temp.path(), temp.path());
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::NotSupported);
+    CHECK(res.error().message.contains("may take 1976 bytes"));
+  }
+
   TEST_CASE("MusicLibrary - reports unsupported library versions as NotSupported", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};

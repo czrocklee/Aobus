@@ -12,6 +12,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -87,11 +88,58 @@ namespace ao::library::test
 
   TEST_CASE("LibraryUri - parsing owns the storage length limit", "[library][unit][uri]")
   {
-    CHECK(LibraryUri::parse(std::string(LibraryUri::kMaxLength, 'a')));
+    // The limit is format: pin its value independently of the production constant.
+    STATIC_REQUIRE(LibraryUri::kMaxLength == 1'976);
+    auto const longest = std::string(LibraryUri::kMaxLength, 'a');
+    CHECK(LibraryUri::parse(longest));
 
-    auto const tooLongRes = LibraryUri::parse(std::string(LibraryUri::kMaxLength + 1U, 'a'));
+    auto const tooLongRes = LibraryUri::parse(longest + "a");
     REQUIRE_FALSE(tooLongRes);
     CHECK(tooLongRes.error().code == Error::Code::ValueTooLarge);
+    CHECK(tooLongRes.error().message.contains("1977"));
+
+    SECTION("the limit applies to the canonical value, not the input")
+    {
+      auto const normalizedRes = LibraryUri::parse("./album/../" + longest);
+      REQUIRE(normalizedRes);
+      CHECK(normalizedRes->value() == longest);
+    }
+
+    SECTION("multibyte names count bytes, not characters")
+    {
+      // U+8AB0 takes three UTF-8 bytes, so 659 of them exceed 1,976 bytes.
+      auto name = std::string{};
+
+      for (std::size_t index = 0; index < 659; ++index)
+      {
+        name += "\xE8\xAA\xB0";
+      }
+
+      auto const multibyteRes = LibraryUri::parse(name);
+      REQUIRE_FALSE(multibyteRes);
+      CHECK(multibyteRes.error().code == Error::Code::ValueTooLarge);
+      CHECK(LibraryUri::parse(name.substr(3)));
+    }
+  }
+
+  TEST_CASE("LibraryUri - diagnostics quote at most a URI's length of input", "[library][unit][uri]")
+  {
+    // "../" and then 1,000 three-byte U+8AB0: byte 1,976 falls inside a code
+    // point, so the quote backs off to the lead byte at 1,974.
+    auto escaping = std::string{"../"};
+
+    for (std::size_t index = 0; index < 1'000; ++index)
+    {
+      escaping += "\xE8\xAA\xB0";
+    }
+
+    auto const res = LibraryUri::parse(escaping);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    auto const& message = res.error().message;
+    CHECK(message.contains("escapes the library root"));
+    CHECK(message.contains("'" + escaping.substr(0, 1'974) + "...' (3003 bytes)"));
+    CHECK_FALSE(message.contains(escaping.substr(0, 1'975)));
   }
 
   TEST_CASE("LibraryUri - UTF-8 names resolve through native filesystem paths", "[library][unit][uri]")

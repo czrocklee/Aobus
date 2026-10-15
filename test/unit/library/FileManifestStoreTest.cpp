@@ -134,7 +134,9 @@ namespace ao::library::test
   TEST_CASE("FileManifestStore - URI padding boundaries preserve read, write, and remove behavior",
             "[library][unit][manifest]")
   {
-    constexpr auto kUriLengths = std::array<std::size_t, 13>{1, 2, 3, 4, 5, 6, 7, 8, 9, 497, 498, 499, 500};
+    // The longest key is within two bytes of LMDB's computed maximum key size
+    // for 4 KiB pages, so a host whose limit is smaller fails its write.
+    constexpr auto kUriLengths = std::array<std::size_t, 13>{1, 2, 3, 4, 5, 6, 7, 8, 9, 1'973, 1'974, 1'975, 1'976};
 
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;

@@ -52,7 +52,7 @@ An absent required collection is not interpreted as an empty collection.
 
 A library URI names one item beneath the music root.
 Parsing replaces backslashes with forward slashes and applies lexical normalization.
-The result must be non-empty, at most 500 bytes, relative, have no root name or root directory, contain no C0 or DEL control character, contain no surviving `..` component, and never begin with a separator.
+The result must be non-empty, at most 1,976 bytes after normalization, relative, have no root name or root directory, contain no C0 or DEL control character, contain no surviving `..` component, and never begin with a separator.
 POSIX absolute paths, Windows drive paths, UNC paths, and parent traversal are rejected.
 Percent signs have no escape semantics: text such as `%2e%2e` names a literal path component and is never decoded into traversal.
 
@@ -308,6 +308,7 @@ There is no migration contract for earlier interchange files, and a version-3 do
 
 Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.
 Version 8 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 8. There is no dual reader or layout autodetection.
+Version 8 has not been released. Until the first public release, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change; for example, a URI longer than 500 bytes is rejected by builds made before the limit became 1,976 bytes.
 Version 8 removed the root `libraryId`: a library id names only the database that drew it, so a document has none to carry; version 7 introduced `recording-date` and typed `credits`.
 `recording-date` defines empty scalar text, including quoted empty scalars and a present empty plain scalar, as its clear form.
 Version 6 existed for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
@@ -397,7 +398,7 @@ library:
 - [`LibraryYamlImporterTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlImporterTest.cpp) covers recording-date and credit-entry admission, whole-document preflight rejection, and version gating before field interpretation.
 - [`LibraryYamlExporterTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlExporterTest.cpp) covers recording-date and credits emission, omission, and delta baselines.
 - [`LibraryYamlPerformanceMetadataTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) covers same-version round trips of date precision, list order and roles, clear forms, and merge overlay preservation.
-- [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) covers canonicalization, literal percent text, control-character rejection, absent roots, in-root resolution, and escaping or dangling symlinks.
+- [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) covers canonicalization, the byte length limit after normalization, literal percent text, control-character rejection, absent roots, in-root resolution, and escaping or dangling symlinks.
 
 ## Related documents
 

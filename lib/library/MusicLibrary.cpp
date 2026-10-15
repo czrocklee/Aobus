@@ -1097,6 +1097,18 @@ namespace ao::library
         return std::unexpected{envRes.error()};
       }
 
+      // LMDB derives its key limit from the page size the environment was
+      // created with, so a database with smaller pages, or an LMDB build with
+      // a smaller fixed limit, could not store every valid manifest key.
+      if (auto const maxKeySize = envRes->maxKeySize(); maxKeySize < detail::PaddedFileManifestKey::kCapacity)
+      {
+        return makeError(Error::Code::NotSupported,
+                         std::format("LMDB accepts keys of at most {} bytes in this database, but a library manifest "
+                                     "key may take {} bytes",
+                                     maxKeySize,
+                                     detail::PaddedFileManifestKey::kCapacity));
+      }
+
       auto initializationTransactionRes = lmdb::WriteTransaction::begin(*envRes);
 
       if (!initializationTransactionRes)

@@ -69,6 +69,8 @@ Per-entry problems may appear as error items without erasing other classificatio
 These item errors describe external filesystem, path-resolution, or media inspection failures.
 A malformed manifest cannot enter a live planner through supported storage: open rejects persisted corruption, while a later point-read or iterator breach aborts through the fatal facility because continuing would make invalid storage look like an ordinary missing file.
 An entry that is present but cannot be resolved or inspected safely is `Error`, not also `Missing`; its existing manifest row remains unchanged when the plan is applied.
+A directory, a directory symlink, or a supported audio file whose root-relative path forms no library URI, for example one longer than 1,976 bytes after normalization, is an `Error` item labeled with its full relative path; the message gives the byte count when length is the cause and says when a directory's contents were not scanned.
+A file of an unsupported format needs no URI, so the walk skips it even when its path forms none.
 The planner reads the persisted library id, committed revision, and manifest from one short LMDB snapshot, copies every manifest row into owned plan-building state, and closes the transaction before walking the filesystem.
 Cancellation is checked while copying the manifest, traversing entries, reporting progress, adding missing rows, matching moves, and hashing candidate payloads.
 
@@ -213,7 +215,7 @@ through `LibraryChanges`; workflow completion performs no independent refresh.
 
 ## Test map
 
-- [`ScanPlanTest.cpp`](../../../test/unit/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors.
+- [`ScanPlanTest.cpp`](../../../test/unit/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors, including entries whose paths form no URI.
 - [`ScanApplyOperationTest.cpp`](../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves library-id binding, stale-new replay protection, atomic application, curated-metadata preservation, cover replacement on `Changed` and `Moved` items, descriptor retention, relinking, failures, progress, and cancellation.
 - [`ScanWorkMetadataTest.cpp`](../../../test/unit/runtime/library/ScanWorkMetadataTest.cpp) distinguishes work-source precedence on new imports from preservation of file-derived and manually curated work on changed-file scans.
 - [`ScanPerformanceMetadataTest.cpp`](../../../test/unit/runtime/library/ScanPerformanceMetadataTest.cpp) protects new credit import and preservation of complete curated Credits and independent RecordingDate on rescans.

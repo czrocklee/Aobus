@@ -39,6 +39,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -757,6 +758,100 @@ namespace ao::rt::test
     REQUIRE(planRes->size() == 1);
     CHECK(planRes->items().front().uri == expected);
     CHECK(planRes->items().front().fullPath == mediaPath);
+  }
+
+#ifndef _WIN32
+  // Windows forbids control characters in names; POSIX filesystems allow them.
+  TEST_CASE("ScanPlan - an entry whose path forms no URI is reported by its full relative path",
+            "[runtime][unit][library-scan][uri]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    auto const artist = musicRoot / "artist";
+    auto const badAlbum = artist / "album\x01";
+    std::filesystem::create_directories(badAlbum);
+    createFile(badAlbum / "hidden.flac");
+    createFile(artist / "track\x01.flac");
+    createFile(artist / "notes\x01.txt");
+    std::filesystem::create_directories(artist / "real");
+    auto const symlink =
+      ao::test::SymlinkFixture{artist / "real", artist / "link\x01", ao::test::SymlinkType::Directory};
+
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto const plan = LibraryScan{library}.buildPlan().value();
+
+    // A file of an unsupported format needs no URI, so it is ignored.
+    REQUIRE(plan.size() == 3);
+    REQUIRE(plan.count(ScanClassification::Error) == 3);
+    auto items = std::vector<ScanItem>(plan.items().begin(), plan.items().end());
+    std::ranges::sort(items, {}, &ScanItem::uri);
+
+    CHECK(items[0].uri == "artist/album\x01");
+    CHECK(items[0].errorMessage.contains("control characters"));
+    CHECK(items[0].errorMessage.contains("its contents were not scanned"));
+
+    // The walk does not follow a directory symlink, so it skips no subtree.
+    CHECK(items[1].uri == "artist/link\x01");
+    CHECK(items[1].errorMessage.contains("control characters"));
+    CHECK_FALSE(items[1].errorMessage.contains("its contents were not scanned"));
+
+    CHECK(items[2].uri == "artist/track\x01.flac");
+    CHECK(items[2].errorMessage.contains("control characters"));
+    CHECK_FALSE(items[2].errorMessage.contains("its contents were not scanned"));
+  }
+#endif
+
+  TEST_CASE("ScanPlan - an entry whose path exceeds the URI limit is reported by its full relative path",
+            "[runtime][unit][library-scan][uri]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    // Nine 200-byte components keep every name legal and leave the 1,808-byte
+    // prefix within the URI limit, so only the entries below it exceed it.
+    auto prefixUri = std::string(200, 'a');
+
+    for (std::size_t index = 1; index < 9; ++index)
+    {
+      prefixUri += "/" + std::string(200, 'a');
+    }
+
+    auto const prefix = musicRoot / prefixUri;
+    auto const longName = std::string(200, 'b');
+    auto ec = std::error_code{};
+    std::filesystem::create_directories(prefix / longName, ec);
+
+    if (ec)
+    {
+      SKIP("the host cannot create a path this long: " << ec.message());
+    }
+
+    createFile(prefix / "valid.flac");
+    createFile(prefix / (longName + ".flac"));
+    createFile(prefix / (longName + ".txt"));
+    createFile(prefix / longName / "hidden.flac");
+
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto const plan = LibraryScan{library}.buildPlan().value();
+
+    // The overlong unsupported file is ignored and the overlong directory is
+    // not descended, so hidden.flac is not reported.
+    auto items = std::vector<ScanItem>(plan.items().begin(), plan.items().end());
+    std::ranges::sort(items, {}, &ScanItem::uri);
+    REQUIRE(items.size() == 3);
+
+    CHECK(items[0].uri == prefixUri + "/" + longName);
+    CHECK(items[0].classification == ScanClassification::Error);
+    CHECK(items[0].errorMessage.contains(std::to_string(items[0].uri.size())));
+    CHECK(items[0].errorMessage.contains("exceeds the maximum of 1976 bytes"));
+    CHECK(items[0].errorMessage.contains("its contents were not scanned"));
+
+    CHECK(items[1].uri == prefixUri + "/" + longName + ".flac");
+    CHECK(items[1].classification == ScanClassification::Error);
+    CHECK(items[1].errorMessage.contains(std::to_string(items[1].uri.size())));
+    CHECK_FALSE(items[1].errorMessage.contains("its contents were not scanned"));
+
+    CHECK(items[2].uri == prefixUri + "/valid.flac");
+    CHECK(items[2].classification == ScanClassification::New);
   }
 
   TEST_CASE("ScanPlan - rejects file symlinks escaping the music root", "[runtime][unit][library-scan][uri]")

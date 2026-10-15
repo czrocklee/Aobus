@@ -3,6 +3,7 @@
 
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -21,6 +22,8 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <system_error>
+#include <tuple>
 #include <vector>
 
 namespace ao::rt::test
@@ -46,6 +49,20 @@ namespace ao::rt::test
       auto out = std::ofstream{destination};
       out << "not audio";
       return destination;
+    }
+
+    // Components stay below filesystem name limits while the path grows past
+    // the 1,976-byte URI limit. Ten stay within Linux's 4,096-byte path limit
+    // and resolve; twenty-one exceed it, so there resolution fails and the
+    // path is measured lexically.
+    std::filesystem::path longTrackPath(std::filesystem::path path, std::size_t const componentCount)
+    {
+      for (std::size_t index = 0; index < componentCount; ++index)
+      {
+        path /= std::string(200, 'a');
+      }
+
+      return path / "track.flac";
     }
   } // namespace
 
@@ -194,6 +211,48 @@ namespace ao::rt::test
       CHECK(trackIdRes.error().message.contains("outside music root"));
     }
 
+    SECTION("path too long for a library URI")
+    {
+      for (auto const componentCount : std::array<std::size_t, 2>{10, 21})
+      {
+        CAPTURE(componentCount);
+        auto const longPath = longTrackPath(libraryFixture.root(), componentCount);
+        auto const trackIdRes = commandsFixture.runTask(commands.createTrackFromFileAsync(longPath));
+        REQUIRE_FALSE(trackIdRes);
+        CHECK(trackIdRes.error().code == Error::Code::ValueTooLarge);
+        CHECK(trackIdRes.error().message.contains("track file path is too long"));
+        CHECK(trackIdRes.error().message.contains("exceeds the maximum of 1976 bytes"));
+      }
+    }
+
+#ifndef _WIN32
+    // Windows forbids control characters in names; POSIX filesystems allow them.
+    SECTION("name inside root that forms no URI")
+    {
+      auto const trackIdRes =
+        commandsFixture.runTask(commands.createTrackFromFileAsync(libraryFixture.root() / "track\x01.flac"));
+      REQUIRE_FALSE(trackIdRes);
+      CHECK(trackIdRes.error().code == Error::Code::InvalidInput);
+      CHECK(trackIdRes.error().message.contains("does not form a library URI"));
+      CHECK(trackIdRes.error().message.contains("control characters"));
+    }
+#endif
+
+    SECTION("long path outside root")
+    {
+      auto const outsideTemp = ao::test::TempDir{};
+
+      for (auto const componentCount : std::array<std::size_t, 2>{10, 21})
+      {
+        CAPTURE(componentCount);
+        auto const longPath = longTrackPath(outsideTemp.path(), componentCount);
+        auto const trackIdRes = commandsFixture.runTask(commands.createTrackFromFileAsync(longPath));
+        REQUIRE_FALSE(trackIdRes);
+        CHECK(trackIdRes.error().code == Error::Code::InvalidInput);
+        CHECK(trackIdRes.error().message.contains("outside music root"));
+      }
+    }
+
     SECTION("symlink escaping root")
     {
       auto const outsideTemp = ao::test::TempDir{};
@@ -210,5 +269,69 @@ namespace ao::rt::test
       CHECK(trackIdRes.error().code == Error::Code::InvalidInput);
       CHECK(trackIdRes.error().message.contains("outside music root"));
     }
+  }
+
+  TEST_CASE("LibraryCommands - createTrackFromFile measures a long path under a symlinked root",
+            "[runtime][unit][library][track-create]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const realRoot = temp.path() / "real";
+    std::filesystem::create_directories(realRoot);
+    auto const configuredRoot = temp.path() / "configured";
+    auto const symlink = ao::test::SymlinkFixture{realRoot, configuredRoot, ao::test::SymlinkType::Directory};
+    auto library = library::test::makeTestMusicLibrary(configuredRoot, temp.path() / "db");
+    auto changes = makeStateOnlyLibraryChanges(library);
+    auto commandsFixture = LibraryCommandsFixture{library, changes};
+
+    // The path is spelled through the configured root, so an unresolvable one
+    // is measured relative to that spelling rather than the resolved root.
+    for (auto const componentCount : std::array<std::size_t, 2>{10, 21})
+    {
+      CAPTURE(componentCount);
+      auto const longPath = longTrackPath(configuredRoot, componentCount);
+      auto const trackIdRes = commandsFixture.runTask(commandsFixture.commands().createTrackFromFileAsync(longPath));
+      REQUIRE_FALSE(trackIdRes);
+      CHECK(trackIdRes.error().code == Error::Code::ValueTooLarge);
+      CHECK(trackIdRes.error().message.contains("exceeds the maximum of 1976 bytes"));
+    }
+  }
+
+  TEST_CASE("LibraryCommands - createTrackFromFile reports a valid URI whose path the platform cannot resolve",
+            "[runtime][unit][library][track-create]")
+  {
+    // A root of thirteen components and a URI of eight keep each within its
+    // limit while the joined path exceeds Linux's 4,096 bytes.
+    auto const temp = ao::test::TempDir{};
+    auto root = temp.path();
+
+    for (std::size_t index = 0; index < 13; ++index)
+    {
+      root /= std::string(200, 'r');
+    }
+
+    auto ec = std::error_code{};
+    std::filesystem::create_directories(root, ec);
+
+    if (ec)
+    {
+      SKIP("the host cannot create a path this long: " << ec.message());
+    }
+
+    auto const longPath = longTrackPath(root, 8);
+    std::ignore = std::filesystem::weakly_canonical(longPath, ec);
+
+    if (ec != std::errc::filename_too_long)
+    {
+      SKIP("the host resolves a path this long");
+    }
+
+    auto library = library::test::makeTestMusicLibrary(root, temp.path() / "db");
+    auto changes = makeStateOnlyLibraryChanges(library);
+    auto commandsFixture = LibraryCommandsFixture{library, changes};
+
+    auto const trackIdRes = commandsFixture.runTask(commandsFixture.commands().createTrackFromFileAsync(longPath));
+    REQUIRE_FALSE(trackIdRes);
+    CHECK(trackIdRes.error().code == Error::Code::IoError);
+    CHECK(trackIdRes.error().message.contains("too long for the platform"));
   }
 } // namespace ao::rt::test

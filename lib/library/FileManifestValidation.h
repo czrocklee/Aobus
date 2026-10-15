@@ -20,13 +20,14 @@ namespace ao::library
     class PaddedFileManifestKey final
     {
     public:
+      /// The size of the key of a URI of the maximum length.
+      static constexpr std::size_t kCapacity = (LibraryUri::kMaxLength + 3U) & ~std::size_t{3U};
+
       explicit PaddedFileManifestKey(std::string_view uri);
 
       std::span<std::byte const> bytes() const noexcept { return std::span{_bytes}.first(_size); }
 
     private:
-      static constexpr std::size_t kCapacity = (LibraryUri::kMaxLength + 3U) & ~std::size_t{3U};
-
       std::array<std::byte, kCapacity> _bytes{};
       std::size_t _size = 0;
     };

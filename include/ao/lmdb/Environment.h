@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -194,6 +195,9 @@ namespace ao::lmdb
     ~Environment() noexcept;
 
     EnvironmentCapacity capacity() const;
+
+    /// The longest key LMDB accepts, derived from the page size the environment was created with.
+    std::size_t maxKeySize() const noexcept;
 
     /// What this environment's map size costs on disk, decided when it opened.
     MapAllocation mapAllocation() const noexcept { return _mapAllocation; }
