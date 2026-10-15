@@ -51,11 +51,11 @@ Movement name and movement number intentionally map to the same `Movement` sort 
 Recording date retains year, month, or day precision and is independent of `Year`.
 Credits are the stored authority for all four fixed kinds, not another scalar `TrackField`, joined table column, or sort key.
 Conductor, Ensemble, and Soloist raw fields expose read-only first-name text; their row projections also carry an entry count for compact `first +N` display, counting duplicates.
-Sort and existing group keys use the first name, while category predicates search every name in that segment.
+Sort and existing group keys use the first name, while category predicates search every name of that kind.
 Their previews open the [scoped Credits editor](../../../system/presentation/metadata-editing.md#credits), not inline scalar mutation.
 Complete owning per-kind lists drive detail/form mixed state and editing; scalar text equality is not credit equality.
-`$performer` searches the fourth segment, and `$credit` searches all kinds; neither requires an artificial table field.
-Category-specific name completion includes every segment member, and role completion uses a separate all-credit vocabulary.
+`$performer` searches Performer credits, and `$credit` searches all kinds; neither requires an artificial table field.
+Category-specific name completion includes every name of that kind, and role completion uses a separate all-credit vocabulary.
 
 ### Tags and technical fields
 

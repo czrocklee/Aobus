@@ -28,7 +28,7 @@ namespace ao::library::detail
    */
   Result<TrimmedCredit> admitCreditShape(CreditView entry, std::size_t index);
 
-  /** Visits entries stably grouped into the four fixed kind segments. */
+  /** Visits entries stably grouped by kind, in `CreditKind` order. */
   template<typename Entries, typename Visit>
   void forEachCreditInKindOrder(Entries& entries, Visit const& visit)
   {

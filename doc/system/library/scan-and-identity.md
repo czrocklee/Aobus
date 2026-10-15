@@ -123,7 +123,7 @@ There is no nested LMDB transaction, item savepoint, or partial batch commit.
 
 Preparation snapshots own the raw credit names, roles, kinds, duplicates, and source order without normalizing or admitting them.
 Reconstructed builders validate and canonicalize credits at Track admission: invalid new-item text fails that item without preventing valid siblings from committing.
-Changed and moved items reconstruct the live complete Track before replacing technical/file facts and covers; newly parsed Credits never silently replace existing curation, even when stored credits or individual segments are empty.
+Changed and moved items reconstruct the live complete Track before replacing technical/file facts and covers; newly parsed Credits never silently replace existing curation, even when stored credits or individual kinds are empty.
 Malformed credit text in a changed or moved file therefore does not reject the item merely because that unused metadata was copied during preparation.
 New imports use explicitly mapped credit kinds; `PERFORMER` never implies Soloist, and Ensemble fallback is resolved whole-file before library admission.
 RecordingDate is not inferred from generic Year, `DATE`, `YEAR`, `TDRC`, album text, or audio identity.

@@ -92,7 +92,7 @@ RecordingDate constants are canonical partial-date strings or integer years; com
 Absent dates do not match equality or ordering; inequality is equality's complement and therefore matches absence.
 Date-list membership compiles as literal comparisons, preserving each element's precision; inclusive ranges use each endpoint's precision.
 Credit equality and list membership test whether any selected entry's nonzero name ID matches the bound constant IDs, ignoring roles and preserving the stored list.
-Conductor, Ensemble, Soloist, and Performer select their own physical segments; Credit selects all entries.
+Conductor, Ensemble, Soloist, and Performer select their own kind's run of entries; Credit selects all entries.
 Unresolved constants never match. Literals are NFC-admitted without trimming, and equality is case-sensitive.
 Inequality complements the whole-selection match, including an empty selection.
 Credit `~` searches individual names through the same batch-local caseless-key cache; it never flattens the list, queries roles, or writes dictionary entries.

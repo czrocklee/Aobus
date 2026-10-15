@@ -33,7 +33,7 @@ namespace ao::rt::test
       for (auto const& [id, view] : reader)
       {
         REQUIRE(view.isColdValid());
-        CHECK(view.performance().credits().size() == 8185);
+        CHECK(view.performance().credits().size() == 5457);
         auto const stored = library::test::trackSpecFromView(library, view);
         CHECK(stored.uri == expected.uri);
         CHECK(stored.recordingDate == expected.recordingDate);
@@ -48,11 +48,11 @@ namespace ao::rt::test
     auto expected = library::test::makeEmptyTrackSpec("x.wav");
     expected.recordingDate = RecordingDate{.year = 1981, .month = 5};
 
-    SECTION("all entries use the inferred Performer segment")
+    SECTION("all entries are Performers")
     {
     }
 
-    SECTION("all four canonical segments share the maximum capacity")
+    SECTION("all four kinds share the maximum capacity")
     {
       expected.credits = {{.name = "Conductor: second", .kind = CreditKind::Conductor, .role = "Guest; leader"},
                           {.name = "Conductor: first", .kind = CreditKind::Conductor},
@@ -60,16 +60,16 @@ namespace ao::rt::test
                           {.name = "Soloist", .kind = CreditKind::Soloist, .role = "Piano (solo)"}};
     }
 
-    // The supported URI x.wav fits 8,185 entries within the whole cold-record bound without Work,
+    // The supported URI x.wav fits 5,457 entries within the whole cold-record bound without Work,
     // custom metadata, or covers. The date uses the existing prefix.
     auto const performers = std::array{Credit{.name = "José: A=B", .role = "Guitar; voice (guest)"},
                                        Credit{.name = "Player, second"},
                                        Credit{.name = "José: A=B", .role = "Guitar; voice (guest)"},
                                        Credit{.name = "Player [fourth]", .role = "null"}};
-    expected.credits.reserve(8185);
+    expected.credits.reserve(5457);
     std::size_t performerIndex = 0;
 
-    while (expected.credits.size() < 8185)
+    while (expected.credits.size() < 5457)
     {
       expected.credits.push_back(performers[performerIndex % performers.size()]);
       ++performerIndex;

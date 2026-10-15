@@ -146,7 +146,7 @@ Otherwise retain the complete trimmed value as an unstructured name with absent 
 Commas and semicolons are not separators, and repeated comments remain separate ordered entries.
 This is conservative support for the Picard convention, not verified identity or proof that a parenthesized suffix is an instrument.
 
-`PERFORMER` never implies Soloist. New scans populate Credits; ordinary rescans preserve complete curated credits, including empty segments, roles, order, and duplicates.
+`PERFORMER` never implies Soloist. New scans populate Credits; ordinary rescans preserve complete curated credits, including kinds left empty, roles, order, and duplicates.
 
 WAVE accumulates every credit kind from successive valid `id3 ` or `ID3 ` chunks in RIFF traversal order, retaining duplicates across chunks as well as within frames.
 It copies every name and role into the WAVE content owner before the temporary embedded-ID3 builder dies, including converted and unsynchronised text.

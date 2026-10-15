@@ -32,7 +32,7 @@ Runtime and presentation consumers adapt these values without changing their sto
 | Work | Text | Work-block `DictionaryId` |
 | Movement | Text | Work-block `DictionaryId` |
 | Recording date | Optional partial calendar date | Performance prefix: year, month, day |
-| Credits | Canonical list of name, kind, optional role | Performance tail: name and role dictionary ids in four kind segments |
+| Credits | Canonical list of name, kind, optional role | Performance tail: name and role dictionary ids and a kind byte per entry, grouped by kind |
 | Year | Unsigned 16-bit | Hot scalar |
 | Disc number | Unsigned 16-bit | Cold scalar |
 | Disc total | Unsigned 16-bit | Cold scalar |
@@ -42,7 +42,7 @@ Runtime and presentation consumers adapt these values without changing their sto
 | Movement total | Unsigned 16-bit | Work-block scalar |
 
 Work and performance are independently optional storage domains.
-The work block is absent when both ids and both movement numbers are zero; performance is absent when RecordingDate is absent and every credit segment is empty.
+The work block is absent when both ids and both movement numbers are zero; performance is absent when RecordingDate is absent and there are no credits.
 A date-only or credits-only performance therefore needs no work block.
 Movement is a leaf value inside the work block; composer remains hot, and application grouping and sorting rules belong to the runtime field and presentation contracts.
 Credits are the only stored authority for Conductor, Ensemble, Soloist, and Performer participants.
@@ -127,7 +127,7 @@ Core supplies independent input-value contracts in [`RecordingDate.h`](../../../
 Both setters copy descriptors, not the supplied strings: source text must survive through preparation, even for owning inputs.
 Immutable prepared values own every id and byte needed by serialization and no longer depend on the builder or source text.
 `TrackView::work()` and `performance()` borrow their cold blocks.
-`PerformanceView::credits()` spans all physical `TrackCreditEntry` values; `credits(kind)` spans one segment. These entries contain dictionary ids, not logical kinds; consumers reconstruct kinds by visiting the four segments.
+`PerformanceView::credits()` spans all physical `TrackCreditEntry` values in kind order; `credits(kind)` spans the run of one kind. Each entry holds dictionary ids and its kind byte, not credit text.
 The spans share the record/buffer or transaction lifetime and do not materialize logical lists.
 Complete reconstruction retains every field and canonical entry; hot reconstruction never fetches cold metadata or credits.
 
@@ -168,7 +168,7 @@ Runtime writes use the [typed scoped replacement](../../../system/presentation/m
 ## Compatibility and versioning
 
 Changing a persisted type, codec value, block meaning, or field width requires a library format version increment.
-Database version 10 gates never-reused Track ids through the id space record; version 9 gated the work/performance split with RecordingDate and segmented Credits, version 8 gated the portable manifest modification-time instant, and version 7 made scalar-valid UTF-8 NFC an admission invariant for Track text and its dictionary references.
+Database version 10 gates never-reused Track ids through the id space record; version 9 gated the work/performance split with RecordingDate and Credits, version 8 gated the portable manifest modification-time instant, and version 7 made scalar-valid UTF-8 NFC an admission invariant for Track text and its dictionary references.
 Version 9 and earlier libraries are rejected rather than converted, relabeled, backfilled, or deleted automatically.
 Only the exact layouts defined by the database version 10 and YAML version 8 references are accepted; alternative layouts with those version labels are unsupported.
 There is no dual reader, layout autodetection, or migration.

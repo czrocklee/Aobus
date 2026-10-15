@@ -206,7 +206,7 @@ Quarter-source expectations retain global seed indices, not compressed candidate
 Every sample uses fresh derived caches; seeding, validation, durable edits, and projection retirement remain outside timing.
 
 The database-high-water rows describe allocated page extent.
-The structural performance-block rows count expected `12 + 8 * memberCount` payloads for present blocks, not measured live payload or heap.
+The structural performance-block rows count expected `4 + 12 * memberCount` payloads for present blocks, not measured live payload or heap.
 Neither metric proves absence of list materialization: allocation-call-path and projection-memory evidence are separate requirements.
 Verify that an allocation profiler records the C++ workload PID, not merely a portal launcher; inherited trace descriptors can be lost across exec/subprocess boundaries.
 

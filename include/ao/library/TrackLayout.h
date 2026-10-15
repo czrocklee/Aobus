@@ -156,18 +156,19 @@ namespace ao::library
   static_assert(offsetof(TrackWorkBlock, movementTotal) ==
                 offsetof(TrackWorkBlock, movementNumber) + sizeof(TrackWorkBlock::movementNumber));
 
-  /** Fixed prefix followed by Conductor, Ensemble, Soloist, Performer segments. */
+  /** Fixed prefix followed by credit entries in nondecreasing kind order. */
   struct alignas(4) TrackPerformanceBlock final
   {
     RecordingDate recordingDate{};
-    std::array<std::uint16_t, 3> sectionCounts{};
-    std::uint16_t reserved{};
   };
 
+  /** One credit; `kind` holds a `CreditKind` value. */
   struct TrackCreditEntry final
   {
     DictionaryId nameId{};
     DictionaryId roleId{};
+    std::uint8_t kind{};
+    std::array<std::uint8_t, 3> reserved{};
   };
 
   static_assert(std::is_standard_layout_v<RecordingDate>);
@@ -178,19 +179,23 @@ namespace ao::library
   static_assert(offsetof(RecordingDate, day) == 3);
   static_assert(std::is_standard_layout_v<TrackPerformanceBlock>);
   static_assert(std::is_trivially_copyable_v<TrackPerformanceBlock>);
-  constexpr std::size_t kTrackPerformanceBlockSize = 12;
+  constexpr std::size_t kTrackPerformanceBlockSize = 4;
   static_assert(sizeof(TrackPerformanceBlock) == kTrackPerformanceBlockSize);
   static_assert(alignof(TrackPerformanceBlock) == 4);
   static_assert(offsetof(TrackPerformanceBlock, recordingDate) == 0);
-  static_assert(offsetof(TrackPerformanceBlock, sectionCounts) == 4);
-  static_assert(offsetof(TrackPerformanceBlock, reserved) == kTrackPerformanceBlockSize - sizeof(std::uint16_t));
   static_assert(std::has_unique_object_representations_v<TrackPerformanceBlock>);
   static_assert(std::is_standard_layout_v<TrackCreditEntry>);
   static_assert(std::is_trivially_copyable_v<TrackCreditEntry>);
-  static_assert(sizeof(TrackCreditEntry) == 8);
+  constexpr std::size_t kTrackCreditEntrySize = 12;
+  static_assert(sizeof(TrackCreditEntry) == kTrackCreditEntrySize);
   static_assert(alignof(TrackCreditEntry) == 4);
   static_assert(offsetof(TrackCreditEntry, nameId) == 0);
-  static_assert(offsetof(TrackCreditEntry, roleId) == 4);
+  static_assert(offsetof(TrackCreditEntry, roleId) ==
+                offsetof(TrackCreditEntry, nameId) + sizeof(TrackCreditEntry::nameId));
+  static_assert(offsetof(TrackCreditEntry, kind) ==
+                offsetof(TrackCreditEntry, roleId) + sizeof(TrackCreditEntry::roleId));
+  static_assert(offsetof(TrackCreditEntry, reserved) ==
+                offsetof(TrackCreditEntry, kind) + sizeof(TrackCreditEntry::kind));
   static_assert(std::has_unique_object_representations_v<TrackCreditEntry>);
 
   struct CustomMetadataBlockHeader final
