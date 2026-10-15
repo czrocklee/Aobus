@@ -30,10 +30,12 @@
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/utility/ScopedRegistration.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -188,50 +190,93 @@ namespace ao::gtk::test
 
     copyMetadataFixtureToLibrary(fixture);
 
-    std::int32_t progressFinishedCount = 0;
     auto progressEvents = std::vector<rt::LibraryTaskProgressUpdated>{};
+    auto finishedEvents = std::vector<std::pair<rt::LibraryTaskProgressId, std::size_t>>{};
+    auto changeEvents = std::vector<rt::LibraryChangeSet>{};
     auto progressFinishedSub = fixture.runtime().library().jobs().onProgressFinished(
-      [&progressFinishedCount](rt::LibraryTaskProgressFinished const&) noexcept { ++progressFinishedCount; });
+      [&finishedEvents, &progressEvents](rt::LibraryTaskProgressFinished const& event) noexcept
+      { finishedEvents.emplace_back(event.id, progressEvents.size()); });
     auto progressSub = fixture.runtime().library().jobs().onProgress([&progressEvents](auto const& event) noexcept
                                                                      { progressEvents.push_back(event); });
+    auto changeSub = fixture.runtime().library().changes().onChanged(
+      [&changeEvents](rt::LibraryChangeSet const& event) noexcept { changeEvents.push_back(event); });
 
     workflow.scan();
     REQUIRE(tryPumpGtkEventsUntil(
-      [&fixture, &progressFinishedCount]
+      [&fixture, &finishedEvents]
       {
-        return progressFinishedCount == 2 &&
+        return finishedEvents.size() == 2 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
-    CHECK(progressFinishedCount == 2);
-    REQUIRE(progressEvents.size() == 3);
+    REQUIRE(finishedEvents.size() == 2);
+    auto const scanningId = finishedEvents[0].first;
+    auto const applyingId = finishedEvents[1].first;
+    CHECK(scanningId != rt::kInvalidLibraryTaskProgressId);
+    CHECK(applyingId != rt::kInvalidLibraryTaskProgressId);
+    CHECK(scanningId != applyingId);
+    CHECK(finishedEvents[0].second == 1);
+    CHECK(finishedEvents[1].second == progressEvents.size());
+    REQUIRE(progressEvents.size() >= 3);
+    CHECK(progressEvents[0].id == scanningId);
     CHECK(progressEvents[0].kind == rt::LibraryTaskProgressKind::Scanning);
     CHECK(progressEvents[0].subject == "song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
+    CHECK(progressEvents[1].id == applyingId);
     CHECK(progressEvents[1].kind == rt::LibraryTaskProgressKind::Updating);
     CHECK(progressEvents[1].subject == "song.flac");
     CHECK(progressEvents[1].fraction == 0.0);
-    CHECK(progressEvents[2].kind == rt::LibraryTaskProgressKind::Fingerprinting);
-    CHECK(progressEvents[2].subject == "song.flac");
-    CHECK(progressEvents[2].fraction == 1.0);
-    CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
 
-    progressFinishedCount = 0;
+    // Only pending same-phase updates coalesce; an already delivered initial
+    // fingerprint value remains observable before the terminal value.
+    double fingerprintFraction = 0.0;
+
+    for (std::size_t index = 2; index < progressEvents.size(); ++index)
+    {
+      auto const& event = progressEvents[index];
+      CAPTURE(index, event.fraction);
+      CHECK(event.id == applyingId);
+      CHECK(event.kind == rt::LibraryTaskProgressKind::Fingerprinting);
+      CHECK(event.subject == "song.flac");
+      CHECK(event.fraction >= fingerprintFraction);
+      CHECK(event.fraction <= 1.0);
+      fingerprintFraction = event.fraction;
+    }
+
+    CHECK(fingerprintFraction == 1.0);
+    CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
+    auto const appliedTrackIds = rt::test::runtimeTrackIds(fixture.runtime());
+    auto const appliedRevision = fixture.runtime().library().snapshot().revision();
+    REQUIRE(changeEvents.size() == 1);
+    CHECK(changeEvents[0].tracksInserted == appliedTrackIds);
+    CHECK(changeEvents[0].libraryRevision == appliedRevision);
+
+    finishedEvents.clear();
     progressEvents.clear();
+    changeEvents.clear();
 
     workflow.scan();
 
     REQUIRE(tryPumpGtkEventsUntil(
-      [&fixture, &progressFinishedCount, &progressEvents]
+      [&fixture, &finishedEvents]
       {
-        return progressEvents.size() == 1 && progressFinishedCount == 1 &&
+        return finishedEvents.size() == 1 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date");
       }));
 
-    CHECK(progressFinishedCount == 1);
+    REQUIRE(finishedEvents.size() == 1);
     REQUIRE(progressEvents.size() == 1);
+    CHECK(progressEvents[0].id != rt::kInvalidLibraryTaskProgressId);
+    CHECK(progressEvents[0].id != scanningId);
+    CHECK(progressEvents[0].id != applyingId);
+    CHECK(finishedEvents[0].first == progressEvents[0].id);
+    CHECK(finishedEvents[0].second == 1);
     CHECK(progressEvents[0].kind == rt::LibraryTaskProgressKind::Scanning);
     CHECK(progressEvents[0].subject == "song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
+    CHECK(changeEvents.empty());
+    CHECK(fixture.runtime().library().snapshot().revision() == appliedRevision);
+    CHECK(rt::test::runtimeTrackIds(fixture.runtime()) == appliedTrackIds);
+    CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
   }
 
   TEST_CASE("LibraryImportExportWorkflow - fast bootstrap background identity relinks a moved file",
