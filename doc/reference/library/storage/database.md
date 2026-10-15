@@ -58,10 +58,16 @@ After the version gate accepts version 10, open requires exactly the seven named
 
 The database is a native-format store rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
-Its path must reside on a locally attached filesystem. Network filesystems and
-shares are unsupported because neither the writer lease nor LMDB's mapped-file
-locking provides cross-host safety for this database.
+Its path must reside on a locally attached, writable filesystem with byte-range locking: each platform's native filesystem, and exFAT on macOS and Windows.
+Network filesystems and shares are unsupported because neither the writer lease nor LMDB's mapped-file locking provides cross-host safety for this database.
+FAT32 is unsupported because it limits a file to 4 GiB: the data file grows with the pages the library uses, so a library on FAT32 cannot grow past that size.
+Opening does not detect the filesystem, so a FAT32 location is not refused before it fills.
 Integer keys and record fields are little-endian in LMDB's native word order, and the format is defined only for 64-bit hosts: [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) refuses to compile for another byte order or word size, and every persisted struct asserts its size, field offsets, and absence of padding.
+
+A closed library moves between macOS, Linux x86-64, and Windows x64 when both builds use the same format version, because admission accepts exactly one version.
+LMDB keeps the page size of the host that created the environment, so a library created with 16 KiB pages on Apple Silicon opens on a 4 KiB-page host and the reverse.
+The lock file's contents are host-specific, but LMDB reinitializes it at the first exclusive open, so it may travel with the data file or be left behind.
+A copy carries the library's id and id history, so a copy and its original must not both stay in use, as [the id space record](#metadata-records) explains.
 [Library YAML](../format/yaml.md) is the interchange surface across format versions.
 
 ## Library transaction consequences
@@ -339,8 +345,8 @@ Parent existence and parent-cycle checks are cross-row logical-writer rules and 
 
 ## Resource and dictionary records
 
-A resource value is exactly 36 bytes: a 32-byte SHA-256 digest followed by a 32-bit content length in the machine's own byte order.
-Like every other record here, the row is the struct's object representation written whole rather than a chosen encoding; a database file is bound to the architecture that created it either way.
+A resource value is exactly 36 bytes: a 32-byte SHA-256 digest followed by a 32-bit content length in the format's little-endian byte order.
+Like every other record here, the row is the struct's object representation written whole rather than a chosen encoding, so it reads the same on every host with the little-endian 64-bit layout the [environment section](#environment) requires, not only on the host that created the file.
 The row describes content and holds none of it; the content lives in the media files the library indexes, and the [cover-art delivery specification](../../../system/resource/cover-art-delivery.md) owns how it is read and verified.
 The `resources` database is append-only in practice: no production path deletes a row, because `create` stops probing at the first empty slot and a hole in a collision chain would let a later create mint a second row for one digest.
 Rows a track no longer references are retained and remain valid.
@@ -515,6 +521,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 - [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
 - [`FileTimeConversionTest.cpp`](../../../../test/unit/library/FileTimeConversionTest.cpp) locks the native file-clock conversion behind the manifest modification-time record: Unix seconds with a nonnegative fraction, epoch zero, instants beyond the Unix nanosecond range, leap-second mapping, and `FileTimestamp` ordering and normalization.
+- [`LibraryFormatFixtureTest.cpp`](../../../../test/unit/runtime/library/LibraryFormatFixtureTest.cpp) opens a library created on each of Linux x86-64, Windows x64, and macOS arm64, checks its page size, that its Track and manifest trees have a branch level, and that a List record overflows, compares its full export with the [`v10.yaml`](../../../../test/data/library/v10.yaml) it was restored from, and writes a Track and a List to it.
 - [`IdSpaceTest.cpp`](../../../../test/unit/library/IdSpaceTest.cpp) covers never-reused Track and List ids across deletion, clear, and reopen, the library id across clear, failed-commit rollback, the saved-order mark, and the List id ceiling.
 - [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
