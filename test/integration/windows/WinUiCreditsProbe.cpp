@@ -840,7 +840,7 @@ namespace
             _ready = [this]
             {
               auto const label =
-                winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::AppKitDiscardChanges));
+                winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesDiscard));
               for (auto const& command : controls<Button>())
               {
                 if (auto text = command.Content().try_as<TextBlock>(); text && text.Text() == label)
@@ -1479,7 +1479,7 @@ namespace
         {
           check(_coordinatorPtr->isActive() && !_dialogClosed, "dirty native Close is cancelled for confirmation");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "discard decision blocks Save");
-          invoke(MessageId::TrackCreditsCancel);
+          invoke(MessageId::WinUiTrackPropertiesKeepEditing);
         });
       _steps.push_back([this] { invokeScope(CreditKind::Soloist); });
       _steps.push_back(
@@ -1492,7 +1492,7 @@ namespace
       _steps.push_back(
         [this]
         {
-          invoke(MessageId::AppKitDiscardChanges);
+          invoke(MessageId::WinUiTrackPropertiesDiscard);
           _ready = [this] { return _dialogClosed; };
         });
       _steps.push_back(
@@ -1519,35 +1519,18 @@ namespace
           check(!titleInput().IsEnabled() && titleInput().Text() == L"Stale title draft",
                 "stale ordinary draft remains visible and disabled");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "stale parent cannot submit");
-          invoke(MessageId::TuiEditorHintReload);
+          invoke(MessageId::WinUiTrackPropertiesReload);
         });
-      _steps.push_back(
-        [this]
-        {
-          // Both the disabled child and discard prompt have Cancel; invoke the enabled prompt action.
-          for (auto const& candidate : controls<Button>())
-          {
-            auto text = candidate.Content().try_as<TextBlock>();
-
-            if (candidate.IsEnabled() && text &&
-                text.Text() == winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::TrackCreditsCancel)))
-            {
-              invokeButton(candidate);
-              return;
-            }
-          }
-
-          throw winrt::hresult_invalid_argument{L"Reload cancellation action is missing"};
-        });
+      _steps.push_back([this] { invoke(MessageId::WinUiTrackPropertiesKeepEditing); });
       _steps.push_back(
         [this]
         {
           check(singleCreditName().Text() == L"Stale draft" && titleInput().Text() == L"Stale title draft",
                 "declining reload preserves child and ordinary drafts");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "declining reload does not silently rebind");
-          invoke(MessageId::TuiEditorHintReload);
+          invoke(MessageId::WinUiTrackPropertiesReload);
         });
-      _steps.push_back([this] { invoke(MessageId::AppKitDiscardChanges); });
+      _steps.push_back([this] { invoke(MessageId::WinUiTrackPropertiesDiscard); });
       _steps.push_back(
         [this]
         {
