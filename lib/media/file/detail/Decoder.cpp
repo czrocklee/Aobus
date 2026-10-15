@@ -77,9 +77,15 @@ namespace ao::media::file
 
   std::optional<std::uint16_t> decodeYear(std::string_view text)
   {
-    std::uint16_t result = 0;
-    auto const [_, ec] = std::from_chars(text.data(), text.data() + text.size(), result);
-    return ec == std::errc() ? std::optional<std::uint16_t>{result} : std::nullopt;
+    // Any other leading number, such as the day of 21/01/2025, is not a year.
+    constexpr std::size_t kYearDigits = 4;
+
+    if (text.size() < kYearDigits || (text.size() > kYearDigits && text[kYearDigits] != '-'))
+    {
+      return std::nullopt;
+    }
+
+    return decodeUint16(text.substr(0, kYearDigits));
   }
 
   std::uint32_t bitrateFromBytes(std::uint64_t byteCount, std::chrono::milliseconds duration) noexcept

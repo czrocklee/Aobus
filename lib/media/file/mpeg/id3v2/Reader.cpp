@@ -120,7 +120,7 @@ namespace ao::media::file::mpeg::id3v2
 
     // Applies the text once per value. ID3v2.3 strings end at their first
     // terminator; ID3v2.4 frames may hold several NUL-separated values, which
-    // apply in order like repeated frames, so the last value wins.
+    // apply in order like repeated frames, so each field's setter folds them.
     template<typename Apply>
     void forEachTextValue(std::string_view text, std::uint8_t version, Apply apply)
     {

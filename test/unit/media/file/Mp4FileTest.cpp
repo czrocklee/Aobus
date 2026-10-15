@@ -52,6 +52,41 @@ namespace ao::media::file::mp4::test
       return atom;
     }
 
+    // The body of a data child: its type word, its locale word, then the value.
+    std::vector<std::uint8_t> makeDataChildBody(std::string_view value, std::uint32_t dataType = 1)
+    {
+      auto dataBody = std::vector<std::uint8_t>{};
+      ao::test::mp4::appendBe32(dataBody, dataType);
+      ao::test::mp4::appendBe32(dataBody, 0); // Locale.
+      dataBody.insert(dataBody.end(), value.begin(), value.end());
+      return dataBody;
+    }
+
+    // A metadata item with one data child per value, as taggers write a field
+    // that holds several names.
+    std::vector<std::uint8_t> makeMultiTextMetadataAtom(std::string_view atomType,
+                                                        std::span<std::string_view const> values)
+    {
+      auto itemBody = std::vector<std::uint8_t>{};
+
+      for (auto const value : values)
+      {
+        auto const child = ao::test::mp4::makeAtom("data", makeDataChildBody(value));
+        itemBody.insert(itemBody.end(), child.begin(), child.end());
+      }
+
+      return ao::test::mp4::makeAtom(atomType, itemBody);
+    }
+
+    // The atom type of an ilst item that names the 1-based mdta key index.
+    std::string mdtaItemType(std::uint32_t keyIndex)
+    {
+      return std::string{static_cast<char>(keyIndex >> 24U),
+                         static_cast<char>(keyIndex >> 16U),
+                         static_cast<char>(keyIndex >> 8U),
+                         static_cast<char>(keyIndex)};
+    }
+
     std::vector<std::uint8_t> makeIntegerMetadataAtom(char const* atomType,
                                                       std::span<std::uint8_t const> payload,
                                                       std::uint32_t dataType = 21,
@@ -1438,6 +1473,180 @@ namespace ao::media::file::mp4::test
     auto const content = readContent(file);
 
     CHECK(content.text(TextField::Title) == "Before");
+  }
+
+  TEST_CASE("MP4 File - every data child of a text item contributes a value", "[media][unit][mp4][file]")
+  {
+    auto ilstChildren = std::vector<std::uint8_t>{};
+    auto const append = [&ilstChildren](std::vector<std::uint8_t> const& atom)
+    { ilstChildren.insert(ilstChildren.end(), atom.begin(), atom.end()); };
+
+    append(makeMultiTextMetadataAtom("\xA9"
+                                     "ART",
+                                     std::array<std::string_view, 2>{"First Artist", "Second Artist"}));
+    append(makeMultiTextMetadataAtom("\xA9"
+                                     "wrt",
+                                     std::array<std::string_view, 2>{"First Composer", "Second Composer"}));
+    append(makeMultiTextMetadataAtom("\xA9"
+                                     "gen",
+                                     std::array<std::string_view, 2>{"Rock", "Pop"}));
+
+    auto const data = createMinimalM4aWithRawIlstAtom(ilstChildren);
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Artist) == "First Artist; Second Artist");
+    CHECK(content.text(TextField::Composer) == "First Composer; Second Composer");
+    CHECK(content.text(TextField::Genre) == "Rock");
+  }
+
+  TEST_CASE("MP4 File - a malformed data child discards every value of its item", "[media][unit][mp4][file]")
+  {
+    auto itemBody = std::vector<std::uint8_t>{};
+    auto valid = std::vector<std::uint8_t>{};
+    ao::test::mp4::appendBe32(valid, 1);
+    ao::test::mp4::appendBe32(valid, 0);
+    valid.insert(valid.end(), {'A', 'r', 't'});
+    auto const validChild = ao::test::mp4::makeAtom("data", valid);
+    itemBody.insert(itemBody.end(), validChild.begin(), validChild.end());
+    // A data child too short to hold its type and locale words.
+    auto const shortChild = ao::test::mp4::makeAtom("data", std::vector<std::uint8_t>{0, 0, 0, 1});
+    itemBody.insert(itemBody.end(), shortChild.begin(), shortChild.end());
+
+    auto const data = createMinimalM4aWithRawIlstAtom(ao::test::mp4::makeAtom("\xA9"
+                                                                              "ART",
+                                                                              itemBody));
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Artist).empty());
+  }
+
+  TEST_CASE("MP4 File - a data child of an unsupported type is skipped without discarding its item",
+            "[media][unit][mp4][file]")
+  {
+    auto itemBody = std::vector<std::uint8_t>{};
+
+    for (auto const& child : {ao::test::mp4::makeAtom("data", makeDataChildBody("Kept")),
+                              ao::test::mp4::makeAtom("data", makeDataChildBody("Skipped", 2)),
+                              ao::test::mp4::makeAtom("data", makeDataChildBody("Also Kept"))})
+    {
+      itemBody.insert(itemBody.end(), child.begin(), child.end());
+    }
+
+    auto const data = createMinimalM4aWithRawIlstAtom(ao::test::mp4::makeAtom("\xA9"
+                                                                              "ART",
+                                                                              itemBody));
+    auto const temp = TempFile{data, ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Artist) == "Kept; Also Kept");
+  }
+
+  TEST_CASE("MP4 File - an end-of-file size inside an item discards that item", "[media][unit][mp4][file]")
+  {
+    // That size is valid only for a top-level atom of the file. Inside an item
+    // it would make the child run to the end of its item, so the item is
+    // malformed and the earlier value stays.
+    auto const endOfFileChild = ao::test::mp4::makeEndOfFileAtom("data", makeDataChildBody("After"));
+
+    SECTION("an item named by its atom type")
+    {
+      auto ilstChildren = makeTextMetadataAtom("\xA9nam", "Before");
+      auto const malformed = ao::test::mp4::makeAtom("\xA9nam", endOfFileChild);
+      ilstChildren.insert(ilstChildren.end(), malformed.begin(), malformed.end());
+
+      auto const temp = TempFile{createMinimalM4aWithRawIlstAtom(ilstChildren), ".m4a"};
+      auto const file = File{temp.path};
+      CHECK(readContent(file).text(TextField::Title) == "Before");
+    }
+
+    SECTION("an item named by an mdta key index")
+    {
+      auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"title"}));
+      auto ilstChildren = makeMdtaTextAtom(1, "Before");
+      auto const malformed = ao::test::mp4::makeAtom(mdtaItemType(1), endOfFileChild);
+      ilstChildren.insert(ilstChildren.end(), malformed.begin(), malformed.end());
+
+      auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(ilstChildren, keys), ".m4a"};
+      auto const file = File{temp.path};
+      CHECK(readContent(file).text(TextField::Title) == "Before");
+    }
+  }
+
+  TEST_CASE("MP4 File - every data child of an mdta item contributes a value", "[media][unit][mp4][file]")
+  {
+    auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"artist", "work", "date", "conductor"}));
+    auto ilstChildren = std::vector<std::uint8_t>{};
+
+    for (auto const& atom : {
+           makeMultiTextMetadataAtom(mdtaItemType(1), std::to_array<std::string_view>({"First", "Second"})),
+           makeMultiTextMetadataAtom(mdtaItemType(2), std::to_array<std::string_view>({"Early", "Late", " "})),
+           makeMultiTextMetadataAtom(mdtaItemType(3), std::to_array<std::string_view>({"1999", "2024-05-17", "21/01"})),
+           makeMultiTextMetadataAtom(mdtaItemType(4), std::to_array<std::string_view>({"Conductor A", "Conductor B"})),
+         })
+    {
+      ilstChildren.insert(ilstChildren.end(), atom.begin(), atom.end());
+    }
+
+    auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(ilstChildren, keys), ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Artist) == "First; Second");
+    // Work keeps the last nonblank value, and Year the last one that parses.
+    CHECK(content.text(TextField::Work) == "Late");
+    CHECK(content.number(NumberField::Year) == 2024);
+    CHECK(content.credits() == std::vector<Credit>{
+                                 {.name = "Conductor A", .kind = CreditKind::Conductor},
+                                 {.name = "Conductor B", .kind = CreditKind::Conductor},
+                               });
+  }
+
+  TEST_CASE("MP4 File - Work and Year items apply every data child", "[media][unit][mp4][file]")
+  {
+    auto ilstChildren = std::vector<std::uint8_t>{};
+
+    for (auto const& atom : {
+           makeMultiTextMetadataAtom("\xA9wrk", std::to_array<std::string_view>({"Early", "Late", " "})),
+           makeMultiTextMetadataAtom("\xA9"
+                                     "day",
+                                     std::to_array<std::string_view>({"1999", "2024-05-17", "21/01"})),
+         })
+    {
+      ilstChildren.insert(ilstChildren.end(), atom.begin(), atom.end());
+    }
+
+    auto const temp = TempFile{createMinimalM4aWithRawIlstAtom(ilstChildren), ".m4a"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Work) == "Late");
+    CHECK(content.number(NumberField::Year) == 2024);
+  }
+
+  TEST_CASE("MP4 File - an artist repeated under the mdta alias joins as a whole value", "[media][unit][mp4][file]")
+  {
+    auto const readArtist = [](std::string_view atomArtist, std::string_view mdtaArtist)
+    {
+      auto const keys = makeMdtaKeysAtom(std::to_array<std::string_view>({"artist"}));
+      auto ilstChildren = makeTextMetadataAtom("\xA9"
+                                               "ART",
+                                               atomArtist);
+      auto const alias = makeMdtaTextAtom(1, mdtaArtist);
+      ilstChildren.insert(ilstChildren.end(), alias.begin(), alias.end());
+
+      auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(ilstChildren, keys), ".m4a"};
+      auto const file = File{temp.path};
+      return std::string{readContent(file).text(TextField::Artist)};
+    };
+
+    CHECK(readArtist("Artist A; Artist B", "Artist A; Artist B") == "Artist A; Artist B");
+    // A name inside a value is not a value of its own.
+    CHECK(readArtist("Artist A", "Artist A; Artist B") == "Artist A; Artist A; Artist B");
   }
 
   TEST_CASE("MP4 File - malformed metadata child boundaries preserve completed siblings", "[media][unit][mp4][file]")

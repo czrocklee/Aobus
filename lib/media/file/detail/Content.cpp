@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -79,6 +80,11 @@ namespace ao::media::file::detail
     }
   }
 
+  namespace
+  {
+    constexpr auto kJoinedValueSeparator = std::string_view{"; "};
+  } // namespace
+
   ContentBuilder ContentBuilder::makeEmpty()
   {
     return {};
@@ -86,27 +92,27 @@ namespace ao::media::file::detail
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::title(std::string_view value)
   {
-    return text(TextField::Title, value);
+    return replace(TextField::Title, value);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::artist(std::string_view value)
   {
-    return text(TextField::Artist, value);
+    return join(TextField::Artist, value);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::album(std::string_view value)
   {
-    return text(TextField::Album, value);
+    return replace(TextField::Album, value);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::albumArtist(std::string_view value)
   {
-    return text(TextField::AlbumArtist, value);
+    return join(TextField::AlbumArtist, value);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::composer(std::string_view value)
   {
-    return text(TextField::Composer, value);
+    return join(TextField::Composer, value);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::conductor(std::string_view value)
@@ -121,7 +127,25 @@ namespace ao::media::file::detail
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::genre(std::string_view value)
   {
-    return text(TextField::Genre, value);
+    // A join would make combination sections such as "Rock; Pop", and taggers
+    // write the most relevant genre first.
+    if (auto& stored = _content.texts[static_cast<std::size_t>(TextField::Genre)];
+        stored.empty() && !utility::trim(value).empty())
+    {
+      stored = value;
+    }
+
+    return *this;
+  }
+
+  ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::replace(TextField field, std::string_view value)
+  {
+    auto const index = static_cast<std::size_t>(field);
+    _content.texts[index] = value;
+    // The replaced value starts the field over, so a later join compares
+    // against it alone and extends a new text rather than the earlier one.
+    _content.joinedTexts[index] = JoinedText{};
+    return *this;
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::work(WorkSource source, std::string_view value)
@@ -144,7 +168,7 @@ namespace ao::media::file::detail
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::movement(std::string_view value)
   {
-    return text(TextField::Movement, value);
+    return replace(TextField::Movement, value);
   }
 
   ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::soloist(std::string_view value)
@@ -224,9 +248,44 @@ namespace ao::media::file::detail
   {
   }
 
-  ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::text(TextField field, std::string_view value)
+  ContentBuilder::MetadataBuilder& ContentBuilder::MetadataBuilder::join(TextField field, std::string_view value)
   {
-    _content.texts[static_cast<std::size_t>(field)] = value;
+    if (utility::trim(value).empty())
+    {
+      return *this;
+    }
+
+    auto const index = static_cast<std::size_t>(field);
+    auto& stored = _content.texts[index];
+    auto& joined = _content.joinedTexts[index];
+
+    if (joined.values.empty() && !stored.empty())
+    {
+      joined.values.insert(stored);
+    }
+
+    // Whole source values decide repeats. The joined text cannot, because a
+    // value may itself contain the separator.
+    if (!joined.values.insert(value).second)
+    {
+      return *this;
+    }
+
+    if (stored.empty())
+    {
+      stored = value;
+      return *this;
+    }
+
+    // One text per field, extended in place, keeps the retained bytes linear
+    // in the source values however many there are.
+    if (joined.text == nullptr)
+    {
+      joined.text = &_content.ownedStrings.emplace_back(stored);
+    }
+
+    joined.text->append(kJoinedValueSeparator).append(value);
+    stored = *joined.text;
     return *this;
   }
 
@@ -342,6 +401,7 @@ namespace ao::media::file::detail
     }
 
     _content.orchestraCandidates.clear();
+    _content.joinedTexts = {};
     return std::move(_content);
   }
 } // namespace ao::media::file::detail

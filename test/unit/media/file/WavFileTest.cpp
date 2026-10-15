@@ -272,6 +272,83 @@ namespace ao::media::file::wav::test
     CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[3]) == 0x56);
   }
 
+  TEST_CASE("WAV File - a later tag chunk replaces an earlier chunk's text fields", "[media][unit][wav][file]")
+  {
+    auto frames = std::vector<std::uint8_t>{};
+    appendLatin1TextFrame(frames, "TPE1", "Id3 Artist");
+    appendLatin1TextFrame(frames, "TCON", "Id3 Genre");
+    auto id3 = std::vector<std::uint8_t>{};
+    appendId3v23Header(id3, frames.size());
+    id3.insert(id3.end(), frames.begin(), frames.end());
+
+    // The builder writes INFO before the extra chunks.
+    auto const data = ao::test::wav::makeWav({
+      .infoFields = {{{.id = {'I', 'N', 'A', 'M'}, .value = "Info Title"},
+                      {.id = {'I', 'A', 'R', 'T'}, .value = "Info Artist"},
+                      {.id = {'I', 'G', 'N', 'R'}, .value = "Info Genre"}}},
+      .extraChunks = {{{.id = {'i', 'd', '3', ' '}, .payload = id3}}},
+    });
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Artist) == "Id3 Artist");
+    CHECK(content.text(TextField::Genre) == "Id3 Genre");
+    CHECK(content.text(TextField::Title) == "Info Title");
+  }
+
+  TEST_CASE("WAV File - an INFO list after an embedded ID3 chunk replaces its text fields", "[media][unit][wav][file]")
+  {
+    auto frames = std::vector<std::uint8_t>{};
+    appendLatin1TextFrame(frames, "TPE1", "Id3 Artist A");
+    appendLatin1TextFrame(frames, "TPE1", "Id3 Artist B");
+    appendLatin1TextFrame(frames, "TIT2", "Id3 Title");
+    appendLatin1TextFrame(frames, "TCON", "Id3 Genre");
+    auto id3 = std::vector<std::uint8_t>{};
+    appendId3v23Header(id3, frames.size());
+    id3.insert(id3.end(), frames.begin(), frames.end());
+    // Blank Artist and Genre fields are absent, so they replace nothing.
+    auto const fields = std::vector<ao::test::wav::InfoField>{{.id = {'I', 'A', 'R', 'T'}, .value = "Info Artist"},
+                                                              {.id = {'I', 'A', 'R', 'T'}, .value = " "},
+                                                              {.id = {'I', 'G', 'N', 'R'}, .value = " \t"}};
+    auto const info = ao::test::wav::makeInfoList(fields);
+
+    auto const data = ao::test::wav::makeWav({
+      .extraChunks = {{{.id = {'i', 'd', '3', ' '}, .payload = id3}, {.id = {'L', 'I', 'S', 'T'}, .payload = info}}},
+    });
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Artist) == "Info Artist");
+    CHECK(content.text(TextField::Genre) == "Id3 Genre");
+    CHECK(content.text(TextField::Title) == "Id3 Title");
+  }
+
+  TEST_CASE("WAV File - each embedded ID3 chunk folds only its own repeated values", "[media][unit][wav][file]")
+  {
+    auto chunks = std::vector<ao::test::wav::Chunk>{};
+
+    for (auto const& [first, second] : {std::pair{"Artist A", "Artist B"}, std::pair{"Artist C", "Artist D"}})
+    {
+      auto frames = std::vector<std::uint8_t>{};
+      appendLatin1TextFrame(frames, "TPE1", first);
+      appendLatin1TextFrame(frames, "TPE1", second);
+      auto id3 = std::vector<std::uint8_t>{};
+      appendId3v23Header(id3, frames.size());
+      id3.insert(id3.end(), frames.begin(), frames.end());
+      chunks.push_back({.id = {'i', 'd', '3', ' '}, .payload = std::move(id3)});
+    }
+
+    auto const data = ao::test::wav::makeWav({.extraChunks = std::move(chunks)});
+    auto const temp = ao::test::TempFile{data, ".wav"};
+    auto const file = File{temp.path};
+
+    // The later chunk's joined text replaces the earlier chunk's and outlives
+    // the builder that joined it.
+    CHECK(readContent(file).text(TextField::Artist) == "Artist C; Artist D");
+  }
+
   TEST_CASE("WAV File - embedded ID3 work survives the copy at its resolved precedence", "[media][unit][wav][file]")
   {
     auto const readWorkFromId3 = [](std::vector<std::uint8_t> const& frames) -> std::string

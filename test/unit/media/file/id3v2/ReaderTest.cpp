@@ -660,8 +660,8 @@ namespace ao::media::file::mpeg::id3v2::test
       auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
 
       REQUIRE(optFrames);
-      // Later values overwrite earlier ones, like repeated frames.
-      CHECK(optFrames->metadata().artist() == "B");
+      // Values fold in order, like repeated frames.
+      CHECK(optFrames->metadata().artist() == "A; B");
     }
 
     SECTION("Latin-1")
@@ -672,7 +672,7 @@ namespace ao::media::file::mpeg::id3v2::test
       auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
 
       REQUIRE(optFrames);
-      CHECK(optFrames->metadata().artist() == "B");
+      CHECK(optFrames->metadata().artist() == "A; B");
     }
 
     SECTION("UTF-16 with BOM")
@@ -694,7 +694,7 @@ namespace ao::media::file::mpeg::id3v2::test
       auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
 
       REQUIRE(optFrames);
-      CHECK(optFrames->metadata().artist() == "B");
+      CHECK(optFrames->metadata().artist() == "A; B");
     }
 
     SECTION("UTF-16 LE multi-value with per-value BOMs")
@@ -722,7 +722,7 @@ namespace ao::media::file::mpeg::id3v2::test
       auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
 
       REQUIRE(optFrames);
-      CHECK(optFrames->metadata().artist() == "B");
+      CHECK(optFrames->metadata().artist() == "A; B");
     }
 
     SECTION("UTF-16 BE multi-value with per-value BOMs")
@@ -748,7 +748,29 @@ namespace ao::media::file::mpeg::id3v2::test
       auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
 
       REQUIRE(optFrames);
-      CHECK(optFrames->metadata().artist() == "B");
+      CHECK(optFrames->metadata().artist() == "A; B");
+    }
+
+    SECTION("Genre keeps the first value")
+    {
+      auto body = Bytes{};
+      appendFrame(body, "TCON", true, 0x00, textContent(Encoding::Utf8, std::string_view{"Rock\0Pop", 8}));
+
+      auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
+
+      REQUIRE(optFrames);
+      CHECK(optFrames->metadata().genre() == "Rock");
+    }
+
+    SECTION("a repeated composer is joined once")
+    {
+      auto body = Bytes{};
+      appendFrame(body, "TCOM", true, 0x00, textContent(Encoding::Utf8, std::string_view{"A\0B\0A", 5}));
+
+      auto const optFrames = readFrames(makeHeader(4, 0x00, body.size()), byteSpan(body));
+
+      REQUIRE(optFrames);
+      CHECK(optFrames->metadata().composer() == "A; B");
     }
 
     SECTION("trailing terminator keeps the single value")
