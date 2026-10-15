@@ -6,6 +6,7 @@
 #include "PlaybackSessionState.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompilation.h>
 #include <ao/rt/PlaybackMode.h>
@@ -81,6 +82,13 @@ namespace ao::rt
       if (state.sourceListId == kInvalidListId || state.currentTrackId == kInvalidTrackId)
       {
         return makeError(Error::Code::CorruptData, "Playback session contains an invalid source or current track id");
+      }
+
+      // A save records the URI of a library track, which is always canonical.
+      if (auto const uriRes = library::LibraryUri::parse(state.currentTrackUri);
+          !uriRes || uriRes->value() != state.currentTrackUri)
+      {
+        return makeError(Error::Code::CorruptData, "Playback session current track URI is not a canonical library URI");
       }
 
       if (state.anchorIndex > static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()) ||

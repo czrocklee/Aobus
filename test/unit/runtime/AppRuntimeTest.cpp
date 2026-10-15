@@ -298,8 +298,10 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto overrideStore = ConfigStore{tempDir.path() / "playback.yaml"};
-    auto const sentinel =
-      PlaybackSessionState{.sourceListId = kAllTracksListId, .currentTrackId = TrackId{7}, .volume = 0.25F};
+    auto const sentinel = PlaybackSessionState{.sourceListId = kAllTracksListId,
+                                               .currentTrackId = TrackId{7},
+                                               .currentTrackUri = "sentinel.flac",
+                                               .volume = 0.25F};
     REQUIRE(overrideStore.save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
 
     SECTION("null override uses the workspace store")

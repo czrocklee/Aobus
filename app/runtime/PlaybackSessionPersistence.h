@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <cstdint>
 #include <stop_token>
+#include <string>
 
 namespace ao::rt
 {
@@ -86,6 +88,11 @@ namespace ao::rt
     async::Runtime& _asyncRuntime;
     async::Subscription _successionStateSubscription;
     async::Subscription _snapshotSubscription;
+    async::Subscription _libraryChangesSubscription;
+    // The URI the library last confirmed for the transport's current track,
+    // kept for a save after a library restore removes that track.
+    TrackId _confirmedTrackId = kInvalidTrackId;
+    std::string _confirmedTrackUri{};
     PlaybackSnapshot _lastSnapshot{};
     async::TaskHandle _scheduledTask;
     bool _sessionDiscarded = false;

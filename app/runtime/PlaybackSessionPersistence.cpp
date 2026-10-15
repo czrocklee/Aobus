@@ -20,6 +20,7 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -88,10 +89,13 @@ namespace ao::rt
     /**
      * True when the saved current track still names the track it was saved for.
      *
-     * Ids are never reused within one library, so a present id names the same
-     * track unless its file changed. An absent id is an ordinary deletion only
-     * while no track holds the saved file: a live track with that URI means the
-     * library renumbered it, as a restore or a rescan after deletion does.
+     * A library never reissues a track id while its database moves forward, so
+     * a present id names the same track unless its file changed. A relink made
+     * while the app was closed and an id reissued by a rollback to an older
+     * database copy look alike here, so both drop. An absent id is an ordinary
+     * deletion only while no track holds the saved file: a live track with that
+     * URI means the library renumbered it, as a restore or a rescan after
+     * deletion does.
      */
     bool isSavedTrackIdentityIntact(LibrarySnapshot const& reader,
                                     utility::UuidBytes const& libraryId,
@@ -144,6 +148,31 @@ namespace ao::rt
     _successionStateSubscription = _succession.onRestorableStateChanged([this] { requestDebouncedSave(); });
     _snapshotSubscription =
       _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+    _libraryChangesSubscription = _library.changes().onChanged(
+      [this](LibraryChangeSet const& changeSet)
+      {
+        // A relink publishes the track as mutated: same id, new file. A reset
+        // keeps the last confirmed URI of a track it removed.
+        if (changeSet.libraryReset || changeSet.tracksMutated.empty())
+        {
+          return;
+        }
+
+        auto const trackId = _playbackTransport.playbackTransportSessionState().trackId;
+
+        if (trackId == kInvalidTrackId || !std::ranges::contains(changeSet.tracksMutated, trackId))
+        {
+          return;
+        }
+
+        if (auto optUri = _library.snapshot().trackUri(trackId); optUri)
+        {
+          _confirmedTrackId = trackId;
+          _confirmedTrackUri = std::move(*optUri);
+          // Persist the new file without waiting for the next playback change.
+          requestDebouncedSave();
+        }
+      });
   }
 
   Result<> PlaybackSessionPersistence::checkpoint()
@@ -174,6 +203,7 @@ namespace ao::rt
     _sessionDiscarded = true;
     _successionStateSubscription.reset();
     _snapshotSubscription.reset();
+    _libraryChangesSubscription.reset();
     cancelScheduledSave();
   }
 
@@ -196,6 +226,7 @@ namespace ao::rt
     _lifecycle = Lifecycle::Shutdown;
     _successionStateSubscription.reset();
     _snapshotSubscription.reset();
+    _libraryChangesSubscription.reset();
     cancelScheduledSave();
     return shouldSave ? save() : Result<>{};
   }
@@ -336,8 +367,21 @@ namespace ao::rt
                    (!hasActiveSession() || publicSubjectMatches),
                  "Playback cursor and transport current tracks disagree during save");
 
+    // A relink keeps the track id but changes its file, and the transport keeps
+    // the URI it opened, so the saved URI is the one the library last confirmed
+    // for this id. After a live restore removes the track, that is still the
+    // file the track last played, which the restored library may now hold.
+    // Trusting the id here relies on the open library never reissuing an id;
+    // switching libraries retires this persistence.
+    if (auto optUri = _library.snapshot().trackUri(currentTrackId); optUri)
+    {
+      _confirmedTrackId = currentTrackId;
+      _confirmedTrackUri = std::move(*optUri);
+    }
+
+    auto currentTrackUri = _confirmedTrackId == currentTrackId ? _confirmedTrackUri : transportSession.trackUri;
     auto const session = snapshotState(
-      _libraryId, std::move(launchSpec), currentTrackId, transportSession.trackUri, anchorIndex, elapsed, snapshot);
+      _libraryId, std::move(launchSpec), currentTrackId, std::move(currentTrackUri), anchorIndex, elapsed, snapshot);
 
     return _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
   }
@@ -524,6 +568,7 @@ namespace ao::rt
     _lifecycle = Lifecycle::Retired;
     _successionStateSubscription.reset();
     _snapshotSubscription.reset();
+    _libraryChangesSubscription.reset();
     cancelScheduledSave();
     _succession.discardPlaybackSessionSnapshot();
     _playbackTransport.discardPlaybackTransportSnapshot();

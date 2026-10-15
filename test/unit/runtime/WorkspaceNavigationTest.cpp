@@ -25,6 +25,7 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -163,19 +164,28 @@ namespace ao::rt::test
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto listViewId = kInvalidViewId;
+    auto closedViewIds = std::vector<ViewId>{};
     auto allTracksViewId = kInvalidViewId;
 
     SECTION("All Tracks is focused")
     {
-      listViewId = requireNavigation(runtime, fixture.firstListId);
+      closedViewIds.push_back(requireNavigation(runtime, fixture.firstListId));
       allTracksViewId = requireNavigation(runtime, GlobalViewKind::AllTracks);
     }
 
     SECTION("The replaced list's view is focused")
     {
       allTracksViewId = requireNavigation(runtime, GlobalViewKind::AllTracks);
-      listViewId = requireNavigation(runtime, fixture.firstListId);
+      closedViewIds.push_back(requireNavigation(runtime, fixture.firstListId));
+    }
+
+    SECTION("Several filtered views of a replaced list are open")
+    {
+      allTracksViewId = requireNavigation(runtime, GlobalViewKind::AllTracks);
+      closedViewIds.push_back(requireNavigation(
+        runtime, FilteredListTarget{.listId = fixture.firstListId, .filterExpression = "$title ~ \"A\""}));
+      closedViewIds.push_back(requireNavigation(
+        runtime, FilteredListTarget{.listId = fixture.firstListId, .filterExpression = "$title ~ \"B\""}));
     }
 
     auto const before = runtime.workspace().snapshot();
@@ -194,19 +204,25 @@ namespace ao::rt::test
     REQUIRE(runRuntimeTask(runtime, runtime.library().jobs().applyLibraryImportPlanAsync(std::move(*planRes))));
     settleRuntimeCallbacks(runtime);
 
-    // The restored lists carry new ids, so the old view names no list; All Tracks survives any restore
-    // and, as the last remaining view, takes focus from a closed active view.
+    // The restored lists carry new ids, so the old views name no list; All Tracks survives any restore
+    // and, as the last remaining view, takes focus from a closed active view. Every stale view closes
+    // in the one commit.
     REQUIRE(changes.size() == 1);
     CHECK(changes.front().cause == WorkspaceChangeCause::ListDeletion);
     CHECK(changes.front().snapshot.openViews == std::vector{allTracksViewId});
     CHECK(changes.front().snapshot.activeViewId == allTracksViewId);
     CHECK(changes.front().snapshot.revision == before.revision + 1);
     CHECK(runtime.workspace().snapshot() == changes.front().snapshot);
-    REQUIRE(destroyed.size() == 1);
-    CHECK(destroyed.front().viewId == listViewId);
-    auto const staleRes = runtime.views().findTrackListState(listViewId);
-    REQUIRE_FALSE(staleRes);
-    CHECK(staleRes.error().code == Error::Code::NotFound);
+    REQUIRE(destroyed.size() == closedViewIds.size());
+
+    for (auto const viewId : closedViewIds)
+    {
+      CAPTURE(viewId);
+      CHECK(std::ranges::contains(destroyed, viewId, &ViewService::ViewDestroyed::viewId));
+      auto const staleRes = runtime.views().findTrackListState(viewId);
+      REQUIRE_FALSE(staleRes);
+      CHECK(staleRes.error().code == Error::Code::NotFound);
+    }
   }
 
   TEST_CASE("AppRuntime - jumpToAlbum reveals valid tracks in album presentation",
