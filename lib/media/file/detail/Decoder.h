@@ -42,8 +42,8 @@ namespace ao::media::file
   std::optional<std::uint16_t> decodeUint16(std::string_view text);
 
   /**
-   * @brief Decodes the leading decimal year of a date field such as "2024-05-17";
-   * text after the digits is ignored.
+   * @brief Decodes the year of a date field: four decimal digits that end the
+   * text or are followed by '-', as in "2024" or "2024-05-17".
    */
   std::optional<std::uint16_t> decodeYear(std::string_view text);
 

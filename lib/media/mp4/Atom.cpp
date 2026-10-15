@@ -64,6 +64,11 @@ namespace ao::media::mp4
     return AtomCursor{_childBytes, _type};
   }
 
+  AtomView AtomView::asContainer() const noexcept
+  {
+    return AtomView{_bytes, payload(), _type, _headerSize};
+  }
+
   Result<OptionalAtom> AtomCursor::next()
   {
     if (_remaining.empty())

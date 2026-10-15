@@ -148,6 +148,51 @@ namespace ao::media::mp4::test
     CHECK(childRes.error().code == Error::Code::FormatRejected);
   }
 
+  TEST_CASE("MP4 AtomView - an atom read as a container visits its payload as children", "[media][unit][mp4]")
+  {
+    // The container table does not list this type, so only asContainer() exposes its children.
+    auto const child = ao::test::mp4::makeAtom("data", {1, 2});
+    auto const bytes = toBytes(ao::test::mp4::makeAtom("item", child));
+    auto rootCursor = AtomView::root(bytes).children();
+    auto const itemRes = rootCursor.next();
+    REQUIRE(itemRes);
+    REQUIRE(*itemRes);
+
+    auto listedCursor = (*itemRes)->children();
+    auto const listedRes = listedCursor.next();
+    REQUIRE(listedRes);
+    CHECK_FALSE(*listedRes);
+
+    auto const container = (*itemRes)->asContainer();
+    CHECK(container.type() == "item");
+    auto childCursor = container.children();
+    auto const childRes = childCursor.next();
+    REQUIRE(childRes);
+    REQUIRE(*childRes);
+    CHECK((*childRes)->type() == "data");
+    CHECK((*childRes)->payload().size() == 2);
+
+    auto const endRes = childCursor.next();
+    REQUIRE(endRes);
+    CHECK_FALSE(*endRes);
+  }
+
+  TEST_CASE("MP4 AtomView - an atom read as a container rejects an end-of-file child size", "[media][unit][mp4][error]")
+  {
+    auto const child = ao::test::mp4::makeEndOfFileAtom("data", {1});
+    auto const bytes = toBytes(ao::test::mp4::makeAtom("item", child));
+    auto rootCursor = AtomView::root(bytes).children();
+    auto const itemRes = rootCursor.next();
+    REQUIRE(itemRes);
+    REQUIRE(*itemRes);
+
+    auto childCursor = (*itemRes)->asContainer().children();
+    auto const childRes = childCursor.next();
+
+    REQUIRE_FALSE(childRes);
+    CHECK(childRes.error().code == Error::Code::FormatRejected);
+  }
+
   TEST_CASE("MP4 AtomView - short typed layout returns no view", "[media][unit][mp4]")
   {
     auto const bytes = toBytes(ao::test::mp4::makeAtom("stsd", {}));

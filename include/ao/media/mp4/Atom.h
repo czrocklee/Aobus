@@ -42,6 +42,15 @@ namespace ao::media::mp4
     AtomCursor children() const noexcept;
 
     /**
+     * Returns this atom with its whole payload as its children, for an atom
+     * that holds child atoms but that the container table cannot list, such
+     * as an ilst item named by an mdta key index. The children keep this atom
+     * as their parent, so none may use the end-of-file size that only the
+     * file root admits.
+     */
+    AtomView asContainer() const noexcept;
+
+    /**
      * Returns a typed view for layouts that begin with a compact AtomLayout,
      * only when both the available bytes and declared length satisfy Layout.
      * Extended-size semantic readers parse payload() relative to the actual

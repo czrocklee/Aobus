@@ -477,6 +477,35 @@ namespace ao::media::file::opus::test
     CHECK(content.duration() == std::chrono::seconds{1});
   }
 
+  TEST_CASE("Opus File - repeated Vorbis descriptor comments fold into one value", "[media][unit][opus][file]")
+  {
+    auto const comments = std::vector<std::string_view>{"ARTIST=First Artist",
+                                                        "ARTIST=Second Artist",
+                                                        "ALBUMARTIST=Album Artist",
+                                                        "ALBUM ARTIST=Album Artist",
+                                                        "COMPOSER=First Composer",
+                                                        "COMPOSER=Second Composer",
+                                                        "GENRE=Rock",
+                                                        "GENRE=Pop",
+                                                        "TITLE=First Title",
+                                                        "TITLE=Last Title",
+                                                        "DATE=21/01/2025"};
+    auto spec = StreamSpec{};
+    spec.optTagsPacket = makeTagsPacket(comments);
+
+    auto const temp = TempFile{makeStreamBytes(spec), ".opus"};
+    auto const file = File{temp.path};
+    auto const content = readContent(file);
+
+    CHECK(content.text(TextField::Artist) == "First Artist; Second Artist");
+    CHECK(content.text(TextField::AlbumArtist) == "Album Artist");
+    CHECK(content.text(TextField::Composer) == "First Composer; Second Composer");
+    CHECK(content.text(TextField::Genre) == "Rock");
+    CHECK(content.text(TextField::Title) == "Last Title");
+    // A day-first date has no year.
+    CHECK(content.number(NumberField::Year) == 0);
+  }
+
   TEST_CASE("Opus File - maps common Vorbis comment aliases", "[media][unit][opus][file]")
   {
     auto comments = std::vector<std::string_view>{};

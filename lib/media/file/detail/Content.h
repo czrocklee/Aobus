@@ -17,6 +17,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace ao::media::file::detail
@@ -51,6 +52,16 @@ namespace ao::media::file::detail
     std::size_t precedingCredits = 0;
   };
 
+  // The source values a joined text field holds, and the text they join into.
+  struct JoinedText final
+  {
+    // Every value joined so far, compared exactly as the source wrote it.
+    std::unordered_set<std::string_view> values;
+    // Created at the second value and extended in place, so a joined field's
+    // text stays valid only until the next value joins it.
+    std::string* text = nullptr;
+  };
+
   struct Content final
   {
     Content() = default;
@@ -77,6 +88,8 @@ namespace ao::media::file::detail
     // Source order; Orchestra candidates stay separate until whole-file precedence resolves.
     std::vector<CreditView> credits;
     std::vector<OrchestraCandidate> orchestraCandidates;
+    // Only while building; finish() releases them.
+    std::array<JoinedText, kTextFieldCount> joinedTexts;
     std::deque<std::string> ownedStrings;
   };
 
@@ -88,7 +101,14 @@ namespace ao::media::file::detail
     class MetadataBuilder final
     {
     public:
+      // Text setters keep views of their values rather than copies, so every
+      // value must stay valid as long as the Content.
       MetadataBuilder& title(std::string_view value);
+      // The library keeps one scalar per descriptor, so repeated source
+      // values fold: Artist, AlbumArtist, and Composer join in source order
+      // with "; ", and Genre keeps its first value. A blank value is absent,
+      // and a value equal to one already joined is not joined again; values
+      // compare whole, never split at a separator they contain.
       MetadataBuilder& artist(std::string_view value);
       MetadataBuilder& album(std::string_view value);
       MetadataBuilder& albumArtist(std::string_view value);
@@ -97,6 +117,11 @@ namespace ao::media::file::detail
       MetadataBuilder& ensemble(std::string_view value);
       MetadataBuilder& orchestra(std::string_view value);
       MetadataBuilder& genre(std::string_view value);
+      // Replaces a text field instead of folding into it, so one WAVE tag
+      // chunk supersedes an earlier chunk's value rather than adding to it.
+      // It admits any value, a blank one included, so a reader that replaces
+      // a folded field applies that field's blank rule itself.
+      MetadataBuilder& replace(TextField field, std::string_view value);
       // Admits one ranked work/grouping candidate: a blank candidate is
       // absent, and a candidate wins only at or above the stored rank, so
       // precedence is order-independent and repeats keep the last nonempty.
@@ -140,7 +165,7 @@ namespace ao::media::file::detail
 
       explicit MetadataBuilder(Content& content);
 
-      MetadataBuilder& text(TextField field, std::string_view value);
+      MetadataBuilder& join(TextField field, std::string_view value);
       MetadataBuilder& number(NumberField field, std::uint16_t value);
 
       std::string_view get(TextField field) const { return _content.texts[static_cast<std::size_t>(field)]; }

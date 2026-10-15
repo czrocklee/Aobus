@@ -100,12 +100,22 @@ namespace ao::media::file::test
     CHECK_FALSE(decodeUint16("65536"));
   }
 
-  TEST_CASE("Decoder - years take the leading digits of a date", "[media][unit][decoder]")
+  TEST_CASE("Decoder - a year is four digits that end the value or begin a date", "[media][unit][decoder]")
   {
-    auto const optYear = decodeYear("2024-05-17");
-    REQUIRE(optYear);
-    CHECK(*optYear == 2024U);
+    CHECK(decodeYear("2024") == 2024U);
+    CHECK(decodeYear("2024-05-17") == 2024U);
+    CHECK(decodeYear("2024-05-17T10:30:00Z") == 2024U);
 
+    // A day-first date must not store its day as the year.
+    CHECK_FALSE(decodeYear("21/01/2025"));
+    CHECK_FALSE(decodeYear("2024/05/17"));
+    CHECK_FALSE(decodeYear("2024.05.17"));
+    // Only '-' may follow the digits, so surrounding whitespace is not trimmed.
+    CHECK_FALSE(decodeYear("2024 "));
+    CHECK_FALSE(decodeYear("20x4"));
+    CHECK_FALSE(decodeYear("20245"));
+    CHECK_FALSE(decodeYear("202"));
+    CHECK_FALSE(decodeYear("+2024"));
     CHECK_FALSE(decodeYear(""));
     CHECK_FALSE(decodeYear("May 2024"));
   }

@@ -78,6 +78,26 @@ Ensemble precedence is whole-file and nonblank: any explicit Ensemble candidate 
 Without such an explicit candidate, all nonblank Orchestra candidates become Ensemble entries in source order.
 A blank explicit tag neither contributes an entry nor suppresses fallback. Explicit `SOLOIST` selects Soloist; `PERFORMER` always selects Performer.
 
+The library keeps one value per descriptor, so repeated source values fold at import.
+A repeated value is a repeated Vorbis comment or a value under another mapped alias, a repeated ID3 frame or an ID3v2.4 NUL-separated value, or another UTF-8 `data` child of the same MP4 item.
+
+- `Artist`, `AlbumArtist`, and `Composer` join their values in traversal order with `; `.
+  A value equal to a whole value already joined is not joined again.
+  The comparison is exact and between whole source values, so a value that differs only in case still joins, a repeated `A; B` joins once, and `A` after `A; B` still joins, giving `A; B; A`.
+- `Genre` keeps its first value, because a join would create combined genres such as `Rock; Pop`.
+- For these four fields, a value holding only surrounding ASCII whitespace is absent: it neither sets nor joins.
+- A value that already holds several names is stored verbatim and never split on `;`, `/`, or any other separator.
+  Boundaries are therefore lost when a value contains `; `: `A; B` then `C` and `A` then `B; C` both give `A; B; C`.
+- `Title`, `Album`, and `Movement` keep the last value in traversal order.
+
+A WAVE file's `INFO` list and each embedded ID3 chunk are alternative tags, so a text field from a later chunk in RIFF order replaces the earlier chunk's value instead of joining it, and a field that a later chunk lacks keeps the earlier value.
+A blank `INFO` artist or genre is absent, as in every other reader, so it replaces nothing.
+`Work` is the exception to replacement: it keeps its source precedence across chunks, so an earlier chunk's `TXXX:WORK` survives a later chunk's `TIT1`.
+Within one embedded ID3 chunk, repeated values fold as above.
+
+FLAC/Vorbis, MP4, and ID3 `Year` text counts only when it begins with four decimal digits followed by its end or `-`, as in `2024` or `2024-05-17`.
+Other text, such as `21/01/2025`, `2024/05/17`, `2024.05.17`, or `2024` followed by a space, contributes no year.
+
 Work sources use the strictly ordered precedence shown above, independent of tag traversal order.
 A candidate containing only surrounding ASCII whitespace (space, tab, carriage return, line feed, form feed, or vertical tab) is absent and cannot suppress a lower-priority source.
 Nonempty text retains its original whitespace; this rule does not change scalar admission or repair invalid encodings.
@@ -92,6 +112,7 @@ MP4 textual atoms, `mdta` fields, and supported freeform `data` children accept 
 UTF-16, binary, type `0`, and nonzero-version textual values are omitted, not decoded or reinterpreted as UTF-8.
 The rule is deliberately uniform: it covers title, name, album, genre, work, movement, and year text as well as credits, so a tagger that declares text as implicit type `0` leaves those fields absent rather than guessed.
 Declared UTF-8 bytes are passed through for normal library text admission; this declaration does not repair malformed text.
+An item with a `data` child too short for its type and locale words contributes none of its values.
 
 MP4 integer movement payloads accept widths 1, 2, 3, 4, or 8, data type `0` or `21`, version `0`, and values from `0` through `65535`. Negative, wider, unsupported-type, unsupported-version, and overflowing values are ignored.
 

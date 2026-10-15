@@ -380,6 +380,7 @@ add_executable(ao_core_test
     unit/media/file/id3v2/TestId3v2.cpp
     unit/media/file/id3v2/CreditReaderTest.cpp
     unit/media/file/ContentCreditTest.cpp
+    unit/media/file/ContentTextTest.cpp
     unit/media/file/VorbisCreditTest.cpp
     unit/media/file/FlacFileTest.cpp
     unit/media/file/WavFileTest.cpp

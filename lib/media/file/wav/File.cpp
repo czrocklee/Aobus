@@ -11,8 +11,10 @@
 #include <ao/AudioScalars.h>
 #include <ao/Error.h>
 #include <ao/media/file/File.h>
+#include <ao/media/file/Visitor.h>
 #include <ao/media/wav/Riff.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/String.h>
 
 #include <algorithm>
 #include <array>
@@ -94,6 +96,8 @@ namespace ao::media::file::wav
       return year;
     }
 
+    // INFO and embedded ID3 are alternative tag chunks, so a field from a
+    // later chunk replaces the earlier chunk's value instead of folding into it.
     void applyInfoField(detail::ContentBuilder& builder, std::string_view id, std::string_view value)
     {
       if (value.empty())
@@ -101,21 +105,28 @@ namespace ao::media::file::wav
         return;
       }
 
+      // Artist and Genre treat a blank value as absent in every reader, so a
+      // blank INFO field cannot replace an earlier chunk's value either.
+      if ((id == "IART" || id == "IGNR") && utility::trim(value).empty())
+      {
+        return;
+      }
+
       if (id == "INAM")
       {
-        builder.metadata().title(value);
+        builder.metadata().replace(TextField::Title, value);
       }
       else if (id == "IART")
       {
-        builder.metadata().artist(value);
+        builder.metadata().replace(TextField::Artist, value);
       }
       else if (id == "IPRD")
       {
-        builder.metadata().album(value);
+        builder.metadata().replace(TextField::Album, value);
       }
       else if (id == "IGNR")
       {
-        builder.metadata().genre(value);
+        builder.metadata().replace(TextField::Genre, value);
       }
       else if (id == "ICRD")
       {
@@ -170,20 +181,22 @@ namespace ao::media::file::wav
                         std::span<std::byte const> fileBacked)
     {
       auto const& metadata = source.metadata();
-      auto copyText = [&target](std::string_view value, auto setter)
+      // The embedded reader already folded the chunk's repeated values, and
+      // its fields replace those of an earlier chunk, as INFO fields do.
+      auto copyText = [&target](TextField field, std::string_view value)
       {
         if (!value.empty())
         {
-          setter(target.metadata(), target.own(std::string{value}));
+          target.metadata().replace(field, target.own(std::string{value}));
         }
       };
 
-      copyText(metadata.title(), [](auto& builder, auto value) { builder.title(value); });
-      copyText(metadata.artist(), [](auto& builder, auto value) { builder.artist(value); });
-      copyText(metadata.album(), [](auto& builder, auto value) { builder.album(value); });
-      copyText(metadata.albumArtist(), [](auto& builder, auto value) { builder.albumArtist(value); });
-      copyText(metadata.composer(), [](auto& builder, auto value) { builder.composer(value); });
-      copyText(metadata.genre(), [](auto& builder, auto value) { builder.genre(value); });
+      copyText(TextField::Title, metadata.title());
+      copyText(TextField::Artist, metadata.artist());
+      copyText(TextField::Album, metadata.album());
+      copyText(TextField::AlbumArtist, metadata.albumArtist());
+      copyText(TextField::Composer, metadata.composer());
+      copyText(TextField::Genre, metadata.genre());
 
       // The embedded ID3 reader already resolved the work precedence; the copy
       // keeps the winning rank instead of re-admitting the text as a candidate.
@@ -192,7 +205,7 @@ namespace ao::media::file::wav
         target.metadata().work(*optWorkSource, target.own(std::string{metadata.work()}));
       }
 
-      copyText(metadata.movement(), [](auto& builder, auto value) { builder.movement(value); });
+      copyText(TextField::Movement, metadata.movement());
 
       // Copy unresolved candidates in traversal order; temporary chunk strings
       // cannot survive this call, and Ensemble precedence is whole-file.

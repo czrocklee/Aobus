@@ -119,23 +119,6 @@ namespace ao::media::file::mp4
       return payload.subspan(sizeof(DataAtomBodyLayout));
     }
 
-    std::optional<std::string_view> atomTextView(AtomView const& view)
-    {
-      // Text support is explicitly UTF-8 (type 1, version 0). In particular,
-      // UTF-16 and binary payloads must not be reinterpreted as UTF-8 bytes.
-      if (auto const* const layout = dataAtomLayout(view); layout == nullptr || layout->type.value() != 1)
-      {
-        return std::nullopt;
-      }
-
-      if (auto const optData = atomData(view); optData)
-      {
-        return utility::bytes::stringView(*optData);
-      }
-
-      return std::nullopt;
-    }
-
     std::uint8_t byteValue(std::byte byte) noexcept
     {
       return static_cast<std::uint8_t>(byte);
@@ -153,6 +136,78 @@ namespace ao::media::file::mp4
              (static_cast<std::uint32_t>(byteValue(bytes[offset + 1])) << 16U) |
              (static_cast<std::uint32_t>(byteValue(bytes[offset + 2])) << 8U) |
              static_cast<std::uint32_t>(byteValue(bytes[offset + 3]));
+    }
+
+    struct DataChildText final
+    {
+      bool malformed = false;
+      std::optional<std::string_view> optText{};
+    };
+
+    // Decodes one data child: a type word, a locale word, then the value.
+    // Text support is explicitly UTF-8 (type 1, version 0). In particular,
+    // UTF-16 and binary payloads must not be reinterpreted as UTF-8 bytes.
+    DataChildText dataChildText(AtomView const& child)
+    {
+      constexpr auto kTypeAndLocaleSize = 2 * sizeof(std::uint32_t);
+      auto const payload = child.payload();
+
+      if (payload.size() < kTypeAndLocaleSize)
+      {
+        return DataChildText{.malformed = true};
+      }
+
+      if (readBigEndianU32(payload, 0) != 1)
+      {
+        return DataChildText{};
+      }
+
+      return DataChildText{.optText = utility::bytes::stringView(payload.subspan(kTypeAndLocaleSize))};
+    }
+
+    // Applies the text of every data child in order, because an item holds one
+    // data child per value. A malformed item applies none of them. The atom
+    // table knows only fixed container types, and an mdta item is named by an
+    // index, so the item itself is read as the container of its children.
+    template<typename Apply>
+    void forEachAtomText(AtomView const& view, Apply apply)
+    {
+      auto values = std::vector<std::string_view>{};
+      bool malformed = false;
+
+      auto const visitRes = visitChildren(view.asContainer(),
+                                          [&](AtomView const& child)
+                                          {
+                                            if (child.type() != "data")
+                                            {
+                                              return true;
+                                            }
+
+                                            auto const text = dataChildText(child);
+
+                                            if (text.malformed)
+                                            {
+                                              malformed = true;
+                                              return false;
+                                            }
+
+                                            if (text.optText)
+                                            {
+                                              values.push_back(*text.optText);
+                                            }
+
+                                            return true;
+                                          });
+
+      if (!visitRes || malformed)
+      {
+        return;
+      }
+
+      for (auto const value : values)
+      {
+        apply(value);
+      }
     }
 
     bool isEqualIgnoringAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
@@ -215,20 +270,14 @@ namespace ao::media::file::mp4
     template<TextSetter Setter>
     void handleText(detail::ContentBuilder& builder, AtomView const& view)
     {
-      if (auto const optText = atomTextView(view); optText)
-      {
-        (builder.metadata().*Setter)(*optText);
-      }
+      forEachAtomText(view, [&builder](std::string_view value) { (builder.metadata().*Setter)(value); });
     }
 
     // Work and grouping atoms share the scalar work slot; see WorkSource ranks.
     template<detail::WorkSource Source>
     void handleWorkAtom(detail::ContentBuilder& builder, AtomView const& view)
     {
-      if (auto const optText = atomTextView(view); optText)
-      {
-        builder.metadata().work(Source, *optText);
-      }
+      forEachAtomText(view, [&builder](std::string_view value) { builder.metadata().work(Source, value); });
     }
 
     [[maybe_unused]] std::string_view atomPayloadAfter(std::span<std::byte const> bytes, std::size_t offset)
@@ -248,53 +297,50 @@ namespace ao::media::file::mp4
       auto values = std::vector<std::string_view>{};
       bool malformed = false;
 
-      auto const visitRes =
-        visitChildren(view,
-                      [&](AtomView const& child)
-                      {
-                        if (child.type() == "mean" || child.type() == "name")
-                        {
-                          constexpr std::size_t kFullBoxHeaderSize = sizeof(std::uint32_t);
+      auto const visitRes = visitChildren(view,
+                                          [&](AtomView const& child)
+                                          {
+                                            if (child.type() == "mean" || child.type() == "name")
+                                            {
+                                              constexpr std::size_t kFullBoxHeaderSize = sizeof(std::uint32_t);
 
-                          if (child.payload().size() < kFullBoxHeaderSize)
-                          {
-                            malformed = true;
-                            return false;
-                          }
+                                              if (child.payload().size() < kFullBoxHeaderSize)
+                                              {
+                                                malformed = true;
+                                                return false;
+                                              }
 
-                          auto const text = atomPayloadAfter(child.payload(), kFullBoxHeaderSize);
+                                              auto const text = atomPayloadAfter(child.payload(), kFullBoxHeaderSize);
 
-                          if (child.type() == "mean")
-                          {
-                            mean = text;
-                          }
-                          else
-                          {
-                            name = text;
-                          }
-                        }
-                        else if (child.type() == "data")
-                        {
-                          // This is the data child itself, not an enclosing metadata item.
-                          constexpr auto kTypeAndLocaleSize = 2 * sizeof(std::uint32_t);
-                          auto const payload = child.payload();
+                                              if (child.type() == "mean")
+                                              {
+                                                mean = text;
+                                              }
+                                              else
+                                              {
+                                                name = text;
+                                              }
+                                            }
+                                            else if (child.type() == "data")
+                                            {
+                                              // Admitted like an item's data children, without
+                                              // repairing malformed declared UTF-8.
+                                              auto const text = dataChildText(child);
 
-                          if (payload.size() < kTypeAndLocaleSize)
-                          {
-                            malformed = true;
-                            return false;
-                          }
+                                              if (text.malformed)
+                                              {
+                                                malformed = true;
+                                                return false;
+                                              }
 
-                          // Match the enclosing-item text decoder's type/version
-                          // admission, without repairing malformed declared UTF-8.
-                          if (readBigEndianU32(payload, 0) == 1)
-                          {
-                            values.push_back(utility::bytes::stringView(payload.subspan(kTypeAndLocaleSize)));
-                          }
-                        }
+                                              if (text.optText)
+                                              {
+                                                values.push_back(*text.optText);
+                                              }
+                                            }
 
-                        return true;
-                      });
+                                            return true;
+                                          });
 
       if (!visitRes || malformed || mean != "com.apple.iTunes" || name.empty())
       {
@@ -324,13 +370,14 @@ namespace ao::media::file::mp4
 
     void handleYear(detail::ContentBuilder& builder, AtomView const& view)
     {
-      if (auto const optText = atomTextView(view); optText)
-      {
-        if (auto const optYear = decodeYear(*optText); optYear)
-        {
-          builder.metadata().year(*optYear);
-        }
-      }
+      forEachAtomText(view,
+                      [&builder](std::string_view value)
+                      {
+                        if (auto const optYear = decodeYear(value); optYear)
+                        {
+                          builder.metadata().year(*optYear);
+                        }
+                      });
     }
 
     template<NumberSetter Setter>
@@ -620,10 +667,7 @@ namespace ao::media::file::mp4
 
     void handleMdtaMetadata(detail::ContentBuilder& builder, std::string_view key, AtomView const& view)
     {
-      if (auto const optValue = atomTextView(view); optValue)
-      {
-        handleMdtaMetadataValue(builder, key, *optValue);
-      }
+      forEachAtomText(view, [&builder, key](std::string_view value) { handleMdtaMetadataValue(builder, key, value); });
     }
 
     void handleMdtaAtom(detail::ContentBuilder& builder, std::span<std::string_view const> keys, AtomView const& view)
