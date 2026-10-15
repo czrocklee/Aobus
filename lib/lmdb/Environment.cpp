@@ -206,6 +206,11 @@ namespace ao::lmdb
     return capacityOf(handle());
   }
 
+  std::size_t Environment::maxKeySize() const noexcept
+  {
+    return static_cast<std::size_t>(::mdb_env_get_maxkeysize(handle()));
+  }
+
   Environment::Environment(EnvPtr envPtr, MapAllocation const mapAllocation) noexcept
     : _envPtr{std::move(envPtr)}, _mapAllocation{mapAllocation}
   {

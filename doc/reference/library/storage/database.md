@@ -128,7 +128,7 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 - Persisted dictionary, Track, and List integer keys are exactly four native bytes before conversion; dictionary keys are the dense range `1..N`, Track keys are nonzero matching hot/cold pairs, and List keys are nonzero and below `UINT32_MAX`.
 - An aborted transaction-local dictionary tail has no durable identity and its ids may be reused by a later transaction.
 - The dictionary persists id-to-string rows and rebuilds its string-to-id index in memory when opened; that same traversal validates key width, dense order, scalar-valid UTF-8 NFC text, and canonical text uniqueness before the store is exposed.
-- Manifest keys are normalized root-relative URI bytes, limited to 500 bytes, then zero-padded to a four-byte multiple; an oversized key returns `ValueTooLarge`.
+- Manifest keys are normalized root-relative URI bytes, at most 1,976 bytes (`LibraryUri::kMaxLength`), then zero-padded to a four-byte multiple; a longer URI returns `ValueTooLarge`. LMDB 1.0 derives its maximum key size from the page size of the host that created the database: 1,978 bytes for 4 KiB pages, the smallest page size of a supported host. The URI limit is the largest four-byte multiple within it, and open returns `NotSupported` for a database whose LMDB key limit is smaller, such as one created with smaller pages.
 
 ## Metadata records
 
@@ -189,7 +189,7 @@ Every present payload starts on a four-byte boundary, and URI bytes follow the b
 The whole cold record, including the header, every present block, the URI, and padding, is at most 65,535 bytes (`kTrackColdRecordSizeLimit`); because the record is padded to a four-byte multiple, the largest stored record is 65,532 bytes.
 Cover-art references, the work block, custom metadata, the recording date and credit references, and the URI share that one budget; no block or value has a separate allowance.
 Only inline bytes count: cover-art image bytes are Resources, and work, credit, and custom-metadata key text is stored in the dictionary, so each cover-art reference, credit, and custom-metadata entry costs eight bytes.
-In practice, custom-metadata values dominate the record; the URI is separately capped at 500 bytes (`LibraryUri::kMaxLength`) but still consumes the shared budget.
+In practice, custom-metadata values dominate the record; the URI is separately capped at 1,976 bytes (`LibraryUri::kMaxLength`) but still consumes the shared budget.
 Track preflight sizes these components in physical order and rejects a record that would exceed the limit with `ValueTooLarge`, naming the first component that crosses it, before any mutation; open applies the same limit and rejects a larger record as `CorruptData`.
 The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI bytes.
 Inline title and custom-metadata value bytes are scalar-valid UTF-8 in NFC.
@@ -474,6 +474,8 @@ The Track write sequencing, validation, and return-value contracts do not change
 
 Version `10` gates the id space record and its never-reused Track and List ids, the explicit zero reserved word in the metadata header, the non-nil library id, and the `UINT32_MAX` List-key reservation.
 Only the exact version-10 layout defined here is accepted; alternative layouts labeled version 10 are unsupported.
+Version 10 has not been released. Until the first public release, a development build may change its layout or widen one of its limits without incrementing it, and the result is an alternative layout to earlier development builds.
+An earlier build rejects such a database on open as `CorruptData`, and one that already has it open fails through the fatal facility when it reads an affected row; for example, a URI longer than 500 bytes is rejected by builds made before the limit became 1,976 bytes.
 The [YAML version 8 reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
 Version `9` gated the independent work and performance blocks, partial RecordingDate, and segmented Credits described above.
 Version `8` gated the portable manifest modification-time record: the 12-byte `FileTimestamp` seconds/nanoseconds instant with its `hasMtime` absence flag replaces the unsigned host file-clock count.
@@ -518,11 +520,11 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
 - [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, opaque filter bytes, prepared snapshots, and padding gate.
 - [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks the prepared-only writer surface, pre-mutation validation, and post-open fail-fast point-read, writer-read, and iteration behavior.
-- [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock unbound and bound snapshots, binding-independent validation, the prepared-only writer surface, manifest validation, point-read and lower-bound outcomes, and post-open iterator fail-fast behavior.
+- [`FileManifestBuilderTest.cpp`](../../../../test/unit/library/FileManifestBuilderTest.cpp) and [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) lock unbound and bound snapshots, binding-independent validation, the prepared-only writer surface, manifest validation, URI padding boundaries through the maximum key size, point-read and lower-bound outcomes, and post-open iterator fail-fast behavior.
 - [`LibraryProbeTest.cpp`](../../../../test/unit/library/LibraryProbeTest.cpp) locks invalid-view and prepared-write contracts, post-open structural, List-parent, Track/manifest, and native-read failures, revision exhaustion, LMDB lifetime misuse, empty lower-bound rejection, fresh-environment reader-table exhaustion, the default request exceeding LMDB's 126-slot baseline through 160 simultaneous snapshots, and bounded normal child-process observations.
 - [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) locks a runtime YAML consumer's post-open Resource-reference invariant to the same fatal diagnostics.
 - [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, named-DBI-open, cursor-row, and manifest-point-read evidence.
-- [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior.
+- [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior, including a maximum-length URI across reopen.
 - [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) locks live parent validation, leaf-delete conflict, children-first subtree deletion, and coherent clear behavior.
 - [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, the complete Reader range and count surface, physical-side projections, retained point and batch load modes, and ordinary store behavior.
 - [`TrackStoreIntegrityTest.cpp`](../../../../test/unit/library/TrackStoreIntegrityTest.cpp) locks reserved-id rejection and the canonical sweep over persisted records.

@@ -19,7 +19,10 @@ namespace ao::library
   class LibraryUri final
   {
   public:
-    static constexpr std::size_t kMaxLength = 500;
+    // Byte length limit of the canonical value. Zero-padded to a four-byte
+    // multiple, it is the manifest key, which must fit LMDB's computed maximum
+    // key size of 1,978 bytes for 4 KiB pages, the smallest supported page size.
+    static constexpr std::size_t kMaxLength = 1'976;
 
     static Result<LibraryUri> parse(std::string_view text);
 

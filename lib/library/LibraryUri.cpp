@@ -24,6 +24,27 @@ namespace ao::library
   {
     constexpr auto kC0ControlLimit = static_cast<unsigned char>(0x20);
     constexpr auto kDeleteControl = static_cast<unsigned char>(0x7F);
+    constexpr auto kUtf8ContinuationMask = static_cast<unsigned char>(0xC0);
+    constexpr auto kUtf8ContinuationTag = static_cast<unsigned char>(0x80);
+
+    // Quotes parse input for a diagnostic. Input longer than any URI is cut to
+    // that length at a UTF-8 lead byte, so it cannot inflate the message.
+    std::string quotedInput(std::string_view const text)
+    {
+      if (text.size() <= LibraryUri::kMaxLength)
+      {
+        return std::format("'{}'", text);
+      }
+
+      auto end = LibraryUri::kMaxLength;
+
+      while (end > 0 && (static_cast<unsigned char>(text[end]) & kUtf8ContinuationMask) == kUtf8ContinuationTag)
+      {
+        --end;
+      }
+
+      return std::format("'{}...' ({} bytes)", text.substr(0, end), text.size());
+    }
 
     bool hasWindowsRootName(std::string_view text) noexcept
     {
@@ -144,25 +165,21 @@ namespace ao::library
       return makeError(Error::Code::InvalidInput, "Library URI must not contain control characters");
     }
 
-    if (text.size() > kMaxLength)
-    {
-      return makeError(Error::Code::ValueTooLarge,
-                       std::format("Library URI length {} exceeds the maximum of {} bytes", text.size(), kMaxLength));
-    }
-
     auto portable = std::string{text};
     std::ranges::replace(portable, '\\', '/');
 
     if (portable.starts_with('/') || hasWindowsRootName(portable))
     {
-      return makeError(Error::Code::InvalidInput, std::format("Library URI '{}' must be root-relative", text));
+      return makeError(
+        Error::Code::InvalidInput, std::format("Library URI {} must be root-relative", quotedInput(text)));
     }
 
     auto path = utility::pathFromUtf8(portable);
 
     if (path.is_absolute() || path.has_root_name() || path.has_root_directory())
     {
-      return makeError(Error::Code::InvalidInput, std::format("Library URI '{}' must be root-relative", text));
+      return makeError(
+        Error::Code::InvalidInput, std::format("Library URI {} must be root-relative", quotedInput(text)));
     }
 
     path = path.lexically_normal();
@@ -181,7 +198,8 @@ namespace ao::library
     {
       if (component == "..")
       {
-        return makeError(Error::Code::InvalidInput, std::format("Library URI '{}' escapes the library root", text));
+        return makeError(
+          Error::Code::InvalidInput, std::format("Library URI {} escapes the library root", quotedInput(text)));
       }
     }
 
@@ -189,7 +207,14 @@ namespace ao::library
 
     if (value.empty() || value.starts_with('/'))
     {
-      return makeError(Error::Code::InvalidInput, std::format("Library URI '{}' must be root-relative", text));
+      return makeError(
+        Error::Code::InvalidInput, std::format("Library URI {} must be root-relative", quotedInput(text)));
+    }
+
+    if (value.size() > kMaxLength)
+    {
+      return makeError(Error::Code::ValueTooLarge,
+                       std::format("Library URI length {} exceeds the maximum of {} bytes", value.size(), kMaxLength));
     }
 
     return LibraryUri{std::move(value)};

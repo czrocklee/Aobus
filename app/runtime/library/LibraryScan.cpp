@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <optional>
 #include <span>
@@ -229,14 +230,15 @@ namespace ao::rt
 
     // Classifies one entry visited by the filesystem walk against the manifest
     // snapshot. An entry whose relative path does not form a library URI
-    // becomes an Error-classified item without a blocked prefix: no manifest
-    // entry can live under a name that cannot form a URI, so those rows stay
-    // eligible for Missing classification. An entry that resolves or
-    // inspects unsafely becomes an Error-classified item whose URI prefix is
-    // blocked from Missing classification. Either way the result reports
-    // false so the walk does not descend into the entry; a true result allows
-    // descent.
-    Result<bool> classifyWalkEntry(std::filesystem::path const& entryPath,
+    // becomes an Error-classified item labeled with that path and without a
+    // blocked prefix: no manifest entry can live under a name that cannot form
+    // a URI, so those rows stay eligible for Missing classification. A file of
+    // an unsupported format needs no URI and is ignored, as scanEntry()
+    // ignores it. An entry that resolves or inspects unsafely becomes an
+    // Error-classified item whose URI prefix is blocked from Missing
+    // classification. Either way the result reports false so the walk does
+    // not descend into the entry; a true result allows descent.
+    Result<bool> classifyWalkEntry(std::filesystem::directory_entry const& entry,
                                    std::filesystem::path const& root,
                                    std::filesystem::path const& resolvedRoot,
                                    ManifestSnapshot const& manifest,
@@ -244,14 +246,35 @@ namespace ao::rt
                                    std::unordered_set<std::string>& blockedUriPrefixes,
                                    std::vector<ScanItem>& items)
     {
-      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(entryPath.lexically_relative(root)));
+      auto const& entryPath = entry.path();
+      auto const relativePath = utility::pathToGenericUtf8(entryPath.lexically_relative(root));
+      auto uriRes = library::LibraryUri::parse(relativePath);
 
       if (!uriRes)
       {
-        auto item = ScanItem{.uri = utility::pathToGenericUtf8(entryPath.filename()),
-                             .fullPath = entryPath,
-                             .classification = ScanClassification::Error,
-                             .errorMessage = uriRes.error().message};
+        // Only a file of an unsupported format is ignored; a directory, a
+        // symlink to one, and an entry whose type cannot be read are reported.
+        // The entry caches the type the walk read where the platform reports
+        // it, so a real directory is still recognized when its path is too
+        // long to inspect again.
+        auto typeEc = std::error_code{};
+        auto const isSymlink = entry.is_symlink(typeEc);
+        auto const isDirectory = !typeEc && entry.is_directory(typeEc);
+
+        if (!typeEc && !isDirectory && !media::file::File::isSupported(entryPath))
+        {
+          return false;
+        }
+
+        // The walk does not follow directory symlinks, so only a real
+        // directory has a subtree that this error skips.
+        auto const skipsSubtree = isDirectory && !isSymlink;
+        auto item = ScanItem{
+          .uri = relativePath,
+          .fullPath = entryPath,
+          .classification = ScanClassification::Error,
+          .errorMessage = skipsSubtree ? std::format("{}; its contents were not scanned", uriRes.error().message)
+                                       : uriRes.error().message};
         items.push_back(std::move(item));
         return false;
       }
@@ -575,7 +598,7 @@ namespace ao::rt
       // The returned bool is the descent permission: false means the entry
       // was classified as unsafe, so the walk must not descend into it.
       auto const canDescendRes =
-        classifyWalkEntry(entry.path(), root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, items);
+        classifyWalkEntry(entry, root, resolvedRoot, snapshot.manifest, seenUris, blockedUriPrefixes, items);
 
       if (!canDescendRes)
       {

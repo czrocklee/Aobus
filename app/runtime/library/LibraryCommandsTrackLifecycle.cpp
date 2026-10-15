@@ -26,8 +26,8 @@
 #include <expected>
 #include <filesystem>
 #include <format>
-#include <optional>
 #include <string>
+#include <system_error>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -54,60 +54,86 @@ namespace ao::rt
           std::format("failed to resolve music root '{}': {}", utility::pathToUtf8(library.rootPath()), ec.message()));
       }
 
-      bool sawOutsideRoot = false;
+      auto const pathText = utility::pathToUtf8(path);
+      auto const outsideRoot = [&pathText]
+      { return makeError(Error::Code::InvalidInput, std::format("track file is outside music root: {}", pathText)); };
+      auto const notFound = [&pathText]
+      { return makeError(Error::Code::NotFound, std::format("track file not found under music root: {}", pathText)); };
+      auto const escapesRoot = [](std::filesystem::path const& rel) { return rel.empty() || *rel.begin() == ".."; };
 
-      auto const resolveInsideRoot =
-        [&root, &sawOutsideRoot](std::filesystem::path const& candidate) -> std::optional<ImportTarget>
+      auto const candidate = path.is_absolute() ? path : root / path;
+      auto resolveEc = std::error_code{};
+      auto const fullPath = std::filesystem::weakly_canonical(candidate, resolveEc);
+      auto const tooLongToResolve = resolveEc == std::errc::filename_too_long;
+
+      if (resolveEc && !tooLongToResolve)
       {
-        auto ec = std::error_code{};
-        auto fullPath = std::filesystem::weakly_canonical(candidate, ec);
+        return notFound();
+      }
 
-        if (ec)
-        {
-          return std::nullopt;
-        }
+      auto rel = std::filesystem::path{};
 
-        auto const rel = fullPath.lexically_relative(root);
-
-        auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(rel));
-
-        if (!uriRes)
-        {
-          sawOutsideRoot = true;
-          return std::nullopt;
-        }
-
-        auto resolvedPathRes = uriRes->resolveUnder(root);
-
-        if (!resolvedPathRes)
-        {
-          sawOutsideRoot = true;
-          return std::nullopt;
-        }
-
-        if (!std::filesystem::is_regular_file(*resolvedPathRes, ec) || ec)
-        {
-          return std::nullopt;
-        }
-
-        return ImportTarget{.fullPath = std::move(*resolvedPathRes), .uri = std::string{uriRes->value()}};
-      };
-
-      auto optTarget = resolveInsideRoot(path.is_absolute() ? path : root / path);
-
-      if (!optTarget)
+      if (tooLongToResolve)
       {
-        if (sawOutsideRoot)
+        // A path too long for the platform to resolve is still measured
+        // against the URI limit in its lexical form. Without resolution only
+        // spellings compare, so it is also measured against the configured
+        // root, which may reach the resolved root through a symlink.
+        auto const lexical = candidate.lexically_normal();
+        rel = lexical.lexically_relative(root);
+
+        if (escapesRoot(rel))
+        {
+          rel = lexical.lexically_relative(library.rootPath().lexically_normal());
+        }
+      }
+      else
+      {
+        rel = fullPath.lexically_relative(root);
+      }
+
+      if (escapesRoot(rel))
+      {
+        return outsideRoot();
+      }
+
+      auto uriRes = library::LibraryUri::parse(utility::pathToGenericUtf8(rel));
+
+      if (!uriRes)
+      {
+        if (uriRes.error().code == Error::Code::ValueTooLarge)
         {
           return makeError(
-            Error::Code::InvalidInput, std::format("track file is outside music root: {}", utility::pathToUtf8(path)));
+            Error::Code::ValueTooLarge,
+            std::format("track file path is too long for the library: {}: {}", pathText, uriRes.error().message));
         }
 
         return makeError(
-          Error::Code::NotFound, std::format("track file not found under music root: {}", utility::pathToUtf8(path)));
+          Error::Code::InvalidInput,
+          std::format("track file path does not form a library URI: {}: {}", pathText, uriRes.error().message));
       }
 
-      return std::move(*optTarget);
+      // The URI fits, but its full path exceeds what the platform can open.
+      if (tooLongToResolve)
+      {
+        return makeError(
+          Error::Code::IoError,
+          std::format("track file path is too long for the platform: {}: {}", pathText, resolveEc.message()));
+      }
+
+      auto resolvedPathRes = uriRes->resolveUnder(root);
+
+      if (!resolvedPathRes)
+      {
+        return outsideRoot();
+      }
+
+      if (!std::filesystem::is_regular_file(*resolvedPathRes, ec) || ec)
+      {
+        return notFound();
+      }
+
+      return ImportTarget{.fullPath = std::move(*resolvedPathRes), .uri = std::string{uriRes->value()}};
     }
 
     struct PreparedTrackImport final

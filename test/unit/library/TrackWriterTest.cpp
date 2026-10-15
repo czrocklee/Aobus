@@ -15,6 +15,7 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -134,6 +135,37 @@ namespace ao::library::test
     CHECK(optManifest->trackId() == trackId);
     CHECK(optManifest->fileSize() == 321);
     CHECK(optManifest->mtime() == kMtime);
+  }
+
+  TEST_CASE("TrackWriter - a maximum-length URI survives commit and reopen", "[library][unit][track-writer]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto uri = std::string(200, 'a');
+
+    for (std::size_t index = 1; index < 9; ++index)
+    {
+      uri += "/" + std::string(200, 'a');
+    }
+
+    uri += "/" + std::string(LibraryUri::kMaxLength - uri.size() - 6, 'b') + ".flac";
+    REQUIRE(uri.size() == LibraryUri::kMaxLength);
+
+    auto trackId = kInvalidTrackId;
+
+    {
+      auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+      trackId = addTrack(library, TrackSpec{.title = "Longest", .uri = uri});
+    }
+
+    // Reopening admits the cold record's URI and its manifest binding.
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto readTransaction = library.readTransaction();
+    auto const optTrack = library.tracks().reader(readTransaction).get(trackId, TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrack);
+    CHECK(optTrack->property().uri() == uri);
+    auto const optManifest = library.manifest().reader(readTransaction).get(uri);
+    REQUIRE(optManifest);
+    CHECK(optManifest->trackId() == trackId);
   }
 
   TEST_CASE("TrackWriter - create rejects a missing existing Resource before mutation", "[library][unit][track-writer]")
