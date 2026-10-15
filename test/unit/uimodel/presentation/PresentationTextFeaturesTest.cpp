@@ -571,12 +571,50 @@ namespace ao::uimodel::test
                                      {"tracksDeleted", 3},
                                      {"listsCreated", 4},
                                      {"listsDeleted", 5},
-                                     {"dangling", 6}});
+                                     {"dangling", 6},
+                                     {"invalidFilters", 7}});
       };
 
       INFO("locale: " << expected.locale);
       CHECK(formatRestore(MessageId::LibraryRestoreScopeLibrary).starts_with(expected.library));
       CHECK(formatRestore(MessageId::LibraryRestoreScopeLists).starts_with(expected.lists));
+    }
+  }
+
+  TEST_CASE("i18n::MessageCatalog - every locale's restore confirmation shows each report count",
+            "[uimodel][unit][catalog][localization]")
+  {
+    static constexpr auto kLocales =
+      std::to_array<std::string_view>({"en", "de-DE", "fr-FR", "es-ES", "ja-JP", "zh-CN", "zh-TW"});
+    static constexpr auto kCounts = std::to_array<std::string_view>({"11", "12", "13", "14", "15", "16", "17"});
+
+    for (auto const locale : kLocales)
+    {
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const message =
+        i18n::requiredFormat(catalog,
+                             MessageId::LibraryRestoreConfirmation,
+                             {{"scope", i18n::requiredText(catalog, MessageId::LibraryRestoreScopeLists)},
+                              {"version", 2},
+                              {"mode", "Full"},
+                              {"tracksCreated", 11},
+                              {"tracksUpdated", 12},
+                              {"tracksDeleted", 13},
+                              {"listsCreated", 14},
+                              {"listsDeleted", 15},
+                              {"dangling", 16},
+                              {"invalidFilters", 17}});
+
+      INFO("locale: " << locale);
+
+      for (auto const count : kCounts)
+      {
+        INFO("count: " << count);
+        CHECK(message.contains(count));
+      }
+
+      CHECK_FALSE(message.contains('{'));
+      CHECK_FALSE(message.contains('}'));
     }
   }
 

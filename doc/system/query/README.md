@@ -93,7 +93,8 @@ A projection consumes an already-materialized source and a presentation specific
 
 Core library storage treats saved expression bytes as opaque scalar-valid text and does not use the query grammar for database admission.
 Opening or refreshing a saved List recompiles the text using the current application implementation.
-A grammar, binding, or truth change can therefore produce a source expression error or different membership without making the database structurally corrupt.
+The library database and YAML versions name the language of saved List filters, so a grammar, binding, or truth change that alters the outcome of accepted filter text increments them; see the [predicate language reference](../../reference/query/predicate-language.md#compatibility-and-versioning).
+Text that does not parse or compile produces a source expression error without making the database structurally corrupt.
 Other retained surfaces—workspace/session state, TUI preferences, and automation—own their own compatibility policy.
 Expressions carry no independent dialect id.
 

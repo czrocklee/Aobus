@@ -430,7 +430,7 @@ es:table {
     list_delete_subtree_question { "¿Eliminar {count, plural, one {# lista} other {# listas}} en este subárbol derivado?\n\n{entries}\nSe conservarán las etiquetas utilizadas por las listas de reproducción anidadas.\nLos archivos de música se conservarán." }
     list_remove_tag { "Eliminar también {tag} de {count, plural, one {# pista} other {# pistas}}" }
     list_tag_references { "{tag} también está referenciado por: {references}. Eliminarlo puede cambiar esas listas." }
-    library_restore_confirmation { "Esta restauración reemplazará el contenido actual de este ámbito: {scope}.\n\nContenido: YAML v{version}, modo ''{mode}''.\nVista previa: pistas creadas: {tracksCreated}, pistas actualizadas: {tracksUpdated}, pistas eliminadas: {tracksDeleted}; listas creadas: {listsCreated}, listas eliminadas: {listsDeleted}; referencias huérfanas ignoradas: {dangling}.\n\nContinúa solo si coincide con la copia seleccionada." }
+    library_restore_confirmation { "Esta restauración reemplazará el contenido actual de este ámbito: {scope}.\n\nContenido: YAML v{version}, modo ''{mode}''.\nVista previa: pistas creadas: {tracksCreated}, pistas actualizadas: {tracksUpdated}, pistas eliminadas: {tracksDeleted}; listas creadas: {listsCreated}, listas eliminadas: {listsDeleted}; referencias huérfanas ignoradas: {dangling}; filtros de lista no válidos conservados tal cual: {invalidFilters}.\n\nContinúa solo si coincide con la copia seleccionada." }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Otras listas tienen pertenencia calculada; edita su expresión o las etiquetas de las pistas en su lugar." }
     list_no_editable_playlists { "No hay listas de reproducción editables directamente" }

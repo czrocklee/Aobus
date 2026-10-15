@@ -55,6 +55,8 @@ namespace ao::rt
     std::uint64_t listsCreated = 0;
     std::uint64_t listsDeleted = 0;
     std::uint64_t danglingReferencesIgnored = 0;
+    // Imported List filters that do not parse or compile, kept byte-exactly.
+    std::uint64_t invalidFiltersKept = 0;
 
     bool operator==(ImportReport const&) const = default;
   };

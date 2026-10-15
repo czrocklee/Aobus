@@ -185,7 +185,9 @@ No rescan is required between a `full` restore and a cover appearing.
 Lists are created in payload order, then parent relationships are applied in a second pass so a child may precede its parent.
 Saved order resolves payload IDs through tracks created or updated by this import and URI references through the target manifest.
 
-An empty or omitted filter means the identity predicate; a nonempty filter must parse and compile under the current query grammar.
+An empty or omitted filter means the identity predicate.
+A nonempty filter is imported byte-exactly even when it does not parse or compile under the current query grammar, because the database can already hold such text and the exporter writes it unchanged; rejecting it would leave that library's backup unrestorable.
+The import counts such a filter, and the imported List exposes the same empty-membership expression error that the [track source](track-source.md) defines for invalid stored text.
 Filter and order may coexist, and order references never add a track to List membership.
 Known payload parent relationships must be self-free and acyclic before any list is written.
 Every recreated list must fit the fixed-width core list layout; an oversized text field, track array, or combined offset rejects the import instead of truncating data.
@@ -208,6 +210,7 @@ Every import, preview, and plan returns an `ImportReport`:
 | `listsCreated` | Payload lists created by the import. |
 | `listsDeleted` | Pre-restore lists; otherwise `0`. |
 | `danglingReferencesIgnored` | Unresolved parent, payload-track-ID, and manifest-URI references. |
+| `invalidFiltersKept` | Imported nonempty List filters that do not parse or compile, kept byte-exactly. |
 
 Counts describe processed matches and creations, not only byte-different records.
 Preview and commit produce the same report when source bytes and target binding remain unchanged.

@@ -14,6 +14,8 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryTransfer.h>
 
@@ -28,10 +30,12 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <vector>
 
 namespace ao::rt::test
 {
@@ -602,16 +606,6 @@ library:
   TEST_CASE("LibraryYaml - version 8 rejects invalid list semantics", "[runtime][unit][import-export][schema]")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
-      {.label = "invalid List filter",
-       .yaml = R"(version: 8
-export_mode: listOnly
-library:
-  lists:
-    - id: 1
-      name: Invalid filter
-      filter: "("
-)",
-       .error = "filter is invalid"},
       {.label = "parent cycle",
        .yaml = R"(version: 8
 export_mode: listOnly
@@ -631,6 +625,101 @@ library:
     {
       checkRejectedPayload(payload);
     }
+  }
+
+  TEST_CASE("LibraryYaml - a List filter the library cannot store refuses the payload whole",
+            "[runtime][unit][import-export][schema]")
+  {
+    // A filter with an expression error is kept, but one that is not
+    // storable List text is a document error and leaves the target unchanged.
+    struct RejectedFilter final
+    {
+      std::string_view label;
+      std::string node;
+      std::string_view error;
+    };
+
+    auto const rejected = std::to_array<RejectedFilter>({
+      {.label = "sequence", .node = "\n        - $genre = Rock", .error = "List record.filter must be a scalar"},
+      {.label = "map", .node = "\n        genre: Rock", .error = "List record.filter must be a scalar"},
+      {.label = "malformed UTF-8", .node = "\"bad\xFF\"", .error = "List filter"},
+      {.label = "65,536 bytes", .node = std::string(65536, 'x'), .error = "exceeds the 65535-byte product limit"},
+    });
+    auto const mode = GENERATE(ImportMode::Restore, ImportMode::Merge);
+    CAPTURE(mode);
+
+    for (auto const& filter : rejected)
+    {
+      CAPTURE(filter.label);
+      auto const temp = ao::test::TempDir{};
+      auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+
+      {
+        auto transaction = library::test::writeTransaction(ml);
+        auto builder = ListBuilder::makeEmpty().name("Baseline");
+        REQUIRE(transaction.apply([&builder](LibraryWrite& write) { return write.lists().create(builder); }));
+        REQUIRE(transaction.commit());
+      }
+
+      auto const originalRevision = [&ml]
+      {
+        auto transaction = ml.readTransaction();
+        return ml.libraryRevision(transaction);
+      }();
+
+      auto const yamlPath = temp.path() / "rejected-filter.yaml";
+      {
+        auto output = std::ofstream{yamlPath, std::ios::binary};
+        output << "version: 8\nexport_mode: listOnly\nlibrary:\n  lists:\n"
+               << "    - id: 1\n      name: Admitted\n      filter: '$genre = \"Rock\"'\n"
+               << "    - id: 2\n      name: Rejected\n      filter: " << filter.node << "\n";
+      }
+
+      auto const res = LibraryYamlImporter{ml}.importFromYamlOffline(yamlPath, mode);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::FormatRejected);
+      CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring(std::string{filter.error}));
+
+      auto transaction = ml.readTransaction();
+      CHECK(ml.libraryRevision(transaction) == originalRevision);
+      auto names = std::vector<std::string>{};
+
+      for (auto const& [listId, view] : ml.lists().reader(transaction))
+      {
+        names.emplace_back(view.name());
+      }
+
+      CHECK(names == std::vector<std::string>{"Baseline"});
+    }
+  }
+
+  TEST_CASE("LibraryYaml - an invalid List filter as long as List text allows is kept",
+            "[runtime][unit][import-export][schema]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    auto const filter = "(" + std::string(65534, 'x');
+    auto const yamlPath = temp.path() / "longest-filter.yaml";
+    {
+      auto output = std::ofstream{yamlPath, std::ios::binary};
+      output << "version: 8\nexport_mode: listOnly\nlibrary:\n  lists:\n"
+             << "    - id: 1\n      name: Longest\n      filter: " << filter << "\n";
+    }
+
+    auto const res = LibraryYamlImporter{ml}.importFromYamlOffline(yamlPath, ImportMode::Restore);
+    REQUIRE(res);
+    CHECK(res->listsCreated == 1);
+    CHECK(res->invalidFiltersKept == 1);
+
+    auto transaction = ml.readTransaction();
+    auto filters = std::vector<std::string>{};
+
+    for (auto const& [listId, view] : ml.lists().reader(transaction))
+    {
+      filters.emplace_back(view.filter());
+    }
+
+    CHECK(filters == std::vector<std::string>{filter});
   }
 
   TEST_CASE("LibraryYaml - version 8 rejects values beyond supported limits", "[runtime][unit][import-export][schema]")

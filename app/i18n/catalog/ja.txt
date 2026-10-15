@@ -430,7 +430,7 @@ ja:table {
     list_delete_subtree_question { "このサブツリー内の {count, plural, one {# 件のリスト} other {# 件のリスト}} を削除しますか？\n\n{entries}\nネストされたプレイリストで使用されているタグは保持されます。\n音楽ファイルは保持されます。" }
     list_remove_tag { "{count, plural, one {# 曲} other {# 曲}} からも {tag} を削除する" }
     list_tag_references { "{tag} は次でも参照されています: {references}。削除すると、これらのリストが変更される可能性があります。" }
-    library_restore_confirmation { "この復元により、現在の対象データ（{scope}）が置き換えられます。\n\nバックアップは YAML v{version} 形式で、モードは ''{mode}'' です。\nプレビューでは、{tracksCreated} 曲を作成し、{tracksUpdated} 曲を更新し、{tracksDeleted} 曲を削除します。{listsCreated} 件のリストを作成し、{listsDeleted} 件を削除します。未解決の参照 {dangling} 件は無視します。\n\n選択したバックアップの内容と一致する場合のみ続行してください。" }
+    library_restore_confirmation { "この復元により、現在の対象データ（{scope}）が置き換えられます。\n\nバックアップは YAML v{version} 形式で、モードは ''{mode}'' です。\nプレビューでは、{tracksCreated} 曲を作成し、{tracksUpdated} 曲を更新し、{tracksDeleted} 曲を削除します。{listsCreated} 件のリストを作成し、{listsDeleted} 件を削除します。未解決の参照 {dangling} 件は無視します。無効なリストフィルター {invalidFilters} 件はそのまま保持します。\n\n選択したバックアップの内容と一致する場合のみ続行してください。" }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "他のリストには計算されたメンバーシップがあります。代わりにその式または曲のタグを編集してください。" }
     list_no_editable_playlists { "直接編集可能なプレイリストはありません" }

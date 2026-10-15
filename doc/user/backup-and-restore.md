@@ -48,7 +48,8 @@ Run the same mode you intend to commit:
 aobus -C /target -O json lib import /backup/library.yaml --mode restore --dry-run
 ```
 
-Review `payloadVersion`, `payloadMode`, `targetScope`, the track/list create-update-delete counts, and `danglingReferencesIgnored`.
+Review `payloadVersion`, `payloadMode`, `targetScope`, the track/list create-update-delete counts, `danglingReferencesIgnored`, and `invalidFiltersKept`.
+A nonzero `invalidFiltersKept` counts List filters that do not parse or compile: those Lists restore with their filter text unchanged, and they and the Lists nested under them show no members until the filter is fixed.
 Do not continue if the root, mode, or deletion counts are unexpected.
 
 ### Apply the import

@@ -610,11 +610,13 @@ library:
     CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
     CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["invalidFiltersKept"]) == "0");
 
     result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Payload: YAML v8, mode 'full', target scope 'library'."));
-    CHECK(contains(result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0."));
+    CHECK(contains(
+      result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0, invalid filters kept 0."));
 
     result = target.run({"track", "show"});
     REQUIRE(result.status == 0);
@@ -633,6 +635,53 @@ library:
     result = target.run({"track", "show"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Test Title"));
+  }
+
+  TEST_CASE("CLI - lib import counts kept invalid List filters in every output and phase",
+            "[cli][integration][lib][import-export]")
+  {
+    auto fixture = CliFixture{};
+    auto const documentPath = fixture.root() / "invalid-filter.yaml";
+    {
+      auto document = std::ofstream{documentPath};
+      document << R"yaml(version: 8
+export_mode: listOnly
+library:
+  lists:
+    - id: 1
+      name: Invalid
+      filter: "("
+    - id: 2
+      name: Valid
+      filter: '$genre = "Rock"'
+)yaml";
+    }
+
+    auto result = fixture.run({"-O", "json", "lib", "import", "--dry-run", documentPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    auto tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["listsCreated"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["invalidFiltersKept"]) == "1");
+
+    result = fixture.run({"lib", "import", "--dry-run", documentPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(contains(
+      result.out, "Changes: tracks +0/~0/-0, lists +2/-0, dangling references ignored 0, invalid filters kept 1."));
+
+    result = fixture.run({"-O", "json", "lib", "import", documentPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    tree = parseYaml(result.out);
+    CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "false");
+    CHECK(yaml::scalarView(tree.rootref()["invalidFiltersKept"]) == "1");
+
+    result =
+      fixture.run({"lib", "import", "--mode", "restore", "--confirm-destructive-restore", documentPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(contains(
+      result.out, "Changes: tracks +0/~0/-0, lists +2/-2, dangling references ignored 0, invalid filters kept 1."));
   }
 
   TEST_CASE("CLI - lib import defaults to merge and preserves absent target tracks",

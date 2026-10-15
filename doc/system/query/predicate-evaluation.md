@@ -178,8 +178,8 @@ Execution plans and internal field opcodes are not persisted.
 Saved List records store scalar-valid UTF-8 local expression text byte-exactly, while runtime view filters retain expression text in view/session state according to their owning contracts.
 
 A predicate change must consider retained expressions even when no record byte changes.
-Saved-List text is interpreted by the current application query implementation rather than admitted by the physical library database version.
-A grammar, binding, or truth-semantics change may therefore turn retained text into an expression error or change its resulting membership without making the database structurally corrupt, and does not by itself increment `ao::library::kLibraryVersion`.
+Saved-List text is not admitted by the physical library database, which stores it opaquely, but the database version names its predicate language.
+A grammar, binding, or truth-semantics change that could turn retained valid text into an expression error or change its resulting membership therefore increments `ao::library::kLibraryVersion` and the library YAML version, as the [predicate language reference](../../reference/query/predicate-language.md#compatibility-and-versioning) states; retained text that does not parse or compile still leaves the database structurally valid.
 The [library database reference](../../reference/library/storage/database.md) owns versioning for the List record layout and other physical storage representations.
 
 Runtime view filters use the compatibility policy of the workspace, playback-session, or CLI surface that retains or accepts them.

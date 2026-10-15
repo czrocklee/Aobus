@@ -249,7 +249,8 @@ Each list is a closed map.
 | `order` | No. | Sequence of saved rank references; empty or omitted means no saved rank. |
 
 `filter` and `order` are independent and may coexist.
-A non-empty `filter` must parse and compile under the current query grammar.
+The document version names the predicate language of its filters, which carry no version of their own: a version-8 filter means what the version-8 [predicate language](../../query/predicate-language.md) defines, and a grammar, field-binding, or evaluation change that alters the outcome of filter text that language accepts increments the format version, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) defines.
+A non-empty `filter` that does not parse or compile is still imported byte-exactly and counted in the import report's `invalidFiltersKept`, so a library that holds such a filter can restore its own backup.
 The producer always emits `id`, `parentId`, and `name`; it omits an empty description, identity filter, and empty order.
 Order references do not define membership and need not currently match the List expression.
 
@@ -290,7 +291,7 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - a track record whose URI is not a supported audio file;
 - malformed UTF-8 in library text or a normalized text value beyond its core storage limit;
 - duplicate nonzero track IDs, duplicate canonical track URIs, raw or canonically equivalent duplicate custom keys, or missing, zero, or duplicate list IDs;
-- an invalid non-empty filter, a known parent cycle, or an ambiguous list-order reference map;
+- a known parent cycle or an ambiguous list-order reference map;
 - a URI or list representation exceeding its core storage limit;
 - a malformed digest, an out-of-range `length`, a cover naming no row, a row no track references, or two rows carrying one digest.
 
@@ -313,7 +314,7 @@ Version 8 removed the root `libraryId`: a library id names only the database tha
 `recording-date` defines empty scalar text, including quoted empty scalars and a present empty plain scalar, as its clear form.
 Version 6 existed for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
 Version 5 recorded the Unicode-caseless meaning of `~`, which later versions carry forward; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 10.
-Payload versioning is independent of the database's `kLibraryVersion`.
+Payload versioning is independent of the database's `kLibraryVersion`, except that a predicate-language change that alters accepted filter text increments both.
 
 ## Examples
 

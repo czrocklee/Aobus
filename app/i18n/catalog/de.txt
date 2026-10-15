@@ -430,7 +430,7 @@ de:table {
     list_delete_subtree_question { "{count, plural, one {# Liste} other {# Listen}} in diesem abgeleiteten Teilbaum löschen?\n\n{entries}\nTags verschachtelter Wiedergabelisten bleiben erhalten.\nMusikdateien bleiben erhalten." }
     list_remove_tag { "{tag} auch von {count, plural, one {# Titel} other {# Titeln}} entfernen" }
     list_tag_references { "{tag} wird auch verwendet von: {references}. Das Entfernen kann diese Listen ändern." }
-    library_restore_confirmation { "Diese Wiederherstellung ersetzt Folgendes: {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau — Titel: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; Listen: {listsCreated} erstellt, {listsDeleted} gelöscht; verwaiste Verweise: {dangling} ignoriert.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
+    library_restore_confirmation { "Diese Wiederherstellung ersetzt Folgendes: {scope}.\n\nInhalt: YAML v{version}, Modus ''{mode}''.\nVorschau — Titel: {tracksCreated} erstellt, {tracksUpdated} aktualisiert, {tracksDeleted} gelöscht; Listen: {listsCreated} erstellt, {listsDeleted} gelöscht; verwaiste Verweise: {dangling} ignoriert; ungültige Listenfilter: {invalidFilters} unverändert übernommen.\n\nFahren Sie nur fort, wenn dies der ausgewählten Sicherung entspricht." }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Andere Listen haben eine berechnete Mitgliedschaft; bearbeiten Sie stattdessen deren Ausdruck oder die Titel-Tags." }
     list_no_editable_playlists { "Keine direkt bearbeitbaren Wiedergabelisten" }

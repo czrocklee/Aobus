@@ -432,7 +432,7 @@ root:table {
     list_delete_subtree_question { "Delete {count, plural, one {# List} other {# Lists}} in this derived subtree?\n\n{entries}\nTags used by nested Playlists are kept.\nMusic files will be kept." }
     list_remove_tag { "Also remove {tag} from {count, plural, one {# track} other {# tracks}}" }
     list_tag_references { "{tag} is also referenced by: {references}. Removing it may change those Lists." }
-    library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; {listsCreated} Lists created, {listsDeleted} deleted; {dangling} dangling references ignored.\n\nContinue only if this matches the selected backup." }
+    library_restore_confirmation { "This restore will replace the current {scope}.\n\nPayload: YAML v{version}, mode ''{mode}''.\nPreview — tracks: {tracksCreated} created, {tracksUpdated} updated, {tracksDeleted} deleted; Lists: {listsCreated} created, {listsDeleted} deleted; dangling references ignored: {dangling}; invalid List filters kept as written: {invalidFilters}.\n\nContinue only if this matches the selected backup." }
     library_file_selection_error { "{operation}: {message}" }
     gtk_list_other_computed_membership { "Other Lists have computed membership; edit their expression or track tags instead." }
     list_no_editable_playlists { "No directly editable Playlists" }
