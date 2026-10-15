@@ -3,11 +3,12 @@
 
 #pragma once
 
-#include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <span>
 
@@ -45,5 +46,6 @@ namespace ao::audio::backend::detail
    * preserve the source. Missing evidence and lower-precision endpoints are
    * rejected rather than interpreted as permission to reduce precision.
    */
-  Result<SelectedAlsaMode> selectAlsaMode(SignalFormat const& sourceFormat, std::span<AlsaModeEvidence const> evidence);
+  std::expected<SelectedAlsaMode, BackendOpenFailure> selectAlsaMode(SignalFormat const& sourceFormat,
+                                                                     std::span<AlsaModeEvidence const> evidence);
 } // namespace ao::audio::backend::detail

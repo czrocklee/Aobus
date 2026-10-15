@@ -13,6 +13,11 @@ namespace ao::audio
 {
   std::optional<PcmFormat> Backend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
+    if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
+    {
+      return std::nullopt;
+    }
+
     auto const optEncoding = detail::preferredLosslessPcmEncoding(sourceFormat);
 
     if (!optEncoding)

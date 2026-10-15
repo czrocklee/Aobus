@@ -13,8 +13,8 @@
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
@@ -30,6 +30,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -349,8 +350,14 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     fakeit::When(Method(fixture.spyBackendPtr->mock(), open))
-      .AlwaysDo([](audio::SignalFormat const&, audio::RenderTarget&) -> Result<audio::OpenedPcmMode>
-                { return makeError(Error::Code::ResourceBusy, "Device is in use by another application"); });
+      .AlwaysDo(
+        [](audio::SignalFormat const&, audio::RenderTarget&) -> audio::BackendOpenResult
+        {
+          // A device held by another application is a genuine output fault, so
+          // the refusal keeps the conservative output-failure cause default.
+          return std::unexpected{audio::BackendOpenFailure{
+            .error = makeError(Error::Code::ResourceBusy, "Device is in use by another application").error()}};
+        });
 
     auto const fixtureUri = fixture.installAudioFixture();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Busy Device Track", .uri = fixtureUri});

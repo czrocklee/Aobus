@@ -53,7 +53,7 @@ namespace ao::audio::test
       {
       }
 
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
+      BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         auto const lock = std::scoped_lock{_mutex};
         _format = pcmFormat(sourceFormat, SampleEncoding::Signed16Le);

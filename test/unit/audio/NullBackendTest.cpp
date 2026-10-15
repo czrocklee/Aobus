@@ -51,11 +51,60 @@ namespace ao::audio::test
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
-    auto const openedRes = backend.open(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}, target);
+    auto const source = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33};
 
-    CHECK_FALSE(backend.prewarmFormatHint(SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33}));
+    CHECK_FALSE(backend.prewarmFormatHint(source));
+
+    auto const openedRes = backend.open(source, target);
     REQUIRE_FALSE(openedRes);
-    CHECK(openedRes.error().code == Error::Code::NotSupported);
+    CHECK(openedRes.error().error.code == Error::Code::NotSupported);
+    CHECK(openedRes.error().error.message == "No lossless PCM encoding is available");
+    // The 33-bit constraint is a source property, so another track may satisfy it.
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+  }
+
+  TEST_CASE("NullBackend - zero-precision source stays refused without a prewarm hint", "[audio][unit][null-backend]")
+  {
+    auto target = NoopRenderTarget{};
+    auto backend = NullBackend{};
+    // Zero precision is unknown, so no lossless encoding can be selected.
+    auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 0};
+
+    CHECK_FALSE(backend.prewarmFormatHint(source));
+
+    for (std::int32_t attempt = 0; attempt < 2; ++attempt)
+    {
+      auto const openedRes = backend.open(source, target);
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().error.code == Error::Code::NotSupported);
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+    }
+  }
+
+  TEST_CASE("NullBackend - zero-geometry source is rejected as invalid input", "[audio][unit][null-backend]")
+  {
+    auto target = NoopRenderTarget{};
+    auto backend = NullBackend{};
+    auto source = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
+
+    SECTION("zero sample rate")
+    {
+      source.sampleRate = 0;
+    }
+
+    SECTION("zero channel count")
+    {
+      source.channels = 0;
+    }
+
+    CHECK_FALSE(backend.prewarmFormatHint(source));
+
+    auto const openedRes = backend.open(source, target);
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code == Error::Code::InvalidInput);
+    CHECK(openedRes.error().error.message == "PCM formats require a sample rate and channels");
+    // The request itself is malformed, not a constraint another track satisfies.
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
   TEST_CASE("NullBackend - volume and mute properties remain readable and writable", "[audio][unit][null-backend]")

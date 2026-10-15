@@ -3,6 +3,7 @@
 
 #include "backend/WasapiSharedBackend.h"
 
+#include "backend/detail/WasapiError.h"
 #include "backend/detail/WasapiFormat.h"
 #include "backend/detail/WasapiGraphRegistry.h"
 #include "backend/detail/WasapiRenderBuffer.h"
@@ -10,6 +11,7 @@
 #include "detail/DecoderOutput.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
@@ -41,6 +43,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <format>
 #include <limits>
 #include <memory>
@@ -533,16 +536,27 @@ namespace ao::audio::backend
     }
   }
 
-  Result<OpenedPcmMode> WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
+  BackendOpenResult WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
-    close();
+    // Reject deterministic source refusals before this backend's own close().
+    // Engine closes its previous playback before calling open().
+    if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
+    {
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::InvalidInput, "WASAPI PCM formats require a sample rate and channels").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
+    }
 
     auto const encodings = ::ao::audio::detail::losslessPcmEncodings(sourceFormat);
 
     if (encodings.empty())
     {
-      return makeError(Error::Code::FormatRejected, "No lossless WASAPI input encoding is available");
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::FormatRejected, "No lossless WASAPI input encoding is available").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
+
+    close();
 
     auto const format = pcmFormat(sourceFormat, encodings.front());
     _implPtr->paused.store(false, std::memory_order_relaxed);
@@ -554,8 +568,11 @@ namespace ao::audio::backend
           ::CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator));
         FAILED(hr))
     {
-      return makeError(
-        Error::Code::InitFailed, std::format("Failed to create MMDeviceEnumerator ({})", describeHresult(hr)));
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::InitFailed,
+                           std::format("Failed to create MMDeviceEnumerator ({})", describeHresult(hr)))
+                   .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto device = ComPtr<IMMDevice>{};
@@ -564,14 +581,21 @@ namespace ao::audio::backend
     {
       if (auto const hr = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &device); FAILED(hr))
       {
-        return makeError(
-          Error::Code::DeviceNotFound, std::format("No default WASAPI render endpoint ({})", describeHresult(hr)));
+        return std::unexpected{BackendOpenFailure{
+          .error = makeError(Error::Code::DeviceNotFound,
+                             std::format("No default WASAPI render endpoint ({})", describeHresult(hr)))
+                     .error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure}};
       }
     }
     else if (auto const hr = enumerator->GetDevice(detail::utf8ToWide(_implPtr->deviceId).c_str(), &device); FAILED(hr))
     {
-      return makeError(Error::Code::DeviceNotFound,
-                       std::format("Failed to open WASAPI endpoint {} ({})", _implPtr->deviceId, describeHresult(hr)));
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::DeviceNotFound,
+                    std::format("Failed to open WASAPI endpoint {} ({})", _implPtr->deviceId, describeHresult(hr)))
+            .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     // Resolve the actual endpoint ID so the route anchor is stable even when
@@ -588,8 +612,11 @@ namespace ao::audio::backend
 
     if (auto const hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &audioClient); FAILED(hr))
     {
-      return makeError(
-        Error::Code::InitFailed, std::format("Failed to activate IAudioClient ({})", describeHresult(hr)));
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::InitFailed, std::format("Failed to activate IAudioClient ({})", describeHresult(hr)))
+            .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto const wave = toWaveFormat(format);
@@ -615,25 +642,35 @@ namespace ao::audio::backend
         FAILED(hr))
     {
       auto const code = (hr == AUDCLNT_E_UNSUPPORTED_FORMAT) ? Error::Code::FormatRejected : Error::Code::InitFailed;
-      return makeError(code, std::format("IAudioClient::Initialize failed ({})", describeHresult(hr)));
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(code, std::format("IAudioClient::Initialize failed ({})", describeHresult(hr))).error(),
+        .cause = detail::wasapiInitializeFailureCause(hr)}};
     }
 
     if (auto const hr = audioClient->GetBufferSize(&_implPtr->bufferFrames); FAILED(hr))
     {
-      return makeError(Error::Code::InitFailed, std::format("GetBufferSize failed ({})", describeHresult(hr)));
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::InitFailed, std::format("GetBufferSize failed ({})", describeHresult(hr))).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto* const renderEvent = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
     if (renderEvent == nullptr)
     {
-      return makeError(Error::Code::InitFailed, "Failed to create WASAPI render event");
+      return std::unexpected{
+        BackendOpenFailure{.error = makeError(Error::Code::InitFailed, "Failed to create WASAPI render event").error(),
+                           .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     if (auto const hr = audioClient->SetEventHandle(renderEvent); FAILED(hr))
     {
       ::CloseHandle(renderEvent);
-      return makeError(Error::Code::InitFailed, std::format("SetEventHandle failed ({})", describeHresult(hr)));
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::InitFailed, std::format("SetEventHandle failed ({})", describeHresult(hr))).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto renderClient = ComPtr<IAudioRenderClient>{};
@@ -641,8 +678,11 @@ namespace ao::audio::backend
     if (auto const hr = audioClient->GetService(IID_PPV_ARGS(&renderClient)); FAILED(hr))
     {
       ::CloseHandle(renderEvent);
-      return makeError(
-        Error::Code::InitFailed, std::format("Failed to obtain IAudioRenderClient ({})", describeHresult(hr)));
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::InitFailed,
+                           std::format("Failed to obtain IAudioRenderClient ({})", describeHresult(hr)))
+                   .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto sessionVolume = ComPtr<ISimpleAudioVolume>{};
@@ -662,15 +702,21 @@ namespace ao::audio::backend
       if (auto const hr = sessionVolume->SetMasterVolume(cachedVolume, nullptr); FAILED(hr))
       {
         ::CloseHandle(renderEvent);
-        return makeError(
-          Error::Code::IoError, std::format("Failed to restore WASAPI session volume ({})", describeHresult(hr)));
+        return std::unexpected{BackendOpenFailure{
+          .error = makeError(Error::Code::IoError,
+                             std::format("Failed to restore WASAPI session volume ({})", describeHresult(hr)))
+                     .error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure}};
       }
 
-      if (auto const hr = sessionVolume->SetMute(cachedMuted ? TRUE : FALSE, nullptr); FAILED(hr))
+      if (auto const hr = sessionVolume->SetMute(static_cast<::BOOL>(cachedMuted), nullptr); FAILED(hr))
       {
         ::CloseHandle(renderEvent);
-        return makeError(
-          Error::Code::IoError, std::format("Failed to restore WASAPI session mute ({})", describeHresult(hr)));
+        return std::unexpected{BackendOpenFailure{
+          .error = makeError(Error::Code::IoError,
+                             std::format("Failed to restore WASAPI session mute ({})", describeHresult(hr)))
+                     .error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure}};
       }
     }
 

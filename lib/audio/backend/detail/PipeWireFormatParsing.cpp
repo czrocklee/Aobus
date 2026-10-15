@@ -22,6 +22,7 @@ extern "C"
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <tuple>
@@ -106,7 +107,8 @@ namespace ao::audio::backend::detail
 
     auto info = ::spa_audio_info_raw{};
 
-    if (::spa_format_audio_raw_parse(param, &info) < 0)
+    if (::spa_format_audio_raw_parse(param, &info) < 0 || info.rate == 0U || info.channels == 0U ||
+        info.channels > std::numeric_limits<std::uint8_t>::max())
     {
       return std::nullopt;
     }

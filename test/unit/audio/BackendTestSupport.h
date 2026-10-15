@@ -8,7 +8,6 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
@@ -52,7 +51,7 @@ namespace ao::audio::test
   public:
     explicit MockBackendProxy(Backend& real);
 
-    Result<OpenedPcmMode> open(SignalFormat const& f, RenderTarget& t) override;
+    BackendOpenResult open(SignalFormat const& f, RenderTarget& t) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -105,7 +104,7 @@ namespace ao::audio::test
     {
       // Provide default 'fake' behavior for all common methods to avoid UnexpectedMethodCallException
       fakeit::When(Method(_mock, open))
-        .AlwaysDo([this](SignalFormat const& sourceFormat, RenderTarget& target) -> Result<OpenedPcmMode>
+        .AlwaysDo([this](SignalFormat const& sourceFormat, RenderTarget& target) -> BackendOpenResult
                   { return _base.open(sourceFormat, target); });
       fakeit::Fake(Method(_mock, start));
       fakeit::Fake(Method(_mock, pause));

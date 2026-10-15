@@ -8,7 +8,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
@@ -61,7 +60,7 @@ namespace ao::audio::test
   {
   }
 
-  Result<OpenedPcmMode> MockBackendProxy::open(SignalFormat const& format, RenderTarget& target)
+  BackendOpenResult MockBackendProxy::open(SignalFormat const& format, RenderTarget& target)
   {
     return _real.open(format, target);
   }

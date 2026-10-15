@@ -10,6 +10,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
@@ -29,6 +30,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -156,7 +158,7 @@ namespace ao::audio::test
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](SignalFormat const& sourceFormat, RenderTarget&) -> Result<OpenedPcmMode>
+        [&](SignalFormat const& sourceFormat, RenderTarget&) -> BackendOpenResult
         {
           openedSignals.push_back(sourceFormat);
           return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};
@@ -192,7 +194,7 @@ namespace ao::audio::test
     auto& mockBackend = spy.mock();
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](SignalFormat const& sourceFormat, RenderTarget&) -> Result<OpenedPcmMode>
+        [&](SignalFormat const& sourceFormat, RenderTarget&) -> BackendOpenResult
         {
           openedSignals.push_back(sourceFormat);
           return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed24In32Le)};
@@ -479,10 +481,13 @@ namespace ao::audio::test
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](SignalFormat const& sourceFormat, RenderTarget&) -> Result<OpenedPcmMode>
+        [&](SignalFormat const& sourceFormat, RenderTarget&) -> BackendOpenResult
         {
           openedSignals.push_back(sourceFormat);
-          return makeError(Error::Code::FormatRejected, "test backend rejected native sample rate");
+          // A native fault with an uncertain cause keeps the conservative default.
+          auto const error =
+            Error{.code = Error::Code::FormatRejected, .message = "test backend rejected native sample rate"};
+          return std::unexpected{BackendOpenFailure{.error = error}};
         });
     When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
     When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);

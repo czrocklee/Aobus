@@ -11,6 +11,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
@@ -151,7 +152,7 @@ namespace ao::rt::test
       fakeit::When(Method(spyBackendPtr->mock(), open))
         .AlwaysDo(
           [renderTargetAddress](
-            audio::SignalFormat const& sourceFormat, audio::RenderTarget& target) -> Result<audio::OpenedPcmMode>
+            audio::SignalFormat const& sourceFormat, audio::RenderTarget& target) -> audio::BackendOpenResult
           {
             *renderTargetAddress = &target;
             auto const encodings = audio::detail::losslessPcmEncodings(sourceFormat);

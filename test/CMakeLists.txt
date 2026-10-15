@@ -168,6 +168,9 @@ add_library(ao_test_support_audio STATIC
     unit/audio/BackendTestSupport.cpp
     unit/audio/DecoderTestSupport.cpp
     unit/audio/FlacFrameTestSupport.cpp
+    # Keep Engine-failure futures/assertions out of the shared decoder-fixture
+    # object used by the Catch-independent audio fatal probe.
+    unit/audio/EngineFailureTestSupport.cpp
     unit/audio/EngineTestSupport.cpp
     unit/audio/FakeCapturingBackend.cpp
     unit/audio/ScriptedDecoderSession.cpp
@@ -510,6 +513,7 @@ add_executable(ao_core_test
     unit/audio/EngineRtSignalRingTest.cpp
     unit/audio/EngineSeekErrorTest.cpp
     unit/audio/EngineTest.cpp
+    unit/audio/EngineBackendFailureTest.cpp
     unit/audio/EngineBackendSwapTest.cpp
     unit/audio/EngineCallbackTest.cpp
     unit/audio/EngineConcurrencyTest.cpp
@@ -833,6 +837,7 @@ if(LINUX)
 endif()
 aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireMonitorTest.cpp
+  unit/audio/backend/PipeWireBackendTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
   unit/audio/backend/AlsaProviderTest.cpp

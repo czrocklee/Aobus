@@ -7,6 +7,7 @@
 #include "lib/audio/backend/detail/AlsaGraphRegistry.h"
 #include "lib/audio/backend/detail/AlsaMixerSession.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/Property.h>
@@ -226,7 +227,7 @@ namespace ao::audio::backend::detail::test
     return _implPtr->controlsPtr->prewarmFormatHint(sourceFormat);
   }
 
-  Result<OpenedPcmMode> AlsaControlBackend::open(SignalFormat const& sourceFormat, RenderTarget& /*target*/)
+  BackendOpenResult AlsaControlBackend::open(SignalFormat const& sourceFormat, RenderTarget& /*target*/)
   {
     std::ignore = _implPtr->mixer->tryInit(nullptr);
     return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};

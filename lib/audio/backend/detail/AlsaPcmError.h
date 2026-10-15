@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 
 #include <cerrno>
 #include <cstdint>
@@ -16,4 +17,10 @@ namespace ao::audio::backend::detail
   }
 
   Error::Code alsaPcmOpenErrorCode(std::int32_t err) noexcept;
+
+  // Only pre-admission exact rate/count constraints and format probes use
+  // -EINVAL as an empty intersection. Other failures remain OutputFailure.
+  // Do not use this for PCM open, applying an admitted mode or read-back:
+  // those operations retain their own conservative failure policy.
+  BackendOpenFailure::Cause alsaHwConstraintFailureCause(std::int32_t status) noexcept;
 } // namespace ao::audio::backend::detail

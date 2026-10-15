@@ -60,6 +60,12 @@ namespace ao::audio::backend
 
   namespace
   {
+    bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
+    {
+      return sourceFormat.sampleRate != 0U && sourceFormat.channels != 0U &&
+             ::ao::audio::detail::preferredLosslessPcmEncoding(sourceFormat).has_value();
+    }
+
     std::optional<PcmFormat> readCurrentHwFormat(::snd_pcm_t* const pcm)
     {
       ::snd_pcm_hw_params_t* params = nullptr;
@@ -165,7 +171,8 @@ namespace ao::audio::backend
       ::snd_pcm_uframes_t periodSize = 0;
     };
 
-    Result<NegotiatedMode> negotiateHwParams(::snd_pcm_t* pcm, SignalFormat const& sourceFormat);
+    std::expected<NegotiatedMode, BackendOpenFailure> negotiateHwParams(::snd_pcm_t* pcm,
+                                                                        SignalFormat const& sourceFormat);
     Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
     bool tryWaitForFrames(::snd_pcm_uframes_t periodSize) const;
@@ -459,41 +466,53 @@ namespace ao::audio::backend
     return {};
   }
 
-  Result<AlsaExclusiveBackend::Impl::NegotiatedMode> AlsaExclusiveBackend::Impl::negotiateHwParams(
-    ::snd_pcm_t* pcm,
-    SignalFormat const& sourceFormat)
+  std::expected<AlsaExclusiveBackend::Impl::NegotiatedMode, BackendOpenFailure>
+  AlsaExclusiveBackend::Impl::negotiateHwParams(::snd_pcm_t* pcm, SignalFormat const& sourceFormat)
   {
     ::snd_pcm_hw_params_t* base = nullptr;
     snd_pcm_hw_params_alloca(&base); // macro
 
     if (::snd_pcm_hw_params_any(pcm, base) < 0)
     {
-      return makeError(Error::Code::InitFailed, "Failed to init ALSA hw params");
+      return std::unexpected{
+        BackendOpenFailure{.error = makeError(Error::Code::InitFailed, "Failed to init ALSA hw params").error(),
+                           .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     if (::snd_pcm_hw_params_set_access(pcm, base, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
     {
-      return makeError(Error::Code::FormatRejected, "No MMAP interleaved support");
+      return std::unexpected{
+        BackendOpenFailure{.error = makeError(Error::Code::FormatRejected, "No MMAP interleaved support").error(),
+                           .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     // Exact rate, never rate_near: the admissible format set is a joint
     // constraint, so the mask below is only meaningful once the rate this track
     // actually needs is pinned. It also fails here, with a rate diagnosis,
     // instead of surfacing later as a misleading format rejection.
-    if (::snd_pcm_hw_params_set_rate(pcm, base, sourceFormat.sampleRate, 0) < 0)
+    // ALSA reports an empty exact constraint intersection as -EINVAL. Other
+    // failures of these operations do not establish a track incompatibility.
+    if (auto const status = ::snd_pcm_hw_params_set_rate(pcm, base, sourceFormat.sampleRate, 0); status < 0)
     {
-      return makeError(
-        Error::Code::FormatRejected,
-        std::format(
-          "ALSA device '{}' does not support {} Hz and Aobus has no resampler", deviceName, sourceFormat.sampleRate));
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::FormatRejected,
+                           std::format("ALSA device '{}' does not support {} Hz and Aobus has no resampler",
+                                       deviceName,
+                                       sourceFormat.sampleRate))
+                   .error(),
+        .cause = detail::alsaHwConstraintFailureCause(status)}};
     }
 
-    if (::snd_pcm_hw_params_set_channels(pcm, base, sourceFormat.channels) < 0)
+    if (auto const status = ::snd_pcm_hw_params_set_channels(pcm, base, sourceFormat.channels); status < 0)
     {
-      return makeError(Error::Code::FormatRejected,
-                       std::format("ALSA device '{}' does not support {} channels and Aobus has no channel remapper",
-                                   deviceName,
-                                   static_cast<std::uint32_t>(sourceFormat.channels)));
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::FormatRejected,
+                    std::format("ALSA device '{}' does not support {} channels and Aobus has no channel remapper",
+                                deviceName,
+                                static_cast<std::uint32_t>(sourceFormat.channels)))
+            .error(),
+        .cause = detail::alsaHwConstraintFailureCause(status)}};
     }
 
     ::snd_pcm_format_mask_t* mask = nullptr;
@@ -522,9 +541,21 @@ namespace ao::audio::backend
 
       ::snd_pcm_hw_params_copy(trial, base);
 
-      if (::snd_pcm_hw_params_set_format(pcm, trial, *optAlsaFormat) < 0)
+      if (auto const status = ::snd_pcm_hw_params_set_format(pcm, trial, *optAlsaFormat); status < 0)
       {
-        continue;
+        // Only an exact-constraint rejection skips this candidate; any other
+        // native failure aborts the walk as an output failure.
+        if (detail::alsaHwConstraintFailureCause(status) == BackendOpenFailure::Cause::TrackRouteIncompatible)
+        {
+          continue;
+        }
+
+        return std::unexpected{BackendOpenFailure{.error = makeError(Error::Code::InitFailed,
+                                                                     std::format("Failed to probe ALSA {} format: {}",
+                                                                                 sampleEncodingName(encoding),
+                                                                                 ::snd_strerror(status)))
+                                                             .error(),
+                                                  .cause = BackendOpenFailure::Cause::OutputFailure}};
       }
 
       auto const sbits = ::snd_pcm_hw_params_get_sbits(trial);
@@ -552,8 +583,12 @@ namespace ao::audio::backend
 
     if (::snd_pcm_hw_params_set_format(pcm, applied, *optAlsaFormat) < 0)
     {
-      return makeError(Error::Code::InitFailed,
-                       std::format("ALSA rejected {} after admitting it", sampleEncodingName(selectedRes->encoding)));
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::InitFailed,
+                    std::format("ALSA rejected {} after admitting it", sampleEncodingName(selectedRes->encoding)))
+            .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     std::uint32_t periods = 4;
@@ -564,21 +599,27 @@ namespace ao::audio::backend
 
     if (::snd_pcm_hw_params(pcm, applied) < 0)
     {
-      return makeError(Error::Code::InitFailed, "Failed to apply hw params");
+      return std::unexpected{
+        BackendOpenFailure{.error = makeError(Error::Code::InitFailed, "Failed to apply hw params").error(),
+                           .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto const optCurrentFormat = readCurrentHwFormat(pcm);
 
     if (!optCurrentFormat)
     {
-      return makeError(Error::Code::InitFailed, "Failed to read ALSA current hw params");
+      return std::unexpected{
+        BackendOpenFailure{.error = makeError(Error::Code::InitFailed, "Failed to read ALSA current hw params").error(),
+                           .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     canPause = (::snd_pcm_hw_params_can_pause(applied) == 1);
 
     if (!isSamePcmMode(clientFormat, *optCurrentFormat))
     {
-      return makeError(Error::Code::FormatRejected, "ALSA applied a different PCM mode than requested");
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::FormatRejected, "ALSA applied a different PCM mode than requested").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     // Take the endpoint width from the configuration that was actually
@@ -588,18 +629,27 @@ namespace ao::audio::backend
 
     if (appliedSbits <= 0)
     {
-      return makeError(Error::Code::FormatRejected, "ALSA could not confirm significant bits for the applied mode");
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::FormatRejected, "ALSA could not confirm significant bits for the applied mode")
+                   .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto const endpointBits = static_cast<std::uint8_t>(
       std::min(appliedSbits, static_cast<std::int32_t>(encodingNominalBits(selectedRes->encoding))));
 
+    // Admission already confirmed sufficient trial precision, so a narrower
+    // applied read-back here is a post-admission inconsistency and stays
+    // OutputFailure; it is not ordinary source incompatibility.
     if (endpointBits < sourceFormat.precisionBits)
     {
-      return makeError(Error::Code::FormatRejected,
-                       std::format("ALSA endpoint resolves {} bits but the track requires {} bits",
-                                   static_cast<std::uint32_t>(endpointBits),
-                                   static_cast<std::uint32_t>(sourceFormat.precisionBits)));
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::FormatRejected,
+                           std::format("ALSA endpoint resolves {} bits but the track requires {} bits",
+                                       static_cast<std::uint32_t>(endpointBits),
+                                       static_cast<std::uint32_t>(sourceFormat.precisionBits)))
+                   .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto const endpointSignal = SignalFormat{
@@ -666,6 +716,7 @@ namespace ao::audio::backend
 
   std::optional<PcmFormat> AlsaExclusiveBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
+    // Cached keys passed open() admission; misses use the base source checks.
     if (auto optCached = _implPtr->prewarmCache.find(sourceFormat); optCached)
     {
       return optCached;
@@ -674,16 +725,25 @@ namespace ao::audio::backend
     return Backend::prewarmFormatHint(sourceFormat);
   }
 
-  Result<OpenedPcmMode> AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
+  BackendOpenResult AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
-    close();
-
-    // Reject a signal this backend could never carry before taking a device
-    // away from whoever currently holds it.
-    if (::ao::audio::detail::losslessPcmEncodings(sourceFormat).empty())
+    // Reject deterministic source refusals before this backend's own close().
+    // Engine closes its previous playback before calling open().
+    if (!canAdmitSourceFormat(sourceFormat))
     {
-      return makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for ALSA");
+      if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
+      {
+        return std::unexpected{BackendOpenFailure{
+          .error = makeError(Error::Code::InvalidInput, "ALSA PCM formats require a sample rate and channels").error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure}};
+      }
+
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for ALSA").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
+
+    close();
 
     _implPtr->fatalStreamError.store(false, std::memory_order_relaxed);
 
@@ -693,17 +753,24 @@ namespace ao::audio::backend
 
     if (openStatus < 0)
     {
-      return makeError(
-        detail::alsaPcmOpenErrorCode(openStatus),
-        std::format("Failed to open ALSA device '{}': {}", _implPtr->deviceName, ::snd_strerror(openStatus)));
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(
+                   detail::alsaPcmOpenErrorCode(openStatus),
+                   std::format("Failed to open ALSA device '{}': {}", _implPtr->deviceName, ::snd_strerror(openStatus)))
+                   .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto safePcmPtr = Impl::AlsaPcmPtr{pcm};
 
     if (::snd_pcm_type(safePcmPtr.get()) != SND_PCM_TYPE_HW)
     {
-      return makeError(Error::Code::FormatRejected,
-                       std::format("ALSA exclusive output requires a direct hardware PCM: {}", _implPtr->deviceName));
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::FormatRejected,
+                    std::format("ALSA exclusive output requires a direct hardware PCM: {}", _implPtr->deviceName))
+            .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto negotiatedRes = _implPtr->negotiateHwParams(safePcmPtr.get(), sourceFormat);
@@ -715,7 +782,8 @@ namespace ao::audio::backend
 
     if (auto const res = _implPtr->configureSwParams(safePcmPtr.get(), negotiatedRes->periodSize); !res)
     {
-      return std::unexpected{res.error()};
+      return std::unexpected{
+        BackendOpenFailure{.error = res.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     _implPtr->optOpenedMode = negotiatedRes->mode;

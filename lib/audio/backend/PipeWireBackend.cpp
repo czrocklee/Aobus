@@ -601,6 +601,7 @@ namespace ao::audio::backend
 
   std::optional<PcmFormat> PipeWireBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
+    // Cached keys passed open() admission; misses use the base source checks.
     if (_exclusiveMode && _implPtr->optLastSourceFormat == sourceFormat && _implPtr->optLastNegotiatedFormat)
     {
       return _implPtr->optLastNegotiatedFormat;
@@ -611,22 +612,37 @@ namespace ao::audio::backend
 
   // PipeWire negotiation must remain one transaction under the native thread-loop lock.
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  Result<OpenedPcmMode> PipeWireBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
+  BackendOpenResult PipeWireBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
-    bool const useExclusive = _exclusiveMode && !_targetDeviceId.empty();
-
-    if (!_implPtr->threadLoopPtr || !_implPtr->corePtr)
+    // Reject deterministic source refusals before this backend's own close().
+    // Engine closes its previous playback before calling open().
+    if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
     {
-      return makeError(Error::Code::InitFailed, "PipeWire not initialized");
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::InvalidInput, "PipeWire PCM formats require a sample rate and channels").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    close();
     auto offeredEncodings = ::ao::audio::detail::losslessPcmEncodings(sourceFormat);
 
     if (offeredEncodings.empty())
     {
-      return makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for PipeWire");
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for PipeWire").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
+
+    bool const useExclusive = _exclusiveMode && !_targetDeviceId.empty();
+
+    if (!_implPtr->threadLoopPtr || !_implPtr->corePtr)
+    {
+      return std::unexpected{
+        BackendOpenFailure{.error = makeError(Error::Code::InitFailed, "PipeWire not initialized").error(),
+                           .cause = BackendOpenFailure::Cause::OutputFailure}};
+    }
+
+    close();
 
     if (!useExclusive)
     {
@@ -759,7 +775,10 @@ namespace ao::audio::backend
     if (optError)
     {
       close();
-      return std::unexpected{std::move(*optError)};
+      // PipeWire's asynchronous errors carry no reliable causal category.
+      // Malformed or divergent successful negotiation is also an output fault.
+      return std::unexpected{
+        BackendOpenFailure{.error = std::move(*optError), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     if (optRouteAnchor)

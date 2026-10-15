@@ -22,7 +22,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/SignalFormat.h>
@@ -587,8 +586,7 @@ namespace ao::rt::test
       {
       }
 
-      Result<audio::OpenedPcmMode> open(audio::SignalFormat const& sourceFormat,
-                                        audio::RenderTarget& renderTarget) override
+      audio::BackendOpenResult open(audio::SignalFormat const& sourceFormat, audio::RenderTarget& renderTarget) override
       {
         _statePtr->renderTarget = &renderTarget;
         return audio::NullBackend::open(sourceFormat, renderTarget);

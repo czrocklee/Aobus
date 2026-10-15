@@ -12,12 +12,10 @@
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Quality.h>
@@ -93,7 +91,7 @@ namespace ao::uimodel::test
       {
       }
 
-      Result<audio::OpenedPcmMode> open(audio::SignalFormat const& sourceFormat, audio::RenderTarget& target) override
+      audio::BackendOpenResult open(audio::SignalFormat const& sourceFormat, audio::RenderTarget& target) override
       {
         auto openedRes = audio::NullBackend::open(sourceFormat, target);
 

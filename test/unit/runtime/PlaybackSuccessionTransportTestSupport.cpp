@@ -132,12 +132,13 @@ namespace ao::rt::test::playback_succession
         };
         auto const outputFormat =
           audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le));
+        bool const isLossy = path.filename() == config.lossyFileName;
         auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
           .sourceFormat = sourceFormat,
           .outputFormat = outputFormat,
           .duration = std::chrono::seconds{2},
-          .isLossy = false,
-          .codec = AudioCodec::Flac,
+          .isLossy = isLossy,
+          .codec = isLossy ? AudioCodec::Mp3 : AudioCodec::Flac,
         });
         auto* const failureGate =
           optOutputEncoding && path.filename() == config.stagedFailureFileName ? config.stagedFailureGate : nullptr;

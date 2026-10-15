@@ -11,12 +11,28 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <concepts>
+#include <cstdint>
 #include <expected>
 #include <optional>
 
 namespace ao::audio
 {
   class RenderTarget;
+
+  /** @brief Original open error plus the backend's causal admission decision. */
+  struct BackendOpenFailure final
+  {
+    enum class Cause : std::uint8_t
+    {
+      OutputFailure,
+      TrackRouteIncompatible,
+    };
+
+    Error error{};
+    Cause cause = Cause::OutputFailure;
+  };
+
+  using BackendOpenResult = std::expected<OpenedPcmMode, BackendOpenFailure>;
 
   /**
    * @brief Platform-specific audio output backend contract.
@@ -63,8 +79,9 @@ namespace ao::audio
      * @brief Returns a non-binding PCM format prediction for decoder prewarming.
      *
      * This method is non-blocking and performs no native open or negotiation.
-     * Implementations may use immutable policy or cached observations. Engine
-     * always treats open() as authoritative and discards a mismatched prewarm.
+     * Implementations may use immutable policy or cached observations, but must
+     * withhold a hint for locally known admission refusals. Engine always treats
+     * open() as authoritative and discards a mismatched prewarm.
      */
     virtual std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept;
 
@@ -78,8 +95,15 @@ namespace ao::audio
      * route truth, not permission to reduce precision. A failed native open or
      * the absence of a lossless mode is reported as an error and is never
      * translated into an implicit lower-precision fallback.
+     *
+     * TrackRouteIncompatible identifies a source or selected-route constraint
+     * that another track may satisfy. OutputFailure is the conservative default
+     * for native faults and uncertain causes. Neither the Error code nor its
+     * message determines this distinction. The original Error is preserved.
+     * Engine closes its previous stream before this call; an implementation's
+     * early admission check does not promise to preserve Engine playback.
      */
-    virtual Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) = 0;
+    virtual BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) = 0;
 
     virtual void start() = 0;
     virtual void pause() = 0;

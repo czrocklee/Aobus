@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "EngineFailureTestSupport.h"
 #include "EngineTestSupport.h"
 #include "FakeCapturingBackend.h"
 #include "ScriptedDecoderSession.h"
@@ -31,26 +32,6 @@
 
 namespace ao::audio::test
 {
-  namespace
-  {
-    std::future<Engine::PlaybackFailure> captureNextFailure(Engine& engine)
-    {
-      auto promisePtr = std::make_shared<std::promise<Engine::PlaybackFailure>>();
-      auto future = promisePtr->get_future();
-
-      engine.setOnPlaybackFailure([promisePtr](Engine::PlaybackFailure const& failure)
-                                  { promisePtr->set_value(failure); });
-
-      return future;
-    }
-
-    Engine::PlaybackFailure requireFailure(std::future<Engine::PlaybackFailure>& future)
-    {
-      REQUIRE(future.wait_for(std::chrono::seconds{15}) == std::future_status::ready);
-      return future.get();
-    }
-  } // namespace
-
   TEST_CASE("Engine - unsupported extension reports track-open failure", "[audio][unit][engine][error]")
   {
     auto const device = makeEngineTestDevice();

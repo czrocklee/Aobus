@@ -163,7 +163,7 @@ namespace ao::audio::backend::test
 
     if (!openedRes)
     {
-      FAIL("Core Audio open failed: " << openedRes.error().message);
+      FAIL("Core Audio open failed: " << openedRes.error().error.message);
     }
 
     REQUIRE(openedRes->clientFormat == pcm);
