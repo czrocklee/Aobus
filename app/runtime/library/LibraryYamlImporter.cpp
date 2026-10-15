@@ -92,6 +92,7 @@ namespace ao::rt
       std::string_view name;
       std::string_view description;
       std::string_view filter;
+      bool filterInvalid = false;
       std::vector<ValidatedListOrderReference> orderReferences;
     };
 
@@ -809,21 +810,13 @@ namespace ao::rt
           return std::unexpected{filterRes.error()};
         }
 
+        // A filter that does not parse or compile is kept byte-exactly, as the
+        // database keeps it, so every exported backup stays restorable; the
+        // List then reports the same expression error it did before export.
         if (!filterRes->empty())
         {
           auto expressionRes = query::parse(*filterRes);
-
-          if (!expressionRes)
-          {
-            return makeError(Error::Code::FormatRejected,
-                             std::format("List record.filter is invalid: {}", expressionRes.error().message));
-          }
-
-          if (auto planRes = query::compileQuery(*expressionRes); !planRes)
-          {
-            return makeError(
-              Error::Code::FormatRejected, std::format("List record.filter is invalid: {}", planRes.error().message));
-          }
+          list.filterInvalid = !expressionRes || !query::compileQuery(*expressionRes);
         }
 
         list.filter = *filterRes;
@@ -2497,6 +2490,11 @@ namespace ao::rt
 
       yamlListIdToNewListId[importedList.yamlId] = *createRes;
       ++report.listsCreated;
+
+      if (importedList.filterInvalid)
+      {
+        ++report.invalidFiltersKept;
+      }
     }
 
     for (auto const& importedList : lists)

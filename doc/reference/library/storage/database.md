@@ -482,7 +482,9 @@ Version `8` gated the portable manifest modification-time record: the 12-byte `F
 Version `7` gated scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excluded filesystem URI bytes and opaque List filter source.
 Version `6` gated the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` text remains syntactically opaque to database admission.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../system/query/predicate-evaluation.md).
-A grammar or predicate-semantic change does not by itself increment `kLibraryVersion`; stored text that no longer parses or compiles is an application expression error rather than corrupt storage.
+The database version also names the predicate language of stored List filters, which carry no version of their own.
+A grammar, field-binding, or evaluation change that alters the outcome of filter text the current language accepts therefore increments `kLibraryVersion`, so that a later migration can tell which language a stored filter was written in; a change that only gives meaning to text the language rejects does not, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) explains.
+Admission still never parses a filter, and stored text that does not parse or compile is an application expression error rather than corrupt storage.
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
 There is no reader for an older physical version, no in-place migration, and no metadata conversion or backfill.

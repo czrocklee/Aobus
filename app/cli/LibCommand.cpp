@@ -92,6 +92,7 @@ namespace ao::cli
     std::uint64_t listsCreated = 0;
     std::uint64_t listsDeleted = 0;
     std::uint64_t danglingReferencesIgnored = 0;
+    std::uint64_t invalidFiltersKept = 0;
   };
 
   struct LibraryStats final
@@ -192,7 +193,8 @@ namespace ao::cli
                                      .tracksDeleted = report.tracksDeleted,
                                      .listsCreated = report.listsCreated,
                                      .listsDeleted = report.listsDeleted,
-                                     .danglingReferencesIgnored = report.danglingReferencesIgnored});
+                                     .danglingReferencesIgnored = report.danglingReferencesIgnored,
+                                     .invalidFiltersKept = report.invalidFiltersKept});
         return;
       }
 
@@ -203,14 +205,16 @@ namespace ao::cli
                    report.payloadVersion,
                    rt::exportModeName(report.payloadMode),
                    targetScope);
-      std::println(os,
-                   "Changes: tracks +{}/~{}/-{}, lists +{}/-{}, dangling references ignored {}.",
-                   report.tracksCreated,
-                   report.tracksUpdated,
-                   report.tracksDeleted,
-                   report.listsCreated,
-                   report.listsDeleted,
-                   report.danglingReferencesIgnored);
+      std::println(
+        os,
+        "Changes: tracks +{}/~{}/-{}, lists +{}/-{}, dangling references ignored {}, invalid filters kept {}.",
+        report.tracksCreated,
+        report.tracksUpdated,
+        report.tracksDeleted,
+        report.listsCreated,
+        report.listsDeleted,
+        report.danglingReferencesIgnored,
+        report.invalidFiltersKept);
     }
 
     void exportLib(CliRuntime& cli,

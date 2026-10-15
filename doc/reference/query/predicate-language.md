@@ -8,10 +8,10 @@ id: query.predicate-language
 This reference defines the current text surface accepted by `ao::query::parse()` and the predicate subset accepted by `ao::query::compileQuery()`.
 Predicate evaluation behavior belongs to the [predicate evaluation specification](../../system/query/predicate-evaluation.md).
 
-Expressions are persisted as saved List filter text without a separate language version number.
+Expressions are persisted as saved List filter text without a separate language version number; the version of the containing format names the language instead.
 The in-memory AST and execution bytecode are not persisted surfaces.
-Core library storage preserves saved-List filter bytes opaquely and does not use this grammar for database admission or `ao::library::kLibraryVersion` compatibility.
-Saved Lists and other retained or automated expressions use the interpretation and compatibility policy of their application owner.
+Core library storage preserves saved-List filter bytes opaquely and does not use this grammar for database admission.
+Other retained or automated expressions use the compatibility policy of the surface that retains or accepts them.
 
 ## Code boundary
 
@@ -158,6 +158,11 @@ Quoted user-variable names must be non-empty.
 | `$movementTotal` | `$mt` |
 | `$coverArt` | `$ca` |
 
+Each text metadata variable holds one stored value, even when that value names several people.
+`=` compares the whole value: `$artist = "Glenn Gould"` does not match `Glenn Gould; Yo-Yo Ma`, `Glenn Gould & Yo-Yo Ma`, or `Glenn Gould/Yo-Yo Ma`.
+`~` finds a name inside it: `$artist ~ "Gould"` matches all three, as well as any other value that contains the text.
+No operator splits a stored value into names; only the [credit selectors](#credit-member-predicates), such as `$conductor` and `$performer`, test individual names.
+
 ### Property variables
 
 | Canonical variable | Alias |
@@ -289,11 +294,24 @@ Saved Lists persist expression text and recompile it when materialized.
 Removing or renaming a variable, alias, operator, literal form, or unit can invalidate stored lists.
 Changing binding or truth semantics can change their membership without changing the list-record byte layout.
 
-The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../system/query/predicate-evaluation.md), define current application interpretation rather than storage validity.
-Changing them does not by itself increment the library database version.
-If retained saved-List text no longer parses or compiles, source materialization reports an expression error and exposes empty membership; the database remains structurally valid.
+The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../system/query/predicate-evaluation.md), define the predicate language of the current versions of two formats:
 
-Library YAML, playback-session state, workspace state, and CLI automation independently own the compatibility of predicate text they contain or accept.
+- the [library database](../library/storage/database.md#compatibility-and-versioning) version names the language of saved List filters;
+- the [library YAML](../library/format/yaml.md) version names the language of document filters.
+
+A change that alters the outcome of filter text the current language accepts, meaning text that parses and compiles, increments both versions, so that a later migration can tell which language a filter was written in.
+The changes listed above are such changes, and so is a new keyword that a bare string spells today: `like` as an operator would invalidate `$genre = like`.
+Neither format reads an earlier version, so such a change leaves existing libraries and backups unsupported, as any other format change does.
+
+A change that only gives meaning to text the current language rejects, such as a new variable or alias, increments neither version.
+Every filter that an earlier build of the version accepts means the same in later builds.
+An earlier build reports a filter that uses the addition as an expression error and keeps its text, and a stored filter that was rejected when written takes on the new meaning.
+Incrementing for such a change would make every existing library and backup unsupported without protecting any accepted filter.
+
+Neither format requires a filter to parse or compile for admission.
+If retained saved-List text does not parse or compile, source materialization reports an expression error and exposes empty membership; the database remains structurally valid, and a YAML import keeps the text byte-exactly.
+
+Playback-session state, workspace state, and CLI automation independently own the compatibility of predicate text they contain or accept.
 An expression carries no nested dialect id or version; the containing surface owns compatibility.
 
 The public typed core variable descriptor catalog is also used by runtime field bridges, completion, generated CLI help, canonical diagnostic field names, and unknown-field diagnostics.

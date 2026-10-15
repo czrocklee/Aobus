@@ -430,7 +430,7 @@ zh_Hant:table {
     list_delete_subtree_question { "刪除此衍生子樹中的 {count, plural, one {# 個列表} other {# 個列表}}？\n\n{entries}\n巢狀播放清單使用的標籤將會保留。\n音樂檔案也會保留。" }
     list_remove_tag { "同時從 {count, plural, one {# 首曲目} other {# 首曲目}} 中移除 {tag}" }
     list_tag_references { "{tag} 仍由下列項目參照：{references}。移除它可能會變更這些列表。" }
-    library_restore_confirmation { "此還原操作將取代以下內容：{scope}。\n\n資料：YAML v{version}，模式 ''{mode}''。\n預覽：建立 {tracksCreated} 首、更新 {tracksUpdated} 首、刪除 {tracksDeleted} 首；建立 {listsCreated} 個列表、刪除 {listsDeleted} 個列表；忽略 {dangling} 個懸空參照。\n\n請只在此內容與所選備份相符時繼續。" }
+    library_restore_confirmation { "此還原操作將取代以下內容：{scope}。\n\n資料：YAML v{version}，模式 ''{mode}''。\n預覽：建立 {tracksCreated} 首、更新 {tracksUpdated} 首、刪除 {tracksDeleted} 首；建立 {listsCreated} 個列表、刪除 {listsDeleted} 個列表；忽略 {dangling} 個懸空參照；依原樣保留 {invalidFilters} 個無效的列表篩選條件。\n\n請只在此內容與所選備份相符時繼續。" }
     library_file_selection_error { "{operation}：{message}" }
     gtk_list_other_computed_membership { "其他列表的成員由系統計算；請改為編輯其表示式或曲目標籤。" }
     list_no_editable_playlists { "沒有可直接編輯的播放清單" }

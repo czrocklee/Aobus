@@ -7,6 +7,7 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
@@ -15,14 +16,20 @@
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/Parser.h>
+#include <ao/query/QueryCompilation.h>
 #include <ao/rt/library/LibraryTransfer.h>
+#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <c4/yml/tree.hpp>
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <optional>
 #include <string>
@@ -325,6 +332,110 @@ library:
     CHECK(listCount == 2);
     CHECK(foundParent);
     CHECK(foundDanglingParent);
+  }
+
+  TEST_CASE("LibraryYaml - a List filter that does not parse or compile survives export and restore",
+            "[runtime][integration][import-export][list]")
+  {
+    // Written raw, as the database admits any filter text. One fails to parse,
+    // one parses but fails to compile, and one carries decomposed text and
+    // surrounding whitespace that neither side may normalize or trim.
+    constexpr auto kUnparsable = std::string_view{"($genre = \"Rock\""};
+    constexpr auto kUncompilable = std::string_view{"@duration ~ \"three\""};
+    constexpr auto kDecomposed = std::string_view{"  $artist ~ \"Café\" and  "};
+    constexpr auto kValid = std::string_view{"$genre = \"Rock\""};
+    REQUIRE_FALSE(query::parse(kUnparsable));
+    REQUIRE_FALSE(query::parse(kDecomposed));
+    auto const uncompilableRes = query::parse(kUncompilable);
+    REQUIRE(uncompilableRes);
+    REQUIRE_FALSE(query::compileQuery(*uncompilableRes));
+
+    auto const sourceTemp = ao::test::TempDir{};
+    auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
+
+    {
+      auto transaction = library::test::writeTransaction(source);
+      createList(transaction, ListBuilder::makeEmpty().name("Unparsable").filter(kUnparsable));
+      createList(transaction, ListBuilder::makeEmpty().name("Uncompilable").filter(kUncompilable));
+      createList(transaction, ListBuilder::makeEmpty().name("Decomposed").filter(kDecomposed));
+      createList(transaction, ListBuilder::makeEmpty().name("Valid").filter(kValid));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const yamlPath = std::filesystem::path{sourceTemp.path()} / "invalid-filters.yaml";
+    REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
+
+    auto const targetTemp = ao::test::TempDir{};
+    auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
+    auto importer = LibraryYamlImporter{target};
+
+    auto const previewRes = importer.previewImportFromYamlOffline(yamlPath);
+    REQUIRE(previewRes);
+    CHECK(previewRes->listsCreated == 4);
+    CHECK(previewRes->invalidFiltersKept == 3);
+
+    auto const reportRes = importer.importFromYamlOffline(yamlPath);
+    REQUIRE(reportRes);
+    CHECK(reportRes->listsCreated == 4);
+    CHECK(reportRes->invalidFiltersKept == 3);
+
+    auto restored = std::vector<std::tuple<std::string, std::string, ListId>>{};
+
+    {
+      auto transaction = target.readTransaction();
+
+      for (auto const& [listId, view] : target.lists().reader(transaction))
+      {
+        restored.emplace_back(view.name(), view.filter(), listId);
+      }
+    }
+
+    std::ranges::sort(restored);
+    REQUIRE(restored.size() == 4);
+    CHECK(std::get<0>(restored[0]) == "Decomposed");
+    CHECK(std::get<1>(restored[0]) == kDecomposed);
+    CHECK(std::get<0>(restored[1]) == "Uncompilable");
+    CHECK(std::get<1>(restored[1]) == kUncompilable);
+    CHECK(std::get<0>(restored[2]) == "Unparsable");
+    CHECK(std::get<1>(restored[2]) == kUnparsable);
+    CHECK(std::get<0>(restored[3]) == "Valid");
+    CHECK(std::get<1>(restored[3]) == kValid);
+
+    // Each counted List reports the error its own text gives, and the valid
+    // one reports none, so the count matches what the Lists show.
+    auto const expressionError = [](std::string_view filter)
+    {
+      auto expressionRes = query::parse(filter);
+
+      if (!expressionRes)
+      {
+        return expressionRes.error().message;
+      }
+
+      auto planRes = query::compileQuery(*expressionRes);
+      REQUIRE_FALSE(planRes);
+      return planRes.error().message;
+    };
+
+    auto changes = makeStateOnlyLibraryChanges(target);
+    auto cache = TrackSourceCache{target, changes};
+    cache.reloadAllTracks();
+
+    for (auto const& [name, filter, listId] : restored)
+    {
+      CAPTURE(name);
+      auto const lease = ao::test::requireValue(cache.acquire(listId));
+      auto const optError = cache.sourceError(lease);
+
+      if (filter == kValid)
+      {
+        CHECK_FALSE(optError);
+        continue;
+      }
+
+      REQUIRE(optError);
+      CHECK(optError->message == std::format("List {} stored filter: {}", listId.raw(), expressionError(filter)));
+    }
   }
 
   TEST_CASE("LibraryYaml - mixed list order references preserve first-occurrence order across round-trip",

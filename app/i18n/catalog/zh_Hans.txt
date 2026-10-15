@@ -431,7 +431,7 @@ zh_Hans:table {
     list_delete_subtree_question { "删除此派生子树中的 {count, plural, one {# 个列表} other {# 个列表}}？\n\n{entries}\n嵌套播放列表使用的标签将被保留。\n音乐文件将予以保留。" }
     list_remove_tag { "同时从 {count, plural, one {# 首曲目} other {# 首曲目}} 中移除 {tag}" }
     list_tag_references { "{tag} 还被以下对象引用：{references}。移除它可能会更改这些列表。" }
-    library_restore_confirmation { "此恢复操作将替换以下内容：{scope}。\n\n数据：YAML v{version}，模式 ''{mode}''。\n预览：创建 {tracksCreated} 首，更新 {tracksUpdated} 首，删除 {tracksDeleted} 首；创建 {listsCreated} 个列表，删除 {listsDeleted} 个列表；忽略 {dangling} 个悬空引用。\n\n仅在此内容与所选备份匹配时继续。" }
+    library_restore_confirmation { "此恢复操作将替换以下内容：{scope}。\n\n数据：YAML v{version}，模式 ''{mode}''。\n预览：创建 {tracksCreated} 首，更新 {tracksUpdated} 首，删除 {tracksDeleted} 首；创建 {listsCreated} 个列表，删除 {listsDeleted} 个列表；忽略 {dangling} 个悬空引用；按原样保留 {invalidFilters} 个无效的列表筛选条件。\n\n仅在此内容与所选备份匹配时继续。" }
     library_file_selection_error { "{operation}：{message}" }
     gtk_list_other_computed_membership { "其他列表具有计算出的成员资格；请改为编辑其表达式或曲目标签。" }
     list_no_editable_playlists { "没有可直接编辑的播放列表" }

@@ -31,7 +31,8 @@ namespace ao::uimodel
                                        {"tracksDeleted", report.tracksDeleted},
                                        {"listsCreated", report.listsCreated},
                                        {"listsDeleted", report.listsDeleted},
-                                       {"dangling", report.danglingReferencesIgnored}}),
+                                       {"dangling", report.danglingReferencesIgnored},
+                                       {"invalidFilters", report.invalidFiltersKept}}),
       .action = std::string{i18n::requiredText(
         catalog, isLibraryScope ? MessageId::LibraryRestoreLibrary : MessageId::LibraryRestoreLists)},
     };

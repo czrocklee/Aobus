@@ -52,14 +52,16 @@ namespace ao::uimodel::test
                                                            .listsCreated = 5,
                                                            .listsDeleted = 6,
                                                            .danglingReferencesIgnored = 7,
+                                                           .invalidFiltersKept = 8,
                                                          });
 
     CHECK(presentation.title == "Confirm Restore");
     CHECK(presentation.action == "Restore Library");
-    CHECK(presentation.message ==
-          "This restore will replace the current library tracks and Lists.\n\nPayload: YAML v6, mode 'full'.\nPreview: "
-          "2 created, 3 updated, 4 deleted; 5 Lists created, 6 deleted; 7 dangling references ignored.\n\nContinue "
-          "only if this matches the selected backup.");
+    CHECK(
+      presentation.message ==
+      "This restore will replace the current library tracks and Lists.\n\nPayload: YAML v6, mode 'full'.\nPreview — "
+      "tracks: 2 created, 3 updated, 4 deleted; Lists: 5 created, 6 deleted; dangling references ignored: 7; "
+      "invalid List filters kept as written: 8.\n\nContinue only if this matches the selected backup.");
   }
 
   TEST_CASE("Library restore presentation - list-only payload names the narrower destructive scope",
@@ -77,14 +79,15 @@ namespace ao::uimodel::test
                                                            .listsCreated = 5,
                                                            .listsDeleted = 6,
                                                            .danglingReferencesIgnored = 7,
+                                                           .invalidFiltersKept = 8,
                                                          });
 
     CHECK(presentation.title == "Confirm Restore");
     CHECK(presentation.action == "Restore Lists");
     CHECK(presentation.message ==
-          "This restore will replace the current Lists.\n\nPayload: YAML v6, mode 'listOnly'.\nPreview: "
-          "2 created, 3 updated, 4 deleted; 5 Lists created, 6 deleted; 7 dangling references ignored.\n\nContinue "
-          "only if this matches the selected backup.");
+          "This restore will replace the current Lists.\n\nPayload: YAML v6, mode 'listOnly'.\nPreview — "
+          "tracks: 2 created, 3 updated, 4 deleted; Lists: 5 created, 6 deleted; dangling references ignored: 7; "
+          "invalid List filters kept as written: 8.\n\nContinue only if this matches the selected backup.");
   }
 
   TEST_CASE("Library restore presentation - every mode preserves its token and explicit zero counts",
@@ -111,8 +114,33 @@ namespace ao::uimodel::test
       CHECK(presentation.message ==
             std::string{"This restore will replace the current Lists.\n\nPayload: YAML v6, mode '"} +
               std::string{token} +
-              "'.\nPreview: 0 created, 0 updated, 0 deleted; 0 Lists created, 0 deleted; 0 dangling references "
-              "ignored.\n\nContinue only if this matches the selected backup.");
+              "'.\nPreview — tracks: 0 created, 0 updated, 0 deleted; Lists: 0 created, 0 deleted; dangling "
+              "references ignored: 0; invalid List filters kept as written: 0.\n\nContinue only if this matches the "
+              "selected backup.");
     }
+  }
+
+  TEST_CASE("Library restore presentation - a count of one reads as grammatically as any other",
+            "[uimodel][unit][library-transfer]")
+  {
+    auto const presentation = libraryRestorePresentation(ao::test::englishMessageCatalog(),
+                                                         rt::ImportReport{
+                                                           .payloadVersion = 6,
+                                                           .payloadMode = rt::ExportMode::Full,
+                                                           .targetScope = rt::ImportTargetScope::Library,
+                                                           .tracksCreated = 1,
+                                                           .tracksUpdated = 1,
+                                                           .tracksDeleted = 1,
+                                                           .listsCreated = 1,
+                                                           .listsDeleted = 1,
+                                                           .danglingReferencesIgnored = 1,
+                                                           .invalidFiltersKept = 1,
+                                                         });
+
+    CHECK(
+      presentation.message ==
+      "This restore will replace the current library tracks and Lists.\n\nPayload: YAML v6, mode 'full'.\nPreview — "
+      "tracks: 1 created, 1 updated, 1 deleted; Lists: 1 created, 1 deleted; dangling references ignored: 1; "
+      "invalid List filters kept as written: 1.\n\nContinue only if this matches the selected backup.");
   }
 } // namespace ao::uimodel::test

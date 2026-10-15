@@ -164,7 +164,7 @@ Mutation/administrative shapes:
 | `lib relink` list | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength}]` |
 | `lib relink` apply | `dryRun, oldUri, newUri, trackId` |
 | `lib fingerprint` | `completed, skipped, failures` |
-| `lib import` | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored` |
+| `lib import` | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored, invalidFiltersKept` |
 | `lib export` | `action, path, mode` |
 | `lib resource list` | `resources[{id,size}]`, where `size` is the descriptor's described length |
 | `lib resource export` | `id, output, size` |
@@ -209,7 +209,7 @@ Fingerprint summary is `fingerprinted N  skipped N  failed N`.
 Tag list is descending frequency then name.
 `tag show` returns the intersection across all supplied or filter-matched tracks.
 
-Plain `lib import` output identifies whether the operation is a preview, then prints payload version, payload mode, target scope, track/list create-update-delete counts, and ignored dangling references.
+Plain `lib import` output identifies whether the operation is a preview, then prints payload version, payload mode, target scope, track/list create-update-delete counts, ignored dangling references, and invalid List filters kept, each count even when it is zero.
 
 ### Streams and exit codes
 
