@@ -3,20 +3,18 @@
 
 #include "EnvironmentDataFile.h"
 #include <ao/Error.h>
-#include <ao/lmdb/Environment.h>
 
 #include <filesystem>
 
 namespace ao::lmdb::detail
 {
-  Result<MapAllocation> prepareEnvironmentDataFile(std::filesystem::path const& /*directory*/,
-                                                   DataFileAccess const /*access*/)
+  Result<> prepareEnvironmentDataFile(std::filesystem::path const& /*directory*/)
   {
-    // Nothing to prepare, for either access. Without MDB_WRITEMAP the POSIX
-    // mapping never extends the data file, so LMDB writes pages as it needs them
-    // and the rest of the map costs no blocks. Creating the file early would
-    // only take work away from LMDB's own open path, and because this touches
-    // nothing it is already safe for a read-only environment.
-    return MapAllocation::OnDemand;
+    // Nothing to prepare. Without MDB_WRITEMAP the POSIX mapping never extends
+    // the data file; LMDB extends it only by writing pages, at commit or when a
+    // large transaction spills, so the map costs no blocks and an aborted
+    // transaction leaves only what it wrote. Creating the file early would only
+    // take work away from LMDB's own open path.
+    return {};
   }
 } // namespace ao::lmdb::detail

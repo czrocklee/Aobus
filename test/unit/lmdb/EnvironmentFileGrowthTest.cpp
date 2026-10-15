@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "lib/lmdb/detail/EnvironmentDataFile.h"
-
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
@@ -13,8 +13,10 @@
 #include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -29,8 +31,8 @@ namespace ao::lmdb::test
 {
   namespace
   {
-    // Large enough that allocating all of it would be unmistakable, small enough
-    // that a volume without sparse support wastes only this much before failing.
+    // Large enough that a data file extended to all of it would be unmistakable,
+    // small enough that a build that did so wastes only this much before failing.
     constexpr auto kLargeMapSize = std::size_t{256} * 1024 * 1024;
     constexpr auto kAllocationCeiling = kLargeMapSize / 8;
     constexpr auto kRecordSize = std::size_t{4096};
@@ -50,6 +52,19 @@ namespace ao::lmdb::test
       return Environment::Options{.flags = kEnvNoTls, .maxDatabases = 4, .pinnedMapBytes = kLargeMapSize};
     }
 
+    // Raises the map to @p floorBytes through the capacity policy after the
+    // open, as the library does, rather than pinning it before.
+    Environment::Options flushedManagedOptions(std::uint64_t const floorBytes)
+    {
+      return Environment::Options{.flags = kEnvNoTls, .maxDatabases = 4, .capacity = {.minimumMapBytes = floorBytes}};
+    }
+
+    void checkFootprintBelowCeiling(std::filesystem::path const& dataPath)
+    {
+      CHECK(std::filesystem::file_size(dataPath) < kAllocationCeiling);
+      CHECK(utility::allocatedFileBytes(dataPath) < kAllocationCeiling);
+    }
+
     void appendRecords(Environment& env, std::uint32_t const count)
     {
       auto const data = createTestData(kRecordSize);
@@ -67,6 +82,7 @@ namespace ao::lmdb::test
 
     void requireRecordsReadable(Environment& env, std::uint32_t const count)
     {
+      auto const expected = createTestData(kRecordSize);
       auto txn = beginWriteTransaction(env);
       auto database = openIntegerKeyDatabase(txn, "records");
       auto writer = database.writer(txn);
@@ -75,13 +91,14 @@ namespace ao::lmdb::test
       {
         auto const optValue = writer.get(id);
         REQUIRE(optValue);
-        REQUIRE(optValue->size() == kRecordSize);
+        REQUIRE(std::ranges::equal(*optValue, expected));
       }
     }
   } // namespace
 
-  // These expectations need a data file whose unwritten remainder costs nothing:
-  // a hole on Windows, and on POSIX a file LMDB never extends in the first place.
+  // The data file grows with the pages transactions use, on Windows as well as
+  // POSIX, so neither its length nor its allocation follows the map. A Windows
+  // build of LMDB with MDB_FIXEDSIZE would extend the file to the map.
   TEST_CASE("Environment - a configured map size does not become disk usage", "[lmdb][unit][environment]")
   {
     auto const temp = ao::test::TempDir{};
@@ -89,14 +106,14 @@ namespace ao::lmdb::test
 
     {
       auto env = openEnvironment(temp.path(), flushedLargeMapOptions());
-      CHECK(env.mapAllocation() == MapAllocation::OnDemand);
-      CHECK(utility::allocatedFileBytes(dataPath) < kAllocationCeiling);
+      checkFootprintBelowCeiling(dataPath);
       appendRecords(env, kRecordCount);
     }
 
     auto const allocated = utility::allocatedFileBytes(dataPath);
     CHECK(allocated >= kRecordSize * kRecordCount);
     CHECK(allocated < kAllocationCeiling);
+    CHECK(std::filesystem::file_size(dataPath) < kAllocationCeiling);
   }
 
   TEST_CASE("Environment - reopening an environment keeps allocation proportional", "[lmdb][unit][environment]")
@@ -112,34 +129,84 @@ namespace ao::lmdb::test
     auto const afterFirstSession = utility::allocatedFileBytes(dataPath);
 
     {
+      // Reopening must not extend the existing file to the map either.
       auto env = openEnvironment(temp.path(), flushedLargeMapOptions());
+      checkFootprintBelowCeiling(dataPath);
       appendRecords(env, kRecordCount);
+      checkFootprintBelowCeiling(dataPath);
     }
 
     auto const afterSecondSession = utility::allocatedFileBytes(dataPath);
     CHECK(afterSecondSession > afterFirstSession);
     CHECK(afterSecondSession < kAllocationCeiling);
+    CHECK(std::filesystem::file_size(dataPath) < kAllocationCeiling);
   }
 
-  TEST_CASE("Environment - opens over a data file that already exists", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - a map the capacity policy raises does not become disk usage", "[lmdb][unit][environment]")
   {
     auto const temp = ao::test::TempDir{};
     auto const dataPath = temp.path() / "data.mdb";
 
+    for (std::uint32_t session = 0; session < 2; ++session)
     {
-      auto env = openEnvironment(temp.path(), largeMapOptions());
+      INFO("session " << session);
+      // Each floor is above the map the previous session recorded, so every open
+      // remaps: the first over a fresh file, the second over one that has data.
+      auto const floorBytes = std::uint64_t{kLargeMapSize} << session;
+      auto env = openEnvironment(temp.path(), flushedManagedOptions(floorBytes));
+      REQUIRE(env.capacity().mapBytes == floorBytes);
+      checkFootprintBelowCeiling(dataPath);
+
+      if (session > 0)
+      {
+        requireRecordsReadable(env, kRecordCount);
+      }
+
       appendRecords(env, kRecordCount);
+      checkFootprintBelowCeiling(dataPath);
     }
 
-    // Preparation has to accept the file a previous session left behind, not only
-    // one it creates itself, because every later open repeats it.
-    REQUIRE(std::filesystem::exists(dataPath));
-    REQUIRE(detail::prepareEnvironmentDataFile(temp.path(), detail::DataFileAccess::ReadWrite));
+    CHECK(utility::allocatedFileBytes(dataPath) >= kRecordSize * kRecordCount * 2);
+    checkFootprintBelowCeiling(dataPath);
+  }
 
-    auto env = openEnvironment(temp.path(), largeMapOptions());
-    CHECK(env.mapAllocation() == MapAllocation::OnDemand);
-    requireRecordsReadable(env, kRecordCount);
-    CHECK(utility::allocatedFileBytes(dataPath) < kAllocationCeiling);
+  // Windows LMDB commits each page it takes from the end of the map before it
+  // writes it, and that extends the file even for a transaction that then
+  // aborts. The adapter marks the file sparse so the extension stays a hole,
+  // which a volume without sparse files cannot provide. POSIX extends the file
+  // only by writing to it.
+  TEST_CASE("Environment - an aborted transaction does not become disk usage", "[lmdb][unit][environment]")
+  {
+    auto const temp = ao::test::TempDir{};
+
+    if (!ao::test::supportsSparseFiles(temp.path()))
+    {
+      SKIP("the volume holding the test directory cannot hold a hole");
+    }
+
+    auto const dataPath = temp.path() / "data.mdb";
+    // One value, which the transaction stages in memory without spilling, so
+    // every page it allocated is still unwritten when it aborts.
+    constexpr auto kStagedSize = std::size_t{8} * 1024 * 1024;
+    constexpr auto kAbortCeiling = kStagedSize / 8;
+
+    {
+      auto env = openEnvironment(temp.path(), flushedLargeMapOptions());
+      auto txn = beginWriteTransaction(env);
+      auto database = openIntegerKeyDatabase(txn, "records");
+      REQUIRE(database.writer(txn).append(createTestData(kStagedSize)));
+      txn.abort();
+      CHECK(utility::allocatedFileBytes(dataPath) < kAbortCeiling);
+    }
+
+    // The file keeps the length the abort left it on Windows, so a reopen has
+    // to keep that extension a hole too.
+    {
+      auto env = openEnvironment(temp.path(), flushedLargeMapOptions());
+      CHECK(utility::allocatedFileBytes(dataPath) < kAbortCeiling);
+    }
+
+    CHECK(utility::allocatedFileBytes(dataPath) < kAbortCeiling);
   }
 
   TEST_CASE("Environment - opens a path whose name is not ASCII", "[lmdb][unit][environment]")
@@ -171,7 +238,6 @@ namespace ao::lmdb::test
     constexpr std::size_t kThreadCount = 8;
     auto const temp = ao::test::TempDir{};
     auto failures = std::atomic<std::size_t>{0};
-    auto denseReports = std::atomic<std::size_t>{0};
     auto ready = std::latch{static_cast<std::ptrdiff_t>(kThreadCount)};
     auto start = std::latch{1};
     auto threads = std::vector<std::jthread>{};
@@ -183,21 +249,16 @@ namespace ao::lmdb::test
     for (std::size_t index = 0; index < kThreadCount; ++index)
     {
       threads.emplace_back(
-        [&temp, &failures, &denseReports, &ready, &start]
+        [&temp, &failures, &ready, &start]
         {
           // Every worker is present before release, so they contend for the same
           // create-and-mark sequence rather than arriving in turn.
           ready.count_down();
           start.wait();
-          auto const allocationRes = detail::prepareEnvironmentDataFile(temp.path(), detail::DataFileAccess::ReadWrite);
 
-          if (!allocationRes)
+          if (!detail::prepareEnvironmentDataFile(temp.path()))
           {
             failures.fetch_add(1, std::memory_order_relaxed);
-          }
-          else if (*allocationRes == MapAllocation::WholeMap)
-          {
-            denseReports.fetch_add(1, std::memory_order_relaxed);
           }
         });
     }
@@ -207,16 +268,12 @@ namespace ao::lmdb::test
     threads.clear();
 
     CHECK(failures.load(std::memory_order_relaxed) == 0);
-    // Every thread saw the same filesystem, so they cannot disagree about it.
-    auto const dense = denseReports.load(std::memory_order_relaxed);
-    CHECK((dense == 0 || dense == kThreadCount));
 
-    // The environment still opens normally afterwards, and the file the racing
-    // callers left behind is still one LMDB can size to the configured map.
-    auto const dataPath = temp.path() / "data.mdb";
+    // The environment still opens normally over the file the racing callers left
+    // behind, and that file still grows only with what is written to it.
     auto env = openEnvironment(temp.path(), largeMapOptions());
     appendRecords(env, kRecordCount);
-    CHECK(utility::allocatedFileBytes(dataPath) < kAllocationCeiling);
+    checkFootprintBelowCeiling(temp.path() / "data.mdb");
   }
 
   TEST_CASE("Environment - concurrent first opens of separate environments all succeed",
@@ -252,9 +309,8 @@ namespace ao::lmdb::test
         {
           ready.count_down();
           start.wait();
-          auto envRes = Environment::open(directory, largeMapOptions());
 
-          if (!envRes || envRes->mapAllocation() != MapAllocation::OnDemand)
+          if (!Environment::open(directory, largeMapOptions()))
           {
             failures.fetch_add(1, std::memory_order_relaxed);
           }
@@ -267,28 +323,14 @@ namespace ao::lmdb::test
     CHECK(failures.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("prepareEnvironmentDataFile - a read-only preparation creates nothing",
-            "[lmdb][unit][environment][capacity]")
-  {
-    auto const temp = ao::test::TempDir{};
-    auto const dataPath = temp.path() / "data.mdb";
-
-    // Preparation for a writable environment is allowed to create the file. For a
-    // read-only one it is not: a caller asking to read a database that is not
-    // there must be told so, not handed an empty one. Only the Windows shim can
-    // fail this, because the POSIX shim touches nothing under either access.
-    REQUIRE(detail::prepareEnvironmentDataFile(temp.path(), detail::DataFileAccess::ReadOnly));
-    CHECK_FALSE(std::filesystem::exists(dataPath));
-  }
-
-  TEST_CASE("Environment - opening rejects a flag the data-file preparation is not written for",
-            "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - opening rejects a flag outside the mirrored ones", "[lmdb][unit][environment][capacity]")
   {
     auto const temp = ao::test::TempDir{};
 
     // MDB_NOSUBDIR would make the path the data file rather than its directory,
-    // and MDB_WRITEMAP would turn an exhausted volume into a mapping fault. Both
-    // break preparation silently, so anything outside the two mirrored flags is
+    // and MDB_WRITEMAP would set the data file's length to the map on POSIX and
+    // let an exhausted volume surface as a mapping fault. Both break the
+    // adapter's contract silently, so anything outside the mirrored flags is
     // refused before an environment exists at all.
     constexpr std::uint32_t kNoSubdir = 0x4000;
     constexpr std::uint32_t kWriteMap = 0x80000;

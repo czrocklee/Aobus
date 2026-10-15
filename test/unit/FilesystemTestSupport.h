@@ -19,6 +19,13 @@ namespace ao::test
    */
   bool hasPrivateManagedFileAccess(std::filesystem::path const& path);
 
+  /**
+   * Whether the volume holding @p directory can leave a file's extended but
+   * unwritten range unallocated. exFAT and the FAT family cannot. Throws when
+   * the volume cannot be inspected.
+   */
+  bool supportsSparseFiles(std::filesystem::path const& directory);
+
   enum class DeniedDirectoryAccess : std::uint8_t
   {
     Read,

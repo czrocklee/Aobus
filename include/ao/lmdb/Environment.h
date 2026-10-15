@@ -59,20 +59,6 @@ namespace ao::lmdb
   constexpr EnvMode kDefaultEnvironmentMode = 0644;
 
   /**
-   * @brief What an environment's map size costs on disk.
-   *
-   * A capacity decision needs this before it picks a map size, because the two
-   * cases price a large map very differently.
-   */
-  enum class MapAllocation : std::uint8_t
-  {
-    /// The data file can hold a hole, so allocation follows committed pages.
-    OnDemand,
-    /// The filesystem cannot hold a hole, so the whole map size is allocated.
-    WholeMap,
-  };
-
-  /**
    * @brief How much an environment may hold, and how far it has already grown.
    */
   struct EnvironmentCapacity final
@@ -105,20 +91,13 @@ namespace ao::lmdb
   struct CapacityPolicy final
   {
     /**
-     * Smallest map to open with where the unused remainder is a hole.
+     * Smallest map to open with.
      *
      * Whatever smaller size the database persisted, the floor wins. It can be
-     * generous because the bytes past the high-water mark cost no disk.
+     * generous because the map reserves address space rather than disk: the
+     * data file grows with the pages transactions use, never with the map.
      */
     std::uint64_t minimumMapBytes = 0;
-    /**
-     * Smallest map to open with where the whole map is allocated.
-     *
-     * Separate from `minimumMapBytes` because there the floor is real disk use:
-     * a fresh, empty database on such a volume occupies this much immediately.
-     * Zero leaves the map at whatever the database persisted.
-     */
-    std::uint64_t denseMinimumMapBytes = 0;
     /**
      * Largest map this boundary may choose.
      *
@@ -128,14 +107,6 @@ namespace ao::lmdb
      * the database has become.
      */
     std::uint64_t maximumMapBytes = 0;
-    /**
-     * Bytes to add per growth step when the data file cannot hold a hole.
-     *
-     * Doubling is free where the unused remainder is a hole and expensive where
-     * it is not, so a filesystem without holes grows by this instead. Zero
-     * leaves such a map at its floor.
-     */
-    std::uint64_t denseStepBytes = 0;
   };
 
   class Environment final
@@ -146,12 +117,12 @@ namespace ao::lmdb
       /**
        * Environment flags, restricted to `kEnvNoTls`, `kEnvReadOnly`, and `kEnvNoSync`.
        *
-       * Opening rejects anything else. The data-file preparation below assumes
-       * the directory layout and a mapping that never extends the file, so a
-       * flag that changes either would break it silently: `MDB_NOSUBDIR` makes
-       * the path the data file rather than its directory, and `MDB_WRITEMAP`
-       * turns a full volume into a mapping fault instead of a returned error.
-       * Refusing an unrecognized flag keeps that assumption a checked fact.
+       * Opening rejects anything else, because this adapter's contract depends
+       * on what the other flags leave alone: `MDB_NOSUBDIR` makes the path the
+       * data file rather than its directory, and `MDB_WRITEMAP` sets the data
+       * file's length to the map size on POSIX and lets a full volume surface as
+       * a mapping fault instead of a returned error. Refusing an unrecognized
+       * flag keeps those assumptions a checked fact.
        */
       std::uint32_t flags = 0;
       EnvMode mode = kDefaultEnvironmentMode;
@@ -177,11 +148,10 @@ namespace ao::lmdb
     /**
      * @brief Opens the environment whose directory is @p path.
      *
-     * Takes a native path rather than an encoded string because the two
-     * consumers need different encodings: the platform data-file preparation
-     * wants the native form, and LMDB decodes what it is handed as UTF-8. A
-     * caller that converted first would have to pick one of them and be wrong
-     * about the other on Windows.
+     * Takes a native path rather than an encoded string and converts it itself,
+     * because LMDB decodes what it is handed as UTF-8. A caller that converted
+     * first could get a platform's narrow encoding instead, which on Windows
+     * need not be UTF-8.
      */
     static Result<Environment> open(std::filesystem::path const& path);
     static Result<Environment> open(std::filesystem::path const& path, Options const& options);
@@ -199,9 +169,6 @@ namespace ao::lmdb
     /// The longest key LMDB accepts, derived from the page size the environment was created with.
     std::size_t maxKeySize() const noexcept;
 
-    /// What this environment's map size costs on disk, decided when it opened.
-    MapAllocation mapAllocation() const noexcept { return _mapAllocation; }
-
   private:
     struct MdbEnvDeleter final
     {
@@ -210,12 +177,11 @@ namespace ao::lmdb
 
     using EnvPtr = std::unique_ptr<MDB_env, MdbEnvDeleter>;
 
-    Environment(EnvPtr envPtr, MapAllocation mapAllocation) noexcept;
+    explicit Environment(EnvPtr envPtr) noexcept;
 
     MDB_env* handle() const noexcept { return _envPtr.get(); }
 
     EnvPtr _envPtr;
-    MapAllocation _mapAllocation = MapAllocation::OnDemand;
 
     friend class ReadTransaction;
     friend class WriteTransaction;

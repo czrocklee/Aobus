@@ -65,24 +65,15 @@ namespace ao::library
   namespace
   {
     // LMDB configuration constants
-    // Capacity a fresh database starts with where the map's unused remainder is
-    // a hole. LMDB would otherwise start at its own 1 MiB default, which a first
-    // scan passes immediately. Generous because it costs no disk until used.
+    // Capacity a fresh database starts with. LMDB would otherwise start at its
+    // own 1 MiB default, which a first scan passes immediately. Generous because
+    // it costs no disk: the data file grows with the pages transactions use.
     constexpr std::uint64_t kLmdbMapFloor = std::uint64_t{2} * 1024 * 1024 * 1024; // 2 GiB
-    // Capacity a fresh database starts with where the whole map is allocated, so
-    // an empty library occupies this immediately. Held at what the fixed map
-    // before managed capacity already claimed on such a volume: growth is added
-    // on top rather than the resting footprint being raised.
-    constexpr std::uint64_t kLmdbDenseMapFloor = std::uint64_t{1} * 1024 * 1024 * 1024; // 1 GiB
     // Where growth stops. Reaching it would take a library far larger than any
-    // real collection; the ceiling is here to bound how many times a failed
-    // mutation can ask for a larger map, not because the figure is expected.
+    // real collection; the ceiling is here to bound the address space one open
+    // library reserves, not because the figure is expected.
     constexpr std::uint64_t kLmdbMapCeiling = std::uint64_t{64} * 1024 * 1024 * 1024; // 64 GiB
-    // Growth step where the data file cannot hold a hole, so the whole map is
-    // allocated. Large enough that steps stay rare, small enough that one step
-    // does not claim a surprising amount of the volume.
-    constexpr std::uint64_t kLmdbDenseMapStep = std::uint64_t{256} * 1024 * 1024; // 256 MiB
-    constexpr std::uint32_t kLmdbMaxDatabases = 8;                                // Seven named stores plus one spare.
+    constexpr std::uint32_t kLmdbMaxDatabases = 8; // Seven named stores plus one spare.
     constexpr std::uint32_t kLmdbFileMode = 0664;
 
     /// Capacity management for one open, or none when the caller pinned the map.
@@ -97,9 +88,7 @@ namespace ao::library
 
       return lmdb::CapacityPolicy{
         .minimumMapBytes = kLmdbMapFloor,
-        .denseMinimumMapBytes = kLmdbDenseMapFloor,
         .maximumMapBytes = kLmdbMapCeiling,
-        .denseStepBytes = kLmdbDenseMapStep,
       };
     }
 

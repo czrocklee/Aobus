@@ -31,17 +31,18 @@ An unflushed commit survives a process crash, but an operating-system crash or p
 The effective capacity comes from the persistent LMDB lock file: an opener that acquires the exclusive environment lock may grow a smaller table to the requested size, a concurrent opener adopts the existing size, and no opener shrinks a larger table.
 Each live `MusicLibrary::readTransaction()` snapshot occupies one effective slot until destruction under `MDB_NOTLS`.
 Exhausting that table follows the existing fatal transaction-begin contract owned by the [library architecture](../../../system/library/structure.md#failure-cancellation-and-lifetime-boundaries); `maxReaders` raises capacity but is not a concurrency throttle.
-That map is the capacity this environment may grow into, not disk it occupies: the [LMDB adapter](../../../system/persistence/lmdb-operation.md) prepares the data file so allocation follows committed use, and a full map remains the point at which mutation fails with `StorageFull`.
+That map is the capacity this environment may grow into, not disk it occupies: as the [LMDB adapter](../../../system/persistence/lmdb-operation.md) specifies, the data file grows with the pages transactions use, never with the map, on every supported platform, and a full map remains the point at which mutation fails with `StorageFull`.
+A mutation that rolls back can leave the data file longer than its committed pages, and later mutations reuse that space; on a Windows volume without sparse files, such as exFAT, the whole extension stays allocated until then.
 `MusicLibrary::storageCapacity()` reports that capacity as `mapBytes` together with the `highWaterBytes` the database has needed; the high water is the peak page extent rather than live data, so deleting rows does not lower it.
 Its `diskBytes` reports the allocated bytes of `data.mdb`, `lock.mdb`, and `.aobus-writer.lock`, excluding frontend state and unrelated descendants.
 
 Capacity is either managed or pinned, and `MusicLibrary::Options` chooses which.
 
 Managed capacity is the default and is what the application uses.
-A fresh database opens at a floor, an existing one keeps the capacity it recorded, and each open raises the map when the recorded peak has come within a doubling of filling it, up to a 64 GiB ceiling.
-The floor depends on what the map costs on the volume holding it: 2 GiB where the data file can hold a hole, so the capacity is reserved without occupying disk, and 1 GiB where it cannot, because there an empty library would occupy the whole floor immediately.
-The dense figure is what the fixed map before managed capacity already claimed on such a volume, so growth is added on top rather than the resting footprint being raised.
-Where the data file cannot hold a hole the map then grows by 256 MiB steps instead of doubling, because there a larger map is larger disk usage.
+Every open raises the map to at least a 2 GiB floor: a fresh database opens at the floor, and an existing database keeps at least its recorded capacity, raised to the floor when smaller.
+A library that an earlier build sized below 2 GiB, as it did on a Windows volume without sparse files such as exFAT, therefore opens at 2 GiB.
+Each open also doubles the map when the recorded peak has come within a doubling of filling it, up to a 64 GiB ceiling.
+The floor and each doubling cost no disk, because the map reserves address space rather than disk.
 Capacity only ever grows: no open lowers a map a database already recorded, and no live environment is resized.
 A mutation that exhausts the map rolls back and leaves the recorded peak untouched, so nothing asks the next open for more room; repeating that work needs the database to have grown for another reason.
 

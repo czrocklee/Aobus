@@ -47,11 +47,11 @@ namespace ao::library
       /**
        * Pins the database's capacity at exactly this many bytes, with no growth.
        *
-       * Zero instead selects managed capacity: an existing database keeps the
-       * capacity it recorded, a fresh one starts at the library floor, and each
-       * open raises the map when the recorded peak has come too close to it. A
-       * nonzero value is for callers that need one known capacity, including
-       * tests that have to reach it.
+       * Zero instead selects managed capacity: a fresh database starts at the
+       * library floor, an existing one keeps at least the capacity it recorded,
+       * raised to the floor when smaller, and each open raises the map when the
+       * recorded peak has come too close to it. A nonzero value is for callers
+       * that need one known capacity, including tests that have to reach it.
        */
       std::uint64_t pinnedMapBytes = 0;
 

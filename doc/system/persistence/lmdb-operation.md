@@ -43,7 +43,7 @@ Runtime, UIModel, and normal frontend public boundaries do not expose LMDB envir
 - A readonly transaction may move between threads when the environment uses `kEnvNoTls` and the caller prevents concurrent access; readers and iterators must be recreated after that move. `MDB_NOTLS` does not relax native writer or mutex thread ownership. Writer moves and terminal operations stay on their owning thread. An active `WriteTransaction` records its creating thread; moving, committing, aborting, opening a database through it, or using a writer or a reader bound to it from another thread fails through `AO_EXPECTS` before native access. Finished writers have no affinity.
 - Acquisition order is native environment writer transaction before process-wide database-open admission. An admission holder must not begin or wait for another write transaction, open a DBI through another transaction, or wait for a worker that needs admission before releasing its own admission. The gate is intentionally non-reentrant.
 - Direct moves from `WriteTransaction` to `ReadTransaction` are deleted. Public `ReadTransaction` moves still reject either a writer source or writer destination at runtime, including explicit base casts, finished writers and writer-base self-move, before touching native ownership. Borrowing a writer's read base remains valid; only a complete `WriteTransaction` move can transfer its native handle and admission together.
-- A configured map size is a capacity bound rather than a disk reservation wherever the filesystem can hold a hole; where it cannot, the environment reports that its map costs the whole size instead of pretending otherwise.
+- A configured map size is a capacity and address-space bound rather than a disk reservation: on every supported platform and filesystem, the data file grows with the pages transactions use, never with the map. An unsuccessful transaction can leave the file longer than the committed extent; wherever the volume can hold a hole, only the pages it wrote are allocated.
 - Reported high water is the peak page extent the environment has committed, never a live-data measure, and it does not decrease when records are deleted.
 - Map capacity changes only at the open boundary, before the environment is handed to a caller. No live environment is resized, because resizing unmaps and remaps the file and would invalidate every pointer a transaction or reader holds.
 - Capacity only grows. A policy whose floor or ceiling is below what a database already recorded leaves that database's map where it is.
@@ -115,7 +115,7 @@ Callers that mix explicit integer-key creation with append in one writer must no
 
 ### Environment and database opening
 
-`Environment::open` applies a nonzero pinned map size and the maximum-database and maximum-reader options before opening the requested path, then prepares that path's data file, then uses the supplied flags and mode for the native environment open, and finally applies the capacity policy while nothing has yet been handed out.
+`Environment::open` applies a nonzero pinned map size and the maximum-database and maximum-reader options before opening the requested path, then prepares a writable environment's data file, then uses the supplied flags and mode for the native environment open, and finally applies the capacity policy while nothing has yet been handed out.
 Failure at environment creation, option application, data-file preparation, path opening, or capacity application returns a recoverable `Result` error and closes any partially created native handle.
 
 Three separate figures describe an environment's storage and this specification keeps them apart.
@@ -123,33 +123,39 @@ Three separate figures describe an environment's storage and this specification 
 **File length** is what the data file reports as its size.
 **Allocated bytes** is what the filesystem has actually given it.
 
-The platforms relate those figures differently.
-POSIX with `MDB_WRITEMAP` disabled, which is what Aobus uses, never extends the data file for the mapping: LMDB appends pages as it writes them, so length and allocation both follow committed use and the map size stays a capacity and address-space bound only.
-Windows extends the file to the map size before creating the mapping, so its length always reports the whole map and, without a hole, allocates the whole map too.
+No platform sizes the data file to the map.
+With `MDB_WRITEMAP` disabled, which is what Aobus uses, opening leaves the file's length alone, and the pinned LMDB is built without `MDB_FIXEDSIZE`, so on Windows it creates the mapping's section without a size.
+The map size is therefore a capacity and address-space bound only, and the file grows with the pages transactions use.
 
-Data-file preparation exists for that Windows case.
-It opens or creates the data file and marks it sparse before the mapping fixes the length, so allocation follows committed use while the length still reports the map.
-On POSIX it does nothing, because the mapping already behaves that way.
+What extends the file differs by platform.
+On POSIX, only LMDB writing a page extends it, so the length follows the highest page written.
+On Windows, LMDB commits each page it takes from the end of the map before anything is written to it, and committing a page of the mapped section extends the file, so the length follows the highest page any transaction has allocated, whether or not that page was then written.
+That highest page is usually the committed extent, but it can lie beyond it.
+LMDB writes a transaction's pages before the metadata that commits them, spills dirty pages to the file during a large transaction, and on Windows extends the file as it allocates, so a transaction that then aborts or fails to commit can leave the file longer than the committed extent, and the file keeps that length after the environment closes.
+Later transactions allocate from the committed extent again and reuse that space rather than adding to it.
+
+Allocation follows the pages written, up to the filesystem's rounding to whole clusters, wherever an extension nothing was written to can stay a hole.
+On POSIX nothing but a write extends the file, so an aborted transaction that spilled nothing leaves it as it was on every volume.
+On Windows every allocated page extends the file, so data-file preparation opens or creates a writable environment's data file and marks it sparse before LMDB maps it.
+An extension an aborted transaction leaves then stays a hole, and only its written pages are allocated.
 The step is idempotent, so concurrent first openers and every later open of the same environment repeat it safely.
-
-Preparation reports which of the two allocation behaviours the environment got, and `Environment::mapAllocation()` exposes that decision for the environment's lifetime.
-A volume that supports no sparse file at all reports `WholeMap` rather than failing, because the map size becoming allocation is a cost to price rather than a broken environment; choosing a map size such a volume can honour belongs to the caller that owns capacity rather than to this adapter.
+A volume that supports no sparse file at all, such as exFAT, is opened unmarked rather than refused: there the extension an aborted transaction leaves stays allocated until later transactions reuse it.
 Any other preparation failure is a recoverable `Result` error, so a genuine permission or device fault is not mistaken for a filesystem limitation.
+Marking a file sparse does not release clusters it already allocated, so a data file extended before it was marked keeps that allocation until it is written over.
+On POSIX preparation does nothing.
 
-Marking a file sparse does not release clusters it already allocated, so a data file an earlier dense build created keeps its allocation.
-Reclaiming that unused tail requires the environment closed and its committed high water known, so it belongs to a caller that reopens the environment rather than to preparation.
-
-The path this adapter receives is UTF-8, matching what LMDB itself decodes, and preparation converts it explicitly rather than relying on a platform's narrow-string default.
+Windows growth has a cost of its own: LMDB's source notes that incremental growth on Windows has a large write-performance impact compared with `MDB_FIXEDSIZE`, which allocates the whole map up front.
+Aobus accepts it rather than give every library a data file as large as its map; the cost has not been measured for Aobus's workload.
 
 Opening admits only the three mirrored environment flags, `kEnvNoTls`, `kEnvReadOnly`, and `kEnvNoSync`, and rejects anything else as `InvalidInput`.
-Data-file preparation assumes the environment directory holds the data file and that the mapping never extends it; `MDB_NOSUBDIR` makes the path the data file rather than its directory, and `MDB_WRITEMAP` turns an exhausted volume into a mapping fault instead of a returned error.
-Both would break preparation silently, so an unrecognized flag is refused rather than trusted.
+This specification assumes the environment directory holds the data file and that the file grows only with the pages transactions use; `MDB_NOSUBDIR` makes the path the data file rather than its directory, and `MDB_WRITEMAP` makes POSIX LMDB set the data file's length to the map size and lets an exhausted volume surface as a mapping fault instead of a returned error.
+Both would break the contract silently, so an unrecognized flag is refused rather than trusted.
 `kEnvNoSync` changes neither assumption: it only skips the flush that makes a commit durable, which is write-through on Windows and `F_FULLFSYNC` on macOS.
 A commit made with it still survives a process crash.
 An operating-system crash or power loss can lose the most recent commits or corrupt the environment, because LMDB then keeps its integrity only on a filesystem that preserves write order, which Aobus does not establish.
 Only disposable environments, such as test fixtures, use it.
 
-The open function takes a native path rather than an encoded string, because its two consumers need different encodings: platform preparation works on the native form, and LMDB decodes what it receives as UTF-8.
+The open function takes a native path rather than an encoded string, because its two consumers need different encodings: data-file preparation works on the native form, and LMDB decodes what it receives as UTF-8.
 A caller that converted first would have to choose one and be wrong about the other where the platform's narrow encoding is not UTF-8.
 
 A caller chooses between two ways of sizing an environment.
@@ -158,18 +164,17 @@ It is not a guaranteed exact size: LMDB silently raises a request below the spac
 Leaving it zero lets LMDB adopt the size the database itself recorded, which is what allows a database to keep capacity an earlier session gave it, and a fresh database to start at LMDB's own small default.
 `Options::capacity` then decides whether to raise that.
 
-The capacity policy names two floors, a ceiling, and a growth step for a file that cannot hold a hole.
-A default policy names neither floor nor ceiling and therefore changes nothing, so an environment sized by `pinnedMapBytes` alone behaves as it always did.
+The capacity policy names a floor and a ceiling.
+A default policy names neither and therefore changes nothing, so an environment sized by `pinnedMapBytes` alone behaves as it always did.
 A ceiling of zero disables the growth rule alone: no step is taken and no headroom is reserved, while a floor above the current map still applies, because a floor is the capacity the caller asked to open with rather than a reaction to how full the database has become.
-The two floors are separate because a floor above the recorded high water costs no disk where the map's unused remainder is a hole and is immediate disk usage where it is not, so one figure would have to be wrong for one of the two cases; `minimumMapBytes` applies to the first and `denseMinimumMapBytes` to the second, and a policy that names no floor for the case it got keeps whatever the database recorded.
-Otherwise the planned capacity starts at the larger of the current map and the floor for that case, and then grows while the map leaves the recorded high water less than one further step of room, stopping at the ceiling.
-A file that can hold a hole doubles, because its unused remainder costs nothing; a file that cannot grows by the configured step instead, because there every added byte is an allocated byte, and a policy that configures no step for that case leaves such a map at its floor.
+Otherwise the planned capacity starts at the larger of the current map and the floor, and then doubles while the map is less than twice the recorded high water, stopping at the ceiling.
+Doubling costs no disk, because the data file grows with the pages transactions use, never with the map.
 The planned capacity is never below the current map, so a database opened once under a larger ceiling keeps its capacity afterwards.
 Applying it uses the native map-size call on the just-opened environment, which is safe only here: that call unmaps and remaps the file, and LMDB documents that it does not check for active transactions, so the caller must guarantee there are none.
 Construction order is that guarantee rather than any check, because the handle has not yet left the open function and no transaction on the environment can exist.
 The new size takes effect for this process immediately but reaches the database only when a later write transaction commits something, so an open alone raises the map without recording it and the next open recomputes from what was recorded.
 A read-only environment is left alone, since it maps whatever exists and could not record a larger size.
-Data-file preparation is likewise skipped for one: creating an absent file, requesting write permission, and marking a file sparse are all mutations, so a read-only open reports the allocation the existing file already describes and touches the data file not at all.
+Data-file preparation is likewise skipped for one: creating an absent file, requesting write permission, and marking a file sparse are all mutations, so a read-only open touches the data file not at all.
 That is a statement about the data file rather than about the whole environment, since LMDB still maintains the reader table in the lock file except on a read-only filesystem.
 
 Growth reacts to the recorded high water, which a rolled-back mutation does not change.
@@ -325,10 +330,10 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`EnvironmentDataFile.h`](../../../lib/lmdb/detail/EnvironmentDataFile.h), with
   [`EnvironmentDataFileWindows.cpp`](../../../lib/lmdb/detail/EnvironmentDataFileWindows.cpp) and
   [`EnvironmentDataFilePosix.cpp`](../../../lib/lmdb/detail/EnvironmentDataFilePosix.cpp), owns the pre-open
-  data-file preparation that keeps a map size from becoming disk usage.
+  data-file preparation that keeps an aborted transaction's extension from becoming disk usage on Windows.
 - [`MapCapacityPolicy.h`](../../../lib/lmdb/detail/MapCapacityPolicy.h) and
   [`MapCapacityPolicy.cpp`](../../../lib/lmdb/detail/MapCapacityPolicy.cpp) own the pure grow-only rule that
-  turns a reported capacity, its allocation behaviour, and a policy into the map size the open boundary installs.
+  turns a reported capacity and a policy into the map size the open boundary installs.
 - [`Transaction.h`](../../../include/ao/lmdb/Transaction.h) and [`Transaction.cpp`](../../../lib/lmdb/Transaction.cpp) own read/write begin, writer-owned process-wide database-open admission, abort, commit, terminal state, and process-wide borrower-binding generations.
 - [`Database.h`](../../../include/ao/lmdb/Database.h) and [`Database.cpp`](../../../lib/lmdb/Database.cpp) own the integer-key and byte-key tokens, named-database access, readers, iterators, writers, and integer key allocation.
 - [`ReservationWriterAccess.h`](../../../lib/lmdb/detail/ReservationWriterAccess.h) owns the source-private zero-copy reservation access used by library Track encoding; public create, update, and append operations accept only copied input bytes.
@@ -348,7 +353,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 ## Test map
 
 - [`EnvironmentTest.cpp`](../../../test/unit/lmdb/EnvironmentTest.cpp) protects environment opening, errors, private native-handle access, move-only ownership, capacity reporting including the high water's refusal to fall after a clear, and the open boundary's capacity decisions: opening a fresh database at the policy floor, keeping a larger recorded map across a reopen, raising the map once the peak passes half of it, stopping at the ceiling, and leaving a pinned map size alone.
-- [`EnvironmentDataFileTest.cpp`](../../../test/unit/lmdb/EnvironmentDataFileTest.cpp) protects allocation staying proportional to committed use under a large configured map, across a reopen, over a data file an earlier session left behind, on a non-ASCII path, and under deterministic concurrent preparation and concurrent first opens.
+- [`EnvironmentFileGrowthTest.cpp`](../../../test/unit/lmdb/EnvironmentFileGrowthTest.cpp) protects file length and allocation staying proportional to the pages written under a large configured map, across a reopen, and under a map the capacity policy raises over a fresh and an existing file; allocation staying below an aborted transaction's staged size across a reopen, skipped on a volume without sparse files; opening a non-ASCII path; deterministic concurrent preparation and concurrent first opens; refusing flags outside the three mirrored ones; and a read-only open that leaves an absent data file absent.
 - [`TransactionTest.cpp`](../../../test/unit/lmdb/TransactionTest.cpp) protects top-level-only construction, read/write lifetime, commit, abort, moves, and bounded deterministic database-open serialization plus commit/abort/destruction/failed-commit release across environments.
 - [`DatabaseTest.cpp`](../../../test/unit/lmdb/DatabaseTest.cpp) protects write-transaction-only database admission, create-capable and existing-only exact flag validation for both named-token types, exact byte-key main-database validation, missing existing databases, and failed-open rollback.
 - [`ReadOnlyDatabaseTest.cpp`](../../../test/unit/lmdb/ReadOnlyDatabaseTest.cpp) protects ordinary retained-DBI reads, integer ordering, missing/empty records, staged write-backed reads and commit, `MDB_DBS_FULL` from existing-only writer admission with root rollback, Reader/Iterator moves, safe destruction, owner moves, and self-move. [`ReadOnlyDatabaseLifetimeTest.cpp`](../../../test/unit/lmdb/ReadOnlyDatabaseLifetimeTest.cpp) protects both key families across cross-thread readonly `kEnvNoTls` handoff with recreated bindings, fatal stale-reader/iterator use after replacement and ABA round trips (a read-only owner replaced with an iterator still open is rejected by the replacement), permitted complete writer moves, and forbidden public base transfers involving active or finished writers. [`LibraryProbeScenario.cpp`](../../../test/fatal/LibraryProbeScenario.cpp) owns the subprocess implementations.
@@ -356,7 +361,7 @@ UIModel and normal frontends consume retained values and snapshots rather than t
 - [`DatabaseReaderTest.cpp`](../../../test/unit/lmdb/DatabaseReaderTest.cpp), [`DatabaseByteKeyTest.cpp`](../../../test/unit/lmdb/DatabaseByteKeyTest.cpp), and [`DatabaseMaxKeyTest.cpp`](../../../test/unit/lmdb/DatabaseMaxKeyTest.cpp) protect miss/end values, byte-key ordering and lower-bound seeks, compile-time key-operation isolation, integer-key coercion, maximum-key behavior, safe integer-key and byte-key wrapper destruction after write transaction teardown, and open-cursor accounting that follows a moved or move-assigned read-only transaction.
 - [`DatabaseWriterTest.cpp`](../../../test/unit/lmdb/DatabaseWriterTest.cpp) protects compile-time key-operation isolation, the copied-data-only public writer surface, source-private integer reservation encoding and append, clear-and-reappend allocation, raising the cached append maximum, exhaustion, update, delete, write reads, conflicts, mutation-failure exception unwinding and rollback, moves, and use-after-commit faults.
 - [`DatabaseWriterLifetimeTest.cpp`](../../../test/unit/lmdb/DatabaseWriterLifetimeTest.cpp) protects both Writer families against same-owner commit/rebind, active replacement, move-out/rebind and move-roundtrip ABA, including stale `clear()` without native cursor-address reuse. It also covers guarded integer cache access, wrapper/owner moves and self-moves, fresh binding and transaction-owned cursor cleanup.
-- [`MapCapacityPolicyTest.cpp`](../../../test/unit/lmdb/MapCapacityPolicyTest.cpp) protects the grow-only rule: a default policy leaving the map alone, the floor lifting a smaller map without lowering a larger one, doubling once the peak passes half and repeating until it fits, the ceiling stopping growth without shrinking a map already past it, additive growth and its absence where a file holds no hole, and saturation near the representable limit.
+- [`MapCapacityPolicyTest.cpp`](../../../test/unit/lmdb/MapCapacityPolicyTest.cpp) protects the grow-only rule: a default policy leaving the map alone, the floor lifting a smaller map without lowering a larger one, doubling once the peak passes half and repeating until it fits, the ceiling stopping growth without shrinking a map already past it, and saturation near the representable limit.
 - [`ResultErrorTest.cpp`](../../../test/unit/lmdb/ResultErrorTest.cpp) protects native-code mapping including the exhausted-map, stale-mapping, full-disk, and full-transaction separation, and caller source-location capture.
 - [`MusicLibraryTest.cpp`](../../../test/unit/library/MusicLibraryTest.cpp),
   [`WriteTransactionTest.cpp`](../../../test/unit/library/WriteTransactionTest.cpp),

@@ -71,10 +71,10 @@ namespace ao::lmdb
      * only when a later write transaction commits something, so an open alone
      * does not record it.
      */
-    Result<> applyCapacityPolicy(::MDB_env* const handle, MapAllocation const allocation, CapacityPolicy const& policy)
+    Result<> applyCapacityPolicy(::MDB_env* const handle, CapacityPolicy const& policy)
     {
       auto const capacity = capacityOf(handle);
-      auto const planned = detail::plannedMapBytes(capacity, allocation, policy);
+      auto const planned = detail::plannedMapBytes(capacity, policy);
 
       if (planned <= capacity.mapBytes)
       {
@@ -85,12 +85,14 @@ namespace ao::lmdb
     }
 
     /**
-     * Rejects a flag the data-file preparation is not written for.
+     * Rejects a flag this adapter's contract is not written for.
      *
-     * The preparation assumes the environment directory holds `data.mdb` and
-     * that the mapping never extends the file. MDB_NOSUBDIR breaks the first and
-     * MDB_WRITEMAP the second, and both would do it silently, so an unrecognized
-     * flag is refused rather than trusted.
+     * The contract assumes the environment directory holds `data.mdb` and that
+     * the file grows only with the pages transactions use. MDB_NOSUBDIR breaks
+     * the first. MDB_WRITEMAP breaks the second on POSIX, where LMDB then sets
+     * the file's length to the map size, and it lets a full volume surface as a
+     * mapping fault instead of a returned error. Both would do it silently, so
+     * an unrecognized flag is refused rather than trusted.
      */
     Result<> admitFlags(std::uint32_t const flags)
     {
@@ -165,16 +167,17 @@ namespace ao::lmdb
       }
     }
 
-    // The data file has to be prepared before LMDB maps it, because the mapping
-    // is what fixes the file's length to the map size. Preparation is native
-    // filesystem work and takes the path as it is.
-    auto const access =
-      (options.flags & kEnvReadOnly) != 0 ? detail::DataFileAccess::ReadOnly : detail::DataFileAccess::ReadWrite;
-    auto allocationRes = detail::prepareEnvironmentDataFile(path, access);
+    auto const readOnly = (options.flags & kEnvReadOnly) != 0;
 
-    if (!allocationRes)
+    // The data file has to be prepared before LMDB maps it, because the first
+    // write transaction may already extend it. Preparation is native filesystem
+    // work and takes the path as it is.
+    if (!readOnly)
     {
-      return std::unexpected{allocationRes.error()};
+      if (auto res = detail::prepareEnvironmentDataFile(path); !res)
+      {
+        return std::unexpected{res.error()};
+      }
     }
 
     // LMDB decodes what it is handed as UTF-8, so the conversion has to say so
@@ -190,15 +193,15 @@ namespace ao::lmdb
 
     // A read-only environment maps whatever already exists and could not commit
     // a larger size anyway, so capacity management has nothing to offer it.
-    if ((options.flags & kEnvReadOnly) == 0)
+    if (!readOnly)
     {
-      if (auto res = applyCapacityPolicy(envPtr.get(), *allocationRes, options.capacity); !res)
+      if (auto res = applyCapacityPolicy(envPtr.get(), options.capacity); !res)
       {
         return std::unexpected{res.error()};
       }
     }
 
-    return Environment{std::move(envPtr), *allocationRes};
+    return Environment{std::move(envPtr)};
   }
 
   EnvironmentCapacity Environment::capacity() const
@@ -211,8 +214,8 @@ namespace ao::lmdb
     return static_cast<std::size_t>(::mdb_env_get_maxkeysize(handle()));
   }
 
-  Environment::Environment(EnvPtr envPtr, MapAllocation const mapAllocation) noexcept
-    : _envPtr{std::move(envPtr)}, _mapAllocation{mapAllocation}
+  Environment::Environment(EnvPtr envPtr) noexcept
+    : _envPtr{std::move(envPtr)}
   {
   }
 

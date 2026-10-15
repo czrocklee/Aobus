@@ -8,9 +8,11 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <memory>
+#include <sys/stat.h>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -96,6 +98,50 @@ namespace ao::test
     auto const ownerReadWrite = std::filesystem::perms::owner_read | std::filesystem::perms::owner_write;
     auto const broadAccess = permissions & (std::filesystem::perms::group_all | std::filesystem::perms::others_all);
     return ownerAccess == ownerReadWrite && broadAccess == std::filesystem::perms::none;
+  }
+
+  bool supportsSparseFiles(std::filesystem::path const& directory)
+  {
+    // POSIX has no portable volume flag for this, so extend a probe file without
+    // writing to it and see whether the volume allocated the extension.
+    constexpr auto kProbeBytes = std::int64_t{16} * 1024 * 1024;
+    // st_blocks counts units of this size by definition.
+    constexpr std::int64_t kStatBlockBytes = 512;
+    auto const probeTemplate = (directory / ".ao.sparse-probe.XXXXXX").string();
+    auto probePath = std::vector<char>{probeTemplate.begin(), probeTemplate.end()};
+    probePath.push_back('\0');
+    auto const file = ::mkstemp(probePath.data());
+
+    if (file < 0)
+    {
+      throw std::system_error{errno, std::generic_category(), "failed to create sparse-file probe"};
+    }
+
+    using FileStatus = struct stat;
+    auto status = FileStatus{};
+    auto const measured = ::ftruncate(file, kProbeBytes) == 0 && ::fstat(file, &status) == 0;
+    auto const measureError = errno;
+    auto const closeResult = ::close(file);
+    auto const closeError = errno;
+    auto const unlinkResult = ::unlink(probePath.data());
+    auto const unlinkError = errno;
+
+    if (!measured)
+    {
+      throw std::system_error{measureError, std::generic_category(), "failed to extend sparse-file probe"};
+    }
+
+    if (closeResult != 0)
+    {
+      throw std::system_error{closeError, std::generic_category(), "failed to close sparse-file probe"};
+    }
+
+    if (unlinkResult != 0)
+    {
+      throw std::system_error{unlinkError, std::generic_category(), "failed to remove sparse-file probe"};
+    }
+
+    return static_cast<std::int64_t>(status.st_blocks) * kStatBlockBytes < kProbeBytes / 2;
   }
 
   SymlinkFixture::SymlinkFixture(std::filesystem::path target, std::filesystem::path link, SymlinkType const type)

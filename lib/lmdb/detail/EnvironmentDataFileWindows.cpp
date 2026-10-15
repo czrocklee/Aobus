@@ -3,7 +3,6 @@
 
 #include "EnvironmentDataFile.h"
 #include <ao/Error.h>
-#include <ao/lmdb/Environment.h>
 #include <ao/utility/Path.h>
 
 #ifndef NOMINMAX
@@ -40,39 +39,11 @@ namespace ao::lmdb::detail
       // these; anything else is a real failure of a control it does implement.
       return errorCode == ERROR_INVALID_FUNCTION || errorCode == ERROR_NOT_SUPPORTED;
     }
-
-    /**
-     * Reports what an existing data file already costs, touching nothing.
-     *
-     * Attributes come without a handle, so this needs no permission on the file
-     * and cannot create one. An unreadable path is reported as the expensive
-     * case: LMDB is about to fail the open with the real diagnostic, and until
-     * something is known a large map is better assumed to cost its full size.
-     */
-    MapAllocation observedAllocation(std::filesystem::path const& dataPath) noexcept
-    {
-      auto const attributes = ::GetFileAttributesW(dataPath.c_str());
-
-      if (attributes == INVALID_FILE_ATTRIBUTES)
-      {
-        return MapAllocation::WholeMap;
-      }
-
-      return (attributes & FILE_ATTRIBUTE_SPARSE_FILE) != 0 ? MapAllocation::OnDemand : MapAllocation::WholeMap;
-    }
   } // namespace
 
-  Result<MapAllocation> prepareEnvironmentDataFile(std::filesystem::path const& directory, DataFileAccess const access)
+  Result<> prepareEnvironmentDataFile(std::filesystem::path const& directory)
   {
     auto const dataPath = directory / kDataFileName;
-
-    if (access == DataFileAccess::ReadOnly)
-    {
-      // Every step below is a mutation: it creates the file when it is absent,
-      // demands write permission, and changes an attribute. None of that belongs
-      // in opening a database for reading.
-      return observedAllocation(dataPath);
-    }
 
     // OPEN_ALWAYS so a first open creates the file and later opens reuse it, and
     // the same share mode LMDB requests so both handles can be open at once.
@@ -100,17 +71,11 @@ namespace ao::lmdb::detail
     auto const markError = marked == FALSE ? ::GetLastError() : DWORD{0};
     std::ignore = ::CloseHandle(handle);
 
-    if (marked != FALSE)
+    if (marked != FALSE || isSparseUnsupported(markError))
     {
-      return MapAllocation::OnDemand;
-    }
-
-    if (isSparseUnsupported(markError))
-    {
-      // exFAT and the FAT family hold no holes. The map size becomes allocation
-      // here, so the caller that owns capacity has to keep it modest rather than
-      // rely on a hole this volume cannot give it.
-      return MapAllocation::WholeMap;
+      // exFAT and the FAT family hold no holes. LMDB still opens there, and an
+      // aborted transaction's extension simply stays allocated until reused.
+      return {};
     }
 
     return makeError(
