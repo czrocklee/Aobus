@@ -87,7 +87,8 @@ Restore drops the payload, reporting no restored session and leaving live state 
 When the id names a track with the saved URI, or neither the id nor the URI is present, restore continues to source resolution.
 The second case is an ordinary deletion and keeps anchor replacement.
 That includes restoring an older backup that lacks the saved Track: the Track is gone and no Track holds its file, so restore may select a replacement at the saved anchor and start it from the beginning.
-A library never reissues a track id while its database moves forward, so these checks compare the saved subject with the one record that id can name; only a rollback to an older database copy breaks that, and the URI check guards it.
+A library never reissues a track id while its database moves forward, so these checks compare the saved subject with the one record that id can name; only a rollback to an older database copy breaks that, and the URI check guards it for the current Track.
+It does not guard the source List, whose id the rolled-back copy can reissue, so the [database reference](../../reference/library/storage/database.md#metadata-records) requires removing saved application state with such a rollback.
 Save records the URI the library last confirmed for the subject, because a relink while the app runs keeps the id and changes the file; such a session resumes.
 That URI is the subject's current one while it is a live track, refreshed when the library publishes the subject as mutated; that refresh also requests a debounced save, so a relink reaches disk without another playback change.
 A live library restore leaves the current subject playing under an id the library no longer has, so a later save records that id with its last confirmed URI, or with the URI it was opened with when the library never confirmed another, and the next restore drops the payload by the last rule when the restored library holds that file.

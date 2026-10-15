@@ -26,6 +26,10 @@ set_property(SOURCE
   APPEND PROPERTY COMPILE_DEFINITIONS AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio"
 )
 set_property(SOURCE
+  unit/runtime/library/LibraryFormatFixtureTest.cpp
+  APPEND PROPERTY COMPILE_DEFINITIONS LIBRARY_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/library"
+)
+set_property(SOURCE
   unit/uimodel/layout/component/LayoutSchemaTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
@@ -712,6 +716,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryExportImportDeltaTest.cpp
     unit/runtime/library/LibraryExportImportErrorTest.cpp
     unit/runtime/library/LibraryExportImportListTest.cpp
+    unit/runtime/library/LibraryFormatFixtureTest.cpp
     unit/runtime/library/LibraryYamlSchemaTest.cpp
     unit/runtime/library/LibraryYamlExporterTest.cpp
     unit/runtime/library/LibraryYamlImporterTest.cpp

@@ -33,6 +33,7 @@ See [documentation maintenance](../development/documentation.md#proposals-and-de
 - [Decision 0016: compose the interactive runtime](0016-compose-interactive-runtime.md)
 - [Decision 0017: evaluate concept metrics as a vector](0017-evaluate-concept-metrics-as-a-vector.md)
 - [Decision 0018: choose consistent Chinese metadata terminology](0018-chinese-metadata-terminology.md)
+- [Decision 0019: keep play statistics off the library revision](0019-keep-play-statistics-off-the-library-revision.md)
 
 ## Superseded decisions
 

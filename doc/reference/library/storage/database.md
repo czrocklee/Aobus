@@ -59,10 +59,16 @@ After the version gate accepts version 10, open requires exactly the seven named
 
 The database is a native-format store rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
-Its path must reside on a locally attached filesystem. Network filesystems and
-shares are unsupported because neither the writer lease nor LMDB's mapped-file
-locking provides cross-host safety for this database.
+Its path must reside on a locally attached, writable filesystem with byte-range locking: each platform's native filesystem, and exFAT on macOS and Windows.
+Network filesystems and shares are unsupported because neither the writer lease nor LMDB's mapped-file locking provides cross-host safety for this database.
+FAT32 is unsupported because it limits a file to 4 GiB: the data file grows with the pages the library uses, so a library on FAT32 cannot grow past that size.
+Opening does not detect the filesystem, so a FAT32 location is not refused before it fills.
 Integer keys and record fields are little-endian in LMDB's native word order, and the format is defined only for 64-bit hosts: [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) refuses to compile for another byte order or word size, and every persisted struct asserts its size, field offsets, and absence of padding.
+
+A closed library moves between macOS, Linux x86-64, and Windows x64 when both builds use the same format version, because admission accepts exactly one version.
+LMDB keeps the page size of the host that created the environment, so a library created with 16 KiB pages on Apple Silicon opens on a 4 KiB-page host and the reverse.
+The lock file's contents are host-specific, but LMDB reinitializes it at the first exclusive open, so it may travel with the data file or be left behind.
+A copy carries the library's id and id history, so a copy and its original must not both stay in use, as [the id space record](#metadata-records) explains.
 [Library YAML](../format/yaml.md) is the interchange surface across format versions.
 
 ## Library transaction consequences
@@ -153,6 +159,7 @@ Absence means the initial committed revision `0`; a present record must be exact
 The maximum valid committed value is `UINT64_MAX - 1`, a physically unreachable exhaustion sentinel for this desktop application's mutation rate.
 A write transaction computes the next value in memory from the durable revision visible to its already-acquired LMDB writer snapshot, exposes it as its candidate revision, and persists it in that same native transaction immediately before commit.
 Abort, pre-commit rejection, and failed commit leave the previous durable revision unchanged.
+Recording playback history, such as a play, a skip, or a last-played time, must never advance the revision or occupy the live-runtime write lane; no store records it yet, and [decision 0019](../../../decision/0019-keep-play-statistics-off-the-library-revision.md) records why.
 
 The id space record is required and is exactly 8 bytes:
 
@@ -169,6 +176,12 @@ Abort and failed commit leave the record unchanged, so ids allocated by a transa
 Within one database, an id therefore names at most one object over its lifetime, and `libraryId` tells one database from another.
 The guarantee does not survive copying the database file: an older copy put back in place rolls the marks back, and two copies used side by side share a `libraryId` while their id histories diverge, so either can later allocate an id the other already used.
 
+Putting an older copy back in place therefore also requires removing the application state saved against the newer database: the playback session, the workspace, and the per-library layout documents of the [application managed state](../../persistence/application-config.md).
+That state identifies its library by `libraryId`, which the copy shares, so the library check passes.
+Until the copy allocates a new id, this is harmless, because a saved id either still names its object or names nothing.
+Afterwards, the playback session's URI check still refuses a current Track whose id now names another file, but a saved List id can name a different List.
+A workspace view then shows that List, a layout entry applies to it, and playback, which follows its source List, can take its next Track, or a replacement at the saved anchor, from it.
+
 ## Track records
 
 `TrackHotHeader` is 36 bytes, four-byte aligned, and contains the filter/sort working set: tag bloom, artist/album/genre/album-artist/composer dictionary ids, sample rate, year, title length, tag-blob length, bit depth, and codec.
@@ -183,7 +196,7 @@ Defined block slots are written in slot order:
 | `1` work | One 12-byte `TrackWorkBlock`: work and movement dictionary ids, then two unsigned 16-bit movement number/total values. |
 | `2` custom metadata | Eight-byte header, eight-byte entries, then value bytes. |
 | `3` performance | One 12-byte `TrackPerformanceBlock` prefix, followed by eight-byte `TrackCreditEntry` values. |
-| `4` | Last unused cold slot; zero. |
+| `4` | Last unused cold slot; zero. The next per-Track block a later version adds, such as a sub-file segment, would use it; a block beyond it needs a new cold header. |
 
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
@@ -340,8 +353,8 @@ Parent existence and parent-cycle checks are cross-row logical-writer rules and 
 
 ## Resource and dictionary records
 
-A resource value is exactly 36 bytes: a 32-byte SHA-256 digest followed by a 32-bit content length in the machine's own byte order.
-Like every other record here, the row is the struct's object representation written whole rather than a chosen encoding; a database file is bound to the architecture that created it either way.
+A resource value is exactly 36 bytes: a 32-byte SHA-256 digest followed by a 32-bit content length in the format's little-endian byte order.
+Like every other record here, the row is the struct's object representation written whole rather than a chosen encoding, so it reads the same on every host with the little-endian 64-bit layout the [environment section](#environment) requires, not only on the host that created the file.
 The row describes content and holds none of it; the content lives in the media files the library indexes, and the [cover-art delivery specification](../../../system/resource/cover-art-delivery.md) owns how it is read and verified.
 The `resources` database is append-only in practice: no production path deletes a row, because `create` stops probing at the first empty slot and a hole in a collision chain would let a later create mint a second row for one digest.
 Rows a track no longer references are retained and remain valid.
@@ -372,6 +385,13 @@ Absence is a separate state, not a clock value: `hasMtime = 0` requires both sec
 The epoch instant `seconds = 0, nanoseconds = 0` with `hasMtime = 1` is therefore a present value distinct from absence, and the C++ API represents the state as `std::optional<FileTimestamp>`.
 
 Zero payload length together with an all-zero signature means pending audio identity.
+
+One file is one Track.
+Every manifest key names a whole file, and admission requires a strict Track-to-manifest bijection, so version 10 has no Track for part of a file, such as a CUE sheet entry, a chapter, or a segment of a disc image.
+A key that has its URI's whole-file key as a proper prefix and a zero byte right after the URI is not a version-10 key; that form is reserved for a later version's sub-file Tracks.
+The zero byte is already the first padding byte unless the URI's length is a four-byte multiple, and it keeps a longer URI's key out of the form.
+A canonical URI contains no zero byte, so a file's reserved keys sort together directly after its whole-file key, with no other URI's key among them, and adding one rewrites no whole-file row.
+A 1,976-byte URI leaves no room for a four-byte continuation under the 1,978-byte LMDB key limit, so the later version either limits a sub-file Track's URI below the whole-file limit or stores its segments another way; the whole-file limit is unaffected.
 
 Manifest point reads, lower-bound seeks, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
@@ -516,6 +536,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 - [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
 - [`FileTimeConversionTest.cpp`](../../../../test/unit/library/FileTimeConversionTest.cpp) locks the native file-clock conversion behind the manifest modification-time record: Unix seconds with a nonnegative fraction, epoch zero, instants beyond the Unix nanosecond range, leap-second mapping, and `FileTimestamp` ordering and normalization.
+- [`LibraryFormatFixtureTest.cpp`](../../../../test/unit/runtime/library/LibraryFormatFixtureTest.cpp) opens a library created on each of Linux x86-64, Windows x64, and macOS arm64, checks its page size, that its Track and manifest trees have a branch level, and that a List record overflows, compares its full export with the [`v10.yaml`](../../../../test/data/library/v10.yaml) it was restored from, and writes a Track and a List to it.
 - [`IdSpaceTest.cpp`](../../../../test/unit/library/IdSpaceTest.cpp) covers never-reused Track and List ids across deletion, clear, and reopen, the library id across clear, failed-commit rollback, the saved-order mark, and the List id ceiling.
 - [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.

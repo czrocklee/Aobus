@@ -33,6 +33,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 
 - Edited library metadata is authoritative after initial import; a changed-file scan refreshes technical properties without replacing curated metadata, including exact RecordingDate and canonical Credits, with kind, role, within-kind order, and duplicates.
 - Scan and pending-audio-identity backfill never populate or overwrite RecordingDate or Credits for an existing Track; audio identity backfill is not metadata backfill.
+- A source field that the [source field mapping](../../reference/media/audio-file.md#source-field-mapping) does not import never enters the library: no scan or import that reads the file stores it.
 - An embedded cover is a scan fact rather than curated metadata: the file is the authority on which covers a track has, and a scan is the only writer of that reference set.
 - A scan never admits an unsupported file into its plan.
 - Only the runtime planner can construct an applicable plan; consumers may inspect its immutable items but cannot insert or rewrite them.
