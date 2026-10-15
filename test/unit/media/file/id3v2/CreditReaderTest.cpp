@@ -384,6 +384,23 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
+  TEST_CASE("ID3v2 credits - v2.3 UTF-16 TXXX values drop the BOM of their own string", "[media][unit][mpeg][id3v2]")
+  {
+    // Picard and Mutagen encode the description and the value as separate
+    // UTF-16 strings, each with a BOM; v2.3 still reads only the first value.
+    for (bool const littleEndian : {true, false})
+    {
+      CAPTURE(littleEndian);
+      auto body = Bytes{};
+      appendFrame(body, "TXXX", false, 0, utf16Content(Encoding::Ucs2, littleEndian, {"Writer", "Wes", "Wyn"}, true));
+      appendFrame(body, "TXXX", false, 0, utf16Content(Encoding::Ucs2, littleEndian, {"CONDUCTOR", "Carl"}, true));
+      appendFrame(body, "TXXX", false, 0, utf16Content(Encoding::Ucs2, littleEndian, {"soloist", "Sue"}, true));
+      CHECK(readCredits(3, body) == std::vector<Credit>{{.name = "Wes", .kind = CreditKind::Writer},
+                                                        {.name = "Carl", .kind = CreditKind::Conductor},
+                                                        {.name = "Sue", .kind = CreditKind::Soloist}});
+    }
+  }
+
   TEST_CASE("ID3v2 TMCL - preserves duplicates and order within and across frames", "[media][unit][mpeg][id3v2]")
   {
     auto body = Bytes{};

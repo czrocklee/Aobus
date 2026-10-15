@@ -118,6 +118,20 @@ namespace ao::media::file::mpeg::id3v2
       return DecodedTextView{.value = convertedStorage, .requiresOwnership = true};
     }
 
+    // A UTF-16 string after the first may carry its own BOM: a v2.4 frame's
+    // later values, or the value after a TXXX description in either version.
+    // Conversion strips only the whole-frame BOM, so the others survive the
+    // NUL split as a leading UTF-8-encoded U+FEFF.
+    std::string_view withoutLeadingBom(std::string_view value) noexcept
+    {
+      if (value.starts_with(kUtf8Bom))
+      {
+        value.remove_prefix(kUtf8Bom.size());
+      }
+
+      return value;
+    }
+
     // Applies each NUL-separated string in order, empty ones included.
     template<typename Apply>
     void forEachNulSeparatedValue(std::string_view text, Apply apply)
@@ -127,18 +141,10 @@ namespace ao::media::file::mpeg::id3v2
       while (offset < text.size())
       {
         auto const terminatorOffset = text.find('\0', offset);
-        auto value = text.substr(
+        auto const value = text.substr(
           offset, terminatorOffset == std::string_view::npos ? std::string_view::npos : terminatorOffset - offset);
 
-        // A v2.4 multi-value frame may give each value its own BOM. The
-        // whole-frame BOM was already stripped during conversion, but interior
-        // BOMs survive the NUL split as a leading UTF-8-encoded U+FEFF.
-        if (value.starts_with(kUtf8Bom))
-        {
-          value.remove_prefix(kUtf8Bom.size());
-        }
-
-        apply(value);
+        apply(withoutLeadingBom(value));
 
         if (terminatorOffset == std::string_view::npos)
         {
@@ -158,7 +164,7 @@ namespace ao::media::file::mpeg::id3v2
       if (version != kId3v24MajorVersion)
       {
         auto const terminatorOffset = text.find('\0');
-        apply(terminatorOffset == std::string_view::npos ? text : text.substr(0, terminatorOffset));
+        apply(withoutLeadingBom(terminatorOffset == std::string_view::npos ? text : text.substr(0, terminatorOffset)));
         return;
       }
 
