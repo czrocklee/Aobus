@@ -158,6 +158,7 @@ Absence means the initial committed revision `0`; a present record must be exact
 The maximum valid committed value is `UINT64_MAX - 1`, a physically unreachable exhaustion sentinel for this desktop application's mutation rate.
 A write transaction computes the next value in memory from the durable revision visible to its already-acquired LMDB writer snapshot, exposes it as its candidate revision, and persists it in that same native transaction immediately before commit.
 Abort, pre-commit rejection, and failed commit leave the previous durable revision unchanged.
+Recording playback history, such as a play, a skip, or a last-played time, must never advance the revision or occupy the live-runtime write lane; no store records it yet, and [decision 0019](../../../decision/0019-keep-play-statistics-off-the-library-revision.md) records why.
 
 The id space record is required and is exactly 8 bytes:
 
@@ -174,6 +175,12 @@ Abort and failed commit leave the record unchanged, so ids allocated by a transa
 Within one database, an id therefore names at most one object over its lifetime, and `libraryId` tells one database from another.
 The guarantee does not survive copying the database file: an older copy put back in place rolls the marks back, and two copies used side by side share a `libraryId` while their id histories diverge, so either can later allocate an id the other already used.
 
+Putting an older copy back in place therefore also requires removing the application state saved against the newer database: the playback session, the workspace, and the per-library layout documents of the [application managed state](../../persistence/application-config.md).
+That state identifies its library by `libraryId`, which the copy shares, so the library check passes.
+Until the copy allocates a new id, this is harmless, because a saved id either still names its object or names nothing.
+Afterwards, the playback session's URI check still refuses a current Track whose id now names another file, but a saved List id can name a different List.
+A workspace view then shows that List, a layout entry applies to it, and playback, which follows its source List, can take its next Track, or a replacement at the saved anchor, from it.
+
 ## Track records
 
 `TrackHotHeader` is 36 bytes, four-byte aligned, and contains the filter/sort working set: tag bloom, artist/album/genre/album-artist/composer dictionary ids, sample rate, year, title length, tag-blob length, bit depth, and codec.
@@ -188,7 +195,7 @@ Defined block slots are written in slot order:
 | `1` work | One 12-byte `TrackWorkBlock`: work and movement dictionary ids, then two unsigned 16-bit movement number/total values. |
 | `2` custom metadata | Eight-byte header, eight-byte entries, then value bytes. |
 | `3` performance | One 12-byte `TrackPerformanceBlock` prefix, followed by eight-byte `TrackCreditEntry` values. |
-| `4` | Last unused cold slot; zero. |
+| `4` | Last unused cold slot; zero. The next per-Track block a later version adds, such as a sub-file segment, would use it; a block beyond it needs a new cold header. |
 
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
@@ -377,6 +384,13 @@ Absence is a separate state, not a clock value: `hasMtime = 0` requires both sec
 The epoch instant `seconds = 0, nanoseconds = 0` with `hasMtime = 1` is therefore a present value distinct from absence, and the C++ API represents the state as `std::optional<FileTimestamp>`.
 
 Zero payload length together with an all-zero signature means pending audio identity.
+
+One file is one Track.
+Every manifest key names a whole file, and admission requires a strict Track-to-manifest bijection, so version 10 has no Track for part of a file, such as a CUE sheet entry, a chapter, or a segment of a disc image.
+A key that has its URI's whole-file key as a proper prefix and a zero byte right after the URI is not a version-10 key; that form is reserved for a later version's sub-file Tracks.
+The zero byte is already the first padding byte unless the URI's length is a four-byte multiple, and it keeps a longer URI's key out of the form.
+A canonical URI contains no zero byte, so a file's reserved keys sort together directly after its whole-file key, with no other URI's key among them, and adding one rewrites no whole-file row.
+A 1,976-byte URI leaves no room for a four-byte continuation under the 1,978-byte LMDB key limit, so the later version either limits a sub-file Track's URI below the whole-file limit or stores its segments another way; the whole-file limit is unaffected.
 
 Manifest point reads, lower-bound seeks, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.

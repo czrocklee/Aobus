@@ -71,6 +71,8 @@ Conductor, Ensemble, Soloist, and Performer rows below emit credit kinds, not sc
 | Movement number/total | `MOVEMENT` slash value; `MOVEMENTTOTAL` | `©mvi`, `©mvc` signed non-negative big-endian integer; equivalent `mdta` aliases | `MVIN` slash value; equivalent `TXXX` aliases | — |
 
 Unknown fields do not become `TrackBuilder::customMetadata`. Invalid isolated scalar values leave their field at zero.
+A source field without a row here, such as a MusicBrainz identifier, an ISRC, or a record label, never enters the library database: the library keeps no raw-tag store and no allowlist of extra fields.
+The field stays in the file, because [Aobus never writes to an audio file](../../decision/0010-never-write-to-audio-files.md), but library YAML carries only what the database holds, so a backup is not a copy of every source tag, and no later scan or refresh is promised to bring the field into the library.
 Supported credit values accumulate rather than overwrite, including repeated values and different mapped source forms for one kind. There is no deduplication.
 Ensemble precedence is whole-file and nonblank: any explicit Ensemble candidate with a nonblank ASCII-trimmed name retains all nonblank explicit candidates and discards all Orchestra candidates, in either traversal order.
 Without such an explicit candidate, all nonblank Orchestra candidates become Ensemble entries in source order.

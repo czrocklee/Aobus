@@ -99,6 +99,7 @@ It does not reuse a nullable branch inside the live operation and is not the fro
 | `listOnly` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references. |
 
 No mode carries a cover byte; `full` carries each cover's digest, length, picture type, and order, and names each distinct cover once.
+No mode is a copy of the files' tags either: a document carries only what the database holds, and a source field that the [source field mapping](../../reference/media/audio-file.md#source-field-mapping) does not import is never there.
 A `full` export opens no audio file and needs none to succeed, because a descriptor is a database fact.
 `delta` and `metadata` omit covers entirely: a mode whose consumer reconstructs the file baseline would otherwise overwrite the art that baseline just read with a sequence the exporting database may no longer agree with.
 

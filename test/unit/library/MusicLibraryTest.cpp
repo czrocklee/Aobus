@@ -1228,6 +1228,30 @@ namespace ao::library::test
       requireCorruptLibrary(temp.path());
     }
 
+    // A later version's sub-file Track key continues its file's whole-file key
+    // after a zero byte, so version 10 must refuse it as a manifest key, both
+    // when the zero byte starts a new block after the URI and when it is the
+    // URI's first padding byte. The message pins that the key check refuses it.
+    auto const requireReservedKeyRefused = [&temp](std::string_view const reservedKey)
+    {
+      auto const validPayload = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
+      createRawBlobRow(temp.path(), "file_manifest", utility::bytes::view(reservedKey), validPayload);
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
+      CHECK(res.error().message == "File manifest key is not minimally zero padded");
+    };
+
+    SECTION("a manifest key continued after a URI that fills its last block is reserved")
+    {
+      requireReservedKeyRefused(std::string_view{"song\0\0\0\0", 8});
+    }
+
+    SECTION("a manifest key continued after its URI's first padding byte is reserved")
+    {
+      requireReservedKeyRefused(std::string_view{"abc\0\x01\0\0\0", 8});
+    }
+
     SECTION("manifest payloads must have the exact canonical layout")
     {
       auto const validKey = utility::bytes::view(std::string_view{"song"});
