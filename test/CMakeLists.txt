@@ -445,7 +445,7 @@ add_executable(ao_core_test
     unit/lmdb/ReadOnlyDatabaseTest.cpp
     unit/lmdb/ReadOnlyDatabaseLifetimeTest.cpp
     unit/lmdb/EnvironmentTest.cpp
-    unit/lmdb/EnvironmentDataFileTest.cpp
+    unit/lmdb/EnvironmentFileGrowthTest.cpp
     unit/lmdb/MapCapacityPolicyTest.cpp
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp

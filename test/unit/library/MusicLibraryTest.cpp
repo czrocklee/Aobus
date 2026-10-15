@@ -65,6 +65,9 @@ namespace ao::library::test
 
   namespace
   {
+    // The database reference names this figure, so it is asserted exactly.
+    constexpr auto kManagedMapFloorBytes = std::uint64_t{2} * 1024 * 1024 * 1024;
+
     enum class RawKeyKind : std::uint8_t
     {
       Integer,
@@ -319,17 +322,36 @@ namespace ao::library::test
     CHECK(capacity.diskBytes > 0);
   }
 
-  TEST_CASE("MusicLibrary - managed capacity opens a fresh library well past the LMDB default",
+  TEST_CASE("MusicLibrary - managed capacity opens a fresh library at the 2 GiB floor",
             "[library][unit][music-library][capacity]")
   {
-    constexpr auto kLmdbDefaultMapBytes = std::uint64_t{1} * 1024 * 1024;
     auto const temp = ao::test::TempDir{};
 
     // No pinned map size, so the library's own floor decides. LMDB would
     // otherwise hand a new database 1 MiB, which one scan passes.
     auto libraryRes = MusicLibrary::open(temp.path(), temp.path() / "managed-db");
     REQUIRE(libraryRes);
-    CHECK(libraryRes->storageCapacity().mapBytes > kLmdbDefaultMapBytes * 512);
+    CHECK(libraryRes->storageCapacity().mapBytes == kManagedMapFloorBytes);
+  }
+
+  TEST_CASE("MusicLibrary - managed capacity raises a smaller recorded map to the floor",
+            "[library][unit][music-library][capacity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "smaller-db";
+
+    {
+      // Creating the library commits its header, which records the pinned map.
+      auto libraryRes = openTestMusicLibrary(temp.path(), databasePath);
+      REQUIRE(libraryRes);
+      REQUIRE(libraryRes->storageCapacity().mapBytes == kTestMusicLibraryMapBytes);
+    }
+
+    // As an earlier build's smaller map would be, such as the 1 GiB it gave a
+    // library on a Windows volume without sparse files.
+    auto libraryRes = MusicLibrary::open(temp.path(), databasePath, MusicLibrary::Options{.flushCommits = false});
+    REQUIRE(libraryRes);
+    CHECK(libraryRes->storageCapacity().mapBytes == kManagedMapFloorBytes);
   }
 
   TEST_CASE("MusicLibrary - a pinned map size stays pinned across reopening",

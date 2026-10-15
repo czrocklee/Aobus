@@ -239,6 +239,28 @@ namespace ao::test
     return userHasFullControl && systemHasFullControl;
   }
 
+  bool supportsSparseFiles(std::filesystem::path const& directory)
+  {
+    // The volume says so itself. Probing a file would not tell: NTFS allocates
+    // an extension of a file that is not marked sparse whether or not the
+    // volume could have held it as a hole.
+    auto volume = std::array<wchar_t, MAX_PATH + 1>{};
+
+    if (::GetVolumePathNameW(directory.c_str(), volume.data(), static_cast<DWORD>(volume.size())) == FALSE)
+    {
+      throw windowsError(::GetLastError(), "GetVolumePathNameW failed");
+    }
+
+    DWORD flags = 0;
+
+    if (::GetVolumeInformationW(volume.data(), nullptr, 0, nullptr, nullptr, &flags, nullptr, 0) == FALSE)
+    {
+      throw windowsError(::GetLastError(), "GetVolumeInformationW failed");
+    }
+
+    return (flags & FILE_SUPPORTS_SPARSE_FILES) != 0;
+  }
+
   SymlinkFixture::SymlinkFixture(std::filesystem::path target, std::filesystem::path link, SymlinkType const type)
     : _link{std::move(link)}
   {

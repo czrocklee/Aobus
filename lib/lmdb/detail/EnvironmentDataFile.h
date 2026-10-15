@@ -4,52 +4,37 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/lmdb/Environment.h>
 
-#include <cstdint>
 #include <filesystem>
 
 namespace ao::lmdb::detail
 {
-  /// What the environment being opened is allowed to do to its data file.
-  enum class DataFileAccess : std::uint8_t
-  {
-    /// The environment will write, so the file may be created and marked sparse.
-    ReadWrite,
-    /**
-     * The environment only reads, so the file must be left exactly as it is.
-     *
-     * A read-only open must not create a database that was not there, must not
-     * ask for write permission on media that refuses it, and must not mark a
-     * file sparse, which is itself a mutation. The allocation is then reported
-     * from what the file already says rather than from what was arranged.
-     */
-    ReadOnly,
-  };
-
   /**
-   * @brief Prepares an environment's data file before LMDB maps it.
+   * @brief Prepares a writable environment's data file before LMDB maps it.
    *
-   * Windows extends the data file to the configured map size before creating the
-   * mapping, which allocates the whole map before the environment holds one
-   * record. This makes that file sparse first, so its length still reports the
-   * map while its allocation follows committed pages. POSIX needs nothing: with
-   * `MDB_WRITEMAP` disabled the mapping never extends the file, and LMDB appends
-   * pages as it writes them, so length and allocation both follow committed use.
+   * Windows LMDB commits each page it allocates from the end of the map before
+   * anything is written to it, and committing a page of a file-backed section
+   * extends the file. A transaction that aborts therefore still leaves the file
+   * as long as the highest page it allocated. This marks the file sparse first,
+   * so that extension stays a hole and allocation follows what was written. A
+   * volume that cannot hold a hole, such as exFAT, is left as it is, and there
+   * an aborted transaction's extension stays allocated until a later
+   * transaction reuses its pages.
    *
-   * The reported allocation tells the caller which of the two it got, because a
-   * filesystem that cannot hold a hole turns the map size into disk usage and a
-   * capacity decision has to know that before choosing one.
+   * POSIX needs nothing: with `MDB_WRITEMAP` disabled LMDB extends the file only
+   * by writing pages to it, so an aborted transaction leaves only the pages it
+   * wrote, which is none unless it spilled.
    *
-   * Marking a file sparse does not release clusters it has already allocated, so
-   * a data file written by an earlier dense build keeps its allocation until
-   * something reclaims the unused tail. Reclaiming it needs the environment
-   * closed and the committed high water known, which only a caller that reopens
-   * the environment can arrange.
+   * Only a writable environment calls this. Creating the file, asking for write
+   * access, and changing its attributes are all mutations a read-only open must
+   * not make.
+   *
+   * Marking a file sparse does not release clusters it has already allocated,
+   * so a data file extended before it was marked keeps that allocation until a
+   * later transaction writes over it.
    *
    * @param directory Environment directory that holds or will receive the data
    *                  file. It must already exist.
-   * @param access    Whether the environment may modify the file at all.
    */
-  Result<MapAllocation> prepareEnvironmentDataFile(std::filesystem::path const& directory, DataFileAccess access);
+  Result<> prepareEnvironmentDataFile(std::filesystem::path const& directory);
 } // namespace ao::lmdb::detail

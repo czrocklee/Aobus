@@ -18,17 +18,13 @@ namespace ao::lmdb::detail
    *
    * Headroom is measured against the high water rather than live data, because
    * that is what a mutation runs out of: LMDB reuses freed pages but does not
-   * move committed ones down. A file that can hold a hole is doubled, since the
-   * unused remainder costs nothing; a file that cannot grows by
-   * @c denseStepBytes, since there every added byte is an allocated byte.
+   * move committed ones down. The map doubles, since the data file grows with
+   * the pages transactions use and the unused remainder costs no disk.
    *
-   * @param capacity   What the open environment reports about itself.
-   * @param allocation What its map size costs on disk.
-   * @param policy     Floor, ceiling, and dense growth step. A zero ceiling
-   *                   forbids growth, so a default policy leaves the map alone.
+   * @param capacity What the open environment reports about itself.
+   * @param policy   Floor and ceiling. A zero ceiling forbids growth, so a
+   *                 default policy leaves the map alone.
    * @return Map size in bytes, at least @c capacity.mapBytes.
    */
-  std::uint64_t plannedMapBytes(EnvironmentCapacity const& capacity,
-                                MapAllocation allocation,
-                                CapacityPolicy const& policy);
+  std::uint64_t plannedMapBytes(EnvironmentCapacity const& capacity, CapacityPolicy const& policy);
 } // namespace ao::lmdb::detail

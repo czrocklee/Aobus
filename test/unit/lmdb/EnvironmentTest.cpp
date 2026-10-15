@@ -44,15 +44,10 @@ namespace ao::lmdb::test
 
     Environment::Options managedOptions(std::uint64_t const floorBytes, std::uint64_t const ceilingBytes)
     {
-      // Both floors carry the same figure so the expected capacity does not
-      // depend on whether the filesystem under the temporary directory can hold
-      // a hole, which decides which of the two the rule consults.
       return Environment::Options{
         .flags = kTestEnvFlags,
         .maxDatabases = 4,
-        .capacity = {.minimumMapBytes = floorBytes,
-                     .denseMinimumMapBytes = floorBytes,
-                     .maximumMapBytes = ceilingBytes},
+        .capacity = {.minimumMapBytes = floorBytes, .maximumMapBytes = ceilingBytes},
       };
     }
 
