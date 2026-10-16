@@ -4,7 +4,9 @@
 #include "CoreAudioFormat.h"
 
 #include "detail/DecoderOutput.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
@@ -16,6 +18,7 @@
 #include <cstdint>
 #include <expected>
 #include <limits>
+#include <optional>
 
 namespace ao::audio::backend::detail
 {
@@ -91,43 +94,72 @@ namespace ao::audio::backend::detail
                         .sampleKind = floatingPoint ? SampleKind::FloatingPoint : SampleKind::Integer};
   }
 
-  Result<PcmFormat> selectLosslessCoreAudioClientFormat(SignalFormat const& sourceFormat,
-                                                        TryCoreAudioClientFormat const& tryFormat)
+  std::expected<PcmFormat, BackendOpenFailure> selectLosslessCoreAudioClientFormat(
+    SignalFormat const& sourceFormat,
+    TryCoreAudioClientFormat const& tryFormat)
   {
     if (!tryFormat)
     {
-      return makeError(Error::Code::InvalidInput, "Core Audio format selection requires an attempt callback");
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::InvalidInput, "Core Audio format selection requires an attempt callback").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    for (auto const encoding : ::ao::audio::detail::losslessPcmEncodings(sourceFormat))
+    auto const encodings = ::ao::audio::detail::losslessPcmEncodings(sourceFormat);
+
+    if (encodings.empty())
+    {
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::FormatRejected, "No lossless Core Audio client PCM encoding is available").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
+    }
+
+    auto optLastRejection = std::optional<BackendOpenFailure>{};
+
+    for (auto const encoding : encodings)
     {
       auto const candidate = pcmFormat(sourceFormat, encoding);
       auto const descriptionRes = coreAudioFormat(candidate);
 
       if (!descriptionRes)
       {
-        return std::unexpected{descriptionRes.error()};
+        return std::unexpected{
+          BackendOpenFailure{.error = descriptionRes.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
       }
 
       auto const readBackRes = tryFormat(*descriptionRes);
 
       if (!readBackRes)
       {
-        if (readBackRes.error().code == Error::Code::FormatRejected)
+        if (readBackRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible)
         {
+          optLastRejection = readBackRes.error();
           continue;
         }
 
         return std::unexpected{readBackRes.error()};
       }
 
-      if (isSameCoreAudioPcmFormat(*descriptionRes, *readBackRes))
+      if (!isSameCoreAudioPcmFormat(*descriptionRes, *readBackRes))
       {
-        return candidate;
+        return std::unexpected{BackendOpenFailure{
+          .error =
+            makeError(Error::Code::FormatRejected, "Core Audio applied a different client PCM mode than requested")
+              .error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure}};
       }
+
+      return candidate;
     }
 
-    return makeError(Error::Code::FormatRejected, "Core Audio rejected every lossless client PCM format");
+    // Every attempted candidate was intentionally rejected. Keep the native
+    // operation's diagnostic rather than replacing it with an exhaustion error.
+    // The encoding list is nonempty and the walk ended without returning, so at
+    // least one track-incompatible rejection recorded a native diagnostic.
+    AO_INVARIANT(optLastRejection);
+    return std::unexpected{*optLastRejection};
   }
 
   bool isSameCoreAudioPcmFormat(::AudioStreamBasicDescription const& lhs,

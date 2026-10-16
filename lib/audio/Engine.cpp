@@ -1662,9 +1662,9 @@ namespace ao::audio
     Result<> setVolumeUnlocked(float volume);
     Result<> setMutedUnlocked(bool muted);
 
-    // Marks the route-activation attempt failed with a terminal Error state
-    // and a non-recoverable RouteActivation failure notification. Caller must
-    // hold stateMutex and own any side cleanup (render target teardown,
+    // Marks an accepted playback-start attempt failed with Error transport
+    // state and the caller-selected failure kind and recoverability. Caller
+    // must hold stateMutex and own any side cleanup (render target teardown,
     // transition reset) before invoking.
     void markPlaybackStartFailureUnlocked(Notifications& notifications,
                                           PlaybackItem const& item,
@@ -2027,7 +2027,9 @@ namespace ao::audio
 
     if (!openedModeRes)
     {
-      auto const& error = openedModeRes.error();
+      auto const& failure = openedModeRes.error();
+      auto const& error = failure.error;
+      bool const incompatible = failure.cause == BackendOpenFailure::Cause::TrackRouteIncompatible;
       retireRenderTarget();
       closeBackendPlayback();
       resetTransitionState();
@@ -2035,7 +2037,12 @@ namespace ao::audio
       {
         auto const lock = std::scoped_lock{stateMutex};
         markPlaybackStartFailureUnlocked(
-          notifications, item, playbackGeneration, PlaybackFailureKind::RouteActivation, error, false);
+          notifications,
+          item,
+          playbackGeneration,
+          incompatible ? PlaybackFailureKind::TrackOpen : PlaybackFailureKind::RouteActivation,
+          error,
+          incompatible);
       }
 
       if (!notifications.empty())

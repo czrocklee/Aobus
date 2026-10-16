@@ -316,8 +316,10 @@ for a pre-commit rejection. PlaybackTransport installs the accepted candidate
 provenance before the queued typed failure is delivered, but emits neither a
 Started event nor a now-playing announcement. A final decoder, seek, or preroll
 failure consequently remains a recoverable `TrackOpen` failure for that
-candidate; a backend activation or backend-format failure remains a
-non-recoverable `RouteActivation` failure.
+candidate. A backend's explicit track/selected-route incompatibility has the
+same classification; an output fault or malformed successful backend mode
+remains a non-recoverable `RouteActivation` failure. Error codes or diagnostic
+text alone do not decide whether succession may skip the candidate.
 A destructive commit whose source is already naturally complete also returns an
 accepted receipt with `playbackStarted == false`, but it is not a failed start:
 Engine remains idle and the queued `TrackEnded` event drives normal succession
@@ -376,11 +378,36 @@ After an external `shutdown()` returns, no provider device or graph callback can
 
 `Backend::prewarmFormatHint(SignalFormat)` is an advisory control-domain query.
 It performs no device open, graph connection, wait, or negotiation; the default predicts the signal's first ordered lossless encoding, while a concrete Backend may use a previously successful same-signal mode or monitor-owned cached evidence.
-Unknown or stale evidence is a performance concern only: Engine either skips prewarming or discards a prepared decoder whose complete mode differs from the later `open()` result.
+A known source-only refusal yields no optimistic hint; concrete backends apply the same bounded admission rule in hint and open without performing native negotiation in the hint.
+Unknown or stale native evidence is a performance concern only: Engine either skips prewarming or discards a prepared decoder whose complete mode differs from the later `open()` result.
 
 `Backend::open(SignalFormat, RenderTarget&)` requires a live target and performs selection and native activation as one operation.
 It returns an `OpenedPcmMode`: the `clientFormat` actually configured, plus an optional `ConfirmedEndpoint` describing the endpoint that mode feeds.
 Probe failure and “16-bit only” are therefore not representable as the same cached value, and no open failure causes an implicit 16-bit retry.
+
+The synchronous `BackendOpenResult` carries either that mode or a
+`BackendOpenFailure` containing the original `Error` and a causal classification.
+`TrackRouteIncompatible` identifies a source or selected-route constraint another
+track may satisfy: an empty lossless source-encoding set, an intentionally
+rejected rate/count, or confirmed insufficient endpoint precision.
+`OutputFailure` is the conservative default for busy, lost, uninitialized or
+broken outputs, unknown native causes, failed readback and post-admission
+inconsistency. A generic `FormatRejected` or `NotSupported` code does not imply
+either class. Engine preserves the original error and translates only explicit
+incompatibility into recoverable `TrackOpen`; output faults remain terminal
+`RouteActivation`. A malformed successful mode is still an output fault.
+
+Public backend entry checks remain necessary for direct callers, including
+unrepresentable source precision. Inspection rejects zero rate, channel count and
+precision before normal playback reaches a backend. At the direct backend boundary,
+zero rate/count is invalid geometry and remains conservative `OutputFailure`;
+an empty lossless encoding set, including zero source precision, is an explicit
+`TrackRouteIncompatible` refusal. Neither decision is inferred from the `Error` code.
+Deterministic source refusal precedes that backend's own close/native configuration where possible. Engine already closes
+its old stream before invoking open, so these guards do not retain or resurrect
+Engine's previous playback. Application succession keeps its existing
+three-consecutive-failure limit and resets it only on a real successful start;
+initial staging, prepared-token and explicit-navigation ownership is unchanged.
 
 The `clientFormat` must preserve the source precision whether or not endpoint evidence exists.
 When a `ConfirmedEndpoint` is present, its rate, channels, sample domain, and effective precision must agree with the configured client mode and preserve the source as well.
@@ -397,7 +424,7 @@ When the inspected signal has no lossless PCM candidate at all, ALSA returns
 After opening the handle, ALSA fixes access, the exact sample rate, and the channel count, then reads the remaining format mask and the significant-bit count each admissible format resolves.
 That snapshot lives only inside the open that produced it; it is not a device capability record and is never consulted to predict a later open.
 Selection considers only encodings that preserve the source precision, in the documented lossless order, and requires confirmed significant bits at least as wide as the source.
-A missing significant-bit result is unknown evidence rather than full container precision, and a device whose endpoints are all narrower than the source is rejected with the inspected evidence in its error.
+A missing significant-bit result is unknown evidence rather than full container precision and cannot establish a skippable precision incompatibility. When every relevant admitted candidate has confirmed insufficient precision, refusal is `TrackRouteIncompatible`; an unresolved relevant candidate keeps refusal conservative `OutputFailure`. The inspected evidence remains in the error.
 An exact rate is required rather than a nearest match, both because the admissible format set depends on it and so an unsupported rate is diagnosed as such instead of surfacing as a format rejection.
 A single `snd_pcm_hw_params()` applies the chosen mode, and the applied mode is read back and compared before the handle is published.
 Integer and float domain changes outside the documented bit-transparent output set are rejected.
@@ -406,9 +433,17 @@ PipeWire, WASAPI, and Core Audio negotiate a client stream in front of a graph t
 They therefore offer only lossless client encodings and leave `ConfirmedEndpoint` absent, in both shared and exclusive mode.
 PipeWire shared mode offers only the first ordered lossless client encoding, while PipeWire exclusive mode retains the complete lossless candidate set and returns the negotiated client stream format.
 WASAPI shared mode selects the first ordered lossless client encoding and separately reports endpoint mix format in its graph.
+Only `IAudioClient::Initialize`'s explicit `AUDCLNT_E_UNSUPPORTED_FORMAT` rejection
+of that offered client format is `TrackRouteIncompatible`; this is not evidence
+that every lossless encoding was attempted. Other initialization failures remain
+`OutputFailure`, including device, service and resource faults. Native return
+values are classified in the operation that produced them, not by a global
+error-number policy shared with readback or post-admission failures.
 Core Audio shared mode tries the complete ordered lossless encoding set on a
 playback-only AUHAL output unit, reads the client stream description back, and
-accepts only an exact match. Its graph reports that client PCM stream and the
+accepts only an exact match. Only an explicitly classified format-set rejection
+advances to another candidate; failed readback or a mismatched successful
+readback is an output failure, not evidence that every candidate is unsupported. Its graph reports that client PCM stream and the
 separately read device-side AUHAL signal format. The latter is downstream route
 evidence, not a direct endpoint confirmation. Core Audio device selection uses
 the persistent device UID; the transient `AudioDeviceID` is resolved again for

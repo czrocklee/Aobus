@@ -44,9 +44,12 @@ namespace ao::audio::backend::detail::test
     auto const selectedRes = selectAlsaMode(integerSignal(24), evidence);
 
     REQUIRE_FALSE(selectedRes);
-    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
-    CHECK(selectedRes.error().message.contains("no confirmed lossless endpoint"));
-    CHECK(selectedRes.error().message.contains("S16_LE sbits=16"));
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.message.contains("no confirmed lossless endpoint"));
+    CHECK(selectedRes.error().error.message.contains("S16_LE sbits=16"));
+    // Every reading was confirmed, so the lossless set is exhausted for this
+    // track: another track may still satisfy the same output.
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
   TEST_CASE("selectAlsaMode - documented lossless order chooses the native container first", "[audio][unit][alsa]")
@@ -76,7 +79,7 @@ namespace ao::audio::backend::detail::test
     auto const reducedRes = selectAlsaMode(integerSignal(32), evidence);
 
     REQUIRE_FALSE(reducedRes);
-    CHECK(reducedRes.error().code == Error::Code::FormatRejected);
+    CHECK(reducedRes.error().error.code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - missing significant-bit evidence is not treated as full precision", "[audio][unit][alsa]")
@@ -86,8 +89,11 @@ namespace ao::audio::backend::detail::test
     auto const selectedRes = selectAlsaMode(integerSignal(32), evidence);
 
     REQUIRE_FALSE(selectedRes);
-    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
-    CHECK(selectedRes.error().message.contains("S32_LE sbits=unknown"));
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.message.contains("S32_LE sbits=unknown"));
+    // Missing precision evidence is not proof of an incompatible endpoint, so
+    // the refusal stays conservative instead of blaming the track.
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
   TEST_CASE("selectAlsaMode - endpoint precision never exceeds its encoding", "[audio][unit][alsa]")
@@ -98,7 +104,7 @@ namespace ao::audio::backend::detail::test
     auto const selectedRes = selectAlsaMode(integerSignal(24), evidence);
 
     REQUIRE_FALSE(selectedRes);
-    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - an integer signal is not quantized into float", "[audio][unit][alsa]")
@@ -108,7 +114,7 @@ namespace ao::audio::backend::detail::test
     auto const selectedRes = selectAlsaMode(integerSignal(32), evidence);
 
     REQUIRE_FALSE(selectedRes);
-    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - a float signal is not quantized into integer", "[audio][unit][alsa]")
@@ -121,7 +127,7 @@ namespace ao::audio::backend::detail::test
     auto const selectedRes = selectAlsaMode(floatSignal, evidence);
 
     REQUIRE_FALSE(selectedRes);
-    CHECK(selectedRes.error().code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
   }
 
   TEST_CASE("selectAlsaMode - empty evidence reports what was inspected", "[audio][unit][alsa]")
@@ -129,7 +135,8 @@ namespace ao::audio::backend::detail::test
     auto const selectedRes = selectAlsaMode(integerSignal(24), {});
 
     REQUIRE_FALSE(selectedRes);
-    CHECK(selectedRes.error().message.contains("none"));
+    CHECK(selectedRes.error().error.message.contains("none"));
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
   TEST_CASE("selectAlsaMode - a signal without precision is rejected", "[audio][unit][alsa]")
@@ -140,6 +147,46 @@ namespace ao::audio::backend::detail::test
     auto const selectedRes = selectAlsaMode(integerSignal(0), evidence);
 
     REQUIRE_FALSE(selectedRes);
-    CHECK(selectedRes.error().code == Error::Code::InvalidInput);
+    CHECK(selectedRes.error().error.code == Error::Code::InvalidInput);
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+  }
+
+  TEST_CASE("selectAlsaMode - an unrepresentable source is a track-route incompatibility", "[audio][unit][alsa]")
+  {
+    SECTION("a 33-bit integer signal has no lossless encoding at all")
+    {
+      auto const selectedRes = selectAlsaMode(integerSignal(33), {});
+
+      REQUIRE_FALSE(selectedRes);
+      CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+      CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+    }
+
+    SECTION("a non-32-bit float signal has no lossless encoding at all")
+    {
+      auto const floatSignal =
+        SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::FloatingPoint};
+      auto const selectedRes = selectAlsaMode(floatSignal, {});
+
+      REQUIRE_FALSE(selectedRes);
+      CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+      CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+    }
+  }
+
+  TEST_CASE("selectAlsaMode - one unknown significant-bit reading keeps an exhausted set conservative",
+            "[audio][unit][alsa]")
+  {
+    // The confirmed S16_LE reading cannot carry a 24-bit signal, but the
+    // unconfirmed S32_LE container might: the refusal must not claim the track
+    // is incompatible with this output.
+    auto const evidence = std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 16},
+                                     AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le}};
+
+    auto const selectedRes = selectAlsaMode(integerSignal(24), evidence);
+
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 } // namespace ao::audio::backend::detail::test

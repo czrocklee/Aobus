@@ -4,6 +4,7 @@
 #include "lib/audio/backend/detail/CoreAudioFormat.h"
 
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
@@ -16,6 +17,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <vector>
 
 namespace ao::audio::backend::detail::test
@@ -102,13 +104,15 @@ namespace ao::audio::backend::detail::test
     auto attemptedFrameByteCounts = std::vector<::UInt32>{};
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
       {.sampleRate = 48000, .channels = 2, .precisionBits = 24, .sampleKind = SampleKind::Integer},
-      [&](::AudioStreamBasicDescription const& candidate) -> Result<::AudioStreamBasicDescription>
+      [&](::AudioStreamBasicDescription const& candidate)
+        -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
       {
         attemptedFrameByteCounts.push_back(candidate.mBytesPerFrame);
 
         if (candidate.mBytesPerFrame == 6U)
         {
-          return makeError(Error::Code::FormatRejected);
+          return std::unexpected{BackendOpenFailure{.error = makeError(Error::Code::FormatRejected).error(),
+                                                    .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
         }
 
         return candidate;
@@ -121,29 +125,119 @@ namespace ao::audio::backend::detail::test
     CHECK(attemptedFrameByteCounts[1] == 8U);
   }
 
+  TEST_CASE("CoreAudioFormat - a mismatched 24-bit read-back stops the walk instead of exhausting candidates",
+            "[audio][unit][coreaudio]")
+  {
+    std::size_t attempts = 0;
+    auto const selectedRes = selectLosslessCoreAudioClientFormat(
+      {.sampleRate = 48000, .channels = 2, .precisionBits = 24, .sampleKind = SampleKind::Integer},
+      [&](::AudioStreamBasicDescription const& candidate)
+        -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
+      {
+        ++attempts;
+
+        // Only the first (packed 24-bit) candidate lies on read-back; a later
+        // exact candidate would succeed if the walk wrongly retried it.
+        if (attempts > 1U)
+        {
+          return candidate;
+        }
+
+        auto readBack = candidate;
+        readBack.mBytesPerPacket = 4U * candidate.mChannelsPerFrame;
+        readBack.mBytesPerFrame = 4U * candidate.mChannelsPerFrame;
+        readBack.mBitsPerChannel = 32U;
+        return readBack;
+      });
+
+    REQUIRE_FALSE(selectedRes);
+    CHECK(attempts == 1U);
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.message == "Core Audio applied a different client PCM mode than requested");
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+  }
+
   TEST_CASE("CoreAudioFormat - rejects coercion and never narrows a 32-bit integer source", "[audio][unit][coreaudio]")
   {
     std::size_t attempts = 0;
     auto const rejectedRes = selectLosslessCoreAudioClientFormat(
       {.sampleRate = 96000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::Integer},
-      [&](::AudioStreamBasicDescription const&) -> Result<::AudioStreamBasicDescription>
+      [&](::AudioStreamBasicDescription const&) -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
       {
         ++attempts;
-        return makeError(Error::Code::FormatRejected);
+        return std::unexpected{BackendOpenFailure{.error = makeError(Error::Code::FormatRejected).error(),
+                                                  .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
       });
 
     REQUIRE_FALSE(rejectedRes);
-    CHECK(rejectedRes.error().code == Error::Code::FormatRejected);
+    // An exhausted lossless set keeps the native operation's own diagnostic.
+    CHECK(rejectedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(rejectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
     CHECK(attempts == 1U);
 
     auto const coercedRes = selectLosslessCoreAudioClientFormat(
       {.sampleRate = 48000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint},
-      [](::AudioStreamBasicDescription candidate) -> Result<::AudioStreamBasicDescription>
+      [](::AudioStreamBasicDescription candidate) -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
       {
         candidate.mSampleRate = 44100.0;
         return candidate;
       });
     REQUIRE_FALSE(coercedRes);
-    CHECK(coercedRes.error().code == Error::Code::FormatRejected);
+    // A malformed or mismatched successful read-back is a native output
+    // fault, distinct from the track's own format-set exhaustion above.
+    CHECK(coercedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(coercedRes.error().error.message == "Core Audio applied a different client PCM mode than requested");
+    CHECK(coercedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+  }
+
+  TEST_CASE("CoreAudioFormat - retries only track-incompatible attempt failures", "[audio][unit][coreaudio]")
+  {
+    std::size_t attempts = 0;
+    auto const selectedRes = selectLosslessCoreAudioClientFormat(
+      {.sampleRate = 48000, .channels = 2, .precisionBits = 24, .sampleKind = SampleKind::Integer},
+      [&](::AudioStreamBasicDescription const&) -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
+      {
+        ++attempts;
+        return std::unexpected{BackendOpenFailure{.error = makeError(Error::Code::IoError, "native read fault").error(),
+                                                  .cause = BackendOpenFailure::Cause::OutputFailure}};
+      });
+
+    // The 24-bit lossless set has several candidates, but a conservative
+    // output failure must abort the walk and propagate unchanged.
+    REQUIRE_FALSE(selectedRes);
+    CHECK(attempts == 1U);
+    CHECK(selectedRes.error().error.code == Error::Code::IoError);
+    CHECK(selectedRes.error().error.message == "native read fault");
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+  }
+
+  TEST_CASE("CoreAudioFormat - an unrepresentable source is refused without a native attempt",
+            "[audio][unit][coreaudio]")
+  {
+    std::size_t attempts = 0;
+    auto const selectedRes = selectLosslessCoreAudioClientFormat(
+      {.sampleRate = 48000, .channels = 2, .precisionBits = 33, .sampleKind = SampleKind::Integer},
+      [&](::AudioStreamBasicDescription const&) -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
+      {
+        ++attempts;
+        return std::unexpected{BackendOpenFailure{.error = makeError(Error::Code::FormatRejected).error(),
+                                                  .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
+      });
+
+    REQUIRE_FALSE(selectedRes);
+    CHECK(attempts == 0U);
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.message == "No lossless Core Audio client PCM encoding is available");
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+  }
+
+  TEST_CASE("CoreAudioFormat - a missing attempt callback is an output failure", "[audio][unit][coreaudio]")
+  {
+    auto const selectedRes = selectLosslessCoreAudioClientFormat(
+      {.sampleRate = 48000, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, {});
+
+    REQUIRE_FALSE(selectedRes);
+    CHECK(selectedRes.error().error.code == Error::Code::InvalidInput);
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 } // namespace ao::audio::backend::detail::test

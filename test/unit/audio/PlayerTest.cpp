@@ -13,12 +13,12 @@
 #include <ao/Error.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
@@ -167,11 +167,12 @@ namespace ao::audio::test
       {
       }
 
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
+      BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         if (auto const optError = _probePtr->openError(); optError)
         {
-          return std::unexpected{*optError};
+          // Faults injected through the probe keep the conservative default cause.
+          return std::unexpected{BackendOpenFailure{.error = *optError}};
         }
 
         _probePtr->publishTarget(&target);
@@ -312,7 +313,7 @@ namespace ao::audio::test
       {
       }
 
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
+      BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         _probePtr->publishTarget(&target);
         target.handleRouteReady(_route);
@@ -825,7 +826,7 @@ namespace ao::audio::test
       ReentrantBackend(ReentrantBackend&&) = delete;
       ReentrantBackend& operator=(ReentrantBackend&&) = delete;
 
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
+      BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         auto const lock = std::scoped_lock{probePtr->mutex};
         probePtr->target = &target;

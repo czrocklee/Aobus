@@ -5,10 +5,12 @@
 
 #include "../../detail/DecoderOutput.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
 #include <algorithm>
+#include <expected>
 #include <format>
 #include <span>
 #include <string>
@@ -42,12 +44,18 @@ namespace ao::audio::backend::detail
     }
   } // namespace
 
-  Result<SelectedAlsaMode> selectAlsaMode(SignalFormat const& sourceFormat, std::span<AlsaModeEvidence const> evidence)
+  std::expected<SelectedAlsaMode, BackendOpenFailure> selectAlsaMode(SignalFormat const& sourceFormat,
+                                                                     std::span<AlsaModeEvidence const> evidence)
   {
     if (sourceFormat.precisionBits == 0U)
     {
-      return makeError(Error::Code::InvalidInput, "Source signal declares no precision");
+      return std::unexpected{
+        BackendOpenFailure{.error = makeError(Error::Code::InvalidInput, "Source signal declares no precision").error(),
+                           .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
+
+    auto const encodings = ao::audio::detail::losslessPcmEncodings(sourceFormat);
+    bool hasUnknownPrecision = false;
 
     auto const findEvidence = [evidence](SampleEncoding const encoding) -> AlsaModeEvidence const*
     {
@@ -58,7 +66,7 @@ namespace ao::audio::backend::detail
     // A lossless encoding still needs an endpoint wide enough to carry the
     // signal: S32_LE driving a 24-bit converter is not lossless for 32-bit
     // content, and only the significant-bit count can tell the two apart.
-    for (auto const encoding : ao::audio::detail::losslessPcmEncodings(sourceFormat))
+    for (auto const encoding : encodings)
     {
       auto const* const entry = findEvidence(encoding);
 
@@ -67,8 +75,9 @@ namespace ao::audio::backend::detail
         continue;
       }
 
-      if (!entry->optSignificantBits)
+      if (!entry->optSignificantBits || *entry->optSignificantBits == 0U)
       {
+        hasUnknownPrecision = true;
         continue;
       }
 
@@ -81,10 +90,18 @@ namespace ao::audio::backend::detail
     }
 
     auto const* const domain = sourceFormat.sampleKind == SampleKind::FloatingPoint ? "float" : "integer";
-    return makeError(Error::Code::FormatRejected,
-                     std::format("ALSA offers no confirmed lossless endpoint for a {}-bit {} signal; evidence: {}",
-                                 sourceFormat.precisionBits,
-                                 domain,
-                                 describeEvidence(evidence)));
+    // Missing precision for an admitted lossless encoding is not proof of an
+    // incompatible endpoint. No admissible encoding, or confirmed narrower
+    // modes only, establishes an intentional refusal.
+    auto const cause = hasUnknownPrecision ? BackendOpenFailure::Cause::OutputFailure
+                                           : BackendOpenFailure::Cause::TrackRouteIncompatible;
+    return std::unexpected{BackendOpenFailure{
+      .error = makeError(Error::Code::FormatRejected,
+                         std::format("ALSA offers no confirmed lossless endpoint for a {}-bit {} signal; evidence: {}",
+                                     sourceFormat.precisionBits,
+                                     domain,
+                                     describeEvidence(evidence)))
+                 .error(),
+      .cause = cause}};
   }
 } // namespace ao::audio::backend::detail

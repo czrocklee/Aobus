@@ -5,6 +5,7 @@
 
 #include "detail/DecoderOutput.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
@@ -18,13 +19,22 @@ namespace ao::audio
   NullBackend::NullBackend() noexcept = default;
   NullBackend::~NullBackend() = default;
 
-  Result<OpenedPcmMode> NullBackend::open(SignalFormat const& sourceFormat, RenderTarget& /*target*/)
+  BackendOpenResult NullBackend::open(SignalFormat const& sourceFormat, RenderTarget& /*target*/)
   {
+    if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
+    {
+      return std::unexpected{
+        BackendOpenFailure{.error = Error{.code = Error::Code::InvalidInput,
+                                          .message = "PCM formats require a sample rate and channels"}}};
+    }
+
     auto const encodings = detail::losslessPcmEncodings(sourceFormat);
 
     if (encodings.empty())
     {
-      return makeError(Error::Code::NotSupported, "No lossless PCM encoding is available");
+      return std::unexpected{BackendOpenFailure{
+        .error = Error{.code = Error::Code::NotSupported, .message = "No lossless PCM encoding is available"},
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
 
     // A sink that discards frames has no endpoint to confirm, so it stays on

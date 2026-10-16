@@ -6,7 +6,6 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SampleEncoding.h>
@@ -46,7 +45,7 @@ namespace ao::audio::test
     FakeCapturingBackend& operator=(FakeCapturingBackend&&) = delete;
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& format) const noexcept override;
-    Result<OpenedPcmMode> open(SignalFormat const& format, RenderTarget& target) override;
+    BackendOpenResult open(SignalFormat const& format, RenderTarget& target) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -63,7 +62,15 @@ namespace ao::audio::test
 
     // Helpers for tests
     void setMockPropertyInfo(PropertyId id, PropertyInfo const& info);
-    void setOpenResult(Result<> res);
+
+    /**
+     * @brief Makes open() fail with the given error and causal admission.
+     *
+     * `cause` defaults to OutputFailure so legacy fault injections keep the
+     * conservative native-fault classification. A success value restores the
+     * normal open path.
+     */
+    void setOpenResult(Result<> res, BackendOpenFailure::Cause cause = BackendOpenFailure::Cause::OutputFailure);
     void setPrewarmEncoding(std::optional<SampleEncoding> optEncoding);
     void setSelectedEncoding(std::optional<SampleEncoding> optEncoding);
 
@@ -99,6 +106,7 @@ namespace ao::audio::test
     RenderTarget* _target = nullptr;
     PcmFormat _format{};
     Result<> _openRes{};
+    BackendOpenFailure::Cause _openCause = BackendOpenFailure::Cause::OutputFailure;
     std::optional<SampleEncoding> _optPrewarmEncoding;
     std::optional<SampleEncoding> _optSelectedEncoding;
     std::optional<std::uint8_t> _optEndpointPrecisionBits;

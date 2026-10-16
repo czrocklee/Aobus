@@ -4,6 +4,7 @@
 #include "CoreAudioError.h"
 
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 
 #include <AudioToolbox/AUComponent.h>
 #include <CoreAudio/AudioHardwareBase.h>
@@ -45,6 +46,13 @@ namespace ao::audio::backend::detail
   {
     return status == ::kAudioHardwareBadDeviceError || status == ::kAudioHardwareBadObjectError ||
            status == ::kAudioHardwareNotRunningError;
+  }
+
+  BackendOpenFailure::Cause coreAudioClientFormatSetFailureCause(::OSStatus const status) noexcept
+  {
+    return status == ::kAudioUnitErr_FormatNotSupported || status == ::kAudioDeviceUnsupportedFormatError
+             ? BackendOpenFailure::Cause::TrackRouteIncompatible
+             : BackendOpenFailure::Cause::OutputFailure;
   }
 
   std::string coreAudioStatusText(::OSStatus const status)

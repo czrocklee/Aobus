@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -37,8 +38,11 @@ namespace ao::audio::backend::test
     auto const openedRes = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, target);
 
     REQUIRE_FALSE(openedRes);
-    CHECK(openedRes.error().code == Error::Code::FormatRejected);
-    CHECK(openedRes.error().message.contains("direct hardware PCM"));
+    CHECK(openedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(openedRes.error().error.message.contains("direct hardware PCM"));
+    // A native device that opened but is not a hardware PCM is an output-side
+    // fault, never a constraint another track could satisfy.
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
   TEST_CASE("AlsaExclusiveBackend - unsupported signal is rejected before native device inspection",
@@ -49,11 +53,116 @@ namespace ao::audio::backend::test
       .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
 
-    auto const openedRes = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 33}, target);
+    auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 33};
+    auto const openedRes = backend.open(sourceFormat, target);
 
     REQUIRE_FALSE(openedRes);
-    CHECK(openedRes.error().code == Error::Code::NotSupported);
-    CHECK(openedRes.error().message == "No lossless PCM encoding is available for ALSA");
+    CHECK(openedRes.error().error.code == Error::Code::NotSupported);
+    CHECK(openedRes.error().error.message == "No lossless PCM encoding is available for ALSA");
+    // No lossless encoding can ever carry a 33-bit integer signal, so the
+    // refusal follows the source, not this output.
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+    // The same unrepresentable source must not even earn a decoder prewarm.
+    CHECK_FALSE(backend.prewarmFormatHint(sourceFormat).has_value());
+  }
+
+  TEST_CASE(
+    "AlsaExclusiveBackend - a float source without a 32-bit lossless encoding is refused before native inspection",
+    "[audio][unit][alsa]")
+  {
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    // The null plugin opens successfully, so a regressed guard could only
+    // surface the later non-hardware-PCM refusal, never this source refusal.
+    auto const device = Device{
+      .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+    auto const sourceFormat =
+      SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::FloatingPoint};
+
+    auto const openedRes = backend.open(sourceFormat, target);
+
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code == Error::Code::NotSupported);
+    CHECK(openedRes.error().error.message == "No lossless PCM encoding is available for ALSA");
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+    CHECK_FALSE(backend.prewarmFormatHint(sourceFormat).has_value());
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - zero geometry is refused as invalid input before native inspection",
+            "[audio][unit][alsa]")
+  {
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    // The null plugin opens successfully, so a regressed guard could only
+    // surface the later non-hardware-PCM refusal, never this source refusal.
+    auto const device = Device{
+      .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+
+    SECTION("a zero sample rate is invalid geometry")
+    {
+      auto const sourceFormat = SignalFormat{.sampleRate = 0, .channels = 2, .precisionBits = 16};
+      auto const openedRes = backend.open(sourceFormat, target);
+
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().error.code == Error::Code::InvalidInput);
+      CHECK(openedRes.error().error.message == "ALSA PCM formats require a sample rate and channels");
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+      CHECK_FALSE(backend.prewarmFormatHint(sourceFormat).has_value());
+    }
+
+    SECTION("a zero channel count is invalid geometry")
+    {
+      auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 0, .precisionBits = 16};
+      auto const openedRes = backend.open(sourceFormat, target);
+
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().error.code == Error::Code::InvalidInput);
+      CHECK(openedRes.error().error.message == "ALSA PCM formats require a sample rate and channels");
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+      CHECK_FALSE(backend.prewarmFormatHint(sourceFormat).has_value());
+    }
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - geometry refusal outranks precision refusal", "[audio][unit][alsa]")
+  {
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    auto const device = Device{
+      .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+
+    SECTION("an unrepresentable source with no channels still reports the geometry refusal")
+    {
+      auto const openedRes =
+        backend.open(SignalFormat{.sampleRate = 48000, .channels = 0, .precisionBits = 33}, target);
+
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().error.code == Error::Code::InvalidInput);
+      CHECK(openedRes.error().error.message == "ALSA PCM formats require a sample rate and channels");
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    }
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - prewarm predicts the lossless mode without native negotiation",
+            "[audio][unit][alsa]")
+  {
+    // The device is absent, so only immutable local admission policy can
+    // answer; a native call could only fail, never produce a hint.
+    auto const device = Device{
+      .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+    std::uint32_t const sourceRate = 48000;
+    std::uint8_t const sourceChannels = 2;
+
+    SECTION("an ordinary representable source retains its precision")
+    {
+      auto const optHint = backend.prewarmFormatHint(
+        SignalFormat{.sampleRate = sourceRate, .channels = sourceChannels, .precisionBits = 24});
+
+      REQUIRE(optHint);
+      CHECK(optHint->sampleRate == sourceRate);
+      CHECK(optHint->channels == sourceChannels);
+      CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
+    }
   }
 
   TEST_CASE("AlsaExclusiveBackend - a missing device is reported as such, never as a format problem",
@@ -70,8 +179,11 @@ namespace ao::audio::backend::test
     auto const openedRes = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, target);
 
     REQUIRE_FALSE(openedRes);
-    CHECK(openedRes.error().code != Error::Code::FormatRejected);
-    CHECK(openedRes.error().message.contains("Failed to open ALSA device"));
+    CHECK(openedRes.error().error.code != Error::Code::FormatRejected);
+    CHECK(openedRes.error().error.message.contains("Failed to open ALSA device"));
+    // An unavailable native device is a conservative output failure; it is
+    // not evidence that the track itself is incompatible.
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
   TEST_CASE("AlsaExclusiveBackend - failed open leaves prewarm hint on immutable policy", "[audio][unit][alsa]")

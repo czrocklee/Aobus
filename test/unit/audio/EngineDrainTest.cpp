@@ -46,7 +46,7 @@ namespace ao::audio::test
     class DrainOnStopBackend final : public Backend
     {
     public:
-      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override
+      BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override
       {
         _target = &target;
         ++_openCount;

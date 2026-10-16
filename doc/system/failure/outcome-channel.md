@@ -34,7 +34,7 @@ UIModel and frontends may adapt an already classified outcome for interaction or
 ## Invariants
 
 - A normal outcome uses the narrowest successful value shape and is not manufactured into an `Error` merely to make it observable.
-- A recoverable external failure crosses a public boundary as `Result<T>` or a typed asynchronous observation; it does not escape as an invariant exception.
+- A recoverable external failure crosses a public boundary as `Result<T>` or a typed asynchronous observation; it does not escape as an invariant exception. The synchronous audio backend-open boundary uses the narrowly enriched `BackendOpenResult` described below.
 - Project fatal checks use the AO facility and must not be laundered into an ordinary success value or a generic recoverable error.
 - Production code does not invoke raw gsl-lite contracts; all project-owned runtime contract diagnostics pass through the AO facility.
 - Production runtime checks do not use the configuration-dependent C `assert`
@@ -66,6 +66,15 @@ The successful domain value determines the base return shape before a recoverabl
 | `Result<>` | A command with no successful payload that can fail recoverably. |
 | `Result<T>` | A value-producing operation that can fail recoverably; a diagnostic lookup miss uses `NotFound`. |
 | `Result<Enum>` | An operation with several normal success states and an additional recoverable failure channel. |
+
+The [audio backend-open boundary](../playback/audio-execution.md#backend-lifetime-and-properties)
+uses `BackendOpenResult`, an expected value whose failure retains the original
+`Error` plus `BackendOpenFailure::Cause`. Native admission owns a distinction
+that the generic code cannot express: track/selected-route incompatibility
+versus conservative output failure. Engine consumes that classification and
+preserves the original error when translating to existing playback failure
+observations. This is a boundary-specific enrichment, not a second generic
+error vocabulary or permission for message-based recovery.
 
 New APIs do not use `Result<bool>` to overload command success and domain state.
 They also avoid `Result<std::optional<T>>` unless absence and failure are independently meaningful and the owning specification states both semantics explicitly.

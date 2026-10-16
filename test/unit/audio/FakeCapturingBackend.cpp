@@ -39,13 +39,16 @@ namespace ao::audio::test
     return Backend::prewarmFormatHint(format);
   }
 
-  Result<OpenedPcmMode> FakeCapturingBackend::open(SignalFormat const& format, RenderTarget& target)
+  BackendOpenResult FakeCapturingBackend::open(SignalFormat const& format, RenderTarget& target)
   {
     auto const lock = std::scoped_lock{_mutex};
 
     if (!_openRes)
     {
-      return std::unexpected{_openRes.error()};
+      // The refusal returns before the success path records "open"; record
+      // the attempt separately so event-order semantics stay untouched.
+      recordEvent("open-failed", {});
+      return std::unexpected{BackendOpenFailure{.error = _openRes.error(), .cause = _openCause}};
     }
 
     auto const encodings = detail::losslessPcmEncodings(format);
@@ -53,7 +56,11 @@ namespace ao::audio::test
 
     if (encodings.empty() && !optSelected)
     {
-      return makeError(Error::Code::FormatRejected, "No test PCM encoding available");
+      // Mirrors NullBackend: a source constraint that another track may satisfy.
+      recordEvent("open-failed", {});
+      return std::unexpected{BackendOpenFailure{
+        .error = Error{.code = Error::Code::FormatRejected, .message = "No test PCM encoding available"},
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
 
     auto const encoding = optSelected.value_or(encodings.empty() ? SampleEncoding::Unknown : encodings.front());
@@ -177,10 +184,11 @@ namespace ao::audio::test
     _mockPropertyInfos[id] = info;
   }
 
-  void FakeCapturingBackend::setOpenResult(Result<> res)
+  void FakeCapturingBackend::setOpenResult(Result<> res, BackendOpenFailure::Cause cause)
   {
     auto const lock = std::scoped_lock{_mutex};
     _openRes = res;
+    _openCause = cause;
   }
 
   void FakeCapturingBackend::setPrewarmEncoding(std::optional<SampleEncoding> optEncoding)

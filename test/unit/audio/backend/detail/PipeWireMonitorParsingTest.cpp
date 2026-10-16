@@ -238,6 +238,79 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(parseRawStreamFormat(pod));
   }
 
+  TEST_CASE(
+    "PipeWireMonitorParsing - rejects raw formats whose rate or channel count cannot narrow to the client format",
+    "[audio][unit][pipewire][monitor]")
+  {
+    auto buffer = std::array<std::byte, 1024>{};
+    auto b = makePodBuilder(buffer);
+
+    SECTION("a zero sample rate is not a usable client format")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_mediaType,
+                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                            SPA_FORMAT_mediaSubtype,
+                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                            SPA_FORMAT_AUDIO_format,
+                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                            SPA_FORMAT_AUDIO_rate,
+                            SPA_POD_Int(0),
+                            SPA_FORMAT_AUDIO_channels,
+                            SPA_POD_Int(2),
+                            0);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      CHECK_FALSE(parseRawStreamFormat(pod));
+    }
+
+    SECTION("a zero channel count is not a usable client format")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_mediaType,
+                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                            SPA_FORMAT_mediaSubtype,
+                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                            SPA_FORMAT_AUDIO_format,
+                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                            SPA_FORMAT_AUDIO_rate,
+                            SPA_POD_Int(48000),
+                            SPA_FORMAT_AUDIO_channels,
+                            SPA_POD_Int(0),
+                            0);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      CHECK_FALSE(parseRawStreamFormat(pod));
+    }
+
+    SECTION("a 258-channel stream cannot wrap into stereo")
+    {
+      // Narrowing 258 to std::uint8_t would wrap to 2, silently turning an
+      // exotic layout into a stereo client format; the bounds check refuses it.
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_mediaType,
+                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                            SPA_FORMAT_mediaSubtype,
+                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                            SPA_FORMAT_AUDIO_format,
+                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
+                            SPA_FORMAT_AUDIO_rate,
+                            SPA_POD_Int(48000),
+                            SPA_FORMAT_AUDIO_channels,
+                            SPA_POD_Int(258),
+                            0);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      CHECK_FALSE(parseRawStreamFormat(pod));
+    }
+  }
+
   TEST_CASE("PipeWireMonitorParsing - failed current format clears the stale cache", "[audio][unit][pipewire][monitor]")
   {
     auto buffer = std::array<std::byte, 1024>{};

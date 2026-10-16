@@ -77,13 +77,13 @@ if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
     # such as an FHS environment's /usr paths, or those of a shell entered under
     # an earlier pin, would resolve headers, libraries, pkg-config modules and
     # CMake packages outside the current pin.
-    for inherited in $(compgen -e); do
-        case "$inherited" in
-            NIX_CFLAGS_* | NIX_LDFLAGS* | PKG_CONFIG_PATH* | CMAKE_PREFIX_PATH | NIXPKGS_CMAKE_PREFIX_PATH | \
-                CMAKE_INCLUDE_PATH | CMAKE_LIBRARY_PATH | CPATH | C_INCLUDE_PATH | CPLUS_INCLUDE_PATH | LIBRARY_PATH)
-                unset "$inherited"
-                ;;
-        esac
+    # Prefix expansion also works in Bash builds without completion builtins.
+    # Variable-only unset: a plain unset would also delete an inherited shell
+    # function of the same name when the variable itself is absent.
+    for inherited in "${!NIX_CFLAGS_@}" "${!NIX_LDFLAGS@}" "${!PKG_CONFIG_PATH@}" \
+        CMAKE_PREFIX_PATH NIXPKGS_CMAKE_PREFIX_PATH CMAKE_INCLUDE_PATH CMAKE_LIBRARY_PATH \
+        CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH; do
+        unset -v "$inherited"
     done
     # nix-shell otherwise resolves its launch Bash through ambient <nixpkgs>.
     # A host Bash also prepends its directory (often /usr/bin) ahead of pinned

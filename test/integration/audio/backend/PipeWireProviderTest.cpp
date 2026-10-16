@@ -295,7 +295,7 @@ namespace ao::audio::backend::test
         PipeWireBackend{Device{.id = DeviceId{""}, .isDefault = true, .backendId = kBackendPipeWire}, kProfileShared};
       auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
       auto const openedRes = backend.open(sourceFormat, target);
-      auto const diagnostic = openedRes.has_value() ? std::string{} : openedRes.error().message;
+      auto const diagnostic = openedRes.has_value() ? std::string{} : openedRes.error().error.message;
 
       INFO(diagnostic);
       REQUIRE(openedRes);

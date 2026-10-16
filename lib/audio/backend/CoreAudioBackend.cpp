@@ -13,8 +13,10 @@
 #include "detail/CoreAudioGraph.h"
 #include "detail/CoreAudioLatency.h"
 #include "detail/CoreAudioRenderBuffer.h"
+#include "detail/DecoderOutput.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
@@ -77,6 +79,12 @@ namespace ao::audio::backend
                  ::AudioObjectPropertyAddress{.mSelector = ::kAudioDevicePropertyStreamConfiguration,
                                               .mScope = ::kAudioObjectPropertyScopeOutput,
                                               .mElement = ::kAudioObjectPropertyElementMain}};
+
+    bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
+    {
+      return sourceFormat.sampleRate != 0U && sourceFormat.channels != 0U &&
+             ::ao::audio::detail::preferredLosslessPcmEncoding(sourceFormat).has_value();
+    }
 
     enum class CoreAudioFault : std::uint8_t
     {
@@ -168,6 +176,37 @@ namespace ao::audio::backend
       auto size = static_cast<::UInt32>(sizeof(Value));
       auto const status = ::AudioUnitGetProperty(unit, property, scope, element, &value, &size);
       return status == ::noErr && size != sizeof(Value) ? ::kAudioHardwareBadPropertySizeError : status;
+    }
+
+    // One native attempt to install a client format on the HAL output unit and
+    // read the applied stream format back. A track-incompatible rejection keeps
+    // the caller's candidate walk alive; every other failure is terminal.
+    std::expected<::AudioStreamBasicDescription, BackendOpenFailure> tryCoreAudioClientFormat(
+      ::AudioUnit const unit,
+      ::AudioStreamBasicDescription const& description)
+    {
+      if (auto const status = ::AudioUnitSetProperty(
+            unit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Input, 0U, &description, sizeof(description));
+          status != ::noErr)
+      {
+        return std::unexpected{BackendOpenFailure{
+          .error =
+            detail::makeCoreAudioError(status, "configure Core Audio client format", Error::Code::InitFailed).error(),
+          .cause = detail::coreAudioClientFormatSetFailureCause(status)}};
+      }
+
+      auto readBack = ::AudioStreamBasicDescription{};
+
+      if (auto const status =
+            readAudioUnitProperty(unit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Input, 0U, readBack);
+          status != ::noErr)
+      {
+        return std::unexpected{BackendOpenFailure{
+          .error = detail::makeCoreAudioError(status, "read Core Audio client format", Error::Code::InitFailed).error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure}};
+      }
+
+      return readBack;
     }
 
     std::vector<::AudioObjectID> outputStreams(::AudioObjectID const device)
@@ -824,15 +863,34 @@ namespace ao::audio::backend
     }
   }
 
-  Result<OpenedPcmMode> CoreAudioBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
+  BackendOpenResult CoreAudioBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
+    // Reject deterministic source refusals before this backend's own close().
+    // Engine closes its previous playback before calling open().
+    if (!canAdmitSourceFormat(sourceFormat))
+    {
+      if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
+      {
+        return std::unexpected{BackendOpenFailure{
+          .error =
+            makeError(Error::Code::InvalidInput, "Core Audio PCM formats require a sample rate and channels").error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure}};
+      }
+
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          makeError(Error::Code::FormatRejected, "No lossless Core Audio client PCM encoding is available").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
+    }
+
     close();
     auto const statePtr = _implPtr->statePtr;
     auto const deviceRes = detail::coreAudioOutputDeviceId(statePtr->deviceUid);
 
     if (!deviceRes)
     {
-      return std::unexpected{deviceRes.error()};
+      return std::unexpected{
+        BackendOpenFailure{.error = deviceRes.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto const componentDescription =
@@ -845,14 +903,19 @@ namespace ao::audio::backend
 
     if (component == nullptr)
     {
-      return makeError(Error::Code::InitFailed, "Core Audio HAL output component is unavailable");
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::InitFailed, "Core Audio HAL output component is unavailable").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     ::AudioUnit rawUnit = nullptr;
 
     if (auto const status = ::AudioComponentInstanceNew(component, &rawUnit); status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "create Core Audio HAL output unit", Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          detail::makeCoreAudioError(status, "create Core Audio HAL output unit", Error::Code::InitFailed).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto unitOwner = AudioUnitOwner{rawUnit};
@@ -863,7 +926,9 @@ namespace ao::audio::backend
           rawUnit, ::kAudioOutputUnitProperty_EnableIO, ::kAudioUnitScope_Output, 0U, &enabled, sizeof(enabled));
         status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "enable Core Audio output", Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error = detail::makeCoreAudioError(status, "enable Core Audio output", Error::Code::InitFailed).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     ::UInt32 disabled = 0U;
@@ -872,7 +937,9 @@ namespace ao::audio::backend
           rawUnit, ::kAudioOutputUnitProperty_EnableIO, ::kAudioUnitScope_Input, 1U, &disabled, sizeof(disabled));
         status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "disable Core Audio input", Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error = detail::makeCoreAudioError(status, "disable Core Audio input", Error::Code::InitFailed).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto const deviceId = *deviceRes;
@@ -881,7 +948,10 @@ namespace ao::audio::backend
           rawUnit, ::kAudioOutputUnitProperty_CurrentDevice, ::kAudioUnitScope_Global, 0U, &deviceId, sizeof(deviceId));
         status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "select Core Audio output device", Error::Code::DeviceNotFound);
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          detail::makeCoreAudioError(status, "select Core Audio output device", Error::Code::DeviceNotFound).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto bufferFramesAddress = kGlobalMain;
@@ -903,7 +973,10 @@ namespace ao::audio::backend
                                                    sizeof(requestedMaximumFrames));
         status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "set Core Audio maximum frames per slice", Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error = detail::makeCoreAudioError(status, "set Core Audio maximum frames per slice", Error::Code::InitFailed)
+                   .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     ::UInt32 maximumFrames = 0U;
@@ -912,37 +985,19 @@ namespace ao::audio::backend
           rawUnit, ::kAudioUnitProperty_MaximumFramesPerSlice, ::kAudioUnitScope_Global, 0U, maximumFrames);
         status != ::noErr || maximumFrames == 0U)
     {
-      return detail::makeCoreAudioError(status == ::noErr ? ::kAudioHardwareBadPropertySizeError : status,
-                                        "read Core Audio maximum frames per slice",
-                                        Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error = detail::makeCoreAudioError(status == ::noErr ? ::kAudioHardwareBadPropertySizeError : status,
+                                            "read Core Audio maximum frames per slice",
+                                            Error::Code::InitFailed)
+                   .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    auto const selectedFormatRes = detail::selectLosslessCoreAudioClientFormat(
-      sourceFormat,
-      [rawUnit](::AudioStreamBasicDescription const& description) -> Result<::AudioStreamBasicDescription>
-      {
-        if (auto const status = ::AudioUnitSetProperty(rawUnit,
-                                                       ::kAudioUnitProperty_StreamFormat,
-                                                       ::kAudioUnitScope_Input,
-                                                       0U,
-                                                       &description,
-                                                       sizeof(description));
-            status != ::noErr)
-        {
-          return detail::makeCoreAudioError(status, "configure Core Audio client format", Error::Code::InitFailed);
-        }
-
-        auto readBack = ::AudioStreamBasicDescription{};
-
-        if (auto const status =
-              readAudioUnitProperty(rawUnit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Input, 0U, readBack);
-            status != ::noErr)
-        {
-          return detail::makeCoreAudioError(status, "read Core Audio client format", Error::Code::InitFailed);
-        }
-
-        return readBack;
-      });
+    auto const selectedFormatRes =
+      detail::selectLosslessCoreAudioClientFormat(sourceFormat,
+                                                  [rawUnit](::AudioStreamBasicDescription const& description)
+                                                    -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
+                                                  { return tryCoreAudioClientFormat(rawUnit, description); });
 
     if (!selectedFormatRes)
     {
@@ -956,7 +1011,9 @@ namespace ao::audio::backend
     if (bytesPerFrame == 0U || maximumFrames > std::numeric_limits<std::size_t>::max() / bytesPerFrame ||
         static_cast<std::size_t>(maximumFrames) * bytesPerFrame > std::numeric_limits<::UInt32>::max())
     {
-      return makeError(Error::Code::ValueTooLarge, "Core Audio render staging buffer is too large");
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::ValueTooLarge, "Core Audio render staging buffer is too large").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto stagingBuffer = std::vector<std::byte>(static_cast<std::size_t>(maximumFrames) * bytesPerFrame);
@@ -968,12 +1025,18 @@ namespace ao::audio::backend
           rawUnit, ::kAudioUnitProperty_SetRenderCallback, ::kAudioUnitScope_Input, 0U, &callback, sizeof(callback));
         status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "install Core Audio render callback", Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          detail::makeCoreAudioError(status, "install Core Audio render callback", Error::Code::InitFailed).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     if (auto const status = ::AudioUnitInitialize(rawUnit); status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "initialize Core Audio HAL output unit", Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          detail::makeCoreAudioError(status, "initialize Core Audio HAL output unit", Error::Code::InitFailed).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     unitOwner.markInitialized();
@@ -984,14 +1047,17 @@ namespace ao::audio::backend
           rawUnit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Output, 0U, outputDescription);
         status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "read Core Audio device format", Error::Code::InitFailed);
+      return std::unexpected{BackendOpenFailure{
+        .error = detail::makeCoreAudioError(status, "read Core Audio device format", Error::Code::InitFailed).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     auto const tailFramesRes = presentationTailFrames(rawUnit, deviceId, outputDescription, selectedFormat.sampleRate);
 
     if (!tailFramesRes)
     {
-      return std::unexpected{tailFramesRes.error()};
+      return std::unexpected{
+        BackendOpenFailure{.error = tailFramesRes.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     float volume = 1.0F;
@@ -1006,7 +1072,9 @@ namespace ao::audio::backend
           rawUnit, ::kHALOutputParam_Volume, ::kAudioUnitScope_Global, 0U, muted ? 0.0F : volume, 0U);
         status != ::noErr)
     {
-      return detail::makeCoreAudioError(status, "restore Core Audio output volume", Error::Code::IoError);
+      return std::unexpected{BackendOpenFailure{
+        .error = detail::makeCoreAudioError(status, "restore Core Audio output volume", Error::Code::IoError).error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     statePtr->generation.fetch_add(1U, std::memory_order_acq_rel);
@@ -1044,7 +1112,8 @@ namespace ao::audio::backend
     if (!registeredListenerCountRes)
     {
       close();
-      return std::unexpected{registeredListenerCountRes.error()};
+      return std::unexpected{BackendOpenFailure{
+        .error = registeredListenerCountRes.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     {

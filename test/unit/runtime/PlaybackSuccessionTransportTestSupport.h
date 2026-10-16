@@ -86,6 +86,7 @@ namespace ao::rt::test::playback_succession
     std::vector<std::filesystem::path> finalOpenFailureFileNames{};
     std::filesystem::path stagedFailureFileName{};
     audio::test::StagedFailureGate* stagedFailureGate = nullptr;
+    std::filesystem::path lossyFileName{};
   };
 
   struct PlaybackSuccessionTransportFixture final

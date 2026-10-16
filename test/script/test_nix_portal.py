@@ -75,9 +75,21 @@ class NativeNixPortalTest(unittest.TestCase):
         )
         return hashlib.sha256((digests + f"gtk-unstripped={gtk_mode}\n").encode("ascii")).hexdigest()
 
-    def _run_portal(self, **environment):
+    def _run_portal(self, *, without_compgen=False, **environment):
+        if without_compgen:
+            # Disable only this child's optional builtin, even when the host's Bash has it.
+            command = [
+                self.bash,
+                "-c",
+                'enable -n compgen 2>/dev/null || :; source "$1" "${@:2}"',
+                "bash-without-compgen",
+                str(self.portal),
+                "help",
+            ]
+        else:
+            command = [self.bash, str(self.portal), "help"]
         return subprocess.run(
-            [self.bash, str(self.portal), "help"],
+            command,
             env={**self.environment, **environment},
             capture_output=True,
             text=True,
@@ -157,18 +169,62 @@ class NativeNixPortalTest(unittest.TestCase):
     def test_nix_reentry_discards_inherited_dependency_search_state(self):
         inherited = {name: "/stale" for name in INHERITED_SEARCH_STATE}
         self._stub("nix-shell", "env -0")
+        kept = {
+            "AOBUS_UNRELATED_SETTING": "kept",
+            "CMAKE_BUILD_PARALLEL_LEVEL": "2",
+            "CMAKE_LIBRARY_PATH_SUFFIX": "kept",
+            "NIX_CFLAGS": "kept",
+            "NIXPKGS_UNRELATED": "kept",
+            "PKG_CONFIG_LIBDIR": "kept",
+        }
         # A host shell carries no fingerprint; a shell entered under an earlier pin carries a stale one.
-        for fingerprint in (None, "0" * 64):
-            with self.subTest(fingerprint=fingerprint):
-                environment = {**inherited, "AOBUS_UNRELATED_SETTING": "kept"}
-                if fingerprint is not None:
-                    environment["AO_NIX_SHELL_FINGERPRINT"] = fingerprint
-                result = self._run_portal(**environment)
+        for without_compgen in (False, True):
+            for fingerprint in (None, "0" * 64):
+                with self.subTest(without_compgen=without_compgen, fingerprint=fingerprint):
+                    environment = {**inherited, **kept}
+                    if fingerprint is not None:
+                        environment["AO_NIX_SHELL_FINGERPRINT"] = fingerprint
+                    result = self._run_portal(without_compgen=without_compgen, **environment)
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stderr, "")
+                    entered = dict(entry.split("=", 1) for entry in result.stdout.split("\0") if entry)
+                    self.assertEqual(set(inherited) & set(entered), set())
+                    self.assertEqual({name: entered[name] for name in kept}, kept)
+
+    def test_nix_reentry_spares_same_named_shell_functions_of_absent_variables(self):
+        # Inspect the functions in Bash: a /bin/sh probe may be dash, which
+        # discards BASH_FUNC_* entries before env can observe them.
+        probe = self.stubs / "nix-shell"
+        probe.write_text(
+            f"#!{self.bash}\n"
+            "declare -F CPATH CMAKE_PREFIX_PATH >/dev/null || exit 1\n"
+            "CPATH\nCMAKE_PREFIX_PATH\nenv -0\n",
+            encoding="utf-8",
+        )
+        probe.chmod(0o755)
+        # Bash exports a function as a BASH_FUNC_<name>%% environment entry; an
+        # absent search-path variable with a same-named exported function must
+        # not lose the function to the stale-variable cleanup.
+        function_names = ("CPATH", "CMAKE_PREFIX_PATH")
+        for name in function_names:
+            self.environment.pop(name, None)
+        exported_functions = {f"BASH_FUNC_{name}%%": "() { echo portal-function\n}\n" for name in function_names}
+        stale = {"NIX_CFLAGS_COMPILE": "/stale", "LIBRARY_PATH": "/stale"}
+
+        for without_compgen in (False, True):
+            with self.subTest(without_compgen=without_compgen):
+                result = self._run_portal(without_compgen=without_compgen, **exported_functions, **stale)
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                entered = dict(entry.split("=", 1) for entry in result.stdout.split("\0") if entry)
-                self.assertEqual(set(inherited) & set(entered), set())
-                self.assertEqual(entered["AOBUS_UNRELATED_SETTING"], "kept")
+                self.assertEqual(result.stderr, "")
+                function_output = "portal-function\nportal-function\n"
+                self.assertTrue(result.stdout.startswith(function_output), result.stdout)
+                entered = dict(
+                    entry.split("=", 1) for entry in result.stdout.removeprefix(function_output).split("\0") if entry
+                )
+                self.assertEqual({name: entered.get(name) for name in stale}, {name: None for name in stale})
+                self.assertTrue(set(function_names).isdisjoint(entered))
 
     def test_reused_shell_keeps_its_dependency_search_state(self):
         (self.package / "__main__.py").write_text(

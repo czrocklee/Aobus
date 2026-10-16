@@ -35,9 +35,11 @@
 #include <ao/rt/library/LibraryTransfer.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <array>
 #include <atomic>
@@ -1277,6 +1279,124 @@ namespace ao::rt::test
     CHECK(progressEvents.back().subject == expectedLastSubject);
     CHECK(progressEvents.back().fraction == static_cast<double>(kFileCount - 1) / static_cast<double>(kFileCount));
     REQUIRE_FALSE(eventOrder.empty());
+    CHECK(eventOrder.back() == "finished");
+  }
+
+  TEST_CASE("LibraryJobs - fingerprint progress coalesces only before delivery",
+            "[runtime][unit][library-task][scan][concurrency]")
+  {
+    bool const deliverInitial = GENERATE(false, true);
+    CAPTURE(deliverInitial);
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
+    auto updatingEntered = AsyncTestState<bool>::create(false);
+    auto initialEntered = AsyncTestState<bool>::create(false);
+    auto finalEntered = AsyncTestState<bool>::create(false);
+    auto updatingRelease = AsyncBarrier{};
+    auto initialRelease = AsyncBarrier{};
+    auto finalRelease = AsyncBarrier{};
+    auto progressEvents = std::vector<LibraryTaskProgressUpdated>{};
+    auto finishedIds = std::vector<LibraryTaskProgressId>{};
+    auto eventOrder = std::vector<std::string>{};
+    auto executor = QueuedExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto runtimeFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    // Release before runtime teardown joins workers; the barriers and captures
+    // above remain alive until that join, including assertion-unwinding paths.
+    auto releaseWorkers = utility::ScopedRegistration{[&updatingRelease, &initialRelease, &finalRelease]
+                                                      {
+                                                        updatingRelease.release();
+                                                        initialRelease.release();
+                                                        finalRelease.release();
+                                                      }};
+    auto& runtime = runtimeFixture.runtime();
+    auto& jobs = runtimeFixture.library().jobs();
+    auto progressSub = jobs.onProgress(
+      [&progressEvents, &eventOrder](LibraryTaskProgressUpdated const& event)
+      {
+        progressEvents.push_back(event);
+        eventOrder.emplace_back("progress");
+      });
+    auto finishedSub = jobs.onProgressFinished(
+      [&finishedIds, &eventOrder](LibraryTaskProgressFinished const& event)
+      {
+        finishedIds.push_back(event.id);
+        eventOrder.emplace_back("finished");
+      });
+    auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
+    REQUIRE(plan.size() == 1);
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future =
+      spawnFuture(runtime,
+                  jobs.applyScanPlanAsync(
+                    std::move(plan),
+                    {},
+                    {},
+                    [updatingEntered, initialEntered, finalEntered, &updatingRelease, &initialRelease, &finalRelease](
+                      ScanApplyProgress const& progress)
+                    {
+                      if (progress.stage == ScanApplyProgressStage::Updating)
+                      {
+                        updatingEntered.set(true);
+                        updatingRelease.wait();
+                      }
+                      else if (progress.stage == ScanApplyProgressStage::Fingerprinting && progress.itemFraction == 0.0)
+                      {
+                        initialEntered.set(true);
+                        initialRelease.wait();
+                      }
+                      else if (progress.stage == ScanApplyProgressStage::Fingerprinting && progress.itemFraction == 1.0)
+                      {
+                        finalEntered.set(true);
+                        finalRelease.wait();
+                      }
+                    }),
+                  completedPtr);
+
+    REQUIRE(executor.tryDrainUntil([updatingEntered] { return updatingEntered.load(); }));
+    executor.drain();
+    REQUIRE(progressEvents.size() == 1);
+    CHECK(progressEvents[0].kind == LibraryTaskProgressKind::Updating);
+    CHECK(progressEvents[0].fraction == 0.0);
+    updatingRelease.release();
+    REQUIRE(initialEntered.tryWaitUntil(true));
+
+    if (deliverInitial)
+    {
+      executor.drain();
+      REQUIRE(progressEvents.size() == 2);
+      CHECK(progressEvents[1].kind == LibraryTaskProgressKind::Fingerprinting);
+      CHECK(progressEvents[1].fraction == 0.0);
+    }
+
+    initialRelease.release();
+    REQUIRE(finalEntered.tryWaitUntil(true));
+    executor.drain();
+    REQUIRE(progressEvents.size() == (deliverInitial ? 3U : 2U));
+    CHECK(progressEvents.back().kind == LibraryTaskProgressKind::Fingerprinting);
+    CHECK(progressEvents.back().fraction == 1.0);
+    CHECK(finishedIds.empty());
+    CHECK_FALSE(isReady(completedPtr));
+
+    finalRelease.release();
+    REQUIRE(executor.tryDrainUntil([&completedPtr] { return isReady(completedPtr); }));
+    auto const res = future.get();
+    executor.drain();
+    REQUIRE(res);
+    CHECK(res->insertedIds.size() == 1);
+    CHECK(res->failureCount == 0);
+    REQUIRE(progressEvents.size() == (deliverInitial ? 3U : 2U));
+    CHECK(progressEvents.front().id != kInvalidLibraryTaskProgressId);
+
+    for (auto const& event : progressEvents)
+    {
+      CHECK(event.id == progressEvents.front().id);
+      CHECK(event.subject == "song.flac");
+    }
+
+    CHECK(finishedIds == std::vector{progressEvents.front().id});
+    REQUIRE(eventOrder.size() == progressEvents.size() + 1);
     CHECK(eventOrder.back() == "finished");
   }
 

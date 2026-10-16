@@ -8,7 +8,6 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SignalFormat.h>
@@ -100,7 +99,7 @@ namespace ao::audio::backend::detail::test
     AlsaControlBackend& operator=(AlsaControlBackend&&) = delete;
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept override;
-    Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget& target) override;
+    BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;
     void resume() override;
