@@ -312,6 +312,7 @@ zh_Hans:table {
     audio_node_unknown { "[未知]" }
     audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} 声道" }
+    audio_channels_identified { "{count} 声道（{layout}）" }
     audio_finding_lossy_source { "有损音源" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {软件音量衰减：{gain}} other {软件音量衰减}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {软件放大：增益 {gain}（有削波风险）} other {软件放大（有削波风险）}}" }
@@ -320,12 +321,13 @@ zh_Hans:table {
     audio_finding_muted { "已静音" }
     audio_finding_resampling { "{hasFormats, select, yes {重采样：{fromRate} Hz → {toRate} Hz} other {重采样}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {声道映射：{fromChannels} 声道 → {toChannels} 声道} other {声道映射}}" }
+    audio_finding_channel_layout { "声道布局：{fromLayout} → {toLayout}" }
     audio_finding_lossless_padding { "无损整数扩位" }
     audio_finding_lossless_float { "无损浮点转换" }
     audio_finding_lossless_round_trip { "无损往返转换（浮点引擎）" }
     audio_finding_truncation { "{kind, select, floatToInteger {浮点 → 整数量化：{fromPrecision} → {toPrecision}} integerToFloat {整数 → 浮点量化：{fromPrecision} → {toPrecision}} precision {精度截断：{fromPrecision} → {toPrecision}} other {精度截断}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {与 {apps} 混音} other {混合音源}}" }
-    audio_quality_bit_perfect_playback { "Bit-Perfect 播放" }
+    audio_quality_bit_perfect_playback { "Bit-Perfect PCM（已观测的软件链路）" }
     audio_quality_signal_preserved { "信号保持不变" }
     audio_quality_pipeline_intervention { "播放链路存在处理" }
     audio_quality_signal_clipping_detected { "检测到信号削波" }
@@ -334,6 +336,9 @@ zh_Hans:table {
     audio_quality_partially_verified_path { "播放链路仅部分验证" }
     audio_quality_clean_lossy_delivery { "有损音源未经额外处理" }
     audio_quality_clean_delivery { "播放链路未经额外处理" }
+    audio_quality_unknown_channel_layout { "源声道布局未识别" }
+    audio_quality_unverified_channel_delivery { "声道传递尚未证实" }
+    audio_quality_inferred_channel_layout { "源声道布局来自推断" }
     playback_control_play { "播放" }
     playback_control_pause { "暂停" }
     playback_control_stop { "停止" }

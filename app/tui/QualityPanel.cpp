@@ -135,6 +135,8 @@ namespace ao::tui
       contentColumns = std::max(contentColumns, cellWidth("● ") + cellWidth(presentation.headline));
     }
 
+    contentColumns = std::max(contentColumns, cellWidth(presentation.channelNote));
+
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
@@ -189,8 +191,13 @@ namespace ao::tui
       rows.push_back(separator());
       rows.push_back(hbox({
         qualityDot(presentation.category),
-        text(" " + presentation.headline),
+        paragraph(" " + presentation.headline),
       }));
+    }
+
+    if (!presentation.channelNote.empty())
+    {
+      rows.push_back(paragraph(presentation.channelNote) | dim);
     }
 
     rows.push_back(separator());

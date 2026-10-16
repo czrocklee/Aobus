@@ -64,7 +64,8 @@ See [text semantics](../presentation/text-catalog.md) for the domain mapping and
 - Resampling and channel findings display both endpoints when available; missing endpoints select the catalog's generic form.
 - Truncation wording distinguishes float-to-integer, integer-to-float, and same-domain precision loss. Precision evidence uses logical bits with `b` for integer and `f` for float.
 - Format labels receive sample rate in kHz with one fractional digit, a bit count, and localized channel text. A signal format shows logical precision; a PCM node shows container width. Thus a 16-bit signal carried in `Signed32Le` displays 32 bits at that PCM node.
-- Mono, stereo, other channel counts, node-role labels, sentence order, punctuation, and units in authored copy are catalog-owned. External application names remain data and are joined for the message argument.
+- Mono names only identified FC (`0x4`, one channel), and stereo only identified FL/FR (`0x3`, two channels). Unknown identities use a generic count; alternate identified sets retain their roles or mask. Equal counts with different known identities use layout labels rather than a misleading count-only transition. These labels use the finding's independent role constraints when native observations differ from unchanged or unknown storage masks; partial roles keep the actual channel count rather than guessing the unassigned positions.
+- Channel text, node-role labels, sentence order, punctuation, and units are catalog-owned. Standard role tokens and external application names remain data, not inferred native evidence.
 
 ## Structured headline precedence
 
@@ -75,16 +76,36 @@ The headline does not repeat per-node rates, gain, shared applications, or other
 |---:|---|---|---|
 | 1 | Overall quality is unknown | No usable pipeline rating | `Unknown` |
 | 2 | Any software-amplification finding | Clipping risk | `Warning` |
-| 3 | Any mute, truncation, resampling, software or unclassified volume modification, mixing, or channel mapping | Pipeline intervention | `Diagnostic` |
-| 4 | Path is not fully verified | Incomplete path evidence | `Informational` |
+| 3 | Any mute, truncation, resampling, software or unclassified volume modification, mixing, channel mapping, or Converted channel confidence | Pipeline intervention | `Diagnostic` |
+| 4 | Path is not fully verified | Incomplete format/path evidence | `Informational` |
 | 5 | Any lossless padding, round trip, or float mapping | Signal preserved | `Positive` |
 | 6 | Source is lossy | Clean delivery of a lossy source | `Informational` |
-| 7 | No visible findings and source quality is bit-perfect | Bit-perfect playback | `Medal` |
+| 7 | No visible findings and source quality is bit-perfect | Bit-perfect PCM at the observed software boundary | `Medal` |
 | 8 | Otherwise | Clean delivery | `Positive` |
 
 `BitPerfect` and `HardwareVolumeModification` do not count as visible findings here.
 The structured headline has no direct `Clipped` branch; raw conclusion/category mapping and Soul aura do.
 Do not equate a headline, raw severity, and confidence flag without applying their respective rules.
+`fullyVerified` retains its format-presence plus Sink-reaching meaning; it does not prove speaker routing.
+Unknown, Unverified, and Inferred channel confidence do not suppress numerical positives or a clean lossy headline.
+The bit-perfect headline describes numerical PCM/software-path evidence, not fully verified speaker routing.
+
+### Independent channel note
+
+`AudioQualityPresentation::channelNote` owns localized layout uncertainty separately from its numerical headline and category:
+
+| Channel confidence | Note meaning |
+|---|---|
+| `Unknown` | Source channel layout not identified |
+| `Unverified` | Channel delivery not proved |
+| `Inferred` | Source channel layout inferred |
+| `Verified` | No warning |
+| `Converted` | No uncertainty note; the headline reports the known intervention |
+
+The note remains visible alongside diagnostic and warning headlines when uncertainty is independently present.
+It never promotes Unknown to Verified or invents speaker roles: an unidentified two-channel source still displays count-owned `2 ch`, not Stereo.
+GTK's pipeline panel and TUI's quality panel render the note as a separate secondary row.
+The shared Now Playing plain-text fallback puts it on a separate line for WinUI's tooltip and AppKit's fallback tooltip; native adapters do not reclassify confidence.
 
 ## Visual categories
 
@@ -113,11 +134,15 @@ For Playing and Paused, aura selection uses the first matching rule:
 |---:|---|---|
 | 1 | Output not ready | `Veiled` |
 | 2 | Overall or pipeline quality is clipped | `Burning` |
-| 3 | Pipeline quality is linear intervention | `Turbulent` |
-| 4 | Incomplete verification, or source quality is lossy/unknown | `Veiled` |
+| 3 | Pipeline quality is linear intervention or channel confidence is Converted | `Turbulent` |
+| 4 | Incomplete format verification, or source quality is lossy/unknown | `Veiled` |
 | 5 | Pipeline quality is bit-perfect | `Radiant` |
 | 6 | Pipeline quality is lossless padded/float | `Flowing` |
 | 7 | Pipeline quality is lossy/unknown | `Veiled` |
+
+Radiant and Flowing express the existing numerical axes and format-presence evidence, independently of Unknown, Unverified, or Inferred channel confidence.
+The separate channel note carries that uncertainty; neither aura nor headline upgrades it to a verified-channel claim.
+Known Converted delivery remains Turbulent even when numerical format fields alone appear unchanged.
 
 Other transport states select `Dormant` regardless of retained quality evidence.
 Frontend adapters provide frame deltas and own clocks, frame registration, visibility/minimization gates, concrete geometry, and rendering. They keep supplying frames while the shared state still needs them, and settle pending transitions at once when they stop early, as under reduced motion, while hidden or unmapped, or when their frame source stops with playback. Time that passes while settled, before the next frame arrives, does not count as motion. They may quantize the shared visual frame for their medium without changing aura or freeze semantics.
@@ -131,4 +156,5 @@ Changes to severity, confidence, headline precedence, or shared motion/aura beha
 - [`AudioQualityFormatter.cpp`](../../../app/uimodel/playback/quality/AudioQualityFormatter.cpp) owns message selection, categories, and headline precedence; [`AudioQualityCss.cpp`](../../../app/linux-gtk/playback/AudioQualityCss.cpp) adapts GTK classes.
 - [`AobusSoulViewModel.cpp`](../../../app/uimodel/playback/soul/AobusSoulViewModel.cpp) owns shared motion and aura state.
 - [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp), [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp), and [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) cover analysis and shared policy.
+- [`DecodedQualityPresentationTest.cpp`](../../../test/unit/uimodel/playback/quality/DecodedQualityPresentationTest.cpp) carries real compressed-decoder stream information through analysis into numerical headlines, channel notes, and Soul aura without rewriting channel confidence.
 - [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp), and [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp) cover frontend consumption and frozen-frame behavior.

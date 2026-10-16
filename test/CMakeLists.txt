@@ -598,6 +598,7 @@ add_executable(ao_core_test
     unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
+    unit/uimodel/playback/quality/DecodedQualityPresentationTest.cpp
     unit/uimodel/playback/seek/PlaybackPositionInterpolatorTest.cpp
     unit/uimodel/playback/seek/PlaybackPositionViewModelTest.cpp
     unit/uimodel/playback/seek/PlaybackTimeFormatterTest.cpp

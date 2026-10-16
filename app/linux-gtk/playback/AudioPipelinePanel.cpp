@@ -200,9 +200,20 @@ namespace ao::gtk
       conclusionBox->append(*dot);
 
       auto* label = Gtk::make_managed<Gtk::Label>(presentation.headline);
+      label->set_wrap(true);
+      label->set_xalign(0.0F);
       conclusionBox->append(*label);
 
       append(*conclusionBox);
+    }
+
+    if (!presentation.channelNote.empty())
+    {
+      auto* note = Gtk::make_managed<Gtk::Label>(presentation.channelNote);
+      note->set_wrap(true);
+      note->set_xalign(0.0F);
+      note->add_css_class("dim-label");
+      append(*note);
     }
   }
 } // namespace ao::gtk
