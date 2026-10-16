@@ -22,7 +22,7 @@ Application runtime consumes Player through executor-affine playback services an
 - **Render session**: one backend attachment correlated to a render generation.
 - **Inspection**: a decoder open with no requested PCM encoding that reports immutable track signal facts without producing playback PCM.
 - **Prewarm format hint**: a non-binding, non-blocking Backend prediction used only to choose an optimistic decoder output before native open.
-- **PCM mode**: one concrete sample rate, channel count, and `SampleEncoding` used by a backend render target.
+- **PCM mode**: one concrete sample rate, channel count, `SampleEncoding`, and effective speaker mask used by a backend render target.
 - **Timeline node**: Engine-owned current or lookahead audio item and its source.
 - **Splice signal**: the non-owning realtime notification that a prepared lookahead became active at end of stream.
 - **Callback-generation floor**: the minimum audio generation whose materialized callbacks may still begin after a synchronizing receipt.
@@ -53,7 +53,7 @@ Application runtime consumes Player through executor-affine playback services an
 - `close()` revokes a backend's render target; no render callback begins after it returns.
 - Device enumeration does not probe, cache, or carry PCM capability tables.
 - A prewarm format hint performs no native open or negotiation and never authorizes a precision reduction, for a track start or for a splice.
-- A successful backend `open()` returns the exact PCM mode configured on the native handle used for playback; its client mode and every confirmed endpoint preserve the source precision.
+- A successful backend `open()` returns the canonical render-target PCM contract backed by the configured native handle; backend-private lossless slot ordering does not change application identity. Its client mode and every confirmed endpoint preserve source precision.
 - An idle selected output holds no native playback handle.
 - PCM ring reset runs only while its producer, render consumer, and buffered-duration observer are quiescent.
 - Shutdown closes callback admission and joins producers before their targets are destroyed.
@@ -251,7 +251,7 @@ The realtime consumer still performs only ring reads; it does not update a separ
 
 Player captures lookahead input, route, current PCM mode, playback generation, and start-context evidence on the callback executor.
 When the current session is gapless-capable, decoder inspection runs on an async worker.
-If the current PCM mode has the same sample rate and channels and its encoding can preserve the successor's inspected signal, the same worker opens the final successor decoder in that encoding and prerolls it.
+If the current PCM mode has compatible storage, its encoding and retained confirmed endpoint preserve the successor's inspected signal, and the backend proves the installed transport reusable, the same worker opens the final successor decoder in that encoding and prerolls it. The successor keeps its own source/output identity; decoder adaptation never relabels it to the preceding track's mask.
 Engine adopts the result only after Player's task remains admissible and Engine's captured playback, route, and mode context still matches.
 Successful adoption starts the decode thread, retains the node as lookahead, and arms its raw pointer for realtime consumption.
 
@@ -261,7 +261,7 @@ without invoking the successor decoder factory. Its application token fixes the
 successor identity but is not proof that the successor has opened successfully.
 
 The gapless verdict is fixed at arm time.
-The current physical PCM mode cannot change without consuming or clearing lookahead, so the render thread performs no format read or capability test.
+The installed native transport cannot change without consuming or clearing lookahead, so the render thread performs no format read, capability test or plan mutation.
 
 `clearNext` returns the disarmed opaque item id when the render thread has not consumed it.
 If already consumed, it returns empty and upper runtime retains matching metadata for the later advanced callback.
@@ -271,12 +271,12 @@ An `updateDevice` call carrying the unchanged device snapshot is a no-op and
 does not invalidate pending starts or prepared lookahead.
 Prepared-source failure clears lookahead without changing the current track; after splice, that source generation is current and fails as current.
 
-A splice is permitted only when both sessions are gapless-capable and their sample rate, channel count, and concrete encoding match.
+A splice requires both sessions to be gapless-capable, identical rate/count/encoding storage and a backend-proved reusable transport. Exact effective-mask equality is the default. The only nonexact candidate is unidentified stereo (`0`) versus canonical FL/FR stereo (`0x3`); it is admitted only when the backend independently proves both use the installed byte order, permutation and unchanged ongoing validation obligations. Unknown is not a wildcard, alternate known sets do not become equivalent, and global PCM equality/cache keys remain mask-sensitive. Engine rechecks both this closed candidate and the backend proof before arming. Source interpretation history is not a mode key: adoption refreshes source/decoder/Engine identity and interpretation evidence to the successor without fabricating a new native configuration or graph observation.
 The successor's source precision may be lower than the current track's precision because widening it into the already-open mode is lossless.
-The successor's precision may never exceed what that mode can represent: an S16 current mode followed by 24-bit audio drains, while a packed-24 current mode followed by 16-bit audio may splice.
+Its precision may never exceed either the client representation or the confirmed endpoint retained for this open. An S16 current mode followed by 24-bit audio drains; an S32 client behind a confirmed 16-bit endpoint also cannot splice a 24-bit successor merely because the container is wider.
 
 Current gapless-capable codecs are lossless FLAC, ALAC, and WAV.
-Lossy/unknown codecs or format mismatch drain and close; no resampling, channel remapping, or artificial silence forces compatibility.
+Lossy/unknown codecs or an unproved mode transition drain and close; no resampling, new channel permutation, identity guessing or artificial silence forces compatibility.
 Lookahead open failure, cancellation, or stale completion leaves the current
 session and successor choice unchanged; it neither skips nor redraws a shuffle
 candidate.
@@ -286,7 +286,7 @@ candidate.
 Explicit start retains a two-stage acceptance boundary.
 Preparation opens an inspection decoder and records source signal facts.
 After inspection, Player returns through a stop-token checkpoint to its callback executor and asks Engine to revalidate the captured route before querying `Backend::prewarmFormatHint` under control serialization.
-The hint query is non-blocking, performs no native I/O, and may use only immutable policy or cached observations; a missing or invalid hint skips optimistic decoder preparation.
+The hint query is non-blocking, performs no native I/O, and may use only immutable policy or cached observations; a missing or invalid hint, including a different effective speaker mask, skips optimistic decoder preparation.
 The isolated value then resumes on a worker, opens a final decoder in the valid hinted encoding, applies the initial seek, and prerolls a `StreamingSource` without acquiring a device, changing the active generation, or replacing lookahead.
 Failure of this optimistic final-decoder step discards only the prepared source and retains the successful inspection, so it does not become a user-visible failure before commit.
 Commit revalidates the token, accepts a new playback generation, retires the old render target, and opens the backend from the inspected `SignalFormat`.
@@ -381,8 +381,10 @@ It performs no device open, graph connection, wait, or negotiation; the default 
 A known source-only refusal yields no optimistic hint; concrete backends apply the same bounded admission rule in hint and open without performing native negotiation in the hint.
 Unknown or stale native evidence is a performance concern only: Engine either skips prewarming or discards a prepared decoder whose complete mode differs from the later `open()` result.
 
+`Backend::canReusePcmMode` is a separate control-side proof for an already-open transport, not another capability cache or an open prediction. It performs no native query, negotiation, wait or allocation. ALSA caches whether both source interpretations admit the same effective plan from actual open observations; phase/conflicting-role refusals or different permutations cannot gain reuse. PipeWire caches equivalence against the admitted stereo observation, including its real swap, and atomically revokes it on rejected format changes or terminal native state. Terminal rejection also closes render admission; start/resume cannot reopen it while the queued failure is pending. WASAPI binds equivalence to its live successfully initialized FL/FR client descriptor, never the optional mix observation. Null output has no native ordering constraint. Core Audio retains exact equality because an original unknown-source refresh cannot yet promise all later identified-source obligations. These bounds restore eligible WAV↔FLAC/ALAC stereo splices without activating another decoder or changing ordinary FLAC↔ALAC zero-mask equality; unproved paths still drain.
+
 `Backend::open(SignalFormat, RenderTarget&)` requires a live target and performs selection and native activation as one operation.
-It returns an `OpenedPcmMode`: the `clientFormat` actually configured, plus an optional `ConfirmedEndpoint` describing the endpoint that mode feeds.
+It returns an `OpenedPcmMode`: the canonical render-target `clientFormat`, optional `ConfirmedEndpoint`, and initial channel-delivery evidence. The backend owns native descriptors and any proved same-set slot permutation; it does not replace the application mask with native unknown positions. The initial delivery snapshot remains an open outcome and backend-owned evidence; redundant route-status copying is absent, and it cannot override newer provider observations.
 Probe failure and “16-bit only” are therefore not representable as the same cached value, and no open failure causes an implicit 16-bit retry.
 
 The synchronous `BackendOpenResult` carries either that mode or a
@@ -428,6 +430,20 @@ A missing significant-bit result is unknown evidence rather than full container 
 An exact rate is required rather than a nearest match, both because the admissible format set depends on it and so an unsupported rate is diagnosed as such instead of surfacing as a format rejection.
 A single `snd_pcm_hw_params()` applies the chosen mode, and the applied mode is read back and compared before the handle is published.
 Integer and float domain changes outside the documented bit-transparent output set are rejected.
+
+### Channel compatibility and native evidence
+
+WAV's [source interpretation](pcm-format.md#wav-source-interpretation) activates identified canonical PCM without a blanket multichannel ban. Admission and native delivery remain separate: a compatible unknown-position path is legacy-unverified, a known same-set permutation needs actual lossless byte/ordinal handling, and an unresolved known contradiction is not silently relabelled as unknown. Count owns geometry throughout.
+
+ALSA compares applied rate/count/encoding as storage facts independently of source mask identity. After storage and required precision succeed, open reads supported/current channel maps while it still owns the not-yet-started PCM handle. Query-unavailable, no applicable map and current-readback-unavailable remain distinct observations; NULL alone establishes neither unsupported API nor an error category. Unconsumed errno copies are not retained as a purported diagnostic surface; availability states, not errno, govern legacy admission. Compatible unavailable positioning keeps playback eligible without a guessed map, including otherwise admitted 4/6-channel modes. All capability maps retain bounded storage validation, but role semantics of another channel count cannot veto the applied current mode. Malformed applicable/current maps and independent native faults do not become uncertainty. A phase-inverted position refuses identified lossless mapping; an unidentified no-permutation stream retains legacy eligibility without claiming verified polarity. A complete current same-set map can select a private, precomputed permutation; supported-map mutation/set negotiation remains outside this bridge. Graph publication uses the retained configured state rather than querying the running PCM handle.
+
+PipeWire offers the actual canonical positions for complete two-channel sets. Mono/multichannel offers retain their previous unpositioned compatibility path rather than inventing positions. Open projects its initial delivery snapshot from the latest already-accepted negotiated positions/flags under the loop lock; a position refresh does not mutate admitted render storage or permutation. A known same-set native order uses an allocation-free private permutation. Post-activation storage changes remain terminal. Identified paths and source-zero stereo retain strict active position comparison, including installed permutations. Source-zero mono/multichannel identity transport can accept a position-only refresh without changing admitted render storage or permutation. The monitor retains current Format observations, not EnumFormat capabilities, including native sets that cannot be described as canonical `PcmFormat` byte order. Well-formed but unusable position semantics do not discard independently valid rate/count/encoding or known role subsets. A position-table length mismatch retains numerics without claiming its prefix as applied roles. Malformed current storage or numerical facts invalidate old evidence; oversized position arrays never enter the native fixed-capacity copy.
+
+WASAPI configures actual admitted mono/two-channel masks, including alternate sets; zero-source identities retain the prior native mono/stereo descriptor without becoming identified source evidence. Multichannel compatibility retains direct-out mask zero, not an assumed engine-default speaker set. The successful client descriptor and independently queried engine mix format remain separate; known channel conversion can coexist with uncertain positions. Legal supported excess mix-mask bits are ignored from the most significant end; partial known positions remain independent constraints rather than malformed frame geometry or a complete canonical format mask. Compatible partial sets mean uncertainty, while incompatible known roles still establish conversion. Reserved/wildcard optional masks yield unidentified roles, not a legalized mask or invented native mapping. Contradictory optional PCM arithmetic retains independently valid dimensions/roles but no concrete PCM or precision claim; absent dimensions yield unavailable observation. Those evidence limitations do not veto a separately constructed valid client descriptor. Successful null/short extensible storage remains a fault, as do real initialized-client/native failures. A single client-to-mix conversion flag belongs to the receiving Sink graph node, not also to Stream. Neither Initialize acceptance nor GetMixFormat proves physical delivery.
+
+Core Audio keeps an explicitly unverified bridge while inspecting applicable AU client/output layouts, output ordinals and device preferences. Current AU output layout is authoritative and skips the device preference query entirely. Device preference is an optional fallback; unusable preference data cannot veto an otherwise valid transport, while an actually queried device-loss failure remains terminal. The unused preferred-stereo property is not an admission dependency. Tags/bitmaps use their native interpretation, Mono is not equated unconditionally to Center, and larger device preferences alone do not describe a smaller client. Known lossless relationships may require a private client permutation and a checked local output-unit ordinal map; neither copies source identity into a native observation. Identity rendering uses validated AU storage directly; callback shape must match the immutable client-channel count before binding or changing storage. Only a true permutation needs separate render/native buffers and per-sample copying. Shared count conversion remains represented at the receiving Sink instead of becoming a new blanket mono/multichannel refusal or a duplicate Stream finding. Refresh validates a fresh exact AU input ASBD and fresh applicable channel relationships against the immutable source slots. A non-device-loss downstream-format read failure invalidates numerical evidence rather than playback only when current AU output layout/map independently proves geometry and the execution relationship still holds; neither cached output count nor device preference supplies that geometry. Missing/changed required proof remains terminal. Start/resume perform this execution admission synchronously, while the current-generation worker handles dispensable observations and latency outside the admission scope. Existing control-worker generations and callback fences govern refresh/retirement; incompatible changed relationships fault rather than remapping active rendering from a callback. This bridge is not complete Core Audio layout/mapping support or a physical-route guarantee.
+
+### Shared client formats
 
 PipeWire, WASAPI, and Core Audio negotiate a client stream in front of a graph that may resample, remix, or requantize without reporting a direct endpoint.
 They therefore offer only lossless client encodings and leave `ConfirmedEndpoint` absent, in both shared and exclusive mode.
@@ -475,7 +491,10 @@ drain, fills the remainder and later callbacks with silence, and counts a
 conservative presentation tail from the device I/O buffer, safety offset,
 device and stream latency, plus AudioUnit latency. A non-realtime control worker
 closes callback admission, fences the last callback, stops AUHAL, and emits the
-single ordered drain completion after that silent tail.
+single ordered drain completion after that silent tail. Lifecycle generation
+advances and already-consumed fault/drain native actions share a control-only
+gate, so a stale action cannot stop a newer run. Realtime generation reads remain
+lock-free; native/run locks are released before target callbacks or graph delivery.
 The target remains open, permitting stop/flush/start seek flows, while non-render route, property, and error callbacks remain protected by generation checks and the `close()` lifetime boundary.
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
@@ -494,12 +513,18 @@ PipeWire, WASAPI, and Core Audio cache application controls accepted before stre
 Core Audio applies both through the per-instance AUHAL linear-gain parameter;
 mute writes zero while preserving the cached volume to restore, and graph
 evidence classifies the gain as software rather than device hardware control.
+Successful Core Audio setters apply native/cached values before returning, but
+coalesce graph publication onto the existing control worker after target callbacks
+unwind. The worker reads current state rather than captured request data; this
+handoff prevents property reentry from waiting on a graph observer that is closing
+the backend and waiting for that same target callback.
 ALSA handles shared mixer state under the separate contract below.
 
 ### Backend graph delivery
 
-The shared `BackendGraphRegistry`, consumed by ALSA and WASAPI, suppresses publication when the complete route graph equals the stored graph.
+The shared `BackendGraphRegistry`, consumed by ALSA, WASAPI, and Core Audio, suppresses publication when the complete route graph equals the stored graph.
 Ordinary publish, clear, and initial subscription delivery do not nest graph callbacks, including when a callback reads a backend property that publishes again.
+Core Audio commits its stored graph and revision under its own snapshot lock through `preparePublish()` or `prepareClear()`, then releases that lock before delivering the returned one-shot ticket. Preparation never waits for the registry callback gate or invokes an observer; delayed deliveries retain the registry's revision and cancellation checks. This ordering prevents initial observers that close the backend from waiting on a snapshot owner that is itself waiting for their callback. Dropping a ticket cancels only its ordinary delivery, not the committed snapshot.
 Reentrant work waits until the active callback returns; revision checks discard superseded publications and cancellation is checked immediately before each callback.
 A normal subscription delivers its captured initial snapshot synchronously; a subscription made inside a graph callback defers that initial delivery and can be cancelled before it runs.
 A clear still removes the stored graph and publishes an empty snapshot rather than storing an empty graph in place of the route fallback.
@@ -640,11 +665,12 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 
 - [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown; Linux-only [`AlsaEnginePropertyTest.cpp`](../../../test/unit/audio/backend/AlsaEnginePropertyTest.cpp) protects reentrant state-only queries during initial graph subscription, ALSA property publication, read-triggered fallback, and volume/mute intent across stop after successful or rejected hardware writes.
 - [`BackendGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/BackendGraphRegistryTest.cpp) protects graph deduplication, non-nested ordinary and initial delivery, revision supersession, cancellation, and synchronous final-empty retirement.
+- [`CoreAudioControlMailboxTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioControlMailboxTest.cpp) protects pending-generation arbitration; [`CoreAudioRunControlTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioRunControlTest.cpp) protects consumed-action ordering against run advancement. [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) covers native callback quiescence, property graph handoff, and observer-driven close; capsule tests alone do not establish those native boundaries.
 - [`EngineRtSignalRingTest.cpp`](../../../test/unit/audio/EngineRtSignalRingTest.cpp) protects the exact two-entry capacity, serialized producer handoff, sequential-splice occupancy, pending-drain arm behavior, and legal full-ring delivery.
 - [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.
 - [`EngineSeekErrorTest.cpp`](../../../test/unit/audio/EngineSeekErrorTest.cpp) protects Error rejection through both seek entry points before and after failure delivery, paused-origin failure, unchanged backend/source state on rejection, and recovery through a new playback.
-- [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
+- [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineStereoReuseTest.cpp`](../../../test/unit/audio/EngineStereoReuseTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.
 - [`AlsaProviderTest.cpp`](../../../test/unit/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../../test/unit/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../../test/unit/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/unit/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.

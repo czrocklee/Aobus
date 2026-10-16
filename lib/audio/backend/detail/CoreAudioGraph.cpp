@@ -22,7 +22,11 @@ namespace ao::audio::backend::detail
     auto stream = flow::Node{.id = state.routeAnchor + ":client",
                              .type = flow::NodeType::Stream,
                              .name = "Aobus Core Audio stream",
-                             .optFormat = *state.optClientFormat};
+                             .optFormat = *state.optClientFormat,
+                             .channelDelivery = state.channelDelivery};
+    // This flag describes the single client-to-output conversion. Attribute it
+    // to its destination without erasing the stream's independent mapping facts.
+    stream.channelDelivery.hasSharedConversion = false;
     auto sink = flow::Node{.id = state.routeAnchor,
                            .type = flow::NodeType::Sink,
                            .name = state.deviceName,
@@ -31,7 +35,8 @@ namespace ao::audio::backend::detail
                            .maxSoftwareGain = state.volume,
                            .minSoftwareGain = state.volume,
                            .isMuted = state.muted,
-                           .objectPath = state.routeAnchor};
+                           .objectPath = state.routeAnchor,
+                           .channelDelivery = state.outputChannelDelivery};
     return {.nodes = {std::move(stream), std::move(sink)},
             .connections = {{.sourceId = state.routeAnchor + ":client", .destinationId = state.routeAnchor}}};
   }

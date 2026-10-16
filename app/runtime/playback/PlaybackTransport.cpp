@@ -147,6 +147,7 @@ namespace ao::rt
             .pipelineQuality = status.pipelineQuality,
             .overall = status.quality,
             .fullyVerified = status.qualityFullyVerified,
+            .channelConfidence = status.channelConfidence,
             .assessments = status.qualityAssessments,
           },
       };

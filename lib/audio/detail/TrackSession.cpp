@@ -89,6 +89,11 @@ namespace ao::audio::detail
         throwDecoderError(Error::Code::FormatRejected, "Track signal format changed after inspection");
       }
 
+      if (info.sourceChannelLayout != inspection.info.sourceChannelLayout)
+      {
+        throwDecoderError(Error::Code::FormatRejected, "Track channel-layout evidence changed after inspection");
+      }
+
       if (!(info.outputFormat == backendFormat))
       {
         throwDecoderError(Error::Code::FormatRejected, "Decoder did not produce the PCM format selected by backend");

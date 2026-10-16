@@ -20,6 +20,9 @@ namespace ao::audio
     std::uint8_t channels = 0;
     std::uint8_t precisionBits = 0;
     SampleKind sampleKind = SampleKind::Integer;
+    // Effective WAVE-style speaker identities in ascending assigned-bit order.
+    // Zero assigns no speakers; channel count remains authoritative.
+    std::uint32_t speakerMask = 0;
 
     bool operator==(SignalFormat const&) const = default;
   };

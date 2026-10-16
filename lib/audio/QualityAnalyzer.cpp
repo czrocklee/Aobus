@@ -3,6 +3,8 @@
 
 #include <ao/audio/QualityAnalyzer.h>
 
+#include <ao/audio/ChannelDeliveryEvidence.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
@@ -14,6 +16,7 @@
 #include <boost/unordered/unordered_flat_map_fwd.hpp>
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -118,6 +121,101 @@ namespace ao::audio
     bool hasVerifiedOutputEndpoint(std::vector<flow::Node const*> const& path) noexcept
     {
       return !path.empty() && path.back()->type == flow::NodeType::Sink;
+    }
+
+    bool hasNativeChannelBoundary(flow::Node const& node) noexcept
+    {
+      return node.type == flow::NodeType::Stream || node.type == flow::NodeType::Intermediary ||
+             node.type == flow::NodeType::Sink;
+    }
+
+    std::uint32_t channelSpeakerMask(flow::Node const& node) noexcept
+    {
+      auto const formatMask = node.optFormat ? signalFormat(*node.optFormat).speakerMask : 0U;
+
+      if (!hasNativeChannelBoundary(node))
+      {
+        return formatMask;
+      }
+
+      // Retain every actually known role, including compatible partial reports.
+      // This constraint set asserts neither completeness nor native byte order.
+      return formatMask | node.channelDelivery.nativeSpeakerMask;
+    }
+
+    std::optional<std::uint32_t> channelFindingSpeakerMask(flow::Node const* node, std::uint32_t const mask) noexcept
+    {
+      if (node == nullptr || mask == 0U || (node->optFormat && signalFormat(*node->optFormat).speakerMask == mask))
+      {
+        return std::nullopt;
+      }
+
+      return mask;
+    }
+
+    bool hasCompleteChannelIdentity(flow::Node const& node) noexcept
+    {
+      if (!node.optFormat)
+      {
+        return false;
+      }
+
+      auto const format = signalFormat(*node.optFormat);
+      auto const nativeMask = hasNativeChannelBoundary(node) ? node.channelDelivery.nativeSpeakerMask : 0U;
+      return (format.speakerMask != 0U && std::popcount(format.speakerMask) == format.channels) ||
+             (nativeMask != 0U && std::popcount(nativeMask) == format.channels);
+    }
+
+    struct ChannelIdentityEvidence final
+    {
+      // Last complete identity, or the first partial/count observation until one exists.
+      flow::Node const* node = nullptr;
+      std::uint32_t speakerMask = 0;
+      std::uint8_t channels = 0;
+    };
+
+    ChannelConfidence channelConfidence(std::vector<flow::Node const*> const& path, bool hasChannelAlteration) noexcept
+    {
+      // Conversion is positive evidence, even when other positions remain unknown.
+      if (hasChannelAlteration)
+      {
+        return ChannelConfidence::Converted;
+      }
+
+      if (!hasVerifiedOutputEndpoint(path) || path.front()->type != flow::NodeType::Source ||
+          !hasCompleteChannelIdentity(*path.front()) ||
+          path.front()->sourceChannelLayout.origin == ChannelLayoutOrigin::Unknown)
+      {
+        return ChannelConfidence::Unknown;
+      }
+
+      for (auto const* node : path)
+      {
+        if (!hasCompleteChannelIdentity(*node))
+        {
+          return ChannelConfidence::Unverified;
+        }
+
+        switch (node->type)
+        {
+          case flow::NodeType::Source:
+          case flow::NodeType::Decoder:
+          case flow::NodeType::Engine: break;
+          case flow::NodeType::Stream:
+          case flow::NodeType::Intermediary:
+          case flow::NodeType::Sink:
+            if (node->channelDelivery.mapping != ChannelDeliveryEvidence::Mapping::Mapped)
+            {
+              return ChannelConfidence::Unverified;
+            }
+
+            break;
+          case flow::NodeType::ExternalSource: return ChannelConfidence::Unverified;
+        }
+      }
+
+      return path.front()->sourceChannelLayout.origin == ChannelLayoutOrigin::Inferred ? ChannelConfidence::Inferred
+                                                                                       : ChannelConfidence::Verified;
     }
 
     bool tryFindPathToSink(flow::Graph const& graph,
@@ -289,6 +387,98 @@ namespace ao::audio
       }
     }
 
+    QualityFinding channelMappingFinding(flow::Node const* changedFrom,
+                                         ChannelIdentityEvidence const& knownIdentity,
+                                         flow::Node const& currentNode,
+                                         bool const hasCountChange)
+    {
+      // A node's storage declaration and independent native set can disagree
+      // without a transition in its format mask. Explain actual reports, never
+      // their impossible union, while keeping endpoint count and storage intact.
+      auto const format = currentNode.optFormat ? signalFormat(*currentNode.optFormat) : SignalFormat{};
+      auto const nativeMask =
+        hasNativeChannelBoundary(currentNode) ? currentNode.channelDelivery.nativeSpeakerMask : 0U;
+      bool const hasLocalRoleConflict = format.channels != 0U && format.speakerMask != 0U && nativeMask != 0U &&
+                                        std::popcount(format.speakerMask | nativeMask) > format.channels;
+      bool const describeLocalSource = hasLocalRoleConflict && !hasCountChange;
+      auto const* fromNode = describeLocalSource ? &currentNode : changedFrom;
+      auto const fromMask = describeLocalSource ? format.speakerMask : knownIdentity.speakerMask;
+      auto const toMask = hasLocalRoleConflict ? nativeMask : channelSpeakerMask(currentNode);
+      return {.kind = QualityFindingKind::ChannelMapping,
+              .quality = Quality::LinearIntervention,
+              .optFromFormat = fromNode != nullptr ? fromNode->optFormat : std::nullopt,
+              .optToFormat = currentNode.optFormat,
+              .optFromSpeakerMask = channelFindingSpeakerMask(fromNode, fromMask),
+              .optToSpeakerMask = channelFindingSpeakerMask(&currentNode, toMask)};
+    }
+
+    void assessChannelTransition(flow::Node const* previousNode,
+                                 ChannelIdentityEvidence& knownIdentity,
+                                 flow::Node const& currentNode,
+                                 NodeQualityAssessment& assessment)
+    {
+      auto const currentMask = channelSpeakerMask(currentNode);
+      auto const currentChannels =
+        currentNode.optFormat ? signalFormat(*currentNode.optFormat).channels : std::uint8_t{};
+      auto const comparisonChannels = currentChannels != 0U ? currentChannels : knownIdentity.channels;
+      bool const hasConflictingReports = currentChannels != 0U && std::popcount(currentMask) > currentChannels;
+      bool const hasCountChange =
+        knownIdentity.channels != 0U && currentChannels != 0U && knownIdentity.channels != currentChannels;
+      bool const hasConflictingRoles = knownIdentity.speakerMask != 0U && currentMask != 0U &&
+                                       comparisonChannels != 0U &&
+                                       std::popcount(knownIdentity.speakerMask | currentMask) > comparisonChannels;
+      flow::Node const* changedFrom = nullptr;
+
+      if (previousNode != nullptr && previousNode->optFormat && currentNode.optFormat &&
+          signalFormat(*previousNode->optFormat).channels != currentChannels)
+      {
+        changedFrom = previousNode;
+      }
+      else if (hasCountChange || hasConflictingRoles)
+      {
+        changedFrom = knownIdentity.node;
+      }
+
+      if (currentNode.channelDelivery.hasSharedConversion || hasConflictingReports || changedFrom != nullptr)
+      {
+        // Missing roles are not a conversion. Known roles contradict only when
+        // they cannot coexist within count-owned geometry, or count itself changes.
+        addFinding(assessment, channelMappingFinding(changedFrom, knownIdentity, currentNode, hasCountChange));
+      }
+
+      if (hasConflictingReports)
+      {
+        if (hasCountChange)
+        {
+          // The count change is already attributed here. Its new geometry is
+          // known even though contradictory roles cannot establish a new anchor.
+          knownIdentity = {.node = &currentNode, .channels = currentChannels};
+        }
+
+        return;
+      }
+
+      if (hasCountChange || hasConflictingRoles)
+      {
+        knownIdentity = {.node = &currentNode, .speakerMask = currentMask, .channels = currentChannels};
+        return;
+      }
+
+      // Compatible partial and unknown observations must not replace a complete
+      // anchor. Keep their known roles as constraints without claiming completeness.
+      knownIdentity.speakerMask |= currentMask;
+
+      if (currentChannels != 0U)
+      {
+        knownIdentity.channels = currentChannels;
+      }
+
+      if (knownIdentity.node == nullptr || hasCompleteChannelIdentity(currentNode))
+      {
+        knownIdentity.node = &currentNode;
+      }
+    }
+
     void assessFormatTransition(flow::Node const& previousNode,
                                 flow::Node const& currentNode,
                                 NodeQualityAssessment& targetAssessment,
@@ -308,16 +498,6 @@ namespace ao::audio
       {
         addFinding(targetAssessment,
                    QualityFinding{.kind = QualityFindingKind::Resampling,
-                                  .quality = Quality::LinearIntervention,
-                                  .optFromFormat = f1,
-                                  .optToFormat = f2});
-        optProvenPrecision.reset();
-      }
-
-      if (s1.channels != s2.channels)
-      {
-        addFinding(targetAssessment,
-                   QualityFinding{.kind = QualityFindingKind::ChannelMapping,
                                   .quality = Quality::LinearIntervention,
                                   .optFromFormat = f1,
                                   .optToFormat = f2});
@@ -428,6 +608,9 @@ namespace ao::audio
       optProvenPrecision = signalFormat(*optSourceFormat).precisionBits;
     }
 
+    auto knownIdentity = ChannelIdentityEvidence{};
+    bool hasChannelAlteration = false;
+
     for (size_t i = 0; i < path.size(); ++i)
     {
       auto const* const node = path[i];
@@ -443,10 +626,20 @@ namespace ao::audio
         .nodeType = node->type,
         .optFormat = node->optFormat,
         .worstQuality = Quality::BitwisePerfect,
+        .sourceChannelLayout = node->sourceChannelLayout,
+        .channelDelivery = node->channelDelivery,
       };
 
       assessNodeSelfProperties(*node, assessment);
       assessInputSources(*node, path, inputSources, graph, assessment);
+      assessChannelTransition(i > 0 ? path[i - 1] : nullptr, knownIdentity, *node, assessment);
+
+      if (std::ranges::any_of(assessment.findings,
+                              [](QualityFinding const& finding)
+                              { return finding.kind == QualityFindingKind::ChannelMapping; }))
+      {
+        hasChannelAlteration = true;
+      }
 
       if (i > 0)
       {
@@ -481,6 +674,7 @@ namespace ao::audio
       result.assessments.push_back(std::move(assessment));
     }
 
+    result.channelConfidence = channelConfidence(path, hasChannelAlteration);
     return result;
   }
 } // namespace ao::audio

@@ -5,6 +5,7 @@
 
 #include "BackendTestSupport.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
@@ -47,6 +48,81 @@ namespace ao::audio::test
     CHECK(backend.profileId() == kProfileShared);
   }
 
+  TEST_CASE("NullBackend - retains identified application slots without claiming a physical endpoint",
+            "[audio][unit][null-backend]")
+  {
+    auto target = NoopRenderTarget{};
+    auto backend = NullBackend{};
+    // A one-channel FL identity is not automatically relabelled centered mono.
+    auto const source = SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16, .speakerMask = 0x1};
+    auto const expected =
+      PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x1};
+
+    auto const optHint = backend.prewarmFormatHint(source);
+    REQUIRE(optHint);
+    CHECK(*optHint == expected);
+
+    auto const openedRes = backend.open(source, target);
+    REQUIRE(openedRes);
+    CHECK(openedRes->clientFormat == expected);
+    CHECK(frameBytes(openedRes->clientFormat) == 2);
+    CHECK_FALSE(openedRes->optEndpoint);
+  }
+
+  TEST_CASE("NullBackend - discarding stereo reuse does not make unidentified PCM a wildcard",
+            "[audio][unit][null-backend]")
+  {
+    auto backend = NullBackend{};
+    auto unidentified = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto identified = unidentified;
+    identified.speakerMask = 0x3;
+    CHECK_FALSE(isSamePcmMode(unidentified, identified));
+    CHECK_FALSE(backend.Backend::canReusePcmMode(unidentified, identified));
+    CHECK(backend.canReusePcmMode(unidentified, identified));
+    CHECK(backend.canReusePcmMode(identified, unidentified));
+    CHECK(backend.canReusePcmMode(identified, identified));
+
+    SECTION("different rates remain different storage")
+    {
+      identified.sampleRate = 44100;
+    }
+
+    SECTION("different counts remain different storage")
+    {
+      identified.channels = 1;
+    }
+
+    SECTION("different encodings remain different storage")
+    {
+      identified.encoding = SampleEncoding::Signed32Le;
+    }
+
+    SECTION("alternate identified stereo is not FL FR")
+    {
+      identified.speakerMask = 0x30;
+    }
+
+    SECTION("a partial role set is not canonical stereo")
+    {
+      identified.speakerMask = 0x1;
+    }
+
+    SECTION("zero rates cannot establish reusable storage")
+    {
+      unidentified.sampleRate = 0;
+      identified.sampleRate = 0;
+    }
+
+    SECTION("unknown encoding cannot establish reusable storage")
+    {
+      unidentified.encoding = SampleEncoding::Unknown;
+      identified.encoding = SampleEncoding::Unknown;
+    }
+
+    CHECK_FALSE(backend.canReusePcmMode(unidentified, identified));
+    CHECK_FALSE(backend.canReusePcmMode(identified, unidentified));
+  }
+
   TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected", "[audio][unit][null-backend]")
   {
     auto target = NoopRenderTarget{};
@@ -67,8 +143,9 @@ namespace ao::audio::test
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
-    // Zero precision is unknown, so no lossless encoding can be selected.
-    auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 0};
+    // A zero precision is an unknown source precision; an identified speaker
+    // mask does not license an open for it.
+    auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 0, .speakerMask = 0x3};
 
     CHECK_FALSE(backend.prewarmFormatHint(source));
 

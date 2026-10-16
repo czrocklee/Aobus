@@ -12,6 +12,7 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
@@ -45,6 +46,12 @@ namespace ao::audio::backend
     WasapiSharedBackend& operator=(WasapiSharedBackend const&) = delete;
     WasapiSharedBackend(WasapiSharedBackend&&) = delete;
     WasapiSharedBackend& operator=(WasapiSharedBackend&&) = delete;
+
+    std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept override;
+
+    // Proves a nonexact reuse only from this open's live initialized FL/FR
+    // stereo client descriptor; a closed or unopened stream stays exact.
+    bool canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept override;
 
     BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;

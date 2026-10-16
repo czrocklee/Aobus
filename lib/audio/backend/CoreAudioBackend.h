@@ -6,10 +6,12 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SignalFormat.h>
 
 #include <memory>
+#include <optional>
 
 namespace ao::audio::backend::detail
 {
@@ -39,6 +41,7 @@ namespace ao::audio::backend
     CoreAudioBackend(CoreAudioBackend&&) = delete;
     CoreAudioBackend& operator=(CoreAudioBackend&&) = delete;
 
+    std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept override;
     BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;

@@ -12,6 +12,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+
 namespace ao::audio::backend::test
 {
   namespace
@@ -59,10 +61,21 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - geometry refusal outranks precision refusal", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireBackend - geometry refusal outranks layout and precision refusals", "[audio][unit][pipewire]")
   {
     auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
     auto target = ::ao::audio::test::NoopRenderTarget{};
+
+    SECTION("a masked source with no sample rate still reports the geometry refusal")
+    {
+      auto const openedRes =
+        backend.open(SignalFormat{.sampleRate = 0, .channels = 2, .precisionBits = 16, .speakerMask = 0x3}, target);
+
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().error.code == Error::Code::InvalidInput);
+      CHECK(openedRes.error().error.message == "PipeWire PCM formats require a sample rate and channels");
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    }
 
     SECTION("an unrepresentable source with no channels still reports the geometry refusal")
     {
@@ -84,7 +97,8 @@ namespace ao::audio::backend::test
 
     SECTION("a 33-bit integer signal has no lossless encoding at all")
     {
-      auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 33};
+      auto const sourceFormat =
+        SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 33, .speakerMask = 0x30};
       auto const openedRes = backend.open(sourceFormat, target);
 
       REQUIRE_FALSE(openedRes);
@@ -108,22 +122,45 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - prewarm predicts the lossless mode without native negotiation",
+  TEST_CASE("PipeWireBackend - prewarm retains admitted complete sets without native negotiation",
             "[audio][unit][pipewire]")
   {
     // prewarmFormatHint is non-blocking and performs no native open or
     // negotiation, so a synthetic device observes only local admission policy.
     auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
 
-    SECTION("an ordinary representable source retains its precision")
+    for (auto const source :
+         {SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16},
+          SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3},
+          SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x30},
+          SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x5},
+          SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16, .speakerMask = 0x1},
+          SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16, .speakerMask = 0x4},
+          SignalFormat{.sampleRate = 48000, .channels = 4, .precisionBits = 16, .speakerMask = 0x33}})
     {
-      auto const optHint =
-        backend.prewarmFormatHint(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16});
-
+      auto const optHint = backend.prewarmFormatHint(source);
       REQUIRE(optHint);
       CHECK(optHint->sampleRate == 48000U);
-      CHECK(optHint->channels == 2U);
+      CHECK(optHint->channels == source.channels);
+      CHECK(optHint->speakerMask == source.speakerMask);
       CHECK(optHint->encoding == SampleEncoding::Signed16Le);
+    }
+  }
+
+  TEST_CASE("PipeWireBackend - malformed speaker sets are local track refusals", "[audio][unit][pipewire]")
+  {
+    auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+
+    for (auto const mask : {std::uint32_t{1}, std::uint32_t{7}, std::uint32_t{0x80000001}})
+    {
+      auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = mask};
+      auto const openedRes = backend.open(source, target);
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+      CHECK(openedRes.error().error.code == Error::Code::NotSupported);
+      CHECK(openedRes.error().error.message == "PipeWire requires a complete supported speaker set");
+      CHECK_FALSE(backend.prewarmFormatHint(source));
     }
   }
 } // namespace ao::audio::backend::test

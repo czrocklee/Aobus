@@ -3,6 +3,7 @@
 
 #include "backend/AlsaExclusiveBackend.h"
 
+#include "backend/detail/AlsaChannelMap.h"
 #include "backend/detail/AlsaGraphRegistry.h"
 #include "backend/detail/AlsaMixerSession.h"
 #include "backend/detail/AlsaModeSelector.h"
@@ -12,6 +13,7 @@
 #include "backend/detail/AlsaPrewarmCache.h"
 #include "backend/detail/AudioBackendRenderProgress.h"
 #include "detail/DecoderOutput.h"
+#include "detail/PcmModeReuse.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -35,6 +37,7 @@ extern "C"
 }
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -133,6 +136,13 @@ namespace ao::audio::backend
     std::optional<OpenedPcmMode> optOpenedMode;
 
     detail::AlsaPrewarmCache prewarmCache;
+    // Immutable while the playback worker is live; stop/join precedes reset.
+    detail::AlsaChannelMap channelMap;
+    // Per-open two-speaker identity-reuse proof, computed once at open from
+    // the cached actual observations and cleared before any close-lifetime
+    // change. Control-lifecycle state: the reuse query reads only this flag
+    // and the stored configured client format.
+    bool stereoReuseProven = false;
     RenderTarget* renderTarget = nullptr;
 
     AlsaPcmPtr pcmPtr;
@@ -168,11 +178,13 @@ namespace ao::audio::backend
     struct NegotiatedMode final
     {
       OpenedPcmMode mode;
+      detail::AlsaChannelMap channelMap;
       ::snd_pcm_uframes_t periodSize = 0;
     };
 
     std::expected<NegotiatedMode, BackendOpenFailure> negotiateHwParams(::snd_pcm_t* pcm,
                                                                         SignalFormat const& sourceFormat);
+    bool canReuseStereoIdentity() const;
     Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
     bool tryWaitForFrames(::snd_pcm_uframes_t periodSize) const;
@@ -207,6 +219,9 @@ namespace ao::audio::backend
     AO_INVARIANT(optOpenedMode);
     auto const clientFormat = optOpenedMode->clientFormat;
     std::size_t const bytesPerFrame = frameBytes(clientFormat);
+    // Provision once before the first render, bounded by the actual channel
+    // count representation and the widest supported sample container.
+    auto permutationScratch = std::array<std::byte, detail::kAlsaPermutationScratchBytes>{};
 
     // Tracks the device-side pause state owned exclusively by this thread.
     // pause()/resume() only flip the `paused` atomic; the edge is applied here.
@@ -242,8 +257,26 @@ namespace ao::audio::backend
         continue;
       }
 
-      // Use the ALSA areas formula to compute the correct destination pointer,
-      // respecting any hardware-specific first/step values.
+      // Rendering and the private permutation require tightly interleaved
+      // whole frames, not merely an MMAP_INTERLEAVED access declaration.
+      bool hasInterleavedGeometry = areas[0].step == bytesPerFrame * 8U && areas[0].first % 8U == 0U;
+
+      for (std::size_t slot = 0; slot < clientFormat.channels; ++slot)
+      {
+        hasInterleavedGeometry =
+          hasInterleavedGeometry && areas[slot].addr == areas[0].addr && areas[slot].step == areas[0].step &&
+          areas[slot].first == areas[0].first + (slot * bytesPerSample(clientFormat.encoding) * 8U);
+      }
+
+      if (!hasInterleavedGeometry)
+      {
+        std::ignore = ::snd_pcm_mmap_commit(pcmPtr.get(), offset, 0);
+        fatalStreamError.store(true, std::memory_order_relaxed);
+        renderTarget->handleBackendError("ALSA returned incompatible interleaved byte geometry");
+        break;
+      }
+
+      // Use the ALSA areas formula for the first whole frame.
       auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + (offset * areas[0].step)) / 8);
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
@@ -259,6 +292,7 @@ namespace ao::audio::backend
       {
         auto const committedBytes = static_cast<std::size_t>(framesRead) * bytesPerFrame;
 
+        detail::applyAlsaChannelPermutation({dst, committedBytes}, channelMap, permutationScratch);
         detail::applyAlsaSoftwareGain({dst, committedBytes}, clientFormat.encoding, mixerPtr->renderGain());
 
         commitFrames(offset, framesRead, renderRes, bufferSize, periodSize);
@@ -439,10 +473,13 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::closeMixerAndClearGraph()
   {
+    // Clear the per-open reuse proof before any close-lifetime changes.
+    stereoReuseProven = false;
     mixerPtr->close();
     pcmPtr.reset();
     renderTarget = nullptr;
     optOpenedMode.reset();
+    channelMap = detail::AlsaChannelMap{};
     graphPublisher.clear(deviceName);
   }
 
@@ -615,7 +652,10 @@ namespace ao::audio::backend
 
     canPause = (::snd_pcm_hw_params_can_pause(applied) == 1);
 
-    if (!isSamePcmMode(clientFormat, *optCurrentFormat))
+    // Native storage readback has no speaker identity. Compare only the
+    // applied byte/rate geometry here; channel-map observation follows below.
+    if (clientFormat.sampleRate != optCurrentFormat->sampleRate ||
+        clientFormat.channels != optCurrentFormat->channels || clientFormat.encoding != optCurrentFormat->encoding)
     {
       return std::unexpected{BackendOpenFailure{
         .error = makeError(Error::Code::FormatRejected, "ALSA applied a different PCM mode than requested").error(),
@@ -652,15 +692,98 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
+    // The local handle has not escaped open or started a worker. Map NULLs
+    // cannot conceal storage/precision faults: those have already returned.
+    auto channelMapRes =
+      detail::prepareAlsaChannelMap(clientFormat, [pcm] { return detail::readAlsaChannelMaps(pcm); });
+
+    if (!channelMapRes)
+    {
+      return std::unexpected{channelMapRes.error()};
+    }
+
     auto const endpointSignal = SignalFormat{
       .sampleRate = clientFormat.sampleRate,
       .channels = clientFormat.channels,
       .precisionBits = endpointBits,
-      .sampleKind = isFloatEncoding(selectedRes->encoding) ? SampleKind::FloatingPoint : SampleKind::Integer};
+      .sampleKind = isFloatEncoding(selectedRes->encoding) ? SampleKind::FloatingPoint : SampleKind::Integer,
+      .speakerMask = channelMapRes->delivery.nativeSpeakerMask};
 
     return NegotiatedMode{.mode = OpenedPcmMode{.clientFormat = clientFormat,
-                                                .optEndpoint = ConfirmedEndpoint{.signalFormat = endpointSignal}},
+                                                .optEndpoint = ConfirmedEndpoint{.signalFormat = endpointSignal},
+                                                .channelDelivery = channelMapRes->delivery},
+                          .channelMap = std::move(*channelMapRes),
                           .periodSize = periodSize};
+  }
+
+  // Computes this open's two-speaker identity-reuse proof once, from the
+  // cached actual channel-map observations and the configured mode, on the
+  // control side before the open result escapes. Re-plan copies through the
+  // pure admission seam are legal here and forbidden in the noexcept query;
+  // no second native query or set happens.
+  bool AlsaExclusiveBackend::Impl::canReuseStereoIdentity() const
+  {
+    if (!optOpenedMode)
+    {
+      return false;
+    }
+
+    auto const& configured = optOpenedMode->clientFormat;
+    auto const otherMask = configured.speakerMask == 0U ? 0x3U : 0U;
+    auto const other = PcmFormat{
+      .sampleRate = configured.sampleRate, .channels = 2, .encoding = configured.encoding, .speakerMask = otherMask};
+
+    // The candidate gate is scalar; only a proved canonical stereo open may
+    // arm the reuse flag.
+    if (!audio::detail::isCanonicalStereoReuseCandidate(configured, configured, other))
+    {
+      return false;
+    }
+
+    auto const& observations = channelMap.observations;
+
+    auto const planFor = [&observations](PcmFormat const& clientFormat)
+    {
+      return detail::prepareAlsaChannelMap(
+        clientFormat,
+        [&observations]
+        { return std::expected<detail::AlsaChannelMapObservations, BackendOpenFailure>{observations}; });
+    };
+
+    auto const configuredPlanRes = planFor(configured);
+    auto const otherPlanRes = planFor(other);
+
+    if (!configuredPlanRes || !otherPlanRes)
+    {
+      return false;
+    }
+
+    auto const sameTransport = [](detail::AlsaChannelMap const& lhs, detail::AlsaChannelMap const& rhs) noexcept
+    {
+      if (lhs.channels != rhs.channels || lhs.sampleBytes != rhs.sampleBytes ||
+          lhs.needsPermutation != rhs.needsPermutation)
+      {
+        return false;
+      }
+
+      // needsPermutation false means identity; only the slots a plan
+      // actually uses decide, never the unused array tail.
+      for (std::size_t slot = 0; slot < lhs.channels; ++slot)
+      {
+        if (lhs.sourceSlots[slot] != rhs.sourceSlots[slot])
+        {
+          return false;
+        }
+      }
+
+      return true;
+    };
+
+    // The re-planned configured identity must reproduce the admitted plan
+    // the playback loop uses, and the other canonical identity must admit
+    // the identical transport. No native role or verification claim is
+    // inferred beyond the cached facts.
+    return sameTransport(*configuredPlanRes, channelMap) && sameTransport(*configuredPlanRes, *otherPlanRes);
   }
 
   Result<> AlsaExclusiveBackend::Impl::configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize)
@@ -725,6 +848,27 @@ namespace ao::audio::backend
     return Backend::prewarmFormatHint(sourceFormat);
   }
 
+  bool AlsaExclusiveBackend::canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept
+  {
+    if (isSamePcmMode(current, next))
+    {
+      return true;
+    }
+
+    if (!_implPtr->optOpenedMode)
+    {
+      return false;
+    }
+
+    // Fixed scalar candidate checks plus this open's cached proof only: no
+    // re-plan, allocations, native calls or waits. The proof is computed once
+    // at open from the cached actual observations and the stored configured
+    // client format; close() clears it before lifetime changes. Both are
+    // control-lifecycle state, serialized with this query.
+    return _implPtr->stereoReuseProven &&
+           audio::detail::isCanonicalStereoReuseCandidate(_implPtr->optOpenedMode->clientFormat, current, next);
+  }
+
   BackendOpenResult AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
     // Reject deterministic source refusals before this backend's own close().
@@ -786,7 +930,14 @@ namespace ao::audio::backend
         BackendOpenFailure{.error = res.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
+    _implPtr->channelMap = std::move(negotiatedRes->channelMap);
     _implPtr->optOpenedMode = negotiatedRes->mode;
+
+    // Arm the per-open reuse proof once, control-side, before the open
+    // result escapes. Every failure path returned above, and open() began
+    // with close(), so the flag starts cleared.
+    _implPtr->stereoReuseProven = _implPtr->canReuseStereoIdentity();
+
     _implPtr->prewarmCache.store(sourceFormat, negotiatedRes->mode.clientFormat);
     _implPtr->renderTarget = &target;
 

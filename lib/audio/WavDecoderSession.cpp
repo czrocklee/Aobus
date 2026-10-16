@@ -8,6 +8,7 @@
 #include "detail/DecoderOutputAdapter.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
@@ -16,6 +17,7 @@
 #include <ao/utility/MappedFile.h>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <chrono>
 #include <cstddef>
@@ -23,6 +25,7 @@
 #include <cstring>
 #include <expected>
 #include <filesystem>
+#include <format>
 #include <memory>
 #include <optional>
 #include <span>
@@ -137,6 +140,70 @@ namespace ao::audio
       }
     }
 
+    Result<std::uint32_t> wavSpeakerMask(media::wav::FormatChunk const& format)
+    {
+      // These are WAV compatibility identities, not count-derived native maps.
+      static constexpr auto kCompatibilityMasks =
+        std::to_array<std::uint32_t>({0x4, 0x3, 0x7, 0x33, 0x37, 0x3F, 0x70F, 0x63F});
+      static constexpr std::uint32_t kSupportedPositions = 0x0003FFFF;
+      static constexpr std::uint32_t kAllSpeakers = 0x80000000;
+      auto const optDeclaration = format.optChannelMask;
+
+      if (!optDeclaration || *optDeclaration == 0)
+      {
+        if (format.channels >= 1 && format.channels <= kCompatibilityMasks.size())
+        {
+          return kCompatibilityMasks[format.channels - 1U];
+        }
+
+        return makeError(Error::Code::NotSupported,
+                         std::format("WAV channel layout: {} channels with {} has no supported fallback",
+                                     format.channels,
+                                     optDeclaration ? "explicit mask 0x00000000" : "no mask declaration"));
+      }
+
+      auto const declaration = *optDeclaration;
+
+      // Ordinary playback refuses ALL as a wildcard policy flag before the
+      // WAVE excess-position rule: it is not an assigned speaker position.
+      if ((declaration & kAllSpeakers) != 0)
+      {
+        return makeError(
+          Error::Code::NotSupported,
+          std::format(
+            "WAV channel layout: mask 0x{:08X} for {} channels contains a wildcard", declaration, format.channels));
+      }
+
+      if (std::popcount(declaration) < format.channels)
+      {
+        return makeError(
+          Error::Code::NotSupported,
+          std::format(
+            "WAV channel layout: mask 0x{:08X} only partially assigns {} channels", declaration, format.channels));
+      }
+
+      auto effectiveMask = declaration;
+
+      // WAVE ignores excess highest positions. Count still owns PCM stride,
+      // and the original DWORD remains source evidence after interpretation.
+      while (std::popcount(effectiveMask) > format.channels)
+      {
+        effectiveMask &= ~(std::uint32_t{1} << (std::bit_width(effectiveMask) - 1U));
+      }
+
+      if ((effectiveMask & ~kSupportedPositions) != 0)
+      {
+        return makeError(Error::Code::NotSupported,
+                         std::format("WAV channel layout: mask 0x{:08X} for {} channels activates reserved positions "
+                                     "(effective mask 0x{:08X})",
+                                     declaration,
+                                     format.channels,
+                                     effectiveMask));
+      }
+
+      return effectiveMask;
+    }
+
     SampleEncoding nativeWavEncoding(media::wav::FormatChunk const& format)
     {
       if (format.isFloat)
@@ -184,11 +251,19 @@ namespace ao::audio
 
     void selectOutputFormat(media::wav::FormatChunk const& format)
     {
+      auto const maskRes = wavSpeakerMask(format);
+
+      if (!maskRes)
+      {
+        detail::throwDecoderError(maskRes.error());
+      }
+
       auto const sourceFormat = SignalFormat{
         .sampleRate = format.sampleRate,
         .channels = static_cast<std::uint8_t>(format.channels),
         .precisionBits = static_cast<std::uint8_t>(format.validBitsPerSample),
         .sampleKind = format.isFloat ? SampleKind::FloatingPoint : SampleKind::Integer,
+        .speakerMask = *maskRes,
       };
       auto const configuredRes = outputAdapter.configure(sourceFormat, nativeWavEncoding(format));
 
@@ -197,8 +272,23 @@ namespace ao::audio
         detail::throwDecoderError(configuredRes.error());
       }
 
+      auto origin = ChannelLayoutOrigin::Inferred;
+
+      if (format.optChannelMask && *format.optChannelMask != 0)
+      {
+        origin = ChannelLayoutOrigin::Declared;
+      }
+      else if (!format.optChannelMask && format.channels <= 2)
+      {
+        origin = ChannelLayoutOrigin::FormatDefault;
+      }
+
       info.sourceFormat = sourceFormat;
       info.outputFormat = *configuredRes;
+      info.sourceChannelLayout = ChannelLayoutEvidence{
+        .origin = origin,
+        .optDeclaredMask = format.optChannelMask,
+      };
       info.isLossy = false;
       info.codec = AudioCodec::Wav;
     }

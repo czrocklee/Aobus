@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/audio/ChannelDeliveryEvidence.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/flow/Graph.h>
@@ -40,7 +42,9 @@ namespace ao::audio
    * @brief A single quality-relevant observation at a node in the audio path.
    *
    * Format transition findings (Resampling, ChannelMapping, LosslessPadding,
-   * LosslessFloat, Truncation) carry the source and destination formats.
+   * LosslessFloat, Truncation) carry the source and destination formats when
+   * reported. A known shared channel conversion can lack a reported input
+   * format or any format at all; its delivery evidence remains inspectable.
    * MixedSources findings carry the names of other applications sharing the node.
    * Software and unclassified volume findings carry a representative reported gain when the
    * backend supplied a magnitude.
@@ -52,6 +56,11 @@ namespace ao::audio
     float gain = 0.0F;
     std::optional<NodeFormat> optFromFormat{};
     std::optional<NodeFormat> optToFormat{};
+    // Additional role constraints explaining ChannelMapping, not canonical
+    // storage masks. Absent values use the reported endpoint format masks;
+    // those formats continue to own count and byte order.
+    std::optional<std::uint32_t> optFromSpeakerMask{};
+    std::optional<std::uint32_t> optToSpeakerMask{};
     std::vector<std::string> sharedApps{};
 
     bool operator==(QualityFinding const&) const = default;
@@ -71,6 +80,8 @@ namespace ao::audio
     std::optional<NodeFormat> optFormat{};
     Quality worstQuality = Quality::BitwisePerfect;
     std::vector<QualityFinding> findings{};
+    ChannelLayoutEvidence sourceChannelLayout{};
+    ChannelDeliveryEvidence channelDelivery{};
 
     bool operator==(NodeQualityAssessment const&) const = default;
   };
@@ -84,6 +95,7 @@ namespace ao::audio
     Quality pipelineQuality = Quality::Unknown;
     Quality overall = Quality::Unknown;
     bool fullyVerified = true;
+    ChannelConfidence channelConfidence = ChannelConfidence::Unknown;
     std::vector<NodeQualityAssessment> assessments{};
 
     bool operator==(QualityResult const&) const = default;
@@ -103,6 +115,23 @@ namespace ao::audio
    * This is a pure function that evaluates the signal path from the decoder
    * to the final output device, producing a per-node assessment of quality
    * findings.
+   *
+   * Channel confidence describes only this snapshot's selected software path.
+   * Verified requires a Source with Declared or FormatDefault identity, complete
+   * canonical identities on Source/Decoder/Engine nodes, and complete observed
+   * position sets with Mapped delivery on every Stream/Intermediary/Sink node.
+   * Native sets come from the native format mask or nativeSpeakerMask; the
+   * latter establishes positions without asserting canonical native byte order.
+   * Missing roles in compatible partial reports are uncertainty, not alteration.
+   * Known roles that cannot coexist within channel-count geometry are channel
+   * alterations, never verified mapping. Partial reports cannot erase a prior
+   * complete identity or establish source identity.
+   * Inferred source history caps that same established path at Inferred.
+   * Missing source identity/history or absence of a Sink-reaching path yields
+   * Unknown; incomplete identities or native mapping evidence are Unverified. Known
+   * alterations take precedence as Converted, independently of mapping facts.
+   * Neither confidence nor source history changes fullyVerified's existing
+   * format-presence plus Sink contract or supplies missing native positions.
    *
    * @param graph The complete system audio graph to analyze.
    * @return A QualityResult containing per-node assessments and the global verdict.

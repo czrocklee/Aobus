@@ -58,11 +58,17 @@ When the playback path begins with a reported format, the source axis starts bit
 The pipeline axis starts bitwise-perfect and accumulates every non-source finding by analyzer severity.
 `overall` retains the worse of source and pipeline for compatibility, sorting, simple styling, and consumers that cannot show both axes.
 
-`fullyVerified` is independent confidence evidence.
+Source graph nodes retain the decoder's independent channel-layout interpretation history. Native nodes retain backend-owned delivery evidence and independently established native speaker sets; a native format mask can stay zero when its noncanonical byte order cannot be represented by `PcmFormat`. Neither native set nor delivery evidence is filled from the source request.
+
+`channelConfidence` is independent of the numerical axes and `fullyVerified`: no useful source identity/path is Unknown; missing or legacy native mapping is Unverified; an otherwise established mapped software path with inferred source identity is Inferred; complete declared/default source identity plus established native software relationships is Verified. Known channel alteration is Converted even when other positioning remains uncertain. Native mapping requires a reported format/count and a complete independently established set; equal channel counts alone prove nothing. These values describe the observed software boundary, not physical wiring or gain/crosstalk verification.
+
+An initial backend-open delivery snapshot is retained with the route. Quality analysis consumes the current provider graph instead of projecting that older snapshot over new observations. Existing generation and subscription retirement reject obsolete publications; evidence-only graph differences can produce new assessments.
+
+`fullyVerified` is independent format-presence confidence evidence.
 It is false when the path terminates before a Sink or any path node omits its format.
 Missing evidence does not by itself downgrade the pipeline axis because Aobus cannot claim that an unreported conversion occurred.
 
-Every assessment records node identity, type, name, optional format, its worst local severity, and ordered findings.
+Every assessment records node identity, type, name, optional format, its worst local severity, ordered findings, source history and native delivery facts separately.
 A node with no property or incoming-transition finding receives an explicit BitPerfect finding; a missing format still makes the whole result partially verified.
 
 ## Commands and transitions
@@ -89,7 +95,7 @@ The runtime volume snapshot independently exposes whether control is hardware-as
 Transition findings carry source and destination formats. For each adjacent pair with reported formats, the analyzer compares:
 
 - sample rate, producing Resampling when it changes;
-- channel count, producing ChannelMapping when it changes;
+- channel count or known effective speaker identity, producing ChannelMapping when it changes; an unknown intervening position does not erase a known end-to-end contradiction;
 - signal/encoding domain, nominal bit count, and concrete representation width, producing lossless padding, lossless float mapping, proven lossless round trip, or truncation.
 
 Integer representation widening within the integer domain is lossless when the destination encoding's nominal precision is not smaller.
@@ -99,6 +105,10 @@ Float representation widening within the float domain is lossless float mapping 
 Integer-to-32-bit-float mapping is lossless only through 24 proven source bits.
 Other integer-to-float changes are quantizing truncation.
 Float-to-integer changes are truncation unless round-trip proof remains valid and the destination encoding can contain the proven source precision.
+
+A known channel-conversion flag also produces ChannelMapping at the receiving boundary. A single shared client-to-output conversion belongs to the Sink, not also to its unchanged client Stream; independently observed upstream changes still produce their own findings. Contradictory nonzero native-set and format evidence cannot verify a path. Missing roles alone do not fabricate mixing or reduce numerical quality. A proved same-set one-to-one native permutation preserves sample values and incurs no channel-intervention finding; it is distinct from mixing, dropping or relabelling.
+
+ChannelMapping findings retain independent role constraints when the endpoint formats alone cannot explain the change. A complete earlier identity survives compatible partial observations; a contradiction within one node retains its actual format and native role reports rather than presenting their impossible union as one layout. These finding roles explain the observation without changing either endpoint's canonical storage mask. Format geometry still owns counts, and missing endpoint geometry never justifies deriving a count from mask population. After an attributed count change, contradictory local roles cannot establish a new identity anchor or repeat that same count change at an unchanged downstream node.
 
 The analyzer never derives alignment or container width from source precision.
 `Signed24PackedLe`, `Signed24In32Le`, and `Signed32Le` therefore remain distinguishable representation evidence.
@@ -179,7 +189,7 @@ Frontend panels consume the ordered assessments and shared presentation rather t
 
 ## Test map
 
-- [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp) proves axes, findings, attribution, precision, verification, float conversion, and proof invalidation.
+- [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp) proves axes, findings, attribution, precision, verification, float conversion, and proof invalidation; [`ChannelQualityTest.cpp`](../../../test/unit/audio/ChannelQualityTest.cpp) proves independent channel confidence, same-count identity changes, actual native-set evidence, uncertainty versus conversion and precision-proof invalidation.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) proves merged-graph handling, generation gating, incomplete provider evidence, callback marshalling, and readiness.
 - [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication; [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp) proves the concrete property-to-graph observation wiring and closed-state non-publication.
 - [`CoreAudioGraphTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioGraphTest.cpp) proves Core Audio client/device format separation and software-gain evidence.

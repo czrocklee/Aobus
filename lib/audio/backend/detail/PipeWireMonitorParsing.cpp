@@ -4,7 +4,6 @@
 #include "backend/detail/PipeWireMonitorParsing.h"
 
 #include "backend/detail/PipeWireFormatParsing.h"
-#include <ao/audio/PcmFormat.h>
 
 extern "C"
 {
@@ -94,18 +93,18 @@ namespace ao::audio::backend::detail
     return record;
   }
 
-  std::optional<PcmFormat> currentFormatFromNodeParam(std::uint32_t const paramId,
-                                                      ::spa_pod const* const param) noexcept
+  std::optional<RawStreamFormat> currentFormatFromNodeParam(std::uint32_t const paramId,
+                                                            ::spa_pod const* const param) noexcept
   {
     if (paramId != SPA_PARAM_Format)
     {
       return std::nullopt;
     }
 
-    return parseRawStreamFormat(param);
+    return parseRawMonitorObservation(param);
   }
 
-  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, PcmFormat>& nodeFormatMap,
+  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, RawStreamFormat>& nodeFormatMap,
                                         std::uint32_t const nodeId,
                                         std::uint32_t const paramId,
                                         ::spa_pod const* const param)

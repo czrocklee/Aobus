@@ -22,29 +22,64 @@ Public PCM values and Backend methods live under `include/ao/audio/`; lossless c
 `SignalFormat` describes audio independently of its byte container.
 
 Rate counts frames per second, channel count describes interleaved channels, and precision measures meaningful signal bits rather than container width.
-The sample kind distinguishes the integer and floating-point domains.
+The sample kind distinguishes the integer and floating-point domains. The effective WAVE-style `speakerMask` describes assigned speaker identities independently of the authoritative channel count.
 
 ### Channel order
 
-No PCM surface carries channel-layout metadata.
-For an identified speaker layout of one through eight channels, the channel count therefore selects this WAV/Microsoft order:
+Both shared formats carry an effective `speakerMask`. Identified application slots use ascending assigned WAVE speaker-bit order; zero assigns no speakers and never selects a default from the channel count. Count alone determines the number of interleaved slots and byte stride. These value types do not perform population-count admission, infer missing speakers, or permute samples.
 
-| Channels | Order |
-|---:|---|
-| 1 | Mono |
-| 2 | `FL`, `FR` |
-| 3 | `FL`, `FR`, `FC` |
-| 4 | `FL`, `FR`, `BL`, `BR` |
-| 5 | `FL`, `FR`, `FC`, `BL`, `BR` |
-| 6 | `FL`, `FR`, `FC`, `LFE`, `BL`, `BR` |
-| 7 | `FL`, `FR`, `FC`, `LFE`, `BC`, `SL`, `SR` |
-| 8 | `FL`, `FR`, `FC`, `LFE`, `BL`, `BR`, `SL`, `SR` |
+WAV interprets its container declaration before publishing identified canonical PCM; the other codec producers still publish zero masks and unknown source interpretation evidence. Native backends preserve the canonical application identity while owning any private slot permutation. Otherwise admitted routes with genuinely unknown positions remain explicitly legacy-unverified, not verified mappings. Available known contradictions require a correct relationship or contextual refusal; they are not erased to unknown. Null output retains application identities but has no native-delivery evidence.
 
-A decoder whose codec orders identified speakers differently normalizes before emitting PCM; it never publishes that codec-native speaker order.
-AAC does this through the FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING` parameter, and Opus mapping family 1 does it by permuting the channel mapping it hands libopus.
-FLAC, WAVE, and ALAC are already in this order.
+AAC requests FDK WAV output mapping and Opus family 1 permutes its decoder mapping; these existing mechanisms do not establish end-to-end speaker verification. The current ALAC session does not normalize the provider's codec element order, which cannot be declared canonical from count alone. Its numerical provider and decoding eligibility are unchanged here.
 
-Opus mapping family 255 is the exception to the identified-layout table: it may expose up to 255 channels, but those channels have no assigned speaker positions and remain in header-defined output-index order.
+Opus family 255 may expose up to 255 unassigned channels in header-defined output-index order. This slice does not change its decoding eligibility or infer speaker roles.
+
+`ChannelLayoutEvidence` records source interpretation separately from format identity: declared, normative format default, inferred compatibility, or unknown. Its optional decoded, unnormalized WAVE-style declaration distinguishes absence from explicit zero; codec-specific tags, namespaces, and conflict context are not interchangeable with that integer. Origin describes the effective interpretation, not a validity or native-delivery verdict. Evidence participates in stream and route snapshots, but not PCM-mode equality.
+
+### WAV source interpretation
+
+WAV PCM already follows ascending assigned-bit order; assigning identity does not permute its samples. The parser retains the raw DWORD independently of decoder admission, including absence versus an engaged zero.
+
+| Input | Effective identity and evidence |
+|---|---|
+| Plain mono/stereo, no declaration | FC `0x4` / FL-FR `0x3`, `FormatDefault`. |
+| Plain 3–8-channel WAV | The compatibility table below, `Inferred`, with no declaration. |
+| Extensible explicit zero, 1–8 channels | The same table, `Inferred`, retaining the engaged raw zero. |
+| Complete supported nonzero declaration | Its actual effective set, `Declared`, retaining the original DWORD. Alternate mono/two-channel sets are not relabelled by count. |
+| More positional bits than channels | Ignore excess highest bits as WAVE specifies, then validate the effective positions; retain the complete original declaration. |
+| Partial assignment, active reserved positions or wildcard | Contextual recoverable source refusal before backend open. A wildcard is not an excess positional bit. |
+| Absent/zero declaration outside the table | No invented fallback; ordinary playback refuses the source. Complete supported declarations are not limited to eight channels. |
+
+| Channels | Mask | Canonical roles |
+|---:|---:|---|
+| 1 | `0x004` | FC |
+| 2 | `0x003` | FL FR |
+| 3 | `0x007` | FL FR FC |
+| 4 | `0x033` | FL FR BL BR |
+| 5 | `0x037` | FL FR FC BL BR |
+| 6 | `0x03F` | FL FR FC LFE BL BR |
+| 7 | `0x70F` | FL FR FC LFE BC SL SR |
+| 8 | `0x63F` | FL FR FC LFE BL BR SL SR |
+
+The multichannel table and explicit-zero interpretation are Aobus compatibility policy, not a universal codec or native-device default. WAVE zero normally denotes direct-out; interpreting it as speakers can misinterpret intentional discrete/stem content. Partial, reserved, wildcard and unsupported fallback refusals can remove previously attempted playback eligibility. Import/parser retention is a separate boundary and does not acquire these decoder refusals.
+See Microsoft's [WAVEFORMATEXTENSIBLE reference](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-waveformatextensible) for raw ordering, excess-bit and direct-out semantics.
+
+### Existing codec-order limitations
+
+Unknown masks do not repeal existing codec normalization obligations. Opus family 1's canonical destination-to-decoder permutations are `3:[0,2,1]`, `5:[0,2,1,3,4]`, `6:[0,2,1,5,3,4]`, `7:[0,2,1,6,5,3,4]`, and `8:[0,2,1,7,5,6,3,4]`; counts 1, 2 and 4 are identity.
+
+For the ALAC reference element-order convention, the canonical permutations and role sets differ from the WAV fallback table:
+
+| Count | Reference order | Canonical destination-to-source indices | Set |
+|---:|---|---|---:|
+| 3 | C L R | `1,2,0` | `0x007` |
+| 4 | C L R Cs | `1,2,0,3` | `0x107` |
+| 5 | C L R Ls Rs | `1,2,0,3,4` | `0x037` |
+| 6 | C L R Ls Rs LFE | `1,2,0,5,3,4` | `0x03F` |
+| 7 | C L R Ls Rs Cs LFE | `1,2,0,6,3,4,5` | `0x13F` |
+| 8 | C Lc Rc L R Ls Rs LFE | `3,4,0,7,5,6,1,2` | `0x0FF` |
+
+This is a reference for the known unnormalized ALAC boundary, not a claim that arbitrary container tags establish that order or that these permutations are implemented by the current ALAC session. ALAC-reference and generic Core Audio/CAF layout-tag namespaces are not interchangeable; equal counts, masks or numeric tags do not prove equal slot order. In particular, reference ALAC four-channel is not quad, seven-channel is not WAV seven-channel, and eight-channel includes wide/back roles. Neither guessing a producer nor a blanket 4/7/8-channel ban repairs this defect.
 
 ### PCM encoding
 
@@ -65,7 +100,7 @@ The negative packed value `FF FF FF` becomes `FF FF FF FF` in `Signed24In32Le`.
 
 ### Concrete PCM format
 
-`PcmFormat` contains `sampleRate`, `channels`, and `encoding`.
+`PcmFormat` contains `sampleRate`, `channels`, `encoding`, and `speakerMask`.
 It is the exact byte-level stream mode and deliberately does not duplicate the source's logical precision.
 For example, losslessly widened 16-bit audio carried as `Signed32Le` uses the same concrete `PcmFormat` as any other `Signed32Le` stream; the track's `SignalFormat` remains the authority that the source contained 16 meaningful bits.
 
@@ -81,17 +116,20 @@ Such a node therefore uses `SignalFormat`.
 ### Confirmed open outcome
 
 `ConfirmedEndpoint` holds the `SignalFormat` a backend observed behind the mode it configured.
-`OpenedPcmMode` pairs the `clientFormat` handed to the native API with an optional `ConfirmedEndpoint`.
+`OpenedPcmMode` pairs the canonical render-target `clientFormat` with an optional `ConfirmedEndpoint` and an initial channel-delivery snapshot. Native descriptors and lossless slot permutations are backend-owned; a noncanonical native byte order is not encoded by lying about the application's mask.
 
 An absent endpoint means the backend could not inspect a direct endpoint during that open.
 It does not mean the endpoint matches the client format.
-Endpoint presence never admits a narrower client mode: the client encoding and every confirmed endpoint must preserve the source precision.
+Endpoint presence never admits a narrower client mode: the client encoding and every confirmed endpoint must preserve the source precision. The confirmed endpoint remains a precision bound for subsequent spliced sources during that same open; a wider client container does not erase it.
+
+`ChannelDeliveryEvidence` separates a mapped software relationship from legacy uncertainty and from independently known channel conversion. Its native speaker set comes from successful native configuration or observation, not the application request; it does not assert canonical native byte order or physical wiring. Unknown native sets stay zero. Initial-open evidence is a snapshot, never a second authority that can override fresher provider observations. Source origin, native delivery, format-presence verification and aggregate channel confidence are separate facts.
 
 ### Format interpretation
 
 Converting a concrete PCM format to logical signal facts yields the encoding's nominal precision; it cannot recover the original source precision.
 A complete interleaved frame occupies channel count times container bytes per sample; an incomplete format has zero frame bytes.
-Concrete mode equality compares rate, channel count, and encoding, not source precision.
+Both signal/PCM conversion helpers preserve the effective mask. Concrete mode equality compares rate, channel count, encoding, and speaker mask, not source precision or interpretation history.
+An already-installed transport has a separate, narrower reuse proof: [Engine gapless admission](audio-execution.md#prepared-lookahead) may accept an unidentified/canonical-FL-FR stereo transition at identical rate/count/encoding only when that backend proves unchanged execution for both identities. This is not PCM equality, a cache-key alias, a source-mask rewrite or verified speaker evidence. Successor decoder/Engine values keep their actual identity while native configuration remains fixed.
 Encoding names used for diagnostics are neither persisted identities nor user-facing copy.
 The linked headers provide the helper declarations.
 
@@ -113,6 +151,7 @@ Zero precision, integer precision above 32 bits, and unsupported float precision
 
 [Backend.h](../../../include/ao/audio/Backend.h) declares the prediction and open operations.
 `prewarmFormatHint` returns a non-binding prediction derived without native I/O; an empty result means no optimistic decoder output is prepared.
+`canReusePcmMode` is a separate proof against the installed open, defaulting to exact identity; it does not perform native I/O, negotiate or mutate rendering.
 `open` requires a live render target and returns the mode actually configured for it, not a cached device capability or an echo of a requested container.
 
 ## Validation rules
@@ -125,7 +164,9 @@ Zero precision, integer precision above 32 bits, and unsupported float precision
   the open is rejected instead.
 - Float and integer signals are never converted into each other's domain
   outside the bit-transparent integer-to-float range above.
-- Backends must not substitute sample rate or channel count unless a separate conversion stage is represented in the graph.
+- Backends must not substitute sample rate, channel count, or the application speaker mask unless a separate conversion stage is represented in the graph.
+- Client/source mask equality is required. A known conflicting nonzero direct-endpoint mask is rejected; an unknown endpoint mask remains unknown, even when endpoint precision is confirmed. No source mask is copied into native readback to fill that gap.
+- Encoding conversion checks logical and concrete mask agreement and never relabels channels. A final decoder whose source mask or interpretation evidence changed after inspection is rejected before source preparation.
 - PCM blocks contain complete interleaved frames; partial samples and partial frames are invalid.
 - No PCM producer, consumer, conversion, or backend mapping may infer concrete
   container width or integer alignment from `SignalFormat::precisionBits`.
@@ -139,7 +180,7 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 
 ## Implementation authority
 
-- [`SignalFormat.h`](../../../include/ao/audio/SignalFormat.h), [`SampleEncoding.h`](../../../include/ao/audio/SampleEncoding.h), [`PcmFormat.h`](../../../include/ao/audio/PcmFormat.h), and [`NodeFormat.h`](../../../include/ao/audio/NodeFormat.h) own the value surface.
+- [`SignalFormat.h`](../../../include/ao/audio/SignalFormat.h), [`SampleEncoding.h`](../../../include/ao/audio/SampleEncoding.h), [`PcmFormat.h`](../../../include/ao/audio/PcmFormat.h), and [`NodeFormat.h`](../../../include/ao/audio/NodeFormat.h) own the value surface. [`ChannelLayoutEvidence.h`](../../../include/ao/audio/ChannelLayoutEvidence.h) owns source interpretation; [`ChannelDeliveryEvidence.h`](../../../include/ao/audio/ChannelDeliveryEvidence.h) owns independent native delivery and channel-confidence values.
 - The private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h) owns lossless candidate derivation.
 - [`PcmConversion.cpp`](../../../lib/audio/PcmConversion.cpp) owns byte conversion between concrete encodings.
 - The private [`OpenedModeValidation.h`](../../../lib/audio/detail/OpenedModeValidation.h) owns conversion admissibility and open-result validation.

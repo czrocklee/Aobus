@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/ChannelLayoutEvidence.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/NodeFormat.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -53,10 +57,135 @@ namespace ao::audio::test
     CHECK(bytesPerSecond(makeFormat(96000, 2, SampleEncoding::Signed32Le)) == static_cast<std::uint64_t>(96000) * 8U);
   }
 
+  TEST_CASE("Format helpers - signalFormat and pcmFormat copy the speaker mask", "[audio][unit][format]")
+  {
+    auto const identifiedPcm =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+
+    auto const signal = signalFormat(identifiedPcm);
+
+    CHECK(signal.sampleRate == 48000U);
+    CHECK(signal.channels == 2U);
+    CHECK(signal.precisionBits == 16U);
+    CHECK(signal.sampleKind == SampleKind::Integer);
+    CHECK(signal.speakerMask == 0x3U);
+
+    auto const roundTripped = pcmFormat(signal, SampleEncoding::Signed16Le);
+    CHECK(roundTripped == identifiedPcm);
+  }
+
+  TEST_CASE("NodeFormat - signalFormat roundtrips the speaker mask through either alternative", "[audio][unit][format]")
+  {
+    auto const identifiedPcm =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+    auto const pcmNode = NodeFormat{identifiedPcm};
+
+    auto const signal = signalFormat(pcmNode);
+
+    CHECK(signal.speakerMask == 0x3U);
+    CHECK(pcmFormat(signal, SampleEncoding::Signed16Le) == identifiedPcm);
+
+    auto const signalNode =
+      NodeFormat{SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3}};
+    CHECK(signalFormat(signalNode) == signal);
+  }
+
+  TEST_CASE("PcmFormat - same-count modes with different speaker masks are different PCM modes",
+            "[audio][unit][format]")
+  {
+    auto const unassigned = makeFormat(48000, 2, SampleEncoding::Signed16Le);
+    auto const frontStereo =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+    auto const frontStereoCopy =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+
+    CHECK(frontStereo == frontStereoCopy);
+    CHECK(unassigned != frontStereo);
+    CHECK_FALSE(isSamePcmMode(unassigned, frontStereo));
+    CHECK(isSamePcmMode(frontStereo, frontStereoCopy));
+  }
+
+  TEST_CASE("SignalFormat - same-count signals with different speaker masks are not equal", "[audio][unit][format]")
+  {
+    auto const unassigned = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
+    auto const frontStereo = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
+
+    CHECK(unassigned != frontStereo);
+    CHECK(frontStereo == SignalFormat{frontStereo});
+  }
+
+  TEST_CASE("PcmFormat - frameBytes follows channel count and encoding, not speaker population",
+            "[audio][unit][format]")
+  {
+    auto const twoChannel = [&](std::uint32_t const speakerMask)
+    {
+      return PcmFormat{
+        .sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = speakerMask};
+    };
+
+    // Unassigned, matching, partial, and extra speaker populations all describe
+    // two S16 channels; the channel count stays authoritative for byte geometry.
+    CHECK(frameBytes(twoChannel(0U)) == 4U);
+    CHECK(frameBytes(twoChannel(0x3)) == 4U);
+    CHECK(frameBytes(twoChannel(0x1)) == 4U);
+    CHECK(frameBytes(twoChannel(0x7)) == 4U);
+
+    CHECK(bytesPerSecond(twoChannel(0x3)) == static_cast<std::uint64_t>(48000) * 4U);
+  }
+
+  TEST_CASE("DecodedStreamInfo - channel-layout evidence alone distinguishes otherwise equal streams",
+            "[audio][unit][format]")
+  {
+    auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
+    auto const outputFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+
+    auto const unexamined = DecodedStreamInfo{.sourceFormat = sourceFormat, .outputFormat = outputFormat};
+    auto const declared = DecodedStreamInfo{.sourceFormat = sourceFormat,
+                                            .outputFormat = outputFormat,
+                                            .sourceChannelLayout = {ChannelLayoutOrigin::Declared, 0x3U}};
+
+    CHECK(unexamined.sourceFormat == declared.sourceFormat);
+    CHECK(unexamined.outputFormat == declared.outputFormat);
+    CHECK(unexamined != declared);
+    CHECK(unexamined == DecodedStreamInfo{unexamined});
+  }
+
+  TEST_CASE("ChannelLayoutEvidence - an explicit zero declaration differs from an absent one", "[audio][unit][format]")
+  {
+    auto const absent = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared};
+    auto const explicitZero = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0U};
+
+    CHECK_FALSE(absent.optDeclaredMask);
+    REQUIRE(explicitZero.optDeclaredMask);
+    CHECK(*explicitZero.optDeclaredMask == 0U);
+    CHECK(absent != explicitZero);
+    CHECK(absent == ChannelLayoutEvidence{absent});
+    CHECK(explicitZero == ChannelLayoutEvidence{explicitZero});
+  }
+
   // The helpers must be usable in constant expressions (RT-path callers depend on
   // them folding away).
   static_assert(frameBytes(PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le}) ==
                 4U);
   static_assert(bytesPerSecond(PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le}) ==
                 2000U);
+
+  // A speaker mask is copied identity, never stride; a nonzero mask never turns
+  // a two-channel S16 mode into a different byte geometry.
+  static_assert(signalFormat(PcmFormat{.sampleRate = 48000,
+                                       .channels = 2,
+                                       .encoding = SampleEncoding::Signed16Le,
+                                       .speakerMask = 0x3})
+                  .speakerMask == 0x3U);
+  static_assert(pcmFormat(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3},
+                          SampleEncoding::Signed16Le)
+                  .speakerMask == 0x3U);
+  static_assert(frameBytes(PcmFormat{.sampleRate = 48000,
+                                     .channels = 2,
+                                     .encoding = SampleEncoding::Signed16Le,
+                                     .speakerMask = 0x7}) == 4U);
+  static_assert(!isSamePcmMode(
+    PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le},
+    PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3}));
 } // namespace ao::audio::test

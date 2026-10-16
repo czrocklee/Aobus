@@ -19,8 +19,10 @@ extern "C"
 #include <spa/utils/dict.h>
 }
 
+#include "backend/detail/PipeWireFormatParsing.h"
 #include "backend/detail/PipeWireMonitorParsing.h"
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/flow/Graph.h>
@@ -31,6 +33,7 @@ extern "C"
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -293,7 +296,7 @@ namespace ao::audio::backend
     std::unordered_map<std::uint32_t, LinkBinding> linkBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> streamNodeBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> sinkNodeBindings;
-    std::unordered_map<std::uint32_t, PcmFormat> nodeFormatMap;
+    std::unordered_map<std::uint32_t, RawStreamFormat> nodeFormatMap;
     std::unordered_map<std::uint32_t, SinkProps> sinkPropsMap;
 
     std::atomic<bool> stopping{false};
@@ -1503,7 +1506,15 @@ namespace ao::audio::backend
 
     if (auto const optFormatIt = nodeFormatMap.find(id); optFormatIt != nodeFormatMap.end())
     {
-      node.optFormat = optFormatIt->second;
+      auto const& observed = optFormatIt->second;
+      node.optFormat = observed.format;
+      bool const hasCompleteNativeSet = !observed.hasUnsupportedPositions && observed.nativeSpeakerMask != 0U &&
+                                        std::popcount(observed.nativeSpeakerMask) == observed.format.channels;
+      node.channelDelivery = {
+        .mapping = hasCompleteNativeSet ? ChannelDeliveryEvidence::Mapping::Mapped
+                                        : ChannelDeliveryEvidence::Mapping::LegacyUnverified,
+        .nativeSpeakerMask = observed.nativeSpeakerMask,
+      };
     }
 
     if (auto const propsIt = sinkPropsMap.find(id); propsIt != sinkPropsMap.end())

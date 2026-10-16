@@ -94,11 +94,61 @@ namespace ao::audio::detail::test
     CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
   }
 
+  TEST_CASE("DecoderOutputAdapter - pass-through of an identified stereo stream preserves mask and bytes",
+            "[audio][unit][decoder-output]")
+  {
+    auto adapter = DecoderOutputAdapter{SampleEncoding::Signed16Le};
+    auto const sourceFormat = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
+    REQUIRE(adapter.configure(sourceFormat, SampleEncoding::Signed16Le));
+    CHECK(adapter.nativeFormat() ==
+          PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3});
+    CHECK(adapter.outputFormat().speakerMask == 0x3U);
+
+    // One stereo S16 frame: L = 0x1234, R = 0x5678, little-endian.
+    auto const nativeBytes = std::array{std::byte{0x34}, std::byte{0x12}, std::byte{0x78}, std::byte{0x56}};
+
+    auto const convertedRes = adapter.convert(nativeBytes);
+
+    REQUIRE(convertedRes);
+    auto const expected = std::vector{std::byte{0x34}, std::byte{0x12}, std::byte{0x78}, std::byte{0x56}};
+    CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
+  }
+
+  TEST_CASE("DecoderOutputAdapter - narrowing a widened masked stereo stream keeps mask and exact bytes",
+            "[audio][unit][decoder-output]")
+  {
+    auto adapter = DecoderOutputAdapter{SampleEncoding::Signed24PackedLe};
+    auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
+    REQUIRE(adapter.configure(sourceFormat, SampleEncoding::Signed32Le));
+    CHECK(adapter.nativeFormat().speakerMask == 0x3U);
+    CHECK(
+      adapter.outputFormat() ==
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed24PackedLe, .speakerMask = 0x3});
+
+    // One native S32 stereo frame carrying 16-bit samples L = 0x1234, R = 0x5678.
+    auto const nativeBytes = std::array{std::byte{0x00},
+                                        std::byte{0x00},
+                                        std::byte{0x34},
+                                        std::byte{0x12},
+                                        std::byte{0x00},
+                                        std::byte{0x00},
+                                        std::byte{0x78},
+                                        std::byte{0x56}};
+
+    auto const convertedRes = adapter.convert(nativeBytes);
+
+    REQUIRE(convertedRes);
+    auto const expected =
+      std::vector{std::byte{0x00}, std::byte{0x34}, std::byte{0x12}, std::byte{0x00}, std::byte{0x78}, std::byte{0x56}};
+    CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
+  }
+
   TEST_CASE("DecoderOutputAdapter - reset revokes the configured format", "[audio][unit][decoder-output]")
   {
     auto adapter = DecoderOutputAdapter{std::nullopt};
-    auto const sourceFormat = SignalFormat{.sampleRate = 44100, .channels = 1, .precisionBits = 16};
+    auto const sourceFormat = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
     REQUIRE(adapter.configure(sourceFormat, SampleEncoding::Signed16Le));
+    CHECK(adapter.nativeFormat().speakerMask == 0x3U);
 
     adapter.reset();
 

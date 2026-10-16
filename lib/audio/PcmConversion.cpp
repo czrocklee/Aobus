@@ -128,7 +128,8 @@ namespace ao::audio
     }
 
     if (sourceSignalFormat.sampleRate != sourcePcmFormat.sampleRate ||
-        sourceSignalFormat.channels != sourcePcmFormat.channels)
+        sourceSignalFormat.channels != sourcePcmFormat.channels ||
+        sourceSignalFormat.speakerMask != sourcePcmFormat.speakerMask)
     {
       return makeError(Error::Code::InvalidInput, "PCM byte layout and logical signal format do not match");
     }

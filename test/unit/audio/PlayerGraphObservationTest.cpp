@@ -7,10 +7,16 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/NodeFormat.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/RouteAnchor.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -137,6 +143,82 @@ namespace ao::audio::test
       GraphObservationProvider* provider = nullptr;
     };
   } // namespace
+
+  TEST_CASE("Player - source identity cannot replace current native channel observations",
+            "[audio][unit][player][concurrency]")
+  {
+    auto fixture = GraphObservationFixture{};
+    auto& queue = fixture.executor.queue();
+    auto const canonical =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+    auto route = Engine::RouteStatus{
+      .state = {.sourceFormat = signalFormat(canonical),
+                .decoderOutputFormat = canonical,
+                .engineOutputFormat = canonical,
+                .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0x3}},
+      .optAnchor = RouteAnchor{.backend = kBackendNone, .id = "observed-route"},
+    };
+    fixture.playerPtr->handleRouteChanged(route, fixture.playerPtr->playbackGeneration());
+    queue.runUntilIdle();
+    auto native = canonical;
+    native.speakerMask = 0;
+    auto graph = flow::Graph{
+      .nodes = {flow::Node{.id = "native-stream", .type = flow::NodeType::Stream, .optFormat = native},
+                flow::Node{.id = "native-sink", .type = flow::NodeType::Sink, .optFormat = native}},
+      .connections = {{.sourceId = "native-stream", .destinationId = "native-sink"}},
+    };
+    fixture.provider->callback()(graph);
+    REQUIRE(queue.tryDrainUntil([&] { return fixture.playerPtr->status().flow.nodes.size() == 5; }));
+    queue.runUntilIdle();
+    auto const uncertain = fixture.playerPtr->status();
+    CHECK(uncertain.channelConfidence == ChannelConfidence::Unverified);
+    CHECK(uncertain.quality == Quality::BitwisePerfect);
+    // Source identity cannot fill missing native roles; the redundant open
+    // delivery copy no longer exists in the route aggregate.
+    CHECK(uncertain.flow.nodes[3].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Unknown);
+    CHECK(uncertain.flow.nodes[3].channelDelivery.nativeSpeakerMask == 0);
+
+    for (auto& node : graph.nodes)
+    {
+      node.channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Mapped, .nativeSpeakerMask = 0x3};
+    }
+
+    fixture.provider->callback()(graph);
+    REQUIRE(queue.tryDrainUntil(
+      [&] { return fixture.playerPtr->status().channelConfidence == ChannelConfidence::Verified; }));
+    auto const mapped = fixture.playerPtr->status();
+    CHECK(mapped.quality == Quality::BitwisePerfect);
+    CHECK(mapped.flow.nodes[3].optFormat == NodeFormat{native});
+    CHECK(mapped.flow.nodes[3].channelDelivery.nativeSpeakerMask == 0x3);
+
+    SECTION("a source snapshot refresh cannot overwrite contradictory native evidence")
+    {
+      graph.nodes[1].channelDelivery.nativeSpeakerMask = 0x30;
+      graph.nodes[1].channelDelivery.hasSharedConversion = true;
+      fixture.provider->callback()(graph);
+      REQUIRE(queue.tryDrainUntil(
+        [&] { return fixture.playerPtr->status().channelConfidence == ChannelConfidence::Converted; }));
+      fixture.playerPtr->handleRouteChanged(route, fixture.playerPtr->playbackGeneration());
+      queue.runUntilIdle();
+      CHECK(fixture.playerPtr->status().channelConfidence == ChannelConfidence::Converted);
+      CHECK(fixture.playerPtr->status().flow.nodes[4].channelDelivery.nativeSpeakerMask == 0x30);
+      CHECK(fixture.playerPtr->status().pipelineQuality == Quality::LinearIntervention);
+      CHECK(fixture.playerPtr->status().flow.nodes[4].sourceChannelLayout == ChannelLayoutEvidence{});
+      CHECK(fixture.playerPtr->status().flow.nodes[0].sourceChannelLayout == route.state.sourceChannelLayout);
+    }
+
+    SECTION("equal effective source modes refresh only source history")
+    {
+      route.state.sourceChannelLayout = {.origin = ChannelLayoutOrigin::Inferred, .optDeclaredMask = 0};
+      fixture.playerPtr->handleRouteChanged(route, fixture.playerPtr->playbackGeneration());
+      queue.runUntilIdle();
+      auto const inferred = fixture.playerPtr->status();
+      CHECK(inferred.channelConfidence == ChannelConfidence::Inferred);
+      CHECK(inferred.pipelineQuality == Quality::BitwisePerfect);
+      CHECK(inferred.flow.nodes[0].sourceChannelLayout == route.state.sourceChannelLayout);
+      CHECK(inferred.flow.nodes[3].channelDelivery == mapped.flow.nodes[3].channelDelivery);
+    }
+  }
 
   TEST_CASE("Player - graph bursts remain coalesced through outward publication and yield to owner work",
             "[audio][unit][player][concurrency][stress]")

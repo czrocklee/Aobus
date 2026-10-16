@@ -490,9 +490,12 @@ add_executable(ao_core_test
     unit/audio/OpusDecoderSessionTest.cpp
     unit/audio/OpusDecoderMalformedTest.cpp
     unit/audio/WavDecoderSessionTest.cpp
+    unit/audio/WavDecoderChannelLayoutTest.cpp
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
+    unit/audio/ChannelQualityTest.cpp
     unit/audio/FormatTest.cpp
+    unit/audio/ChannelLayoutEvidenceTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/StreamingPrerollTest.cpp
     unit/audio/StreamingRenderAlignmentTest.cpp
@@ -510,6 +513,9 @@ add_executable(ao_core_test
     unit/audio/EngineErrorTest.cpp
     unit/audio/EngineFatalProbeTest.cpp
     unit/audio/EngineGaplessTest.cpp
+    unit/audio/EngineStereoReuseTest.cpp
+    unit/audio/EngineChannelLayoutTest.cpp
+    unit/audio/EngineWavChannelLayoutTest.cpp
     unit/audio/EngineRtSignalRingTest.cpp
     unit/audio/EngineSeekErrorTest.cpp
     unit/audio/EngineTest.cpp
@@ -838,13 +844,18 @@ endif()
 aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireMonitorTest.cpp
   unit/audio/backend/PipeWireBackendTest.cpp
+  unit/audio/backend/PipeWireChannelObservationTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
+  unit/audio/backend/AlsaChannelObservationTest.cpp
   unit/audio/backend/AlsaProviderTest.cpp
   unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
+  unit/audio/backend/detail/PipeWireFormatParsingTest.cpp
   unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
   unit/audio/backend/detail/AlsaMixerSessionTest.cpp
   unit/audio/backend/detail/AlsaModeSelectorTest.cpp
+  unit/audio/backend/detail/AlsaChannelMapTest.cpp
+  unit/audio/backend/detail/AlsaPrewarmCacheTest.cpp
   unit/audio/backend/detail/AlsaPcmErrorTest.cpp
   unit/audio/backend/detail/AlsaPcmFormatTest.cpp
   unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
@@ -852,12 +863,16 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
 )
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/CoreAudioBackendTest.cpp
+  unit/audio/backend/CoreAudioChannelObservationTest.cpp
   unit/audio/backend/CoreAudioProviderTest.cpp
   unit/audio/backend/CoreAudioTestOutputTest.cpp
   unit/audio/backend/detail/CoreAudioErrorTest.cpp
   unit/audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
   unit/audio/backend/detail/CoreAudioFormatTest.cpp
   unit/audio/backend/detail/CoreAudioGraphTest.cpp
+  unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp
+  unit/audio/backend/detail/CoreAudioControlMailboxTest.cpp
+  unit/audio/backend/detail/CoreAudioRunControlTest.cpp
   unit/audio/backend/detail/CoreAudioLatencyTest.cpp
   unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
   unit/audio/backend/detail/CoreFoundationStringTest.cpp
