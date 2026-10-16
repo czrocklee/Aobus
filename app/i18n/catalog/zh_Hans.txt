@@ -5,7 +5,7 @@ zh_Hans:table {
   messages:table {
     track_field_recording_date { "录音日期" }
     track_credits_heading { "制作人员" }
-    track_credit_performer { "演奏者" }
+    track_credit_performer { "表演者" }
     track_credit_lyricist { "作词" }
     track_credit_arranger { "编曲" }
     track_credit_writer { "词曲作者" }
@@ -144,7 +144,7 @@ zh_Hans:table {
     track_field_genre { "流派" }
     track_field_composer { "作曲家" }
     track_field_conductor { "指挥" }
-    track_field_ensemble { "合奏团" }
+    track_field_ensemble { "乐团" }
     track_field_work { "作品" }
     track_field_movement { "乐章" }
     track_field_soloist { "独奏者" }
@@ -175,7 +175,7 @@ zh_Hans:table {
     missing_track_genre { "未知流派" }
     missing_track_composer { "未知作曲家" }
     missing_track_conductor { "未知指挥" }
-    missing_track_ensemble { "未知合奏团" }
+    missing_track_ensemble { "未知乐团" }
     missing_track_work { "未知作品" }
     track_presentation_library { "音乐库" }
     track_presentation_description_library { "所有曲目按专辑艺人和专辑排序。" }

@@ -5,7 +5,7 @@ ja:table {
   messages:table {
     track_field_recording_date { "録音日" }
     track_credits_heading { "クレジット" }
-    track_credit_performer { "演奏者" }
+    track_credit_performer { "パフォーマー" }
     track_credit_lyricist { "作詞者" }
     track_credit_arranger { "編曲者" }
     track_credit_writer { "ソングライター" }
@@ -186,7 +186,7 @@ ja:table {
     track_presentation_description_albums { "アルバムごとにグループ化し、曲向けの列を表示します。" }
     track_presentation_artists { "アーティスト" }
     track_presentation_description_artists { "アルバムアーティストごとにグループ化し、ディスコグラフィ順に表示します。" }
-    track_presentation_performers { "演奏者" }
+    track_presentation_performers { "パフォーマー" }
     track_presentation_description_performers { "客演を含む曲のアーティストごとにグループ化します。" }
     track_presentation_genres { "ジャンル" }
     track_presentation_description_genres { "ジャンルごとにグループ化します。" }

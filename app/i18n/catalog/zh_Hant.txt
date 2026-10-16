@@ -5,7 +5,7 @@ zh_Hant:table {
   messages:table {
     track_field_recording_date { "錄音日期" }
     track_credits_heading { "製作人員" }
-    track_credit_performer { "演奏者" }
+    track_credit_performer { "演出者" }
     track_credit_lyricist { "作詞" }
     track_credit_arranger { "編曲" }
     track_credit_writer { "詞曲作者" }
@@ -143,7 +143,7 @@ zh_Hant:table {
     track_field_genre { "曲風" }
     track_field_composer { "作曲家" }
     track_field_conductor { "指揮" }
-    track_field_ensemble { "合奏團" }
+    track_field_ensemble { "樂團" }
     track_field_work { "作品" }
     track_field_movement { "樂章" }
     track_field_soloist { "獨奏者" }
@@ -174,7 +174,7 @@ zh_Hant:table {
     missing_track_genre { "未知曲風" }
     missing_track_composer { "未知作曲家" }
     missing_track_conductor { "未知指揮" }
-    missing_track_ensemble { "未知合奏團" }
+    missing_track_ensemble { "未知樂團" }
     missing_track_work { "未知作品" }
     track_presentation_library { "音樂庫" }
     track_presentation_description_library { "所有曲目按專輯藝人和專輯排序。" }
