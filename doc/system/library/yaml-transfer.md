@@ -203,7 +203,7 @@ Every import, preview, and plan returns an `ImportReport`:
 |---|---|
 | `payloadVersion` | Accepted interchange version; currently `8`. |
 | `payloadMode` | `delta`, `metadata`, `full`, or `list-only`. |
-| `targetScope` | `Library` for track-bearing payloads or `Lists` for `list-only`. |
+| `targetScope` | `ImportTargetScope::Library` for track-bearing payloads or `ImportTargetScope::Lists` for `list-only`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
 | `tracksUpdated` | Imported records that match a target manifest URI. |
 | `tracksDeleted` | Pre-restore tracks when scope clears tracks; otherwise `0`. |
@@ -269,20 +269,20 @@ No frontend may commit a restore from a bare path or reinterpret scope, counts, 
 
 ### Building an interactive transfer surface
 
-GTK and WinUI build their export selectors from one UIModel definition ordered as Delta, Metadata, Full, and List Only.
-Both default to Full.
-An invalid native selector index remains an adapter concern: GTK conservatively falls back to Metadata, while WinUI returns no mode and does not reinterpret the selection.
+GTK and WinUI build their export selectors from one UIModel definition ordered as `delta`, `metadata`, `full`, and `list-only`.
+Both default to `full`.
+An invalid native selector index remains an adapter concern: GTK conservatively falls back to `metadata`, while WinUI returns no mode and does not reinterpret the selection.
 
 Restore confirmation is also shared presentation policy.
 Given the structured `ImportReport`, UIModel selects the Library- or Lists-scoped action and formats the complete version, scope, counts, and ignored-reference summary.
 The displayed payload mode argument is the report's stable machine token (`delta`, `metadata`, `full`, or `list-only`), not the localized export-selector label; display text is never parsed back into transfer identity.
 
-GTK prepares a restore plan after file selection, presents its version, payload mode, scope, counts, and ignored references, and applies only after an explicit positive response.
+GTK prepares a restore plan after file selection, presents its version, payload mode, scope, counts, ignored references, and kept invalid List filters, and applies only after an explicit positive response.
 Closing or rejecting the confirmation drops the plan.
 
 WinUI exposes all four export modes through its Windows save picker and offers `merge` or `restore` before opening its Windows file picker.
 Merge is the default and applies the prepared plan without a destructive confirmation.
-Restore presents the shared report's version, payload mode, target scope, track/List create-update-delete counts, and ignored references in a native confirmation; cancellation or rejection drops the plan and changes nothing.
+Restore presents the shared report's version, payload mode, target scope, track/List create-update-delete counts, ignored references, and kept invalid List filters in a native confirmation; cancellation or rejection drops the plan and changes nothing.
 Import preparation, apply, and export publish their coarse file-named phases through the shared task-progress channel used by the Windows activity surface.
 
 CLI defaults import to `merge`.

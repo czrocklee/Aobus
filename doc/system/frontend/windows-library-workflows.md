@@ -82,9 +82,10 @@ does not cancel or restart admitted work; Classic's status bar reports the
 terminal result.
 
 A merge applies its prepared plan directly. A restore instead presents payload
-version and mode, target scope, create/update/delete counts, and ignored-reference
-count. Its destructive action is scope-specific, defaults to Cancel, and is the
-only route that applies the plan. Rejecting the preview drops that one-shot plan.
+version and mode, target scope, create/update/delete counts, and the counts of
+ignored references and kept invalid List filters. Its destructive action is
+scope-specific, defaults to Cancel, and is the only route that applies the plan.
+Rejecting the preview drops that one-shot plan.
 
 Cancelling a mode dialog or picker changes nothing. Malformed YAML and
 recoverable picker, preparation, import, or export failure remain visible in

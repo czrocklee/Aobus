@@ -67,9 +67,9 @@ The Windows frontend keeps its database beneath the selected music root. Network
 8. In Modern mode, click Soul to play or pause. In Classic mode, click Soul to choose an output device.
    In either mode, right-click Soul for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline. See [interpreting playback quality](play-music.md#inspect-playback-quality) to distinguish source fidelity, pipeline changes, and incomplete evidence.
 9. Choose **Rescan** after files change. A failed scan leaves the active library open and retryable. Another Rescan while one is active starts nothing; choosing a different library instead closes the current process and cancels its work during teardown.
-10. To back up portable library data, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode, select Delta, Metadata, Full, or List Only, and save a `.yaml` file.
+10. To back up portable library data, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode, select Delta, Metadata, Full, or Lists only, and save a `.yaml` file.
     To import one, use the matching **Import Library Data...** command and choose Merge to retain records outside the backup or Restore to replace the reported scope.
-    Restore shows the payload version, mode, scope, change counts, and ignored references before enabling the scope-specific destructive action; Cancel remains the default.
+    Restore shows the payload version, mode, scope, change counts, ignored references, and kept invalid List filters before enabling the scope-specific destructive action; Cancel remains the default.
     Modern shows transfer progress in its ordinary activity surface. Switching to Classic leaves an admitted transfer running and reports its terminal status there; closing its dialog, picker, or the window cancels the unfinished workflow.
 11. To apply a custom theme, create `%LOCALAPPDATA%\Aobus\windows-theme.yaml` using the exact reference schema, then choose **Reload Theme**. Omit or remove the file to follow built-in and system appearance.
 
