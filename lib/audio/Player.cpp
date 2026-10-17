@@ -46,6 +46,7 @@ namespace ao::audio
                            .pipelineQuality = status.pipelineQuality,
                            .overall = status.quality,
                            .fullyVerified = status.qualityFullyVerified,
+                           .channelConfidence = status.channelConfidence,
                            .assessments = status.qualityAssessments};
     }
 
@@ -764,6 +765,7 @@ namespace ao::audio
     playerStatus.pipelineQuality = qualityRes.pipelineQuality;
     playerStatus.quality = qualityRes.overall;
     playerStatus.qualityFullyVerified = qualityRes.fullyVerified;
+    playerStatus.channelConfidence = qualityRes.channelConfidence;
     playerStatus.qualityAssessments = qualityRes.assessments;
 
     playerStatus.isReady = isReady();
@@ -877,7 +879,8 @@ namespace ao::audio
                      .type = flow::NodeType::Source,
                      .name = std::move(sourceName),
                      .optFormat = rs.sourceFormat,
-                     .isLossySource = rs.isLossySource},
+                     .isLossySource = rs.isLossySource,
+                     .sourceChannelLayout = rs.sourceChannelLayout},
           flow::Node{.id = "ao-decoder",
                      .type = flow::NodeType::Decoder,
                      .name = "Decoded PCM",

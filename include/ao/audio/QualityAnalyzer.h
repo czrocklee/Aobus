@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/flow/Graph.h>
@@ -40,7 +41,9 @@ namespace ao::audio
    * @brief A single quality-relevant observation at a node in the audio path.
    *
    * Format transition findings (Resampling, ChannelMapping, LosslessPadding,
-   * LosslessFloat, Truncation) carry the source and destination formats.
+   * LosslessFloat, Truncation) carry the source and destination formats when
+   * reported. A known shared channel conversion can lack a reported input
+   * format or any format at all; its delivery evidence remains inspectable.
    * MixedSources findings carry the names of other applications sharing the node.
    * Software and unclassified volume findings carry a representative reported gain when the
    * backend supplied a magnitude.
@@ -52,6 +55,11 @@ namespace ao::audio
     float gain = 0.0F;
     std::optional<NodeFormat> optFromFormat{};
     std::optional<NodeFormat> optToFormat{};
+    // Additional role constraints explaining ChannelMapping, not canonical
+    // storage masks. Absent values use the reported endpoint format masks;
+    // those formats continue to own count and byte order.
+    std::optional<std::uint32_t> optFromSpeakerMask{};
+    std::optional<std::uint32_t> optToSpeakerMask{};
     std::vector<std::string> sharedApps{};
 
     bool operator==(QualityFinding const&) const = default;
@@ -84,6 +92,7 @@ namespace ao::audio
     Quality pipelineQuality = Quality::Unknown;
     Quality overall = Quality::Unknown;
     bool fullyVerified = true;
+    ChannelConfidence channelConfidence = ChannelConfidence::Unknown;
     std::vector<NodeQualityAssessment> assessments{};
 
     bool operator==(QualityResult const&) const = default;
@@ -100,9 +109,9 @@ namespace ao::audio
   /**
    * @brief Analyzes a flow graph to determine the overall audio quality.
    *
-   * This is a pure function that evaluates the signal path from the decoder
-   * to the final output device, producing a per-node assessment of quality
-   * findings.
+   * Pure evaluation of the selected Source-to-Sink path. Findings describe
+   * alterations; channel confidence describes identity and mapping evidence.
+   * See doc/system/playback/quality-analysis.md for the derivation rules.
    *
    * @param graph The complete system audio graph to analyze.
    * @return A QualityResult containing per-node assessments and the global verdict.

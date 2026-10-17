@@ -12,6 +12,7 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
@@ -46,6 +47,7 @@ namespace ao::audio::backend
     WasapiSharedBackend(WasapiSharedBackend&&) = delete;
     WasapiSharedBackend& operator=(WasapiSharedBackend&&) = delete;
 
+    std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept override;
     BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;

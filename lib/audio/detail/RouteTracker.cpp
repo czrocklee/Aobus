@@ -3,11 +3,10 @@
 
 #include "RouteTracker.h"
 
-#include <ao/AudioCodec.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/RouteAnchor.h>
-#include <ao/audio/SignalFormat.h>
 
 #include <mutex>
 #include <optional>
@@ -16,13 +15,14 @@
 
 namespace ao::audio::detail
 {
-  void RouteTracker::setDecoder(SignalFormat sourceFormat, PcmFormat outputFormat, bool isLossy, AudioCodec codec)
+  void RouteTracker::setDecoder(DecodedStreamInfo const& info)
   {
     auto const lock = std::scoped_lock{_mutex};
-    _state.sourceFormat = sourceFormat;
-    _state.decoderOutputFormat = outputFormat;
-    _state.isLossySource = isLossy;
-    _state.codec = codec;
+    _state.sourceFormat = info.sourceFormat;
+    _state.decoderOutputFormat = info.outputFormat;
+    _state.isLossySource = info.isLossy;
+    _state.codec = info.codec;
+    _state.sourceChannelLayout = info.sourceChannelLayout;
   }
 
   void RouteTracker::setEngineFormat(PcmFormat format)

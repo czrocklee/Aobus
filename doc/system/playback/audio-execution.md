@@ -22,7 +22,7 @@ Application runtime consumes Player through executor-affine playback services an
 - **Render session**: one backend attachment correlated to a render generation.
 - **Inspection**: a decoder open with no requested PCM encoding that reports immutable track signal facts without producing playback PCM.
 - **Prewarm format hint**: a non-binding, non-blocking Backend prediction used only to choose an optimistic decoder output before native open.
-- **PCM mode**: one concrete sample rate, channel count, and `SampleEncoding` used by a backend render target.
+- **PCM mode**: one concrete sample rate, channel count, `SampleEncoding`, and effective speaker mask used by a backend render target.
 - **Timeline node**: Engine-owned current or lookahead audio item and its source.
 - **Splice signal**: the non-owning realtime notification that a prepared lookahead became active at end of stream.
 - **Callback-generation floor**: the minimum audio generation whose materialized callbacks may still begin after a synchronizing receipt.
@@ -257,7 +257,7 @@ The realtime consumer still performs only ring reads; it does not update a separ
 
 Player captures lookahead input, route, current PCM mode, playback generation, and start-context evidence on the callback executor.
 When the current session is gapless-capable, decoder inspection runs on an async worker.
-If the current PCM mode has the same sample rate and channels and its encoding can preserve the successor's inspected signal, the same worker opens the final successor decoder in that encoding and prerolls it.
+If the current PCM mode has the same sample rate, channels, and effective speaker mask, and both its encoding and retained confirmed endpoint preserve the successor's inspected signal, the same worker opens the final successor decoder in that encoding and prerolls it.
 Engine adopts the result only after Player's task remains admissible and Engine's captured playback, route, and mode context still matches.
 Successful adoption starts the decode thread, retains the node as lookahead, and arms its raw pointer for realtime consumption.
 
@@ -277,7 +277,8 @@ An `updateDevice` call carrying the unchanged device snapshot is a no-op and
 does not invalidate pending starts or prepared lookahead.
 Prepared-source failure clears lookahead without changing the current track; after splice, that source generation is current and fails as current.
 
-A splice is permitted only when both sessions are gapless-capable and their sample rate, channel count, and concrete encoding match.
+A splice is permitted only when both sessions are gapless-capable and their sample rate, channel count, concrete encoding, and effective speaker mask match exactly.
+Preparation and adoption both validate the successor against the confirmed endpoint retained for this native open; promotion refreshes source interpretation without replacing that endpoint bound.
 The successor's source precision may be lower than the current track's precision because widening it into the already-open mode is lossless.
 The successor's precision may never exceed what that mode can represent: an S16 current mode followed by 24-bit audio drains, while a packed-24 current mode followed by 16-bit audio may splice.
 
@@ -438,6 +439,16 @@ A missing significant-bit result is unknown evidence rather than full container 
 An exact rate is required rather than a nearest match, both because the admissible format set depends on it and so an unsupported rate is diagnosed as such instead of surfacing as a format rejection.
 A single `snd_pcm_hw_params()` applies the chosen mode, and the applied mode is read back and compared before the handle is published.
 Integer and float domain changes outside the documented bit-transparent output set are rejected.
+
+Only after required applied storage and precision succeed, ALSA independently queries offered and current channel maps.
+A NULL result withholds that observation, not storage eligibility; it does not excuse an invalid source declaration. Every nonzero source mask must contain exactly one assigned WAVE position per channel, regardless of current-map availability, or admission is `TrackRouteIncompatible` after required native validation.
+All offered maps face bounded list and storage checks, even when their channel counts differ from this mode. Only matching-count offers undergo role-semantic validation and can veto admission; their positions never select the current slot order, and the backend never sets a channel map.
+Malformed successful current observations remain output failures, including for a zero-mask source. These independent native failures are not converted into layout refusals or unknown evidence.
+For a known source, complete matching current positions establish a private immutable slot permutation; partial compatible positions remain uncertain and known contradictions are explicit track/route incompatibilities.
+A partial current map is compatible only when each known role sits in the unchanged canonical slot the source's ascending assigned-bit order gives it, because partial evidence cannot prove a permutation: for a stereo `FL`/`FR` source, `[FL, UNKNOWN]` and `[UNKNOWN, FR]` remain uncertain, while `[FR, UNKNOWN]` is a known contradiction refused as a recoverable `TrackRouteIncompatible`.
+A zero-mask source retains legacy no-permutation eligibility and never acquires source identity from a known endpoint. Current positions may still populate endpoint and graph evidence; they do not prove the unknown source's mapping.
+The playback loop checks tightly interleaved MMAP geometry and uses preallocated frame scratch for any permutation before gain and commit.
+The graph reports native storage without a canonical input mask and carries observed native positions separately.
 
 PipeWire, WASAPI, and Core Audio negotiate a client stream in front of a graph that may resample, remix, or requantize without reporting a direct endpoint.
 They therefore offer only lossless client encodings and leave `ConfirmedEndpoint` absent, in both shared and exclusive mode.
@@ -641,7 +652,7 @@ preparation reports the exception through the runtime diagnostic boundary and
 does not invoke acceptance or completion.
 An inspection failure is a recoverable track-open outcome and does not replace active playback.
 An optimistic explicit-start decoder failure is retained only as a cache miss; commit retries decoder setup after the backend returns its exact PCM mode.
-A backend activation failure is a non-recoverable route-activation outcome for that start.
+A backend activation failure classified `OutputFailure` is a non-recoverable route-activation outcome for that start; an explicitly typed `TrackRouteIncompatible` refusal keeps its recoverable track-open classification.
 A final decoder, seek, or preroll failure after backend activation is a recoverable track-open outcome, but the attempted backend is still closed before publication.
 A decoded PCM block larger than the source ring is a recoverable `DecodeFailed` media outcome.
 Stale generation events are discarded.

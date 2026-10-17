@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SignalFormat.h>
 
@@ -22,6 +23,7 @@ namespace ao::audio
     PcmFormat engineOutputFormat;
     bool isLossySource = false;
     AudioCodec codec = AudioCodec::Unknown;
+    ChannelLayoutEvidence sourceChannelLayout{};
 
     bool operator==(AudioRouteFormatState const&) const = default;
   };

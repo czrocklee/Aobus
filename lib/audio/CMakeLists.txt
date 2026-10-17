@@ -69,6 +69,7 @@ elseif(LINUX)
         backend/detail/PipeWireRuntime.cpp
         backend/detail/PipeWireMonitorParsing.cpp
         backend/detail/AlsaDeviceDiscovery.cpp
+        backend/detail/AlsaChannelMap.cpp
         backend/detail/AlsaGraphRegistry.cpp
         backend/detail/AlsaMixerSession.cpp
         backend/detail/AlsaModeSelector.cpp

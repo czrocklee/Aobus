@@ -5,6 +5,7 @@
 
 #include "BackendTestSupport.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
@@ -47,6 +48,27 @@ namespace ao::audio::test
     CHECK(backend.profileId() == kProfileShared);
   }
 
+  TEST_CASE("NullBackend - retains identified application slots without claiming a physical endpoint",
+            "[audio][unit][null-backend]")
+  {
+    auto target = NoopRenderTarget{};
+    auto backend = NullBackend{};
+    // A one-channel FL identity is not automatically relabelled centered mono.
+    auto const source = SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16, .speakerMask = 0x1};
+    auto const expected =
+      PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x1};
+
+    auto const optHint = backend.prewarmFormatHint(source);
+    REQUIRE(optHint);
+    CHECK(*optHint == expected);
+
+    auto const openedRes = backend.open(source, target);
+    REQUIRE(openedRes);
+    CHECK(openedRes->clientFormat == expected);
+    CHECK(frameBytes(openedRes->clientFormat) == 2);
+    CHECK_FALSE(openedRes->optEndpoint);
+  }
+
   TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected", "[audio][unit][null-backend]")
   {
     auto target = NoopRenderTarget{};
@@ -67,8 +89,9 @@ namespace ao::audio::test
   {
     auto target = NoopRenderTarget{};
     auto backend = NullBackend{};
-    // Zero precision is unknown, so no lossless encoding can be selected.
-    auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 0};
+    // A zero precision is an unknown source precision; an identified speaker
+    // mask does not license an open for it.
+    auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 0, .speakerMask = 0x3};
 
     CHECK_FALSE(backend.prewarmFormatHint(source));
 

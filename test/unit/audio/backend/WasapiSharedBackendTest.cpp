@@ -19,6 +19,7 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <ks.h>
 #include <ksmedia.h>
 
@@ -201,6 +202,26 @@ namespace ao::audio::backend::test
       CHECK(openedRes.error().error.message == "WASAPI PCM formats require a sample rate and channels");
       CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
     }
+  }
+
+  TEST_CASE("WasapiSharedBackend - identified source roles are refused before native channel admission is available",
+            "[audio][unit][wasapi][backend]")
+  {
+    auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
+    auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    // The unopened synthetic endpoint cannot establish either requested speaker set.
+    auto const speakerMask = GENERATE(0x30U, 0x3U);
+    auto const sourceFormat =
+      SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = speakerMask};
+
+    CHECK_FALSE(backend.prewarmFormatHint(sourceFormat));
+    auto const openedRes = backend.open(sourceFormat, target);
+
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(openedRes.error().error.message == "WASAPI source speaker identity is not supported");
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
   TEST_CASE("WasapiSharedBackend - prewarm predicts the lossless mode without native negotiation",

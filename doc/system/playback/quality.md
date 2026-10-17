@@ -48,7 +48,7 @@ The relevant boundaries are:
 
 ### Engine route evidence
 
-Engine owns track-side route facts: encoded source format and lossiness, decoder output format, Engine output format, accepted route anchor, and playback generation.
+Engine owns track-side route facts: encoded source format and lossiness, decoder output format, Engine output format, the source channel-layout interpretation carried from decoding, accepted route anchor, and playback generation.
 It does not interpret these values into user-facing quality conclusions.
 
 ### Backend-provider evidence
@@ -137,7 +137,7 @@ Each accepted graph replaces the previous provider evidence for that route and t
 - There is one merged quality graph and one analyzer result per Player, not one interpretation per frontend.
 - Engine owns Aobus-side route truth; the provider owns system-side observation; Player owns the join.
 - The analyzer consumes immutable graph snapshots and owns no subscription or asynchronous lifetime.
-- Player status, PlaybackService state, and `QualityChanged` preserve the same accepted analyzer result.
+- Player status, PlaybackService state, and `QualityChanged` preserve the same accepted analyzer result for the fields currently projected into runtime and UIModel; analyzer channel confidence and source interpretation history remain Core-internal and are not yet projected ([staging boundary](quality-analysis.md#result-axes-and-confidence)).
 - Platform graph callbacks never mutate PlaybackService or UIModel directly.
 - Missing provider evidence remains visible through verification state instead of being backfilled from desired route configuration.
 - Frontends render ordered node assessments supplied by runtime and never reconstruct path order.

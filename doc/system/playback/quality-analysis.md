@@ -62,6 +62,10 @@ The pipeline axis starts bitwise-perfect and accumulates every non-source findin
 It is false when the path terminates before a Sink or any path node omits its format.
 Missing evidence does not by itself downgrade the pipeline axis because Aobus cannot claim that an unreported conversion occurred.
 
+Core `channelConfidence` is separate from numerical axes and `fullyVerified`: Unknown lacks a complete interpreted source or a Sink-reaching path; Unverified lacks complete identity or mapping at a required boundary; Inferred retains inferred source interpretation; Verified has complete identity and native mapping throughout the observed software path.
+Verified can coexist with a known alteration finding: confidence grades identity and mapping evidence, not path quality.
+It never proves physical wiring. Current runtime/frontend presentation remains unchanged and does not yet project this additional channel-confidence field.
+
 Every assessment records node identity, type, name, optional format, its worst local severity, and ordered findings.
 A node with no property or incoming-transition finding receives an explicit BitPerfect finding; a missing format still makes the whole result partially verified.
 
@@ -89,7 +93,7 @@ The runtime volume snapshot independently exposes whether control is hardware-as
 Transition findings carry source and destination formats. For each adjacent pair with reported formats, the analyzer compares:
 
 - sample rate, producing Resampling when it changes;
-- channel count, producing ChannelMapping when it changes;
+- channel count and known speaker roles, producing ChannelMapping at the receiving boundary when counts change or known roles cannot coexist within the count-owned geometry;
 - signal/encoding domain, nominal bit count, and concrete representation width, producing lossless padding, lossless float mapping, proven lossless round trip, or truncation.
 
 Integer representation widening within the integer domain is lossless when the destination encoding's nominal precision is not smaller.
@@ -99,6 +103,15 @@ Float representation widening within the float domain is lossless float mapping 
 Integer-to-32-bit-float mapping is lossless only through 24 proven source bits.
 Other integer-to-float changes are quantizing truncation.
 Float-to-integer changes are truncation unless round-trip proof remains valid and the destination encoding can contain the proven source precision.
+
+Channel analysis retains complete identity anchors through compatible partial or zero observations.
+A local conflict between a node's declared format roles and its own native role set always stays a finding at that node.
+A complete assigned-WAVE native role set establishes the continuation role anchor, with the channel count changed or unchanged, so an unchanged native-only downstream report does not repeat that same incoming transition; partial or invalid native reports cannot replace prior role constraints within unchanged count-owned geometry, and genuinely different later sets and repeated local contradictions remain findings.
+This is per-continuation suppression, not a global dedupe.
+Missing roles alone are uncertainty, not alteration; independently known shared conversion still produces a finding even without a reported format.
+`hasSharedConversion` is native receiving-boundary evidence: the producer attributes it once per conversion at the node that received the mixed stream, independent later conversions retain their own findings, and application-owned source, decoder, and Engine nodes cannot supply it.
+Source interpretation is not native evidence, and partial format and native-role fields do not jointly manufacture a complete mapping proof.
+ChannelMapping invalidates numerical round-trip proof; channel uncertainty alone does not.
 
 The analyzer never derives alignment or container width from source precision.
 `Signed24PackedLe`, `Signed24In32Le`, and `Signed32Le` therefore remain distinguishable representation evidence.

@@ -15,6 +15,7 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -35,7 +36,9 @@ namespace ao::audio::backend::test
       .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
 
-    auto const openedRes = backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, target);
+    auto const speakerMask = GENERATE(0U, 0x3U);
+    auto const openedRes = backend.open(
+      SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .speakerMask = speakerMask}, target);
 
     REQUIRE_FALSE(openedRes);
     CHECK(openedRes.error().error.code == Error::Code::FormatRejected);
@@ -123,12 +126,23 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("AlsaExclusiveBackend - geometry refusal outranks precision refusal", "[audio][unit][alsa]")
+  TEST_CASE("AlsaExclusiveBackend - geometry refusal outranks layout and precision refusals", "[audio][unit][alsa]")
   {
     auto target = ::ao::audio::test::NoopRenderTarget{};
     auto const device = Device{
       .id = DeviceId{"null"}, .displayName = "ALSA null plugin", .description = "null", .backendId = kBackendAlsa};
     auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+
+    SECTION("a masked source with no sample rate still reports the geometry refusal")
+    {
+      auto const openedRes =
+        backend.open(SignalFormat{.sampleRate = 0, .channels = 2, .precisionBits = 16, .speakerMask = 0x3}, target);
+
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().error.code == Error::Code::InvalidInput);
+      CHECK(openedRes.error().error.message == "ALSA PCM formats require a sample rate and channels");
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    }
 
     SECTION("an unrepresentable source with no channels still reports the geometry refusal")
     {
@@ -142,7 +156,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("AlsaExclusiveBackend - prewarm predicts the lossless mode without native negotiation",
+  TEST_CASE("AlsaExclusiveBackend - prewarm preserves identified and unidentified client modes without native calls",
             "[audio][unit][alsa]")
   {
     // The device is absent, so only immutable local admission policy can
@@ -153,7 +167,19 @@ namespace ao::audio::backend::test
     std::uint32_t const sourceRate = 48000;
     std::uint8_t const sourceChannels = 2;
 
-    SECTION("an ordinary representable source retains its precision")
+    SECTION("an identified source retains its canonical identities")
+    {
+      auto const optHint = backend.prewarmFormatHint(
+        SignalFormat{.sampleRate = sourceRate, .channels = sourceChannels, .precisionBits = 24, .speakerMask = 0x3});
+
+      REQUIRE(optHint);
+      CHECK(optHint->sampleRate == sourceRate);
+      CHECK(optHint->channels == sourceChannels);
+      CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
+      CHECK(optHint->speakerMask == 0x3U);
+    }
+
+    SECTION("the same source without identities keeps the ordinary hint")
     {
       auto const optHint = backend.prewarmFormatHint(
         SignalFormat{.sampleRate = sourceRate, .channels = sourceChannels, .precisionBits = 24});
@@ -162,7 +188,96 @@ namespace ao::audio::backend::test
       CHECK(optHint->sampleRate == sourceRate);
       CHECK(optHint->channels == sourceChannels);
       CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
+      CHECK(optHint->speakerMask == 0U);
     }
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - prewarm withholds deterministically invalid speaker declarations locally",
+            "[audio][unit][alsa]")
+  {
+    // The withholding is decided by prewarmFormatHint's local admission
+    // policy; the device plays no role in the decision.
+    auto const device = Device{
+      .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+
+    SECTION("an incomplete or reserved nonzero declaration is withheld")
+    {
+      auto const invalidMask = GENERATE(0x1U, 0x7U, 0x80000001U);
+      CAPTURE(invalidMask);
+
+      auto const optHint = backend.prewarmFormatHint(
+        SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .speakerMask = invalidMask});
+
+      CHECK_FALSE(optHint);
+    }
+
+    SECTION("a complete stereo declaration keeps the ordinary hint")
+    {
+      auto const optHint = backend.prewarmFormatHint(
+        SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .speakerMask = 0x3});
+
+      REQUIRE(optHint);
+      CHECK(optHint->sampleRate == 48000);
+      CHECK(optHint->channels == 2);
+      CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
+      CHECK(optHint->speakerMask == 0x3U);
+    }
+
+    SECTION("an unidentified source keeps the ordinary hint")
+    {
+      auto const optHint =
+        backend.prewarmFormatHint(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24});
+
+      REQUIRE(optHint);
+      CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
+      CHECK(optHint->speakerMask == 0U);
+    }
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - an invalid speaker declaration does not conceal a native open fault",
+            "[audio][unit][alsa]")
+  {
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    // The declaration is deterministically unopenable, but open() must still
+    // reach the device first: a missing card reports its own output fault
+    // instead of a track refusal that hides the unavailable endpoint.
+    auto const device = Device{
+      .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+
+    auto const openedRes =
+      backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .speakerMask = 0x1}, target);
+
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code != Error::Code::FormatRejected);
+    CHECK(openedRes.error().error.message.contains("Failed to open ALSA device"));
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    // The same declaration stays locally withheld from prewarm as well.
+    auto const optHint = backend.prewarmFormatHint(
+      SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .speakerMask = 0x1});
+
+    CHECK_FALSE(optHint);
+  }
+
+  TEST_CASE("AlsaExclusiveBackend - an identified source preserves genuine native open failure", "[audio][unit][alsa]")
+  {
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    // Position uncertainty must not conceal an independently failed native
+    // open or turn an unavailable endpoint into a recoverable track refusal.
+    auto const device = Device{
+      .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};
+    auto backend = AlsaExclusiveBackend{device, kProfileExclusive};
+
+    // The channel count matches a normal stereo request, so only the assigned
+    // speaker identities distinguish this source.
+    auto const openedRes =
+      backend.open(SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24, .speakerMask = 0x3}, target);
+
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code != Error::Code::FormatRejected);
+    CHECK(openedRes.error().error.message.contains("Failed to open ALSA device"));
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
   TEST_CASE("AlsaExclusiveBackend - a missing device is reported as such, never as a format problem",

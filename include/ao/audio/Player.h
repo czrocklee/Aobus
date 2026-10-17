@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/Quality.h>
@@ -62,6 +63,7 @@ namespace ao::audio
       Quality pipelineQuality = Quality::Unknown;
       Quality quality = Quality::Unknown;
       bool qualityFullyVerified = true;
+      ChannelConfidence channelConfidence = ChannelConfidence::Unknown;
       std::vector<NodeQualityAssessment> qualityAssessments{};
       bool isReady = false;
 

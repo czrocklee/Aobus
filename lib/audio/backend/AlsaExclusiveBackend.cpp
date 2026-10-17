@@ -3,6 +3,7 @@
 
 #include "backend/AlsaExclusiveBackend.h"
 
+#include "backend/detail/AlsaChannelMap.h"
 #include "backend/detail/AlsaGraphRegistry.h"
 #include "backend/detail/AlsaMixerSession.h"
 #include "backend/detail/AlsaModeSelector.h"
@@ -35,6 +36,7 @@ extern "C"
 }
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -133,6 +135,8 @@ namespace ao::audio::backend
     std::optional<OpenedPcmMode> optOpenedMode;
 
     detail::AlsaPrewarmCache prewarmCache;
+    // Immutable while the playback worker is live; stop/join precedes reset.
+    detail::AlsaChannelMap channelMap;
     RenderTarget* renderTarget = nullptr;
 
     AlsaPcmPtr pcmPtr;
@@ -168,6 +172,7 @@ namespace ao::audio::backend
     struct NegotiatedMode final
     {
       OpenedPcmMode mode;
+      detail::AlsaChannelMap channelMap;
       ::snd_pcm_uframes_t periodSize = 0;
     };
 
@@ -207,6 +212,9 @@ namespace ao::audio::backend
     AO_INVARIANT(optOpenedMode);
     auto const clientFormat = optOpenedMode->clientFormat;
     std::size_t const bytesPerFrame = frameBytes(clientFormat);
+    // Provision once before the first render, bounded by the actual channel
+    // count representation and the widest supported sample container.
+    auto permutationScratch = std::array<std::byte, detail::kAlsaPermutationScratchBytes>{};
 
     // Tracks the device-side pause state owned exclusively by this thread.
     // pause()/resume() only flip the `paused` atomic; the edge is applied here.
@@ -242,8 +250,26 @@ namespace ao::audio::backend
         continue;
       }
 
-      // Use the ALSA areas formula to compute the correct destination pointer,
-      // respecting any hardware-specific first/step values.
+      // Rendering and the private permutation require tightly interleaved
+      // whole frames, not merely an MMAP_INTERLEAVED access declaration.
+      bool hasInterleavedGeometry = areas[0].step == bytesPerFrame * 8U && areas[0].first % 8U == 0U;
+
+      for (std::size_t slot = 0; slot < clientFormat.channels; ++slot)
+      {
+        hasInterleavedGeometry =
+          hasInterleavedGeometry && areas[slot].addr == areas[0].addr && areas[slot].step == areas[0].step &&
+          areas[slot].first == areas[0].first + (slot * bytesPerSample(clientFormat.encoding) * 8U);
+      }
+
+      if (!hasInterleavedGeometry)
+      {
+        std::ignore = ::snd_pcm_mmap_commit(pcmPtr.get(), offset, 0);
+        fatalStreamError.store(true, std::memory_order_relaxed);
+        renderTarget->handleBackendError("ALSA returned incompatible interleaved byte geometry");
+        break;
+      }
+
+      // Use the ALSA areas formula for the first whole frame.
       auto* const dst = static_cast<std::byte*>(areas[0].addr) + ((areas[0].first + (offset * areas[0].step)) / 8);
       auto const bytesToRead = static_cast<std::size_t>(frames) * bytesPerFrame;
 
@@ -259,6 +285,7 @@ namespace ao::audio::backend
       {
         auto const committedBytes = static_cast<std::size_t>(framesRead) * bytesPerFrame;
 
+        detail::applyAlsaChannelPermutation({dst, committedBytes}, channelMap, permutationScratch);
         detail::applyAlsaSoftwareGain({dst, committedBytes}, clientFormat.encoding, mixerPtr->renderGain());
 
         commitFrames(offset, framesRead, renderRes, bufferSize, periodSize);
@@ -443,6 +470,7 @@ namespace ao::audio::backend
     pcmPtr.reset();
     renderTarget = nullptr;
     optOpenedMode.reset();
+    channelMap = detail::AlsaChannelMap{};
     graphPublisher.clear(deviceName);
   }
 
@@ -615,7 +643,10 @@ namespace ao::audio::backend
 
     canPause = (::snd_pcm_hw_params_can_pause(applied) == 1);
 
-    if (!isSamePcmMode(clientFormat, *optCurrentFormat))
+    // Native storage readback has no speaker identity. Compare only the
+    // applied byte/rate geometry here; channel-map observation follows below.
+    if (clientFormat.sampleRate != optCurrentFormat->sampleRate ||
+        clientFormat.channels != optCurrentFormat->channels || clientFormat.encoding != optCurrentFormat->encoding)
     {
       return std::unexpected{BackendOpenFailure{
         .error = makeError(Error::Code::FormatRejected, "ALSA applied a different PCM mode than requested").error(),
@@ -652,14 +683,27 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
+    // The local handle has not escaped open or started a worker. Map NULLs
+    // cannot conceal storage/precision faults: those have already returned.
+    auto channelMapRes =
+      detail::prepareAlsaChannelMap(clientFormat, [pcm] { return detail::readAlsaChannelMaps(pcm); });
+
+    if (!channelMapRes)
+    {
+      return std::unexpected{channelMapRes.error()};
+    }
+
     auto const endpointSignal = SignalFormat{
       .sampleRate = clientFormat.sampleRate,
       .channels = clientFormat.channels,
       .precisionBits = endpointBits,
-      .sampleKind = isFloatEncoding(selectedRes->encoding) ? SampleKind::FloatingPoint : SampleKind::Integer};
+      .sampleKind = isFloatEncoding(selectedRes->encoding) ? SampleKind::FloatingPoint : SampleKind::Integer,
+      .speakerMask = channelMapRes->delivery.nativeSpeakerMask};
 
     return NegotiatedMode{.mode = OpenedPcmMode{.clientFormat = clientFormat,
-                                                .optEndpoint = ConfirmedEndpoint{.signalFormat = endpointSignal}},
+                                                .optEndpoint = ConfirmedEndpoint{.signalFormat = endpointSignal},
+                                                .channelDelivery = channelMapRes->delivery},
+                          .channelMap = std::move(*channelMapRes),
                           .periodSize = periodSize};
   }
 
@@ -716,6 +760,14 @@ namespace ao::audio::backend
 
   std::optional<PcmFormat> AlsaExclusiveBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
+    // A nonzero declaration that is not a complete per-channel speaker set
+    // is deterministically unopenable here; withhold it before the cache and
+    // base hints. An unidentified (zero) mask keeps those paths.
+    if (sourceFormat.speakerMask != 0U && !isCompleteWaveSpeakerMask(sourceFormat.speakerMask, sourceFormat.channels))
+    {
+      return std::nullopt;
+    }
+
     // Cached keys passed open() admission; misses use the base source checks.
     if (auto optCached = _implPtr->prewarmCache.find(sourceFormat); optCached)
     {
@@ -786,7 +838,9 @@ namespace ao::audio::backend
         BackendOpenFailure{.error = res.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
+    _implPtr->channelMap = std::move(negotiatedRes->channelMap);
     _implPtr->optOpenedMode = negotiatedRes->mode;
+
     _implPtr->prewarmCache.store(sourceFormat, negotiatedRes->mode.clientFormat);
     _implPtr->renderTarget = &target;
 
