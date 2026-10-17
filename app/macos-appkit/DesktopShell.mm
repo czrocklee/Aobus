@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <string_view>
@@ -40,7 +41,7 @@ namespace
   using ao::i18n::MessageId;
   constexpr auto kInspectorSheetWidth = 420;
   constexpr auto kClassicStatusAreaHeight = 24;
-  constexpr auto kEmptyActionWidth = 152;
+  constexpr auto kMinimumEmptyActionWidth = 152.0;
   constexpr auto kEmptyActionOffset = 76;
   constexpr auto kPresentationWidth = 116;
   constexpr auto kClassicPresentationTrailing = 132;
@@ -509,11 +510,16 @@ namespace
   auto const emptyTop = tableFrame.origin.y + std::max(0.0, tableFrame.size.height / 3);
   setFrame(_empty, kOuterInset, emptyTop, browserWidth - (2 * kOuterInset), kControlHeight);
   setFrame(_emptyHint, kOuterInset, emptyTop + kSidebarRowHeight, browserWidth - (2 * kOuterInset), kControlHeight);
+  // The title changes with the browser state and locale, so the action keeps
+  // its former width only as a minimum and otherwise fits its whole title.
+  auto const emptyActionSize = _emptyAction.fittingSize;
+  auto const emptyActionWidth = std::min(std::max(kMinimumEmptyActionWidth, std::ceil(emptyActionSize.width)),
+                                         std::max(0.0, browserWidth - (2 * kOuterInset)));
   setFrame(_emptyAction,
-           (browserWidth - kEmptyActionWidth) / 2,
+           (browserWidth - emptyActionWidth) / 2,
            emptyTop + kEmptyActionOffset,
-           kEmptyActionWidth,
-           _emptyAction.fittingSize.height);
+           emptyActionWidth,
+           emptyActionSize.height);
 
   [_libraryBrowser layoutForModern:_modern browserWidth:browserWidth];
 
