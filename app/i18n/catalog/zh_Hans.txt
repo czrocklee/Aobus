@@ -1080,5 +1080,166 @@ zh_Hans:table {
     tui_settings_terminal_title_hint { "设置当前播放曲目的标题格式，例如 $artist \" - \" $title。留空则停用标题更新。" }
     tui_settings_title_preview { "预览：{title}" }
     tui_settings_invalid_title_format { "格式无效：{detail}" }
+
+    appkit_collection_hint { "为收藏命名，并选择其中包含的内容。" }
+    appkit_track_details { "曲目详情" }
+    appkit_selected_music { "所选音乐" }
+    appkit_saved_list { "已保存的列表" }
+    appkit_delete_list_question { "删除列表？" }
+    appkit_delete_list_hint { "此列表及其子列表将被移除。" }
+    appkit_cancel { "取消" }
+    appkit_delete_list { "删除列表" }
+    appkit_save_changes { "保存修改" }
+    appkit_field_actions { "字段操作" }
+    appkit_basic_information { "基本信息" }
+    appkit_classification_tags { "分类与标签" }
+    appkit_track_disc { "曲目与光盘" }
+    appkit_work_performance { "作品与演奏" }
+    appkit_file_information { "文件信息" }
+    appkit_add_shared_tags { "添加共有标签" }
+    appkit_shared_tags { "共有标签" }
+    appkit_list_details { "列表详情" }
+    appkit_name { "名称" }
+    appkit_description { "描述" }
+    appkit_expression { "筛选表达式" }
+    appkit_list_name { "列表名称" }
+    appkit_optional_description { "可选描述" }
+    appkit_list_expression_hint { "使用 #favorites 这样的标签可直接添加曲目。也可以使用查询自动收集匹配的音乐。" }
+    appkit_collapse_section { "折叠此部分" }
+    appkit_expand_section { "展开此部分" }
+    appkit_edits_storage_hint { "编辑内容保存在 Aobus 中，音频文件保持不变。" }
+    appkit_deletion_keeps_media { "曲目、标签和音频文件都将保留。" }
+    appkit_saving { "正在保存…" }
+    appkit_will_clear { "将清除" }
+    appkit_list { "列表" }
+    appkit_discard_question { "放弃这些修改？" }
+    appkit_discard_hint { "未保存的输入将被放弃。" }
+    appkit_keep_editing { "继续编辑" }
+    appkit_keep_open { "保持打开" }
+    appkit_discard_changes { "放弃修改" }
+    appkit_clear_selected_field { "清除所选曲目的此字段" }
+    appkit_edit_tracks { "编辑 {count, plural, other {# 首曲目}}" }
+    appkit_updating_tracks { "正在更新所选的 {count, plural, other {# 首曲目}}" }
+    appkit_deleting_lists { "{count, plural, other {将移除 # 个列表}}" }
+    appkit_field_actions_for { "{field} 操作" }
+    appkit_properties_selection { "属性 — 已选择 {count, plural, other {# 首曲目}}" }
+    appkit_new_list { "新建列表" }
+    appkit_edit_list { "编辑列表" }
+    appkit_remove_from_list { "从列表中移除" }
+    appkit_add_to_list { "添加到列表" }
+    appkit_properties_stale { "音乐库已更改。输入内容已保留；请重新打开属性以编辑当前版本。" }
+    appkit_editor_busy { "音乐库繁忙。输入内容已保留；请再次尝试保存。" }
+    appkit_editor_stale { "音乐库已更改。输入内容已保留；请重新打开编辑器以继续。" }
+    appkit_about { "关于 Aobus" }
+    appkit_services { "服务" }
+    appkit_hide_application { "隐藏 Aobus" }
+    appkit_hide_others { "隐藏其他" }
+    appkit_show_all { "全部显示" }
+    appkit_quit { "退出 Aobus" }
+    appkit_menu_file { "文件" }
+    appkit_open_library_action { "打开音乐库…" }
+    appkit_open_recent { "打开最近使用" }
+    appkit_rescan_library { "重新扫描音乐库" }
+    appkit_close_window { "关闭窗口" }
+    appkit_menu_edit { "编辑" }
+    appkit_undo { "撤销" }
+    appkit_redo { "重做" }
+    appkit_cut { "剪切" }
+    appkit_copy { "拷贝" }
+    appkit_paste { "粘贴" }
+    appkit_paste_match_style { "粘贴并匹配样式" }
+    appkit_delete { "删除" }
+    appkit_select_all { "全选" }
+    appkit_filter_tracks { "筛选曲目" }
+    appkit_properties_action { "属性…" }
+    appkit_lists { "列表" }
+    appkit_new_list_action { "新建列表…" }
+    appkit_new_child_list_action { "新建子列表…" }
+    appkit_edit_list_action { "编辑列表…" }
+    appkit_delete_list_action { "删除列表…" }
+    appkit_menu_view { "显示" }
+    appkit_modern { "现代" }
+    appkit_classic { "经典" }
+    appkit_show_inspector { "显示检查器" }
+    appkit_hide_inspector { "隐藏检查器" }
+    appkit_show_sidebar { "显示边栏" }
+    appkit_hide_sidebar { "隐藏边栏" }
+    appkit_show_activity { "显示活动" }
+    appkit_enter_full_screen { "进入全屏幕" }
+    appkit_customize_toolbar { "自定义工具栏…" }
+    appkit_appearance_system { "跟随系统" }
+    appkit_appearance_light { "浅色" }
+    appkit_appearance_dark { "深色" }
+    appkit_menu_playback { "播放" }
+    appkit_output_device_action { "输出设备…" }
+    appkit_menu_window { "窗口" }
+    appkit_minimize { "最小化" }
+    appkit_zoom { "缩放" }
+    appkit_show_window { "显示 Aobus 窗口" }
+    appkit_bring_all_to_front { "前置全部窗口" }
+    appkit_menu_help { "帮助" }
+    appkit_help { "Aobus 帮助" }
+    appkit_library_section { "音乐库" }
+    appkit_saved_lists { "已保存的列表" }
+    appkit_playing_artwork { "当前播放曲目的封面" }
+    appkit_selected_artwork { "所选曲目的封面" }
+    appkit_filter_placeholder { "筛选曲目" }
+    appkit_tracks { "曲目" }
+    appkit_empty_library_title { "打开音乐文件夹以建立音乐库" }
+    appkit_ready { "就绪" }
+    appkit_reveal_in_finder { "在访达中显示" }
+    appkit_edit_properties_action { "编辑属性…" }
+    appkit_choose_music { "选择想听的音乐" }
+    appkit_output_device { "输出设备" }
+    appkit_volume { "音量" }
+    appkit_playback_options { "播放选项" }
+    appkit_playback_position { "播放位置" }
+    appkit_repeat_off { "关闭循环" }
+    appkit_repeat_all { "全部循环" }
+    appkit_repeat_one { "单曲循环" }
+    appkit_filter { "筛选" }
+    appkit_filter_this_view { "筛选此视图" }
+    appkit_current_view { "当前视图" }
+    appkit_activity { "活动" }
+    appkit_open_library { "打开音乐库" }
+    appkit_library_empty { "音乐库为空" }
+    appkit_no_matching_tracks { "没有匹配的曲目" }
+    appkit_empty_library_hint { "请打开音乐文件夹，或选择其他列表。" }
+    appkit_no_matching_tracks_hint { "请尝试其他筛选条件，或清除筛选以重新查看此视图。" }
+    appkit_clear_filter { "清除筛选" }
+    appkit_list_empty { "此列表为空" }
+    appkit_empty_list_hint { "请向此列表添加音乐，或浏览所有曲目。" }
+    appkit_show_all_tracks { "显示所有曲目" }
+    appkit_invalid_filter { "无效的筛选条件" }
+    appkit_auto_presentation { "自动" }
+    appkit_unavailable_presentation { "不可用：{id}（自动）" }
+    appkit_column_sort_presentation { "列排序" }
+    appkit_no_activity { "当前没有活动" }
+    appkit_audio { "音频" }
+    appkit_file_label { "文件" }
+    appkit_selection_details_hint { "选择音乐后，此处会显示其详细信息。" }
+    appkit_shared_details_hint { "可在属性中编辑所选内容的共有信息。" }
+    appkit_track_information { "曲目信息" }
+    appkit_done { "完成" }
+    appkit_dismiss_activity { "隐藏活动" }
+    appkit_hide_notification { "隐藏通知" }
+    appkit_severity_info { "信息" }
+    appkit_severity_warning { "警告" }
+    appkit_severity_error { "错误" }
+    appkit_choose_library_folder { "请选择存放音乐库的文件夹。" }
+    appkit_clear_recent_menu { "清除菜单" }
+    appkit_unknown_folder { "未知文件夹" }
+    appkit_remove_from_current_list { "从此列表中移除" }
+    appkit_playback_position_value { "{elapsed}，共 {duration}" }
+    appkit_selection_total { "已选择 {selected, number} / {total, plural, other {共 # 首曲目}}" }
+    appkit_tracks_selected { "{count, plural, other {已选择 # 首曲目}}" }
+    appkit_track_of_total { "{track, number} / {total, number}" }
+    appkit_recent_unavailable { "最近使用的音乐库文件夹已不可用：\n{path}" }
+    appkit_hide_activity { "隐藏活动" }
+    appkit_no_recent_libraries { "没有最近使用的音乐库" }
+    appkit_artwork_available { "有封面" }
+    appkit_activity_detail_label { "{severity}：{message}" }
+    appkit_operation_failed { "Aobus 无法完成此操作" }
+    appkit_settings_already_open { "另一个 Aobus 窗口已在使用这些应用程序设置。" }
   }
 }
