@@ -31,6 +31,11 @@ namespace ao::audio::test
   {
     auto const lock = std::scoped_lock{_mutex};
 
+    if (_optPrewarmFormat)
+    {
+      return _optPrewarmFormat;
+    }
+
     if (_optPrewarmEncoding)
     {
       return pcmFormat(format, *_optPrewarmEncoding);
@@ -195,6 +200,12 @@ namespace ao::audio::test
   {
     auto const lock = std::scoped_lock{_mutex};
     _optPrewarmEncoding = optEncoding;
+  }
+
+  void FakeCapturingBackend::setPrewarmFormat(std::optional<PcmFormat> optFormat)
+  {
+    auto const lock = std::scoped_lock{_mutex};
+    _optPrewarmFormat = optFormat;
   }
 
   void FakeCapturingBackend::setSelectedEncoding(std::optional<SampleEncoding> optEncoding)

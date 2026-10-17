@@ -21,6 +21,10 @@ namespace ao::audio::detail::test
   namespace
   {
     constexpr auto kRate = std::uint32_t{48000};
+    // WAVE-style FL | FR, the canonical two-speaker identity at this boundary.
+    constexpr auto kFrontStereoMask = std::uint32_t{0x3};
+    // WAVE-style FL | FC, a different complete two-speaker identity.
+    constexpr auto kFrontLeftCenterMask = std::uint32_t{0x5};
 
     SignalFormat integerSignal(std::uint8_t const precisionBits)
     {
@@ -36,6 +40,20 @@ namespace ao::audio::detail::test
     OpenedPcmMode unconfirmedMode(SampleEncoding const encoding)
     {
       return OpenedPcmMode{.clientFormat = PcmFormat{.sampleRate = kRate, .channels = 2, .encoding = encoding}};
+    }
+
+    SignalFormat maskedSignal(std::uint32_t const speakerMask)
+    {
+      return SignalFormat{.sampleRate = kRate, .channels = 2, .precisionBits = 16, .speakerMask = speakerMask};
+    }
+
+    OpenedPcmMode maskedMode(std::uint32_t const clientMask, std::uint32_t const endpointMask)
+    {
+      auto clientFormat = PcmFormat{.sampleRate = kRate, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+      clientFormat.speakerMask = clientMask;
+
+      return OpenedPcmMode{
+        .clientFormat = clientFormat, .optEndpoint = ConfirmedEndpoint{.signalFormat = maskedSignal(endpointMask)}};
     }
   } // namespace
 
@@ -172,5 +190,62 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().code == Error::Code::FormatRejected);
     CHECK(validatedRes.error().message.contains(
       encoding == SampleEncoding::Signed16Le ? "Backend returned lossy S16_LE" : "Backend returned lossy S32_LE"));
+  }
+
+  TEST_CASE("validateOpenedMode - a client mode that loses or substitutes the source speaker mask is rejected",
+            "[audio][unit][engine]")
+  {
+    auto mode = maskedMode(kFrontStereoMask, kFrontStereoMask);
+
+    SECTION("substituted same-count mask")
+    {
+      mode.clientFormat.speakerMask = kFrontLeftCenterMask;
+    }
+
+    SECTION("lost mask")
+    {
+      mode.clientFormat.speakerMask = 0U;
+    }
+
+    auto const validatedRes = validateOpenedMode(maskedSignal(kFrontStereoMask), mode);
+
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
+    CHECK(validatedRes.error().message == "Backend returned a different client speaker mask");
+  }
+
+  TEST_CASE("validateOpenedMode - a known contradicting endpoint speaker mask is rejected", "[audio][unit][engine]")
+  {
+    auto const validatedRes =
+      validateOpenedMode(maskedSignal(kFrontStereoMask), maskedMode(kFrontStereoMask, kFrontLeftCenterMask));
+
+    REQUIRE_FALSE(validatedRes);
+    CHECK(validatedRes.error().code == Error::Code::FormatRejected);
+    CHECK(validatedRes.error().message == "Backend confirmed an endpoint with a different speaker mask");
+  }
+
+  TEST_CASE("validateOpenedMode - an unknown mask neither rejects nor inherits the identified speaker layout",
+            "[audio][unit][engine]")
+  {
+    SECTION("endpoint mask stays zero for an identified source layout")
+    {
+      auto const mode = maskedMode(kFrontStereoMask, 0U);
+
+      CHECK(validateOpenedMode(maskedSignal(kFrontStereoMask), mode));
+      // Unknown endpoint positions provide no speaker proof and are never
+      // filled from the request.
+      CHECK(mode.optEndpoint->signalFormat.speakerMask == 0U);
+    }
+
+    SECTION("an unassigned source cannot contradict an identified endpoint")
+    {
+      CHECK(validateOpenedMode(maskedSignal(0U), maskedMode(0U, kFrontStereoMask)));
+    }
+  }
+
+  TEST_CASE("validateOpenedMode - matching identified speaker masks on client and endpoint are accepted",
+            "[audio][unit][engine]")
+  {
+    CHECK(validateOpenedMode(maskedSignal(kFrontStereoMask), maskedMode(kFrontStereoMask, kFrontStereoMask)));
   }
 } // namespace ao::audio::detail::test

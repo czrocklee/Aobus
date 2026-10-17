@@ -3,6 +3,7 @@
 
 #include "lib/audio/backend/detail/AlsaGraphRegistry.h"
 
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
@@ -13,12 +14,94 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
 using namespace ao::audio::backend::detail;
 using namespace ao::audio::flow;
+
+TEST_CASE("AlsaGraphRegistry - delivery-only changes publish without relabelling native slots", "[audio][unit][alsa]")
+{
+  auto registry = AlsaGraphRegistry{};
+  auto graph = Graph{};
+  std::size_t calls = 0;
+  auto sub = registry.subscribe("hw:0,0",
+                                [&](Graph const& nextGraph)
+                                {
+                                  graph = nextGraph;
+                                  ++calls;
+                                });
+  auto mode = ao::audio::OpenedPcmMode{
+    .clientFormat = {.sampleRate = 48000,
+                     .channels = 4,
+                     .encoding = ao::audio::SampleEncoding::Signed32Le,
+                     .speakerMask = 0x33},
+    .optEndpoint =
+      ao::audio::ConfirmedEndpoint{.signalFormat = {.sampleRate = 48000, .channels = 4, .precisionBits = 24}},
+    .channelDelivery = {.isMapped = false}};
+
+  registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
+
+  REQUIRE(calls == 2U);
+  REQUIRE(graph.nodes.size() == 2U);
+  REQUIRE(graph.nodes[0].optFormat);
+  REQUIRE(graph.nodes[1].optFormat);
+  auto const nativeStorage = std::get<ao::audio::PcmFormat>(*graph.nodes[0].optFormat);
+  CHECK(nativeStorage.sampleRate == 48000U);
+  CHECK(nativeStorage.channels == 4U);
+  CHECK(nativeStorage.encoding == ao::audio::SampleEncoding::Signed32Le);
+  CHECK(nativeStorage.speakerMask == 0U);
+  CHECK(std::get<ao::audio::SignalFormat>(*graph.nodes[1].optFormat).precisionBits == 24U);
+  CHECK(std::get<ao::audio::SignalFormat>(*graph.nodes[1].optFormat).speakerMask == 0U);
+  CHECK(graph.nodes[0].channelDelivery == mode.channelDelivery);
+  CHECK(graph.nodes[1].channelDelivery == mode.channelDelivery);
+
+  registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
+  CHECK(calls == 2U);
+  CHECK(graph.nodes[0].channelDelivery.nativeSpeakerMask == 0U);
+
+  // No format change: current evidence alone must invalidate graph equality.
+  mode.channelDelivery.isMapped = true;
+  mode.channelDelivery.nativeSpeakerMask = 0x33;
+  registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
+
+  CHECK(calls == 3U);
+  CHECK(graph.nodes[0].channelDelivery == mode.channelDelivery);
+  CHECK(graph.nodes[1].channelDelivery == mode.channelDelivery);
+  CHECK(std::get<ao::audio::PcmFormat>(*graph.nodes[0].optFormat) == nativeStorage);
+  CHECK(mode.clientFormat.speakerMask == 0x33U);
+}
+
+TEST_CASE("AlsaGraphRegistry - observed endpoint set does not become a canonical native slot description",
+          "[audio][unit][alsa]")
+{
+  auto registry = AlsaGraphRegistry{};
+  auto graph = Graph{};
+  auto sub = registry.subscribe("hw:0,0", [&](Graph const& nextGraph) { graph = nextGraph; });
+  auto const mode = ao::audio::OpenedPcmMode{
+    .clientFormat = {.sampleRate = 48000,
+                     .channels = 4,
+                     .encoding = ao::audio::SampleEncoding::Signed24PackedLe,
+                     .speakerMask = 0x33},
+    .optEndpoint =
+      ao::audio::ConfirmedEndpoint{
+        .signalFormat = {.sampleRate = 48000, .channels = 4, .precisionBits = 24, .speakerMask = 0x33}},
+    .channelDelivery = {.isMapped = true, .nativeSpeakerMask = 0x33}};
+
+  registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
+
+  REQUIRE(graph.nodes.size() == 2U);
+  REQUIRE(graph.nodes[0].optFormat);
+  REQUIRE(graph.nodes[1].optFormat);
+  CHECK(std::get<ao::audio::PcmFormat>(*graph.nodes[0].optFormat).speakerMask == 0U);
+  CHECK(std::get<ao::audio::SignalFormat>(*graph.nodes[1].optFormat).speakerMask == 0x33U);
+  CHECK(graph.nodes[0].channelDelivery.isMapped);
+  CHECK(graph.nodes[0].channelDelivery.nativeSpeakerMask == 0x33U);
+  CHECK(graph.nodes[1].channelDelivery.nativeSpeakerMask == 0x33U);
+  CHECK_FALSE(graph.nodes[0].channelDelivery.hasSharedConversion);
+}
 
 TEST_CASE("AlsaGraphRegistry - initial subscription receives neutral graph", "[audio][unit][alsa]")
 {
