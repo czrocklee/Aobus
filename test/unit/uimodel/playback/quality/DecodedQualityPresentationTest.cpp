@@ -136,16 +136,32 @@ namespace ao::uimodel::test
       CHECK_FALSE(presentation.channelNote.empty());
       CHECK(resolveSoulAura(audio::Transport::Playing, true, state) == testCase.aura);
 
-      if (testCase.fileName == "basic_metadata.mp3")
+      if (testCase.fileName == "basic_metadata.flac")
       {
-        // A genuinely Unknown non-WAV producer guards against a decoder-only
-        // fix accidentally masking presentation's independent-confidence bug.
+        // FLAC defines stereo roles, not the downstream native mapping.
+        CHECK(info.sourceChannelLayout.origin == audio::ChannelLayoutOrigin::FormatDefault);
+        CHECK(info.sourceFormat.channels == 2U);
+        CHECK(info.sourceFormat.speakerMask == 0x3U);
+        CHECK(info.outputFormat.speakerMask == info.sourceFormat.speakerMask);
+        CHECK(result.channelConfidence == audio::ChannelConfidence::Unverified);
+        CHECK(presentation.channelNote == "Channel delivery not proved");
+      }
+      else
+      {
+        // Genuine Unknown non-WAV producers guard against a decoder-only fix
+        // masking presentation's independent-confidence bug. Neither is guessed
+        // to be stereo merely because it has two channels.
         CHECK(info.sourceChannelLayout.origin == audio::ChannelLayoutOrigin::Unknown);
         CHECK(info.sourceFormat.speakerMask == 0U);
+        CHECK(info.outputFormat.speakerMask == 0U);
         CHECK(info.sourceFormat.channels == 2U);
         CHECK(result.channelConfidence == audio::ChannelConfidence::Unknown);
         CHECK(presentation.channelNote == "Source channel layout not identified");
-        CHECK(formatter.formatLabel(info.sourceFormat) == "44.1 kHz · 16-bit · 2 ch");
+
+        if (testCase.fileName == "basic_metadata.mp3")
+        {
+          CHECK(formatter.formatLabel(info.sourceFormat) == "44.1 kHz · 16-bit · 2 ch");
+        }
       }
     }
   }

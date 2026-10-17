@@ -22,7 +22,7 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 - A decoder created without a requested encoding inspects the stream and chooses its preferred lossless native representation.
 - A decoder created with a requested `SampleEncoding` either produces exactly that interleaved representation or is not published.
 - Decoders preserve inspected sample rate, channel count, sample kind, precision, and effective speaker mask; they do not silently resample, relabel slots, add or remove channels, or reduce precision.
-- The shared [PCM format reference](pcm-format.md) defines ascending-bit order for identified application layouts. WAV applies its source interpretation before output adaptation and retains raw declarations independently; the other codec producers still report zero masks and unknown interpretation evidence. Their existing normalization obligations and the known ALAC limitation remain explicit in that reference.
+- The shared [PCM format reference](pcm-format.md) defines ascending-bit order for identified application layouts. WAV and FLAC apply their source interpretation before output adaptation and retain raw declarations independently; the other codec producers still report zero masks and unknown interpretation evidence. Their existing normalization obligations and the known ALAC limitation remain explicit in that reference.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -106,7 +106,13 @@ Lossy and unknown sessions use the drain path until delay/padding trim is parsed
 ## Failure behavior
 
 Malformed external media and unsupported requests return recoverable decoder errors.
-FLAC requires STREAMINFO to establish a valid source and output format before construction succeeds; missing required metadata is `DecodeFailed`.
+FLAC requires STREAMINFO to establish valid source geometry before construction succeeds; missing required metadata is `DecodeFailed`.
+It also requests Vorbis comments during initialization, resolves the complete [FLAC source identity](pcm-format.md#flac-source-interpretation), and only then configures the output adapter and publishes source/output formats together.
+Repeated Vorbis comment blocks are tolerated; mask declarations agree or fail across all blocks rather than choosing a first- or last-block override.
+An absent five/six-channel mask leaves the generic surround default unidentified in the WAVE-mask model; source and output mask zero with `Unknown` origin preserve count and bytes without imposing back-versus-side roles.
+A supported complete declaration still supplies its exact identity, including back or side five/six-channel sets.
+Unsupported explicit zero, partial or conflicting speaker assignments and malformed known mask values produce contextual source errors, not an unidentified fallback.
+No first PCM read is needed to finalize identity; later metadata cannot silently replace the ready session's interpretation.
 FLAC treats corrupted metadata, headers, frames, CRC mismatches, detected missing frames, and premature end before the declared sample count as `DecodeFailed`; a standalone loss-of-sync notice may remain recoverable for resynchronization.
 Delivered frame sample positions must continue the decoded timeline, or begin at the requested seek target.
 A missing-sample gap or additional write over pending PCM is rejected before any incorrectly positioned block is returned, even when libFLAC suppresses its missing-frame notice or the total sample count is unknown.

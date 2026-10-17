@@ -7,6 +7,7 @@
 #include "test/unit/audio/FlacFrameTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
@@ -78,8 +79,12 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.sampleRate == kStreamSampleRate);
       CHECK(info.sourceFormat.channels == kStreamChannels);
       CHECK(info.sourceFormat.precisionBits == kStreamBitsPerSample);
+      CHECK(info.sourceFormat.speakerMask == 0x3);
+      CHECK(info.sourceChannelLayout.origin == ChannelLayoutOrigin::FormatDefault);
+      CHECK_FALSE(info.sourceChannelLayout.optDeclaredMask);
       CHECK(info.outputFormat.sampleRate == kStreamSampleRate);
       CHECK(info.outputFormat.channels == kStreamChannels);
+      CHECK(info.outputFormat.speakerMask == 0x3);
       CHECK(info.codec == AudioCodec::Flac);
       CHECK_FALSE(info.isLossy);
     }

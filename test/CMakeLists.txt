@@ -484,6 +484,7 @@ add_executable(ao_core_test
     unit/audio/FlacDecoderSessionTest.cpp
     unit/audio/FlacDecoderMalformedTest.cpp
     unit/audio/FlacDecoderFormatStabilityTest.cpp
+    unit/audio/FlacDecoderChannelLayoutTest.cpp
     unit/audio/AlacDecoderSessionTest.cpp
     unit/audio/AlacDecoderMalformedMp4Test.cpp
     unit/audio/Mp3DecoderSessionTest.cpp
@@ -846,6 +847,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireMonitorTest.cpp
   unit/audio/backend/PipeWireBackendTest.cpp
   unit/audio/backend/PipeWireChannelObservationTest.cpp
+  unit/audio/backend/FlacDefaultChannelMapTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
   unit/audio/backend/AlsaChannelObservationTest.cpp

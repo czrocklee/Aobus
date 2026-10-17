@@ -28,7 +28,7 @@ The sample kind distinguishes the integer and floating-point domains. The effect
 
 Both shared formats carry an effective `speakerMask`. Identified application slots use ascending assigned WAVE speaker-bit order; zero assigns no speakers and never selects a default from the channel count. Count alone determines the number of interleaved slots and byte stride. These value types do not perform population-count admission, infer missing speakers, or permute samples.
 
-WAV interprets its container declaration before publishing identified canonical PCM; the other codec producers still publish zero masks and unknown source interpretation evidence. Native backends preserve the canonical application identity while owning any private slot permutation. Otherwise admitted routes with genuinely unknown positions remain explicitly legacy-unverified, not verified mappings. Available known contradictions require a correct relationship or contextual refusal; they are not erased to unknown. Null output retains application identities but has no native-delivery evidence.
+WAV interprets its container declaration and FLAC resolves its metadata/defaults before publishing representable speaker identities; FLAC's ambiguous five/six-channel default and the other codec producers publish zero masks and unknown source interpretation evidence. Native backends preserve the canonical application identity while owning any private slot permutation. Otherwise admitted routes with genuinely unknown positions remain explicitly legacy-unverified, not verified mappings. Available known contradictions require a correct relationship or contextual refusal; they are not erased to unknown. Null output retains application identities but has no native-delivery evidence.
 
 AAC requests FDK WAV output mapping and Opus family 1 permutes its decoder mapping; these existing mechanisms do not establish end-to-end speaker verification. The current ALAC session does not normalize the provider's codec element order, which cannot be declared canonical from count alone. Its numerical provider and decoding eligibility are unchanged here.
 
@@ -63,6 +63,34 @@ WAV PCM already follows ascending assigned-bit order; assigning identity does no
 
 The multichannel table and explicit-zero interpretation are Aobus compatibility policy, not a universal codec or native-device default. WAVE zero normally denotes direct-out; interpreting it as speakers can misinterpret intentional discrete/stem content. Partial, reserved, wildcard and unsupported fallback refusals can remove previously attempted playback eligibility. Import/parser retention is a separate boundary and does not acquire these decoder refusals.
 See Microsoft's [WAVEFORMATEXTENSIBLE reference](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-waveformatextensible) for raw ordering, excess-bit and direct-out semantics.
+
+### FLAC source interpretation
+
+FLAC resolves channel identity after all metadata and before configuring its output adapter or publishing a ready session.
+Absent `WAVEFORMATEXTENSIBLE_CHANNEL_MASK`, [RFC 9639 section 9.1.3](https://www.rfc-editor.org/rfc/rfc9639.html#section-9.1.3) supplies default roles for one to eight channels.
+Counts one, two, three, four, seven and eight have the representable sets in the table above and use `FormatDefault`, not an application multichannel inference or native routing proof.
+For five/six channels, the RFC calls the final pair back/surround; that does not uniquely establish WAVE BL/BR rather than SL/SR.
+Without a declaration, those two counts therefore publish effective mask zero, `Unknown` origin and no raw declaration rather than impose an exact back or side constraint.
+This deliberately underidentifies the default because the current WAVE-mask value cannot express generic surround alternatives; it does not claim the coded channels are non-speaker content.
+Count, precision, storage and decoded slot order remain unchanged, and admitted native transport remains unverified rather than borrowing roles from the device.
+A complete declaration still establishes its actual set and does not gain an origin-based exemption from native conflicts.
+Decoded FLAC slots already follow the applicable ascending-bit order; attaching an identified layout adds no permutation.
+
+A complete supported nonzero [mask comment](https://www.rfc-editor.org/rfc/rfc9639.html#section-8.6.2) overrides the default, with `Declared` origin and its decoded integer retained as `optDeclaredMask`.
+The field name and hexadecimal contents are case-insensitive; `0x`/`0X` and zero padding are accepted.
+Equivalent repeated declarations agree within or across comment blocks; conflicting declarations, malformed known values, overflow, reserved/wildcard positions and masks assigning more or fewer speakers than coded channels fail before PCM publication.
+Although RFC 9639 forbids multiple Vorbis comment blocks in a conforming file, playback tolerates them and checks mask declarations across all delivered blocks before finalizing identity.
+Blocks without a mask do not change the interpretation: if no block declares a mask, the default interpretation above applies, including five/six-channel uncertainty; otherwise, the declaration takes precedence wherever it occurs.
+A later block cannot override a conflicting or malformed known declaration; bounded diagnostics identify the Vorbis block and entry.
+Known values accept only the prefix followed by hexadecimal digits: whitespace, signs, embedded NULs and trailing data are not silently trimmed or treated as absence.
+
+Explicit FLAC zero means no assigned speakers; unlike extensible WAV zero, it has no compatibility fallback.
+It is distinct from an absent five/six-channel declaration whose generic surround default cannot be represented precisely.
+Zero and partial assignments are refused for ordinary playback because their unassigned slots have no supported speaker-rendering interpretation.
+These bounded admission and malformed/duplicate-value rules are playback policy, not claims that the RFC forbids every such file or that library import uses the same boundary.
+In particular, FLAC does not borrow WAVE's excess-high-bit truncation rule, and non-default masks are outside FLAC's streamable subset rather than inherently invalid.
+Metadata precedence, lossless adaptation, literal channel order and stable first-read/seek/EOF identity are covered by [`FlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/FlacDecoderChannelLayoutTest.cpp).
+Linux [`FlacDefaultChannelMapTest.cpp`](../../../test/unit/audio/backend/FlacDefaultChannelMapTest.cpp) decodes real five/six-channel files before exercising ALSA/PipeWire back/side plans and declared-conflict controls; those are planner integration tests, not physical routing evidence.
 
 ### Existing codec-order limitations
 

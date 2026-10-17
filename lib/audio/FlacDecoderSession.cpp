@@ -12,6 +12,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
@@ -22,6 +23,7 @@
 #include <FLAC/ordinals.h>
 #include <FLAC/stream_decoder.h>
 
+#include <array>
 #include <bit>
 #include <chrono>
 #include <cstddef>
@@ -45,6 +47,43 @@ namespace ao::audio
   namespace
   {
     constexpr std::uint8_t kLowByteMask = 0xFF;
+
+    struct FlacMetadataFailure final
+    {
+      std::string_view reason;
+      // One-based Vorbis block and entry indices; zero denotes unavailable context.
+      std::uint64_t blockIndex;
+      std::uint32_t entryIndex;
+      std::array<std::uint8_t, 16> valuePrefix{};
+      std::size_t prefixLength = 0;
+      std::size_t valueLength = 0;
+      std::source_location location;
+    };
+
+    constexpr std::uint8_t foldAsciiCase(std::uint8_t const value) noexcept
+    {
+      return value >= 'A' && value <= 'Z' ? static_cast<std::uint8_t>(value + ('a' - 'A')) : value;
+    }
+
+    bool matchesFlacMaskName(std::span<::FLAC__byte const> const entry) noexcept
+    {
+      static constexpr auto kFieldName = std::string_view{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK"};
+
+      if (entry.size() < kFieldName.size())
+      {
+        return false;
+      }
+
+      for (std::size_t index = 0; index < kFieldName.size(); ++index)
+      {
+        if (foldAsciiCase(entry[index]) != foldAsciiCase(static_cast<std::uint8_t>(kFieldName[index])))
+        {
+          return false;
+        }
+      }
+
+      return entry.size() == kFieldName.size() || entry[kFieldName.size()] == '=';
+    }
 
     struct FlacFrameFormatMismatch final
     {
@@ -100,6 +139,14 @@ namespace ao::audio
       return metadata->data.stream_info;
     }
 
+    ::FLAC__StreamMetadata_VorbisComment const& vorbisCommentFor(::FLAC__StreamMetadata const* metadata)
+    {
+      AO_EXPECTS(metadata->type == ::FLAC__METADATA_TYPE_VORBIS_COMMENT);
+      // The checked tag identifies the active C member at the union's address.
+      // The existing byte-layout boundary checks its storage size and alignment.
+      return *utility::layout::view<::FLAC__StreamMetadata_VorbisComment>(utility::bytes::view(metadata->data));
+    }
+
     std::uint64_t frameSampleNumberFor(::FLAC__Frame const* frame) noexcept
     {
       // libFLAC normalizes fixed-block frame numbers to sample numbers before
@@ -148,10 +195,16 @@ namespace ao::audio
     std::optional<FlacFrameFormatMismatch> optFormatMismatch;
     std::optional<FlacFrameDiscontinuity> optFrameDiscontinuity;
     std::optional<Error> optOutputError;
+    std::optional<FlacMetadataFailure> optMetadataFailure;
+    std::optional<std::uint32_t> optDeclaredMask;
+    std::uint64_t declarationBlockIndex = 0;
+    std::uint32_t declarationEntryIndex = 0;
+    std::uint64_t vorbisCommentBlockCount = 0;
+    bool hasFinalizedMetadata = false;
     // Only seek_absolute's synchronous write callback uses this target; normal
     // delivery is checked against the next public block's sequential index.
     std::optional<std::uint64_t> optSeekTarget;
-    bool hasConfiguredStreamInfo = false;
+    bool hasStreamInfo = false;
     bool eof = false;
 
     Impl(std::optional<SampleEncoding> optOutputEncoding)
@@ -206,8 +259,247 @@ namespace ao::audio
                               ::FLAC__StreamDecoderErrorStatus status,
                               void* clientData) noexcept;
 
+    void recordMetadataFailure(std::string_view const reason,
+                               std::uint64_t const blockIndex = 0,
+                               std::uint32_t const entryIndex = 0,
+                               std::span<::FLAC__byte const> const value = {},
+                               std::source_location const location = std::source_location::current()) noexcept
+    {
+      if (optMetadataFailure)
+      {
+        return;
+      }
+
+      auto failure =
+        FlacMetadataFailure{.reason = reason, .blockIndex = blockIndex, .entryIndex = entryIndex, .location = location};
+      failure.valueLength = value.size();
+
+      for (auto const byte : value)
+      {
+        if (failure.prefixLength == failure.valuePrefix.size())
+        {
+          break;
+        }
+
+        failure.valuePrefix[failure.prefixLength++] = byte;
+      }
+
+      optMetadataFailure = failure;
+    }
+
+    void readChannelMask(std::span<::FLAC__byte const> const entry,
+                         std::uint64_t const blockIndex,
+                         std::uint32_t const entryIndex) noexcept
+    {
+      static constexpr std::size_t kFieldNameLength = std::string_view{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK"}.size();
+      static constexpr std::uint32_t kHexLetterOffset = 10;
+
+      if (!matchesFlacMaskName(entry))
+      {
+        return;
+      }
+
+      if (entry.size() == kFieldNameLength)
+      {
+        recordMetadataFailure("mask declaration has no '=' separator", blockIndex, entryIndex);
+        return;
+      }
+
+      auto const value = entry.subspan(kFieldNameLength + 1U);
+
+      if (value.size() < 3 || value[0] != '0' || foldAsciiCase(value[1]) != 'x')
+      {
+        recordMetadataFailure("mask requires a 0x prefix and hexadecimal digits", blockIndex, entryIndex, value);
+        return;
+      }
+
+      std::uint32_t mask = 0;
+
+      // This is bounded playback syntax policy, not an RFC whitespace or
+      // overflow mandate. Leading zero padding is accepted without copying.
+      for (auto const byte : value.subspan(2))
+      {
+        auto const folded = foldAsciiCase(byte);
+        std::uint32_t digit = 0;
+
+        if (folded >= '0' && folded <= '9')
+        {
+          digit = static_cast<std::uint32_t>(folded - '0');
+        }
+        else if (folded >= 'a' && folded <= 'f')
+        {
+          digit = static_cast<std::uint32_t>(folded - 'a') + kHexLetterOffset;
+        }
+        else
+        {
+          recordMetadataFailure("mask contains a non-hexadecimal byte", blockIndex, entryIndex, value);
+          return;
+        }
+
+        if (mask > (std::numeric_limits<std::uint32_t>::max() - digit) / 16U)
+        {
+          recordMetadataFailure("mask exceeds uint32 range", blockIndex, entryIndex, value);
+          return;
+        }
+
+        mask = (mask * 16U) + digit;
+      }
+
+      if (optDeclaredMask && *optDeclaredMask != mask)
+      {
+        recordMetadataFailure("conflicting mask declarations", blockIndex, entryIndex, value);
+        return;
+      }
+
+      if (!optDeclaredMask)
+      {
+        optDeclaredMask = mask;
+        declarationBlockIndex = blockIndex;
+        declarationEntryIndex = entryIndex;
+      }
+    }
+
+    void finalizeChannelLayout()
+    {
+      // RFC 9639, Table 16 leaves five/six-channel surround slots generic:
+      // neither exact WAVE back nor side identity is established without a
+      // declaration. Zero here means unidentified, not declared non-speaker
+      // content. Representable defaults and declarations need no PCM remix.
+      static constexpr auto kDefaultMasks = std::to_array<std::uint32_t>({0x4, 0x3, 0x7, 0x33, 0, 0, 0x70F, 0x63F});
+      static constexpr std::uint32_t kSupportedPositions = 0x0003FFFF;
+      static constexpr std::uint32_t kAllSpeakers = 0x80000000;
+      auto const channels = info.sourceFormat.channels;
+
+      if (optDeclaredMask)
+      {
+        auto const mask = *optDeclaredMask;
+        auto reason = std::string_view{};
+
+        // Refusing explicit non-speaker, partial, excess, and reserved layouts
+        // is the ordinary-playback policy, not WAVE's excess-bit rule.
+        if (mask == 0)
+        {
+          reason = "explicit zero identifies no speaker positions";
+        }
+        else if ((mask & kAllSpeakers) != 0)
+        {
+          reason = "wildcard is not an assigned speaker position";
+        }
+        else if ((mask & ~kSupportedPositions) != 0)
+        {
+          reason = "reserved speaker positions";
+        }
+        else if (std::popcount(mask) < channels)
+        {
+          reason = "partially assigned channels";
+        }
+        else if (std::popcount(mask) > channels)
+        {
+          reason = "excess speaker positions";
+        }
+
+        if (!reason.empty())
+        {
+          detail::throwDecoderError(
+            Error::Code::NotSupported,
+            std::format("FLAC channel layout: mask 0x{:08X} for {} channels in Vorbis comment block {}, entry {}: {}",
+                        mask,
+                        channels,
+                        declarationBlockIndex,
+                        declarationEntryIndex,
+                        reason));
+        }
+      }
+
+      info.sourceFormat.speakerMask = optDeclaredMask.value_or(kDefaultMasks[channels - 1U]);
+      auto origin = ChannelLayoutOrigin::Unknown;
+
+      if (optDeclaredMask)
+      {
+        origin = ChannelLayoutOrigin::Declared;
+      }
+      else if (info.sourceFormat.speakerMask != 0U)
+      {
+        origin = ChannelLayoutOrigin::FormatDefault;
+      }
+
+      info.sourceChannelLayout = ChannelLayoutEvidence{.origin = origin, .optDeclaredMask = optDeclaredMask};
+    }
+
+    bool tryAdmitFrame(::FLAC__Frame const* frame) noexcept
+    {
+      if (!hasFinalizedMetadata || optMetadataFailure)
+      {
+        recordMetadataFailure("audio arrived without stable finalized metadata");
+        return false;
+      }
+
+      // libFLAC accepts frames whose header contradicts the STREAMINFO format
+      // instead of rejecting them, so a frame may arrive with a sample rate,
+      // channel count, or bit depth different from the established source
+      // format. Admit the fixed-session geometry before any PCM buffer work.
+      if (auto const& sourceFormat = info.sourceFormat;
+          frame->header.sample_rate != sourceFormat.sampleRate ||
+          frame->header.channels != static_cast<std::uint32_t>(sourceFormat.channels) ||
+          frame->header.bits_per_sample != static_cast<std::uint32_t>(sourceFormat.precisionBits))
+      {
+        // Keep only inline evidence here; diagnostic formatting belongs outside
+        // the C callback, and the delivered frame's storage is only borrowed.
+        optFormatMismatch = FlacFrameFormatMismatch{
+          .expectedFormat = sourceFormat,
+          .frameSampleRate = frame->header.sample_rate,
+          .frameChannels = frame->header.channels,
+          .framePrecisionBits = frame->header.bits_per_sample,
+          .location = std::source_location::current(),
+        };
+
+        return false;
+      }
+
+      // A loss-of-sync notice can suppress libFLAC's MISSING_FRAME report.
+      // Its repair path can then deliver silence and the real frame in one
+      // process_single call. Do not overwrite pending PCM or relabel a later
+      // frame as the next sample; even a lost first frame has no repair block.
+      if (auto const expectedFrameIndex = optSeekTarget.value_or(nextFrameIndex);
+          frameSampleNumberFor(frame) != expectedFrameIndex || bufferedFrames != 0)
+      {
+        optFrameDiscontinuity = FlacFrameDiscontinuity{
+          .expectedFrameIndex = expectedFrameIndex,
+          .frameIndex = frameSampleNumberFor(frame),
+          .pendingFrames = bufferedFrames,
+          .location = std::source_location::current(),
+        };
+
+        return false;
+      }
+
+      return true;
+    }
+
     void checkDecodeError() const
     {
+      if (optMetadataFailure)
+      {
+        auto const& failure = *optMetadataFailure;
+        auto prefix = std::string{};
+
+        for (std::size_t index = 0; index < failure.prefixLength; ++index)
+        {
+          prefix += std::format("{:02X}", failure.valuePrefix[index]);
+        }
+
+        detail::throwDecoderError(Error::Code::NotSupported,
+                                  std::format("FLAC channel layout: {} for {} channels (Vorbis comment block {}, "
+                                              "entry {}, value length {}, prefix hex [{}])",
+                                              failure.reason,
+                                              info.sourceFormat.channels,
+                                              failure.blockIndex,
+                                              failure.entryIndex,
+                                              failure.valueLength,
+                                              prefix),
+                                  failure.location);
+      }
+
       // The session-detected frame-format failure is the direct cause of an
       // aborted decode, so it wins over the more generic libFLAC error status.
       if (optFormatMismatch)
@@ -280,6 +572,12 @@ namespace ao::audio
       _implPtr->eof = false;
       _implPtr->nextFrameIndex = 0;
 
+      if (_implPtr->decoder == nullptr ||
+          ::FLAC__stream_decoder_set_metadata_respond(_implPtr->decoder, ::FLAC__METADATA_TYPE_VORBIS_COMMENT) == 0)
+      {
+        detail::throwDecoderError(Error::Code::InitFailed, "Failed to request FLAC channel metadata");
+      }
+
       auto const initStatus = ::FLAC__stream_decoder_init_stream(_implPtr->decoder,
                                                                  Impl::readCallback,
                                                                  Impl::seekCallback,
@@ -299,19 +597,31 @@ namespace ao::audio
       // Process until metadata is read
       if (::FLAC__stream_decoder_process_until_end_of_metadata(_implPtr->decoder) == 0)
       {
+        _implPtr->checkDecodeError();
         detail::throwDecoderError(Error::Code::DecodeFailed, "Failed to read FLAC metadata");
       }
 
       _implPtr->checkDecodeError();
 
       if (auto const& sourceFormat = _implPtr->info.sourceFormat;
-          !_implPtr->hasConfiguredStreamInfo || sourceFormat.sampleRate == 0 || sourceFormat.channels == 0 ||
+          !_implPtr->hasStreamInfo || sourceFormat.sampleRate == 0 || sourceFormat.channels == 0 ||
           sourceFormat.channels > FLAC__MAX_CHANNELS || sourceFormat.precisionBits < FLAC__MIN_BITS_PER_SAMPLE ||
           sourceFormat.precisionBits > FLAC__MAX_BITS_PER_SAMPLE)
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC stream is missing valid STREAMINFO");
       }
 
+      _implPtr->finalizeChannelLayout();
+      auto const configuredRes = _implPtr->outputAdapter.configure(
+        _implPtr->info.sourceFormat, nativeFlacEncoding(_implPtr->info.sourceFormat.precisionBits));
+
+      if (!configuredRes)
+      {
+        detail::throwDecoderError(configuredRes.error());
+      }
+
+      _implPtr->info.outputFormat = *configuredRes;
+      _implPtr->hasFinalizedMetadata = true;
       return {};
     }
     catch (detail::DecoderException const& ex)
@@ -398,6 +708,7 @@ namespace ao::audio
       auto const decoderState = ::FLAC__stream_decoder_get_state(_implPtr->decoder);
       auto const preservePosition = !_implPtr->optDecodeError && !_implPtr->optFormatMismatch &&
                                     !_implPtr->optFrameDiscontinuity && !_implPtr->optOutputError &&
+                                    !_implPtr->optMetadataFailure &&
                                     (decoderState == ::FLAC__STREAM_DECODER_SEARCH_FOR_FRAME_SYNC ||
                                      decoderState == ::FLAC__STREAM_DECODER_END_OF_STREAM);
       ::FLAC__uint64 bytePosition = 0;
@@ -593,44 +904,8 @@ namespace ao::audio
       {
         auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
-        // libFLAC accepts frames whose header contradicts the STREAMINFO format
-        // instead of rejecting them, so a frame may arrive with a sample rate,
-        // channel count, or bit depth different from the established source
-        // format. Copying, resizing, interleaving, or converting such a frame
-        // would emit PCM that contradicts the published session format, so guard
-        // the frame before any buffer work and abort without emitting its PCM.
-        if (auto const& sourceFormat = impl->info.sourceFormat;
-            frame->header.sample_rate != sourceFormat.sampleRate ||
-            frame->header.channels != static_cast<std::uint32_t>(sourceFormat.channels) ||
-            frame->header.bits_per_sample != static_cast<std::uint32_t>(sourceFormat.precisionBits))
+        if (!impl->tryAdmitFrame(frame))
         {
-          // Keep only inline evidence here; diagnostic formatting belongs outside
-          // the C callback, and the delivered frame's storage is only borrowed.
-          impl->optFormatMismatch = FlacFrameFormatMismatch{
-            .expectedFormat = sourceFormat,
-            .frameSampleRate = frame->header.sample_rate,
-            .frameChannels = frame->header.channels,
-            .framePrecisionBits = frame->header.bits_per_sample,
-            .location = std::source_location::current(),
-          };
-
-          return ::FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
-        }
-
-        // A loss-of-sync notice can suppress libFLAC's MISSING_FRAME report.
-        // Its repair path can then deliver silence and the real frame in one
-        // process_single call. Do not overwrite pending PCM or relabel a later
-        // frame as the next sample; even a lost first frame has no repair block.
-        if (auto const expectedFrameIndex = impl->optSeekTarget.value_or(impl->nextFrameIndex);
-            frameSampleNumberFor(frame) != expectedFrameIndex || impl->bufferedFrames != 0)
-        {
-          impl->optFrameDiscontinuity = FlacFrameDiscontinuity{
-            .expectedFrameIndex = expectedFrameIndex,
-            .frameIndex = frameSampleNumberFor(frame),
-            .pendingFrames = impl->bufferedFrames,
-            .location = std::source_location::current(),
-          };
-
           return ::FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
         }
 
@@ -712,9 +987,39 @@ namespace ao::audio
       "FLAC metadata callback",
       [&]
       {
-        if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-            metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
+        auto* const impl = utility::unsafeDowncast<Impl>(clientData);
+
+        if (impl->hasFinalizedMetadata)
         {
+          impl->recordMetadataFailure("metadata changed after initialization");
+          return;
+        }
+
+        if (metadata->type == ::FLAC__METADATA_TYPE_VORBIS_COMMENT)
+        {
+          // Tolerate duplicate tag blocks, but resolve every mask against the
+          // same declaration before publication. A later block cannot override
+          // an earlier conflict or turn malformed known metadata into absence.
+          auto const blockIndex = ++impl->vorbisCommentBlockCount;
+          auto const& comments = vorbisCommentFor(metadata);
+
+          for (std::uint32_t index = 0; index < comments.num_comments && !impl->optMetadataFailure; ++index)
+          {
+            auto const& entry = comments.comments[index];
+            impl->readChannelMask({entry.entry, entry.length}, blockIndex, index + 1U);
+          }
+
+          return;
+        }
+
+        if (metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
+        {
+          if (impl->hasStreamInfo)
+          {
+            impl->recordMetadataFailure("multiple STREAMINFO blocks");
+            return;
+          }
+
           auto const& streamInfo = streamInfoFor(metadata);
 
           impl->info.sourceFormat.channels = static_cast<std::uint8_t>(streamInfo.channels);
@@ -722,16 +1027,6 @@ namespace ao::audio
           impl->info.sourceFormat.precisionBits = static_cast<std::uint8_t>(streamInfo.bits_per_sample);
           impl->info.sourceFormat.sampleKind = SampleKind::Integer;
 
-          auto const configuredRes = impl->outputAdapter.configure(
-            impl->info.sourceFormat, nativeFlacEncoding(impl->info.sourceFormat.precisionBits));
-
-          if (!configuredRes)
-          {
-            impl->optOutputError = configuredRes.error();
-            return;
-          }
-
-          impl->info.outputFormat = *configuredRes;
           impl->totalFrames = streamInfo.total_samples;
 
           if (streamInfo.sample_rate > 0)
@@ -741,7 +1036,7 @@ namespace ao::audio
 
           impl->info.isLossy = false;
           impl->info.codec = AudioCodec::Flac;
-          impl->hasConfiguredStreamInfo = true;
+          impl->hasStreamInfo = true;
         }
       });
   }
