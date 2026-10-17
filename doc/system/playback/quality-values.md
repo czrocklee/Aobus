@@ -25,8 +25,7 @@ Frontend adapters consume shared categories rather than deriving another quality
 | 5 | `LossySource` | Encoded source is lossy | `Informational` |
 | 6 | `Clipped` | Reserved sample-clipping severity | `Clipped` |
 
-The current analyzer does not infer actual clipping from amplification metadata.
-Software amplification remains `LinearIntervention`, with a `Warning` presentation override for clipping risk.
+Software amplification keeps `LinearIntervention` with a `Warning` presentation override for clipping risk.
 Consumers use the analyzer-assigned finding quality, not enum declaration order or a second finding-kind classifier.
 
 ## Finding kinds
@@ -76,7 +75,7 @@ The headline does not repeat per-node rates, gain, shared applications, or other
 |---:|---|---|---|
 | 1 | Overall quality is unknown | No usable pipeline rating | `Unknown` |
 | 2 | Any software-amplification finding | Clipping risk | `Warning` |
-| 3 | Any mute, truncation, resampling, software or unclassified volume modification, mixing, channel mapping, or Converted channel confidence | Pipeline intervention | `Diagnostic` |
+| 3 | Any mute, truncation, resampling, software or unclassified volume modification, mixing, or channel mapping | Pipeline intervention | `Diagnostic` |
 | 4 | Path is not fully verified | Incomplete format/path evidence | `Informational` |
 | 5 | Any lossless padding, round trip, or float mapping | Signal preserved | `Positive` |
 | 6 | Source is lossy | Clean delivery of a lossy source | `Informational` |
@@ -85,10 +84,7 @@ The headline does not repeat per-node rates, gain, shared applications, or other
 
 `BitPerfect` and `HardwareVolumeModification` do not count as visible findings here.
 The structured headline has no direct `Clipped` branch; raw conclusion/category mapping and Soul aura do.
-Do not equate a headline, raw severity, and confidence flag without applying their respective rules.
-`fullyVerified` retains its format-presence plus Sink-reaching meaning; it does not prove speaker routing.
-Unknown, Unverified, and Inferred channel confidence do not suppress numerical positives or a clean lossy headline.
-The bit-perfect headline describes numerical PCM/software-path evidence, not fully verified speaker routing.
+Unknown, Unverified, and Inferred channel confidence do not suppress numerical positives or a clean lossy headline; the headline and `fullyVerified` flag describe the numerical software path, not verified speaker routing.
 
 ### Independent channel note
 
@@ -100,7 +96,6 @@ The bit-perfect headline describes numerical PCM/software-path evidence, not ful
 | `Unverified` | Channel delivery not proved |
 | `Inferred` | Source channel layout inferred |
 | `Verified` | No warning |
-| `Converted` | No uncertainty note; the headline reports the known intervention |
 
 The note remains visible alongside diagnostic and warning headlines when uncertainty is independently present.
 It never promotes Unknown to Verified or invents speaker roles: an unidentified two-channel source still displays count-owned `2 ch`, not Stereo.
@@ -134,15 +129,14 @@ For Playing and Paused, aura selection uses the first matching rule:
 |---:|---|---|
 | 1 | Output not ready | `Veiled` |
 | 2 | Overall or pipeline quality is clipped | `Burning` |
-| 3 | Pipeline quality is linear intervention or channel confidence is Converted | `Turbulent` |
+| 3 | Pipeline quality is linear intervention | `Turbulent` |
 | 4 | Incomplete format verification, or source quality is lossy/unknown | `Veiled` |
 | 5 | Pipeline quality is bit-perfect | `Radiant` |
 | 6 | Pipeline quality is lossless padded/float | `Flowing` |
 | 7 | Pipeline quality is lossy/unknown | `Veiled` |
 
-Radiant and Flowing express the existing numerical axes and format-presence evidence, independently of Unknown, Unverified, or Inferred channel confidence.
-The separate channel note carries that uncertainty; neither aura nor headline upgrades it to a verified-channel claim.
-Known Converted delivery remains Turbulent even when numerical format fields alone appear unchanged.
+Channel confidence never selects an aura; the separate channel note carries that uncertainty, and neither aura nor headline upgrades it to a verified-channel claim.
+Known conversion reaches Turbulent only through its finding's pipeline severity, never from the confidence value.
 
 Other transport states select `Dormant` regardless of retained quality evidence.
 Frontend adapters provide frame deltas and own clocks, frame registration, visibility/minimization gates, concrete geometry, and rendering. They keep supplying frames while the shared state still needs them, and settle pending transitions at once when they stop early, as under reduced motion, while hidden or unmapped, or when their frame source stops with playback. Time that passes while settled, before the next frame arrives, does not count as motion. They may quantize the shared visual frame for their medium without changing aura or freeze semantics.

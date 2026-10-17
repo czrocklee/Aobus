@@ -40,7 +40,7 @@ TEST_CASE("AlsaGraphRegistry - delivery-only changes publish without relabelling
                      .speakerMask = 0x33},
     .optEndpoint =
       ao::audio::ConfirmedEndpoint{.signalFormat = {.sampleRate = 48000, .channels = 4, .precisionBits = 24}},
-    .channelDelivery = {.mapping = ao::audio::ChannelDeliveryEvidence::Mapping::Unknown}};
+    .channelDelivery = {.isMapped = false}};
 
   registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
 
@@ -58,23 +58,16 @@ TEST_CASE("AlsaGraphRegistry - delivery-only changes publish without relabelling
   CHECK(graph.nodes[0].channelDelivery == mode.channelDelivery);
   CHECK(graph.nodes[1].channelDelivery == mode.channelDelivery);
 
-  // No format change: current evidence alone must invalidate graph equality.
-  mode.channelDelivery.mapping = ao::audio::ChannelDeliveryEvidence::Mapping::LegacyUnverified;
   registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
-
-  CHECK(calls == 3U);
-  CHECK(graph.nodes[0].channelDelivery == mode.channelDelivery);
-  CHECK(graph.nodes[1].channelDelivery == mode.channelDelivery);
-  CHECK(std::get<ao::audio::PcmFormat>(*graph.nodes[0].optFormat) == nativeStorage);
-  registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
-  CHECK(calls == 3U);
+  CHECK(calls == 2U);
   CHECK(graph.nodes[0].channelDelivery.nativeSpeakerMask == 0U);
 
-  mode.channelDelivery.mapping = ao::audio::ChannelDeliveryEvidence::Mapping::Mapped;
+  // No format change: current evidence alone must invalidate graph equality.
+  mode.channelDelivery.isMapped = true;
   mode.channelDelivery.nativeSpeakerMask = 0x33;
   registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
 
-  CHECK(calls == 4U);
+  CHECK(calls == 3U);
   CHECK(graph.nodes[0].channelDelivery == mode.channelDelivery);
   CHECK(graph.nodes[1].channelDelivery == mode.channelDelivery);
   CHECK(std::get<ao::audio::PcmFormat>(*graph.nodes[0].optFormat) == nativeStorage);
@@ -95,7 +88,7 @@ TEST_CASE("AlsaGraphRegistry - observed endpoint set does not become a canonical
     .optEndpoint =
       ao::audio::ConfirmedEndpoint{
         .signalFormat = {.sampleRate = 48000, .channels = 4, .precisionBits = 24, .speakerMask = 0x33}},
-    .channelDelivery = {.mapping = ao::audio::ChannelDeliveryEvidence::Mapping::Mapped, .nativeSpeakerMask = 0x33}};
+    .channelDelivery = {.isMapped = true, .nativeSpeakerMask = 0x33}};
 
   registry.publish({.routeAnchor = "hw:0,0", .optMode = mode});
 
@@ -104,7 +97,7 @@ TEST_CASE("AlsaGraphRegistry - observed endpoint set does not become a canonical
   REQUIRE(graph.nodes[1].optFormat);
   CHECK(std::get<ao::audio::PcmFormat>(*graph.nodes[0].optFormat).speakerMask == 0U);
   CHECK(std::get<ao::audio::SignalFormat>(*graph.nodes[1].optFormat).speakerMask == 0x33U);
-  CHECK(graph.nodes[0].channelDelivery.mapping == ao::audio::ChannelDeliveryEvidence::Mapping::Mapped);
+  CHECK(graph.nodes[0].channelDelivery.isMapped);
   CHECK(graph.nodes[0].channelDelivery.nativeSpeakerMask == 0x33U);
   CHECK(graph.nodes[1].channelDelivery.nativeSpeakerMask == 0x33U);
   CHECK_FALSE(graph.nodes[0].channelDelivery.hasSharedConversion);

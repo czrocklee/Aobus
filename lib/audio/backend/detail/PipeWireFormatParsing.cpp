@@ -680,7 +680,7 @@ namespace ao::audio::backend::detail
 
     if (exactOffer && sourceFormat.speakerMask != 0U)
     {
-      delivery.channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::Mapped;
+      delivery.channelDelivery.isMapped = true;
     }
 
     if (optPositions->mask == 0U || offeredMask == 0U)

@@ -1511,8 +1511,7 @@ namespace ao::audio::backend
       bool const hasCompleteNativeSet = !observed.hasUnsupportedPositions && observed.nativeSpeakerMask != 0U &&
                                         std::popcount(observed.nativeSpeakerMask) == observed.format.channels;
       node.channelDelivery = {
-        .mapping = hasCompleteNativeSet ? ChannelDeliveryEvidence::Mapping::Mapped
-                                        : ChannelDeliveryEvidence::Mapping::LegacyUnverified,
+        .isMapped = hasCompleteNativeSet,
         .nativeSpeakerMask = observed.nativeSpeakerMask,
       };
     }

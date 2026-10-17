@@ -155,7 +155,7 @@ namespace ao::audio::test
       .state = {.sourceFormat = signalFormat(canonical),
                 .decoderOutputFormat = canonical,
                 .engineOutputFormat = canonical,
-                .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0x3}},
+                .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Identified}},
       .optAnchor = RouteAnchor{.backend = kBackendNone, .id = "observed-route"},
     };
     fixture.playerPtr->handleRouteChanged(route, fixture.playerPtr->playbackGeneration());
@@ -175,12 +175,12 @@ namespace ao::audio::test
     CHECK(uncertain.quality == Quality::BitwisePerfect);
     // Source identity cannot fill missing native roles; the redundant open
     // delivery copy no longer exists in the route aggregate.
-    CHECK(uncertain.flow.nodes[3].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Unknown);
+    CHECK_FALSE(uncertain.flow.nodes[3].channelDelivery.isMapped);
     CHECK(uncertain.flow.nodes[3].channelDelivery.nativeSpeakerMask == 0);
 
     for (auto& node : graph.nodes)
     {
-      node.channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Mapped, .nativeSpeakerMask = 0x3};
+      node.channelDelivery = {.isMapped = true, .nativeSpeakerMask = 0x3};
     }
 
     fixture.provider->callback()(graph);
@@ -197,10 +197,11 @@ namespace ao::audio::test
       graph.nodes[1].channelDelivery.hasSharedConversion = true;
       fixture.provider->callback()(graph);
       REQUIRE(queue.tryDrainUntil(
-        [&] { return fixture.playerPtr->status().channelConfidence == ChannelConfidence::Converted; }));
+        [&] { return fixture.playerPtr->status().pipelineQuality == Quality::LinearIntervention; }));
       fixture.playerPtr->handleRouteChanged(route, fixture.playerPtr->playbackGeneration());
       queue.runUntilIdle();
-      CHECK(fixture.playerPtr->status().channelConfidence == ChannelConfidence::Converted);
+      // Positions stay proved; the ChannelMapping finding owns the conversion.
+      CHECK(fixture.playerPtr->status().channelConfidence == ChannelConfidence::Verified);
       CHECK(fixture.playerPtr->status().flow.nodes[4].channelDelivery.nativeSpeakerMask == 0x30);
       CHECK(fixture.playerPtr->status().pipelineQuality == Quality::LinearIntervention);
       CHECK(fixture.playerPtr->status().flow.nodes[4].sourceChannelLayout == ChannelLayoutEvidence{});
@@ -209,7 +210,7 @@ namespace ao::audio::test
 
     SECTION("equal effective source modes refresh only source history")
     {
-      route.state.sourceChannelLayout = {.origin = ChannelLayoutOrigin::Inferred, .optDeclaredMask = 0};
+      route.state.sourceChannelLayout = {.origin = ChannelLayoutOrigin::Inferred};
       fixture.playerPtr->handleRouteChanged(route, fixture.playerPtr->playbackGeneration());
       queue.runUntilIdle();
       auto const inferred = fixture.playerPtr->status();

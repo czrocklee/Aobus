@@ -36,8 +36,8 @@ namespace ao::audio::backend::detail::test
          PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed24In32Le, .speakerMask = 0x3},
        .optDeviceFormat =
          SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint},
-       .channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified, .nativeSpeakerMask = 0x3},
-       .outputChannelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified},
+       .channelDelivery = {.isMapped = false, .nativeSpeakerMask = 0x3},
+       .outputChannelDelivery = {.isMapped = false},
        .volume = 0.5F,
        .muted = true});
 
@@ -47,7 +47,7 @@ namespace ao::audio::backend::detail::test
     CHECK(graph.nodes[0].optFormat ==
           NodeFormat{PcmFormat{
             .sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed24In32Le, .speakerMask = 0x3}});
-    CHECK(graph.nodes[0].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(graph.nodes[0].channelDelivery.isMapped);
     CHECK(graph.nodes[0].channelDelivery.nativeSpeakerMask == 0x3U);
     CHECK_FALSE(graph.nodes[0].channelDelivery.hasSharedConversion);
     CHECK(graph.nodes[1].id == "device-uid");
@@ -55,7 +55,7 @@ namespace ao::audio::backend::detail::test
     CHECK(graph.nodes[1].optFormat ==
           NodeFormat{SignalFormat{
             .sampleRate = 48000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint}});
-    CHECK(graph.nodes[1].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(graph.nodes[1].channelDelivery.isMapped);
     CHECK(graph.nodes[1].channelDelivery.nativeSpeakerMask == 0U);
     CHECK_FALSE(graph.nodes[1].channelDelivery.hasSharedConversion);
     CHECK(graph.nodes[1].sourceChannelLayout == ChannelLayoutEvidence{});
@@ -78,14 +78,10 @@ namespace ao::audio::backend::detail::test
            .sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe, .speakerMask = 0x4},
        .optDeviceFormat =
          SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint},
-       .channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified,
-                           .nativeSpeakerMask = 0x4,
-                           .hasSharedConversion = true},
-       .outputChannelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified,
-                                 .nativeSpeakerMask = 0x3,
-                                 .hasSharedConversion = true}});
+       .channelDelivery = {.isMapped = false, .nativeSpeakerMask = 0x4, .hasSharedConversion = true},
+       .outputChannelDelivery = {.isMapped = false, .nativeSpeakerMask = 0x3, .hasSharedConversion = true}});
     REQUIRE(graph.nodes.size() == 2U);
-    CHECK(graph.nodes[0].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(graph.nodes[0].channelDelivery.isMapped);
     CHECK_FALSE(graph.nodes[0].channelDelivery.hasSharedConversion);
     CHECK(graph.nodes[0].channelDelivery.nativeSpeakerMask == 0x4U);
     CHECK(graph.nodes[1].channelDelivery.nativeSpeakerMask == 0x3U);
@@ -123,10 +119,10 @@ namespace ao::audio::backend::detail::test
        .channelDelivery = planRes->delivery,
        .outputChannelDelivery = planRes->outputDelivery});
     REQUIRE(graph.nodes.size() == 2U);
-    CHECK(graph.nodes[0].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(graph.nodes[0].channelDelivery.isMapped);
     CHECK(graph.nodes[0].channelDelivery.nativeSpeakerMask == 0x4U);
     CHECK_FALSE(graph.nodes[0].channelDelivery.hasSharedConversion);
-    CHECK(graph.nodes[1].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(graph.nodes[1].channelDelivery.isMapped);
     CHECK(graph.nodes[1].channelDelivery.nativeSpeakerMask == 0x3U);
     CHECK(graph.nodes[1].channelDelivery.hasSharedConversion);
 
@@ -145,24 +141,19 @@ namespace ao::audio::backend::detail::test
       hasUpstreamCountChange = true;
     }
 
-    graph.nodes.insert(
-      graph.nodes.begin(),
-      {.id = "ao-source",
-       .type = flow::NodeType::Source,
-       .optFormat = source,
-       .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = source.speakerMask}});
+    graph.nodes.insert(graph.nodes.begin(),
+                       {.id = "ao-source",
+                        .type = flow::NodeType::Source,
+                        .optFormat = source,
+                        .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Identified}});
     graph.connections.push_back({.sourceId = "ao-source", .destinationId = "device-uid:client"});
     auto const quality = analyzeAudioQuality(graph);
-    CHECK(quality.channelConfidence == ChannelConfidence::Converted);
+    CHECK(quality.channelConfidence == ChannelConfidence::Unverified);
     CHECK(quality.pipelineQuality == Quality::LinearIntervention);
     REQUIRE(quality.assessments.size() == 3U);
     CHECK(quality.assessments[0].nodeId == "ao-source");
     CHECK(quality.assessments[1].nodeId == "device-uid:client");
     CHECK(quality.assessments[2].nodeId == "device-uid");
-    CHECK(quality.assessments[1].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
-    CHECK_FALSE(quality.assessments[1].channelDelivery.hasSharedConversion);
-    CHECK(quality.assessments[2].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
-    CHECK(quality.assessments[2].channelDelivery.hasSharedConversion);
     std::size_t conversionCount = 0U;
     std::size_t streamConversionCount = 0U;
     std::size_t sinkConversionCount = 0U;

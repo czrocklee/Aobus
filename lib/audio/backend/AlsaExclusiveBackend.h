@@ -51,10 +51,6 @@ namespace ao::audio::backend
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept override;
 
-    // Proves reuse only by re-planning both identities from this open's cached
-    // actual observations; no second native query or set.
-    bool canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept override;
-
     BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;

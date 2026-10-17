@@ -3,7 +3,6 @@
 
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
-#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
@@ -462,14 +461,6 @@ namespace ao::uimodel
     }
 
     if (signal.pipelineQuality == audio::Quality::LinearIntervention)
-    {
-      return SoulAura::Turbulent;
-    }
-
-    // Complete analyzer snapshots already report LinearIntervention for Converted.
-    // This independently callable resolver also accepts constructed QualityState
-    // values: defensively honor Converted even if their numerical axes disagree.
-    if (signal.channelConfidence == audio::ChannelConfidence::Converted)
     {
       return SoulAura::Turbulent;
     }

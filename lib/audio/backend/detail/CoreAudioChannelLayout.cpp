@@ -11,6 +11,7 @@
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <AudioToolbox/AUComponent.h>
 #include <AudioToolbox/AudioFormat.h>
@@ -42,7 +43,6 @@ namespace ao::audio::backend::detail
     constexpr std::size_t kLayoutHeaderBytes = offsetof(::AudioChannelLayout, mChannelDescriptions);
     constexpr ::UInt32 kMaximumPropertyBytes = 65536U;
     constexpr ::UInt32 kMaximumChannelDescriptions = 256U;
-    constexpr std::uint32_t kSupportedWaveRoles = 0x3FFFFU;
 
     enum class WaveRole : std::uint32_t
     {
@@ -336,7 +336,7 @@ namespace ao::audio::backend::detail
         outputRoles = observedRoles(observation.optDeviceLabels, outputChannels);
       }
 
-      plan.outputDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified,
+      plan.outputDelivery = {.isMapped = false,
                              .nativeSpeakerMask = completeRoleMask(outputRoles),
                              .hasSharedConversion = plan.delivery.hasSharedConversion};
 
@@ -937,7 +937,7 @@ namespace ao::audio::backend::detail
     }
 
     auto plan = CoreAudioChannelPlan{};
-    plan.delivery.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+    plan.delivery.isMapped = false;
     // Rate, precision and sample-domain changes remain independent format facts.
     plan.delivery.hasSharedConversion = hasChannelConversion(client.channels, outputChannels, observation.optOutputMap);
     plan.sourceSlots.resize(client.channels);
@@ -954,8 +954,7 @@ namespace ao::audio::backend::detail
       return plan;
     }
 
-    if (!std::cmp_equal(std::popcount(client.speakerMask), client.channels) ||
-        (client.speakerMask & ~kSupportedWaveRoles) != 0U)
+    if (!isCompleteWaveSpeakerMask(client.speakerMask, client.channels))
     {
       return std::unexpected{roleFailure()};
     }

@@ -86,20 +86,6 @@ namespace ao::audio
     virtual std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept;
 
     /**
-     * @brief Proves that an installed transport can carry the next render mode.
-     *
-     * Control-side, non-blocking and non-negotiating. The default requires exact
-     * PCM identity. An override may additionally admit unidentified stereo and
-     * canonical FL/FR stereo at identical rate/count/encoding, only while its
-     * configured byte order, permutation and ongoing validation obligations
-     * remain valid for both modes. It must not mutate an
-     * active render plan, relabel source evidence or promote delivery confidence.
-     * Engine rechecks this proof before arming; route/open changes retire the
-     * captured preparation. This does not change PCM equality or cache keys.
-     */
-    virtual bool canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept;
-
-    /**
      * @brief Opens one render target and returns the mode actually configured.
      *
      * `clientFormat` keeps the source rate, count and effective identity in

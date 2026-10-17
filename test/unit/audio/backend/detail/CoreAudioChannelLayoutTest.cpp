@@ -241,7 +241,7 @@ namespace ao::audio::backend::detail::test
     unidentified.speakerMask = 0;
     auto const legacyRes = planCoreAudioChannels(unidentified, outputFormat(), *observedRes);
     REQUIRE(legacyRes);
-    CHECK(legacyRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(legacyRes->delivery.isMapped);
     CHECK(legacyRes->delivery.nativeSpeakerMask == 0);
     CHECK_FALSE(legacyRes->delivery.hasSharedConversion);
   }
@@ -270,7 +270,7 @@ namespace ao::audio::backend::detail::test
     auto const planRes = planCoreAudioChannels(kStereoClient, output, *observedRes);
     REQUIRE(planRes);
     CHECK(planRes->sourceSlots == std::vector<std::uint32_t>{0U, 1U});
-    CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(planRes->delivery.isMapped);
     CHECK(planRes->delivery.nativeSpeakerMask == 0U);
     CHECK(planRes->delivery.hasSharedConversion);
   }
@@ -416,7 +416,7 @@ namespace ao::audio::backend::detail::test
     auto const planRes = configureCoreAudioChannels(fake.operations(), kStereoClient, output);
     REQUIRE(planRes);
     CHECK_FALSE(planRes->delivery.hasSharedConversion);
-    CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(planRes->delivery.isMapped);
     CHECK(planRes->delivery.nativeSpeakerMask == 0U);
   }
 
@@ -453,7 +453,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(planRes);
     CHECK(planRes->sourceSlots == std::vector<std::uint32_t>{0U});
     CHECK(planRes->delivery.hasSharedConversion);
-    CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(planRes->delivery.isMapped);
     CHECK(planRes->delivery.nativeSpeakerMask == (expectedNativeLabel == 3U ? 0x4U : 0U));
     CHECK(planRes->outputDelivery.nativeSpeakerMask == 0x3U);
     CHECK(planRes->nativeClientFormat.speakerMask == (expectedNativeLabel == 3U ? 0x4U : 0U));
@@ -533,7 +533,7 @@ namespace ao::audio::backend::detail::test
       CHECK(planRes->sourceSlots == std::vector<std::uint32_t>{0U});
       CHECK(planRes->nativeClientFormat.speakerMask == 0x4U);
       CHECK(planRes->delivery.nativeSpeakerMask == 0x4U);
-      CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(planRes->delivery.isMapped);
     }
 
     SECTION("explicit Mono remains opaque rather than proving or contradicting Center")
@@ -545,7 +545,7 @@ namespace ao::audio::backend::detail::test
       CHECK(*observedRes->optClientLabels == std::vector<::AudioChannelLabel>{42U});
       auto const planRes = planCoreAudioChannels(client, outputFormat(1U), *observedRes);
       REQUIRE(planRes);
-      CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(planRes->delivery.isMapped);
       CHECK(planRes->delivery.nativeSpeakerMask == 0U);
       CHECK_FALSE(planRes->delivery.hasSharedConversion);
     }
@@ -560,7 +560,7 @@ namespace ao::audio::backend::detail::test
       auto const planRes = planCoreAudioChannels(client, outputFormat(1U), *observedRes);
       REQUIRE(planRes);
       CHECK(planRes->delivery.nativeSpeakerMask == 0U);
-      CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(planRes->delivery.isMapped);
     }
   }
 
@@ -674,7 +674,7 @@ namespace ao::audio::backend::detail::test
         REQUIRE(planRes);
         CHECK(planRes->sourceSlots == std::vector<std::uint32_t>{0U, 1U});
         CHECK(planRes->hasIdentityOrder);
-        CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+        CHECK_FALSE(planRes->delivery.isMapped);
         CHECK(planRes->delivery.nativeSpeakerMask == (hasMap ? 0x3U : 0U));
         CHECK(planRes->outputDelivery.nativeSpeakerMask == 0x3U);
         CHECK_FALSE(planRes->delivery.hasSharedConversion);
@@ -1014,7 +1014,7 @@ namespace ao::audio::backend::detail::test
     CHECK(opened.clientFormat.speakerMask == 0x3U);
     CHECK_FALSE(opened.optEndpoint);
     CHECK(opened.channelDelivery.nativeSpeakerMask == 0x3U);
-    CHECK(opened.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(opened.channelDelivery.isMapped);
 
     auto const graph = coreAudioGraph({.routeAnchor = "native-swap",
                                        .optClientFormat = planRes->nativeClientFormat,
@@ -1096,7 +1096,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(planRes);
     CHECK(planRes->sourceSlots == std::vector<std::uint32_t>{0U, 1U});
     CHECK(planRes->delivery.hasSharedConversion);
-    CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(planRes->delivery.isMapped);
     CHECK(planRes->delivery.nativeSpeakerMask == 0U);
     CHECK(fake.sets == 0U);
   }
@@ -1114,7 +1114,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fake.reply(Property::OutputMap).optBytes == ordinalMap({1, 0}));
     CHECK(planRes->sourceSlots == std::vector<std::uint32_t>{1U, 0U});
     CHECK(planRes->nativeClientFormat.speakerMask == 0U);
-    CHECK(planRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(planRes->delivery.isMapped);
     CHECK(planRes->delivery.nativeSpeakerMask == 0x3U);
     CHECK(planRes->outputDelivery.nativeSpeakerMask == 0x3U);
     CHECK_FALSE(planRes->delivery.hasSharedConversion);

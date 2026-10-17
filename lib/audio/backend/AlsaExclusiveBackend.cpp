@@ -13,7 +13,6 @@
 #include "backend/detail/AlsaPrewarmCache.h"
 #include "backend/detail/AudioBackendRenderProgress.h"
 #include "detail/DecoderOutput.h"
-#include "detail/PcmModeReuse.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -138,11 +137,6 @@ namespace ao::audio::backend
     detail::AlsaPrewarmCache prewarmCache;
     // Immutable while the playback worker is live; stop/join precedes reset.
     detail::AlsaChannelMap channelMap;
-    // Per-open two-speaker identity-reuse proof, computed once at open from
-    // the cached actual observations and cleared before any close-lifetime
-    // change. Control-lifecycle state: the reuse query reads only this flag
-    // and the stored configured client format.
-    bool stereoReuseProven = false;
     RenderTarget* renderTarget = nullptr;
 
     AlsaPcmPtr pcmPtr;
@@ -184,7 +178,6 @@ namespace ao::audio::backend
 
     std::expected<NegotiatedMode, BackendOpenFailure> negotiateHwParams(::snd_pcm_t* pcm,
                                                                         SignalFormat const& sourceFormat);
-    bool canReuseStereoIdentity() const;
     Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
     bool tryWaitForFrames(::snd_pcm_uframes_t periodSize) const;
@@ -473,8 +466,6 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::closeMixerAndClearGraph()
   {
-    // Clear the per-open reuse proof before any close-lifetime changes.
-    stereoReuseProven = false;
     mixerPtr->close();
     pcmPtr.reset();
     renderTarget = nullptr;
@@ -716,76 +707,6 @@ namespace ao::audio::backend
                           .periodSize = periodSize};
   }
 
-  // Computes this open's two-speaker identity-reuse proof once, from the
-  // cached actual channel-map observations and the configured mode, on the
-  // control side before the open result escapes. Re-plan copies through the
-  // pure admission seam are legal here and forbidden in the noexcept query;
-  // no second native query or set happens.
-  bool AlsaExclusiveBackend::Impl::canReuseStereoIdentity() const
-  {
-    if (!optOpenedMode)
-    {
-      return false;
-    }
-
-    auto const& configured = optOpenedMode->clientFormat;
-    auto const otherMask = configured.speakerMask == 0U ? 0x3U : 0U;
-    auto const other = PcmFormat{
-      .sampleRate = configured.sampleRate, .channels = 2, .encoding = configured.encoding, .speakerMask = otherMask};
-
-    // The candidate gate is scalar; only a proved canonical stereo open may
-    // arm the reuse flag.
-    if (!audio::detail::isCanonicalStereoReuseCandidate(configured, configured, other))
-    {
-      return false;
-    }
-
-    auto const& observations = channelMap.observations;
-
-    auto const planFor = [&observations](PcmFormat const& clientFormat)
-    {
-      return detail::prepareAlsaChannelMap(
-        clientFormat,
-        [&observations]
-        { return std::expected<detail::AlsaChannelMapObservations, BackendOpenFailure>{observations}; });
-    };
-
-    auto const configuredPlanRes = planFor(configured);
-    auto const otherPlanRes = planFor(other);
-
-    if (!configuredPlanRes || !otherPlanRes)
-    {
-      return false;
-    }
-
-    auto const sameTransport = [](detail::AlsaChannelMap const& lhs, detail::AlsaChannelMap const& rhs) noexcept
-    {
-      if (lhs.channels != rhs.channels || lhs.sampleBytes != rhs.sampleBytes ||
-          lhs.needsPermutation != rhs.needsPermutation)
-      {
-        return false;
-      }
-
-      // needsPermutation false means identity; only the slots a plan
-      // actually uses decide, never the unused array tail.
-      for (std::size_t slot = 0; slot < lhs.channels; ++slot)
-      {
-        if (lhs.sourceSlots[slot] != rhs.sourceSlots[slot])
-        {
-          return false;
-        }
-      }
-
-      return true;
-    };
-
-    // The re-planned configured identity must reproduce the admitted plan
-    // the playback loop uses, and the other canonical identity must admit
-    // the identical transport. No native role or verification claim is
-    // inferred beyond the cached facts.
-    return sameTransport(*configuredPlanRes, channelMap) && sameTransport(*configuredPlanRes, *otherPlanRes);
-  }
-
   Result<> AlsaExclusiveBackend::Impl::configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize)
   {
     ::snd_pcm_sw_params_t* swParams = nullptr;
@@ -846,27 +767,6 @@ namespace ao::audio::backend
     }
 
     return Backend::prewarmFormatHint(sourceFormat);
-  }
-
-  bool AlsaExclusiveBackend::canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept
-  {
-    if (isSamePcmMode(current, next))
-    {
-      return true;
-    }
-
-    if (!_implPtr->optOpenedMode)
-    {
-      return false;
-    }
-
-    // Fixed scalar candidate checks plus this open's cached proof only: no
-    // re-plan, allocations, native calls or waits. The proof is computed once
-    // at open from the cached actual observations and the stored configured
-    // client format; close() clears it before lifetime changes. Both are
-    // control-lifecycle state, serialized with this query.
-    return _implPtr->stereoReuseProven &&
-           audio::detail::isCanonicalStereoReuseCandidate(_implPtr->optOpenedMode->clientFormat, current, next);
   }
 
   BackendOpenResult AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
@@ -932,11 +832,6 @@ namespace ao::audio::backend
 
     _implPtr->channelMap = std::move(negotiatedRes->channelMap);
     _implPtr->optOpenedMode = negotiatedRes->mode;
-
-    // Arm the per-open reuse proof once, control-side, before the open
-    // result escapes. Every failure path returned above, and open() began
-    // with close(), so the flag starts cleared.
-    _implPtr->stereoReuseProven = _implPtr->canReuseStereoIdentity();
 
     _implPtr->prewarmCache.store(sourceFormat, negotiatedRes->mode.clientFormat);
     _implPtr->renderTarget = &target;

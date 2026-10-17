@@ -68,10 +68,7 @@ namespace ao::audio::test
       return utility::bytes::view(std::span<std::uint8_t const>{bytes});
     }
 
-    void checkLayout(DecodedStreamInfo const& info,
-                     LayoutCase const& expected,
-                     ChannelLayoutOrigin origin,
-                     std::optional<std::uint32_t> optDeclaration)
+    void checkLayout(DecodedStreamInfo const& info, LayoutCase const& expected, ChannelLayoutOrigin origin)
     {
       CHECK(info.sourceFormat.channels == expected.channels);
       CHECK(info.outputFormat.channels == expected.channels);
@@ -80,7 +77,6 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.speakerMask == expected.mask);
       CHECK(info.outputFormat.speakerMask == expected.mask);
       CHECK(info.sourceChannelLayout.origin == origin);
-      CHECK(info.sourceChannelLayout.optDeclaredMask == optDeclaration);
       REQUIRE(expected.roles.size() == expected.channels);
 
       auto remainingMask = info.sourceFormat.speakerMask;
@@ -167,10 +163,9 @@ namespace ao::audio::test
         auto const temp = ao::test::TempFile{data, ".wav"};
         auto decoderPtr = ao::test::requireValue(WavDecoderSession::open(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        auto const origin = !hasDeclaration && expected.channels <= 2 ? ChannelLayoutOrigin::FormatDefault
-                                                                      : ChannelLayoutOrigin::Inferred;
-        auto const optDeclaration = hasDeclaration ? std::optional<std::uint32_t>{0} : std::nullopt;
-        checkLayout(info, expected, origin, optDeclaration);
+        auto const origin =
+          !hasDeclaration && expected.channels <= 2 ? ChannelLayoutOrigin::Identified : ChannelLayoutOrigin::Inferred;
+        checkLayout(info, expected, origin);
         CHECK(info.sourceFormat.precisionBits == 16);
         CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
         CHECK(signalFormat(info.outputFormat) == info.sourceFormat);
@@ -250,12 +245,12 @@ namespace ao::audio::test
                                                 .audioData = expected.pcm});
       auto const temp = ao::test::TempFile{data, ".wav"};
       auto decoderPtr = ao::test::requireValue(WavDecoderSession::open(temp.path, std::nullopt));
-      checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Declared, expected.mask);
+      checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Identified);
       checkTwoFramePcm(*decoderPtr, expected.pcm);
     }
   }
 
-  TEST_CASE("WavDecoderSession - ignores excess highest positions while retaining the original declaration",
+  TEST_CASE("WavDecoderSession - ignores excess highest positions when trimming to the effective layout",
             "[audio][integration][wav][decoder]")
   {
     using enum WavRole;
@@ -289,7 +284,7 @@ namespace ao::audio::test
                                                 .audioData = testCase.effective.pcm});
       auto const temp = ao::test::TempFile{data, ".wav"};
       auto decoderPtr = ao::test::requireValue(WavDecoderSession::open(temp.path, std::nullopt));
-      checkLayout(decoderPtr->streamInfo(), testCase.effective, ChannelLayoutOrigin::Declared, testCase.declaration);
+      checkLayout(decoderPtr->streamInfo(), testCase.effective, ChannelLayoutOrigin::Identified);
       checkTwoFramePcm(*decoderPtr, testCase.effective.pcm);
     }
   }
@@ -393,7 +388,7 @@ namespace ao::audio::test
       auto const temp = ao::test::TempFile{data, ".wav"};
       auto decoderPtr = ao::test::requireValue(WavDecoderSession::open(temp.path, expected.encoding));
       auto const info = decoderPtr->streamInfo();
-      checkLayout(info, source, ChannelLayoutOrigin::Declared, 0x107);
+      checkLayout(info, source, ChannelLayoutOrigin::Identified);
       CHECK(info.sourceFormat.precisionBits == 16);
       CHECK(info.sourceFormat.sampleKind == SampleKind::Integer);
       CHECK(info.outputFormat.encoding == expected.encoding);
@@ -433,7 +428,7 @@ namespace ao::audio::test
     auto const temp = ao::test::TempFile{data, ".wav"};
     auto decoderPtr = ao::test::requireValue(WavDecoderSession::open(temp.path, std::nullopt));
     auto const info = decoderPtr->streamInfo();
-    checkLayout(info, layout, ChannelLayoutOrigin::Declared, 0xC);
+    checkLayout(info, layout, ChannelLayoutOrigin::Identified);
     CHECK(info.sourceFormat.sampleKind == SampleKind::FloatingPoint);
     CHECK(info.sourceFormat.precisionBits == 32);
     CHECK(info.outputFormat.encoding == SampleEncoding::Float32Le);
@@ -467,7 +462,7 @@ namespace ao::audio::test
     auto const temp = ao::test::TempFile{data, ".wav"};
     auto decoderPtr = ao::test::requireValue(WavDecoderSession::open(temp.path, std::nullopt));
     auto const info = decoderPtr->streamInfo();
-    checkLayout(info, layout, ChannelLayoutOrigin::Declared, 0x107);
+    checkLayout(info, layout, ChannelLayoutOrigin::Identified);
     CHECK(info.duration == std::chrono::milliseconds{4097});
 
     auto const firstRes = decoderPtr->readNextBlock();

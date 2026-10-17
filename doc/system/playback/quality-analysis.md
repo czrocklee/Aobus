@@ -58,17 +58,26 @@ When the playback path begins with a reported format, the source axis starts bit
 The pipeline axis starts bitwise-perfect and accumulates every non-source finding by analyzer severity.
 `overall` retains the worse of source and pipeline for compatibility, sorting, simple styling, and consumers that cannot show both axes.
 
-Source graph nodes retain the decoder's independent channel-layout interpretation history. Native nodes retain backend-owned delivery evidence and independently established native speaker sets; a native format mask can stay zero when its noncanonical byte order cannot be represented by `PcmFormat`. Neither native set nor delivery evidence is filled from the source request.
+Source graph nodes retain the decoder's effective channel-layout interpretation.
+Native nodes retain backend-owned delivery evidence and independently established native speaker sets;
+a native format mask can stay zero when its noncanonical byte order cannot be represented by `PcmFormat`.
+Neither native set nor delivery evidence is filled from the source request.
 
-`channelConfidence` is independent of the numerical axes and `fullyVerified`: no useful source identity/path is Unknown; missing or legacy native mapping is Unverified; an otherwise established mapped software path with inferred source identity is Inferred; complete declared/default source identity plus established native software relationships is Verified. Known channel alteration is Converted even when other positioning remains uncertain. Native mapping requires a reported format/count and a complete independently established set; equal channel counts alone prove nothing. These values describe the observed software boundary, not physical wiring or gain/crosstalk verification.
+`channelConfidence` is independent of the numerical axes and `fullyVerified`: no useful source identity or path is Unknown; missing or unmapped native delivery is Unverified; an otherwise established mapped software path with inferred source identity is Inferred; identified source identity plus established native software relationships is Verified.
+A known channel conversion is a `ChannelMapping` finding, not a confidence value: it owns the intervention verdict while confidence keeps describing identity and mapping proof only.
+Native mapping requires a reported format/count and a complete independently established set; equal channel counts alone prove nothing.
+These values describe the observed software boundary, not physical wiring or gain/crosstalk verification.
 
-An initial backend-open delivery snapshot is retained with the route. Quality analysis consumes the current provider graph instead of projecting that older snapshot over new observations. Existing generation and subscription retirement reject obsolete publications; evidence-only graph differences can produce new assessments.
+Quality analysis consumes current provider-graph publications.
+Generation and subscription retirement reject obsolete publications;
+evidence-only graph differences can produce new assessments.
 
-`fullyVerified` is independent format-presence confidence evidence.
-It is false when the path terminates before a Sink or any path node omits its format.
+`fullyVerified` summarizes format presence along an analyzed Source path.
+It is false when that path terminates before a Sink or any path node omits its format.
 Missing evidence does not by itself downgrade the pipeline axis because Aobus cannot claim that an unreported conversion occurred.
 
-Every assessment records node identity, type, name, optional format, its worst local severity, ordered findings, source history and native delivery facts separately.
+Every assessment records node identity, type, name, optional format, its worst local severity, and ordered findings.
+Source interpretation and native delivery evidence remain on the owning graph nodes, which are the authority the analyzer reads.
 A node with no property or incoming-transition finding receives an explicit BitPerfect finding; a missing format still makes the whole result partially verified.
 
 ## Commands and transitions

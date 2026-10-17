@@ -3,12 +3,12 @@
 
 #pragma once
 
+#include "WasapiFormatObservation.h"
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
 
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -31,11 +31,7 @@ namespace ao::audio::backend::detail
   {
     std::string routeAnchor;
     std::optional<PcmFormat> optInputFormat{};
-    std::optional<PcmFormat> optMixFormat{};
-    // Independent mix facts survive an unsupported PCM representation. Zero
-    // channels denotes an unavailable observation; never fill from the client.
-    std::uint16_t mixChannels = 0;
-    std::uint32_t mixSpeakerMask = 0;
+    WaveFormatObservation mixObservation{};
     ChannelDeliveryEvidence channelDelivery{};
     float volume = 1.0F;
     bool muted = false;

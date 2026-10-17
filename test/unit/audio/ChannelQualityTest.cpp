@@ -42,21 +42,21 @@ namespace ao::audio::test
                                        .precisionBits = 16,
                                        .sampleKind = SampleKind::Integer,
                                        .speakerMask = speakerMask},
-             .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = speakerMask}},
+             .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Identified}},
             {.id = "decoder", .type = flow::NodeType::Decoder, .optFormat = identifiedPcm(channels, speakerMask)},
             {.id = "engine", .type = flow::NodeType::Engine, .optFormat = identifiedPcm(channels, speakerMask)},
             {.id = "stream",
              .type = flow::NodeType::Stream,
              .optFormat = identifiedPcm(channels, speakerMask),
-             .channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Mapped}},
+             .channelDelivery = {.isMapped = true}},
             {.id = "mixer",
              .type = flow::NodeType::Intermediary,
              .optFormat = identifiedPcm(channels, speakerMask),
-             .channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Mapped}},
+             .channelDelivery = {.isMapped = true}},
             {.id = "sink",
              .type = flow::NodeType::Sink,
              .optFormat = identifiedPcm(channels, speakerMask),
-             .channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Mapped}},
+             .channelDelivery = {.isMapped = true}},
           },
         .connections =
           {
@@ -91,19 +91,14 @@ namespace ao::audio::test
     auto graph = mappedChannelGraph();
     auto expectedConfidence = ChannelConfidence::Verified;
 
-    SECTION("explicit FL FR declaration")
+    SECTION("identified FL FR history")
     {
-      graph.nodes[0].sourceChannelLayout = {.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0x3};
+      graph.nodes[0].sourceChannelLayout = {.origin = ChannelLayoutOrigin::Identified};
     }
 
-    SECTION("format-default FL FR")
+    SECTION("inferred FL FR history")
     {
-      graph.nodes[0].sourceChannelLayout = {.origin = ChannelLayoutOrigin::FormatDefault};
-    }
-
-    SECTION("inferred FL FR from explicit zero")
-    {
-      graph.nodes[0].sourceChannelLayout = {.origin = ChannelLayoutOrigin::Inferred, .optDeclaredMask = 0};
+      graph.nodes[0].sourceChannelLayout = {.origin = ChannelLayoutOrigin::Inferred};
       expectedConfidence = ChannelConfidence::Inferred;
     }
 
@@ -115,10 +110,7 @@ namespace ao::audio::test
     CHECK(result.pipelineQuality == Quality::BitwisePerfect);
     CHECK(result.overall == Quality::BitwisePerfect);
     REQUIRE(result.assessments.size() == 6U);
-    CHECK(result.assessments[0].sourceChannelLayout == graph.nodes[0].sourceChannelLayout);
     CHECK(result.assessments[0].optFormat == graph.nodes[0].optFormat);
-    CHECK(result.assessments[3].sourceChannelLayout.origin == ChannelLayoutOrigin::Unknown);
-    CHECK(result.assessments[3].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
   }
 
   TEST_CASE("QualityAnalyzer - every native role needs its own mapping observation", "[audio][unit][quality]")
@@ -148,9 +140,9 @@ namespace ao::audio::test
       nativeIndex = 5;
     }
 
-    graph.nodes[nativeIndex].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::Unknown;
+    graph.nodes[nativeIndex].channelDelivery.isMapped = false;
     // Source history on a native node cannot substitute for native evidence.
-    graph.nodes[nativeIndex].sourceChannelLayout = {.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0x3};
+    graph.nodes[nativeIndex].sourceChannelLayout = {.origin = ChannelLayoutOrigin::Identified};
 
     auto const result = analyzeAudioQuality(graph);
 
@@ -158,7 +150,6 @@ namespace ao::audio::test
     CHECK(result.fullyVerified);
     CHECK(result.pipelineQuality == Quality::BitwisePerfect);
     REQUIRE(result.assessments.size() == 6U);
-    CHECK(result.assessments[nativeIndex].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Unknown);
   }
 
   TEST_CASE("QualityAnalyzer - absent source identity or delivery path has unknown confidence",
@@ -197,14 +188,14 @@ namespace ao::audio::test
     CHECK(result.channelConfidence == ChannelConfidence::Unknown);
   }
 
-  TEST_CASE("QualityAnalyzer - unknown or legacy delivery does not invent numerical loss", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - unmapped delivery does not invent numerical loss", "[audio][unit][quality]")
   {
     auto graph = mappedChannelGraph();
     auto expectedConfidence = ChannelConfidence::Unverified;
 
-    SECTION("legacy mapping with observed identities")
+    SECTION("unmapped delivery with observed identities")
     {
-      graph.nodes[3].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      graph.nodes[3].channelDelivery.isMapped = false;
     }
 
     SECTION("mapped flag with missing native positions")
@@ -226,17 +217,16 @@ namespace ao::audio::test
       graph.nodes[1].channelDelivery.nativeSpeakerMask = 0x3;
     }
 
-    SECTION("inferred source with legacy native evidence")
+    SECTION("inferred source with unmapped native delivery")
     {
       graph.nodes[0].sourceChannelLayout.origin = ChannelLayoutOrigin::Inferred;
-      graph.nodes[3].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      graph.nodes[3].channelDelivery.isMapped = false;
     }
 
     SECTION("partial source followed by compatible complete application and native sets")
     {
       expectedConfidence = ChannelConfidence::Unknown;
       setIdentity(graph.nodes[0], 2, 0x1);
-      graph.nodes[0].sourceChannelLayout.optDeclaredMask = 0x1;
     }
 
     auto const result = analyzeAudioQuality(graph);
@@ -258,18 +248,14 @@ namespace ao::audio::test
     auto graph = mappedChannelGraph(2, 0x3); // Complete FL FR source and application path
     setIdentity(graph.nodes[3], 2, 0x1);     // Native FL is known; FR is not observed, not contradicted.
 
-    SECTION("partial native format with unknown mapping")
+    SECTION("partial native format with unmapped delivery")
     {
-      graph.nodes[3].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::Unknown;
+      graph.nodes[3].channelDelivery.isMapped = false;
     }
 
-    SECTION("partial native format with legacy mapping")
+    SECTION("partial native format with mapped delivery")
     {
-      graph.nodes[3].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
-    }
-
-    SECTION("partial native format with mapped relationship")
-    {
+      graph.nodes[3].channelDelivery.isMapped = true;
     }
 
     SECTION("partial observed native set with no canonical native format mask")
@@ -286,12 +272,12 @@ namespace ao::audio::test
     SECTION("complete native format and compatible partial observed set")
     {
       setIdentity(graph.nodes[3], 2, 0x3);
-      graph.nodes[3].channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Unknown, .nativeSpeakerMask = 0x1};
+      graph.nodes[3].channelDelivery = {.isMapped = false, .nativeSpeakerMask = 0x1};
     }
 
     SECTION("partial native format and compatible complete observed set")
     {
-      graph.nodes[3].channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Unknown, .nativeSpeakerMask = 0x3};
+      graph.nodes[3].channelDelivery = {.isMapped = false, .nativeSpeakerMask = 0x3};
     }
 
     auto const result = analyzeAudioQuality(graph);
@@ -304,7 +290,6 @@ namespace ao::audio::test
     REQUIRE(result.assessments[0].optFormat);
     CHECK(std::get<SignalFormat>(*result.assessments[0].optFormat).speakerMask == 0x3U);
     CHECK(result.assessments[3].optFormat == graph.nodes[3].optFormat);
-    CHECK(result.assessments[3].channelDelivery == graph.nodes[3].channelDelivery);
 
     for (auto const& assessment : result.assessments)
     {
@@ -377,7 +362,6 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
 
-    CHECK(result.channelConfidence == ChannelConfidence::Converted);
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
     CHECK(result.sourceQuality == Quality::BitwisePerfect);
     CHECK(result.fullyVerified);
@@ -387,25 +371,26 @@ namespace ao::audio::test
     CHECK(stream.findings[0].kind == QualityFindingKind::ChannelMapping);
     CHECK(stream.findings[0].optFromFormat == graph.nodes[2].optFormat);
     CHECK(stream.findings[0].optToFormat == graph.nodes[3].optFormat);
-    CHECK(stream.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
   }
 
   TEST_CASE("QualityAnalyzer - uncertainty cannot hide a known channel alteration", "[audio][unit][quality]")
   {
     auto graph = mappedChannelGraph(1, 0x4);
+    std::size_t findingIndex = 3;
 
     SECTION("unknown intervening positions do not erase FC versus FL")
     {
       setIdentity(graph.nodes[3], 1, 0);
       setIdentity(graph.nodes[4], 1, 0);
       setIdentity(graph.nodes[5], 1, 0x1);
+      findingIndex = 5; // The Sink first reports the contradictory FL role.
     }
 
-    SECTION("inferred source plus legacy known conversion")
+    SECTION("inferred source plus unmapped known conversion")
     {
       graph.nodes[0].sourceChannelLayout.origin = ChannelLayoutOrigin::Inferred;
-      graph.nodes[3].channelDelivery = {
-        .mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified, .hasSharedConversion = true};
+      graph.nodes[3].channelDelivery.isMapped = false;
+      graph.nodes[3].channelDelivery.hasSharedConversion = true;
       setIdentity(graph.nodes[3], 1, 0);
     }
 
@@ -429,10 +414,15 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
 
-    CHECK(result.channelConfidence == ChannelConfidence::Converted);
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
-    REQUIRE(result.assessments.size() >= 4U);
-    CHECK(result.assessments[3].channelDelivery == graph.nodes[3].channelDelivery);
+    REQUIRE(result.assessments.size() > findingIndex);
+
+    for (std::size_t index = 0; index < result.assessments.size(); ++index)
+    {
+      auto const count = std::ranges::count(
+        result.assessments[index].findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind);
+      CHECK(count == (index == findingIndex ? 1 : 0));
+    }
   }
 
   TEST_CASE("QualityAnalyzer - a mapped same-set permutation has no numerical penalty", "[audio][unit][quality]")
@@ -444,13 +434,12 @@ namespace ao::audio::test
     for (std::size_t index = 3; index < graph.nodes.size(); ++index)
     {
       setIdentity(graph.nodes[index], 4, 0);
-      graph.nodes[index].channelDelivery = {
-        .mapping = ChannelDeliveryEvidence::Mapping::Mapped, .nativeSpeakerMask = 0x33};
+      graph.nodes[index].channelDelivery = {.isMapped = true, .nativeSpeakerMask = 0x33};
     }
 
     auto expectedConfidence = ChannelConfidence::Verified;
 
-    SECTION("declared source with observed native sets")
+    SECTION("identified source with observed native sets")
     {
     }
 
@@ -477,8 +466,6 @@ namespace ao::audio::test
       auto const& assessment = result.assessments[index];
       REQUIRE(assessment.optFormat);
       CHECK(std::get<PcmFormat>(*assessment.optFormat).speakerMask == 0U);
-      CHECK(assessment.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
-      CHECK(assessment.channelDelivery.nativeSpeakerMask == 0x33U);
     }
   }
 
@@ -506,14 +493,14 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
 
-    CHECK(result.channelConfidence == ChannelConfidence::Converted);
+    // Complete contradictory sets are still proved positions: the finding owns
+    // the conversion, and identity confidence stays independent of it.
+    CHECK(result.channelConfidence == ChannelConfidence::Verified);
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
     CHECK(result.fullyVerified);
     REQUIRE(result.assessments.size() == 6U);
     auto const& assessment = result.assessments[nativeIndex];
     CHECK(hasChannelFinding(assessment, QualityFindingKind::ChannelMapping));
-    CHECK(assessment.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
-    CHECK(assessment.channelDelivery.nativeSpeakerMask == 0x107U);
     REQUIRE(assessment.optFormat);
     CHECK(std::get<PcmFormat>(*assessment.optFormat).speakerMask == 0x33U);
     REQUIRE(assessment.findings.size() == 1U);
@@ -559,7 +546,7 @@ namespace ao::audio::test
     setIdentity(graph.nodes[5], sinkChannels, 0);
     graph.nodes[5].channelDelivery.nativeSpeakerMask = sinkNativeMask;
     auto const result = analyzeAudioQuality(graph);
-    CHECK(result.channelConfidence == ChannelConfidence::Converted);
+    CHECK(result.pipelineQuality == Quality::LinearIntervention);
     REQUIRE(result.assessments.size() == 6U);
     auto const& assessment = result.assessments[4];
     REQUIRE(assessment.findings.size() == 1U);
@@ -629,12 +616,10 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
 
-    CHECK(result.channelConfidence == ChannelConfidence::Converted);
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
     CHECK(result.fullyVerified);
     REQUIRE(result.assessments.size() == 6U);
     CHECK(hasChannelFinding(result.assessments[changedIndex], QualityFindingKind::ChannelMapping));
-    CHECK(result.assessments[changedIndex].channelDelivery == graph.nodes[changedIndex].channelDelivery);
     CHECK(result.assessments[changedIndex].optFormat == graph.nodes[changedIndex].optFormat);
     auto const& findings = result.assessments[changedIndex].findings;
     REQUIRE(findings.size() == 1U);
@@ -656,7 +641,9 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
 
-    CHECK(result.channelConfidence == ChannelConfidence::Converted);
+    // The partial source identity keeps confidence Unknown; the finding still
+    // reports the intervention it observed.
+    CHECK(result.channelConfidence == ChannelConfidence::Unknown);
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
     CHECK(result.fullyVerified);
     REQUIRE(result.assessments.size() == 6U);
@@ -670,12 +657,12 @@ namespace ao::audio::test
     auto graph = mappedChannelGraph();
     // An initial open may have established mapping. Only current graph-native
     // observations count; an application-side retained snapshot is not readback.
-    graph.nodes[2].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::Mapped;
+    graph.nodes[2].channelDelivery.isMapped = true;
     graph.nodes[2].channelDelivery.nativeSpeakerMask = 0x3;
 
     for (std::size_t index = 3; index < graph.nodes.size(); ++index)
     {
-      graph.nodes[index].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::Unknown;
+      graph.nodes[index].channelDelivery.isMapped = false;
       setIdentity(graph.nodes[index], 2, 0);
     }
 
@@ -685,8 +672,6 @@ namespace ao::audio::test
     CHECK(result.pipelineQuality == Quality::BitwisePerfect);
     CHECK(result.fullyVerified);
     REQUIRE(result.assessments.size() == 6U);
-    CHECK(result.assessments[2].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
-    CHECK(result.assessments[3].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Unknown);
     REQUIRE(result.assessments[3].optFormat);
     CHECK(std::get<PcmFormat>(*result.assessments[3].optFormat).speakerMask == 0U);
   }
@@ -727,7 +712,7 @@ namespace ao::audio::test
     graph.nodes.push_back({.id = "alternate",
                            .type = flow::NodeType::Sink,
                            .optFormat = identifiedPcm(2, 0x30),
-                           .channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::Mapped}});
+                           .channelDelivery = {.isMapped = true}});
     auto expectedConfidence = ChannelConfidence::Verified;
     auto expectedQuality = Quality::BitwisePerfect;
     auto const* expectedSink = "sink";
@@ -741,7 +726,9 @@ namespace ao::audio::test
     SECTION("different known set branch first")
     {
       graph.connections.insert(graph.connections.begin(), alternateConnection);
-      expectedConfidence = ChannelConfidence::Converted;
+      // Positions stay proved on the alternate branch: the ChannelMapping
+      // finding owns the intervention, not the confidence.
+      expectedConfidence = ChannelConfidence::Verified;
       expectedQuality = Quality::LinearIntervention;
       expectedSink = "alternate";
     }
@@ -767,7 +754,6 @@ namespace ao::audio::test
     CHECK(result.pipelineQuality == Quality::BitwisePerfect);
     REQUIRE(result.assessments.size() == 6U);
     CHECK_FALSE(result.assessments[3].optFormat);
-    CHECK(result.assessments[3].channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
   }
 
   TEST_CASE("QualityAnalyzer - channel interventions invalidate integer precision round-trip proof",
@@ -793,17 +779,17 @@ namespace ao::audio::test
       }
     }
 
-    SECTION("known shared conversion with legacy mapping")
+    SECTION("known shared conversion without mapped positions")
     {
-      graph.nodes[3].channelDelivery = {
-        .mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified, .hasSharedConversion = true};
+      graph.nodes[3].channelDelivery.isMapped = false;
+      graph.nodes[3].channelDelivery.hasSharedConversion = true;
     }
 
     SECTION("compatible partial observation with separately known shared conversion")
     {
       setIdentity(graph.nodes[3], 4, 0x1);
-      graph.nodes[3].channelDelivery = {
-        .mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified, .hasSharedConversion = true};
+      graph.nodes[3].channelDelivery.isMapped = false;
+      graph.nodes[3].channelDelivery.hasSharedConversion = true;
     }
 
     SECTION("observed native set changes at the narrowing transition")
@@ -819,7 +805,6 @@ namespace ao::audio::test
 
     auto const result = analyzeAudioQuality(graph);
 
-    CHECK(result.channelConfidence == ChannelConfidence::Converted);
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
     REQUIRE(result.assessments.size() == 6U);
     CHECK(hasChannelFinding(result.assessments[5], QualityFindingKind::Truncation));
@@ -836,7 +821,7 @@ namespace ao::audio::test
       std::get<PcmFormat>(*graph.nodes[index].optFormat).encoding = SampleEncoding::Float32Le;
     }
 
-    graph.nodes[3].channelDelivery.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+    graph.nodes[3].channelDelivery.isMapped = false;
 
     SECTION("unknown native positions")
     {

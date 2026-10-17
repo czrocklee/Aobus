@@ -514,7 +514,7 @@ add_executable(ao_core_test
     unit/audio/EngineErrorTest.cpp
     unit/audio/EngineFatalProbeTest.cpp
     unit/audio/EngineGaplessTest.cpp
-    unit/audio/EngineStereoReuseTest.cpp
+    unit/audio/EngineStereoIdentityTest.cpp
     unit/audio/EngineChannelLayoutTest.cpp
     unit/audio/EngineWavChannelLayoutTest.cpp
     unit/audio/EngineRtSignalRingTest.cpp
@@ -847,7 +847,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireMonitorTest.cpp
   unit/audio/backend/PipeWireBackendTest.cpp
   unit/audio/backend/PipeWireChannelObservationTest.cpp
-  unit/audio/backend/FlacDefaultChannelMapTest.cpp
+  unit/audio/backend/FlacAlsaPipeWireChannelMapTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
   unit/audio/backend/AlsaChannelObservationTest.cpp

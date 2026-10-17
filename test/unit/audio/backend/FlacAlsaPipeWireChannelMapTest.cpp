@@ -1,14 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-// Decoder-to-native-planner integration at the software boundary. A genuine
-// five/six-channel FLAC file is decoded by the real decoder, every sample
-// frame is verified against hand-authored literal little-endian bytes, and
-// the finalized decoder facts then drive the actual ALSA and PipeWire
-// channel-map planners against independently authored native position
-// observations. These cases prove the decoder/planner boundary only: no
-// audio device is opened, no native command runs, and nothing here asserts
-// hardware wiring.
+// Real FLAC decoding feeds actual channel-map planners with independent
+// literal positions and PCM oracles. These cases do not open native devices.
 
 #include "lib/audio/DecoderFactory.h"
 #include "lib/audio/backend/detail/AlsaChannelMap.h"
@@ -58,21 +52,15 @@ namespace ao::audio::backend::test
     constexpr std::uint32_t kSampleRate = 48000;
     constexpr std::uint32_t kFramesPerBlock = 16;
 
-    // Constant per-channel marker values for the three verbatim fixture
-    // frames. The decode oracle is the separately hand-authored
-    // kLiteralFrames below, written directly rather than derived from these
-    // values or from any production mapping.
+    // Fixture markers; the literal PCM oracle below is authored separately.
     constexpr auto kFrameMarkers = std::to_array<std::array<std::int32_t, 6>>({
       {0x1001, 0x2002, 0x3003, 0x4004, 0x5005, 0x6006},
       {0x1101, 0x2202, 0x3303, 0x4404, 0x5505, 0x6606},
       {0x2101, 0x3202, 0x4303, 0x5404, 0x6505, 0x7606},
     });
 
-    // Hand-authored literal little-endian decode oracle: the bytes each
-    // decoded frame must deliver in source slot order, twelve bytes per
-    // frame for up to six channels. They encode the same constant markers as
-    // the fixture above but are written directly instead of being extracted
-    // from it.
+    // Little-endian source-slot bytes for up to six channels, not generated
+    // from the fixture markers or production mapping.
     constexpr auto kLiteralFrames = std::to_array<std::array<std::uint8_t, 12>>({
       {0x01, 0x10, 0x02, 0x20, 0x03, 0x30, 0x04, 0x40, 0x05, 0x50, 0x06, 0x60},
       {0x01, 0x11, 0x02, 0x22, 0x03, 0x33, 0x04, 0x44, 0x05, 0x55, 0x06, 0x66},
@@ -82,36 +70,6 @@ namespace ao::audio::backend::test
     std::span<std::uint8_t const> literalFrameBytes(std::uint8_t const channels, std::size_t const frameIndex)
     {
       return std::span<std::uint8_t const>{kLiteralFrames[frameIndex]}.first(static_cast<std::size_t>(channels) * 2U);
-    }
-
-    void appendLe32(std::vector<std::uint8_t>& bytes, std::uint32_t const value)
-    {
-      for (std::uint32_t shift = 0; shift < 32; shift += 8)
-      {
-        bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFU));
-      }
-    }
-
-    void appendCommentBlock(std::vector<std::uint8_t>& bytes,
-                            std::vector<std::string> const& comments,
-                            bool const isLast)
-    {
-      auto body = std::vector<std::uint8_t>{};
-      appendLe32(body, 0); // Empty vendor string.
-      appendLe32(body, static_cast<std::uint32_t>(comments.size()));
-
-      for (auto const& comment : comments)
-      {
-        appendLe32(body, static_cast<std::uint32_t>(comment.size()));
-        body.insert(body.end(), comment.begin(), comment.end());
-      }
-
-      REQUIRE(body.size() <= 0xFFFFFFU);
-      bytes.push_back(isLast ? 0x84 : 0x04);
-      bytes.push_back(static_cast<std::uint8_t>((body.size() >> 16U) & 0xFFU));
-      bytes.push_back(static_cast<std::uint8_t>((body.size() >> 8U) & 0xFFU));
-      bytes.push_back(static_cast<std::uint8_t>(body.size() & 0xFFU));
-      bytes.insert(bytes.end(), body.begin(), body.end());
     }
 
     std::vector<std::uint8_t> buildSurroundStream(std::uint8_t const channels, std::vector<std::string> const& comments)
@@ -129,7 +87,7 @@ namespace ao::audio::backend::test
       if (!comments.empty())
       {
         bytes[4] = 0; // STREAMINFO is no longer the last metadata block.
-        appendCommentBlock(bytes, comments, true);
+        ao::audio::test::appendFlacCommentBlock(bytes, comments, true);
       }
 
       for (std::size_t frameIndex = 0; frameIndex < kFrameMarkers.size(); ++frameIndex)
@@ -151,8 +109,7 @@ namespace ao::audio::backend::test
     void checkDecodedInfo(DecodedStreamInfo const& info,
                           std::uint8_t const channels,
                           std::uint32_t const expectedMask,
-                          ChannelLayoutOrigin const origin,
-                          std::optional<std::uint32_t> const optDeclaration)
+                          ChannelLayoutOrigin const origin)
     {
       CHECK(info.sourceFormat.sampleRate == kSampleRate);
       CHECK(info.outputFormat.sampleRate == kSampleRate);
@@ -163,7 +120,6 @@ namespace ao::audio::backend::test
       CHECK(info.outputFormat.speakerMask == expectedMask);
       CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
       CHECK(info.sourceChannelLayout.origin == origin);
-      CHECK(info.sourceChannelLayout.optDeclaredMask == optDeclaration);
       CHECK_FALSE(info.isLossy);
       CHECK(info.duration == std::chrono::milliseconds{1});
     }
@@ -365,13 +321,13 @@ namespace ao::audio::backend::test
         auto const temp = ao::test::TempFile{buildSurroundStream(channels, {}), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        checkDecodedInfo(info, channels, 0, ChannelLayoutOrigin::Unknown, std::nullopt);
+        checkDecodedInfo(info, channels, 0, ChannelLayoutOrigin::Unknown);
         requireLiteralDecodedFrames(*decoderPtr, channels);
 
         auto const mapRes = planAlsaDelivery(info.outputFormat, row.nativeAlsaPositions);
         REQUIRE(mapRes);
         CHECK(mapRes->channels == channels);
-        CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+        CHECK_FALSE(mapRes->delivery.isMapped);
         CHECK(mapRes->delivery.nativeSpeakerMask == row.declaredMask);
         CHECK_FALSE(mapRes->needsPermutation);
 
@@ -397,12 +353,12 @@ namespace ao::audio::backend::test
         auto const temp = ao::test::TempFile{buildSurroundStream(channels, maskComments(row.declaredMask)), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        checkDecodedInfo(info, channels, row.declaredMask, ChannelLayoutOrigin::Declared, row.declaredMask);
+        checkDecodedInfo(info, channels, row.declaredMask, ChannelLayoutOrigin::Identified);
         requireLiteralDecodedFrames(*decoderPtr, channels);
 
         auto const mapRes = planAlsaDelivery(info.outputFormat, row.nativeAlsaPositions);
         REQUIRE(mapRes);
-        CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+        CHECK(mapRes->delivery.isMapped);
         CHECK(mapRes->delivery.nativeSpeakerMask == row.declaredMask);
         REQUIRE(mapRes->needsPermutation);
 
@@ -429,8 +385,7 @@ namespace ao::audio::backend::test
           ao::test::TempFile{buildSurroundStream(channels, maskComments(row.conflictingDeclaredMask)), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        checkDecodedInfo(
-          info, channels, row.conflictingDeclaredMask, ChannelLayoutOrigin::Declared, row.conflictingDeclaredMask);
+        checkDecodedInfo(info, channels, row.conflictingDeclaredMask, ChannelLayoutOrigin::Identified);
         requireLiteralDecodedFrames(*decoderPtr, channels);
 
         auto const planRes = planAlsaDelivery(info.outputFormat, row.nativeAlsaPositions);
@@ -456,7 +411,7 @@ namespace ao::audio::backend::test
         auto const temp = ao::test::TempFile{buildSurroundStream(channels, {}), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        checkDecodedInfo(info, channels, 0, ChannelLayoutOrigin::Unknown, std::nullopt);
+        checkDecodedInfo(info, channels, 0, ChannelLayoutOrigin::Unknown);
         requireLiteralDecodedFrames(*decoderPtr, channels);
 
         auto const native = requireNativeObservation(channels, row.nativePipeWirePositions);
@@ -465,7 +420,7 @@ namespace ao::audio::backend::test
         auto const deliveryRes = detail::rawStreamDelivery(info.sourceFormat, native);
         REQUIRE(deliveryRes);
         CHECK(deliveryRes->clientFormat.speakerMask == 0U);
-        CHECK(deliveryRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+        CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
         CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == row.declaredMask);
         CHECK_FALSE(deliveryRes->needsPermutation);
 
@@ -486,14 +441,14 @@ namespace ao::audio::backend::test
         auto const temp = ao::test::TempFile{buildSurroundStream(channels, maskComments(row.declaredMask)), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        checkDecodedInfo(info, channels, row.declaredMask, ChannelLayoutOrigin::Declared, row.declaredMask);
+        checkDecodedInfo(info, channels, row.declaredMask, ChannelLayoutOrigin::Identified);
         requireLiteralDecodedFrames(*decoderPtr, channels);
 
         auto const native = requireNativeObservation(channels, row.nativePipeWirePositions);
         auto const deliveryRes = detail::rawStreamDelivery(info.sourceFormat, native);
         REQUIRE(deliveryRes);
         CHECK(deliveryRes->clientFormat.speakerMask == row.declaredMask);
-        CHECK(deliveryRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+        CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
         CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == row.declaredMask);
         REQUIRE(deliveryRes->needsPermutation);
 
@@ -519,8 +474,7 @@ namespace ao::audio::backend::test
           ao::test::TempFile{buildSurroundStream(channels, maskComments(row.conflictingDeclaredMask)), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        checkDecodedInfo(
-          info, channels, row.conflictingDeclaredMask, ChannelLayoutOrigin::Declared, row.conflictingDeclaredMask);
+        checkDecodedInfo(info, channels, row.conflictingDeclaredMask, ChannelLayoutOrigin::Identified);
         requireLiteralDecodedFrames(*decoderPtr, channels);
 
         auto const native = requireNativeObservation(channels, row.nativePipeWirePositions);

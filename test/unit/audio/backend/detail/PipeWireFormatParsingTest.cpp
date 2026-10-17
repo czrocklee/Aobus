@@ -4,7 +4,6 @@
 #include "lib/audio/backend/detail/PipeWireFormatParsing.h"
 
 #include "lib/audio/backend/detail/PipeWireMonitorParsing.h"
-#include "lib/audio/detail/PcmModeReuse.h"
 #include <ao/Error.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
@@ -524,7 +523,7 @@ namespace ao::audio::backend::detail::test
       auto const deliveryRes = rawStreamDelivery(source, *optNative);
       REQUIRE(deliveryRes);
       CHECK(deliveryRes->clientFormat.speakerMask == source.speakerMask);
-      CHECK(deliveryRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
       CHECK_FALSE(deliveryRes->needsPermutation);
     }
   }
@@ -630,7 +629,7 @@ namespace ao::audio::backend::detail::test
       REQUIRE(deliveryRes);
       CHECK(deliveryRes->clientFormat.encoding == fixture.encoding);
       CHECK(deliveryRes->clientFormat.speakerMask == 0x30U);
-      CHECK(deliveryRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+      CHECK(deliveryRes->channelDelivery.isMapped);
       CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 0x30U);
       CHECK(deliveryRes->needsPermutation);
       auto bytes = std::array<std::byte, 8>{};
@@ -654,7 +653,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(optNative);
     auto const deliveryRes = rawStreamDelivery({.sampleRate = 48000, .channels = 4, .speakerMask = 0x33}, *optNative);
     REQUIRE(deliveryRes);
-    CHECK(deliveryRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
     CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 0x33U);
     CHECK(optNative->format.speakerMask == 0U);
     auto bytes = std::to_array<std::byte>({std::byte{0x11},
@@ -729,7 +728,7 @@ namespace ao::audio::backend::detail::test
     CHECK(currentRes->clientFormat ==
           PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le});
     CHECK(currentRes->channelDelivery.nativeSpeakerMask == 4U);
-    CHECK(currentRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(currentRes->channelDelivery.isMapped);
     CHECK_FALSE(currentRes->needsPermutation);
     auto bytes = std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}});
     applyRawStreamDelivery(bytes, *currentRes);
@@ -757,7 +756,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(currentRes);
     CHECK(currentRes->clientFormat.speakerMask == 0U);
     CHECK(currentRes->channelDelivery.nativeSpeakerMask == 0x60cU);
-    CHECK(currentRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(currentRes->channelDelivery.isMapped);
     CHECK_FALSE(currentRes->needsPermutation);
   }
 
@@ -792,7 +791,7 @@ namespace ao::audio::backend::detail::test
       REQUIRE(projectionRes);
       CHECK(projectionRes->channelDelivery.nativeSpeakerMask == 4U);
       CHECK(projectionRes->channelDelivery.nativeSpeakerMask != admittedRes->channelDelivery.nativeSpeakerMask);
-      CHECK(projectionRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(projectionRes->channelDelivery.isMapped);
       // The admitted identity transport stays installed: the projection
       // installs no permutation, so client byte order is delivered unchanged.
       CHECK_FALSE(projectionRes->needsPermutation);
@@ -824,7 +823,7 @@ namespace ao::audio::backend::detail::test
       REQUIRE(projectionRes);
       CHECK(projectionRes->channelDelivery.nativeSpeakerMask == 0x60cU);
       CHECK(projectionRes->channelDelivery.nativeSpeakerMask != admittedRes->channelDelivery.nativeSpeakerMask);
-      CHECK(projectionRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(projectionRes->channelDelivery.isMapped);
       CHECK_FALSE(projectionRes->needsPermutation);
       auto bytes = std::to_array<std::byte>({std::byte{0x11},
                                              std::byte{0x12},
@@ -871,96 +870,6 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - reuse candidates need the observation-backed transport proof",
-            "[audio][unit][pipewire]")
-  {
-    // Component coverage for the open-time proof cached by PipeWireBackend:
-    // these active-seam projections use the accepted native observation. The
-    // query itself never projects or negotiates. The candidate helper only
-    // pairs formats; both identities must admit one byte transport. Native
-    // open/query controls, not this case, check the cached backend result;
-    // neither reproduces a later callback-invalidation schedule.
-
-    auto const sourceOf = [](std::uint32_t mask) noexcept
-    { return SignalFormat{.sampleRate = 48000, .channels = 2, .speakerMask = mask}; };
-
-    SECTION("the candidate gate pairs only 0 <-> FL/FR two-channel storage")
-    {
-      auto const storage = [](std::uint32_t mask)
-      {
-        return PcmFormat{
-          .sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = mask};
-      };
-
-      CHECK(audio::detail::isCanonicalStereoReuseCandidate(storage(0x3), storage(0x3), storage(0)));
-      CHECK(audio::detail::isCanonicalStereoReuseCandidate(storage(0), storage(0), storage(0x3)));
-      CHECK_FALSE(audio::detail::isCanonicalStereoReuseCandidate(storage(0x3), storage(0x3), storage(0x3)));
-      CHECK_FALSE(audio::detail::isCanonicalStereoReuseCandidate(storage(0x3), storage(0x3), storage(0x30)));
-      CHECK_FALSE(audio::detail::isCanonicalStereoReuseCandidate(storage(0x3), storage(0x3), storage(0x4)));
-      CHECK_FALSE(audio::detail::isCanonicalStereoReuseCandidate(
-        storage(0x3),
-        storage(0x3),
-        PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0}));
-      CHECK_FALSE(audio::detail::isCanonicalStereoReuseCandidate(
-        storage(0x3),
-        storage(0x3),
-        PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed32Le, .speakerMask = 0}));
-      CHECK_FALSE(audio::detail::isCanonicalStereoReuseCandidate(storage(0x30), storage(0x30), storage(0)));
-    }
-
-    SECTION("both identities project onto one installed transport")
-    {
-      for (auto const installedMask : {0U, 0x3U})
-      {
-        for (bool const swapped : {false, true})
-        {
-          CAPTURE(installedMask, swapped);
-          auto buffer = std::array<std::byte, 1024>{};
-          auto const roles = swapped ? std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FR, SPA_AUDIO_CHANNEL_FL})
-                                     : std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
-          auto const optNative = parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 2, roles));
-          REQUIRE(optNative);
-          auto const installedRes = rawStreamDelivery(sourceOf(installedMask), *optNative);
-          auto const nextRes = rawStreamDelivery(sourceOf(installedMask ^ 0x3U), *optNative);
-          REQUIRE(installedRes);
-          REQUIRE(nextRes);
-          // One byte transport: same storage and the same effective
-          // permutation, including an installed swap.
-          CHECK(installedRes->clientFormat.sampleRate == nextRes->clientFormat.sampleRate);
-          CHECK(installedRes->clientFormat.channels == nextRes->clientFormat.channels);
-          CHECK(installedRes->clientFormat.encoding == nextRes->clientFormat.encoding);
-          CHECK(installedRes->needsPermutation == nextRes->needsPermutation);
-          CHECK(installedRes->needsPermutation == swapped);
-          CHECK(installedRes->sourceSlots == nextRes->sourceSlots);
-          CHECK(installedRes->sourceSlots[0] == (swapped ? 1U : 0U));
-          CHECK(installedRes->sourceSlots[1] == (swapped ? 0U : 1U));
-          // Each identity keeps its own evidence: an unpositioned successor
-          // never borrows the identified mapping and vice versa.
-          CHECK(installedRes->channelDelivery.mapping == (installedMask == 0x3U
-                                                            ? ChannelDeliveryEvidence::Mapping::Mapped
-                                                            : ChannelDeliveryEvidence::Mapping::LegacyUnverified));
-          CHECK(nextRes->channelDelivery.mapping == (installedMask == 0x3U
-                                                       ? ChannelDeliveryEvidence::Mapping::LegacyUnverified
-                                                       : ChannelDeliveryEvidence::Mapping::Mapped));
-          CHECK(installedRes->channelDelivery.nativeSpeakerMask == 0x3U);
-          CHECK(nextRes->channelDelivery.nativeSpeakerMask == 0x3U);
-        }
-      }
-    }
-
-    SECTION("an unpositioned observation proves nothing for either identity")
-    {
-      auto buffer = std::array<std::byte, 1024>{};
-      auto const optNative = parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 2, {}));
-      REQUIRE(optNative);
-      CHECK((optNative->flags & SPA_AUDIO_FLAG_UNPOSITIONED) != 0U);
-      // The strict exact FL/FR offer refuses an unpositioned readback, so a
-      // candidate pairing over it can never borrow identified proof.
-      CHECK_FALSE(rawStreamDelivery(sourceOf(0U), *optNative));
-      CHECK_FALSE(rawStreamDelivery(sourceOf(0x3U), *optNative));
-    }
-  }
-
   TEST_CASE("PipeWireFormatParsing - source-zero stereo cannot replace an installed swap after activation",
             "[audio][unit][pipewire]")
   {
@@ -977,7 +886,7 @@ namespace ao::audio::backend::detail::test
     auto const installedRes = rawStreamDelivery(source, *optInitial);
     REQUIRE(installedRes);
     CHECK(installedRes->clientFormat.speakerMask == 0U);
-    CHECK(installedRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(installedRes->channelDelivery.isMapped);
     REQUIRE(installedRes->needsPermutation);
     CHECK(installedRes->sourceSlots[0] == 1U);
     CHECK(installedRes->sourceSlots[1] == 0U);
@@ -1038,7 +947,7 @@ namespace ao::audio::backend::detail::test
     auto const monoRes = rawStreamDelivery(source, *optMono);
     REQUIRE(monoRes);
     CHECK(monoRes->clientFormat.speakerMask == 1U);
-    CHECK(monoRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(monoRes->channelDelivery.isMapped);
     auto const center = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FC});
     auto const optCenter = parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 1, center));
     REQUIRE(optCenter);
@@ -1109,7 +1018,7 @@ namespace ao::audio::backend::detail::test
     }
 
     REQUIRE(deliveryRes);
-    CHECK(deliveryRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
     CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == expectedKnownMask);
     CHECK(deliveryRes->needsPermutation == needsPermutation);
     applyRawStreamDelivery(bytes, *deliveryRes);
@@ -1135,7 +1044,7 @@ namespace ao::audio::backend::detail::test
     auto const legacyRes = rawStreamDelivery(unidentified, *optNative);
     REQUIRE(legacyRes);
     CHECK(legacyRes->clientFormat.speakerMask == 0);
-    CHECK(legacyRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(legacyRes->channelDelivery.isMapped);
     CHECK_FALSE(legacyRes->needsPermutation);
     CHECK(optNative->hasUnsupportedPositions);
     CHECK(optNative->positions[0] == SPA_AUDIO_CHANNEL_RLC);
@@ -1161,7 +1070,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(deliveryRes);
     CHECK(deliveryRes->clientFormat.speakerMask == 0U);
     CHECK(optNative->format.speakerMask == 3U);
-    CHECK(deliveryRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(deliveryRes->channelDelivery.isMapped);
   }
 
   TEST_CASE("PipeWireFormatParsing - a short native position array cannot describe a complete stream",

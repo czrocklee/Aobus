@@ -74,36 +74,6 @@ namespace ao::audio::test
     constexpr auto kSecondPcm = std::to_array<std::uint8_t>(
       {0x81, 0xE0, 0x82, 0xD0, 0x83, 0xC0, 0x84, 0xB0, 0x85, 0xA0, 0x86, 0x90, 0x87, 0x80, 0x88, 0xF0});
 
-    void appendLe32(std::vector<std::uint8_t>& bytes, std::uint32_t const value)
-    {
-      for (std::uint32_t shift = 0; shift < 32; shift += 8)
-      {
-        bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFU));
-      }
-    }
-
-    void appendCommentBlock(std::vector<std::uint8_t>& bytes,
-                            std::vector<std::string> const& comments,
-                            bool const isLast)
-    {
-      auto body = std::vector<std::uint8_t>{};
-      appendLe32(body, 0); // Empty vendor string.
-      appendLe32(body, static_cast<std::uint32_t>(comments.size()));
-
-      for (auto const& comment : comments)
-      {
-        appendLe32(body, static_cast<std::uint32_t>(comment.size()));
-        body.insert(body.end(), comment.begin(), comment.end());
-      }
-
-      REQUIRE(body.size() <= 0xFFFFFFU);
-      bytes.push_back(isLast ? 0x84 : 0x04);
-      bytes.push_back(static_cast<std::uint8_t>((body.size() >> 16U) & 0xFFU));
-      bytes.push_back(static_cast<std::uint8_t>((body.size() >> 8U) & 0xFFU));
-      bytes.push_back(static_cast<std::uint8_t>(body.size() & 0xFFU));
-      bytes.insert(bytes.end(), body.begin(), body.end());
-    }
-
     std::vector<std::uint8_t> buildLayoutStream(std::uint8_t const channels,
                                                 CommentBlocks const& blocks = {},
                                                 std::uint8_t const precisionBits = 16,
@@ -125,7 +95,7 @@ namespace ao::audio::test
 
         for (std::size_t index = 0; index < blocks.size(); ++index)
         {
-          appendCommentBlock(bytes, blocks[index], index + 1U == blocks.size());
+          appendFlacCommentBlock(bytes, blocks[index], index + 1U == blocks.size());
         }
       }
 
@@ -142,7 +112,6 @@ namespace ao::audio::test
     void checkLayout(DecodedStreamInfo const& info,
                      LayoutCase const& expected,
                      ChannelLayoutOrigin const origin,
-                     std::optional<std::uint32_t> const optDeclaration,
                      SampleEncoding const encoding = SampleEncoding::Signed16Le,
                      std::uint8_t const precisionBits = 16)
     {
@@ -155,7 +124,6 @@ namespace ao::audio::test
       CHECK(info.outputFormat.speakerMask == expected.mask);
       CHECK(info.outputFormat.encoding == encoding);
       CHECK(info.sourceChannelLayout.origin == origin);
-      CHECK(info.sourceChannelLayout.optDeclaredMask == optDeclaration);
       CHECK_FALSE(info.isLossy);
       CHECK(info.duration == std::chrono::milliseconds{1});
       REQUIRE(expected.roles.size() == expected.channels);
@@ -187,7 +155,6 @@ namespace ao::audio::test
       CHECK(info.outputFormat.speakerMask == 0);
       CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
       CHECK(info.sourceChannelLayout.origin == ChannelLayoutOrigin::Unknown);
-      CHECK_FALSE(info.sourceChannelLayout.optDeclaredMask);
       CHECK_FALSE(info.isLossy);
       CHECK(info.duration == std::chrono::milliseconds{1});
     }
@@ -284,7 +251,7 @@ namespace ao::audio::test
         auto const temp = ao::test::TempFile{buildLayoutStream(expected.channels, blocks), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
         auto const info = decoderPtr->streamInfo();
-        checkLayout(info, expected, ChannelLayoutOrigin::FormatDefault, std::nullopt);
+        checkLayout(info, expected, ChannelLayoutOrigin::Identified);
         CHECK(signalFormat(info.outputFormat) == info.sourceFormat);
         auto const frameBytes = static_cast<std::size_t>(expected.channels) * 2U;
         checkPlayback(*decoderPtr,
@@ -348,7 +315,7 @@ namespace ao::audio::test
         {"TITLE=before", std::format("WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x{:X}", expected.mask), "TITLE=after"}};
       auto const temp = ao::test::TempFile{buildLayoutStream(expected.channels, comments), ".flac"};
       auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
-      checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Declared, expected.mask);
+      checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Identified);
       auto const frameBytes = static_cast<std::size_t>(expected.channels) * 2U;
       checkPlayback(*decoderPtr,
                     std::span<std::uint8_t const>{kFirstPcm}.first(frameBytes),
@@ -383,7 +350,7 @@ namespace ao::audio::test
         CAPTURE(expected.channels, expected.mask, blocks.size());
         auto const temp = ao::test::TempFile{buildLayoutStream(expected.channels, blocks), ".flac"};
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
-        checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Declared, expected.mask);
+        checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Identified);
         auto const frameBytes = static_cast<std::size_t>(expected.channels) * 2U;
         checkPlayback(*decoderPtr,
                       std::span<std::uint8_t const>{kFirstPcm}.first(frameBytes),
@@ -420,7 +387,7 @@ namespace ao::audio::test
       CAPTURE(blocks.size());
       auto const temp = ao::test::TempFile{buildLayoutStream(2, blocks), ".flac"};
       auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
-      checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Declared, 0xC);
+      checkLayout(decoderPtr->streamInfo(), expected, ChannelLayoutOrigin::Identified);
       checkPlayback(*decoderPtr,
                     std::span<std::uint8_t const>{kFirstPcm}.first(4),
                     std::span<std::uint8_t const>{kSecondPcm}.first(4));
@@ -578,33 +545,28 @@ namespace ao::audio::test
       CommentBlocks blocks;
       LayoutCase expected;
       ChannelLayoutOrigin origin;
-      std::optional<std::uint32_t> optDeclaration;
     };
     auto const cases = std::vector<PersistenceCase>{
       // Only a later block declares; empty and unrelated blocks come first.
       {"later declaration",
        {{}, {"TITLE=middle"}, {"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x30"}},
        {2, 0x30, {BackLeft, BackRight}},
-       ChannelLayoutOrigin::Declared,
-       0x30},
+       ChannelLayoutOrigin::Identified},
       // The first declaration survives later unrelated blocks.
       {"retained declaration",
        {{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x30"}, {"TITLE=unrelated"}, {"OTHER=0xFFFFFFFF"}},
        {2, 0x30, {BackLeft, BackRight}},
-       ChannelLayoutOrigin::Declared,
-       0x30},
+       ChannelLayoutOrigin::Identified},
       // Equivalent declarations in two blocks persist as one layout.
       {"equivalent blocks",
        {{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x3"}, {"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x3"}},
        {2, 0x3, {FrontLeft, FrontRight}},
-       ChannelLayoutOrigin::Declared,
-       0x3},
+       ChannelLayoutOrigin::Identified},
       // Repeated blocks without any mask keep the normative default.
       {"unrelated blocks",
        {{"TITLE=first"}, {"TITLE=second"}, {"WAVEFORMATEXTENSIBLE_CHANNEL_MASK_EXTRA=0x0"}},
        {2, 0x3, {FrontLeft, FrontRight}},
-       ChannelLayoutOrigin::FormatDefault,
-       std::nullopt},
+       ChannelLayoutOrigin::Identified},
     };
 
     for (auto const& expected : cases)
@@ -613,7 +575,7 @@ namespace ao::audio::test
       auto const temp = ao::test::TempFile{buildLayoutStream(2, expected.blocks), ".flac"};
       auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
       auto const info = decoderPtr->streamInfo();
-      checkLayout(info, expected.expected, expected.origin, expected.optDeclaration);
+      checkLayout(info, expected.expected, expected.origin);
       auto const directPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
       CHECK(directPtr->streamInfo() == info);
       checkPlayback(*decoderPtr,
@@ -788,7 +750,7 @@ namespace ao::audio::test
 
         auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, expected.encoding));
         checkLayout(
-          decoderPtr->streamInfo(), layout, ChannelLayoutOrigin::Declared, 0x107, expected.encoding, precisionBits);
+          decoderPtr->streamInfo(), layout, ChannelLayoutOrigin::Identified, expected.encoding, precisionBits);
         checkPlayback(*decoderPtr, expected.pcm, expected.pcm);
       }
     }
@@ -801,7 +763,7 @@ namespace ao::audio::test
     auto const temp = ao::test::TempFile{buildLayoutStream(2, {{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x30"}}), ".flac"};
     auto decoderPtr = ao::test::requireValue(openDecoderSession(temp.path, std::nullopt));
     auto const info = decoderPtr->streamInfo();
-    checkLayout(info, {2, 0x30, {BackLeft, BackRight}}, ChannelLayoutOrigin::Declared, 0x30);
+    checkLayout(info, {2, 0x30, {BackLeft, BackRight}}, ChannelLayoutOrigin::Identified);
     REQUIRE(decoderPtr->seek(std::chrono::milliseconds{1}));
     CHECK(decoderPtr->streamInfo() == info);
     auto const tailRes = decoderPtr->readNextBlock();
@@ -831,8 +793,7 @@ namespace ao::audio::test
     auto const info = decoderPtr->streamInfo();
     checkLayout(info,
                 {4, 0x107, {FrontLeft, FrontRight, FrontCenter, BackCenter}},
-                ChannelLayoutOrigin::Declared,
-                0x107,
+                ChannelLayoutOrigin::Identified,
                 SampleEncoding::Signed32Le);
     auto const firstRes = decoderPtr->readNextBlock();
     REQUIRE_FALSE(firstRes);

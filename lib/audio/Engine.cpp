@@ -9,7 +9,6 @@
 #include "detail/EngineEventQueueInvariants.h"
 #include "detail/EngineRtSignalRing.h"
 #include "detail/OpenedModeValidation.h"
-#include "detail/PcmModeReuse.h"
 #include "detail/RenderPath.h"
 #include "detail/RenderTimeline.h"
 #include "detail/RouteTracker.h"
@@ -57,11 +56,6 @@ namespace ao::audio
 {
   namespace
   {
-    bool isPcmReuseCandidate(PcmFormat const& current, PcmFormat const& next) noexcept
-    {
-      return isSamePcmMode(current, next) || detail::isCanonicalStereoReuseCandidate(current, current, next);
-    }
-
     template<typename Action>
     void runOrAbort(std::string_view const context, Action&& action) noexcept
     {
@@ -1812,9 +1806,8 @@ namespace ao::audio
       auto const& currentFormat = *_implPtr->optCurrentBackendFormat;
       auto const nextFormat = pcmFormat(sourceFormat, currentFormat.encoding);
       auto const nextMode = OpenedPcmMode{.clientFormat = nextFormat, .optEndpoint = _implPtr->optCurrentEndpoint};
-      auto const reuseLossless = isPcmReuseCandidate(currentFormat, nextFormat) &&
-                                 detail::validateOpenedMode(sourceFormat, nextMode).has_value() &&
-                                 engine._implPtr->backendPtr->canReusePcmMode(currentFormat, nextFormat);
+      auto const reuseLossless =
+        isSamePcmMode(currentFormat, nextFormat) && detail::validateOpenedMode(sourceFormat, nextMode).has_value();
 
       if (!Engine::Impl::isGaplessCapable(_implPtr->optInspection->info) || !reuseLossless)
       {
@@ -2643,9 +2636,8 @@ namespace ao::audio
       auto const nextMode =
         OpenedPcmMode{.clientFormat = preparedTrack.backendFormat, .optEndpoint = preparationImpl->optCurrentEndpoint};
       capable = Engine::Impl::isGaplessCapable(preparedTrack.info) &&
-                isPcmReuseCandidate(currentBackendFormat, preparedTrack.backendFormat) &&
-                detail::validateOpenedMode(preparedTrack.info.sourceFormat, nextMode).has_value() &&
-                engine._implPtr->backendPtr->canReusePcmMode(currentBackendFormat, preparedTrack.backendFormat);
+                isSamePcmMode(currentBackendFormat, preparedTrack.backendFormat) &&
+                detail::validateOpenedMode(preparedTrack.info.sourceFormat, nextMode).has_value();
 
       if (capable)
       {

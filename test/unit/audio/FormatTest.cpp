@@ -105,6 +105,19 @@ namespace ao::audio::test
     CHECK(isSamePcmMode(frontStereo, frontStereoCopy));
   }
 
+  TEST_CASE("SignalFormat - complete WAVE masks assign one supported role to every channel", "[audio][unit][format]")
+  {
+    CHECK(isCompleteWaveSpeakerMask(0x4, 1));
+    CHECK(isCompleteWaveSpeakerMask(0x30, 2));
+    CHECK(isCompleteWaveSpeakerMask(0x3FFFF, 18));
+    CHECK_FALSE(isCompleteWaveSpeakerMask(0, 0));
+    CHECK_FALSE(isCompleteWaveSpeakerMask(0, 2));
+    CHECK_FALSE(isCompleteWaveSpeakerMask(0x1, 2));
+    CHECK_FALSE(isCompleteWaveSpeakerMask(0x7, 2));
+    CHECK_FALSE(isCompleteWaveSpeakerMask(0x40000, 1));
+    CHECK_FALSE(isCompleteWaveSpeakerMask(0x80000000, 1));
+  }
+
   TEST_CASE("SignalFormat - same-count signals with different speaker masks are not equal", "[audio][unit][format]")
   {
     auto const unassigned = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
@@ -141,27 +154,14 @@ namespace ao::audio::test
       PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
 
     auto const unexamined = DecodedStreamInfo{.sourceFormat = sourceFormat, .outputFormat = outputFormat};
-    auto const declared = DecodedStreamInfo{.sourceFormat = sourceFormat,
-                                            .outputFormat = outputFormat,
-                                            .sourceChannelLayout = {ChannelLayoutOrigin::Declared, 0x3U}};
+    auto const identified = DecodedStreamInfo{.sourceFormat = sourceFormat,
+                                              .outputFormat = outputFormat,
+                                              .sourceChannelLayout = {ChannelLayoutOrigin::Identified}};
 
-    CHECK(unexamined.sourceFormat == declared.sourceFormat);
-    CHECK(unexamined.outputFormat == declared.outputFormat);
-    CHECK(unexamined != declared);
+    CHECK(unexamined.sourceFormat == identified.sourceFormat);
+    CHECK(unexamined.outputFormat == identified.outputFormat);
+    CHECK(unexamined != identified);
     CHECK(unexamined == DecodedStreamInfo{unexamined});
-  }
-
-  TEST_CASE("ChannelLayoutEvidence - an explicit zero declaration differs from an absent one", "[audio][unit][format]")
-  {
-    auto const absent = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared};
-    auto const explicitZero = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0U};
-
-    CHECK_FALSE(absent.optDeclaredMask);
-    REQUIRE(explicitZero.optDeclaredMask);
-    CHECK(*explicitZero.optDeclaredMask == 0U);
-    CHECK(absent != explicitZero);
-    CHECK(absent == ChannelLayoutEvidence{absent});
-    CHECK(explicitZero == ChannelLayoutEvidence{explicitZero});
   }
 
   // The helpers must be usable in constant expressions (RT-path callers depend on

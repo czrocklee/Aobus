@@ -4,7 +4,6 @@
 #include "test/unit/audio/FakeCapturingBackend.h"
 
 #include "lib/audio/detail/DecoderOutput.h"
-#include "lib/audio/detail/PcmModeReuse.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -15,7 +14,6 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
-#include <atomic>
 #include <cstdint>
 #include <expected>
 #include <functional>
@@ -44,12 +42,6 @@ namespace ao::audio::test
     }
 
     return Backend::prewarmFormatHint(format);
-  }
-
-  bool FakeCapturingBackend::canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept
-  {
-    return Backend::canReusePcmMode(current, next) || (_allowsStereoModeReuse.load(std::memory_order_acquire) &&
-                                                       detail::isCanonicalStereoReuseCandidate(current, current, next));
   }
 
   BackendOpenResult FakeCapturingBackend::open(SignalFormat const& format, RenderTarget& target)
@@ -220,11 +212,6 @@ namespace ao::audio::test
   {
     auto const lock = std::scoped_lock{_mutex};
     _optSelectedEncoding = optEncoding;
-  }
-
-  void FakeCapturingBackend::setStereoModeReuseAllowed(bool const allowed) noexcept
-  {
-    _allowsStereoModeReuse.store(allowed, std::memory_order_release);
   }
 
   void FakeCapturingBackend::setConfirmedEndpointPrecision(std::optional<std::uint8_t> optPrecisionBits)

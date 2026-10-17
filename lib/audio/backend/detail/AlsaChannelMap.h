@@ -52,7 +52,7 @@ namespace ao::audio::backend::detail
   struct AlsaChannelMap final
   {
     AlsaChannelMapObservations observations;
-    ChannelDeliveryEvidence delivery{.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified};
+    ChannelDeliveryEvidence delivery{.isMapped = false};
     std::uint8_t channels = 0;
     std::uint8_t sampleBytes = 0;
     bool needsPermutation = false;

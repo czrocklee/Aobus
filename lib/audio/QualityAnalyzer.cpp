@@ -174,14 +174,8 @@ namespace ao::audio
       std::uint8_t channels = 0;
     };
 
-    ChannelConfidence channelConfidence(std::vector<flow::Node const*> const& path, bool hasChannelAlteration) noexcept
+    ChannelConfidence channelConfidence(std::vector<flow::Node const*> const& path) noexcept
     {
-      // Conversion is positive evidence, even when other positions remain unknown.
-      if (hasChannelAlteration)
-      {
-        return ChannelConfidence::Converted;
-      }
-
       if (!hasVerifiedOutputEndpoint(path) || path.front()->type != flow::NodeType::Source ||
           !hasCompleteChannelIdentity(*path.front()) ||
           path.front()->sourceChannelLayout.origin == ChannelLayoutOrigin::Unknown)
@@ -204,7 +198,7 @@ namespace ao::audio
           case flow::NodeType::Stream:
           case flow::NodeType::Intermediary:
           case flow::NodeType::Sink:
-            if (node->channelDelivery.mapping != ChannelDeliveryEvidence::Mapping::Mapped)
+            if (!node->channelDelivery.isMapped)
             {
               return ChannelConfidence::Unverified;
             }
@@ -609,7 +603,6 @@ namespace ao::audio
     }
 
     auto knownIdentity = ChannelIdentityEvidence{};
-    bool hasChannelAlteration = false;
 
     for (size_t i = 0; i < path.size(); ++i)
     {
@@ -626,20 +619,11 @@ namespace ao::audio
         .nodeType = node->type,
         .optFormat = node->optFormat,
         .worstQuality = Quality::BitwisePerfect,
-        .sourceChannelLayout = node->sourceChannelLayout,
-        .channelDelivery = node->channelDelivery,
       };
 
       assessNodeSelfProperties(*node, assessment);
       assessInputSources(*node, path, inputSources, graph, assessment);
       assessChannelTransition(i > 0 ? path[i - 1] : nullptr, knownIdentity, *node, assessment);
-
-      if (std::ranges::any_of(assessment.findings,
-                              [](QualityFinding const& finding)
-                              { return finding.kind == QualityFindingKind::ChannelMapping; }))
-      {
-        hasChannelAlteration = true;
-      }
 
       if (i > 0)
       {
@@ -674,7 +658,7 @@ namespace ao::audio
       result.assessments.push_back(std::move(assessment));
     }
 
-    result.channelConfidence = channelConfidence(path, hasChannelAlteration);
+    result.channelConfidence = channelConfidence(path);
     return result;
   }
 } // namespace ao::audio

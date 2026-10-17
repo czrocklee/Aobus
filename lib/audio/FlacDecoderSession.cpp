@@ -23,8 +23,10 @@
 #include <FLAC/ordinals.h>
 #include <FLAC/stream_decoder.h>
 
+#include <algorithm>
 #include <array>
 #include <bit>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -39,6 +41,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -47,16 +50,16 @@ namespace ao::audio
   namespace
   {
     constexpr std::uint8_t kLowByteMask = 0xFF;
+    // The recorded diagnostic quotes at most this many value bytes in hex.
+    constexpr std::size_t kValuePrefixLimit = 16;
 
+    // The owning bounded diagnostic for a refused metadata interpretation:
+    // the explanation with Vorbis block/entry context and a hexadecimal
+    // prefix of the offending value. Borrowed callback metadata is composed
+    // into reason, so nothing references libFLAC storage afterwards.
     struct FlacMetadataFailure final
     {
-      std::string_view reason;
-      // One-based Vorbis block and entry indices; zero denotes unavailable context.
-      std::uint64_t blockIndex;
-      std::uint32_t entryIndex;
-      std::array<std::uint8_t, 16> valuePrefix{};
-      std::size_t prefixLength = 0;
-      std::size_t valueLength = 0;
+      std::string reason;
       std::source_location location;
     };
 
@@ -196,6 +199,8 @@ namespace ao::audio
     std::optional<FlacFrameDiscontinuity> optFrameDiscontinuity;
     std::optional<Error> optOutputError;
     std::optional<FlacMetadataFailure> optMetadataFailure;
+    // The first valid declaration and its owning coordinates, retained for
+    // all-block agreement and refusal context; the raw value stays local.
     std::optional<std::uint32_t> optDeclaredMask;
     std::uint64_t declarationBlockIndex = 0;
     std::uint32_t declarationEntryIndex = 0;
@@ -259,40 +264,44 @@ namespace ao::audio
                               ::FLAC__StreamDecoderErrorStatus status,
                               void* clientData) noexcept;
 
+    // Composes the owning bounded diagnostic. Formatting may allocate, so
+    // it runs only inside the libFLAC callbacks' exception containment; the
+    // first recorded failure owns the message.
     void recordMetadataFailure(std::string_view const reason,
                                std::uint64_t const blockIndex = 0,
                                std::uint32_t const entryIndex = 0,
                                std::span<::FLAC__byte const> const value = {},
-                               std::source_location const location = std::source_location::current()) noexcept
+                               std::source_location const location = std::source_location::current())
     {
       if (optMetadataFailure)
       {
         return;
       }
 
-      auto failure =
-        FlacMetadataFailure{.reason = reason, .blockIndex = blockIndex, .entryIndex = entryIndex, .location = location};
-      failure.valueLength = value.size();
+      auto prefix = std::string{};
 
-      for (auto const byte : value)
+      for (auto const byte : value.first(std::min(value.size(), kValuePrefixLimit)))
       {
-        if (failure.prefixLength == failure.valuePrefix.size())
-        {
-          break;
-        }
-
-        failure.valuePrefix[failure.prefixLength++] = byte;
+        prefix += std::format("{:02X} ", byte);
       }
 
-      optMetadataFailure = failure;
+      if (!prefix.empty())
+      {
+        prefix.pop_back();
+      }
+
+      optMetadataFailure = FlacMetadataFailure{
+        .reason = std::format(
+          "{} (Vorbis comment block {}, entry {}, value prefix hex [{}])", reason, blockIndex, entryIndex, prefix),
+        .location = location,
+      };
     }
 
     void readChannelMask(std::span<::FLAC__byte const> const entry,
                          std::uint64_t const blockIndex,
-                         std::uint32_t const entryIndex) noexcept
+                         std::uint32_t const entryIndex)
     {
       static constexpr std::size_t kFieldNameLength = std::string_view{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK"}.size();
-      static constexpr std::uint32_t kHexLetterOffset = 10;
 
       if (!matchesFlacMaskName(entry))
       {
@@ -313,36 +322,25 @@ namespace ao::audio
         return;
       }
 
-      std::uint32_t mask = 0;
-
       // This is bounded playback syntax policy, not an RFC whitespace or
-      // overflow mandate. Leading zero padding is accepted without copying.
-      for (auto const byte : value.subspan(2))
+      // overflow mandate. Leading zero padding is accepted. std::from_chars
+      // rejects whitespace, signs, NUL, and other non-hexadecimal bytes, and
+      // requiring full consumption rejects any trailing byte.
+      auto const digits = utility::bytes::stringView(std::as_bytes(value.subspan(2)));
+      auto const* const first = digits.data();
+      std::uint32_t mask = 0;
+      auto const parseResult = std::from_chars(first, first + digits.size(), mask, 16);
+
+      if (parseResult.ec == std::errc::result_out_of_range)
       {
-        auto const folded = foldAsciiCase(byte);
-        std::uint32_t digit = 0;
+        recordMetadataFailure("mask exceeds uint32 range", blockIndex, entryIndex, value);
+        return;
+      }
 
-        if (folded >= '0' && folded <= '9')
-        {
-          digit = static_cast<std::uint32_t>(folded - '0');
-        }
-        else if (folded >= 'a' && folded <= 'f')
-        {
-          digit = static_cast<std::uint32_t>(folded - 'a') + kHexLetterOffset;
-        }
-        else
-        {
-          recordMetadataFailure("mask contains a non-hexadecimal byte", blockIndex, entryIndex, value);
-          return;
-        }
-
-        if (mask > (std::numeric_limits<std::uint32_t>::max() - digit) / 16U)
-        {
-          recordMetadataFailure("mask exceeds uint32 range", blockIndex, entryIndex, value);
-          return;
-        }
-
-        mask = (mask * 16U) + digit;
+      if (parseResult.ec != std::errc{} || parseResult.ptr != first + digits.size())
+      {
+        recordMetadataFailure("mask contains a non-hexadecimal byte", blockIndex, entryIndex, value);
+        return;
       }
 
       if (optDeclaredMask && *optDeclaredMask != mask)
@@ -366,40 +364,39 @@ namespace ao::audio
       // declaration. Zero here means unidentified, not declared non-speaker
       // content. Representable defaults and declarations need no PCM remix.
       static constexpr auto kDefaultMasks = std::to_array<std::uint32_t>({0x4, 0x3, 0x7, 0x33, 0, 0, 0x70F, 0x63F});
-      static constexpr std::uint32_t kSupportedPositions = 0x0003FFFF;
       static constexpr std::uint32_t kAllSpeakers = 0x80000000;
       auto const channels = info.sourceFormat.channels;
 
       if (optDeclaredMask)
       {
-        auto const mask = *optDeclaredMask;
-        auto reason = std::string_view{};
+        // A declaration must name one assigned position per channel. Refusing
+        // explicit non-speaker, partial, excess, and reserved layouts is the
+        // ordinary-playback policy, not WAVE's excess-bit rule.
+        if (auto const mask = *optDeclaredMask; !isCompleteWaveSpeakerMask(mask, channels))
+        {
+          auto reason = std::string_view{};
 
-        // Refusing explicit non-speaker, partial, excess, and reserved layouts
-        // is the ordinary-playback policy, not WAVE's excess-bit rule.
-        if (mask == 0)
-        {
-          reason = "explicit zero identifies no speaker positions";
-        }
-        else if ((mask & kAllSpeakers) != 0)
-        {
-          reason = "wildcard is not an assigned speaker position";
-        }
-        else if ((mask & ~kSupportedPositions) != 0)
-        {
-          reason = "reserved speaker positions";
-        }
-        else if (std::popcount(mask) < channels)
-        {
-          reason = "partially assigned channels";
-        }
-        else if (std::popcount(mask) > channels)
-        {
-          reason = "excess speaker positions";
-        }
+          if (mask == 0)
+          {
+            reason = "explicit zero identifies no speaker positions";
+          }
+          else if ((mask & kAllSpeakers) != 0)
+          {
+            reason = "wildcard is not an assigned speaker position";
+          }
+          else if ((mask & ~kWaveSpeakerMask) != 0)
+          {
+            reason = "reserved speaker positions";
+          }
+          else if (std::popcount(mask) < channels)
+          {
+            reason = "partially assigned channels";
+          }
+          else
+          {
+            reason = "excess speaker positions";
+          }
 
-        if (!reason.empty())
-        {
           detail::throwDecoderError(
             Error::Code::NotSupported,
             std::format("FLAC channel layout: mask 0x{:08X} for {} channels in Vorbis comment block {}, entry {}: {}",
@@ -414,19 +411,20 @@ namespace ao::audio
       info.sourceFormat.speakerMask = optDeclaredMask.value_or(kDefaultMasks[channels - 1U]);
       auto origin = ChannelLayoutOrigin::Unknown;
 
-      if (optDeclaredMask)
+      // Both declared masks and precise format defaults establish the same
+      // identified interpretation; the undeclared five/six-channel generic
+      // surround slots stay unknown.
+      if (optDeclaredMask || info.sourceFormat.speakerMask != 0U)
       {
-        origin = ChannelLayoutOrigin::Declared;
-      }
-      else if (info.sourceFormat.speakerMask != 0U)
-      {
-        origin = ChannelLayoutOrigin::FormatDefault;
+        origin = ChannelLayoutOrigin::Identified;
       }
 
-      info.sourceChannelLayout = ChannelLayoutEvidence{.origin = origin, .optDeclaredMask = optDeclaredMask};
+      info.sourceChannelLayout = ChannelLayoutEvidence{.origin = origin};
     }
 
-    bool tryAdmitFrame(::FLAC__Frame const* frame) noexcept
+    // Not noexcept: a recorded metadata failure composes its owning diagnostic,
+    // and allocation escapes only through the write callback's containment.
+    bool tryAdmitFrame(::FLAC__Frame const* frame)
     {
       if (!hasFinalizedMetadata || optMetadataFailure)
       {
@@ -481,23 +479,11 @@ namespace ao::audio
       if (optMetadataFailure)
       {
         auto const& failure = *optMetadataFailure;
-        auto prefix = std::string{};
-
-        for (std::size_t index = 0; index < failure.prefixLength; ++index)
-        {
-          prefix += std::format("{:02X}", failure.valuePrefix[index]);
-        }
-
-        detail::throwDecoderError(Error::Code::NotSupported,
-                                  std::format("FLAC channel layout: {} for {} channels (Vorbis comment block {}, "
-                                              "entry {}, value length {}, prefix hex [{}])",
-                                              failure.reason,
-                                              info.sourceFormat.channels,
-                                              failure.blockIndex,
-                                              failure.entryIndex,
-                                              failure.valueLength,
-                                              prefix),
-                                  failure.location);
+        // The recorded reason is already the owning bounded diagnostic.
+        detail::throwDecoderError(
+          Error::Code::NotSupported,
+          std::format("FLAC channel layout: {} for {} channels", failure.reason, info.sourceFormat.channels),
+          failure.location);
       }
 
       // The session-detected frame-format failure is the direct cause of an

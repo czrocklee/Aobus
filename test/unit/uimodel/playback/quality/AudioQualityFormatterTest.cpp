@@ -28,9 +28,9 @@ namespace ao::uimodel::test
 {
   namespace
   {
-    audio::flow::Graph declaredChannelGraph(std::uint8_t const channels,
-                                            std::uint32_t const sourceMask,
-                                            audio::ChannelDeliveryEvidence const sinkDelivery)
+    audio::flow::Graph identifiedChannelGraph(std::uint8_t const channels,
+                                              std::uint32_t const sourceMask,
+                                              audio::ChannelDeliveryEvidence const sinkDelivery)
     {
       return {
         .nodes =
@@ -42,14 +42,13 @@ namespace ao::uimodel::test
                                               .precisionBits = 16,
                                               .sampleKind = audio::SampleKind::Integer,
                                               .speakerMask = sourceMask},
-             .sourceChannelLayout = {.origin = audio::ChannelLayoutOrigin::Declared, .optDeclaredMask = sourceMask}},
+             .sourceChannelLayout = {.origin = audio::ChannelLayoutOrigin::Identified}},
             {.id = "stream",
              .type = audio::flow::NodeType::Stream,
              .optFormat =
                audio::PcmFormat{
                  .sampleRate = 48000, .channels = channels, .encoding = audio::SampleEncoding::Signed16Le},
-             .channelDelivery = {.mapping = audio::ChannelDeliveryEvidence::Mapping::Mapped,
-                                 .nativeSpeakerMask = sourceMask}},
+             .channelDelivery = {.isMapped = true, .nativeSpeakerMask = sourceMask}},
             {.id = "sink",
              .type = audio::flow::NodeType::Sink,
              .optFormat =
@@ -191,7 +190,7 @@ namespace ao::uimodel::test
   TEST_CASE("AudioQualityFormatter - analyzer findings retain independently observed native layouts",
             "[uimodel][integration][playback][quality]")
   {
-    auto graph = declaredChannelGraph(4, 0x33, {.mapping = audio::ChannelDeliveryEvidence::Mapping::Mapped});
+    auto graph = identifiedChannelGraph(4, 0x33, {.isMapped = true});
     std::size_t changedIndex = 2;
     std::uint32_t expectedStorageMask = 0;
 
@@ -211,7 +210,10 @@ namespace ao::uimodel::test
     }
 
     auto const result = audio::analyzeAudioQuality(graph);
-    CHECK(result.channelConfidence == audio::ChannelConfidence::Converted);
+    // Both contradictory sets are proved positions: the finding owns the
+    // conversion, and the confidence stays independent of it.
+    CHECK(result.channelConfidence == audio::ChannelConfidence::Verified);
+    CHECK(result.pipelineQuality == audio::Quality::LinearIntervention);
     REQUIRE(result.assessments.size() == 3U);
     auto const& assessment = result.assessments[changedIndex];
     REQUIRE(assessment.findings.size() == 1U);
@@ -230,9 +232,10 @@ namespace ao::uimodel::test
   TEST_CASE("AudioQualityFormatter - partial native constraints remain visible without guessed roles",
             "[uimodel][integration][playback][quality]")
   {
-    auto const graph = declaredChannelGraph(2, 0x3, {.nativeSpeakerMask = 0x4});
+    auto const graph = identifiedChannelGraph(2, 0x3, {.nativeSpeakerMask = 0x4});
     auto const result = audio::analyzeAudioQuality(graph);
-    CHECK(result.channelConfidence == audio::ChannelConfidence::Converted);
+    CHECK(result.channelConfidence == audio::ChannelConfidence::Unverified);
+    CHECK(result.pipelineQuality == audio::Quality::LinearIntervention);
     REQUIRE(result.assessments.size() == 3U);
     REQUIRE(result.assessments[2].findings.size() == 1U);
     auto const& finding = result.assessments[2].findings.front();
@@ -713,7 +716,7 @@ namespace ao::uimodel::test
       for (auto const confidence : {audio::ChannelConfidence::Unknown,
                                     audio::ChannelConfidence::Unverified,
                                     audio::ChannelConfidence::Inferred,
-                                    audio::ChannelConfidence::Converted})
+                                    audio::ChannelConfidence::Verified})
       {
         auto const state = rt::QualityState{
           .sourceQuality = audio::Quality::BitwisePerfect,
@@ -728,7 +731,7 @@ namespace ao::uimodel::test
         CHECK(presentation.headline == (amplification ? "Clipping risk" : "Pipeline intervention"));
         CHECK(presentation.category ==
               (amplification ? AudioQualityCategory::Warning : AudioQualityCategory::Diagnostic));
-        CHECK(presentation.channelNote.empty() == (confidence == audio::ChannelConfidence::Converted));
+        CHECK(presentation.channelNote.empty() == (confidence == audio::ChannelConfidence::Verified));
       }
     }
   }
@@ -736,32 +739,20 @@ namespace ao::uimodel::test
   TEST_CASE("AudioQualityFormatter - known channel conversion stays an intervention",
             "[uimodel][unit][playback][quality]")
   {
-    // A converted state without its finding still reports the real
-    // intervention instead of hiding behind an uncertainty headline.
-    auto const cleanConverted =
-      withChannelConfidence(rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                                             .pipelineQuality = audio::Quality::BitwisePerfect,
-                                             .overall = audio::Quality::BitwisePerfect},
-                            audio::ChannelConfidence::Converted);
-    auto const converted = audioQualityPresentation(cleanConverted);
-    CHECK(converted.headline == "Pipeline intervention");
-    CHECK(converted.category == AudioQualityCategory::Diagnostic);
-    CHECK(converted.channelNote.empty());
-
-    auto const mappingState = withChannelConfidence(
+    // The ChannelMapping finding is the conversion authority: it keeps the
+    // intervention headline even when the numerical axes disagree.
+    auto const mappingState =
       rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                       .pipelineQuality = audio::Quality::LinearIntervention,
-                       .overall = audio::Quality::LinearIntervention,
-                       .assessments =
-                         {
-                           audio::NodeQualityAssessment{
-                             .nodeId = "ao-engine",
-                             .nodeType = audio::flow::NodeType::Engine,
-                             .findings = {audio::QualityFinding{.kind = audio::QualityFindingKind::ChannelMapping,
-                                                                .quality = audio::Quality::LinearIntervention}},
-                           },
-                         }},
-      audio::ChannelConfidence::Converted);
+                       .pipelineQuality = audio::Quality::BitwisePerfect,
+                       .overall = audio::Quality::BitwisePerfect,
+                       .assessments = {
+                         audio::NodeQualityAssessment{
+                           .nodeId = "ao-engine",
+                           .nodeType = audio::flow::NodeType::Engine,
+                           .findings = {audio::QualityFinding{.kind = audio::QualityFindingKind::ChannelMapping,
+                                                              .quality = audio::Quality::LinearIntervention}},
+                         },
+                       }};
     auto const mapped = audioQualityPresentation(mappingState);
     CHECK(mapped.headline == "Pipeline intervention");
     CHECK(mapped.category == AudioQualityCategory::Diagnostic);

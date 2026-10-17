@@ -127,9 +127,7 @@ namespace ao::uimodel::test
       CHECK(result.sourceQuality == (info.isLossy ? audio::Quality::LossySource : audio::Quality::BitwisePerfect));
       CHECK(result.pipelineQuality == testCase.pipeline);
       CHECK(result.channelConfidence != audio::ChannelConfidence::Verified);
-      CHECK(result.channelConfidence != audio::ChannelConfidence::Converted);
       REQUIRE_FALSE(result.assessments.empty());
-      CHECK(result.assessments.front().sourceChannelLayout == info.sourceChannelLayout);
       CHECK(result.assessments.front().optFormat == graph.nodes.front().optFormat);
       CHECK(presentation.headline == testCase.headline);
       CHECK(presentation.category == testCase.category);
@@ -138,8 +136,8 @@ namespace ao::uimodel::test
 
       if (testCase.fileName == "basic_metadata.flac")
       {
-        // FLAC defines stereo roles, not the downstream native mapping.
-        CHECK(info.sourceChannelLayout.origin == audio::ChannelLayoutOrigin::FormatDefault);
+        // Format-defined stereo roles do not establish downstream mapping.
+        CHECK(info.sourceChannelLayout.origin == audio::ChannelLayoutOrigin::Identified);
         CHECK(info.sourceFormat.channels == 2U);
         CHECK(info.sourceFormat.speakerMask == 0x3U);
         CHECK(info.outputFormat.speakerMask == info.sourceFormat.speakerMask);
@@ -148,9 +146,7 @@ namespace ao::uimodel::test
       }
       else
       {
-        // Genuine Unknown non-WAV producers guard against a decoder-only fix
-        // masking presentation's independent-confidence bug. Neither is guessed
-        // to be stereo merely because it has two channels.
+        // Other formats remain unidentified despite preserving the numerical headline.
         CHECK(info.sourceChannelLayout.origin == audio::ChannelLayoutOrigin::Unknown);
         CHECK(info.sourceFormat.speakerMask == 0U);
         CHECK(info.outputFormat.speakerMask == 0U);
@@ -220,8 +216,9 @@ namespace ao::uimodel::test
 
     if (sink.channelDelivery.hasSharedConversion)
     {
-      CHECK(result.channelConfidence == audio::ChannelConfidence::Converted);
-      CHECK(presentation.channelNote.empty());
+      // The finding owns the conversion; the unproved delivery note remains.
+      CHECK(result.channelConfidence == audio::ChannelConfidence::Unverified);
+      CHECK(presentation.channelNote == "Channel delivery not proved");
     }
     else
     {

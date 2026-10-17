@@ -8,7 +8,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/PcmFormat.h>
 #include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_message.hpp>
@@ -42,28 +41,14 @@ namespace ao::audio::backend::test
     INFO((openedRes ? "opened" : openedRes.error().error.message));
     REQUIRE(openedRes);
     CHECK(openedRes->clientFormat.speakerMask == 0x3);
-    CHECK(openedRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(openedRes->channelDelivery.isMapped);
     CHECK(openedRes->channelDelivery.nativeSpeakerMask == 0x3);
     CHECK_FALSE(openedRes->channelDelivery.hasSharedConversion);
     REQUIRE(openedRes->optEndpoint);
     CHECK(openedRes->optEndpoint->signalFormat.speakerMask == 0x3);
     CHECK(openedRes->optEndpoint->signalFormat.precisionBits >= 16);
 
-    // Control-side reuse query on the actual admitted plans: both canonical
-    // two-speaker identities share the installed identity transport here.
-    auto const& configured = openedRes->clientFormat;
-    auto const unpositioned =
-      PcmFormat{.sampleRate = configured.sampleRate, .channels = 2, .encoding = configured.encoding, .speakerMask = 0};
-    auto const backPair = PcmFormat{
-      .sampleRate = configured.sampleRate, .channels = 2, .encoding = configured.encoding, .speakerMask = 0x30};
-    CHECK(backend.canReusePcmMode(configured, configured));
-    CHECK(backend.canReusePcmMode(configured, unpositioned));
-    CHECK(backend.canReusePcmMode(unpositioned, configured));
-    CHECK_FALSE(backend.canReusePcmMode(configured, backPair));
     backend.close();
-
-    // Closing cleared the per-open proof before the lifetime change.
-    CHECK_FALSE(backend.canReusePcmMode(configured, unpositioned));
 
     // Same rate/count/precision, genuinely different speaker set. The native
     // current map, not the count or an Error code, establishes this constraint.
@@ -74,8 +59,6 @@ namespace ao::audio::backend::test
     CHECK(conflictRes.error().error.code == Error::Code::FormatRejected);
     CHECK(conflictRes.error().error.message.contains("channel positions conflict"));
 
-    // The failed re-open reset the per-open proof: no nonexact reuse remains.
-    CHECK_FALSE(backend.canReusePcmMode(configured, unpositioned));
     backend.close();
   }
 } // namespace ao::audio::backend::test

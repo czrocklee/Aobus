@@ -80,8 +80,7 @@ namespace ao::audio::test
       CHECK(info.sourceFormat.channels == kStreamChannels);
       CHECK(info.sourceFormat.precisionBits == kStreamBitsPerSample);
       CHECK(info.sourceFormat.speakerMask == 0x3);
-      CHECK(info.sourceChannelLayout.origin == ChannelLayoutOrigin::FormatDefault);
-      CHECK_FALSE(info.sourceChannelLayout.optDeclaredMask);
+      CHECK(info.sourceChannelLayout.origin == ChannelLayoutOrigin::Identified);
       CHECK(info.outputFormat.sampleRate == kStreamSampleRate);
       CHECK(info.outputFormat.channels == kStreamChannels);
       CHECK(info.outputFormat.speakerMask == 0x3);

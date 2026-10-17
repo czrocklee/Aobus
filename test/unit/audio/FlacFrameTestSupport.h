@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ao::audio::test
@@ -25,4 +26,9 @@ namespace ao::audio::test
                                                         std::uint8_t channels,
                                                         std::uint8_t bitsPerSample,
                                                         std::span<std::int32_t const> markers);
+
+  // Appends one Vorbis comment metadata block to an in-progress FLAC byte
+  // stream, with the last-metadata-block flag set by isLast. The block carries
+  // an empty vendor string followed by the length-prefixed comments.
+  void appendFlacCommentBlock(std::vector<std::uint8_t>& bytes, std::vector<std::string> const& comments, bool isLast);
 } // namespace ao::audio::test

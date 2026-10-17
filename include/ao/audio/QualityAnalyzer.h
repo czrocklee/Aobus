@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/audio/ChannelDeliveryEvidence.h>
-#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/flow/Graph.h>
@@ -80,8 +79,6 @@ namespace ao::audio
     std::optional<NodeFormat> optFormat{};
     Quality worstQuality = Quality::BitwisePerfect;
     std::vector<QualityFinding> findings{};
-    ChannelLayoutEvidence sourceChannelLayout{};
-    ChannelDeliveryEvidence channelDelivery{};
 
     bool operator==(NodeQualityAssessment const&) const = default;
   };
@@ -112,26 +109,9 @@ namespace ao::audio
   /**
    * @brief Analyzes a flow graph to determine the overall audio quality.
    *
-   * This is a pure function that evaluates the signal path from the decoder
-   * to the final output device, producing a per-node assessment of quality
-   * findings.
-   *
-   * Channel confidence describes only this snapshot's selected software path.
-   * Verified requires a Source with Declared or FormatDefault identity, complete
-   * canonical identities on Source/Decoder/Engine nodes, and complete observed
-   * position sets with Mapped delivery on every Stream/Intermediary/Sink node.
-   * Native sets come from the native format mask or nativeSpeakerMask; the
-   * latter establishes positions without asserting canonical native byte order.
-   * Missing roles in compatible partial reports are uncertainty, not alteration.
-   * Known roles that cannot coexist within channel-count geometry are channel
-   * alterations, never verified mapping. Partial reports cannot erase a prior
-   * complete identity or establish source identity.
-   * Inferred source history caps that same established path at Inferred.
-   * Missing source identity/history or absence of a Sink-reaching path yields
-   * Unknown; incomplete identities or native mapping evidence are Unverified. Known
-   * alterations take precedence as Converted, independently of mapping facts.
-   * Neither confidence nor source history changes fullyVerified's existing
-   * format-presence plus Sink contract or supplies missing native positions.
+   * Pure evaluation of the selected Source-to-Sink path. Findings describe
+   * alterations; channel confidence describes identity and mapping evidence.
+   * See doc/system/playback/quality-analysis.md for the derivation rules.
    *
    * @param graph The complete system audio graph to analyze.
    * @return A QualityResult containing per-node assessments and the global verdict.

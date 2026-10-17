@@ -69,60 +69,6 @@ namespace ao::audio::test
     CHECK_FALSE(openedRes->optEndpoint);
   }
 
-  TEST_CASE("NullBackend - discarding stereo reuse does not make unidentified PCM a wildcard",
-            "[audio][unit][null-backend]")
-  {
-    auto backend = NullBackend{};
-    auto unidentified = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
-    auto identified = unidentified;
-    identified.speakerMask = 0x3;
-    CHECK_FALSE(isSamePcmMode(unidentified, identified));
-    CHECK_FALSE(backend.Backend::canReusePcmMode(unidentified, identified));
-    CHECK(backend.canReusePcmMode(unidentified, identified));
-    CHECK(backend.canReusePcmMode(identified, unidentified));
-    CHECK(backend.canReusePcmMode(identified, identified));
-
-    SECTION("different rates remain different storage")
-    {
-      identified.sampleRate = 44100;
-    }
-
-    SECTION("different counts remain different storage")
-    {
-      identified.channels = 1;
-    }
-
-    SECTION("different encodings remain different storage")
-    {
-      identified.encoding = SampleEncoding::Signed32Le;
-    }
-
-    SECTION("alternate identified stereo is not FL FR")
-    {
-      identified.speakerMask = 0x30;
-    }
-
-    SECTION("a partial role set is not canonical stereo")
-    {
-      identified.speakerMask = 0x1;
-    }
-
-    SECTION("zero rates cannot establish reusable storage")
-    {
-      unidentified.sampleRate = 0;
-      identified.sampleRate = 0;
-    }
-
-    SECTION("unknown encoding cannot establish reusable storage")
-    {
-      unidentified.encoding = SampleEncoding::Unknown;
-      identified.encoding = SampleEncoding::Unknown;
-    }
-
-    CHECK_FALSE(backend.canReusePcmMode(unidentified, identified));
-    CHECK_FALSE(backend.canReusePcmMode(identified, unidentified));
-  }
-
   TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected", "[audio][unit][null-backend]")
   {
     auto target = NoopRenderTarget{};

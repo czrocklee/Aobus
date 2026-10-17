@@ -11,7 +11,6 @@
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
-#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -46,7 +45,6 @@ namespace ao::audio::test
     FakeCapturingBackend& operator=(FakeCapturingBackend&&) = delete;
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& format) const noexcept override;
-    bool canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept override;
     BackendOpenResult open(SignalFormat const& format, RenderTarget& target) override;
     void start() override;
     void pause() override;
@@ -78,10 +76,6 @@ namespace ao::audio::test
     // Clearing it restores the source-derived encoding hint.
     void setPrewarmFormat(std::optional<PcmFormat> optFormat);
     void setSelectedEncoding(std::optional<SampleEncoding> optEncoding);
-    // Models an independently proved fixed stereo transport, not native proof.
-    // Atomic revocation lets preparation/adoption tests control its lifetime.
-    void setStereoModeReuseAllowed(bool allowed) noexcept;
-
     /**
      * @brief Makes open() report a confirmed endpoint of the given precision.
      *
@@ -118,7 +112,6 @@ namespace ao::audio::test
     std::optional<SampleEncoding> _optPrewarmEncoding;
     std::optional<PcmFormat> _optPrewarmFormat;
     std::optional<SampleEncoding> _optSelectedEncoding;
-    std::atomic<bool> _allowsStereoModeReuse{false};
     std::optional<std::uint8_t> _optEndpointPrecisionBits;
     std::optional<Error::Code> _optPropError{};
     std::map<PropertyId, PropertyInfo> _mockPropertyInfos{};

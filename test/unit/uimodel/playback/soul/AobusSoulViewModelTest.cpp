@@ -117,8 +117,6 @@ namespace ao::uimodel::test
 
         state.fullyVerified = false;
         CHECK(resolveSoulAura(transport, true, state) == SoulAura::Veiled);
-        state.channelConfidence = audio::ChannelConfidence::Converted;
-        CHECK(resolveSoulAura(transport, true, state) == SoulAura::Turbulent);
       }
     }
   }

@@ -20,7 +20,6 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -302,9 +301,8 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto const format =
       PcmFormat{.sampleRate = 1000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
-    auto const firstEvidence = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0x3U};
-    auto const secondEvidence =
-      ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Inferred, .optDeclaredMask = std::uint32_t{0}};
+    auto const firstEvidence = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified};
+    auto const secondEvidence = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Inferred};
     auto const firstData = std::vector{std::byte{0x11},
                                        std::byte{0x12},
                                        std::byte{0x13},
@@ -362,9 +360,7 @@ namespace ao::audio::test
     CHECK(status.routeState.sourceFormat.speakerMask == 0x3);
     CHECK(status.routeState.decoderOutputFormat.speakerMask == 0x3);
     CHECK(status.routeState.engineOutputFormat.speakerMask == 0x3);
-    // The equal-mode splice refreshes the route evidence to the successor's
-    // history. A promotion would instead publish the first track's Declared
-    // evidence or a delivery-derived origin; neither may happen.
+    // Layout interpretation follows the successor, independently of native delivery.
     CHECK(status.routeState.sourceChannelLayout == secondEvidence);
     CHECK(status.routeState.sourceChannelLayout != firstEvidence);
 

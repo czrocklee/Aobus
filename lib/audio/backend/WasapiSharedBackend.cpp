@@ -6,11 +6,11 @@
 #include "backend/detail/SpeakerSet.h"
 #include "backend/detail/WasapiError.h"
 #include "backend/detail/WasapiFormat.h"
+#include "backend/detail/WasapiFormatObservation.h"
 #include "backend/detail/WasapiGraphRegistry.h"
 #include "backend/detail/WasapiRenderBuffer.h"
 #include "backend/detail/WasapiStrings.h"
 #include "detail/DecoderOutput.h"
-#include "detail/PcmModeReuse.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -69,9 +69,6 @@ namespace ao::audio::backend
     constexpr auto kIdleRetryDelay = std::chrono::milliseconds{1};
     constexpr auto kPausedPollDelay = std::chrono::milliseconds{10};
     constexpr auto kDrainPollDelay = std::chrono::milliseconds{10};
-    // Native-observation role table; source admission keeps its own separate
-    // detail::hasSupportedSourceSpeakerSet vocabulary.
-    constexpr std::uint32_t kSupportedWaveSpeakerMask = 0x3FFFFU;
 
     SampleEncoding observedWavePcmEncoding(WORD const containerBits, WORD const validBits, bool const isFloat) noexcept
     {
@@ -106,7 +103,7 @@ namespace ao::audio::backend
     bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
     {
       auto const optEncoding = ::ao::audio::detail::preferredLosslessPcmEncoding(sourceFormat);
-      return optEncoding && detail::acceptsWaveSpeakerSet(sourceFormat) &&
+      return optEncoding && detail::hasSupportedSourceSpeakerSet(sourceFormat) &&
              detail::waveFormatFromPcmFormat(pcmFormat(sourceFormat, *optEncoding)).has_value();
     }
 
@@ -174,19 +171,12 @@ namespace ao::audio::backend
     };
   } // namespace
 
-  bool detail::acceptsWaveSpeakerSet(SignalFormat const& sourceFormat) noexcept
-  {
-    // Active source admission only; the native observation keeps its own role
-    // table and partial or reserved-evidence semantics.
-    return hasSupportedSourceSpeakerSet(sourceFormat);
-  }
-
   std::optional<WAVEFORMATEXTENSIBLE> detail::waveFormatFromPcmFormat(PcmFormat const& format) noexcept
   {
     auto const containerBytes = bytesPerSample(format.encoding);
     auto const stride = frameBytes(format);
 
-    if (format.sampleRate == 0U || stride == 0U || !acceptsWaveSpeakerSet(signalFormat(format)) ||
+    if (format.sampleRate == 0U || stride == 0U || !hasSupportedSourceSpeakerSet(signalFormat(format)) ||
         format.sampleRate > std::numeric_limits<DWORD>::max() / stride)
     {
       return std::nullopt;
@@ -223,14 +213,13 @@ namespace ao::audio::backend
                                                                      WAVEFORMATEXTENSIBLE const& acceptedClient,
                                                                      WaveFormatObservation const& mix) noexcept
   {
-    auto evidence = ChannelDeliveryEvidence{
-      .mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified, .nativeSpeakerMask = acceptedClient.dwChannelMask};
+    auto evidence = ChannelDeliveryEvidence{.nativeSpeakerMask = acceptedClient.dwChannelMask};
 
     if (applicationFormat.speakerMask != 0U && applicationFormat.channels <= 2U &&
         acceptedClient.Format.nChannels == applicationFormat.channels &&
         acceptedClient.dwChannelMask == applicationFormat.speakerMask)
     {
-      evidence.mapping = ChannelDeliveryEvidence::Mapping::Mapped;
+      evidence.isMapped = true;
     }
 
     if (mix.channels != 0U)
@@ -277,7 +266,7 @@ namespace ao::audio::backend
         auto const& extensible =
           reinterpret_cast<WAVEFORMATEXTENSIBLE const&>(wave); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
 
-        if ((extensible.dwChannelMask & ~kSupportedWaveSpeakerMask) != 0U)
+        if ((extensible.dwChannelMask & ~kWaveSpeakerMask) != 0U)
         {
           // Reserved or wildcard positions are never legal native roles. The
           // whole role set is unusable, so only numerical facts survive.
@@ -632,9 +621,7 @@ namespace ao::audio::backend
     if (audioClient.Get() != nullptr)
     {
       state.optInputFormat = nativeClientFormat;
-      state.optMixFormat = mixObservation.optFormat;
-      state.mixChannels = mixObservation.channels;
-      state.mixSpeakerMask = mixObservation.speakerMask;
+      state.mixObservation = mixObservation;
       state.channelDelivery = channelDelivery;
     }
 
@@ -670,33 +657,6 @@ namespace ao::audio::backend
     return canAdmitSourceFormat(sourceFormat) ? Backend::prewarmFormatHint(sourceFormat) : std::nullopt;
   }
 
-  bool WasapiSharedBackend::canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept
-  {
-    if (isSamePcmMode(current, next))
-    {
-      return true;
-    }
-
-    // Only this open's live, successfully initialized client proves a nonexact
-    // reuse; a closed or unopened stream keeps the exact-equality default.
-    if (_implPtr->audioClient.Get() == nullptr)
-    {
-      return false;
-    }
-
-    auto const& configured = _implPtr->nativeClientFormat;
-
-    // The candidate gate pairs canonical two-channel storage with a 0 <-> FL/FR
-    // identity difference only; it is never transport proof by itself. Both
-    // the unknown-stereo and the declared FL/FR source are accepted through
-    // the same explicit FL/FR descriptor, so the stored actual client format
-    // binds the proof. The optional GetMixFormat observation is never proof,
-    // and this control-side check changes no transport, graph evidence,
-    // source mask or delivery confidence.
-    return configured.speakerMask == (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT) &&
-           ::ao::audio::detail::isCanonicalStereoReuseCandidate(configured, current, next);
-  }
-
   BackendOpenResult WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
     // Reject deterministic source refusals before this backend's own close().
@@ -708,7 +668,7 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    if (!detail::acceptsWaveSpeakerSet(sourceFormat))
+    if (!detail::hasSupportedSourceSpeakerSet(sourceFormat))
     {
       return std::unexpected{BackendOpenFailure{
         .error = makeError(Error::Code::NotSupported, "WASAPI requires a complete supported speaker set").error(),

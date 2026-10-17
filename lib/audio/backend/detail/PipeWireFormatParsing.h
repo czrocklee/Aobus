@@ -40,7 +40,7 @@ namespace ao::audio::backend::detail
   struct RawStreamDelivery final
   {
     PcmFormat clientFormat{};
-    ChannelDeliveryEvidence channelDelivery{.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified};
+    ChannelDeliveryEvidence channelDelivery{.isMapped = false};
     // Native destination slot -> canonical application source slot.
     std::array<std::uint8_t, SPA_AUDIO_MAX_CHANNELS> sourceSlots{};
     bool needsPermutation = false;

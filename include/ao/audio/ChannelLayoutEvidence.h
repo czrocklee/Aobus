@@ -4,28 +4,24 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 
 namespace ao::audio
 {
   enum class ChannelLayoutOrigin : std::uint8_t
   {
     Unknown,
-    Declared,
-    FormatDefault,
+    Identified,
     Inferred,
   };
 
-  // Origin describes the effective speakerMask interpretation, independently
-  // of PCM identity and native delivery proof. The optional declaration retains
-  // decoded, unnormalized WAVE-style bits, including explicit zero vs absence.
-  // It is absent for declarations in other vocabularies: codec-specific tags,
-  // namespaces, and their conflict context remain the decoder's responsibility.
-  // No origin value alone admits a layout or proves its delivery.
+  // Origin records how the effective speakerMask interpretation was
+  // established: read from declared or format-default channel metadata, or
+  // inferred from weaker evidence. Raw declaration vocabulary and conflict
+  // context stay with the decoder. No origin value alone admits a layout or
+  // proves its delivery.
   struct ChannelLayoutEvidence final
   {
     ChannelLayoutOrigin origin = ChannelLayoutOrigin::Unknown;
-    std::optional<std::uint32_t> optDeclaredMask{};
 
     bool operator==(ChannelLayoutEvidence const&) const = default;
   };

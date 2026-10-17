@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include "WasapiFormatObservation.h"
 #include <ao/Error.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
-#include <ao/audio/SignalFormat.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -20,23 +20,10 @@
 #include <mmreg.h>
 // clang-format on
 
-#include <cstdint>
 #include <optional>
 
 namespace ao::audio::backend::detail
 {
-  struct WaveFormatObservation final
-  {
-    std::uint32_t sampleRate = 0;
-    std::uint16_t channels = 0;
-    // Effective observed roles, possibly partial; excess high positions are
-    // ignored, and reserved or wildcard positions erase the whole role set.
-    std::uint32_t speakerMask = 0;
-    // A canonical format mask is present only for a complete observed set.
-    std::optional<PcmFormat> optFormat{};
-  };
-
-  bool acceptsWaveSpeakerSet(SignalFormat const& sourceFormat) noexcept;
   std::optional<WAVEFORMATEXTENSIBLE> waveFormatFromPcmFormat(PcmFormat const& format) noexcept;
   ChannelDeliveryEvidence waveChannelDeliveryFromObservation(PcmFormat const& applicationFormat,
                                                              WAVEFORMATEXTENSIBLE const& acceptedClient,

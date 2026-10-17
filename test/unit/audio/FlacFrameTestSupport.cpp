@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ao::audio::test
@@ -85,6 +86,14 @@ namespace ao::audio::test
 
       return bitsPerSample == 24 ? std::uint8_t{6} : std::uint8_t{4};
     }
+
+    void appendLe32(std::vector<std::uint8_t>& bytes, std::uint32_t const value)
+    {
+      for (std::uint32_t shift = 0; shift < 32; shift += 8)
+      {
+        bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFU));
+      }
+    }
   } // namespace
 
   std::vector<std::uint8_t> buildFlacStreaminfoBytes(std::uint64_t totalSamples)
@@ -144,5 +153,27 @@ namespace ao::audio::test
     appendBigEndianUnsigned(bytes, computeCrc16(bytes), 2);
 
     return bytes;
+  }
+
+  void appendFlacCommentBlock(std::vector<std::uint8_t>& bytes,
+                              std::vector<std::string> const& comments,
+                              bool const isLast)
+  {
+    auto body = std::vector<std::uint8_t>{};
+    appendLe32(body, 0); // Empty vendor string.
+    appendLe32(body, static_cast<std::uint32_t>(comments.size()));
+
+    for (auto const& comment : comments)
+    {
+      appendLe32(body, static_cast<std::uint32_t>(comment.size()));
+      body.insert(body.end(), comment.begin(), comment.end());
+    }
+
+    REQUIRE(body.size() <= 0xFFFFFFU);
+    bytes.push_back(isLast ? 0x84 : 0x04);
+    bytes.push_back(static_cast<std::uint8_t>((body.size() >> 16U) & 0xFFU));
+    bytes.push_back(static_cast<std::uint8_t>((body.size() >> 8U) & 0xFFU));
+    bytes.push_back(static_cast<std::uint8_t>(body.size() & 0xFFU));
+    bytes.insert(bytes.end(), body.begin(), body.end());
   }
 } // namespace ao::audio::test

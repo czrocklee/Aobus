@@ -56,8 +56,7 @@ namespace ao::audio::backend::test
                          flow::Node{.id = "ao-source",
                                     .type = flow::NodeType::Source,
                                     .optFormat = source,
-                                    .sourceChannelLayout = {
-                                      .origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = source.speakerMask}});
+                                    .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Identified}});
       graph.connections.push_back({.sourceId = "ao-source", .destinationId = "wasapi-stream", .isActive = true});
       return graph;
     }
@@ -86,8 +85,7 @@ namespace ao::audio::backend::test
             "[audio][integration][wasapi][.manual]")
   {
     // Explicitly selected idle endpoint only. No start/render/PCM submission,
-    // test setProperty call, endpoint-volume write or system-default change;
-    // the canReusePcmMode probes are control-side reads of the live open.
+    // test setProperty call, endpoint-volume write or system-default change.
     // Normal production open DOES restore cached volume/mute on this test
     // executable's own per-application session; this is not zero session writes.
     auto const* selectedId = std::getenv("AOBUS_TEST_WASAPI_DEVICE_ID");
@@ -125,14 +123,13 @@ namespace ao::audio::backend::test
       std::uint8_t channels;
       std::uint32_t sourceMask;
       std::uint32_t nativeMask;
-      ChannelDeliveryEvidence::Mapping mapping;
+      bool isMapped;
       bool requiresSuccess;
     };
-    auto const requests =
-      std::array{RequestCase{2, 0x3, 0x3, ChannelDeliveryEvidence::Mapping::Mapped, true},
-                 RequestCase{2, 0, 0x3, ChannelDeliveryEvidence::Mapping::LegacyUnverified, true},
-                 RequestCase{2, 0x30, 0x30, ChannelDeliveryEvidence::Mapping::Mapped, false},
-                 RequestCase{6, 0x3f, 0, ChannelDeliveryEvidence::Mapping::LegacyUnverified, false}};
+    auto const requests = std::array{RequestCase{2, 0x3, 0x3, true, true},
+                                     RequestCase{2, 0, 0x3, false, true},
+                                     RequestCase{2, 0x30, 0x30, true, false},
+                                     RequestCase{6, 0x3f, 0, false, false}};
 
     for (auto const& request : requests)
     {
@@ -169,7 +166,7 @@ namespace ao::audio::backend::test
       CHECK(openedRes->clientFormat.encoding == SampleEncoding::Signed16Le);
       CHECK(openedRes->clientFormat.speakerMask == request.sourceMask);
       CHECK_FALSE(openedRes->optEndpoint);
-      CHECK(openedRes->channelDelivery.mapping == request.mapping);
+      CHECK(openedRes->channelDelivery.isMapped == request.isMapped);
       CHECK(openedRes->channelDelivery.nativeSpeakerMask == request.nativeMask);
       REQUIRE_FALSE(received.empty());
       auto const& graph = received.back();
@@ -182,7 +179,7 @@ namespace ao::audio::backend::test
       REQUIRE(client != nullptr);
       CHECK(client->channels == request.channels);
       CHECK(client->speakerMask == request.nativeMask);
-      CHECK(stream->channelDelivery.mapping == openedRes->channelDelivery.mapping);
+      CHECK(stream->channelDelivery.isMapped == openedRes->channelDelivery.isMapped);
       CHECK(stream->channelDelivery.nativeSpeakerMask == openedRes->channelDelivery.nativeSpeakerMask);
       CHECK_FALSE(stream->channelDelivery.hasSharedConversion);
 
@@ -195,9 +192,7 @@ namespace ao::audio::backend::test
       REQUIRE(mix->channels > 0U);
       REQUIRE(mix->sampleRate > 0U);
       auto const nativeMixMask = sink->channelDelivery.nativeSpeakerMask;
-      CHECK(sink->channelDelivery.mapping == (mix->speakerMask != 0U
-                                                ? ChannelDeliveryEvidence::Mapping::Mapped
-                                                : ChannelDeliveryEvidence::Mapping::LegacyUnverified));
+      CHECK(sink->channelDelivery.isMapped == (mix->speakerMask != 0U));
 
       if (mix->speakerMask != 0U)
       {
@@ -225,38 +220,16 @@ namespace ao::audio::backend::test
                        request.sourceMask,
                        openedRes->clientFormat.speakerMask,
                        client->speakerMask,
-                       static_cast<std::uint32_t>(openedRes->channelDelivery.mapping),
+                       static_cast<std::uint32_t>(openedRes->channelDelivery.isMapped),
                        mix->sampleRate,
                        mix->channels,
                        sampleEncodingName(mix->encoding),
                        mix->speakerMask,
                        nativeMixMask,
-                       static_cast<std::uint32_t>(sink->channelDelivery.mapping),
+                       static_cast<std::uint32_t>(sink->channelDelivery.isMapped),
                        openedRes->channelDelivery.hasSharedConversion));
 
-      // Open-only reuse proof: the live initialized client descriptor decides,
-      // never GetMixFormat, the render transport or graph evidence. Both stereo
-      // identities open through the same accepted FL/FR descriptor, so only
-      // that base proves the 0 <-> FL/FR identity change; alternate sets and
-      // geometry changes never do.
-      auto const stereoFlip = PcmFormat{.sampleRate = 48000,
-                                        .channels = 2,
-                                        .encoding = SampleEncoding::Signed16Le,
-                                        .speakerMask = request.sourceMask == 0x3U ? 0U : 0x3U};
-      auto const centeredSet =
-        PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x5};
-      auto const otherRate = PcmFormat{
-        .sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = request.sourceMask};
-      CHECK(backend.canReusePcmMode(openedRes->clientFormat, openedRes->clientFormat));
-      CHECK(backend.canReusePcmMode(openedRes->clientFormat, stereoFlip) == (request.nativeMask == 0x3U));
-      CHECK(backend.canReusePcmMode(stereoFlip, openedRes->clientFormat) == (request.nativeMask == 0x3U));
-      CHECK_FALSE(backend.canReusePcmMode(openedRes->clientFormat, centeredSet));
-      CHECK_FALSE(backend.canReusePcmMode(openedRes->clientFormat, otherRate));
-
       backend.close();
-      // The closed stream proves nothing, not even the identity change that
-      // the same descriptor proved while its initialized client was live.
-      CHECK_FALSE(backend.canReusePcmMode(openedRes->clientFormat, stereoFlip));
       REQUIRE_FALSE(received.empty());
       CHECK(received.back().nodes.empty());
     }
@@ -276,49 +249,6 @@ namespace ao::audio::backend::test
     backend.flush();
     backend.stop();
     backend.close();
-  }
-
-  TEST_CASE("WasapiSharedBackend - mode reuse without a live initialized client stays exact",
-            "[audio][unit][wasapi][backend]")
-  {
-    auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
-    auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
-
-    auto const unknownStereo =
-      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0};
-    auto const frontStereo =
-      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
-    auto const backStereo =
-      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x30};
-
-    // Exact equality stays the default admission without an initialized client.
-    CHECK(backend.canReusePcmMode(unknownStereo, unknownStereo));
-    CHECK(backend.canReusePcmMode(frontStereo, frontStereo));
-    CHECK(backend.canReusePcmMode(backStereo, backStereo));
-
-    // No native client is live, so the 0 <-> FL/FR identity change stays
-    // unproved even though both identities share one accepted descriptor.
-    CHECK_FALSE(backend.canReusePcmMode(frontStereo, unknownStereo));
-    CHECK_FALSE(backend.canReusePcmMode(unknownStereo, frontStereo));
-
-    // Geometry and storage changes never reuse.
-    CHECK_FALSE(backend.canReusePcmMode(
-      frontStereo,
-      PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3}));
-    CHECK_FALSE(backend.canReusePcmMode(
-      frontStereo,
-      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed32Le, .speakerMask = 0x3}));
-    CHECK_FALSE(backend.canReusePcmMode(
-      frontStereo,
-      PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x4}));
-
-    // Alternate two-role sets are never the reuse base.
-    CHECK_FALSE(backend.canReusePcmMode(backStereo, frontStereo));
-    CHECK_FALSE(backend.canReusePcmMode(frontStereo, backStereo));
-
-    // Closing without an open proves nothing either.
-    backend.close();
-    CHECK_FALSE(backend.canReusePcmMode(frontStereo, unknownStereo));
   }
 
   TEST_CASE("WasapiSharedBackend - cached properties round trip before opening a device",
@@ -612,18 +542,17 @@ namespace ao::audio::backend::test
       std::uint8_t channels;
       std::uint32_t sourceMask;
       std::uint32_t nativeMask;
-      ChannelDeliveryEvidence::Mapping mapping;
+      bool isMapped;
     };
-    using Mapping = ChannelDeliveryEvidence::Mapping;
-    auto const cases = std::array{DescriptorCase{1, 0x1, 0x1, Mapping::Mapped},
-                                  DescriptorCase{1, 0x4, 0x4, Mapping::Mapped},
-                                  DescriptorCase{2, 0x3, 0x3, Mapping::Mapped},
-                                  DescriptorCase{2, 0x30, 0x30, Mapping::Mapped},
-                                  DescriptorCase{2, 0x5, 0x5, Mapping::Mapped},
-                                  DescriptorCase{1, 0, 0x4, Mapping::LegacyUnverified},
-                                  DescriptorCase{2, 0, 0x3, Mapping::LegacyUnverified},
-                                  DescriptorCase{4, 0x33, 0, Mapping::LegacyUnverified},
-                                  DescriptorCase{6, 0x3f, 0, Mapping::LegacyUnverified}};
+    auto const cases = std::array{DescriptorCase{1, 0x1, 0x1, true},
+                                  DescriptorCase{1, 0x4, 0x4, true},
+                                  DescriptorCase{2, 0x3, 0x3, true},
+                                  DescriptorCase{2, 0x30, 0x30, true},
+                                  DescriptorCase{2, 0x5, 0x5, true},
+                                  DescriptorCase{1, 0, 0x4, false},
+                                  DescriptorCase{2, 0, 0x3, false},
+                                  DescriptorCase{4, 0x33, 0, false},
+                                  DescriptorCase{6, 0x3f, 0, false}};
 
     for (auto const& fixture : cases)
     {
@@ -643,7 +572,7 @@ namespace ao::audio::backend::test
       CHECK(observationRes->optFormat->speakerMask == fixture.nativeMask);
       CHECK(observationRes->optFormat->encoding == SampleEncoding::Signed16Le);
       auto const evidence = detail::waveChannelDeliveryFromObservation(application, *optWave, {});
-      CHECK(evidence.mapping == fixture.mapping);
+      CHECK(evidence.isMapped == fixture.isMapped);
       CHECK(evidence.nativeSpeakerMask == fixture.nativeMask);
       CHECK_FALSE(evidence.hasSharedConversion);
       CHECK(application.speakerMask == fixture.sourceMask);
@@ -679,7 +608,7 @@ namespace ao::audio::backend::test
       auto const optWave = detail::waveFormatFromPcmFormat(application);
       REQUIRE(optWave);
       auto const evidence = detail::waveChannelDeliveryFromObservation(application, *optWave, *mixRes);
-      CHECK(evidence.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+      CHECK(evidence.isMapped);
       CHECK(evidence.hasSharedConversion);
       CHECK(optWave->dwChannelMask == 0x30U);
     }
@@ -691,7 +620,7 @@ namespace ao::audio::backend::test
       auto const optWave = detail::waveFormatFromPcmFormat(application);
       REQUIRE(optWave);
       auto const evidence = detail::waveChannelDeliveryFromObservation(application, *optWave, *mixRes);
-      CHECK(evidence.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(evidence.isMapped);
       CHECK(evidence.hasSharedConversion);
       CHECK(optWave->dwChannelMask == 0U);
     }
@@ -711,7 +640,7 @@ namespace ao::audio::backend::test
       auto const optWave = detail::waveFormatFromPcmFormat(application);
       REQUIRE(optWave);
       auto const evidence = detail::waveChannelDeliveryFromObservation(application, *optWave, *monoMixRes);
-      CHECK(evidence.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+      CHECK(evidence.isMapped);
       CHECK(evidence.hasSharedConversion);
       CHECK(optWave->dwChannelMask == 4U);
     }
@@ -739,80 +668,6 @@ namespace ao::audio::backend::test
       {.sampleRate = 0xffffffff, .channels = 2, .encoding = SampleEncoding::Signed32Le}));
     CHECK_FALSE(detail::waveFormatFromPcmFormat(
       {.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 1}));
-  }
-
-  TEST_CASE("WasapiSharedBackend - both stereo identities accept one shared FL FR client descriptor",
-            "[audio][unit][wasapi][format]")
-  {
-    auto const stereoOf = [](std::uint32_t const speakerMask)
-    {
-      return PcmFormat{
-        .sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = speakerMask};
-    };
-    auto const optUnknownWave = detail::waveFormatFromPcmFormat(stereoOf(0));
-    auto const optFrontWave = detail::waveFormatFromPcmFormat(stereoOf(0x3));
-    REQUIRE(optUnknownWave);
-    REQUIRE(optFrontWave);
-
-    // WAVEFORMATEXTENSIBLE has no equality operator, so the literal factory
-    // oracle compares field by field: an unknown-stereo source and a declared
-    // FL/FR source are accepted through one identical descriptor, which is
-    // the fixed base any later stereo-reuse proof is bound to.
-    CHECK(optUnknownWave->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE);
-    CHECK(optFrontWave->Format.wFormatTag == optUnknownWave->Format.wFormatTag);
-    CHECK(optUnknownWave->Format.nChannels == 2);
-    CHECK(optFrontWave->Format.nChannels == optUnknownWave->Format.nChannels);
-    CHECK(optUnknownWave->Format.nSamplesPerSec == 48000);
-    CHECK(optFrontWave->Format.nSamplesPerSec == optUnknownWave->Format.nSamplesPerSec);
-    CHECK(optUnknownWave->Format.wBitsPerSample == 16);
-    CHECK(optFrontWave->Format.wBitsPerSample == optUnknownWave->Format.wBitsPerSample);
-    CHECK(optUnknownWave->Format.nBlockAlign == 4);
-    CHECK(optFrontWave->Format.nBlockAlign == optUnknownWave->Format.nBlockAlign);
-    CHECK(optUnknownWave->Format.nAvgBytesPerSec == 192000);
-    CHECK(optFrontWave->Format.nAvgBytesPerSec == optUnknownWave->Format.nAvgBytesPerSec);
-    CHECK(optFrontWave->Format.cbSize == optUnknownWave->Format.cbSize);
-    CHECK(optUnknownWave->dwChannelMask == 0x3U);
-    CHECK(optFrontWave->dwChannelMask == optUnknownWave->dwChannelMask);
-    // WAVEFORMATEXTENSIBLE exposes valid precision through the Windows SDK union.
-    CHECK(optUnknownWave->Samples.wValidBitsPerSample == 16); // NOLINT(cppcoreguidelines-pro-type-union-access)
-    CHECK(optFrontWave->Samples.wValidBitsPerSample ==        // NOLINT(cppcoreguidelines-pro-type-union-access)
-          optUnknownWave->Samples.wValidBitsPerSample);
-    CHECK(::IsEqualGUID(optFrontWave->SubFormat, KSDATAFORMAT_SUBTYPE_PCM) != FALSE);
-    CHECK(::IsEqualGUID(optFrontWave->SubFormat, optUnknownWave->SubFormat) != FALSE);
-
-    SECTION("alternate two-role sets build their own descriptors without the FL FR base")
-    {
-      auto const optBackWave = detail::waveFormatFromPcmFormat(stereoOf(0x30));
-      REQUIRE(optBackWave);
-      CHECK(optBackWave->dwChannelMask == 0x30U);
-      CHECK(optBackWave->Format.nBlockAlign == optUnknownWave->Format.nBlockAlign);
-
-      auto const optCenteredWave = detail::waveFormatFromPcmFormat(stereoOf(0x5));
-      REQUIRE(optCenteredWave);
-      CHECK(optCenteredWave->dwChannelMask == 0x5U);
-    }
-
-    SECTION("geometry and storage changes build different descriptors")
-    {
-      auto const optOtherRateWave = detail::waveFormatFromPcmFormat(
-        PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3});
-      REQUIRE(optOtherRateWave);
-      CHECK(optOtherRateWave->Format.nSamplesPerSec == 44100);
-      CHECK(optOtherRateWave->Format.nAvgBytesPerSec == 176400);
-
-      auto const optWideWave = detail::waveFormatFromPcmFormat(
-        PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed32Le, .speakerMask = 0x3});
-      REQUIRE(optWideWave);
-      CHECK(optWideWave->Format.wBitsPerSample == 32);
-      CHECK(optWideWave->Format.nBlockAlign == 8);
-      CHECK(optWideWave->Format.nAvgBytesPerSec == 384000);
-
-      auto const optMonoWave = detail::waveFormatFromPcmFormat(
-        PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x1});
-      REQUIRE(optMonoWave);
-      CHECK(optMonoWave->Format.nChannels == 1);
-      CHECK(optMonoWave->dwChannelMask == 0x1U);
-    }
   }
 
   TEST_CASE("WasapiGraphRegistry - client to mix conversion belongs only to its sink",
@@ -860,9 +715,7 @@ namespace ao::audio::backend::test
     auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
     registry.publish({.routeAnchor = "endpoint-a",
                       .optInputFormat = clientRes->optFormat,
-                      .optMixFormat = mixRes->optFormat,
-                      .mixChannels = mixRes->channels,
-                      .mixSpeakerMask = mixRes->speakerMask,
+                      .mixObservation = *mixRes,
                       .channelDelivery = evidence});
     REQUIRE(received.size() == 2U);
     REQUIRE(received.back().nodes.size() == 2U);
@@ -872,14 +725,14 @@ namespace ao::audio::backend::test
     REQUIRE(sink.optFormat);
     CHECK(signalFormat(*stream.optFormat).speakerMask == 0U);
     CHECK(signalFormat(*sink.optFormat).speakerMask == 3U);
-    CHECK(stream.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(stream.channelDelivery.isMapped);
     CHECK_FALSE(stream.channelDelivery.hasSharedConversion);
-    CHECK(sink.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(sink.channelDelivery.isMapped);
     CHECK(sink.channelDelivery.nativeSpeakerMask == 3U);
     CHECK(sink.channelDelivery.hasSharedConversion);
 
     auto const analysis = analyzeAudioQuality(withDeclaredSource(received.back(), source));
-    CHECK(analysis.channelConfidence == ChannelConfidence::Converted);
+    CHECK(analysis.channelConfidence == ChannelConfidence::Unverified);
     CHECK(analysis.sourceQuality == Quality::BitwisePerfect);
     CHECK(analysis.pipelineQuality == Quality::LinearIntervention);
     REQUIRE(analysis.assessments.size() == 3U);
@@ -922,7 +775,7 @@ namespace ao::audio::backend::test
     auto const clientRes = detail::observeWaveFormat(optClientWave->Format);
     REQUIRE(clientRes);
     REQUIRE(clientRes->optFormat);
-    auto expectedMapping = ChannelDeliveryEvidence::Mapping::Mapped;
+    bool expectedMapping = true;
     std::uint32_t expectedMixMask = 3;
     std::uint32_t expectedFormatMask = 3;
     bool hasMixFormat = true;
@@ -944,7 +797,7 @@ namespace ao::audio::backend::test
       mix.dwChannelMask = 0x1;
       expectedMixMask = 0x1;
       expectedFormatMask = 0;
-      expectedMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      expectedMapping = false;
       expectedConfidence = ChannelConfidence::Unverified;
     }
 
@@ -953,9 +806,9 @@ namespace ao::audio::backend::test
       mix.dwChannelMask = 0x4;
       expectedMixMask = 0x4;
       expectedFormatMask = 0;
-      expectedMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      expectedMapping = false;
       hasSharedConversion = true;
-      expectedConfidence = ChannelConfidence::Converted;
+      expectedConfidence = ChannelConfidence::Unverified;
     }
 
     SECTION("an independently observed alternate set is mapped and converted")
@@ -964,7 +817,6 @@ namespace ao::audio::backend::test
       expectedMixMask = 0x30;
       expectedFormatMask = 0x30;
       hasSharedConversion = true;
-      expectedConfidence = ChannelConfidence::Converted;
     }
 
     SECTION("an observed zero mask leaves sink mapping unverified")
@@ -972,7 +824,7 @@ namespace ao::audio::backend::test
       mix.dwChannelMask = 0;
       expectedMixMask = 0;
       expectedFormatMask = 0;
-      expectedMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      expectedMapping = false;
       expectedConfidence = ChannelConfidence::Unverified;
     }
 
@@ -984,9 +836,9 @@ namespace ao::audio::backend::test
       mix.Format.nAvgBytesPerSec = 768000;
       expectedMixMask = 0;
       expectedFormatMask = 0;
-      expectedMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      expectedMapping = false;
       hasSharedConversion = true;
-      expectedConfidence = ChannelConfidence::Converted;
+      expectedConfidence = ChannelConfidence::Unverified;
     }
 
     SECTION("unsupported float width retains actual count and role observations")
@@ -999,7 +851,7 @@ namespace ao::audio::backend::test
       expectedMixMask = 0x30;
       hasSharedConversion = true;
       hasMixFormat = false;
-      expectedConfidence = ChannelConfidence::Converted;
+      expectedConfidence = ChannelConfidence::Unverified;
     }
 
     SECTION("unsupported subtype retains independent multichannel mix positions")
@@ -1012,7 +864,7 @@ namespace ao::audio::backend::test
       expectedMixMask = 0x3f;
       hasSharedConversion = true;
       hasMixFormat = false;
-      expectedConfidence = ChannelConfidence::Converted;
+      expectedConfidence = ChannelConfidence::Unverified;
     }
 
     SECTION("unsupported float width still retains compatible partial roles")
@@ -1023,7 +875,7 @@ namespace ao::audio::backend::test
       mix.Format.nAvgBytesPerSec = 768000;
       mix.dwChannelMask = 0x1;
       expectedMixMask = 0x1;
-      expectedMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      expectedMapping = false;
       hasMixFormat = false;
       expectedConfidence = ChannelConfidence::Unverified;
     }
@@ -1033,10 +885,10 @@ namespace ao::audio::backend::test
       mix.SubFormat = {};
       mix.dwChannelMask = 0x4;
       expectedMixMask = 0x4;
-      expectedMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+      expectedMapping = false;
       hasSharedConversion = true;
       hasMixFormat = false;
-      expectedConfidence = ChannelConfidence::Converted;
+      expectedConfidence = ChannelConfidence::Unverified;
     }
 
     auto const observationRes = detail::observeWaveFormat(mix.Format);
@@ -1051,19 +903,17 @@ namespace ao::audio::backend::test
     auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
     registry.publish({.routeAnchor = "endpoint-a",
                       .optInputFormat = clientRes->optFormat,
-                      .optMixFormat = observationRes->optFormat,
-                      .mixChannels = observationRes->channels,
-                      .mixSpeakerMask = observationRes->speakerMask,
+                      .mixObservation = *observationRes,
                       .channelDelivery = evidence});
 
     REQUIRE(received.size() == 2U);
     REQUIRE(received.back().nodes.size() == 2U);
     auto const& stream = received.back().nodes[0];
     auto const& sink = received.back().nodes[1];
-    CHECK(stream.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(stream.channelDelivery.isMapped);
     CHECK(stream.channelDelivery.nativeSpeakerMask == 3U);
     CHECK_FALSE(stream.channelDelivery.hasSharedConversion);
-    CHECK(sink.channelDelivery.mapping == expectedMapping);
+    CHECK(sink.channelDelivery.isMapped == expectedMapping);
     CHECK(sink.channelDelivery.nativeSpeakerMask == expectedMixMask);
     CHECK(sink.channelDelivery.hasSharedConversion == hasSharedConversion);
     REQUIRE(stream.optFormat);
@@ -1088,7 +938,6 @@ namespace ao::audio::backend::test
     CHECK(std::ranges::count(analysis.assessments[2].findings,
                              QualityFindingKind::ChannelMapping,
                              &QualityFinding::kind) == (hasSharedConversion ? 1 : 0));
-    CHECK(analysis.assessments[2].channelDelivery.nativeSpeakerMask == expectedMixMask);
 
     if (hasSharedConversion && hasMixFormat)
     {
@@ -1275,14 +1124,15 @@ namespace ao::audio::backend::test
       CAPTURE(mask);
       registry.publish(
         {.routeAnchor = "endpoint-a",
-         .optMixFormat =
-           PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Float32Le, .speakerMask = 0},
-         .mixChannels = 2,
-         .mixSpeakerMask = mask,
+         .mixObservation = {.sampleRate = 48000,
+                            .channels = 2,
+                            .speakerMask = mask,
+                            .optFormat =
+                              PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Float32Le}},
          .channelDelivery = {.hasSharedConversion = true}});
       REQUIRE(received.back().nodes.size() == 2U);
       auto const& sink = received.back().nodes[1];
-      CHECK(sink.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(sink.channelDelivery.isMapped);
       CHECK(sink.channelDelivery.nativeSpeakerMask == mask);
       CHECK(sink.channelDelivery.hasSharedConversion);
     }
@@ -1304,14 +1154,14 @@ namespace ao::audio::backend::test
     std::uint32_t expectedMixMask = 0;
     bool mixHasFormat = false;
     bool sinkHasFormat = false;
-    auto expectedSinkMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+    bool expectedSinkMapping = false;
 
     SECTION("contradictory mix stride withholds the concrete sink format without erasing roles")
     {
       mix.Format.nBlockAlign = 4;
       mix.Format.nAvgBytesPerSec = 192000;
       expectedMixMask = 3;
-      expectedSinkMapping = ChannelDeliveryEvidence::Mapping::Mapped;
+      expectedSinkMapping = true;
     }
 
     SECTION("an unavailable mix observation publishes no fabricated sink format")
@@ -1356,7 +1206,7 @@ namespace ao::audio::backend::test
     }
 
     auto const evidence = detail::waveChannelDeliveryFromObservation(application, *optClientWave, *mixRes);
-    CHECK(evidence.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(evidence.isMapped);
     CHECK_FALSE(evidence.hasSharedConversion);
 
     auto registry = detail::WasapiGraphRegistry{};
@@ -1364,20 +1214,18 @@ namespace ao::audio::backend::test
     auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
     registry.publish({.routeAnchor = "endpoint-a",
                       .optInputFormat = clientRes->optFormat,
-                      .optMixFormat = mixRes->optFormat,
-                      .mixChannels = mixRes->channels,
-                      .mixSpeakerMask = mixRes->speakerMask,
+                      .mixObservation = *mixRes,
                       .channelDelivery = evidence});
 
     REQUIRE(received.size() == 2U);
     REQUIRE(received.back().nodes.size() == 2U);
     auto const& stream = received.back().nodes[0];
     auto const& sink = received.back().nodes[1];
-    CHECK(stream.channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(stream.channelDelivery.isMapped);
     CHECK(stream.channelDelivery.nativeSpeakerMask == application.speakerMask);
     CHECK_FALSE(stream.channelDelivery.hasSharedConversion);
     CHECK(sink.optFormat.has_value() == sinkHasFormat);
-    CHECK(sink.channelDelivery.mapping == expectedSinkMapping);
+    CHECK(sink.channelDelivery.isMapped == expectedSinkMapping);
     CHECK(sink.channelDelivery.nativeSpeakerMask == expectedMixMask);
     CHECK_FALSE(sink.channelDelivery.hasSharedConversion);
 
@@ -1396,7 +1244,6 @@ namespace ao::audio::backend::test
             analysis.assessments[1].findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 0);
     CHECK(std::ranges::count(
             analysis.assessments[2].findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 0);
-    CHECK(analysis.assessments[2].channelDelivery.nativeSpeakerMask == expectedMixMask);
   }
 
   TEST_CASE("observeWaveFormat leaves unsupported endpoint encoding unknown", "[audio][unit][wasapi][format]")

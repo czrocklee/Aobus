@@ -60,15 +60,14 @@ namespace ao::audio::test
       .speakerMask = kQuadMask,
     };
 
-    ChannelLayoutEvidence declaredQuadEvidence()
+    ChannelLayoutEvidence identifiedQuadEvidence()
     {
-      return ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = kQuadMask};
+      return ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified};
     }
 
     ChannelLayoutEvidence inferredQuadEvidence()
     {
-      // Inferred layout: the effective origin changed, and no raw declaration
-      // is retained for it.
+      // Inferred layout: the same effective origin distinction, without raw history.
       return ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Inferred};
     }
 
@@ -105,9 +104,9 @@ namespace ao::audio::test
   {
     auto tracker = detail::RouteTracker{};
 
-    SECTION("declared masks are copied into the route snapshot")
+    SECTION("identified masks are copied into the route snapshot")
     {
-      tracker.setDecoder(quadStreamInfo(declaredQuadEvidence()));
+      tracker.setDecoder(quadStreamInfo(identifiedQuadEvidence()));
       tracker.setEngineFormat(kQuadEngineFormat);
 
       auto const state = tracker.state();
@@ -154,7 +153,7 @@ namespace ao::audio::test
             "[audio][unit][route-tracker]")
   {
     auto tracker = detail::RouteTracker{};
-    tracker.setDecoder(quadStreamInfo(declaredQuadEvidence()));
+    tracker.setDecoder(quadStreamInfo(identifiedQuadEvidence()));
     auto const before = tracker.state();
 
     tracker.setDecoder(quadStreamInfo(inferredQuadEvidence()));
@@ -169,35 +168,14 @@ namespace ao::audio::test
     // ...but each setDecoder copies the current source evidence, so the
     // snapshot itself differs.
     CHECK(before != after);
-    CHECK(before.sourceChannelLayout == declaredQuadEvidence());
+    CHECK(before.sourceChannelLayout == identifiedQuadEvidence());
     CHECK(after.sourceChannelLayout == inferredQuadEvidence());
-  }
-
-  TEST_CASE("RouteTracker - an explicit zero declaration stays distinct from an absent one",
-            "[audio][unit][route-tracker]")
-  {
-    auto tracker = detail::RouteTracker{};
-
-    tracker.setDecoder(quadStreamInfo(ChannelLayoutEvidence{
-      .origin = ChannelLayoutOrigin::Declared,
-      .optDeclaredMask = 0,
-    }));
-    auto const withExplicitZero = tracker.state();
-
-    tracker.setDecoder(quadStreamInfo(ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared}));
-    auto const withAbsentDeclaration = tracker.state();
-
-    // Explicit zero is a decoded raw declaration; absence is a different record.
-    REQUIRE(withExplicitZero.sourceChannelLayout.optDeclaredMask);
-    CHECK(*withExplicitZero.sourceChannelLayout.optDeclaredMask == 0);
-    CHECK_FALSE(withAbsentDeclaration.sourceChannelLayout.optDeclaredMask);
-    CHECK(withExplicitZero != withAbsentDeclaration);
   }
 
   TEST_CASE("RouteTracker - clear resets formats, evidence, and anchor", "[audio][unit][route-tracker]")
   {
     auto tracker = detail::RouteTracker{};
-    tracker.setDecoder(quadStreamInfo(declaredQuadEvidence()));
+    tracker.setDecoder(quadStreamInfo(identifiedQuadEvidence()));
     tracker.setEngineFormat(kQuadEngineFormat);
     tracker.setAnchor(kBackendNone, "hw:0,0");
     REQUIRE(tracker.anchor());
@@ -218,7 +196,7 @@ namespace ao::audio::test
     auto player = Player{executor};
     executor.runUntilIdle();
 
-    player.handleRouteChanged(quadRouteStatus(declaredQuadEvidence()), player.playbackGeneration());
+    player.handleRouteChanged(quadRouteStatus(identifiedQuadEvidence()), player.playbackGeneration());
     executor.runUntilIdle();
 
     auto const status = player.status();
@@ -228,7 +206,7 @@ namespace ao::audio::test
     REQUIRE(sourceIt != status.flow.nodes.end());
     CHECK(sourceIt->type == flow::NodeType::Source);
     // Only the source node carries the decoder's layout evidence.
-    CHECK(sourceIt->sourceChannelLayout == declaredQuadEvidence());
+    CHECK(sourceIt->sourceChannelLayout == identifiedQuadEvidence());
     REQUIRE(sourceIt->optFormat);
     CHECK(*sourceIt->optFormat == NodeFormat{kQuadSourceFormat});
     CHECK(std::get<SignalFormat>(*sourceIt->optFormat).speakerMask == kQuadMask);
@@ -255,7 +233,7 @@ namespace ao::audio::test
     auto player = Player{executor};
     executor.runUntilIdle();
 
-    player.handleRouteChanged(quadRouteStatus(declaredQuadEvidence()), player.playbackGeneration());
+    player.handleRouteChanged(quadRouteStatus(identifiedQuadEvidence()), player.playbackGeneration());
     executor.runUntilIdle();
     auto const before = player.status();
 
@@ -282,16 +260,16 @@ namespace ao::audio::test
     auto const sourceAfter = std::ranges::find(after.flow.nodes, std::string_view{"ao-source"}, &flow::Node::id);
     REQUIRE(sourceBefore != before.flow.nodes.end());
     REQUIRE(sourceAfter != after.flow.nodes.end());
-    CHECK(sourceBefore->sourceChannelLayout == declaredQuadEvidence());
+    CHECK(sourceBefore->sourceChannelLayout == identifiedQuadEvidence());
     CHECK(sourceAfter->sourceChannelLayout == inferredQuadEvidence());
   }
 
-  TEST_CASE("QualityAnalyzer - declared and default source histories retain equal numerical quality",
+  TEST_CASE("QualityAnalyzer - identified and inferred source histories retain equal numerical quality",
             "[audio][unit][quality]")
   {
     // A pure synthetic playback path. The native sink keeps an explicit raw
-    // mask of zero and default Unknown evidence: it never inherits the
-    // requested source declaration, and no channel verification is asserted.
+    // mask of zero and no delivery evidence: it never inherits the source
+    // history, and no channel verification is asserted.
     auto const makeGraph = [](ChannelLayoutEvidence evidence)
     {
       auto const sourceFormat = SignalFormat{
@@ -335,28 +313,23 @@ namespace ao::audio::test
       };
     };
 
-    auto const declaredResult = analyzeAudioQuality(makeGraph(declaredQuadEvidence()));
-    auto const formatDefaultResult = analyzeAudioQuality(makeGraph(ChannelLayoutEvidence{
-      .origin = ChannelLayoutOrigin::FormatDefault,
-    }));
+    auto const identifiedResult = analyzeAudioQuality(makeGraph(identifiedQuadEvidence()));
+    auto const inferredResult = analyzeAudioQuality(makeGraph(inferredQuadEvidence()));
 
-    // Different histories remain independently inspectable, not a numerical
-    // intervention or a hidden PCM mode key. Native delivery is still unknown.
-    CHECK(declaredResult.sourceQuality == formatDefaultResult.sourceQuality);
-    CHECK(declaredResult.pipelineQuality == formatDefaultResult.pipelineQuality);
-    CHECK(declaredResult.overall == formatDefaultResult.overall);
-    CHECK(declaredResult.channelConfidence == formatDefaultResult.channelConfidence);
-    CHECK(declaredResult.channelConfidence == ChannelConfidence::Unverified);
+    // Origin history never creates a numerical intervention or a hidden PCM
+    // mode key. Native delivery stays unproved for both histories.
+    CHECK(identifiedResult.sourceQuality == inferredResult.sourceQuality);
+    CHECK(identifiedResult.pipelineQuality == inferredResult.pipelineQuality);
+    CHECK(identifiedResult.overall == inferredResult.overall);
+    CHECK(identifiedResult.channelConfidence == inferredResult.channelConfidence);
+    CHECK(identifiedResult.channelConfidence == ChannelConfidence::Unverified);
     // fullyVerified keeps its format-presence contract: every node reported a
     // format and the path reaches a Sink. This is not channel verification.
-    CHECK(declaredResult.fullyVerified);
-    CHECK(declaredResult.overall == Quality::BitwisePerfect);
-    REQUIRE(declaredResult.assessments.size() == 4);
-    REQUIRE(formatDefaultResult.assessments.size() == 4);
-    CHECK(declaredResult.assessments[0].nodeId == "ao-source");
-    CHECK(declaredResult.assessments[0].sourceChannelLayout == declaredQuadEvidence());
-    CHECK(formatDefaultResult.assessments[0].sourceChannelLayout.origin == ChannelLayoutOrigin::FormatDefault);
-    CHECK(declaredResult.assessments[0].sourceChannelLayout != formatDefaultResult.assessments[0].sourceChannelLayout);
-    CHECK(declaredResult.assessments[3].nodeId == "native-sink");
+    CHECK(identifiedResult.fullyVerified);
+    CHECK(identifiedResult.overall == Quality::BitwisePerfect);
+    REQUIRE(identifiedResult.assessments.size() == 4);
+    REQUIRE(inferredResult.assessments.size() == 4);
+    CHECK(identifiedResult.assessments[0].nodeId == "ao-source");
+    CHECK(identifiedResult.assessments[3].nodeId == "native-sink");
   }
 } // namespace ao::audio::test

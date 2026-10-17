@@ -6,7 +6,6 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/PcmFormat.h>
 #include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_message.hpp>
@@ -49,51 +48,11 @@ namespace ao::audio::backend::test
       CHECK(openedRes->clientFormat.sampleRate == 48000);
       CHECK(openedRes->clientFormat.channels == 2);
       CHECK(openedRes->clientFormat.speakerMask == mask);
-      CHECK(openedRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+      CHECK(openedRes->channelDelivery.isMapped);
       CHECK(openedRes->channelDelivery.nativeSpeakerMask == mask);
       CHECK_FALSE(openedRes->optEndpoint);
 
-      // Control-side reuse query on the actual admitted session: the other
-      // canonical two-speaker identity shares the installed byte transport,
-      // while a different role set or rate never becomes a reuse candidate.
-      auto const& configured = openedRes->clientFormat;
-
-      CHECK(backend.canReusePcmMode(configured, configured));
-
-      if (mask == 0x3U)
-      {
-        auto const unpositioned = PcmFormat{
-          .sampleRate = configured.sampleRate, .channels = 2, .encoding = configured.encoding, .speakerMask = 0};
-        CHECK(backend.canReusePcmMode(configured, unpositioned));
-        CHECK(backend.canReusePcmMode(unpositioned, configured));
-        CHECK_FALSE(backend.canReusePcmMode(
-          configured,
-          PcmFormat{
-            .sampleRate = configured.sampleRate, .channels = 2, .encoding = configured.encoding, .speakerMask = 0x30}));
-        CHECK_FALSE(backend.canReusePcmMode(
-          configured,
-          PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = configured.encoding, .speakerMask = 0}));
-      }
-      else
-      {
-        // A non-canonical configured set is never a reuse candidate.
-        CHECK_FALSE(backend.canReusePcmMode(
-          configured,
-          PcmFormat{
-            .sampleRate = configured.sampleRate, .channels = 2, .encoding = configured.encoding, .speakerMask = 0}));
-      }
-
       backend.close();
-
-      // Closing cleared the per-open proof: no nonexact reuse survives the
-      // lifecycle boundary, including the pairing that was admitted before.
-      CHECK_FALSE(backend.canReusePcmMode(configured,
-                                          PcmFormat{
-                                            .sampleRate = configured.sampleRate,
-                                            .channels = 2,
-                                            .encoding = configured.encoding,
-                                            .speakerMask = (mask == 0x3U ? 0U : 0x3U),
-                                          }));
     }
   }
 } // namespace ao::audio::backend::test

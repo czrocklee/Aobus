@@ -98,7 +98,6 @@ namespace ao::audio::test
     REQUIRE(engine.status().transport == Transport::Playing);
     CHECK(engine.status().routeState.sourceFormat.speakerMask == 0x33);
     CHECK(engine.status().routeState.sourceChannelLayout.origin == ChannelLayoutOrigin::Inferred);
-    CHECK_FALSE(engine.status().routeState.sourceChannelLayout.optDeclaredMask);
     CHECK(backend->currentFormat().speakerMask == 0x33);
 
     auto const preparedRes = engine.setNext(makePlaybackItem(secondFile.path));
@@ -118,7 +117,7 @@ namespace ao::audio::test
       REQUIRE(advanced.tryWaitForCount(1));
       CHECK(ended.count() == 0);
       CHECK(engine.status().routeState.sourceChannelLayout ==
-            ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0x33});
+            ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified});
     }
     else
     {
@@ -136,7 +135,7 @@ namespace ao::audio::test
       REQUIRE(reopenedTarget->renderPcm(output).bytesWritten == output.size());
       CHECK(std::ranges::equal(output, utility::bytes::view(std::span<std::uint8_t const>{secondPcm})));
       CHECK(engine.status().routeState.sourceChannelLayout ==
-            ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Declared, .optDeclaredMask = 0x107});
+            ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified});
     }
 
     auto const status = engine.status();

@@ -327,7 +327,7 @@ namespace ao::audio::backend::detail
         map.needsPermutation = map.needsPermutation || sourceSlot != slot;
       }
 
-      map.delivery.mapping = ChannelDeliveryEvidence::Mapping::Mapped;
+      map.delivery.isMapped = true;
       return map;
     }
 

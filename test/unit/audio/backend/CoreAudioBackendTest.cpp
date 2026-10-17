@@ -34,6 +34,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <variant>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -189,6 +190,7 @@ namespace ao::audio::backend::test
     CHECK(openedRes.error().error.code == Error::Code::DeviceNotFound);
     CHECK(openedRes.error().error.message == "Core Audio output device is no longer available");
     CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    backend.close();
   }
 
   TEST_CASE("CoreAudioBackend - an unrepresentable source is refused as a track incompatibility before native access",
@@ -375,7 +377,10 @@ namespace ao::audio::backend::test
     CAPTURE(device.id.raw());
 
     auto target = ao::audio::test::NoopRenderTarget{};
-    auto backend = CoreAudioBackend{device, kProfileShared};
+    auto graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
+    auto backend = CoreAudioBackend{device, kProfileShared, graphRegistryPtr};
+    auto const identified =
+      PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
     auto const openedRes = backend.open(
       {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer, .speakerMask = 0x3},
       target);
@@ -385,9 +390,32 @@ namespace ao::audio::backend::test
     CHECK(openedRes->clientFormat.channels == 2U);
     CHECK(openedRes->clientFormat.encoding == SampleEncoding::Signed16Le);
     CHECK_FALSE(openedRes->optEndpoint);
-    CHECK(openedRes->channelDelivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(openedRes->channelDelivery.isMapped);
     // Only native observations may establish this set; unsupported layouts remain unknown.
     CHECK((openedRes->channelDelivery.nativeSpeakerMask == 0U || openedRes->channelDelivery.nativeSpeakerMask == 0x3U));
+
+    // Observe this backend's published native storage, not the canonical open
+    // descriptor or the channel plan of a different disposable AudioUnit.
+    auto captureNativeGraph = [&]
+    {
+      auto graph = flow::Graph{};
+      auto sub = graphRegistryPtr->subscribe(device.id.raw(), [&](flow::Graph const& updated) { graph = updated; });
+      REQUIRE(sub);
+      // Cancellation waits behind in-flight delivery before reading this copy.
+      sub.reset();
+      return graph;
+    };
+    auto const nativeGraph = captureNativeGraph();
+    REQUIRE(nativeGraph.nodes.size() == 2U);
+    auto const& nativeNode = nativeGraph.nodes.front();
+    REQUIRE(nativeNode.optFormat);
+    REQUIRE(std::holds_alternative<PcmFormat>(*nativeNode.optFormat));
+    auto const nativeFormat = std::get<PcmFormat>(*nativeNode.optFormat);
+    CHECK(nativeFormat.sampleRate == identified.sampleRate);
+    CHECK(nativeFormat.channels == identified.channels);
+    CHECK(nativeFormat.encoding == identified.encoding);
+    CHECK(openedRes->clientFormat == identified);
+
     CHECK(backend.queryProperty(PropertyId::Volume).isAvailable);
     CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isHardwareAssisted);
     REQUIRE(backend.set(props::kVolume, 0.25F));
@@ -420,6 +448,7 @@ namespace ao::audio::backend::test
       REQUIRE(openedRes);
       CHECK(::ao::audio::detail::isLosslessPcmEncoding(sourceFormat, openedRes->clientFormat.encoding));
       CHECK_FALSE(openedRes->optEndpoint);
+      CHECK(openedRes->clientFormat.speakerMask == 0U);
       backend.close();
     }
   }

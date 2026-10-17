@@ -145,7 +145,6 @@ namespace ao::audio
       // These are WAV compatibility identities, not count-derived native maps.
       static constexpr auto kCompatibilityMasks =
         std::to_array<std::uint32_t>({0x4, 0x3, 0x7, 0x33, 0x37, 0x3F, 0x70F, 0x63F});
-      static constexpr std::uint32_t kSupportedPositions = 0x0003FFFF;
       static constexpr std::uint32_t kAllSpeakers = 0x80000000;
       auto const optDeclaration = format.optChannelMask;
 
@@ -185,13 +184,13 @@ namespace ao::audio
       auto effectiveMask = declaration;
 
       // WAVE ignores excess highest positions. Count still owns PCM stride,
-      // and the original DWORD remains source evidence after interpretation.
+      // and only the effective interpretation is published.
       while (std::popcount(effectiveMask) > format.channels)
       {
         effectiveMask &= ~(std::uint32_t{1} << (std::bit_width(effectiveMask) - 1U));
       }
 
-      if ((effectiveMask & ~kSupportedPositions) != 0)
+      if (!isCompleteWaveSpeakerMask(effectiveMask, format.channels))
       {
         return makeError(Error::Code::NotSupported,
                          std::format("WAV channel layout: mask 0x{:08X} for {} channels activates reserved positions "
@@ -272,23 +271,20 @@ namespace ao::audio
         detail::throwDecoderError(configuredRes.error());
       }
 
+      // An explicit non-zero declaration, or an absent declaration with the
+      // documented mono/stereo compatibility default, establishes the same
+      // identified interpretation. Explicit zero and wider absent counts stay
+      // inferred from the fallback table; raw declaration history stays here.
       auto origin = ChannelLayoutOrigin::Inferred;
 
-      if (format.optChannelMask && *format.optChannelMask != 0)
+      if ((format.optChannelMask && *format.optChannelMask != 0) || (!format.optChannelMask && format.channels <= 2))
       {
-        origin = ChannelLayoutOrigin::Declared;
-      }
-      else if (!format.optChannelMask && format.channels <= 2)
-      {
-        origin = ChannelLayoutOrigin::FormatDefault;
+        origin = ChannelLayoutOrigin::Identified;
       }
 
       info.sourceFormat = sourceFormat;
       info.outputFormat = *configuredRes;
-      info.sourceChannelLayout = ChannelLayoutEvidence{
-        .origin = origin,
-        .optDeclaredMask = format.optChannelMask,
-      };
+      info.sourceChannelLayout = ChannelLayoutEvidence{.origin = origin};
       info.isLossy = false;
       info.codec = AudioCodec::Wav;
     }

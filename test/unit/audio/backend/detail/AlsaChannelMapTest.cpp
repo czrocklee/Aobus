@@ -97,114 +97,11 @@ namespace ao::audio::backend::detail::test
     CHECK(calls == 1U);
     CHECK(mapRes->observations.query == expectedQuery);
     CHECK(mapRes->observations.optCurrentPositions.has_value() == expectsCurrent);
-    CHECK(mapRes->delivery.mapping == (expectsCurrent ? ChannelDeliveryEvidence::Mapping::Mapped
-                                                      : ChannelDeliveryEvidence::Mapping::LegacyUnverified));
+    CHECK(mapRes->delivery.isMapped == expectsCurrent);
     CHECK_FALSE(mapRes->delivery.hasSharedConversion);
     CHECK(mapRes->delivery.nativeSpeakerMask == (expectsCurrent ? client.speakerMask : 0U));
     CHECK_FALSE(mapRes->needsPermutation);
     CHECK(client.speakerMask == (channels == 4 ? 0x33U : 0x3fU));
-  }
-
-  TEST_CASE("AlsaChannelMap - reuse replans both identities from the cached actual observations",
-            "[audio][unit][alsa-channel-map]")
-  {
-    // Component coverage for the open-time proof cached by AlsaExclusiveBackend:
-    // both identities pass through this same active admission seam using cached
-    // observations. The query itself never re-plans or performs native I/O;
-    // native open/query controls separately check the cached result.
-
-    auto const planFor = [](PcmFormat const& client, AlsaChannelMapObservations const& observations)
-    {
-      return prepareAlsaChannelMap(
-        client,
-        [&observations] { return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{observations}; });
-    };
-
-    auto const sameTransport = [](AlsaChannelMap const& lhs, AlsaChannelMap const& rhs)
-    {
-      if (lhs.channels != rhs.channels || lhs.sampleBytes != rhs.sampleBytes ||
-          lhs.needsPermutation != rhs.needsPermutation)
-      {
-        return false;
-      }
-
-      // needsPermutation false means identity; only the slots a plan actually
-      // uses decide, never the unused array tail.
-      for (std::size_t slot = 0; slot < lhs.channels; ++slot)
-      {
-        if (lhs.sourceSlots[slot] != rhs.sourceSlots[slot])
-        {
-          return false;
-        }
-      }
-
-      return true;
-    };
-
-    SECTION("an identity FL/FR map shares one transport between 0 and 0x3")
-    {
-      auto const observations = currentMap({SND_CHMAP_FL, SND_CHMAP_FR});
-      auto const identifiedRes = planFor(stereoFormat(0x3), observations);
-      auto const unpositionedRes = planFor(stereoFormat(0), observations);
-      REQUIRE(identifiedRes);
-      REQUIRE(unpositionedRes);
-      CHECK(sameTransport(*identifiedRes, *unpositionedRes));
-      CHECK_FALSE(identifiedRes->needsPermutation);
-      CHECK(identifiedRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
-      CHECK(unpositionedRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
-      CHECK(identifiedRes->delivery.nativeSpeakerMask == 0x3U);
-      CHECK(unpositionedRes->delivery.nativeSpeakerMask == 0x3U);
-    }
-
-    SECTION("a missing current map leaves legacy reuse only while both plans agree")
-    {
-      auto const observations = AlsaChannelMapObservations{.supportedMaps = {}, .optCurrentPositions = {}};
-      auto const identifiedRes = planFor(stereoFormat(0x3), observations);
-      auto const unpositionedRes = planFor(stereoFormat(0), observations);
-      REQUIRE(identifiedRes);
-      REQUIRE(unpositionedRes);
-      CHECK(sameTransport(*identifiedRes, *unpositionedRes));
-      CHECK_FALSE(identifiedRes->needsPermutation);
-      // No inferred native role or verification claim beyond the facts.
-      CHECK(identifiedRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
-      CHECK(unpositionedRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
-      CHECK(identifiedRes->delivery.nativeSpeakerMask == 0U);
-      CHECK(unpositionedRes->delivery.nativeSpeakerMask == 0U);
-    }
-
-    SECTION("a swapped map cannot gain 0 <-> 0x3 reuse")
-    {
-      auto const observations = currentMap({SND_CHMAP_FR, SND_CHMAP_FL});
-      auto const identifiedRes = planFor(stereoFormat(0x3), observations);
-      auto const unpositionedRes = planFor(stereoFormat(0), observations);
-      REQUIRE(identifiedRes);
-      REQUIRE(unpositionedRes);
-      REQUIRE(identifiedRes->needsPermutation);
-      CHECK(identifiedRes->sourceSlots[0] == 1U);
-      CHECK(identifiedRes->sourceSlots[1] == 0U);
-      CHECK_FALSE(unpositionedRes->needsPermutation);
-      CHECK(unpositionedRes->sourceSlots[0] == 0U);
-      CHECK(unpositionedRes->sourceSlots[1] == 1U);
-      CHECK_FALSE(sameTransport(*identifiedRes, *unpositionedRes));
-    }
-
-    SECTION("a phase-tagged source-zero map cannot gain 0 <-> 0x3 reuse")
-    {
-      auto const observations = currentMap({SND_CHMAP_FL | SND_CHMAP_PHASE_INVERSE, SND_CHMAP_FR});
-      auto const unpositionedRes = planFor(stereoFormat(0), observations);
-      REQUIRE(unpositionedRes);
-      CHECK(unpositionedRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
-      CHECK(unpositionedRes->delivery.nativeSpeakerMask == 0U);
-      CHECK_FALSE(planFor(stereoFormat(0x3), observations));
-    }
-
-    SECTION("conflicting current roles refuse the identified successor")
-    {
-      auto const observations = currentMap({SND_CHMAP_FC, SND_CHMAP_LFE});
-      auto const unpositionedRes = planFor(stereoFormat(0), observations);
-      REQUIRE(unpositionedRes);
-      CHECK_FALSE(planFor(stereoFormat(0x3), observations));
-    }
   }
 
   TEST_CASE("AlsaChannelMap - current same-set identity and permutation are both mapped",
@@ -217,7 +114,7 @@ namespace ao::audio::backend::detail::test
       stereoFormat(), [&] { return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{observations}; });
 
     REQUIRE(mapRes);
-    CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(mapRes->delivery.isMapped);
     CHECK(mapRes->delivery.nativeSpeakerMask == 0x3U);
     CHECK(mapRes->needsPermutation == swapped);
     CHECK(mapRes->sourceSlots[0] == (swapped ? 1U : 0U));
@@ -237,7 +134,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(mapRes->observations.optCurrentPositions);
     CHECK(*mapRes->observations.optCurrentPositions == positions);
     CHECK(mapRes->delivery.nativeSpeakerMask == (silent ? 0U : 0x3U));
-    CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(mapRes->delivery.isMapped);
     CHECK_FALSE(mapRes->needsPermutation);
     CHECK(mapRes->sourceSlots[0] == 0U);
     CHECK(mapRes->sourceSlots[1] == 1U);
@@ -252,7 +149,7 @@ namespace ao::audio::backend::detail::test
       [] { return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{currentMap({SND_CHMAP_MONO})}; });
 
     REQUIRE(mapRes);
-    CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(mapRes->delivery.isMapped);
     CHECK(mapRes->delivery.nativeSpeakerMask == 0U);
     CHECK_FALSE(mapRes->needsPermutation);
   }
@@ -322,7 +219,7 @@ namespace ao::audio::backend::detail::test
       REQUIRE(mapRes);
       REQUIRE(mapRes->observations.optCurrentPositions);
       CHECK(*mapRes->observations.optCurrentPositions == positions);
-      CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+      CHECK_FALSE(mapRes->delivery.isMapped);
       // The phase-flagged slot is not clean endpoint evidence; no native set
       // and no mapped polarity are claimed from the unidentified request.
       CHECK(mapRes->delivery.nativeSpeakerMask == 0U);
@@ -355,7 +252,7 @@ namespace ao::audio::backend::detail::test
     auto observations = AlsaChannelMapObservations{.query = AlsaChannelMapObservations::Query::ApplicableMap,
                                                    .supportedMaps = {{SND_CHMAP_NA, SND_CHMAP_NA}},
                                                    .optCurrentPositions = {}};
-    auto expectedMapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified;
+    bool expectedMapping = false;
     std::uint32_t expectedMask = 0;
 
     SECTION("missing current map retains uncertainty")
@@ -366,7 +263,7 @@ namespace ao::audio::backend::detail::test
     SECTION("a current mapped pair outranks the silent capability")
     {
       observations.optCurrentPositions = std::vector<unsigned int>{SND_CHMAP_FL, SND_CHMAP_FR};
-      expectedMapping = ChannelDeliveryEvidence::Mapping::Mapped;
+      expectedMapping = true;
       expectedMask = 0x3;
     }
 
@@ -375,7 +272,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(mapRes);
     CHECK(mapRes->observations.query == AlsaChannelMapObservations::Query::ApplicableMap);
     CHECK(mapRes->observations.supportedMaps == observations.supportedMaps);
-    CHECK(mapRes->delivery.mapping == expectedMapping);
+    CHECK(mapRes->delivery.isMapped == expectedMapping);
     CHECK(mapRes->delivery.nativeSpeakerMask == expectedMask);
     CHECK_FALSE(mapRes->needsPermutation);
   }
@@ -405,7 +302,7 @@ namespace ao::audio::backend::detail::test
     REQUIRE(mapRes);
     CHECK(mapRes->observations.query == expectedQuery);
     CHECK(mapRes->observations.supportedMaps == observations.supportedMaps);
-    CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(mapRes->delivery.isMapped);
     CHECK(mapRes->delivery.nativeSpeakerMask == 0x3U);
     CHECK_FALSE(mapRes->needsPermutation);
     CHECK(mapRes->sourceSlots[0] == 0U);
@@ -449,7 +346,7 @@ namespace ao::audio::backend::detail::test
       [&] { return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{currentMap(positions)}; });
 
     REQUIRE(mapRes);
-    CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::LegacyUnverified);
+    CHECK_FALSE(mapRes->delivery.isMapped);
     CHECK(mapRes->delivery.nativeSpeakerMask == 0U);
     CHECK_FALSE(mapRes->needsPermutation);
     REQUIRE(mapRes->observations.optCurrentPositions);
@@ -543,7 +440,7 @@ namespace ao::audio::backend::detail::test
       });
     REQUIRE(mapRes);
     REQUIRE(mapRes->needsPermutation);
-    CHECK(mapRes->delivery.mapping == ChannelDeliveryEvidence::Mapping::Mapped);
+    CHECK(mapRes->delivery.isMapped);
     CHECK(mapRes->delivery.nativeSpeakerMask == 0x3fU);
     // Canonical FL FR FC LFE BL BR -> observed FL FR BL BR FC LFE.
     auto bytes = std::to_array<std::uint8_t>({1, 0x80, 2, 0x7f, 3, 0x81, 4, 0x7e, 5, 0x82, 6, 0x7d});

@@ -271,8 +271,7 @@ namespace ao::uimodel
         case audio::ChannelConfidence::Inferred:
           presentation.channelNote = requiredMessage(catalog, MessageId::AudioQualityInferredChannelLayout);
           break;
-        case audio::ChannelConfidence::Verified:
-        case audio::ChannelConfidence::Converted: break;
+        case audio::ChannelConfidence::Verified: break;
       }
 
       return presentation;
@@ -475,15 +474,6 @@ namespace ao::uimodel
         firstFinding(state, audio::QualityFindingKind::UnclassifiedVolumeModification) != nullptr ||
         firstFinding(state, audio::QualityFindingKind::MixedSources) != nullptr ||
         firstFinding(state, audio::QualityFindingKind::ChannelMapping) != nullptr)
-    {
-      return AudioQualityPresentation{.headline = qualityConclusion(audio::Quality::LinearIntervention),
-                                      .category = AudioQualityCategory::Diagnostic};
-    }
-
-    // Complete analyzer snapshots already include ChannelMapping. This callable
-    // also accepts independently constructed QualityState values: defensively
-    // honor an explicit Converted input even when its findings are omitted.
-    if (state.channelConfidence == audio::ChannelConfidence::Converted)
     {
       return AudioQualityPresentation{.headline = qualityConclusion(audio::Quality::LinearIntervention),
                                       .category = AudioQualityCategory::Diagnostic};

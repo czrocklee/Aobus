@@ -7,7 +7,6 @@
 #include "backend/detail/PipeWireFormatParsing.h"
 #include "backend/detail/PipeWireRuntime.h"
 #include "detail/DecoderOutput.h"
-#include "detail/PcmModeReuse.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -189,11 +188,6 @@ namespace ao::audio::backend
     bool opening = false;
     std::atomic<bool> renderAdmissionOpen{false};
     std::atomic<bool> drainPending{false};
-    // Per-open two-speaker identity-reuse proof: computed once at open under
-    // the loop lock, revoked by native param error callbacks, and cleared on
-    // open/close before lifetime changes. The reuse query reads only this
-    // flag and the immutable admitted client format.
-    std::atomic<bool> stereoReuseProven{false};
     bool routeAnchorReported = false;
 
     PwThreadLoopPtr threadLoopPtr;
@@ -245,8 +239,6 @@ namespace ao::audio::backend
     {
       return {.id = id, .optValue = value, .info = propertyInfo(id)};
     }
-
-    bool canReuseStereoIdentity() const;
 
   private:
     void handleFormatParam(::spa_pod const* param);
@@ -397,7 +389,6 @@ namespace ao::audio::backend
           optNegotiated->format.channels != sourceFormat.channels ||
           !std::ranges::contains(offeredEncodings, optNegotiated->format.encoding))
       {
-        stereoReuseProven.store(false, std::memory_order_release);
         optOpenFailure =
           BackendOpenFailure{.error = Error{.code = Error::Code::FormatRejected,
                                             .message = "PipeWire negotiated a PCM mode outside the lossless offer"}};
@@ -408,7 +399,6 @@ namespace ao::audio::backend
 
         if (!deliveryRes)
         {
-          stereoReuseProven.store(false, std::memory_order_release);
           optOpenFailure = std::move(deliveryRes.error());
         }
         else
@@ -427,7 +417,6 @@ namespace ao::audio::backend
     }
     else
     {
-      stereoReuseProven.store(false, std::memory_order_release);
       optOpenFailure =
         BackendOpenFailure{.error = Error{.code = Error::Code::FormatRejected,
                                           .message = "PipeWire negotiated an unrecognized raw PCM format"}};
@@ -440,7 +429,7 @@ namespace ao::audio::backend
 
     if (optOpenFailure)
     {
-      // A terminal observation revokes both reuse and production admission;
+      // A terminal observation revokes production admission;
       // the Engine event handoff must not admit another old-plan render.
       renderAdmissionOpen.store(false, std::memory_order_release);
     }
@@ -490,7 +479,6 @@ namespace ao::audio::backend
     if (newState == PW_STREAM_STATE_ERROR)
     {
       auto const* const message = errorMessage != nullptr ? errorMessage : "Unknown PipeWire error";
-      stereoReuseProven.store(false, std::memory_order_release);
       renderAdmissionOpen.store(false, std::memory_order_release);
       optOpenFailure = BackendOpenFailure{.error = Error{.code = Error::Code::InitFailed, .message = message}};
 
@@ -616,65 +604,6 @@ namespace ao::audio::backend
     ::pw_stream_set_control(streamPtr.get(), SPA_PROP_mute, 1, &mutedFloat, 0U);
   }
 
-  // Computes this open's two-speaker identity-reuse proof once, from the
-  // accepted native observation and the admitted delivery. Called under the
-  // loop lock before the open result escapes; control-side only, no native
-  // call. Projection work and its bounded allocations belong here, never in
-  // the noexcept reuse query.
-  bool PipeWireBackend::Impl::canReuseStereoIdentity() const
-  {
-    if (!optNativeFormat)
-    {
-      return false;
-    }
-
-    auto const& admitted = delivery.clientFormat;
-    auto const otherMask = admitted.speakerMask == 0U ? 0x3U : 0U;
-    auto const other = PcmFormat{
-      .sampleRate = admitted.sampleRate, .channels = 2, .encoding = admitted.encoding, .speakerMask = otherMask};
-
-    // The candidate gate is scalar; only a proved canonical stereo open may
-    // arm the reuse flag.
-    if (!audio::detail::isCanonicalStereoReuseCandidate(admitted, admitted, other))
-    {
-      return false;
-    }
-
-    auto const& native = *optNativeFormat;
-
-    auto const sourceOf = [](PcmFormat const& format)
-    {
-      return SignalFormat{
-        .sampleRate = format.sampleRate, .channels = format.channels, .speakerMask = format.speakerMask};
-    };
-
-    auto const installedRes = rawStreamDelivery(sourceOf(admitted), native);
-    auto const otherRes = rawStreamDelivery(sourceOf(other), native);
-
-    if (!installedRes || !otherRes)
-    {
-      return false;
-    }
-
-    // The installed projection must reproduce the admitted transport, and the
-    // other canonical identity must share that exact byte transport,
-    // including an installed swap. The speaker mask is identity, not
-    // transport.
-    if (installedRes->clientFormat != delivery.clientFormat ||
-        installedRes->channelDelivery != delivery.channelDelivery ||
-        installedRes->needsPermutation != delivery.needsPermutation ||
-        installedRes->sourceSlots != delivery.sourceSlots)
-    {
-      return false;
-    }
-
-    return installedRes->clientFormat.sampleRate == otherRes->clientFormat.sampleRate &&
-           installedRes->clientFormat.channels == otherRes->clientFormat.channels &&
-           installedRes->clientFormat.encoding == otherRes->clientFormat.encoding &&
-           installedRes->needsPermutation == otherRes->needsPermutation &&
-           installedRes->sourceSlots == otherRes->sourceSlots;
-  }
-
   PipeWireBackend::PipeWireBackend(Device const& device, ProfileId const& profile)
     : _implPtr{std::make_unique<Impl>()}, _targetDeviceId{device.id}, _exclusiveMode{profile == kProfileExclusive}
   {
@@ -713,22 +642,6 @@ namespace ao::audio::backend
     }
 
     return Backend::prewarmFormatHint(sourceFormat);
-  }
-
-  bool PipeWireBackend::canReusePcmMode(PcmFormat const& current, PcmFormat const& next) const noexcept
-  {
-    if (isSamePcmMode(current, next))
-    {
-      return true;
-    }
-
-    // Fixed scalar candidate checks plus this open's cached proof only: no
-    // parsing, projections, native calls, allocations or waits. The proof is
-    // computed once at open under the loop lock from the accepted native
-    // observation and the immutable admitted client format; native param
-    // error callbacks revoke it, and open/close clear it first.
-    return _implPtr->stereoReuseProven.load(std::memory_order_acquire) &&
-           audio::detail::isCanonicalStereoReuseCandidate(_implPtr->delivery.clientFormat, current, next);
   }
 
   // PipeWire negotiation must remain one transaction under the native thread-loop lock.
@@ -789,8 +702,6 @@ namespace ao::audio::backend
     auto optRouteAnchor = std::optional<std::string>{};
     {
       auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
-      // Clear the per-open reuse proof before any open-lifetime state changes.
-      _implPtr->stereoReuseProven.store(false, std::memory_order_release);
       _implPtr->renderTarget = &target;
       _implPtr->sourceFormat = sourceFormat;
       _implPtr->format = {};
@@ -908,11 +819,6 @@ namespace ao::audio::backend
                 }
               }
 
-              // Arm the per-open reuse proof once, here under the loop
-              // lock, before the open result escapes. Any later failure path
-              // calls close(), which clears it again.
-              _implPtr->stereoReuseProven.store(_implPtr->canReuseStereoIdentity(), std::memory_order_release);
-
               optRouteAnchor = std::move(_implPtr->optPendingRouteAnchor);
               _implPtr->applyCachedControls();
               _implPtr->outputControlAvailable.store(!useExclusive, std::memory_order_relaxed);
@@ -973,7 +879,6 @@ namespace ao::audio::backend
 
       if (::pw_stream_set_active(_implPtr->streamPtr.get(), true) < 0)
       {
-        _implPtr->stereoReuseProven.store(false, std::memory_order_release);
         _implPtr->renderAdmissionOpen.store(false, std::memory_order_release);
         _implPtr->optOpenFailure =
           BackendOpenFailure{.error = Error{.code = Error::Code::InitFailed, .message = kActivationFailure}};
@@ -1024,8 +929,6 @@ namespace ao::audio::backend
 
   void PipeWireBackend::close()
   {
-    // Clear the per-open reuse proof before any close-lifetime changes.
-    _implPtr->stereoReuseProven.store(false, std::memory_order_release);
     _implPtr->stopRenderCycles();
     _implPtr->destroyStream();
     _implPtr->renderTarget = nullptr;

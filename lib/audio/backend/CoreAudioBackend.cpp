@@ -665,10 +665,8 @@ namespace ao::audio::backend
         {
           optNativeClientFormat.reset();
           // Failed observation removes position certainty, not known conversion.
-          channelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified,
-                             .hasSharedConversion = channelDelivery.hasSharedConversion};
-          outputChannelDelivery = {.mapping = ChannelDeliveryEvidence::Mapping::LegacyUnverified,
-                                   .hasSharedConversion = outputChannelDelivery.hasSharedConversion};
+          channelDelivery = {.hasSharedConversion = channelDelivery.hasSharedConversion};
+          outputChannelDelivery = {.hasSharedConversion = outputChannelDelivery.hasSharedConversion};
         }
         else
         {
@@ -1553,6 +1551,7 @@ namespace ao::audio::backend
 
   void CoreAudioBackend::close()
   {
+    // Retire the control-side capability before callback/native retirement.
     auto const statePtr = _implPtr->statePtr;
     ::AudioUnit unit = nullptr;
     ::AudioObjectID deviceId = ::kAudioObjectUnknown;
