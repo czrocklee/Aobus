@@ -842,11 +842,13 @@ endif()
 aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireMonitorTest.cpp
   unit/audio/backend/PipeWireBackendTest.cpp
+  unit/audio/backend/PipeWireChannelObservationTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
   unit/audio/backend/AlsaChannelObservationTest.cpp
   unit/audio/backend/AlsaProviderTest.cpp
   unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
+  unit/audio/backend/detail/PipeWireFormatParsingTest.cpp
   unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
   unit/audio/backend/detail/AlsaChannelMapTest.cpp
   unit/audio/backend/detail/AlsaPrewarmCacheTest.cpp

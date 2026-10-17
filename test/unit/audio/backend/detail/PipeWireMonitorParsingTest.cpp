@@ -14,6 +14,7 @@
 extern "C"
 {
 #include <pipewire/keys.h>
+#include <spa/param/audio/raw-utils.h>
 #include <spa/param/audio/raw.h>
 #include <spa/param/format.h>
 #include <spa/param/param.h>
@@ -31,9 +32,11 @@ extern "C"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifdef __clang__
@@ -45,6 +48,38 @@ namespace ao::audio::backend::detail::test
 {
   namespace
   {
+    // Author the pod directly: oversized positions must never pass through
+    // spa_audio_info_raw's fixed-capacity array, even in the fixture.
+    ::spa_pod const* monitorFormat(std::span<std::byte> buffer,
+                                   std::uint32_t encoding,
+                                   std::int32_t rate,
+                                   std::int32_t channels,
+                                   std::span<std::uint32_t const> positions)
+    {
+      auto builder = ::spa_pod_builder{};
+      ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
+      auto object = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&builder, &object, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+      ::spa_pod_builder_prop(&builder, SPA_FORMAT_mediaType, 0);
+      ::spa_pod_builder_id(&builder, SPA_MEDIA_TYPE_audio);
+      ::spa_pod_builder_prop(&builder, SPA_FORMAT_mediaSubtype, 0);
+      ::spa_pod_builder_id(&builder, SPA_MEDIA_SUBTYPE_raw);
+      ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_format, 0);
+      ::spa_pod_builder_id(&builder, encoding);
+      ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_rate, 0);
+      ::spa_pod_builder_int(&builder, rate);
+      ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_channels, 0);
+      ::spa_pod_builder_int(&builder, channels);
+
+      if (!positions.empty())
+      {
+        ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_position, 0);
+        ::spa_pod_builder_array(&builder, sizeof(std::uint32_t), SPA_TYPE_Id, positions.size(), positions.data());
+      }
+
+      return static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &object));
+    }
+
     ::spa_dict makeDict(std::span<::spa_dict_item const> items)
     {
       return ::spa_dict{.flags = 0, .n_items = static_cast<std::uint32_t>(items.size()), .items = items.data()};
@@ -185,7 +220,11 @@ namespace ao::audio::backend::detail::test
                             0);
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      REQUIRE(parseRawStreamFormat(pod));
+      auto const optNative = parseRawStreamObservation(pod);
+      REQUIRE(optNative);
+      CHECK(optNative->format.sampleRate == 44100);
+      CHECK(optNative->format.channels == 2);
+      CHECK(optNative->format.encoding == SampleEncoding::Signed16Le);
       CHECK_FALSE(currentFormatFromNodeParam(SPA_PARAM_EnumFormat, pod));
     }
 
@@ -209,9 +248,9 @@ namespace ao::audio::backend::detail::test
 
       auto const optFormat = currentFormatFromNodeParam(SPA_PARAM_Format, pod);
       REQUIRE(optFormat);
-      CHECK(optFormat->sampleRate == 44100);
-      CHECK(optFormat->channels == 2);
-      CHECK(optFormat->encoding == SampleEncoding::Signed16Le);
+      CHECK(optFormat->format.sampleRate == 44100);
+      CHECK(optFormat->format.channels == 2);
+      CHECK(optFormat->format.encoding == SampleEncoding::Signed16Le);
     }
   }
 
@@ -235,7 +274,7 @@ namespace ao::audio::backend::detail::test
                           0);
     auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-    CHECK_FALSE(parseRawStreamFormat(pod));
+    CHECK_FALSE(parseRawStreamObservation(pod));
   }
 
   TEST_CASE(
@@ -263,7 +302,7 @@ namespace ao::audio::backend::detail::test
                             0);
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      CHECK_FALSE(parseRawStreamFormat(pod));
+      CHECK_FALSE(parseRawStreamObservation(pod));
     }
 
     SECTION("a zero channel count is not a usable client format")
@@ -284,7 +323,7 @@ namespace ao::audio::backend::detail::test
                             0);
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      CHECK_FALSE(parseRawStreamFormat(pod));
+      CHECK_FALSE(parseRawStreamObservation(pod));
     }
 
     SECTION("a 258-channel stream cannot wrap into stereo")
@@ -307,7 +346,7 @@ namespace ao::audio::backend::detail::test
                             0);
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      CHECK_FALSE(parseRawStreamFormat(pod));
+      CHECK_FALSE(parseRawStreamObservation(pod));
     }
   }
 
@@ -331,11 +370,334 @@ namespace ao::audio::backend::detail::test
                           0);
     auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-    auto cache = std::unordered_map<std::uint32_t, PcmFormat>{};
+    auto cache = std::unordered_map<std::uint32_t, RawStreamFormat>{};
     updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, pod);
     REQUIRE(cache.contains(42));
 
     updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, nullptr);
+    CHECK_FALSE(cache.contains(42));
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - current observations replace position evidence without copying the request",
+            "[audio][unit][pipewire][monitor]")
+  {
+    struct PositionCase final
+    {
+      std::uint32_t left;
+      std::uint32_t right;
+      std::uint32_t flags;
+      std::uint32_t nativeMask;
+      std::uint32_t canonicalMask;
+    };
+    // Independent actual native orders: FR FL, BL BR, and unpositioned.
+    auto const cases = std::to_array<PositionCase>({
+      {SPA_AUDIO_CHANNEL_FR, SPA_AUDIO_CHANNEL_FL, 0, 0x3, 0},
+      {SPA_AUDIO_CHANNEL_RL, SPA_AUDIO_CHANNEL_RR, 0, 0x30, 0x30},
+      {SPA_AUDIO_CHANNEL_UNKNOWN, SPA_AUDIO_CHANNEL_UNKNOWN, SPA_AUDIO_FLAG_UNPOSITIONED, 0, 0},
+    });
+    auto cache = std::unordered_map<std::uint32_t, RawStreamFormat>{};
+
+    for (auto const& expected : cases)
+    {
+      auto buffer = std::array<std::byte, 1024>{};
+      auto builder = makePodBuilder(buffer);
+      auto native = ::spa_audio_info_raw{};
+      native.format = SPA_AUDIO_FORMAT_S16_LE;
+      native.flags = expected.flags;
+      native.rate = 48000;
+      native.channels = 2;
+      native.position[0] = expected.left;
+      native.position[1] = expected.right;
+      auto const* pod = ::spa_format_audio_raw_build(&builder, SPA_PARAM_Format, &native);
+      REQUIRE(pod != nullptr);
+      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, pod);
+      REQUIRE(cache.contains(42));
+      auto const& observed = cache.at(42);
+      CHECK(observed.format.sampleRate == 48000);
+      CHECK(observed.format.channels == 2);
+      CHECK(observed.format.encoding == SampleEncoding::Signed16Le);
+      CHECK(observed.format.speakerMask == expected.canonicalMask);
+      CHECK(observed.nativeSpeakerMask == expected.nativeMask);
+      CHECK((observed.flags & SPA_AUDIO_FLAG_UNPOSITIONED) == expected.flags);
+
+      if (expected.nativeMask != 0)
+      {
+        CHECK(observed.positions[0] == expected.left);
+        CHECK(observed.positions[1] == expected.right);
+      }
+
+      auto const saved = observed;
+      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_EnumFormat, nullptr);
+      CHECK(cache.at(42) == saved);
+    }
+
+    // The final current observation removed the previous known BL/BR roles;
+    // null readback then removes even the storage observation.
+    CHECK(cache.at(42).nativeSpeakerMask == 0);
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, nullptr);
+    CHECK_FALSE(cache.contains(42));
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - unusable position semantics preserve fresh numerics and known constraints",
+            "[audio][unit][pipewire][monitor]")
+  {
+    auto const cases = std::to_array<std::array<std::uint32_t, 3>>({
+      {SPA_AUDIO_CHANNEL_FL, 0xffffffffU, SPA_AUDIO_CHANNEL_UNKNOWN},
+      {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_NA, SPA_AUDIO_CHANNEL_NA},
+      {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_MONO, SPA_AUDIO_CHANNEL_MONO},
+      {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_AUX0, SPA_AUDIO_CHANNEL_AUX0},
+      {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_UNKNOWN},
+    });
+    auto const initialRoles = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_RL, SPA_AUDIO_CHANNEL_RR});
+
+    for (auto const& roles : cases)
+    {
+      auto initialBuffer = std::array<std::byte, 1024>{};
+      auto currentBuffer = std::array<std::byte, 1024>{};
+      auto cache = std::unordered_map<std::uint32_t, RawStreamFormat>{};
+      auto const* initial = monitorFormat(initialBuffer, SPA_AUDIO_FORMAT_S32_LE, 44100, 2, initialRoles);
+      REQUIRE(initial != nullptr);
+      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, initial);
+      REQUIRE(cache.contains(42));
+      REQUIRE(cache.at(42).nativeSpeakerMask == 0x30U);
+      auto const* current = monitorFormat(currentBuffer, SPA_AUDIO_FORMAT_S16_LE, 48000, 3, roles);
+      REQUIRE(current != nullptr);
+      // The same malformed/unrepresentable roles remain inadmissible as strict
+      // native client readback; monitoring has a separate evidence contract.
+      CHECK_FALSE(parseRawStreamObservation(current));
+      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_EnumFormat, current);
+      CHECK(cache.at(42).nativeSpeakerMask == 0x30U);
+      updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, current);
+      REQUIRE(cache.contains(42));
+      auto const& observed = cache.at(42);
+      CHECK(observed.format.sampleRate == 48000U);
+      CHECK(observed.format.channels == 3U);
+      CHECK(observed.format.encoding == SampleEncoding::Signed16Le);
+      CHECK(observed.format.speakerMask == 0U);
+      CHECK(observed.nativeSpeakerMask == 1U);
+      CHECK(observed.hasUnsupportedPositions);
+      CHECK(observed.positions[0] == roles[0]);
+      CHECK(observed.positions[1] == roles[1]);
+      CHECK(observed.positions[2] == roles[2]);
+      CHECK(observed.positions[3] == SPA_AUDIO_CHANNEL_UNKNOWN);
+      CHECK((observed.flags & SPA_AUDIO_FLAG_UNPOSITIONED) == 0U);
+    }
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - oversized position storage preserves numerics without a native array copy",
+            "[audio][unit][pipewire][monitor]")
+  {
+    auto buffer = std::array<std::byte, 2048>{};
+    auto roles = std::array<std::uint32_t, 65>{};
+    roles.fill(SPA_AUDIO_CHANNEL_UNKNOWN);
+    roles.front() = SPA_AUDIO_CHANNEL_FL;
+    roles.back() = SPA_AUDIO_CHANNEL_FC;
+    std::int32_t channels = 0;
+    std::uint32_t expectedMask = 0;
+    std::uint32_t expectedFirst = SPA_AUDIO_CHANNEL_UNKNOWN;
+    std::uint32_t expectedFlags = SPA_AUDIO_FLAG_UNPOSITIONED;
+
+    SECTION("all 65 slots are active and the last known role remains evidence")
+    {
+      channels = 65;
+      expectedMask = 5;
+      expectedFirst = SPA_AUDIO_CHANNEL_FL;
+      expectedFlags = 0;
+    }
+
+    SECTION("excess position slots cannot overwrite count or establish a prefix layout")
+    {
+      channels = 2;
+    }
+
+    auto const* pod = monitorFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 48000, channels, roles);
+    REQUIRE(pod != nullptr);
+    CHECK_FALSE(parseRawStreamObservation(pod));
+    auto const optMonitor = currentFormatFromNodeParam(SPA_PARAM_Format, pod);
+    REQUIRE(optMonitor);
+    CHECK(optMonitor->format.sampleRate == 48000U);
+    CHECK(std::cmp_equal(optMonitor->format.channels, channels));
+    CHECK(optMonitor->format.encoding == SampleEncoding::Signed16Le);
+    CHECK(optMonitor->format.speakerMask == 0U);
+    CHECK(optMonitor->nativeSpeakerMask == expectedMask);
+    CHECK(optMonitor->hasUnsupportedPositions);
+    CHECK(optMonitor->flags == expectedFlags);
+    CHECK(optMonitor->positions.front() == expectedFirst);
+    CHECK(optMonitor->positions.back() == SPA_AUDIO_CHANNEL_UNKNOWN);
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - mismatched position cardinality keeps numerics without prefix role claims",
+            "[audio][unit][pipewire][monitor]")
+  {
+    auto initialBuffer = std::array<std::byte, 1024>{};
+    auto currentBuffer = std::array<std::byte, 1024>{};
+    auto const initialRoles = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_RL, SPA_AUDIO_CHANNEL_RR});
+    auto roles = std::vector<std::uint32_t>{SPA_AUDIO_CHANNEL_FC};
+    auto const* initial = monitorFormat(initialBuffer, SPA_AUDIO_FORMAT_S32_LE, 44100, 2, initialRoles);
+    REQUIRE(initial != nullptr);
+    auto cache = std::unordered_map<std::uint32_t, RawStreamFormat>{};
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, initial);
+    REQUIRE(cache.contains(42));
+    REQUIRE(cache.at(42).nativeSpeakerMask == 0x30U);
+    bool hasFixedChoice = false;
+
+    SECTION("short direct array")
+    {
+      hasFixedChoice = false;
+    }
+
+    SECTION("short fixed ChoiceNone array")
+    {
+      hasFixedChoice = true;
+    }
+
+    SECTION("excess entries do not establish an active prefix")
+    {
+      roles = {SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FC, SPA_AUDIO_CHANNEL_FR};
+    }
+
+    auto const* current = monitorFormat(currentBuffer, SPA_AUDIO_FORMAT_S16_LE, 48000, 2, roles);
+    REQUIRE(current != nullptr);
+
+    if (hasFixedChoice)
+    {
+      auto const* property = ::spa_pod_find_prop(current, nullptr, SPA_FORMAT_AUDIO_position);
+      REQUIRE(property != nullptr);
+      REQUIRE(property->value.size == 12U);
+      auto const offset =
+        static_cast<std::size_t>(std::as_bytes(std::span{&property->value, 1}).data() - currentBuffer.data());
+      // A complete one-slot Choice -> Array body plus its four padding bytes.
+      // This final property grows by 16 bytes without truncating the object.
+      auto const choice = std::to_array<std::uint32_t>(
+        {28U, SPA_TYPE_Choice, SPA_CHOICE_None, 0U, 12U, SPA_TYPE_Array, 4U, SPA_TYPE_Id, SPA_AUDIO_CHANNEL_FC, 0U});
+      std::memcpy(currentBuffer.data() + offset, choice.data(), sizeof(choice));
+      auto header = *current;
+      header.size += 16U;
+      std::memcpy(currentBuffer.data(), &header, sizeof(header));
+    }
+
+    // The native parser unpositions these two-channel count mismatches. Their
+    // FC-bearing prefix must not invent a conflict with stereo.
+    CHECK_FALSE(parseRawStreamObservation(current));
+    auto const optMonitor = currentFormatFromNodeParam(SPA_PARAM_Format, current);
+    REQUIRE(optMonitor);
+    CHECK(optMonitor->format.sampleRate == 48000U);
+    CHECK(optMonitor->format.channels == 2U);
+    CHECK(optMonitor->format.encoding == SampleEncoding::Signed16Le);
+    CHECK(optMonitor->format.speakerMask == 0U);
+    CHECK(optMonitor->nativeSpeakerMask == 0U);
+    CHECK(optMonitor->hasUnsupportedPositions);
+    CHECK(optMonitor->flags == SPA_AUDIO_FLAG_UNPOSITIONED);
+    CHECK(optMonitor->positions[0] == SPA_AUDIO_CHANNEL_UNKNOWN);
+    CHECK(optMonitor->positions[1] == SPA_AUDIO_CHANNEL_UNKNOWN);
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, current);
+    REQUIRE(cache.contains(42));
+    CHECK(cache.at(42).format.sampleRate == 48000U);
+    CHECK(cache.at(42).format.channels == 2U);
+    CHECK(cache.at(42).format.encoding == SampleEncoding::Signed16Le);
+    CHECK(cache.at(42).format.speakerMask == 0U);
+    CHECK(cache.at(42).nativeSpeakerMask == 0U);
+    CHECK(cache.at(42).flags == SPA_AUDIO_FLAG_UNPOSITIONED);
+    CHECK(cache.at(42).positions[0] == SPA_AUDIO_CHANNEL_UNKNOWN);
+    CHECK(cache.at(42).positions[1] == SPA_AUDIO_CHANNEL_UNKNOWN);
+  }
+
+  TEST_CASE("PipeWireMonitorParsing - invalid current geometry or pod storage invalidates all cached facts",
+            "[audio][unit][pipewire][monitor]")
+  {
+    auto initialBuffer = std::array<std::byte, 1024>{};
+    auto currentBuffer = std::array<std::byte, 1024>{};
+    auto const roles = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
+    auto const* initial = monitorFormat(initialBuffer, SPA_AUDIO_FORMAT_S16_LE, 48000, 2, roles);
+    REQUIRE(initial != nullptr);
+    auto cache = std::unordered_map<std::uint32_t, RawStreamFormat>{};
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, initial);
+    REQUIRE(cache.contains(42));
+    REQUIRE(cache.at(42).nativeSpeakerMask == 3U);
+    std::uint32_t encoding = SPA_AUDIO_FORMAT_S16_LE;
+    std::int32_t rate = 48000;
+    std::int32_t channels = 2;
+    bool truncateObject = false;
+    bool overrunProperty = false;
+    bool malformedArray = false;
+
+    SECTION("zero rate")
+    {
+      rate = 0;
+    }
+
+    SECTION("negative rate")
+    {
+      rate = -1;
+    }
+
+    SECTION("zero channel count")
+    {
+      channels = 0;
+    }
+
+    SECTION("channel count exceeds the independent format representation")
+    {
+      channels = 258;
+    }
+
+    SECTION("unsupported encoding")
+    {
+      encoding = SPA_AUDIO_FORMAT_U8;
+    }
+
+    SECTION("truncated whole object storage")
+    {
+      truncateObject = true;
+    }
+
+    SECTION("property payload extends beyond the enclosing object")
+    {
+      overrunProperty = true;
+    }
+
+    SECTION("position array storage has a wrong child width")
+    {
+      malformedArray = true;
+    }
+
+    auto const* current = monitorFormat(currentBuffer, encoding, rate, channels, roles);
+    REQUIRE(current != nullptr);
+
+    if (truncateObject)
+    {
+      auto header = *current;
+      --header.size;
+      std::memcpy(currentBuffer.data(), &header, sizeof(header));
+    }
+
+    if (overrunProperty || malformedArray)
+    {
+      auto const* property = ::spa_pod_find_prop(current, nullptr, SPA_FORMAT_AUDIO_position);
+      REQUIRE(property != nullptr);
+      auto const offset =
+        static_cast<std::size_t>(std::as_bytes(std::span{&property->value, 1}).data() - currentBuffer.data());
+
+      if (overrunProperty)
+      {
+        auto value = property->value;
+        value.size = current->size;
+        std::memcpy(currentBuffer.data() + offset, &value, sizeof(value));
+      }
+      else
+      {
+        auto body = ::spa_pod_array_body{};
+        std::memcpy(&body, SPA_POD_BODY_CONST(&property->value), sizeof(body));
+        body.child.size = 8;
+        std::memcpy(currentBuffer.data() + offset + sizeof(::spa_pod), &body, sizeof(body));
+      }
+    }
+
+    CHECK_FALSE(parseRawStreamObservation(current));
+    CHECK_FALSE(currentFormatFromNodeParam(SPA_PARAM_Format, current));
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, current);
+    CHECK_FALSE(cache.contains(42));
+    updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_EnumFormat, initial);
     CHECK_FALSE(cache.contains(42));
   }
 
