@@ -4,6 +4,8 @@
 <dict>
   <key>CFBundleExecutable</key><string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
   <key>CFBundleIdentifier</key><string>org.aobus.desktop</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array>${AOBUS_APPKIT_BUNDLE_LOCALIZATIONS}</array>
   <key>CFBundleName</key><string>Aobus</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>1</string>
