@@ -712,8 +712,11 @@ namespace ao::gtk::layout
       button.set_visible(!editing && uimodel::shouldShowTrackCreditKind(kind, currentSections[i], _showEmpty));
       button.set_sensitive(!_submitting && (_form != nullptr || !_snapshot.trackIds.empty()));
 
+      // A truncated label fills the button, so every label starts at the
+      // leading edge to keep short and truncated summaries aligned.
       if (auto* label = dynamic_cast<Gtk::Label*>(button.get_child()); label != nullptr)
       {
+        label->set_xalign(0.0F);
         label->set_ellipsize(Pango::EllipsizeMode::END);
         label->set_size_request(0, -1);
       }

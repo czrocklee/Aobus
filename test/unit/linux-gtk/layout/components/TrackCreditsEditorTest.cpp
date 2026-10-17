@@ -40,14 +40,17 @@
 #include <gtkmm/comboboxtext.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/label.h>
 #include <gtkmm/root.h>
 #include <gtkmm/scrolledwindow.h>
+#include <pangomm/layout.h>
 #include <sigc++/functors/slot.h>
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -573,6 +576,38 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(lyricist->get_visible());
     checkFocusWithin(button(editor, "ao-credits-edit"));
     windowFixture.unmount();
+  }
+
+  TEST_CASE("TrackCreditsEditor - category summaries start at the leading edge", "[gtk][unit][track-credits]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto id = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& storage)
+                                     { id = library::test::addTrackWithUniqueFixtureUri(storage, {}); }};
+    auto& runtime = fixture.runtime();
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto form = uimodel::TrackPropertiesFormModel{catalog};
+    REQUIRE(uimodel::loadTrackPropertiesFormBaseline(
+      runtime.library().snapshot(), std::array{id}, uimodel::buildTrackPropertiesFormSpec(catalog), form));
+    auto editor = TrackCreditsEditor{runtime.completion(), catalog, form, [] {}};
+    std::size_t categories = 0;
+
+    for (auto* action : collectAll<Gtk::Button>(editor))
+    {
+      if (!action->has_css_class("ao-credit-category"))
+      {
+        continue;
+      }
+
+      CAPTURE(action->get_label());
+      auto* const label = dynamic_cast<Gtk::Label*>(action->get_child());
+      REQUIRE(label != nullptr);
+      CHECK(label->get_xalign() == 0.0F);
+      CHECK(label->get_ellipsize() == Pango::EllipsizeMode::END);
+      ++categories;
+    }
+
+    CHECK(categories == library::kCreditKindCount);
   }
 
   TEST_CASE("TrackCreditsEditor - kinds after Performer preview only with credits or show-empty",
