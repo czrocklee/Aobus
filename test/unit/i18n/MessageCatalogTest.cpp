@@ -3,16 +3,27 @@
 
 #include <ao/i18n/MessageCatalog.h>
 
+#include "app/i18n/SystemLocale.h"
 #include <ao/Error.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #ifndef _WIN32
 #include <gsl-lite/gsl-lite.hpp>
 #include <unicode/uloc.h>
 #include <unicode/utypes.h>
+#endif
+
+#ifdef __APPLE__
+#include <ao/utility/Raii.h>
+
+#include <CoreFoundation/CFArray.h>
+#include <CoreFoundation/CFBase.h>
+#include <CoreFoundation/CFLocale.h>
+#include <CoreFoundation/CFString.h>
 #endif
 
 #include <algorithm>
@@ -23,6 +34,7 @@
 #include <cstdint>
 #include <latch>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -297,7 +309,30 @@ namespace ao::i18n::test
     CHECK(*fallbackCountRes == ResolvedMessage{.text = "1 track", .locale = "en"});
   }
 
-#ifndef _WIN32
+  TEST_CASE("MessageCatalog - an inadmissible or unavailable system locale selects English", "[core][unit][catalog]")
+  {
+    auto const systemLocaleRes = GENERATE(Result<std::string>{"12345"},
+                                          Result<std::string>{"en_US"},
+                                          Result<std::string>{makeError(Error::Code::NotFound, "No system locale")});
+    CAPTURE(systemLocaleRes.value_or("<error>"));
+
+    auto catalogRes = detail::createCatalogForSystemLocale(systemLocaleRes);
+    REQUIRE(catalogRes);
+    CHECK(catalogRes->requestedLocale() == "en");
+
+    auto titleRes = catalogRes->format(MessageId::PilotLibraryTitle);
+    REQUIRE(titleRes);
+    CHECK(*titleRes == ResolvedMessage{.text = "Music library", .locale = "en"});
+  }
+
+  TEST_CASE("MessageCatalog - an admissible system locale is requested as reported", "[core][unit][catalog]")
+  {
+    auto catalogRes = detail::createCatalogForSystemLocale(std::string{"de-AT"});
+    REQUIRE(catalogRes);
+    CHECK(catalogRes->requestedLocale() == "de-AT");
+  }
+
+#if !defined(_WIN32) && !defined(__APPLE__)
 
   TEST_CASE("MessageCatalog - malformed operating-system locale falls back to English", "[core][unit][catalog]")
   {
@@ -320,6 +355,46 @@ namespace ao::i18n::test
     auto titleRes = catalogRes->format(MessageId::PilotLibraryTitle);
     REQUIRE(titleRes);
     CHECK(*titleRes == ResolvedMessage{.text = "Music library", .locale = "en"});
+  }
+#endif
+
+#ifdef __APPLE__
+
+  TEST_CASE("MessageCatalog - macOS requests the first preferred language rather than the ICU default",
+            "[core][unit][catalog]")
+  {
+    auto const originalLocale = std::string{::uloc_getDefault()};
+    auto const restoreLocale = gsl_lite::finally(
+      [&originalLocale]
+      {
+        auto restoreStatus = U_ZERO_ERROR;
+        ::uloc_setDefault(originalLocale.c_str(), &restoreStatus);
+      });
+
+    auto const languagesPtr = utility::makeUniquePtr<::CFRelease>(::CFLocaleCopyPreferredLanguages());
+    REQUIRE(languagesPtr != nullptr);
+    REQUIRE(::CFArrayGetCount(languagesPtr.get()) > 0);
+
+    auto preferred = std::array<char, ULOC_FULLNAME_CAPACITY>{};
+    REQUIRE(::CFStringGetCString(static_cast<::CFStringRef>(::CFArrayGetValueAtIndex(languagesPtr.get(), 0)),
+                                 preferred.data(),
+                                 static_cast<::CFIndex>(preferred.size()),
+                                 ::kCFStringEncodingUTF8) != 0U);
+
+    auto preferredRes = MessageCatalog::create(preferred.data());
+    REQUIRE(preferredRes);
+    CAPTURE(preferredRes->requestedLocale());
+
+    // A valid ICU default other than the preferred language separates the two
+    // sources even on a machine whose preferred language is plain English.
+    auto const* const icuDefault = preferredRes->requestedLocale() == "en" ? "de" : "en";
+    auto status = U_ZERO_ERROR;
+    ::uloc_setDefault(icuDefault, &status);
+    REQUIRE(U_SUCCESS(status));
+
+    auto catalogRes = MessageCatalog::createForSystemLocale();
+    REQUIRE(catalogRes);
+    CHECK(catalogRes->requestedLocale() == preferredRes->requestedLocale());
   }
 #endif
 
