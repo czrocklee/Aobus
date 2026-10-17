@@ -83,6 +83,10 @@ Configuration with the same live tag is idempotent; attempting to replace a live
 It rejects empty, partial, malformed, or embedded-NUL input rather than repairing it or consulting the ambient C locale.
 `root` is admitted as the public English tag `en` for internal compatibility.
 `MessageCatalog::createForSystemLocale()` reads the operating-system locale once; if the operating system cannot provide an admissible locale, it constructs English.
+Windows supplies the first preferred UI language and macOS the first preferred language of System Settings, so neither reads `LANG` or `LC_*`.
+Linux supplies ICU's default locale, which ICU derives from the POSIX locale environment (`LC_ALL`, `LC_MESSAGES`, then `LANG`).
+A macOS application started from Finder or the Dock normally inherits no `LANG` from launchd, so the POSIX source would usually select English there.
+Because the macOS source is System Settings, the TUI on macOS ignores the terminal's `LANG` while its language override is empty; selecting another language there needs that override.
 An explicitly invalid tag never silently becomes English.
 
 For an admitted request, resolution tries the exact resource locale, ICU likely-subtags expansion, successive parents, and English root in that order, without ICU's ambient default locale entering the chain.
@@ -204,6 +208,7 @@ Changing the message runtime, fallback model, or ICU family is an architectural/
 - [`CatalogPattern.cpp`](../../../app/i18n/CatalogPattern.cpp) owns signature validation, pseudo transformation, and generated projection rules.
 - [`CatalogCompiler.cpp`](../../../tool/catalog/CatalogCompiler.cpp) validates the root inventory and sparse overrides and generates pseudo and WinUI resources.
 - [`app/i18n/CMakeLists.txt`](../../../app/i18n/CMakeLists.txt) derives resources and selectable locales from `package.lst`, compiles and embeds catalogs, and keeps ICU in the interactive leaf.
+- [`SystemLocaleWindows.cpp`](../../../app/i18n/SystemLocaleWindows.cpp), [`SystemLocaleMacos.cpp`](../../../app/i18n/SystemLocaleMacos.cpp), and [`SystemLocalePosix.cpp`](../../../app/i18n/SystemLocalePosix.cpp) read the operating-system locale.
 - [`StringResources.cpp`](../../../app/windows-winui/platform/StringResources.cpp) owns the explicit MRT context.
 
 [`MessageCatalogTest.cpp`](../../../test/unit/i18n/MessageCatalogTest.cpp) protects locale admission, fallback, arguments, ownership, pseudo behavior, and concurrent formatting.

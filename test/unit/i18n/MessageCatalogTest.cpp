@@ -15,6 +15,15 @@
 #include <unicode/utypes.h>
 #endif
 
+#ifdef __APPLE__
+#include <ao/utility/Raii.h>
+
+#include <CoreFoundation/CFArray.h>
+#include <CoreFoundation/CFBase.h>
+#include <CoreFoundation/CFLocale.h>
+#include <CoreFoundation/CFString.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -23,6 +32,7 @@
 #include <cstdint>
 #include <latch>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -297,7 +307,7 @@ namespace ao::i18n::test
     CHECK(*fallbackCountRes == ResolvedMessage{.text = "1 track", .locale = "en"});
   }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
 
   TEST_CASE("MessageCatalog - malformed operating-system locale falls back to English", "[core][unit][catalog]")
   {
@@ -320,6 +330,46 @@ namespace ao::i18n::test
     auto titleRes = catalogRes->format(MessageId::PilotLibraryTitle);
     REQUIRE(titleRes);
     CHECK(*titleRes == ResolvedMessage{.text = "Music library", .locale = "en"});
+  }
+#endif
+
+#ifdef __APPLE__
+
+  TEST_CASE("MessageCatalog - macOS requests the first preferred language rather than the ICU default",
+            "[core][unit][catalog]")
+  {
+    auto const originalLocale = std::string{::uloc_getDefault()};
+    auto const restoreLocale = gsl_lite::finally(
+      [&originalLocale]
+      {
+        auto restoreStatus = U_ZERO_ERROR;
+        ::uloc_setDefault(originalLocale.c_str(), &restoreStatus);
+      });
+
+    auto const languagesPtr = utility::makeUniquePtr<::CFRelease>(::CFLocaleCopyPreferredLanguages());
+    REQUIRE(languagesPtr != nullptr);
+    REQUIRE(::CFArrayGetCount(languagesPtr.get()) > 0);
+
+    auto preferred = std::array<char, ULOC_FULLNAME_CAPACITY>{};
+    REQUIRE(::CFStringGetCString(static_cast<::CFStringRef>(::CFArrayGetValueAtIndex(languagesPtr.get(), 0)),
+                                 preferred.data(),
+                                 static_cast<::CFIndex>(preferred.size()),
+                                 ::kCFStringEncodingUTF8) != 0U);
+
+    auto preferredRes = MessageCatalog::create(preferred.data());
+    REQUIRE(preferredRes);
+    CAPTURE(preferredRes->requestedLocale());
+
+    // A valid ICU default other than the preferred language separates the two
+    // sources even on a machine whose preferred language is plain English.
+    auto const* const icuDefault = preferredRes->requestedLocale() == "en" ? "de" : "en";
+    auto status = U_ZERO_ERROR;
+    ::uloc_setDefault(icuDefault, &status);
+    REQUIRE(U_SUCCESS(status));
+
+    auto catalogRes = MessageCatalog::createForSystemLocale();
+    REQUIRE(catalogRes);
+    CHECK(catalogRes->requestedLocale() == preferredRes->requestedLocale());
   }
 #endif
 
