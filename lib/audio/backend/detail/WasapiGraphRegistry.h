@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "WasapiFormatObservation.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -21,15 +23,18 @@ namespace ao::audio::backend::detail
    * Volume and mute reflect the per-application session controls
    * (ISimpleAudioVolume); the Windows audio engine applies them downstream of
    * the stream, so they are classified as software gain. The input format is
-   * the PCM contract passed to IAudioClient, while the mix format is queried
-   * independently from the endpoint and remains unknown when Windows does not
-   * expose a supported PCM representation.
+   * the accepted native client descriptor, including legacy zero-source role
+   * fills. The independent engine mix observation retains numerical and partial
+   * role facts even without a concrete PCM format. Delivery evidence retains
+   * configured client mapping and downstream client-to-mix conversion; graph
+   * projection attributes that conversion only to the receiving sink.
    */
   struct WasapiRouteState final
   {
     std::string routeAnchor;
     std::optional<PcmFormat> optInputFormat{};
-    std::optional<PcmFormat> optMixFormat{};
+    WaveFormatObservation mixObservation{};
+    ChannelDeliveryEvidence channelDelivery{};
     float volume = 1.0F;
     bool muted = false;
   };
