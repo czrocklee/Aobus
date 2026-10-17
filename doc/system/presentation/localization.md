@@ -151,6 +151,7 @@ GTK, TUI, and AppKit resolve canonical typed ids from the injected `MessageCatal
 GTK copies borrowed fixed text when a widget API requires ownership.
 TUI feature formatters bind named chrome arguments, leaving command and key identity unchanged.
 AppKit converts required and formatted UTF-8 at its native-string boundary.
+Its bundle declares the selectable catalog locales as `CFBundleLocalizations`, so macOS presents the menu items and panels it supplies, such as Services and full-screen commands, in the first preferred language that the bundle declares.
 
 WinUI binds an explicit MRT `Language` qualifier from the catalog's requested locale.
 It does not allow a default `ResourceLoader` context to select another language independently.

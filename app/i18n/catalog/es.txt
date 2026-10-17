@@ -1079,5 +1079,166 @@ es:table {
     tui_settings_terminal_title_hint { "Da formato a la pista en reproducción, p. ej., $artist \" - \" $title. Déjalo vacío para desactivar la actualización del título." }
     tui_settings_title_preview { "Vista previa: {title}" }
     tui_settings_invalid_title_format { "Formato no válido: {detail}" }
+
+    appkit_collection_hint { "Ponle un nombre a la colección y elige qué incluye." }
+    appkit_track_details { "Detalles de la pista" }
+    appkit_selected_music { "Música seleccionada" }
+    appkit_saved_list { "Lista guardada" }
+    appkit_delete_list_question { "¿Eliminar lista?" }
+    appkit_delete_list_hint { "Se eliminarán la lista y sus listas secundarias." }
+    appkit_cancel { "Cancelar" }
+    appkit_delete_list { "Eliminar lista" }
+    appkit_save_changes { "Guardar cambios" }
+    appkit_field_actions { "Acciones del campo" }
+    appkit_basic_information { "Información básica" }
+    appkit_classification_tags { "Clasificación y etiquetas" }
+    appkit_track_disc { "Pista y disco" }
+    appkit_work_performance { "Obra e interpretación" }
+    appkit_file_information { "Información del archivo" }
+    appkit_add_shared_tags { "Añadir etiquetas compartidas" }
+    appkit_shared_tags { "Etiquetas compartidas" }
+    appkit_list_details { "Detalles de la lista" }
+    appkit_name { "Nombre" }
+    appkit_description { "Descripción" }
+    appkit_expression { "Expresión de filtro" }
+    appkit_list_name { "Nombre de la lista" }
+    appkit_optional_description { "Descripción opcional" }
+    appkit_list_expression_hint { "Usa una etiqueta como #favorites para añadir pistas directamente. Una consulta también puede reunir automáticamente la música que coincida." }
+    appkit_collapse_section { "Plegar sección" }
+    appkit_expand_section { "Desplegar sección" }
+    appkit_edits_storage_hint { "Los cambios se guardan en Aobus. Los archivos de audio no se modifican." }
+    appkit_deletion_keeps_media { "Tus pistas, etiquetas y archivos de audio se conservarán." }
+    appkit_saving { "Guardando…" }
+    appkit_will_clear { "Se borrará" }
+    appkit_list { "Lista" }
+    appkit_discard_question { "¿Descartar estos cambios?" }
+    appkit_discard_hint { "Se descartará lo que hayas introducido sin guardar." }
+    appkit_keep_editing { "Seguir editando" }
+    appkit_keep_open { "Mantener abierto" }
+    appkit_discard_changes { "Descartar cambios" }
+    appkit_clear_selected_field { "Borrar en las pistas seleccionadas" }
+    appkit_edit_tracks { "Editar {count, plural, one {# pista} other {# pistas}}" }
+    appkit_updating_tracks { "Actualizando {count, plural, one {# pista seleccionada} other {# pistas seleccionadas}}" }
+    appkit_deleting_lists { "{count, plural, one {Se eliminará # lista} other {Se eliminarán # listas}}" }
+    appkit_field_actions_for { "Acciones para {field}" }
+    appkit_properties_selection { "Propiedades — {count, plural, one {# pista seleccionada} other {# pistas seleccionadas}}" }
+    appkit_new_list { "Nueva lista" }
+    appkit_edit_list { "Editar lista" }
+    appkit_remove_from_list { "Eliminar de la lista" }
+    appkit_add_to_list { "Añadir a la lista" }
+    appkit_properties_stale { "La biblioteca cambió. Lo que has introducido se conserva; vuelve a abrir Propiedades para editar la versión actual." }
+    appkit_editor_busy { "La biblioteca está ocupada. Lo que has introducido se conserva; intenta guardar de nuevo." }
+    appkit_editor_stale { "La biblioteca cambió. Lo que has introducido se conserva; vuelve a abrir el editor para continuar." }
+    appkit_about { "Acerca de Aobus" }
+    appkit_services { "Servicios" }
+    appkit_hide_application { "Ocultar Aobus" }
+    appkit_hide_others { "Ocultar otros" }
+    appkit_show_all { "Mostrar todo" }
+    appkit_quit { "Salir de Aobus" }
+    appkit_menu_file { "Archivo" }
+    appkit_open_library_action { "Abrir biblioteca…" }
+    appkit_open_recent { "Abrir recientes" }
+    appkit_rescan_library { "Reescanear biblioteca" }
+    appkit_close_window { "Cerrar ventana" }
+    appkit_menu_edit { "Edición" }
+    appkit_undo { "Deshacer" }
+    appkit_redo { "Rehacer" }
+    appkit_cut { "Cortar" }
+    appkit_copy { "Copiar" }
+    appkit_paste { "Pegar" }
+    appkit_paste_match_style { "Pegar con el mismo estilo" }
+    appkit_delete { "Eliminar" }
+    appkit_select_all { "Seleccionar todo" }
+    appkit_filter_tracks { "Filtrar pistas" }
+    appkit_properties_action { "Propiedades…" }
+    appkit_lists { "Listas" }
+    appkit_new_list_action { "Nueva lista…" }
+    appkit_new_child_list_action { "Nueva lista secundaria…" }
+    appkit_edit_list_action { "Editar lista…" }
+    appkit_delete_list_action { "Eliminar lista…" }
+    appkit_menu_view { "Visualización" }
+    appkit_modern { "Moderno" }
+    appkit_classic { "Clásico" }
+    appkit_show_inspector { "Mostrar inspector" }
+    appkit_hide_inspector { "Ocultar inspector" }
+    appkit_show_sidebar { "Mostrar barra lateral" }
+    appkit_hide_sidebar { "Ocultar barra lateral" }
+    appkit_show_activity { "Mostrar actividad" }
+    appkit_enter_full_screen { "Usar pantalla completa" }
+    appkit_customize_toolbar { "Personalizar barra de herramientas…" }
+    appkit_appearance_system { "Según el sistema" }
+    appkit_appearance_light { "Claro" }
+    appkit_appearance_dark { "Oscuro" }
+    appkit_menu_playback { "Reproducción" }
+    appkit_output_device_action { "Dispositivo de salida…" }
+    appkit_menu_window { "Ventana" }
+    appkit_minimize { "Minimizar" }
+    appkit_zoom { "Zoom" }
+    appkit_show_window { "Mostrar la ventana de Aobus" }
+    appkit_bring_all_to_front { "Traer todo al frente" }
+    appkit_menu_help { "Ayuda" }
+    appkit_help { "Ayuda de Aobus" }
+    appkit_library_section { "Biblioteca" }
+    appkit_saved_lists { "Listas guardadas" }
+    appkit_playing_artwork { "Portada de reproducción actual" }
+    appkit_selected_artwork { "Portada de la pista seleccionada" }
+    appkit_filter_placeholder { "Filtrar pistas" }
+    appkit_tracks { "Pistas" }
+    appkit_empty_library_title { "Abre una carpeta de música para crear tu biblioteca" }
+    appkit_ready { "Listo" }
+    appkit_reveal_in_finder { "Mostrar en el Finder" }
+    appkit_edit_properties_action { "Editar propiedades…" }
+    appkit_choose_music { "Elige algo para escuchar" }
+    appkit_output_device { "Dispositivo de salida" }
+    appkit_volume { "Volumen" }
+    appkit_playback_options { "Opciones de reproducción" }
+    appkit_playback_position { "Posición de reproducción" }
+    appkit_repeat_off { "Repetición desactivada" }
+    appkit_repeat_all { "Repetir todo" }
+    appkit_repeat_one { "Repetir una" }
+    appkit_filter { "Filtro" }
+    appkit_filter_this_view { "Filtrar esta vista" }
+    appkit_current_view { "Vista actual" }
+    appkit_activity { "Actividad" }
+    appkit_open_library { "Abrir biblioteca" }
+    appkit_library_empty { "Tu biblioteca está vacía" }
+    appkit_no_matching_tracks { "No hay pistas coincidentes" }
+    appkit_empty_library_hint { "Abre una carpeta de música o elige otra lista." }
+    appkit_no_matching_tracks_hint { "Prueba con otro filtro o bórralo para volver a ver esta vista." }
+    appkit_clear_filter { "Borrar filtro" }
+    appkit_list_empty { "Esta lista está vacía" }
+    appkit_empty_list_hint { "Añade música a esta lista o explora todas tus pistas." }
+    appkit_show_all_tracks { "Mostrar todas las pistas" }
+    appkit_invalid_filter { "Filtro no válido" }
+    appkit_auto_presentation { "Automático" }
+    appkit_unavailable_presentation { "No disponible: {id} (Automático)" }
+    appkit_column_sort_presentation { "Orden por columna" }
+    appkit_no_activity { "No hay actividad en curso" }
+    appkit_audio { "Audio" }
+    appkit_file_label { "Archivo" }
+    appkit_selection_details_hint { "Selecciona música para ver aquí sus detalles." }
+    appkit_shared_details_hint { "Edita en Propiedades la información común de esta selección." }
+    appkit_track_information { "Información de la pista" }
+    appkit_done { "Aceptar" }
+    appkit_dismiss_activity { "Ocultar actividad" }
+    appkit_hide_notification { "Ocultar notificación" }
+    appkit_severity_info { "Información" }
+    appkit_severity_warning { "Advertencia" }
+    appkit_severity_error { "Error" }
+    appkit_choose_library_folder { "Elige la carpeta que contiene tu biblioteca de música." }
+    appkit_clear_recent_menu { "Vaciar menú" }
+    appkit_unknown_folder { "Carpeta desconocida" }
+    appkit_remove_from_current_list { "Eliminar de esta lista" }
+    appkit_playback_position_value { "{elapsed} de {duration}" }
+    appkit_selection_total { "Seleccionadas: {selected, number} / {total, plural, one {# pista} other {# pistas}}" }
+    appkit_tracks_selected { "{count, plural, one {# pista seleccionada} other {# pistas seleccionadas}}" }
+    appkit_track_of_total { "{track, number} de {total, number}" }
+    appkit_recent_unavailable { "La carpeta de biblioteca reciente ya no está disponible:\n{path}" }
+    appkit_hide_activity { "Ocultar actividad" }
+    appkit_no_recent_libraries { "No hay bibliotecas recientes" }
+    appkit_artwork_available { "Portada disponible" }
+    appkit_activity_detail_label { "{severity}: {message}" }
+    appkit_operation_failed { "Aobus no pudo completar la operación" }
+    appkit_settings_already_open { "Otra ventana de Aobus ya está usando esta configuración de la aplicación." }
   }
 }

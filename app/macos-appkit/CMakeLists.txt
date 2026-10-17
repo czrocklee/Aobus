@@ -43,6 +43,12 @@ set(_appkit_brand_license "${CMAKE_SOURCE_DIR}/asset/brand/LICENSE.txt")
 target_sources(aobus-appkit PRIVATE "${_appkit_icon}" "${_appkit_brand_license}")
 set_source_files_properties("${_appkit_icon}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 set_source_files_properties("${_appkit_brand_license}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources/Brand)
+# Without declared localizations, macOS presents the menu items and panels it
+# supplies in English even when the catalog follows another maintained locale.
+set(AOBUS_APPKIT_BUNDLE_LOCALIZATIONS)
+foreach(_appkit_locale_tag IN LISTS AOBUS_CATALOG_LOCALE_TAGS)
+  string(APPEND AOBUS_APPKIT_BUNDLE_LOCALIZATIONS "<string>${_appkit_locale_tag}</string>")
+endforeach()
 set_target_properties(aobus-appkit PROPERTIES
   OBJCXX_STANDARD 26 OBJCXX_STANDARD_REQUIRED ON
   MACOSX_BUNDLE_GUI_IDENTIFIER "org.aobus.desktop"

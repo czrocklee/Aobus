@@ -181,3 +181,5 @@ target_link_libraries(ao_app_i18n_completion
 
 # WinUI consumes the generated resource paths from its sibling directory.
 set(AOBUS_CATALOG_WINUI_RESW_FILES "${AOBUS_CATALOG_WINUI_RESW_FILES}" PARENT_SCOPE)
+# AppKit declares the selectable locale tags as its bundle localizations.
+set(AOBUS_CATALOG_LOCALE_TAGS "${_catalog_locale_tags}" PARENT_SCOPE)

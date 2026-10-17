@@ -810,15 +810,20 @@ namespace ao::appkit
                                                 : [self text:MessageId::AppKitNoMatchingTracks];
   _emptyHint.stringValue = filter.entryText.empty() ? [self text:MessageId::AppKitEmptyLibraryHint]
                                                     : [self text:MessageId::AppKitNoMatchingTracksHint];
-  _emptyAction.title = filter.entryText.empty() ? [self text:MessageId::AppKitOpenLibraryAction]
-                                                : [self text:MessageId::AppKitClearFilter];
+  auto* emptyActionTitle = filter.entryText.empty() ? [self text:MessageId::AppKitOpenLibraryAction]
+                                                    : [self text:MessageId::AppKitClearFilter];
 
   if (filter.entryText.empty() && activeListId != ao::rt::kAllTracksListId)
   {
     _empty.stringValue = [self text:MessageId::AppKitListEmpty];
     _emptyHint.stringValue = [self text:MessageId::AppKitEmptyListHint];
-    _emptyAction.title = [self text:MessageId::AppKitShowAllTracks];
+    emptyActionTitle = [self text:MessageId::AppKitShowAllTracks];
   }
+
+  // The empty-state action is sized to its title.
+  _layoutPending =
+    static_cast<BOOL>(_layoutPending != NO || [_emptyAction.title isEqualToString:emptyActionTitle] == NO);
+  _emptyAction.title = emptyActionTitle;
 
   if (_search.currentEditor == nil && utf8(_search.stringValue) != filter.entryText)
   {
