@@ -350,6 +350,7 @@ namespace ao::audio::backend
       std::atomic<bool> runActive{false};
       std::atomic<bool> renderAllowed{false};
       std::atomic<std::uint64_t> pendingDrainGeneration{0U};
+      std::atomic<bool> pendingGraphPublication{false};
       std::atomic<std::uint64_t> pendingDeviceGeneration{0U};
       std::atomic<std::uint64_t> pendingFault{0U};
       std::atomic<bool> controlStop{false};
@@ -360,6 +361,7 @@ namespace ao::audio::backend
       void signalDrainReady(std::uint64_t drainGeneration) noexcept;
       void signalDeviceChange() noexcept;
       void signalFault(CoreAudioFault fault) noexcept;
+      void requestGraphPublication() noexcept;
       void controlLoop();
       void handleDrain(std::uint64_t drainGeneration);
       void handleDeviceChange(std::uint64_t deviceGeneration);
@@ -367,6 +369,14 @@ namespace ao::audio::backend
       void publishGraph() const;
       void reportError(std::uint64_t errorGeneration, std::string_view message);
     };
+
+    // Caller holds targetCallbackMutex while observing the borrowed target.
+    bool isCurrentOpenTarget(CoreAudioRuntimeState const& state,
+                             std::uint64_t const openGeneration,
+                             RenderTarget const& target) noexcept
+    {
+      return state.generation.load(std::memory_order_acquire) == openGeneration && state.renderTarget == &target;
+    }
 
     void CoreAudioRuntimeState::signalDrainReady(std::uint64_t const drainGeneration) noexcept
     {
@@ -393,6 +403,12 @@ namespace ao::audio::backend
       {
         controlSignal.release();
       }
+    }
+
+    void CoreAudioRuntimeState::requestGraphPublication() noexcept
+    {
+      pendingGraphPublication.store(true, std::memory_order_release);
+      controlSignal.release();
     }
 
     void CoreAudioRuntimeState::controlLoop()
@@ -423,6 +439,14 @@ namespace ao::audio::backend
             drainGeneration != 0U)
         {
           handleDrain(drainGeneration);
+        }
+
+        // Hand off property publication rather than calling graph observers on
+        // the setter's stack. Another thread's target callback may still be active;
+        // observer-driven close waits for it through targetCallbackMutex.
+        if (pendingGraphPublication.exchange(false, std::memory_order_acq_rel))
+        {
+          publishGraph();
         }
       }
     }
@@ -587,29 +611,36 @@ namespace ao::audio::backend
         return;
       }
 
-      auto const publicationLock = std::scoped_lock{graphPublicationMutex};
-      auto state = detail::CoreAudioRouteState{};
+      auto pendingDelivery = detail::BackendGraphRegistry::PendingDelivery{};
       {
-        auto const lock = std::scoped_lock{graphStateMutex};
-
-        if (!graphPublished)
+        auto const publicationLock = std::scoped_lock{graphPublicationMutex};
+        auto state = detail::CoreAudioRouteState{};
         {
-          return;
+          auto const lock = std::scoped_lock{graphStateMutex};
+
+          if (!graphPublished)
+          {
+            return;
+          }
+
+          state.routeAnchor = deviceUid;
+          state.deviceName = deviceName;
+          state.optClientFormat = optClientFormat;
+          state.optDeviceFormat = optDeviceFormat;
         }
 
-        state.routeAnchor = deviceUid;
-        state.deviceName = deviceName;
-        state.optClientFormat = optClientFormat;
-        state.optDeviceFormat = optDeviceFormat;
+        {
+          auto const lock = std::scoped_lock{propertyMutex};
+          state.volume = cachedVolume;
+          state.muted = cachedMuted;
+        }
+
+        // Order the registry commit against close without retaining an owner
+        // lock while registry delivery waits for or invokes an observer.
+        pendingDelivery = graphRegistryPtr->preparePublish(state.routeAnchor, detail::coreAudioGraph(state));
       }
 
-      {
-        auto const lock = std::scoped_lock{propertyMutex};
-        state.volume = cachedVolume;
-        state.muted = cachedMuted;
-      }
-
-      graphRegistryPtr->publish(state.routeAnchor, detail::coreAudioGraph(state));
+      std::move(pendingDelivery).deliver();
     }
 
     void CoreAudioRuntimeState::reportError(std::uint64_t const errorGeneration, std::string_view const message)
@@ -1095,7 +1126,7 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    statePtr->generation.fetch_add(1U, std::memory_order_acq_rel);
+    auto const openGeneration = statePtr->generation.fetch_add(1U, std::memory_order_acq_rel) + 1U;
     statePtr->pendingDrainGeneration.store(0U, std::memory_order_release);
     statePtr->pendingFault.store(0U, std::memory_order_release);
     statePtr->runActive.store(false, std::memory_order_release);
@@ -1140,12 +1171,41 @@ namespace ao::audio::backend
     }
 
     {
-      auto const lock = std::scoped_lock{statePtr->graphStateMutex};
-      statePtr->graphPublished = true;
+      // Open-origin notifications share close's target lifetime boundary.
+      // No native, property, graph-state or publication lock spans these calls.
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+
+      if (!isCurrentOpenTarget(*statePtr, openGeneration, target))
+      {
+        return OpenedPcmMode{.clientFormat = selectedFormat};
+      }
+
+      {
+        auto const lock = std::scoped_lock{statePtr->graphStateMutex};
+        statePtr->graphPublished = true;
+      }
+
+      statePtr->renderTarget->handleRouteReady(statePtr->deviceUid);
     }
 
-    target.handleRouteReady(statePtr->deviceUid);
-    target.handleFormatChanged(selectedFormat);
+    {
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+
+      // Close may retire this open between notifications. Check the generation
+      // as well as identity: a later open can attach the same target again.
+      if (!isCurrentOpenTarget(*statePtr, openGeneration, target))
+      {
+        return OpenedPcmMode{.clientFormat = selectedFormat};
+      }
+
+      statePtr->renderTarget->handleFormatChanged(selectedFormat);
+
+      if (!isCurrentOpenTarget(*statePtr, openGeneration, target))
+      {
+        return OpenedPcmMode{.clientFormat = selectedFormat};
+      }
+    }
+
     statePtr->publishGraph();
     return OpenedPcmMode{.clientFormat = selectedFormat};
   }
@@ -1282,40 +1342,60 @@ namespace ao::audio::backend
   void CoreAudioBackend::close()
   {
     auto const statePtr = _implPtr->statePtr;
-    statePtr->generation.fetch_add(1U, std::memory_order_acq_rel);
-    statePtr->runActive.store(false, std::memory_order_release);
-    statePtr->renderAllowed.store(false, std::memory_order_release);
-    statePtr->renderFence.closeAndWait();
     statePtr->deviceListenerFence.close();
-
-    auto const publicationLock = std::scoped_lock{statePtr->graphPublicationMutex};
-    auto routeAnchor = std::string{};
-    bool clearGraph = false;
-    {
-      auto const lock = std::scoped_lock{statePtr->graphStateMutex};
-      routeAnchor = statePtr->deviceUid;
-      clearGraph = statePtr->graphPublished;
-      statePtr->graphPublished = false;
-      statePtr->optClientFormat.reset();
-      statePtr->optDeviceFormat.reset();
-    }
 
     ::AudioUnit unit = nullptr;
     ::AudioObjectID deviceId = ::kAudioObjectUnknown;
     std::size_t registeredListenerCount = 0U;
     {
-      auto const lock = std::scoped_lock{statePtr->nativeMutex};
-      unit = statePtr->unit;
-      deviceId = statePtr->deviceId;
-      registeredListenerCount = statePtr->registeredDeviceListenerCount;
-      statePtr->registeredDeviceListenerCount = 0U;
-      statePtr->unit = nullptr;
-      statePtr->deviceId = ::kAudioObjectUnknown;
-      statePtr->started = false;
-      statePtr->stagingBuffer.clear();
-      statePtr->bytesPerFrame = 0U;
-      statePtr->maximumFramesPerSlice = 0U;
-      statePtr->presentationTailFrameCount.store(0U, std::memory_order_release);
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+      // An admitted open notification can reenter start while close waits for
+      // this mutex. Establish final render quiescence after it has returned,
+      // before detaching any render storage or revoking the target.
+      statePtr->generation.fetch_add(1U, std::memory_order_acq_rel);
+      statePtr->runActive.store(false, std::memory_order_release);
+      statePtr->renderAllowed.store(false, std::memory_order_release);
+      statePtr->renderFence.closeAndWait();
+      {
+        auto const lock = std::scoped_lock{statePtr->nativeMutex};
+        unit = statePtr->unit;
+        deviceId = statePtr->deviceId;
+        registeredListenerCount = std::exchange(statePtr->registeredDeviceListenerCount, 0U);
+        statePtr->unit = nullptr;
+        statePtr->deviceId = ::kAudioObjectUnknown;
+        statePtr->started = false;
+        statePtr->stagingBuffer.clear();
+        statePtr->bytesPerFrame = 0U;
+        statePtr->maximumFramesPerSlice = 0U;
+        statePtr->presentationTailFrameCount.store(0U, std::memory_order_release);
+      }
+
+      // Render quiescence and callback serialization precede target revocation.
+      // Do not reacquire this mutex while holding graphPublicationMutex below.
+      statePtr->renderTarget = nullptr;
+      statePtr->deliveredDrainGeneration = 0U;
+      statePtr->deliveredErrorGeneration = 0U;
+      statePtr->drainTail.reset();
+    }
+
+    auto pendingDelivery = detail::BackendGraphRegistry::PendingDelivery{};
+    {
+      auto const publicationLock = std::scoped_lock{statePtr->graphPublicationMutex};
+      auto routeAnchor = std::string{};
+      bool clearGraph = false;
+      {
+        auto const lock = std::scoped_lock{statePtr->graphStateMutex};
+        routeAnchor = statePtr->deviceUid;
+        clearGraph = statePtr->graphPublished;
+        statePtr->graphPublished = false;
+        statePtr->optClientFormat.reset();
+        statePtr->optDeviceFormat.reset();
+      }
+
+      if (clearGraph && statePtr->graphRegistryPtr && !routeAnchor.empty())
+      {
+        pendingDelivery = statePtr->graphRegistryPtr->prepareClear(routeAnchor);
+      }
     }
 
     while (registeredListenerCount != 0U)
@@ -1334,19 +1414,7 @@ namespace ao::audio::backend
       ::AudioComponentInstanceDispose(unit);
     }
 
-    {
-      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
-      statePtr->renderTarget = nullptr;
-      statePtr->deliveredDrainGeneration = 0U;
-      statePtr->deliveredErrorGeneration = 0U;
-    }
-
-    statePtr->drainTail.reset();
-
-    if (clearGraph && statePtr->graphRegistryPtr && !routeAnchor.empty())
-    {
-      statePtr->graphRegistryPtr->clear(routeAnchor);
-    }
+    std::move(pendingDelivery).deliver();
   }
 
   Result<> CoreAudioBackend::setProperty(PropertyId const id, PropertyValue const& value)
@@ -1420,7 +1488,7 @@ namespace ao::audio::backend
       }
     }
 
-    statePtr->publishGraph();
+    statePtr->requestGraphPublication();
     return {};
   }
 
