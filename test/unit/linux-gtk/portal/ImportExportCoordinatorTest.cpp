@@ -188,7 +188,7 @@ namespace ao::gtk::test
     {
       auto yaml = std::ofstream{importPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:

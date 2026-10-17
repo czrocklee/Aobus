@@ -23,7 +23,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 
 - **Source library** is the library being exported.
 - **Target library** is the library being imported into.
-- **Payload mode** is the document's `export_mode` and controls payload scope and baseline reconstruction.
+- **Payload mode** is the document's `export-mode` and controls payload scope and baseline reconstruction.
 - **Import mode** is `restore` or `merge` and controls how the payload combines with target state.
 - **File baseline** is a track builder loaded from the audio file named by a Library URI when that file is readable.
 - **Merge baseline** is an existing target track matched by canonical manifest URI.
@@ -96,7 +96,7 @@ It does not reuse a nullable branch inside the live operation and is not the fro
 | `delta` | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
 | `metadata` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
 | `full` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Reference sequence, including empty, plus the `library.resources` table. | Included, including zero values. | Included. |
-| `listOnly` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references. |
+| `list-only` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references. |
 
 No mode carries a cover byte; `full` carries each cover's digest, length, picture type, and order, and names each distinct cover once.
 No mode is a copy of the files' tags either: a document carries only what the database holds, and a source field that the [source field mapping](../../reference/media/audio-file.md#source-field-mapping) does not import is never there.
@@ -112,7 +112,7 @@ A filesystem inspection error fails export with `IoError`.
 ### Restore
 
 For `delta`, `metadata`, and `full`, restore clears tracks, manifest rows, and lists inside the import transaction before rebuilding them.
-For `listOnly`, restore preserves tracks and manifest rows and clears only lists.
+For `list-only`, restore preserves tracks and manifest rows and clears only lists.
 Restored rows receive fresh ids above every id the database ever committed, so a reference saved against this database before the restore names no restored object; document ids only bind references inside the document.
 A new database has committed no id, so its restored ids start at `1` and can equal the ids of the document's source or of another database.
 Restore never changes the target's `libraryId`, so a restore into a new database leaves it distinguishable by id from the library the document came from.
@@ -149,7 +149,7 @@ Collections use replacement semantics:
 
 A recognized codec token replaces the baseline codec; any other token rejects the payload.
 Manifest facts start from an existing manifest row, otherwise current filesystem facts when the path exists, otherwise a zero file size and no stored modification time.
-A present `fileSize` field overrides that fact.
+A present `file-size` field overrides that fact.
 A present `mtime` value overrides the modification-time fact: the map form stores its instant, and an explicit YAML null clears the stored modification time to absent; an omitted `mtime` preserves the baseline.
 
 The performance-information fields follow the same overlay shape with two narrow rules.
@@ -172,7 +172,7 @@ Only `full` may carry that key, so the mode decides the outcome:
 | `full` | The document's reference graph, including which tracks share one cover. | The document's reference graph for the tracks it names. |
 | `metadata` | The file's current art, which may differ from the exporting database's state when the file was retagged in between; no covers when the file cannot be read. | The target track's covers, unchanged. |
 | `delta` | The file's current art; no covers when the file cannot be read. | The target's covers, filled from the file only when the target has none. |
-| `listOnly` | Untouched. | Untouched. |
+| `list-only` | Untouched. | Untouched. |
 
 A `full` import derives each `ResourceId` from the digest rather than reading one from the document, and writes descriptors only: no cover content is written, whatever the size of the collection.
 A declared length fills a descriptor row that does not exist and never overwrites one a writer counted.
@@ -202,8 +202,8 @@ Every import, preview, and plan returns an `ImportReport`:
 | Field | Meaning |
 |---|---|
 | `payloadVersion` | Accepted interchange version; currently `8`. |
-| `payloadMode` | `delta`, `metadata`, `full`, or `listOnly`. |
-| `targetScope` | `Library` for track-bearing payloads or `Lists` for `listOnly`. |
+| `payloadMode` | `delta`, `metadata`, `full`, or `list-only`. |
+| `targetScope` | `ImportTargetScope::Library` for track-bearing payloads or `ImportTargetScope::Lists` for `list-only`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
 | `tracksUpdated` | Imported records that match a target manifest URI. |
 | `tracksDeleted` | Pre-restore tracks when scope clears tracks; otherwise `0`. |
@@ -269,20 +269,20 @@ No frontend may commit a restore from a bare path or reinterpret scope, counts, 
 
 ### Building an interactive transfer surface
 
-GTK and WinUI build their export selectors from one UIModel definition ordered as Delta, Metadata, Full, and List Only.
-Both default to Full.
-An invalid native selector index remains an adapter concern: GTK conservatively falls back to Metadata, while WinUI returns no mode and does not reinterpret the selection.
+GTK and WinUI build their export selectors from one UIModel definition ordered as `delta`, `metadata`, `full`, and `list-only`.
+Both default to `full`.
+An invalid native selector index remains an adapter concern: GTK conservatively falls back to `metadata`, while WinUI returns no mode and does not reinterpret the selection.
 
 Restore confirmation is also shared presentation policy.
 Given the structured `ImportReport`, UIModel selects the Library- or Lists-scoped action and formats the complete version, scope, counts, and ignored-reference summary.
-The displayed payload mode argument is the report's stable machine token (`delta`, `metadata`, `full`, or `listOnly`), not the localized export-selector label; display text is never parsed back into transfer identity.
+The displayed payload mode argument is the report's stable machine token (`delta`, `metadata`, `full`, or `list-only`), not the localized export-selector label; display text is never parsed back into transfer identity.
 
-GTK prepares a restore plan after file selection, presents its version, payload mode, scope, counts, and ignored references, and applies only after an explicit positive response.
+GTK prepares a restore plan after file selection, presents its version, payload mode, scope, counts, ignored references, and kept invalid List filters, and applies only after an explicit positive response.
 Closing or rejecting the confirmation drops the plan.
 
 WinUI exposes all four export modes through its Windows save picker and offers `merge` or `restore` before opening its Windows file picker.
 Merge is the default and applies the prepared plan without a destructive confirmation.
-Restore presents the shared report's version, payload mode, target scope, track/List create-update-delete counts, and ignored references in a native confirmation; cancellation or rejection drops the plan and changes nothing.
+Restore presents the shared report's version, payload mode, target scope, track/List create-update-delete counts, ignored references, and kept invalid List filters in a native confirmation; cancellation or rejection drops the plan and changes nothing.
 Import preparation, apply, and export publish their coarse file-named phases through the shared task-progress channel used by the Windows activity surface.
 
 CLI defaults import to `merge`.

@@ -77,7 +77,7 @@ namespace ao::library
       case CreditKind::Producer: return "producer";
       case CreditKind::Engineer: return "engineer";
       case CreditKind::Mixer: return "mixer";
-      case CreditKind::DjMixer: return "djmixer";
+      case CreditKind::DjMixer: return "dj-mixer";
       case CreditKind::Remixer: return "remixer";
     }
 

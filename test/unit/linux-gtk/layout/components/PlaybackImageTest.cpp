@@ -97,7 +97,7 @@ namespace ao::gtk::layout::test
       auto output = std::ofstream{path};
       REQUIRE(output);
       output << "version: 8\n"
-                "export_mode: full\n"
+                "export-mode: full\n"
                 "library:\n";
 
       if (optCover)

@@ -413,7 +413,7 @@ namespace ao::rt
         optMtime = optManifest->mtime();
       }
 
-      appendKeyValue(node, "fileSize", fileSize);
+      appendKeyValue(node, "file-size", fileSize);
       emitTrackMtime(node, optMtime);
       return {};
     }
@@ -566,7 +566,7 @@ namespace ao::rt
       listNode.set_map();
 
       appendKeyValue(listNode, "id", listId.raw());
-      appendKeyValue(listNode, "parentId", listView.parentId().raw());
+      appendKeyValue(listNode, "parent-id", listView.parentId().raw());
       appendString(listNode, "name", listView.name());
 
       if (!listView.description().empty())
@@ -675,7 +675,7 @@ namespace ao::rt
     auto const transaction = ml.readTransaction();
 
     appendKeyValue(root, "version", kYamlFormatVersion);
-    appendString(root, "export_mode", exportModeName(mode));
+    appendString(root, "export-mode", exportModeName(mode));
 
     auto library = root.append_child();
     yaml::setKey(library, "library");

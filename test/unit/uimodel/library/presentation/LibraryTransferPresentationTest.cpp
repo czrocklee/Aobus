@@ -85,7 +85,7 @@ namespace ao::uimodel::test
     CHECK(presentation.title == "Confirm Restore");
     CHECK(presentation.action == "Restore Lists");
     CHECK(presentation.message ==
-          "This restore will replace the current Lists.\n\nPayload: YAML v6, mode 'listOnly'.\nPreview — "
+          "This restore will replace the current Lists.\n\nPayload: YAML v6, mode 'list-only'.\nPreview — "
           "tracks: 2 created, 3 updated, 4 deleted; Lists: 5 created, 6 deleted; dangling references ignored: 7; "
           "invalid List filters kept as written: 8.\n\nContinue only if this matches the selected backup.");
   }
@@ -97,7 +97,7 @@ namespace ao::uimodel::test
       std::pair{rt::ExportMode::Delta, std::string_view{"delta"}},
       std::pair{rt::ExportMode::Metadata, std::string_view{"metadata"}},
       std::pair{rt::ExportMode::Full, std::string_view{"full"}},
-      std::pair{rt::ExportMode::ListOnly, std::string_view{"listOnly"}},
+      std::pair{rt::ExportMode::ListOnly, std::string_view{"list-only"}},
     };
 
     for (auto const& [mode, token] : modes)

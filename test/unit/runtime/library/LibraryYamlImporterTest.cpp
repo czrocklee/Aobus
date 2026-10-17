@@ -38,7 +38,7 @@ namespace ao::rt::test
     std::string trackDocument(std::string_view trackFields)
     {
       return std::format("version: {}\n"
-                         "export_mode: full\n"
+                         "export-mode: full\n"
                          "library:\n"
                          "  resources: []\n"
                          "  tracks:\n"
@@ -52,7 +52,7 @@ namespace ao::rt::test
     std::string documentWith(std::string_view trackOneFields, std::string_view trackTwoFields)
     {
       return std::format("version: {}\n"
-                         "export_mode: full\n"
+                         "export-mode: full\n"
                          "library:\n"
                          "  resources: []\n"
                          "  tracks:\n"
@@ -331,7 +331,7 @@ namespace ao::rt::test
             "[runtime][unit][import-export][schema]")
   {
     auto const yaml = std::format("version: {}\n"
-                                  "export_mode: full\n"
+                                  "export-mode: full\n"
                                   "library:\n"
                                   "  resources: []\n"
                                   "  tracks:\n"

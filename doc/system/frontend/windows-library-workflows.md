@@ -70,7 +70,7 @@ More menu and Classic's File menu. Modern's More menu owns global library and
 shell actions; its separate Playback options menu contains Stop and Reveal
 Current Track. The two menus have distinct accessible names.
 
-Export first selects `delta`, `metadata`, `full`, or `listOnly`, defaulting to
+Export first selects `delta`, `metadata`, `full`, or `list-only`, defaulting to
 `full`, then uses the Windows save picker for a `.yaml` or `.yml` path. Import
 first selects `merge` or `restore`, defaulting to `merge`, then uses the Windows
 open picker. Both submit to the active session's `LibraryJobs`.
@@ -82,9 +82,10 @@ does not cancel or restart admitted work; Classic's status bar reports the
 terminal result.
 
 A merge applies its prepared plan directly. A restore instead presents payload
-version and mode, target scope, create/update/delete counts, and ignored-reference
-count. Its destructive action is scope-specific, defaults to Cancel, and is the
-only route that applies the plan. Rejecting the preview drops that one-shot plan.
+version and mode, target scope, create/update/delete counts, and the counts of
+ignored references and kept invalid List filters. Its destructive action is
+scope-specific, defaults to Cancel, and is the only route that applies the plan.
+Rejecting the preview drops that one-shot plan.
 
 Cancelling a mode dialog or picker changes nothing. Malformed YAML and
 recoverable picker, preparation, import, or export failure remain visible in

@@ -183,7 +183,7 @@ namespace ao::library::test
                                    "producer",
                                    "engineer",
                                    "mixer",
-                                   "djmixer",
+                                   "dj-mixer",
                                    "remixer"};
     static_assert(tokens.size() == kCreditKindCount);
 
@@ -201,7 +201,7 @@ namespace ao::library::test
     CHECK(creditKindToken(invalid).empty());
     CHECK_FALSE(parseCreditKind("Soloist"));
     CHECK_FALSE(parseCreditKind("musician"));
-    CHECK_FALSE(parseCreditKind("dj-mixer"));
+    CHECK_FALSE(parseCreditKind("djmixer"));
     CHECK_FALSE(parseCreditKind(""));
     auto const res = normalizeList({{.name = "Name", .kind = invalid}});
     REQUIRE_FALSE(res);

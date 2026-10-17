@@ -468,7 +468,7 @@ namespace ao::rt::test
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: delta
+export-mode: delta
 library:
   tracks:
     - uri: track1.flac
@@ -524,7 +524,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -552,7 +552,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -618,7 +618,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(version: 8
-export_mode: delta
+export-mode: delta
 library:
   tracks:
     - uri: track1.flac
@@ -627,7 +627,7 @@ library:
       title: "New"
   lists:
     - id: 1
-      parentId: 0
+      parent-id: 0
       name: "Imported"
       order:
         - uri: track2.flac
@@ -675,7 +675,7 @@ library:
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -759,7 +759,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << "version: 8\n";
-      yaml << "export_mode: metadata\n";
+      yaml << "export-mode: metadata\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
       yaml << "    - uri: \"A.flac\"\n";
@@ -825,7 +825,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPathDelta};
       yaml << "version: 8\n";
-      yaml << "export_mode: delta\n";
+      yaml << "export-mode: delta\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
       yaml << "    - uri: \"A.flac\"\n";
@@ -890,7 +890,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: minimum
+export-mode: minimum
 library:
   tracks: []
   lists: []
@@ -906,7 +906,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 extension_root: future
 library:
   resources: []
@@ -934,7 +934,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << "version: 8\n";
-      yaml << "export_mode: metadata\n";
+      yaml << "export-mode: metadata\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
       yaml << "    - uri: \"tagged.flac\"\n";
@@ -1085,12 +1085,12 @@ library:
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
     - uri: song.flac
-      fileSize: 42
+      file-size: 42
       mtime:
         seconds: 1719835259
         nanoseconds: 500000000
@@ -1133,7 +1133,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << "version: 8\n";
-      yaml << "export_mode: full\n";
+      yaml << "export-mode: full\n";
       yaml << "library:\n";
       yaml << "  resources: []\n";
       yaml << "  tracks:\n";

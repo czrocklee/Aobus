@@ -18,11 +18,14 @@ Producer and consumer code lives under `app/runtime/library/`; the format transl
 
 ## Document root
 
+Every schema-defined field name and every multiword enum token, such as `list-only`, is lowercase words joined by hyphens, never underscores or camel case.
+Keys of a Track's `custom` map are user-defined and exempt from this rule; [Credits](#credits) lists the reserved ones.
+
 The root is a closed map with this shape:
 
 ```yaml
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -32,16 +35,16 @@ library:
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
 | `version` | Yes. | Always `8`. | Unsigned 32-bit integer; only `8` is accepted. |
-| `export_mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `listOnly`. |
+| `export-mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `list-only`. |
 | `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
 
 Collection presence declares payload scope:
 
-| `export_mode` | `library.resources` | `library.tracks` | `library.lists` |
+| `export-mode` | `library.resources` | `library.tracks` | `library.lists` |
 |---|---|---|---|
 | `full` | Required sequence, including when empty. | Required sequence, including when empty. | Required sequence, including when empty. |
 | `delta`, `metadata` | Forbidden. | Required sequence, including when empty. | Required sequence, including when empty. |
-| `listOnly` | Forbidden. | Forbidden. | Required sequence, including when empty. |
+| `list-only` | Forbidden. | Forbidden. | Required sequence, including when empty. |
 
 No document of any mode carries a cover byte.
 
@@ -92,7 +95,7 @@ Each track is a closed map.
 | `tags` | No. | Sequence of scalar strings. | Emitted only when non-empty. |
 | `covers` | No. | Sequence of closed cover maps. | Mode-dependent; an empty sequence is meaningful. |
 | Technical fields | No. | Scalars from the technical table. | Emitted in `full`. |
-| `fileSize` | No. | Unsigned 64-bit integer. | Emitted in `full`; `0` when no manifest row exists. |
+| `file-size` | No. | Unsigned 64-bit integer. | Emitted in `full`; `0` when no manifest row exists. |
 | `mtime` | No. | Closed `seconds`/`nanoseconds` map or an explicit YAML null. | Emitted in `full`: the map when the manifest stores a modification time, an explicit null when it stores none, including when no manifest row exists. |
 
 `mtime` carries the manifest's modification time as one portable instant on the Unix/POSIX time scale: `seconds` is a signed 64-bit count from `1970-01-01 00:00:00 UTC`, excluding leap seconds, and `nanoseconds` is the fraction of that second, at least `0` and below `1000000000`.
@@ -126,7 +129,7 @@ The following fields are unsigned 16-bit integers:
 | `disc-number` | `disc-total` | `movement-number` |
 | `movement-total` | | |
 
-These names come from `rt::trackFieldId()` and use hyphens rather than underscores or camel case.
+These names come from `rt::trackFieldId()`.
 
 ### Recording date
 
@@ -156,7 +159,7 @@ credits:
 ```
 
 `name` and `kind` are required scalars; `role` is an optional scalar.
-Kind tokens are exactly `conductor`, `ensemble`, `soloist`, `performer`, `lyricist`, `arranger`, `writer`, `producer`, `engineer`, `mixer`, `djmixer`, and `remixer`.
+Kind tokens are exactly `conductor`, `ensemble`, `soloist`, `performer`, `lyricist`, `arranger`, `writer`, `producer`, `engineer`, `mixer`, `dj-mixer`, and `remixer`.
 The importer groups entries stably in that canonical kind order, and the exporter emits that order.
 Within-kind order, duplicate entries, repeated names and roles, and the same name in different kinds are preserved; there is no deduplication.
 The separate `conductor`, `ensemble`, `soloist`, and `musicians` track keys are unknown fields, not aliases.
@@ -242,7 +245,7 @@ Each list is a closed map.
 | Field | Required | Type and meaning |
 |---|---|---|
 | `id` | Yes. | Nonzero unique unsigned 32-bit payload identity. |
-| `parentId` | No. | Unsigned 32-bit payload list identity; omission or `0` means root. |
+| `parent-id` | No. | Unsigned 32-bit payload list identity; omission or `0` means root. |
 | `name` | Yes. | Scalar string. |
 | `description` | No. | Scalar string. |
 | `filter` | No. | Scalar local predicate text; empty or omitted means identity (`true`). |
@@ -251,7 +254,7 @@ Each list is a closed map.
 `filter` and `order` are independent and may coexist.
 The document version names the predicate language of its filters, which carry no version of their own: a version-8 filter means what the version-8 [predicate language](../../query/predicate-language.md) defines, and a grammar, field-binding, or evaluation change that alters the outcome of filter text that language accepts increments the format version, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) defines.
 A non-empty `filter` that does not parse or compile is still imported byte-exactly and counted in the import report's `invalidFiltersKept`, so a library that holds such a filter can restore its own backup.
-The producer always emits `id`, `parentId`, and `name`; it omits an empty description, identity filter, and empty order.
+The producer always emits `id`, `parent-id`, and `name`; it omits an empty description, identity filter, and empty order.
 Order references do not define membership and need not currently match the List expression.
 
 Order references accept these forms:
@@ -266,7 +269,7 @@ order:
 A scalar or `id` map refers to a track record's payload `id`.
 A `uri` map contains a Library URI and resolves through the target manifest.
 A map must contain exactly one of `id` or `uri`; unknown fields and ambiguous maps reject the document.
-Normal exports use scalar IDs, while `listOnly` exports use URI maps so ranks can attach to tracks with different target IDs.
+Normal exports use scalar IDs, while `list-only` exports use URI maps so ranks can attach to tracks with different target IDs.
 
 Dangling parent, track-ID, and URI references are ignored and counted in the import report.
 Known parent relationships must not point to self or form a cycle.
@@ -281,7 +284,7 @@ Exceeding any bound rejects the payload rather than narrowing or truncating it.
 The importer reports `FormatRejected` for malformed YAML and any violation of this reference, including:
 
 - a non-map root, `library`, resource, track, cover, list, or map-form list reference;
-- a missing required field or collection, a forbidden `tracks` collection in `listOnly`, or a `resources` table or `covers` key outside `full`;
+- a missing required field or collection, a forbidden `tracks` collection in `list-only`, or a `resources` table or `covers` key outside `full`;
 - an unsupported version, mode, codec, or cover type;
 - an unknown or duplicate field in any closed map;
 - a malformed UUID, Library URI, scalar, sequence, or numeric width;
@@ -310,6 +313,7 @@ There is no migration contract for earlier interchange files, and a version-3 do
 Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.
 Version 8 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 8. There is no dual reader or layout autodetection.
 Version 8 has not been released. Until the first public release, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change; for example, a URI longer than 500 bytes is rejected by builds made before the limit became 1,976 bytes.
+A renamed key or token rejects documents in both directions: earlier development builds spelled `export-mode`, `file-size`, `parent-id`, `list-only`, and the credit kind `dj-mixer` as `export_mode`, `fileSize`, `parentId`, `listOnly`, and `djmixer`.
 Version 8 removed the root `libraryId`: a library id names only the database that drew it, so a document has none to carry; version 7 introduced `recording-date` and typed `credits`.
 `recording-date` defines empty scalar text, including quoted empty scalars and a present empty plain scalar, as its clear form.
 Version 6 existed for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
@@ -322,7 +326,7 @@ Full payload:
 
 ```yaml
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - digest: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
@@ -350,13 +354,13 @@ library:
       codec: FLAC
       channels: 2
       bit-depth: 24
-      fileSize: 12345678
+      file-size: 12345678
       mtime:
         seconds: 1700000000
         nanoseconds: 123456789
   lists:
     - id: 7
-      parentId: 0
+      parent-id: 0
       name: Favorites
       filter: "#favorite"
       order: [42]
@@ -366,11 +370,11 @@ List-only payload:
 
 ```yaml
 version: 8
-export_mode: listOnly
+export-mode: list-only
 library:
   lists:
     - id: 7
-      parentId: 0
+      parent-id: 0
       name: Favorites
       filter: "#favorite"
       order:

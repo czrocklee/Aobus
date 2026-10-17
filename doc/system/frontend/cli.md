@@ -36,7 +36,7 @@ They do not reimplement list membership, scan planning, query evaluation, mutati
 - Explicit ids are resolved by direct current-library lookup and missing ids fail before a batch mutation starts.
 - A command accepting ids or `--filter` rejects supplying both and rejects supplying neither when a target is required.
 - Dry-run and committed mutation reports use the same classification and field-diff logic.
-- A dry-run does not commit library content, update restore metadata, or publish library changes.
+- A dry-run does not commit library content or publish library changes.
 
 ## State model
 
@@ -78,7 +78,7 @@ Saved-order moves bind the current effective sequence and committed revision bef
 Ordinary List delete rejects descendants, while `list delete --descendants` selects one atomic complete-subtree operation and its dry-run exposes the same affected rows.
 
 Scan dry-run uses the scan plan without apply.
-Library import dry-run decodes and applies through the import transaction, then aborts and does not update restore metadata.
+Library import dry-run decodes and applies through the import transaction, then aborts.
 `lib fingerprint --pending` is bounded maintenance with no dry-run mode because completed identity batches are its unit of progress.
 It runs worker work through `CliRuntime::runTask()` so callback-executor continuations and terminal completion return through the invocation-thread executor without deadlocking a future wait.
 Its current progress and item-failure callbacks remain worker-produced and are serialized by the indexer.

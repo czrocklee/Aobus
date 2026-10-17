@@ -4,6 +4,7 @@
 #include "CliTestSupport.h"
 #include "runtime/resource/ResourceByteDiskCache.h"
 #include "test/unit/FilesystemTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -114,7 +115,7 @@ namespace ao::cli::test
     {
       auto document = std::ofstream{documentPath};
       document << R"yaml(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -156,7 +157,7 @@ library:
     {
       auto document = std::ofstream{documentPath};
       document << R"yaml(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -637,6 +638,41 @@ library:
     CHECK(contains(result.out, "Test Title"));
   }
 
+  TEST_CASE("CLI - lib export --mode list-only carries the hyphenated mode token through import",
+            "[cli][integration][lib][import-export]")
+  {
+    auto source = CliFixture{};
+    source.copyAudio("basic_metadata.flac", "track.flac");
+    REQUIRE(source.run({"init"}).status == 0);
+    REQUIRE(source.run({"list", "create", "--name", "Saved"}).status == 0);
+
+    auto const exportPath = source.root() / "lists.yaml";
+    // The retired camel-case token is not an alias for the YAML token.
+    checkDomainFailure(source.run({"lib", "export", exportPath.string(), "--mode", "listOnly"}),
+                       "invalid export mode 'listOnly'. Valid modes are: delta, metadata, full, list-only.");
+    CHECK_FALSE(fs::exists(exportPath));
+
+    auto result = source.run({"lib", "export", exportPath.string(), "--mode", "list-only"});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    auto const document = parseYaml(ao::test::readFile(exportPath));
+    CHECK(yaml::scalarView(document.rootref()["export-mode"]) == "list-only");
+
+    auto target = CliFixture{};
+    result = target.run({"-O", "json", "lib", "import", "--dry-run", exportPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+    auto const tree = parseYaml(result.out);
+    // The report's mode value follows the YAML token; its own keys stay camel case.
+    CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "list-only");
+    CHECK(yaml::scalarView(tree.rootref()["listsCreated"]) == "1");
+    CHECK_FALSE(yaml::findChild(tree.rootref(), "payload-mode").readable());
+
+    result = target.run({"lib", "import", "--dry-run", exportPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Payload: YAML v8, mode 'list-only'"));
+  }
+
   TEST_CASE("CLI - lib import counts kept invalid List filters in every output and phase",
             "[cli][integration][lib][import-export]")
   {
@@ -645,7 +681,7 @@ library:
     {
       auto document = std::ofstream{documentPath};
       document << R"yaml(version: 8
-export_mode: listOnly
+export-mode: list-only
 library:
   lists:
     - id: 1

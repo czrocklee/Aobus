@@ -744,7 +744,7 @@ namespace ao::cli::test
     auto fixture = CliFixture{};
     auto const trackArg = idArg(fixture.addTrack(library::test::TrackSpec{.title = "Song", .uri = "song.flac"}));
     auto const tokens = std::to_array<std::string_view>({"remixer",
-                                                         "djmixer",
+                                                         "dj-mixer",
                                                          "mixer",
                                                          "engineer",
                                                          "producer",

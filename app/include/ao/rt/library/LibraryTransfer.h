@@ -26,7 +26,7 @@ namespace ao::rt
       case ExportMode::Delta: return "delta";
       case ExportMode::Metadata: return "metadata";
       case ExportMode::Full: return "full";
-      case ExportMode::ListOnly: return "listOnly";
+      case ExportMode::ListOnly: return "list-only";
     }
 
     return {};

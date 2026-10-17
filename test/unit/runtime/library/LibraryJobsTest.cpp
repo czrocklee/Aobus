@@ -122,7 +122,7 @@ namespace ao::rt::test
     {
       auto yaml = std::ofstream{path};
       yaml << "version: 8\n"
-              "export_mode: full\n"
+              "export-mode: full\n"
               "library:\n"
               "  resources: []\n"
               "  tracks:\n"

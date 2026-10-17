@@ -31,7 +31,7 @@ Symlinks whose existing targets remain inside that root are supported, while dan
 
 1. In GTK, choose **File → Export Library Data...**. On Windows, choose **More → Export Library Data...** in Modern mode or **File → Export Library Data...** in Classic mode.
 2. Choose the payload you need:
-   **Full** includes curated metadata, technical and manifest facts, cover references, and lists; **Metadata** omits technical statistics and cover references; **Delta** records edits relative to readable files; **List Only** contains lists without track records.
+   **Full** includes curated metadata, technical and manifest facts, cover references, and lists; **Metadata** omits technical statistics and cover references; **Delta** records edits relative to readable files; **Lists only** contains lists without track records.
 3. Choose a `.yaml` file and wait for **Library exported successfully**. On Windows, Modern's activity surface names the file while export is running; switching to Classic leaves the transfer running and its status bar reports completion.
 
 The CLI equivalent for a complete library-data backup is:
