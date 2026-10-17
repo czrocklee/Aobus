@@ -5,9 +5,12 @@
 
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/BackendGraphRegistry.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
 
+#include <bit>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -32,13 +35,29 @@ namespace ao::audio::backend::detail
                              .name = "WASAPI Stream",
                              .optFormat = state.optInputFormat,
                              .objectPath = ""});
+      graph.nodes.back().channelDelivery = state.channelDelivery;
+      // The retained conversion describes client -> mix, not engine -> client.
+      graph.nodes.back().channelDelivery.hasSharedConversion = false;
 
       auto sink = flow::Node{.id = "wasapi-sink",
                              .type = flow::NodeType::Sink,
                              .name = state.routeAnchor,
-                             .optFormat = state.optMixFormat,
+                             .optFormat = state.mixObservation.optFormat,
                              .objectPath = state.routeAnchor};
 
+      auto const mixChannels = state.mixObservation.channels;
+      auto const mixMask = mixChannels != 0U ? state.mixObservation.speakerMask : 0U;
+      auto const hasMixRoles =
+        mixMask != 0U && (mixMask & ~kWaveSpeakerMask) == 0U && std::popcount(mixMask) <= mixChannels;
+      auto const hasMixPositions = hasMixRoles && std::cmp_equal(std::popcount(mixMask), mixChannels);
+
+      // GetMixFormat describes the software engine boundary, independently of
+      // the accepted client descriptor. Complete observed positions establish
+      // this boundary's mapping, not physical endpoint or speaker wiring.
+      // Partial roles remain independent constraints without complete mapping.
+      sink.channelDelivery.isMapped = hasMixPositions;
+      sink.channelDelivery.nativeSpeakerMask = hasMixRoles ? mixMask : 0U;
+      sink.channelDelivery.hasSharedConversion = state.channelDelivery.hasSharedConversion;
       sink.isMuted = state.muted;
 
       // Session volume is applied by the Windows audio engine in software.

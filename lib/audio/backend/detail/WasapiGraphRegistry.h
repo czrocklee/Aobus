@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "WasapiFormatObservation.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -29,7 +31,8 @@ namespace ao::audio::backend::detail
   {
     std::string routeAnchor;
     std::optional<PcmFormat> optInputFormat{};
-    std::optional<PcmFormat> optMixFormat{};
+    WaveFormatObservation mixObservation{};
+    ChannelDeliveryEvidence channelDelivery{};
     float volume = 1.0F;
     bool muted = false;
   };
