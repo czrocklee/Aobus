@@ -62,7 +62,7 @@ namespace ao::audio::backend::detail::test
 
     registry.publish({.routeAnchor = "endpoint-a",
                       .optInputFormat = inputFormat,
-                      .optMixFormat = mixFormat,
+                      .mixObservation = {.sampleRate = 48000, .channels = 2, .optFormat = mixFormat},
                       .volume = 0.25F,
                       .muted = true});
 

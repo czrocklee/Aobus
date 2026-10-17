@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include "WasapiFormatObservation.h"
+#include <ao/Error.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
 
 #ifndef NOMINMAX
@@ -21,11 +24,14 @@
 
 namespace ao::audio::backend::detail
 {
-  /**
-   * @brief Converts a PCM/IEEE-float Windows wave format to the graph format model.
-   *
-   * Unknown encodings and dimensions that cannot be represented by PcmFormat stay
-   * unknown so the quality graph does not claim a verified endpoint format.
-   */
-  std::optional<PcmFormat> formatFromWaveFormat(WAVEFORMATEX const& wave) noexcept;
+  std::optional<WAVEFORMATEXTENSIBLE> waveFormatFromPcmFormat(PcmFormat const& format) noexcept;
+  ChannelDeliveryEvidence waveChannelDeliveryFromObservation(PcmFormat const& applicationFormat,
+                                                             WAVEFORMATEXTENSIBLE const& acceptedClient,
+                                                             WaveFormatObservation const& mix) noexcept;
+
+  // Failure means a storage-integrity fault in a successful descriptor (a
+  // short extensible object). Absent, contradictory or reserved optional
+  // evidence is returned as an observation without a concrete format claim or
+  // usable roles; it never vetoes a separately constructed client descriptor.
+  Result<WaveFormatObservation> observeWaveFormat(WAVEFORMATEX const& wave);
 } // namespace ao::audio::backend::detail
