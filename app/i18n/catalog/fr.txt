@@ -169,6 +169,7 @@ fr:table {
     track_field_quality { "Qualité" }
     track_group_none { "Aucun" }
     missing_track_artist { "Artiste inconnu" }
+    various_track_artists { "Multi-interprètes" }
     missing_track_album { "Album inconnu" }
     missing_track_year { "Année inconnue" }
     missing_track_genre { "Genre inconnu" }

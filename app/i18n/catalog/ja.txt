@@ -169,6 +169,7 @@ ja:table {
     track_field_quality { "音質" }
     track_group_none { "なし" }
     missing_track_artist { "不明なアーティスト" }
+    various_track_artists { "ヴァリアス・アーティスト" }
     missing_track_album { "不明なアルバム" }
     missing_track_year { "不明な年" }
     missing_track_genre { "不明なジャンル" }

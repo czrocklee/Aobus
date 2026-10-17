@@ -147,6 +147,33 @@ namespace ao::uimodel::test
                                                                                  });
   }
 
+  TEST_CASE("i18n::MessageCatalog - names Various Artists in every maintained locale", "[uimodel][unit][catalog]")
+  {
+    struct LocaleCase final
+    {
+      std::string_view locale;
+      std::string_view text;
+    };
+
+    auto const cases = std::to_array<LocaleCase>({
+      {"en-US", "Various Artists"},
+      {"zh-Hans", "群星"},
+      {"zh-Hant", "群星"},
+      {"ja", "ヴァリアス・アーティスト"},
+      {"de", "Verschiedene Interpreten"},
+      {"fr", "Multi-interprètes"},
+      {"es", "Varios Artistas"},
+    });
+    auto const heading = rt::TrackGroupHeading{.primary = std::string{"Sampler"}, .secondary = rt::VariousArtists{}};
+
+    for (auto const& localeCase : cases)
+    {
+      CAPTURE(localeCase.locale);
+      CHECK(formatTrackGroupHeading(ao::test::messageCatalog(localeCase.locale), heading).secondaryText ==
+            localeCase.text);
+    }
+  }
+
   TEST_CASE("i18n::MessageCatalog - owns backend profile and semantic icon presentation", "[uimodel][unit][catalog]")
   {
     auto const& catalog = ao::test::englishMessageCatalog();

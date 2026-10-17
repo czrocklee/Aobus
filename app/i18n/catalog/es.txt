@@ -169,6 +169,7 @@ es:table {
     track_field_quality { "Calidad" }
     track_group_none { "Ninguno" }
     missing_track_artist { "Artista desconocido" }
+    various_track_artists { "Varios Artistas" }
     missing_track_album { "Álbum desconocido" }
     missing_track_year { "Año desconocido" }
     missing_track_genre { "Género desconocido" }

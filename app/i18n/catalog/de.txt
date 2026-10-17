@@ -169,6 +169,7 @@ de:table {
     track_field_quality { "Qualität" }
     track_group_none { "Keine" }
     missing_track_artist { "Unbekannter Interpret" }
+    various_track_artists { "Verschiedene Interpreten" }
     missing_track_album { "Unbekanntes Album" }
     missing_track_year { "Unbekanntes Jahr" }
     missing_track_genre { "Unbekanntes Genre" }
