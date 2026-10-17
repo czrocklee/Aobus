@@ -51,6 +51,9 @@ namespace ao::media::mp4
      */
     std::span<std::byte const> magicCookie() const;
 
+    // True when selected ALAC mono/stereo layout metadata prevents the format default.
+    bool hasNoncanonicalAlacLayout() const noexcept;
+
     /**
      * @brief Returns the total number of audio samples.
      */
@@ -126,6 +129,7 @@ namespace ao::media::mp4
 
     std::span<std::byte const> _fileData;
     std::vector<std::byte> _magicCookie;
+    bool _hasNoncanonicalAlacLayout = false;
     std::vector<SampleEntry> _samples;
 
     std::uint32_t _timescale = 0;

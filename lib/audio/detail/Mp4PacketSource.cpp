@@ -95,6 +95,11 @@ namespace ao::audio::detail
     return _optDemuxer ? _optDemuxer->magicCookie() : std::span<std::byte const>{};
   }
 
+  bool Mp4PacketSource::hasNoncanonicalAlacLayout() const noexcept
+  {
+    return _optDemuxer && _optDemuxer->hasNoncanonicalAlacLayout();
+  }
+
   media::mp4::Demuxer::SampleEntry Mp4PacketSource::sampleInfo() const
   {
     if (isAtEnd())

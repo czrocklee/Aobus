@@ -29,6 +29,7 @@ namespace ao::audio::detail
     bool isAtEnd() const noexcept;
     std::span<std::byte const> packet() const;
     std::span<std::byte const> magicCookie() const;
+    bool hasNoncanonicalAlacLayout() const noexcept;
     media::mp4::Demuxer::SampleEntry sampleInfo() const;
     std::uint32_t sampleIndex() const noexcept;
     std::uint32_t timescale(std::uint32_t fallback = 0) const noexcept;

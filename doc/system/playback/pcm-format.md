@@ -72,9 +72,17 @@ Identified decoded slots already follow the applicable ascending-bit order.
 ### ALAC source interpretation
 
 The validated mandatory configuration owns count, rate and precision.
-ALAC layout interpretation is not implemented: every channel count, including mono and stereo, publishes zero masks with `Unknown` origin while ordinary decoding remains eligible.
-Structural atom/container failures and invalid mandatory configuration remain initialization errors.
-Provider element order for counts 3–8 remains unnormalized in the [channel order reference](../../reference/media/channel-order.md#alac); no reference permutation is implemented.
+For actual counts one and two, both relevant `chan` locations participate: the selected audio sample entry and the cookie tail.
+
+| Layout metadata | Published identity |
+|---|---|
+| Absent | FC `0x4` / FL-FR `0x3`, `Identified`, as ALAC specifies. |
+| Every `chan` has a complete fixed header and the actual-count matching ALAC Mono/Stereo tag | The same identified default; ancillary fields and trailing bytes are ignored. |
+| Any other tag or bounded short header | Zero, `Unknown`; ordinary decoding remains eligible. |
+
+An unsupported participant cannot be overridden by another declaration.
+Unrelated tracks do not participate; structural atom/container failures and invalid mandatory configuration remain initialization errors.
+Counts 3–8 remain unidentified, with provider element order unnormalized; the [reference permutations](../../reference/media/channel-order.md#alac) are not implemented.
 
 AAC requests FDK WAV output mapping; Opus family 1 permutes decoder mapping.
 These byte-order mechanisms do not themselves publish source identity or prove native delivery.
@@ -160,7 +168,7 @@ A separate conversion stage must represent any downstream rate, count or identit
 - [`SignalFormat.h`](../../../include/ao/audio/SignalFormat.h), [`PcmFormat.h`](../../../include/ao/audio/PcmFormat.h), [`SampleEncoding.h`](../../../include/ao/audio/SampleEncoding.h), [`NodeFormat.h`](../../../include/ao/audio/NodeFormat.h), [`ChannelLayoutEvidence.h`](../../../include/ao/audio/ChannelLayoutEvidence.h) and [`ChannelDeliveryEvidence.h`](../../../include/ao/audio/ChannelDeliveryEvidence.h) own values.
 - [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), [`PcmConversion.cpp`](../../../lib/audio/PcmConversion.cpp) and [`OpenedModeValidation.h`](../../../lib/audio/detail/OpenedModeValidation.h) own candidates, conversion and open-result validation, covered by their [owning tests](../../../test/unit/audio/).
 - [`OpenedPcmMode.h`](../../../include/ao/audio/OpenedPcmMode.h) and [`Backend.h`](../../../include/ao/audio/Backend.h) own the open boundary.
-- [`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp), [`FlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/FlacDecoderChannelLayoutTest.cpp) cover actual source interpretation and PCM. [`FlacAlsaPipeWireChannelMapTest.cpp`](../../../test/unit/audio/backend/FlacAlsaPipeWireChannelMapTest.cpp) covers decoder-to-planner integration without opening devices.
+- [`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp), [`FlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/FlacDecoderChannelLayoutTest.cpp) and [`AlacDecoderMalformedMp4Test.cpp`](../../../test/unit/audio/AlacDecoderMalformedMp4Test.cpp) cover actual source interpretation and PCM. [`FlacAlsaPipeWireChannelMapTest.cpp`](../../../test/unit/audio/backend/FlacAlsaPipeWireChannelMapTest.cpp) covers decoder-to-planner integration without opening devices.
 
 ## Related documents
 

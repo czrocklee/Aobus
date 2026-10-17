@@ -134,7 +134,7 @@ namespace ao::uimodel::test
       CHECK_FALSE(presentation.channelNote.empty());
       CHECK(resolveSoulAura(audio::Transport::Playing, true, state) == testCase.aura);
 
-      if (testCase.fileName == "basic_metadata.flac")
+      if (testCase.fileName == "basic_metadata.flac" || testCase.fileName == "alac16.m4a")
       {
         // Format-defined stereo roles do not establish downstream mapping.
         CHECK(info.sourceChannelLayout.origin == audio::ChannelLayoutOrigin::Identified);
@@ -146,7 +146,7 @@ namespace ao::uimodel::test
       }
       else
       {
-        // Other formats remain unidentified despite preserving the numerical headline.
+        // MP3 remains unidentified despite preserving the numerical headline.
         CHECK(info.sourceChannelLayout.origin == audio::ChannelLayoutOrigin::Unknown);
         CHECK(info.sourceFormat.speakerMask == 0U);
         CHECK(info.outputFormat.speakerMask == 0U);

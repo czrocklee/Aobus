@@ -136,7 +136,9 @@ namespace ao::audio::test
   TEST_CASE("Engine - real WAV FLAC and ALAC splice with exact stereo identity",
             "[audio][integration][engine][gapless][concurrency]")
   {
-    auto const [left, right] = GENERATE(std::pair<std::size_t, std::size_t>{0, 1});
+    auto const [left, right] = GENERATE(std::pair<std::size_t, std::size_t>{0, 1},
+                                        std::pair<std::size_t, std::size_t>{2, 0},
+                                        std::pair<std::size_t, std::size_t>{1, 2});
     bool const reverse = GENERATE(false, true);
     CAPTURE(left, right, reverse);
     auto const alac = ao::test::TempFile{stereoAlacBytes(), ".m4a"};
