@@ -33,7 +33,8 @@ Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from 
 
 Shipping decoders currently leave the new mask and source interpretation unknown; enabling codec identification is pending.
 ALSA admits identified sources against its native channel-map observations.
-PipeWire, WASAPI, and Core Audio do not yet implement native admission for identified source roles: their backend open entry points explicitly refuse every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and their prewarm queries withhold such modes.
+PipeWire now admits identified sources with complete supported speaker sets: exact two-channel offers stay strict, mono and multichannel negotiation stays unpositioned, and admitted roles are proved by the negotiated native Format param, never by the request.
+WASAPI and Core Audio do not yet implement native admission for identified source roles: their backend open entry points explicitly refuse every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and their prewarm queries withhold such modes.
 This availability boundary precedes native stream access and does not relax common opened-mode validation or reinterpret native faults; zero-mask playback follows the existing path.
 Their existing byte-order conventions remain unchanged. The following legacy WAV/Microsoft orders are not a rule for filling a zero mask:
 

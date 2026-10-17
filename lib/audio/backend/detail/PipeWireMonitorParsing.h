@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/PcmFormat.h>
+#include "PipeWireFormatParsing.h"
 
 #include <cstdint>
 #include <optional>
@@ -107,7 +107,7 @@ namespace ao::audio::backend::detail
    * EnumFormat params describe supported candidates and must not be treated as
    * the current stream/sink format.
    */
-  std::optional<PcmFormat> currentFormatFromNodeParam(std::uint32_t paramId, ::spa_pod const* param) noexcept;
+  std::optional<RawStreamFormat> currentFormatFromNodeParam(std::uint32_t paramId, ::spa_pod const* param) noexcept;
 
   /**
    * @brief Updates the live format cache from an active Format param.
@@ -116,7 +116,7 @@ namespace ao::audio::backend::detail
    * the node; EnumFormat and other params are capabilities or unrelated state
    * and do not touch the live-format cache.
    */
-  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, PcmFormat>& nodeFormatMap,
+  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, RawStreamFormat>& nodeFormatMap,
                                         std::uint32_t nodeId,
                                         std::uint32_t paramId,
                                         ::spa_pod const* param);
