@@ -26,8 +26,16 @@ The sample kind distinguishes the integer and floating-point domains.
 
 ### Channel order
 
-No PCM surface carries channel-layout metadata.
-For an identified speaker layout of one through eight channels, the channel count therefore selects this WAV/Microsoft order:
+`SignalFormat` and `PcmFormat` carry an effective WAVE-style `speakerMask`.
+A nonzero mask names speakers in ascending assigned-bit order; zero assigns no positions and is never a wildcard or a count-derived default.
+Channel count, not mask population, always owns frame geometry.
+Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from format equality and from native mapping observations.
+
+Shipping decoders currently leave the new mask and source interpretation unknown; enabling codec identification is pending.
+ALSA admits identified sources against its native channel-map observations.
+PipeWire, WASAPI, and Core Audio do not yet implement native admission for identified source roles: their backend open entry points explicitly refuse every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and their prewarm queries withhold such modes.
+This availability boundary precedes native stream access and does not relax common opened-mode validation or reinterpret native faults; zero-mask playback follows the existing path.
+Their existing byte-order conventions remain unchanged. The following legacy WAV/Microsoft orders are not a rule for filling a zero mask:
 
 | Channels | Order |
 |---:|---|
@@ -65,9 +73,9 @@ The negative packed value `FF FF FF` becomes `FF FF FF FF` in `Signed24In32Le`.
 
 ### Concrete PCM format
 
-`PcmFormat` contains `sampleRate`, `channels`, and `encoding`.
+`PcmFormat` contains `sampleRate`, `channels`, `encoding`, and effective `speakerMask`.
 It is the exact byte-level stream mode and deliberately does not duplicate the source's logical precision.
-For example, losslessly widened 16-bit audio carried as `Signed32Le` uses the same concrete `PcmFormat` as any other `Signed32Le` stream; the track's `SignalFormat` remains the authority that the source contained 16 meaningful bits.
+For example, losslessly widened 16-bit audio carried as `Signed32Le` uses the same concrete `PcmFormat` as a full-precision `Signed32Le` stream with the same rate, count, and speaker identity; the track's `SignalFormat` remains the authority that the source contained 16 meaningful bits.
 
 `NodeFormat` is `std::variant<SignalFormat, PcmFormat>`.
 A node uses `PcmFormat` when it exchanges concrete bytes and `SignalFormat` when it does not.
@@ -81,7 +89,8 @@ Such a node therefore uses `SignalFormat`.
 ### Confirmed open outcome
 
 `ConfirmedEndpoint` holds the `SignalFormat` a backend observed behind the mode it configured.
-`OpenedPcmMode` pairs the `clientFormat` handed to the native API with an optional `ConfirmedEndpoint`.
+`OpenedPcmMode` pairs canonical render-target `clientFormat` with an optional `ConfirmedEndpoint` and initial native channel-delivery evidence.
+A backend owns any private lossless slot permutation; observed native speaker sets do not assert canonical native byte order.
 
 An absent endpoint means the backend could not inspect a direct endpoint during that open.
 It does not mean the endpoint matches the client format.
@@ -91,7 +100,8 @@ Endpoint presence never admits a narrower client mode: the client encoding and e
 
 Converting a concrete PCM format to logical signal facts yields the encoding's nominal precision; it cannot recover the original source precision.
 A complete interleaved frame occupies channel count times container bytes per sample; an incomplete format has zero frame bytes.
-Concrete mode equality compares rate, channel count, and encoding, not source precision.
+Concrete mode equality compares rate, channel count, encoding, and effective speaker mask, not source precision or interpretation history.
+Logical/concrete format conversion preserves the mask; PCM encoding conversion rejects mismatched logical and storage identity.
 Encoding names used for diagnostics are neither persisted identities nor user-facing copy.
 The linked headers provide the helper declarations.
 
@@ -125,6 +135,8 @@ Zero precision, integer precision above 32 bits, and unsupported float precision
   the open is rejected instead.
 - Float and integer signals are never converted into each other's domain
   outside the bit-transparent integer-to-float range above.
+- The opened client must retain the source rate, count, and effective speaker mask exactly.
+  Two known contradictory source/endpoint masks reject the open; an unknown endpoint mask provides no matching-speaker proof.
 - Backends must not substitute sample rate or channel count unless a separate conversion stage is represented in the graph.
 - PCM blocks contain complete interleaved frames; partial samples and partial frames are invalid.
 - No PCM producer, consumer, conversion, or backend mapping may infer concrete

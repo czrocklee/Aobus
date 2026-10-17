@@ -84,6 +84,9 @@ namespace ao::audio::detail
 
       auto const info = decoderPtr->streamInfo();
 
+      // Preparation stability covers the effective signal format, including
+      // its speakerMask interpretation. Origin-only evidence drift re-describes
+      // the same layout and is accepted.
       if (!(info.sourceFormat == inspection.info.sourceFormat))
       {
         throwDecoderError(Error::Code::FormatRejected, "Track signal format changed after inspection");

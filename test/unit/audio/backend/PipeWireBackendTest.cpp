@@ -11,6 +11,7 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace ao::audio::backend::test
 {
@@ -106,6 +107,26 @@ namespace ao::audio::backend::test
       CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
       CHECK_FALSE(backend.prewarmFormatHint(sourceFormat).has_value());
     }
+  }
+
+  TEST_CASE("PipeWireBackend - identified source roles are refused before native channel admission is available",
+            "[audio][unit][pipewire]")
+  {
+    auto const profile = GENERATE(kProfileShared, kProfileExclusive);
+    auto backend = PipeWireBackend{syntheticSink(), profile};
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    // Neither an alternate back pair nor canonical FL/FR is admitted by count alone.
+    auto const speakerMask = GENERATE(0x30U, 0x3U);
+    auto const sourceFormat =
+      SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = speakerMask};
+
+    CHECK_FALSE(backend.prewarmFormatHint(sourceFormat));
+    auto const openedRes = backend.open(sourceFormat, target);
+
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(openedRes.error().error.message == "PipeWire source speaker identity is not supported");
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
   TEST_CASE("PipeWireBackend - prewarm predicts the lossless mode without native negotiation",

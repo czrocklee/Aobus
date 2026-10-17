@@ -314,4 +314,67 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::InvalidInput);
     CHECK(destination.empty());
   }
+
+  TEST_CASE("convertPcmEncoding - same-count streams with different speaker masks are rejected", "[audio][unit][pcm]")
+  {
+    // One stereo S16 frame: L = 0x1234, R = 0x5678, little-endian.
+    auto const source = std::to_array<std::byte>({std::byte{0x34}, std::byte{0x12}, std::byte{0x78}, std::byte{0x56}});
+    auto const sourceFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+    std::uint32_t signalMask = 0x3;
+
+    SECTION("a different identified mask on the same two channels")
+    {
+      signalMask = 0x5; // WAVE-style FL | FC, a complete alternate two-speaker identity.
+    }
+
+    SECTION("an unassigned signal mask is not inferred from the byte layout")
+    {
+      signalMask = 0U;
+    }
+
+    auto destination = std::vector<std::byte>{};
+    auto const mismatchedSignal =
+      SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = signalMask};
+
+    auto const res =
+      convertPcmEncoding(source, sourceFormat, mismatchedSignal, SampleEncoding::Signed32Le, destination);
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidInput);
+    CHECK(destination.empty());
+  }
+
+  TEST_CASE("convertPcmEncoding - matching speaker masks convert exact stereo bytes", "[audio][unit][pcm]")
+  {
+    // One stereo S16 frame: L = 0x1234, R = 0x5678, little-endian.
+    auto const source = std::to_array<std::byte>({std::byte{0x34}, std::byte{0x12}, std::byte{0x78}, std::byte{0x56}});
+    auto const sourceFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+    auto const signal = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
+    auto destination = std::vector<std::byte>{};
+
+    SECTION("identical destination encoding copies the frame unchanged")
+    {
+      auto const res = convertPcmEncoding(source, sourceFormat, signal, SampleEncoding::Signed16Le, destination);
+
+      REQUIRE(res);
+      CHECK(destination == std::vector<std::byte>{std::byte{0x34}, std::byte{0x12}, std::byte{0x78}, std::byte{0x56}});
+    }
+
+    SECTION("widened destination preserves full-scale samples in their original slot order")
+    {
+      auto const res = convertPcmEncoding(source, sourceFormat, signal, SampleEncoding::Signed32Le, destination);
+
+      REQUIRE(res);
+      CHECK(destination == std::vector<std::byte>{std::byte{0x00},
+                                                  std::byte{0x00},
+                                                  std::byte{0x34},
+                                                  std::byte{0x12},
+                                                  std::byte{0x00},
+                                                  std::byte{0x00},
+                                                  std::byte{0x78},
+                                                  std::byte{0x56}});
+    }
+  }
 } // namespace ao::audio::test

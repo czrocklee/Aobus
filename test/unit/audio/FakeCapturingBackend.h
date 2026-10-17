@@ -72,8 +72,10 @@ namespace ao::audio::test
      */
     void setOpenResult(Result<> res, BackendOpenFailure::Cause cause = BackendOpenFailure::Cause::OutputFailure);
     void setPrewarmEncoding(std::optional<SampleEncoding> optEncoding);
+    // Overrides the full advisory mode, including intentionally stale identity.
+    // Clearing it restores the source-derived encoding hint.
+    void setPrewarmFormat(std::optional<PcmFormat> optFormat);
     void setSelectedEncoding(std::optional<SampleEncoding> optEncoding);
-
     /**
      * @brief Makes open() report a confirmed endpoint of the given precision.
      *
@@ -108,6 +110,7 @@ namespace ao::audio::test
     Result<> _openRes{};
     BackendOpenFailure::Cause _openCause = BackendOpenFailure::Cause::OutputFailure;
     std::optional<SampleEncoding> _optPrewarmEncoding;
+    std::optional<PcmFormat> _optPrewarmFormat;
     std::optional<SampleEncoding> _optSelectedEncoding;
     std::optional<std::uint8_t> _optEndpointPrecisionBits;
     std::optional<Error::Code> _optPropError{};

@@ -601,6 +601,11 @@ namespace ao::audio::backend
 
   std::optional<PcmFormat> PipeWireBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
+    if (sourceFormat.speakerMask != 0U)
+    {
+      return std::nullopt;
+    }
+
     // Cached keys passed open() admission; misses use the base source checks.
     if (_exclusiveMode && _implPtr->optLastSourceFormat == sourceFormat && _implPtr->optLastNegotiatedFormat)
     {
@@ -630,6 +635,14 @@ namespace ao::audio::backend
     {
       return std::unexpected{BackendOpenFailure{
         .error = makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for PipeWire").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
+    }
+
+    // Identified sources require native role admission, not count-only negotiation.
+    if (sourceFormat.speakerMask != 0U)
+    {
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::FormatRejected, "PipeWire source speaker identity is not supported").error(),
         .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SignalFormat.h>
 
@@ -21,6 +22,7 @@ namespace ao::audio
     std::chrono::milliseconds duration{0};
     bool isLossy = false;
     AudioCodec codec = AudioCodec::Unknown;
+    ChannelLayoutEvidence sourceChannelLayout{};
 
     bool operator==(DecodedStreamInfo const&) const = default;
   };

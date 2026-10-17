@@ -863,6 +863,16 @@ namespace ao::audio::backend
     }
   }
 
+  std::optional<PcmFormat> CoreAudioBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
+  {
+    if (sourceFormat.speakerMask != 0U)
+    {
+      return std::nullopt;
+    }
+
+    return Backend::prewarmFormatHint(sourceFormat);
+  }
+
   BackendOpenResult CoreAudioBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
     // Reject deterministic source refusals before this backend's own close().
@@ -880,6 +890,14 @@ namespace ao::audio::backend
       return std::unexpected{BackendOpenFailure{
         .error =
           makeError(Error::Code::FormatRejected, "No lossless Core Audio client PCM encoding is available").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
+    }
+
+    // Identified sources require native role admission beyond the ASBD storage check.
+    if (sourceFormat.speakerMask != 0U)
+    {
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::FormatRejected, "Core Audio source speaker identity is not supported").error(),
         .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
 
