@@ -492,16 +492,23 @@ namespace ao::i18n
     return MessageCatalog{std::move(implPtr)};
   }
 
-  Result<MessageCatalog> MessageCatalog::createForSystemLocale()
+  Result<MessageCatalog> detail::createCatalogForSystemLocale(Result<std::string> const& systemLocaleRes)
   {
-    auto systemLocaleRes = detail::systemLocaleTag();
-
-    if (!systemLocaleRes)
+    if (systemLocaleRes)
     {
-      return create("en");
+      if (auto catalogRes = MessageCatalog::create(*systemLocaleRes);
+          catalogRes || catalogRes.error().code != Error::Code::InvalidInput)
+      {
+        return catalogRes;
+      }
     }
 
-    return create(*systemLocaleRes);
+    return MessageCatalog::create("en");
+  }
+
+  Result<MessageCatalog> MessageCatalog::createForSystemLocale()
+  {
+    return detail::createCatalogForSystemLocale(detail::systemLocaleTag());
   }
 
   std::string_view MessageCatalog::requestedLocale() const noexcept

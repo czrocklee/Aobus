@@ -3,11 +3,13 @@
 
 #include <ao/i18n/MessageCatalog.h>
 
+#include "app/i18n/SystemLocale.h"
 #include <ao/Error.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #ifndef _WIN32
 #include <gsl-lite/gsl-lite.hpp>
@@ -305,6 +307,29 @@ namespace ao::i18n::test
     auto fallbackCountRes = undeterminedRes->format(MessageId::PilotTrackCount, {{"count", std::size_t{1}}});
     REQUIRE(fallbackCountRes);
     CHECK(*fallbackCountRes == ResolvedMessage{.text = "1 track", .locale = "en"});
+  }
+
+  TEST_CASE("MessageCatalog - an inadmissible or unavailable system locale selects English", "[core][unit][catalog]")
+  {
+    auto const systemLocaleRes = GENERATE(Result<std::string>{"12345"},
+                                          Result<std::string>{"en_US"},
+                                          Result<std::string>{makeError(Error::Code::NotFound, "No system locale")});
+    CAPTURE(systemLocaleRes.value_or("<error>"));
+
+    auto catalogRes = detail::createCatalogForSystemLocale(systemLocaleRes);
+    REQUIRE(catalogRes);
+    CHECK(catalogRes->requestedLocale() == "en");
+
+    auto titleRes = catalogRes->format(MessageId::PilotLibraryTitle);
+    REQUIRE(titleRes);
+    CHECK(*titleRes == ResolvedMessage{.text = "Music library", .locale = "en"});
+  }
+
+  TEST_CASE("MessageCatalog - an admissible system locale is requested as reported", "[core][unit][catalog]")
+  {
+    auto catalogRes = detail::createCatalogForSystemLocale(std::string{"de-AT"});
+    REQUIRE(catalogRes);
+    CHECK(catalogRes->requestedLocale() == "de-AT");
   }
 
 #if !defined(_WIN32) && !defined(__APPLE__)
