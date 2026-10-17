@@ -12,12 +12,17 @@
 #include <atomic>
 #include <barrier>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <latch>
 #include <memory>
+#include <mutex>
 #include <semaphore>
+#include <stop_token>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -30,6 +35,214 @@ namespace ao::audio::backend::detail::test
       return {.nodes = {{.id = std::move(id), .type = flow::NodeType::Stream}}};
     }
   } // namespace
+
+  TEST_CASE("BackendGraphRegistry - preparation commits current facts without delivering observers",
+            "[audio][unit][backend-graph]")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto sub = registry.subscribe("route-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+    auto const current = graphWithNode("prepared");
+    auto pending = registry.preparePublish("route-a", current);
+    REQUIRE(received.size() == 1U);
+    CHECK(received[0] == flow::Graph{});
+
+    auto late = std::vector<flow::Graph>{};
+    auto lateSub = registry.subscribe("route-a", [&](flow::Graph const& graph) { late.push_back(graph); });
+    CHECK(late == std::vector<flow::Graph>{current});
+    std::move(pending).deliver();
+    CHECK((received == std::vector<flow::Graph>{{}, current}));
+    CHECK(late == std::vector<flow::Graph>{current});
+
+    // Dropping a ticket cancels only its delivery, not its committed facts.
+    auto droppedReceived = std::vector<flow::Graph>{};
+    auto droppedSub =
+      registry.subscribe("route-b", [&](flow::Graph const& graph) { droppedReceived.push_back(graph); });
+    {
+      auto const dropped = registry.preparePublish("route-b", current);
+    }
+    CHECK(droppedReceived == std::vector<flow::Graph>{{}});
+    auto stored = flow::Graph{};
+    auto storedSub = registry.subscribe("route-b", [&](flow::Graph const& graph) { stored = graph; });
+    CHECK(stored == current);
+  }
+
+  TEST_CASE("BackendGraphRegistry - a newer clear retires delayed prepared publication", "[audio][unit][backend-graph]")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto sub = registry.subscribe("route-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+    auto pending = registry.preparePublish("route-a", graphWithNode("retired"));
+    registry.clear("route-a");
+    std::move(pending).deliver();
+    CHECK((received == std::vector<flow::Graph>{{}, {}}));
+    auto stored = graphWithNode("sentinel");
+    auto lateSub = registry.subscribe("route-a", [&](flow::Graph const& graph) { stored = graph; });
+    CHECK(stored == flow::Graph{});
+  }
+
+  TEST_CASE("BackendGraphRegistry - delayed prepared clear cannot replace a newer publication",
+            "[audio][unit][backend-graph]")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto sub = registry.subscribe("route-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+    auto pending = registry.prepareClear("route-a");
+    auto const current = graphWithNode("newer");
+    registry.publish("route-a", current);
+    std::move(pending).deliver();
+    CHECK((received == std::vector<flow::Graph>{{}, current}));
+  }
+
+  TEST_CASE("BackendGraphRegistry - pending delivery is move-only and one-shot across observer reentry",
+            "[audio][unit][backend-graph]")
+  {
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<BackendGraphRegistry::PendingDelivery>);
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<BackendGraphRegistry::PendingDelivery>);
+    auto registry = BackendGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto pending = BackendGraphRegistry::PendingDelivery{};
+    auto sub = registry.subscribe("route-a",
+                                  [&](flow::Graph const& graph)
+                                  {
+                                    received.push_back(graph);
+                                    std::move(pending).deliver();
+                                  });
+    auto const current = graphWithNode("once");
+    auto original = registry.preparePublish("route-a", current);
+    pending = std::move(original);
+    REQUIRE(received.size() == 1U);
+    std::move(pending).deliver();
+    CHECK((received == std::vector<flow::Graph>{{}, current}));
+  }
+
+  TEST_CASE("BackendGraphRegistry - moving a pending delivery releases all source ownership",
+            "[audio][unit][backend-graph]")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto ownerPtr = std::make_shared<std::uint32_t>(17U);
+    auto const weakOwnerPtr = std::weak_ptr<std::uint32_t>{ownerPtr};
+    auto received = std::vector<std::uint32_t>{};
+    auto sub =
+      registry.subscribe("route-a", [ownerPtr, &received](flow::Graph const&) { received.push_back(*ownerPtr); });
+    auto original = registry.preparePublish("route-a", graphWithNode("pending"));
+    sub.reset();
+    ownerPtr.reset();
+    REQUIRE_FALSE(weakOwnerPtr.expired());
+
+    bool moveConstruction = false;
+
+    SECTION("move construction")
+    {
+      moveConstruction = true;
+    }
+
+    SECTION("move assignment")
+    {
+    }
+
+    // Last-owner release proves that the moved source retains no callback
+    // payload, without invoking a member on that moved-from source.
+    if (moveConstruction)
+    {
+      auto const transferred = std::move(original);
+      CHECK_FALSE(weakOwnerPtr.expired());
+    }
+    else
+    {
+      auto transferred = BackendGraphRegistry::PendingDelivery{};
+      transferred = std::move(original);
+      CHECK_FALSE(weakOwnerPtr.expired());
+    }
+
+    CHECK(weakOwnerPtr.expired());
+    CHECK(received == std::vector<std::uint32_t>{17U});
+  }
+
+  TEST_CASE("BackendGraphRegistry - prepared deliveries retain cancellation and retirement checks",
+            "[audio][unit][backend-graph]")
+  {
+    auto received = std::vector<flow::Graph>{};
+    auto pending = BackendGraphRegistry::PendingDelivery{};
+    {
+      auto registry = BackendGraphRegistry{};
+      auto sub = registry.subscribe("route-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+      auto cancelled = registry.preparePublish("route-a", graphWithNode("cancelled"));
+      sub.reset();
+      std::move(cancelled).deliver();
+      CHECK(received == std::vector<flow::Graph>{{}});
+      auto liveSub = registry.subscribe("route-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+      pending = registry.preparePublish("route-a", graphWithNode("retired"));
+      registry.shutdown();
+      CHECK((received == std::vector<flow::Graph>{{}, graphWithNode("cancelled"), {}}));
+    }
+    auto const afterRetirement = received;
+    std::move(pending).deliver();
+    CHECK(received == afterRetirement);
+  }
+
+  TEST_CASE("BackendGraphRegistry - initial observer can retire a competing owner-committed publication",
+            "[audio][unit][backend-graph][concurrency]")
+  {
+    auto registry = BackendGraphRegistry{};
+    auto ownerMutex = std::mutex{};
+    auto releaseMutex = std::mutex{};
+    auto releaseSignal = std::condition_variable_any{};
+    bool prepareRequested = false;
+    auto prepared = std::latch{1};
+    auto received = std::vector<flow::Graph>{};
+    bool retired = false;
+
+    // No assertion can unwind while owning the snapshot mutex. Stop-aware
+    // parking also permits a failed subscription to retire the worker safely.
+    auto publisher = std::jthread{[&](std::stop_token stopToken)
+                                  {
+                                    {
+                                      auto lock = std::unique_lock{releaseMutex};
+
+                                      if (!releaseSignal.wait(lock, stopToken, [&] { return prepareRequested; }))
+                                      {
+                                        return;
+                                      }
+                                    }
+
+                                    auto pending = BackendGraphRegistry::PendingDelivery{};
+                                    {
+                                      auto const lock = std::scoped_lock{ownerMutex};
+                                      pending = registry.preparePublish("route-a", graphWithNode("old"));
+                                    }
+                                    prepared.count_down();
+                                    std::move(pending).deliver();
+                                  }};
+
+    auto sub = registry.subscribe("route-a",
+                                  [&](flow::Graph const& graph)
+                                  {
+                                    received.push_back(graph);
+
+                                    if (retired)
+                                    {
+                                      return;
+                                    }
+
+                                    retired = true;
+                                    {
+                                      auto const lock = std::scoped_lock{releaseMutex};
+                                      prepareRequested = true;
+                                    }
+                                    releaseSignal.notify_all();
+                                    prepared.wait();
+                                    auto pending = BackendGraphRegistry::PendingDelivery{};
+                                    {
+                                      auto const lock = std::scoped_lock{ownerMutex};
+                                      pending = registry.prepareClear("route-a");
+                                    }
+                                    std::move(pending).deliver();
+                                  });
+    REQUIRE(sub);
+    publisher.join();
+    CHECK((received == std::vector<flow::Graph>{{}, {}}));
+  }
 
   TEST_CASE("BackendGraphRegistry - subscriber receives empty then current route snapshot",
             "[audio][unit][backend-graph]")

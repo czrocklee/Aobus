@@ -498,11 +498,28 @@ ALSA handles shared mixer state under the separate contract below.
 
 ### Backend graph delivery
 
-The shared `BackendGraphRegistry`, consumed by ALSA and WASAPI, suppresses publication when the complete route graph equals the stored graph.
+The shared `BackendGraphRegistry`, consumed by ALSA, WASAPI, and Core Audio, suppresses publication when the complete route graph equals the stored graph.
 Ordinary publish, clear, and initial subscription delivery do not nest graph callbacks, including when a callback reads a backend property that publishes again.
 Reentrant work waits until the active callback returns; revision checks discard superseded publications and cancellation is checked immediately before each callback.
 A normal subscription delivers its captured initial snapshot synchronously; a subscription made inside a graph callback defers that initial delivery and can be cancelled before it runs.
 A clear still removes the stored graph and publishes an empty snapshot rather than storing an empty graph in place of the route fallback.
+
+Graph preparation commits the snapshot and its revision without waiting for the callback gate or invoking observers.
+Its move-only delivery ticket is one-shot; dropping it cancels delivery without undoing the committed snapshot.
+Delayed delivery still checks route revision, subscription cancellation, and registry retirement.
+Core Audio prepares publications and clears under its owner publication lock, then releases that lock before delivering.
+Close closes listener admission, then acquires target callback serialization before retiring the generation, disabling the run and render admission, and waiting for final render quiescence.
+That final fence follows admitted non-render notifications: an open-origin notification can reenter start while close waits for it.
+Only after this fence may close detach native state, clear render storage, or revoke the target.
+Callback serialization is released before publication locking; the lifetime guarantee is close completion, not an entry-time cutoff of old-generation activity.
+Open-origin route-ready and format notifications use the same callback serialization as non-render control notifications, so an external close waits for an admitted notification to return.
+Open checks its captured generation and target identity before admitting route-ready and enabling publication, then rechecks before the format notification and after it returns.
+A retired notification sequence does not initiate graph publication; ordinary publication reads current state rather than replaying an obsolete open's captured graph.
+This does not authorize a target callback to wait for observer-driven close or synchronously destroy its own target or backend; the current callback's borrow must remain alive through return.
+Native SDK calls and close settlement may block; the boundary is lifetime safety, not a wait-free timing guarantee.
+Close retires native listeners and the AudioUnit before delivering the prepared clear.
+Property writes retain synchronous native error reporting and cached intent, but request graph publication on the existing non-realtime control worker.
+That handoff avoids outward graph delivery on a target callback's property-write stack and publishes current state rather than replaying an old property snapshot.
 
 The callback gate serializes delivery without holding the registry state mutex across callbacks.
 Each publisher retains responsibility for its own thread's delivery: a different publishing thread may update the route revision while waiting for the gate, but never transfers its callbacks to the active publisher's thread.
@@ -639,7 +656,8 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 ## Test map
 
 - [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown; Linux-only [`AlsaEnginePropertyTest.cpp`](../../../test/unit/audio/backend/AlsaEnginePropertyTest.cpp) protects reentrant state-only queries during initial graph subscription, ALSA property publication, read-triggered fallback, and volume/mute intent across stop after successful or rejected hardware writes.
-- [`BackendGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/BackendGraphRegistryTest.cpp) protects graph deduplication, non-nested ordinary and initial delivery, revision supersession, cancellation, and synchronous final-empty retirement.
+- [`BackendGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/BackendGraphRegistryTest.cpp) protects graph deduplication, non-nested ordinary and initial delivery, prepared commit/delivery separation, move-only ticket ownership, revision supersession, cancellation, and synchronous final-empty retirement.
+- [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) protects native publication and initial-observer close, property-publication worker handoff with observer-driven close, open-origin notification settlement against external close, final render quiescence after notification-origin restart, stale-generation followup suppression, and synchronous registry retirement during native publication.
 - [`EngineRtSignalRingTest.cpp`](../../../test/unit/audio/EngineRtSignalRingTest.cpp) protects the exact two-entry capacity, serialized producer handoff, sequential-splice occupancy, pending-drain arm behavior, and legal full-ring delivery.
 - [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.
