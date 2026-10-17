@@ -858,6 +858,14 @@ target_link_libraries(ao_core_test PRIVATE
 )
 if(LINUX)
   target_link_libraries(ao_core_test PRIVATE PkgALSA PkgPipeWire)
+  # Only the scoped callback-source fake in PipeWireBackendAdmissionTest owns
+  # these external calls; every other stream delegates to the native SDK.
+  target_link_options(ao_core_test PRIVATE
+    "LINKER:--wrap=pw_stream_add_listener"
+    "LINKER:--wrap=pw_stream_connect"
+    "LINKER:--wrap=pw_stream_set_active"
+    "LINKER:--wrap=pw_stream_dequeue_buffer"
+    "LINKER:--wrap=pw_stream_queue_buffer")
 endif()
 if(LINUX)
   target_sources(ao_core_test PRIVATE unit/audio/backend/AlsaMixerTestSupport.cpp)
@@ -865,11 +873,14 @@ endif()
 aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireMonitorTest.cpp
   unit/audio/backend/PipeWireBackendTest.cpp
+  unit/audio/backend/PipeWireBackendAdmissionTest.cpp
+  unit/audio/backend/PipeWireChannelObservationTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
   unit/audio/backend/AlsaChannelObservationTest.cpp
   unit/audio/backend/AlsaProviderTest.cpp
   unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
+  unit/audio/backend/detail/PipeWireFormatParsingTest.cpp
   unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
   unit/audio/backend/detail/AlsaChannelMapTest.cpp
   unit/audio/backend/detail/AlsaPrewarmCacheTest.cpp

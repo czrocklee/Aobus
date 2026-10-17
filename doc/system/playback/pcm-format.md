@@ -33,8 +33,17 @@ Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from 
 
 Shipping decoders currently leave the new mask and source interpretation unknown; enabling codec identification is pending.
 ALSA admits identified sources against its native channel-map observations.
-PipeWire, WASAPI, and Core Audio do not yet implement native admission for identified source roles: their backend open entry points explicitly refuse every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and their prewarm queries withhold such modes.
-This availability boundary precedes native stream access and does not relax common opened-mode validation or reinterpret native faults; zero-mask playback follows the existing path.
+PipeWire admits a complete supported WAVE source declaration and validates the Format param actually read back; the offer is not that observation.
+A two-channel offer is one exact role set: the declared WAVE pair when the source mask is nonzero, and FL/FR only when that mask is zero. The offer never writes a new identity into a zero client mask.
+Mono and multichannel offers stay unpositioned.
+An unpositioned offer does not mean the negotiated observation lacks positions.
+Compatible observed constraints may admit transport without proving every declared role.
+Only a complete, unambiguous observed WAVE speaker set establishes native mapping evidence, at any channel count and independently of source history.
+That evidence does not identify the source or assert canonical native byte order or physical wiring.
+The [PipeWire client channel contract](audio-execution.md#pipewire-client-channel-contract) owns readback, partial completion, refresh, and failure classification.
+WASAPI and Core Audio do not yet implement native admission for identified source roles: their backend open entry points explicitly refuse every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and their prewarm queries withhold such modes.
+This availability boundary precedes native stream access and does not relax common opened-mode validation or reinterpret native faults.
+For WASAPI and Core Audio, zero-mask playback follows their existing path.
 Their existing byte-order conventions remain unchanged. The following legacy WAV/Microsoft orders are not a rule for filling a zero mask:
 
 | Channels | Order |
@@ -89,8 +98,10 @@ Such a node therefore uses `SignalFormat`.
 ### Confirmed open outcome
 
 `ConfirmedEndpoint` holds the `SignalFormat` a backend observed behind the mode it configured.
-`OpenedPcmMode` pairs canonical render-target `clientFormat` with an optional `ConfirmedEndpoint` and initial native channel-delivery evidence.
+`OpenedPcmMode` pairs canonical render-target `clientFormat` with an optional `ConfirmedEndpoint` and the initial native channel-delivery snapshot projected during that open.
 A backend owns any private lossless slot permutation; observed native speaker sets do not assert canonical native byte order.
+Current observations can supersede that snapshot; neither value is physical speaker wiring.
+PipeWire projection and refresh rules belong to the [client channel contract](audio-execution.md#pipewire-client-channel-contract).
 
 An absent endpoint means the backend could not inspect a direct endpoint during that open.
 It does not mean the endpoint matches the client format.
