@@ -37,6 +37,10 @@ namespace ao::uimodel
           {
             return std::to_string(item);
           }
+          else if constexpr (std::same_as<Value, rt::VariousArtists>)
+          {
+            return std::string{i18n::requiredText(textCatalog, i18n::MessageId::VariousTrackArtists)};
+          }
           else
           {
             return std::string{missingTrackValueLabel(textCatalog, item)};

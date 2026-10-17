@@ -22,6 +22,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -619,33 +620,224 @@ namespace ao::rt::test
     CHECK(snap.redundantFields == expectedRedundant);
   }
 
-  TEST_CASE("TrackListProjection - group label for album without album artist", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - an album without an album artist names its track artists",
+            "[runtime][unit][projection]")
   {
     auto env = TrackListProjectionFixture{};
-
-    auto id1 =
-      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "T1", .album = "Solo Album", .albumArtist = ""});
-    env.setupFiltered({{id1}});
+    auto const addTrack = [&env](std::string title, std::string album, std::string artist, std::string albumArtist = {})
+    {
+      return env.libraryFixture.addTrack(library::test::TrackSpec{.title = std::move(title),
+                                                                  .artist = std::move(artist),
+                                                                  .album = std::move(album),
+                                                                  .albumArtist = std::move(albumArtist)});
+    };
+    auto const ids = std::vector{
+      addTrack("A1", "Solo Album", ""),
+      addTrack("A2", "Solo Album", "Aimer"),
+      addTrack("A3", "Solo Album", ""),
+      addTrack("B1", "Sampler", "Celine Dion"),
+      addTrack("B2", "Sampler", ""),
+      addTrack("B3", "Sampler", "James Horner"),
+      addTrack("B4", "Sampler", "Enya"),
+      addTrack("H1", "Soundtrack", "Celine Dion"),
+      addTrack("H2", "Soundtrack", "James Horner"),
+      addTrack("H3", "Soundtrack", "James Horner"),
+      addTrack("C1", "Untitled", ""),
+      // Inserted against title order, so the source order cannot supply the text.
+      addTrack("E2", "Spellings", "AIMER"),
+      addTrack("E1", "Spellings", "Aimer"),
+      addTrack("F1", "Articles", "The Doors"),
+      addTrack("F2", "Articles", "Doors"),
+      addTrack("G2", "Folding", "STRASSE"),
+      addTrack("G1", "Folding", "Straße"),
+      addTrack("D1", "Duets", "First", "Album Artist"),
+      addTrack("D2", "Duets", "Second", "Album Artist"),
+    };
+    env.setupFiltered({ids});
 
     auto proj = env.createProjection(ViewId{1});
+    auto const presentAlbumsByTitle = [&proj](bool const ascending)
+    {
+      proj.setPresentation(
+        TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
+                              .sortBy = {
+                                TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
+                                TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                TrackSortTerm{.field = TrackSortField::Title, .ascending = ascending},
+                              }});
+    };
+    presentAlbumsByTitle(true);
 
+    REQUIRE(proj.groupCount() == 8);
+    auto const headingOf = [&proj](std::string_view album) -> TrackGroupHeading
+    {
+      auto optHeading = std::optional<TrackGroupHeading>{};
+
+      for (std::size_t index = 0; index < proj.groupCount() && !optHeading; ++index)
+      {
+        if (trackGroupHeadingText(proj.groupAt(index).heading.primary) == album)
+        {
+          optHeading = proj.groupAt(index).heading;
+        }
+      }
+
+      // REQUIRE rather than FAIL: MSVC treats a return after FAIL as unreachable (C4702).
+      INFO("no group for album " << album);
+      REQUIRE(optHeading);
+      return *std::move(optHeading);
+    };
+
+    // A track without an artist does not count, so one artist names the album even when most tracks name none.
+    CHECK(trackGroupHeadingText(headingOf("Solo Album").secondary) == "Aimer");
+    // No artist on more than half of the tracks with one makes Various Artists.
+    CHECK(std::holds_alternative<VariousArtists>(headingOf("Sampler").secondary));
+    // A guest on one track leaves the majority artist, even when the guest's row comes first.
+    CHECK(trackGroupHeadingText(headingOf("Soundtrack").secondary) == "James Horner");
+    // Artists compare by group identity, and the first row in projection order supplies the text.
+    CHECK(trackGroupHeadingText(headingOf("Spellings").secondary) == "Aimer");
+    // Group identity keeps a leading article, so The Doors and Doors are two artists with one track each.
+    CHECK(std::holds_alternative<VariousArtists>(headingOf("Articles").secondary));
+    // Group identity folds Unicode case fully, so Straße and STRASSE are one artist.
+    CHECK(trackGroupHeadingText(headingOf("Folding").secondary) == "Straße");
+    // No artist on any track stays an unknown artist.
+    CHECK(trackGroupHeadingMissingKind(headingOf("Untitled").secondary) == MissingTrackValueKind::Artist);
+    // An album artist always wins over the track artists.
+    CHECK(trackGroupHeadingText(headingOf("Duets").secondary) == "Album Artist");
+
+    // Reversing the title order puts the other spelling first.
+    presentAlbumsByTitle(false);
+    REQUIRE(proj.groupCount() == 8);
+    CHECK(trackGroupHeadingText(headingOf("Spellings").secondary) == "AIMER");
+    CHECK(trackGroupHeadingText(headingOf("Folding").secondary) == "STRASSE");
+  }
+
+  TEST_CASE("TrackListProjection - live edits keep the track artist heading of an album current",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const first =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Aimer", .album = "Mixtape"});
+    auto const second =
+      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .artist = "Aimer", .album = "Mixtape"});
+    env.setupFiltered({{first, second}});
+
+    auto proj = env.createProjection(ViewId{1});
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
                                                .sortBy = {
                                                  TrackSortTerm{.field = TrackSortField::AlbumArtist, .ascending = true},
                                                  TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
                                                }});
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const sub =
+      proj.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    // Subscribing delivers an initial reset.
+    batches.clear();
 
-    REQUIRE(proj.size() == 1);
-    REQUIRE(proj.groupCount() == 1);
-    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Solo Album");
-    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.secondary) == MissingTrackValueKind::Artist);
+    // Every edit below keeps the album's rows in title order inside its one group.
+    auto const requireOneGroup = [&proj](std::vector<TrackId> const& rows)
+    {
+      REQUIRE(proj.size() == rows.size());
+
+      for (std::size_t index = 0; index < rows.size(); ++index)
+      {
+        CHECK(proj.trackIdAt(index) == rows[index]);
+      }
+
+      REQUIRE(proj.groupCount() == 1);
+      CHECK(proj.groupAt(0).rows.start == 0);
+      CHECK(proj.groupAt(0).rows.count == rows.size());
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Mixtape");
+    };
+    auto const requireSingleReset = [&batches]
+    {
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
+      batches.clear();
+    };
+    auto const setArtist = [&env](TrackId const id, std::string artist)
+    {
+      env.libraryFixture.updateTrack(
+        id, [&artist](library::test::TrackSpec& spec) { spec.artist = std::move(artist); });
+      env.source.singleUpdate(id);
+    };
+
+    requireOneGroup({first, second});
+    REQUIRE(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+
+    SECTION("an artist-only update")
+    {
+      setArtist(second, "Celine Dion");
+      requireOneGroup({first, second});
+      CHECK(std::holds_alternative<VariousArtists>(proj.groupAt(0).heading.secondary));
+      requireSingleReset();
+
+      setArtist(second, "Aimer");
+      requireOneGroup({first, second});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      requireSingleReset();
+
+      // Another spelling of the same artist on a later row keeps the heading, so there is no reset.
+      setArtist(second, "AIMER");
+      requireOneGroup({first, second});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      auto const* const update = std::get_if<ProjectionUpdateRange>(&batches.front().deltas.front());
+      REQUIRE(update != nullptr);
+      CHECK(update->range.start == 1);
+      CHECK(update->range.count == 1);
+    }
+
+    SECTION("inserting and removing tracks of a second artist")
+    {
+      // One guest track leaves Aimer the majority, so the heading stays and nothing resets.
+      auto const third = env.libraryFixture.addTrack(
+        library::test::TrackSpec{.title = "C", .artist = "Celine Dion", .album = "Mixtape"});
+      env.source.singleInsert(third);
+      requireOneGroup({first, second, third});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      REQUIRE(batches.size() == 1);
+      REQUIRE(batches.front().deltas.size() == 1);
+      auto const* const insertion = std::get_if<ProjectionInsertRange>(&batches.front().deltas.front());
+      REQUIRE(insertion != nullptr);
+      CHECK(insertion->range.start == 2);
+      CHECK(insertion->range.count == 1);
+      batches.clear();
+
+      // A second guest track ties the count.
+      auto const fourth = env.libraryFixture.addTrack(
+        library::test::TrackSpec{.title = "D", .artist = "Celine Dion", .album = "Mixtape"});
+      env.source.singleInsert(fourth);
+      requireOneGroup({first, second, third, fourth});
+      CHECK(std::holds_alternative<VariousArtists>(proj.groupAt(0).heading.secondary));
+      requireSingleReset();
+
+      env.source.singleRemove(fourth);
+      requireOneGroup({first, second, third});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Aimer");
+      requireSingleReset();
+    }
+
+    SECTION("removing the row that supplies the spelling")
+    {
+      setArtist(second, "AIMER");
+      batches.clear();
+
+      env.source.singleRemove(first);
+      requireOneGroup({second});
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "AIMER");
+      requireSingleReset();
+    }
   }
 
   TEST_CASE("TrackListProjection - unknown album label", "[runtime][unit][projection]")
   {
     auto env = TrackListProjectionFixture{};
 
-    auto id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "T1", .album = "", .albumArtist = ""});
+    auto id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "T1", .artist = "", .album = "", .albumArtist = ""});
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});

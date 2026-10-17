@@ -170,6 +170,7 @@ zh_Hans:table {
     track_field_quality { "音质" }
     track_group_none { "无" }
     missing_track_artist { "未知艺人" }
+    various_track_artists { "群星" }
     missing_track_album { "未知专辑" }
     missing_track_year { "未知年份" }
     missing_track_genre { "未知流派" }

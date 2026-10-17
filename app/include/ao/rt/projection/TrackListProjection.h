@@ -54,7 +54,17 @@ namespace ao::rt
 
   constexpr auto kMissingTrackValueKindCount = static_cast<std::size_t>(MissingTrackValueKind::Work) + 1;
 
-  using TrackGroupHeadingValue = std::variant<std::monostate, std::string, std::uint16_t, MissingTrackValueKind>;
+  // The artist slot of an Album group without an album artist when no track
+  // artist is named by more than half of the tracks that name one; tracks
+  // without an artist do not count. When no track names an artist, the slot
+  // holds MissingTrackValueKind::Artist instead.
+  struct VariousArtists final
+  {
+    bool operator==(VariousArtists const&) const = default;
+  };
+
+  using TrackGroupHeadingValue =
+    std::variant<std::monostate, std::string, std::uint16_t, MissingTrackValueKind, VariousArtists>;
 
   struct TrackGroupHeading final
   {

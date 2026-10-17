@@ -97,7 +97,8 @@ namespace ao::rt
     {
       TrackRowRange rows{};
       GroupIdentityKey identity{};
-      using HeadingValue = std::variant<std::monostate, std::string_view, std::uint16_t, MissingTrackValueKind>;
+      using HeadingValue =
+        std::variant<std::monostate, std::string_view, std::uint16_t, MissingTrackValueKind, VariousArtists>;
       HeadingValue primary{};
       HeadingValue secondary{};
       HeadingValue tertiary{};
@@ -130,6 +131,9 @@ namespace ao::rt
       GroupSection::HeadingValue primary{};
       GroupSection::HeadingValue secondary{};
       GroupSection::HeadingValue tertiary{};
+      // Group identity of the track artist that an Album entry without an album
+      // artist names in its secondary slot; empty otherwise.
+      std::string_view trackArtistIdentity{};
       ResourceId imageId{kInvalidResourceId};
     };
 
@@ -654,32 +658,28 @@ namespace ao::rt
             auto const albumArtist = dictionaryText(view.metadata().albumArtistId());
             entry.groupIdentity = {.first = albumArtist.identityKey, .second = album.identityKey};
 
-            if (album.raw.empty())
-            {
-              entry.primary = MissingTrackValueKind::Album;
-            }
-            else
-            {
-              entry.primary = album.raw;
-            }
+            entry.primary = album.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Album}
+                                              : GroupSection::HeadingValue{album.raw};
 
-            if (albumArtist.raw.empty())
-            {
-              entry.secondary = MissingTrackValueKind::Artist;
-            }
-            else
+            if (!albumArtist.raw.empty())
             {
               entry.secondary = albumArtist.raw;
             }
-
-            if (auto year = view.metadata().year(); year != 0)
+            else if (auto const artist = dictionaryText(view.metadata().artistId()); !artist.raw.empty())
             {
-              entry.tertiary = year;
+              // Without an album artist the slot names the track artist;
+              // resolveTrackArtist() settles the artist of the whole group.
+              entry.secondary = artist.raw;
+              entry.trackArtistIdentity = artist.identityKey;
             }
             else
             {
-              entry.tertiary = MissingTrackValueKind::Year;
+              entry.secondary = MissingTrackValueKind::Artist;
             }
+
+            auto const year = view.metadata().year();
+            entry.tertiary =
+              year != 0 ? GroupSection::HeadingValue{year} : GroupSection::HeadingValue{MissingTrackValueKind::Year};
           }
 
           break;
@@ -888,6 +888,70 @@ namespace ao::rt
           sections.back().rows.count++;
         }
       }
+
+      for (auto& section : sections)
+      {
+        resolveTrackArtist(section, std::span{orderIndex}.subspan(section.rows.start, section.rows.count));
+      }
+    }
+
+    // An Album group without an album artist names the artist that more than
+    // half of its tracks with an artist name, by group identity and with that
+    // artist's first row's text, or Various Artists when no artist has such a
+    // majority. A track without an artist does not count.
+    static void resolveTrackArtist(GroupSection& section, std::span<OrderEntry const> rows) noexcept
+    {
+      // Boyer-Moore majority vote: only this candidate can hold a majority.
+      auto candidate = std::string_view{};
+      std::size_t lead = 0;
+      std::size_t artistRows = 0;
+
+      for (auto const& row : rows)
+      {
+        if (row.trackArtistIdentity.empty())
+        {
+          continue;
+        }
+
+        ++artistRows;
+
+        if (lead == 0)
+        {
+          candidate = row.trackArtistIdentity;
+          lead = 1;
+        }
+        else if (row.trackArtistIdentity == candidate)
+        {
+          ++lead;
+        }
+        else
+        {
+          --lead;
+        }
+      }
+
+      if (artistRows == 0)
+      {
+        return;
+      }
+
+      OrderEntry const* firstVote = nullptr;
+      std::size_t votes = 0;
+
+      for (auto const& row : rows)
+      {
+        if (row.trackArtistIdentity == candidate)
+        {
+          if (votes == 0)
+          {
+            firstVote = &row;
+          }
+
+          ++votes;
+        }
+      }
+
+      section.secondary = votes * 2 > artistRows ? firstVote->secondary : GroupSection::HeadingValue{VariousArtists{}};
     }
 
     void rebuildOrderIndex()
@@ -1350,15 +1414,12 @@ namespace ao::rt
       std::visit(
         [&seed]<typename Value>(Value const& value)
         {
-          if constexpr (std::same_as<Value, std::monostate>)
-          {
-            combineHash(seed, 0);
-          }
-          else if constexpr (std::same_as<Value, MissingTrackValueKind>)
+          // std::monostate and VariousArtists carry no value; the index above tells them apart.
+          if constexpr (std::same_as<Value, MissingTrackValueKind>)
           {
             combineHash(seed, static_cast<std::size_t>(value));
           }
-          else
+          else if constexpr (!std::same_as<Value, std::monostate> && !std::same_as<Value, VariousArtists>)
           {
             combineHash(seed, std::hash<Value>{}(value));
           }

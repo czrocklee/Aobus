@@ -26,15 +26,18 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 - A redundant field is suppressed only when the group header presents the same fact.
 - Every materialized group section has a nonempty primary display value after UIModel formatting.
 - Album groups use `(album artist, album)` identity; Work groups use `(composer, work)` identity.
+- An Album group whose tracks have no album artist keeps that empty identity, but its heading names the artist that more than half of its tracks with an artist name, by group identity and with that artist's first row's text, or Various Artists when no artist has such a majority. A guest artist on one track of an album therefore leaves the album's own artist in the heading, while two artists with equal track counts make Various Artists. Tracks without an artist do not count, and with none the heading shows the missing-artist value. Two albums with the same title and no album artist share that empty identity and form one group, so the vote covers the tracks of both: 10 Queen tracks and 3 ABBA tracks under one title show Queen, which hides the merge.
 - Movement sorting compares numeric movement number rather than movement-name text.
 
 ## Grouping and sorting
 
 Runtime group headers contain three structured slots.
-Each slot retains absence, raw text, a numeric year, or a typed `MissingTrackValueKind`; compound album/work keys retain the secondary album-artist or composer value independently.
+Each slot retains absence, raw text, a numeric year, a typed `MissingTrackValueKind`, or the `VariousArtists` marker.
+The secondary slot of a Work group holds its composer, and that of an Album group holds its album artist.
+An Album group without an album artist holds instead the artist that more than half of its tracks with an artist name, `VariousArtists` when no artist has such a majority, or the missing-artist value when none names one; only this slot holds `VariousArtists`.
 Every grouping populates the primary slot with raw text, a numeric year, or a typed missing value before materializing a section.
-Unknown group values remain distinct semantic keys rather than merging with an unrelated concrete value or becoming English inside runtime.
-UIModel resolves the slots through feature presentation functions over `MessageCatalog`, and frontend adapters own only markup and geometry.
+Unknown group values and `VariousArtists` remain distinct semantic values rather than merging with an unrelated concrete value or becoming English inside runtime.
+UIModel resolves the slots through feature presentation functions over `MessageCatalog`, which supplies the localized missing-value labels and Various Artists text, and frontend adapters own only markup and geometry.
 
 Text display, group identity, and ordering use separate keys:
 

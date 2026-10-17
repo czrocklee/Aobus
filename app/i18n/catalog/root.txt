@@ -171,6 +171,7 @@ root:table {
     track_field_quality { "Quality" }
     track_group_none { "None" }
     missing_track_artist { "Unknown Artist" }
+    various_track_artists { "Various Artists" }
     missing_track_album { "Unknown Album" }
     missing_track_year { "Unknown Year" }
     missing_track_genre { "Unknown Genre" }

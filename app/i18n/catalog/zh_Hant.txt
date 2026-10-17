@@ -169,6 +169,7 @@ zh_Hant:table {
     track_field_quality { "音質" }
     track_group_none { "無" }
     missing_track_artist { "未知藝人" }
+    various_track_artists { "群星" }
     missing_track_album { "未知專輯" }
     missing_track_year { "未知年份" }
     missing_track_genre { "未知曲風" }
