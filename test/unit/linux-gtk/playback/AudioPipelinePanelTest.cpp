@@ -5,14 +5,19 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/enums.h>
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
 
@@ -125,20 +130,21 @@ namespace ao::gtk::test
     auto inspector = AudioPipelinePanelInspector{widget};
 
     auto view = uimodel::AudioPipelineViewState{};
-    view.quality =
-      rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                       .pipelineQuality = audio::Quality::BitwisePerfect,
-                       .overall = audio::Quality::BitwisePerfect,
-                       .assessments = {
-                         audio::NodeQualityAssessment{
-                           .nodeId = "ao-source",
-                           .nodeName = "Source",
-                           .nodeType = audio::flow::NodeType::Source,
-                           .optFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16},
-                           .findings = {audio::QualityFinding{
-                             .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect}},
-                         },
-                       }};
+    view.quality = rt::QualityState{
+      .sourceQuality = audio::Quality::BitwisePerfect,
+      .pipelineQuality = audio::Quality::BitwisePerfect,
+      .overall = audio::Quality::BitwisePerfect,
+      .channelConfidence = audio::ChannelConfidence::Verified,
+      .assessments = {
+        audio::NodeQualityAssessment{
+          .nodeId = "ao-source",
+          .nodeName = "Source",
+          .nodeType = audio::flow::NodeType::Source,
+          .optFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3},
+          .findings = {audio::QualityFinding{
+            .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect}},
+        },
+      }};
 
     widget.apply(view);
 
@@ -147,8 +153,96 @@ namespace ao::gtk::test
     CHECK(hasLabel(labels, "[Source]"));
     CHECK(hasLabel(labels, "Source"));
     CHECK(hasLabel(labels, "(44.1 kHz · 16-bit · Stereo)"));
-    CHECK(hasLabel(labels, "Bit-perfect playback"));
+    CHECK(hasLabel(labels, "Bit-perfect PCM (observed software path)"));
+    CHECK_FALSE(hasLabel(labels, "Channel delivery not proved"));
     CHECK(inspector.hasDescendantCssClass("ao-quality-medal"));
+
+    SECTION("unverified delivery adds a separate note without discarding numerical evidence")
+    {
+      view.quality.channelConfidence = audio::ChannelConfidence::Unverified;
+      widget.apply(view);
+      auto const unverifiedLabels = inspector.labelTexts();
+      CHECK(hasLabel(unverifiedLabels, "(44.1 kHz · 16-bit · Stereo)"));
+      CHECK(hasLabel(unverifiedLabels, "Channel delivery not proved"));
+      CHECK(hasLabel(unverifiedLabels, "Bit-perfect PCM (observed software path)"));
+      CHECK(inspector.hasDescendantCssClass("ao-quality-medal"));
+
+      view.quality.channelConfidence = audio::ChannelConfidence::Verified;
+      widget.apply(view);
+      CHECK_FALSE(hasLabel(inspector.labelTexts(), "Channel delivery not proved"));
+    }
+  }
+
+  TEST_CASE("AudioPipelinePanel - headline and channel note wrap across managed-label rebuilds",
+            "[gtk][unit][playback][geometry][localization]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    for (auto const* const locale : {"en-US", "zh-CN"})
+    {
+      CAPTURE(locale);
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const formatter = uimodel::AudioQualityFormatter{catalog};
+      auto widget = AudioPipelinePanel{catalog};
+      auto inspector = AudioPipelinePanelInspector{widget};
+      auto view = uimodel::AudioPipelineViewState{
+        .quality = {.sourceQuality = audio::Quality::BitwisePerfect,
+                    .pipelineQuality = audio::Quality::BitwisePerfect,
+                    .overall = audio::Quality::BitwisePerfect,
+                    .assessments = {{.nodeType = audio::flow::NodeType::Source,
+                                     .optFormat =
+                                       audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16}}}},
+      };
+      auto previousNote = std::string{};
+
+      for (auto const confidence : {audio::ChannelConfidence::Unknown,
+                                    audio::ChannelConfidence::Verified,
+                                    audio::ChannelConfidence::Unverified,
+                                    audio::ChannelConfidence::Unknown})
+      {
+        CAPTURE(confidence);
+        view.quality.channelConfidence = confidence;
+        auto const presentation = formatter.presentation(view.quality);
+        REQUIRE(presentation.category == uimodel::AudioQualityCategory::Medal);
+        widget.apply(view);
+        auto const labels = inspector.labelTexts();
+        CHECK(std::ranges::count(labels, presentation.headline) == 1);
+
+        if (!previousNote.empty() && previousNote != presentation.channelNote)
+        {
+          CHECK_FALSE(hasLabel(labels, previousNote));
+        }
+
+        // Borrow labels only within this apply generation. Re-find them after
+        // each rebuild; no pointer or reference crosses the next apply call.
+        for (auto const& text : {presentation.headline, presentation.channelNote})
+        {
+          if (text.empty())
+          {
+            continue;
+          }
+
+          CHECK(std::ranges::count(labels, text) == 1);
+          auto* const label = findLabelByText(widget, text);
+          REQUIRE(label != nullptr);
+          CHECK(label->get_wrap());
+          // Respect GTK's horizontal minimum before measuring height-for-width;
+          // a smaller budget is invalid, not evidence of wrapping. Keep the
+          // constrained budget near 64px and the wide control at least natural
+          // width without pinning a font, line count, or pixel height.
+          auto const width = measureWidget(*label, Gtk::Orientation::HORIZONTAL);
+          auto const narrowColumns = std::max(64, width.minimum);
+          auto const wideColumns = std::max(640, width.natural);
+          REQUIRE(narrowColumns < wideColumns);
+          auto const wide = measureWidget(*label, Gtk::Orientation::VERTICAL, wideColumns);
+          auto const narrow = measureWidget(*label, Gtk::Orientation::VERTICAL, narrowColumns);
+          CHECK(narrow.natural > wide.natural);
+          CHECK(label->get_text().raw() == text);
+        }
+
+        previousNote = presentation.channelNote;
+      }
+    }
   }
 
   TEST_CASE("AudioPipelinePanel - replaces variant CSS classes", "[gtk][unit][playback]")
@@ -182,6 +276,7 @@ namespace ao::gtk::test
           .sourceQuality = audio::Quality::BitwisePerfect,
           .pipelineQuality = audio::Quality::BitwisePerfect,
           .overall = audio::Quality::BitwisePerfect,
+          .channelConfidence = audio::ChannelConfidence::Verified,
           .assessments = {audio::NodeQualityAssessment{
             .nodeName = "Dvořák DAC",
             .nodeType = audio::flow::NodeType::Source,
@@ -198,7 +293,7 @@ namespace ao::gtk::test
     CHECK(hasLabel(labels, "Audiokette"));
     CHECK(hasLabel(labels, "[Quelle]"));
     CHECK(hasLabel(labels, "Dvořák DAC"));
-    CHECK(hasLabel(labels, "Bitperfekte Wiedergabe"));
+    CHECK(hasLabel(labels, "Bitgenaues PCM (beobachteter Softwarepfad)"));
   }
 
   TEST_CASE("AudioPipelinePanel - escapes external device names before applying markup", "[gtk][unit][playback]")

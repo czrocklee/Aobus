@@ -69,6 +69,7 @@ elseif(LINUX)
         backend/detail/PipeWireMonitorParsing.cpp
         backend/detail/AlsaDeviceDiscovery.cpp
         backend/detail/AlsaGraphRegistry.cpp
+        backend/detail/AlsaChannelMap.cpp
         backend/detail/AlsaMixerSession.cpp
         backend/detail/AlsaModeSelector.cpp
         backend/detail/AlsaPcmError.cpp
@@ -86,6 +87,9 @@ elseif(APPLE)
         backend/detail/CoreAudioDeviceDiscovery.cpp
         backend/detail/CoreAudioFormat.cpp
         backend/detail/CoreAudioGraph.cpp
+        backend/detail/CoreAudioChannelLayout.cpp
+        backend/detail/CoreAudioControlMailbox.cpp
+        backend/detail/CoreAudioRunControl.cpp
         backend/detail/CoreAudioLatency.cpp
         backend/detail/CoreAudioRenderBuffer.cpp
         backend/detail/CoreFoundationString.cpp

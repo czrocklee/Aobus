@@ -7,22 +7,28 @@
 #include "detail/AudioBackendRenderBuffer.h"
 #include "detail/BackendGraphRegistry.h"
 #include "detail/CallbackFence.h"
+#include "detail/CoreAudioChannelLayout.h"
+#include "detail/CoreAudioControlMailbox.h"
 #include "detail/CoreAudioDeviceDiscovery.h"
 #include "detail/CoreAudioError.h"
 #include "detail/CoreAudioFormat.h"
 #include "detail/CoreAudioGraph.h"
 #include "detail/CoreAudioLatency.h"
 #include "detail/CoreAudioRenderBuffer.h"
+#include "detail/CoreAudioRunControl.h"
 #include "detail/DecoderOutput.h"
+#include "detail/SpeakerSet.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/utility/ThreadName.h>
 
@@ -78,22 +84,44 @@ namespace ao::audio::backend
                                               .mElement = ::kAudioObjectPropertyElementMain},
                  ::AudioObjectPropertyAddress{.mSelector = ::kAudioDevicePropertyStreamConfiguration,
                                               .mScope = ::kAudioObjectPropertyScopeOutput,
+                                              .mElement = ::kAudioObjectPropertyElementMain},
+                 ::AudioObjectPropertyAddress{.mSelector = ::kAudioDevicePropertyPreferredChannelLayout,
+                                              .mScope = ::kAudioObjectPropertyScopeOutput,
                                               .mElement = ::kAudioObjectPropertyElementMain}};
+    constexpr auto kUnitChannelProperties = std::to_array<::AudioUnitPropertyID>(
+      {::kAudioUnitProperty_AudioChannelLayout, ::kAudioOutputUnitProperty_ChannelMap});
 
     bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
     {
       return sourceFormat.sampleRate != 0U && sourceFormat.channels != 0U &&
+             detail::hasSupportedSourceSpeakerSet(sourceFormat) &&
              ::ao::audio::detail::preferredLosslessPcmEncoding(sourceFormat).has_value();
     }
 
-    enum class CoreAudioFault : std::uint8_t
+    BackendOpenFailure sourceFormatFailure(SignalFormat const& sourceFormat)
     {
-      None,
-      DeviceLost,
-      RenderBufferShape,
-      RenderFrameLimit,
-      RenderTargetMissing,
-    };
+      if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
+      {
+        return {
+          .error =
+            makeError(Error::Code::InvalidInput, "Core Audio PCM formats require a sample rate and channels").error(),
+          .cause = BackendOpenFailure::Cause::OutputFailure};
+      }
+
+      if (!detail::hasSupportedSourceSpeakerSet(sourceFormat))
+      {
+        return {
+          .error = makeError(Error::Code::FormatRejected, "Core Audio cannot identify the source channel set").error(),
+          .cause = BackendOpenFailure::Cause::TrackRouteIncompatible};
+      }
+
+      return {
+        .error =
+          makeError(Error::Code::FormatRejected, "No lossless Core Audio client PCM encoding is available").error(),
+        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible};
+    }
+
+    using detail::CoreAudioFault;
 
     class CallbackLeave final
     {
@@ -297,6 +325,8 @@ namespace ao::audio::backend
       switch (fault)
       {
         case CoreAudioFault::DeviceLost: return "Core Audio output device was disconnected";
+        case CoreAudioFault::ChannelRouteChanged:
+          return "Core Audio channel relationship changed or could not be refreshed";
         case CoreAudioFault::RenderBufferShape: return "Core Audio supplied an incompatible render buffer";
         case CoreAudioFault::RenderFrameLimit: return "Core Audio exceeded the configured render frame limit";
         case CoreAudioFault::RenderTargetMissing: return "Core Audio render callback has no target";
@@ -323,7 +353,8 @@ namespace ao::audio::backend
       ::AudioUnit unit = nullptr;
       ::AudioObjectID deviceId = ::kAudioObjectUnknown;
       bool started = false;
-      std::size_t registeredDeviceListenerCount = 0U;
+      std::array<bool, kDevicePropertyAddresses.size()> registeredDeviceListeners{};
+      std::array<bool, kUnitChannelProperties.size()> registeredUnitListeners{};
 
       detail::CallbackFence renderFence{};
       detail::CallbackFence deviceListenerFence{};
@@ -331,6 +362,9 @@ namespace ao::audio::backend
       std::recursive_mutex targetCallbackMutex{};
 
       std::vector<std::byte> stagingBuffer{};
+      std::vector<std::byte> nativeBuffer{};
+      detail::CoreAudioChannelPlan channelPlan{};
+      std::size_t sampleBytes = 0U;
       std::size_t bytesPerFrame = 0U;
       ::UInt32 maximumFramesPerSlice = 0U;
       std::atomic<std::uint64_t> presentationTailFrameCount{0U};
@@ -338,20 +372,26 @@ namespace ao::audio::backend
 
       mutable std::recursive_mutex graphPublicationMutex{};
       mutable std::mutex graphStateMutex{};
+      // Canonical render-target contract stays separate from native graph storage.
       std::optional<PcmFormat> optClientFormat{};
+      std::optional<PcmFormat> optNativeClientFormat{};
       std::optional<SignalFormat> optDeviceFormat{};
+      ChannelDeliveryEvidence channelDelivery{};
+      ChannelDeliveryEvidence outputChannelDelivery{};
       bool graphPublished = false;
 
       mutable std::mutex propertyMutex{};
       float cachedVolume = 1.0F;
       bool cachedMuted = false;
 
-      std::atomic<std::uint64_t> generation{1U};
+      // Public controls acquire targetCallbackMutex before the run gate.
+      // Workers release the gate before callback delivery or graph publication.
+      detail::CoreAudioRunControl runControl{};
       std::atomic<bool> runActive{false};
       std::atomic<bool> renderAllowed{false};
       std::atomic<std::uint64_t> pendingDrainGeneration{0U};
-      std::atomic<std::uint64_t> pendingDeviceGeneration{0U};
-      std::atomic<std::uint64_t> pendingFault{0U};
+      std::atomic<bool> pendingGraphPublication{false};
+      detail::CoreAudioControlMailbox controlMailbox;
       std::atomic<bool> controlStop{false};
       std::counting_semaphore<> controlSignal{0};
       std::uint64_t deliveredDrainGeneration = 0U;
@@ -359,11 +399,17 @@ namespace ao::audio::backend
 
       void signalDrainReady(std::uint64_t drainGeneration) noexcept;
       void signalDeviceChange() noexcept;
-      void signalFault(CoreAudioFault fault) noexcept;
+      void signalFault(CoreAudioFault fault, std::uint64_t faultGeneration = 0U) noexcept;
+      void requestGraphPublication() noexcept;
       void controlLoop();
       void handleDrain(std::uint64_t drainGeneration);
-      void handleDeviceChange(std::uint64_t deviceGeneration);
-      void handleFault(std::uint64_t encodedFault);
+      // Execution mode proves transport only; the worker owns full diagnostics.
+      // A supplied flag defers publication and records whether a snapshot was updated.
+      bool tryRefreshDevice(std::uint64_t deviceGeneration,
+                            detail::CoreAudioChannelRefreshMode mode = detail::CoreAudioChannelRefreshMode::Observation,
+                            bool* publicationDeferred = nullptr);
+      bool tryFinishDeviceRefresh(std::uint64_t deviceGeneration, CoreAudioFault fault, bool* publicationDeferred);
+      void handleFault(detail::CoreAudioControlFault const& packet);
       void publishGraph() const;
       void reportError(std::uint64_t errorGeneration, std::string_view message);
     };
@@ -379,20 +425,29 @@ namespace ao::audio::backend
 
     void CoreAudioRuntimeState::signalDeviceChange() noexcept
     {
-      pendingDeviceGeneration.store(generation.load(std::memory_order_acquire), std::memory_order_release);
+      std::ignore = controlMailbox.tryPublishDeviceChange(runControl.current());
       controlSignal.release();
     }
 
-    void CoreAudioRuntimeState::signalFault(CoreAudioFault const fault) noexcept
+    void CoreAudioRuntimeState::signalFault(CoreAudioFault const fault, std::uint64_t const faultGeneration) noexcept
     {
-      auto const currentGeneration = generation.load(std::memory_order_acquire);
-      auto const encoded = (currentGeneration << 8U) | static_cast<std::uint8_t>(fault);
+      auto const currentGeneration = faultGeneration == 0U ? runControl.current() : faultGeneration;
 
-      if (std::uint64_t expected = 0U;
-          pendingFault.compare_exchange_strong(expected, encoded, std::memory_order_release, std::memory_order_relaxed))
+      if (!runControl.isCurrent(currentGeneration))
+      {
+        return;
+      }
+
+      if (controlMailbox.tryPublishFault(currentGeneration, fault))
       {
         controlSignal.release();
       }
+    }
+
+    void CoreAudioRuntimeState::requestGraphPublication() noexcept
+    {
+      pendingGraphPublication.store(true, std::memory_order_release);
+      controlSignal.release();
     }
 
     void CoreAudioRuntimeState::controlLoop()
@@ -408,15 +463,32 @@ namespace ao::audio::backend
           return;
         }
 
-        if (auto const deviceGeneration = pendingDeviceGeneration.exchange(0U, std::memory_order_acq_rel);
-            deviceGeneration != 0U)
+        if (auto const deviceGeneration = controlMailbox.takeDeviceChange(); deviceGeneration != 0U)
         {
-          handleDeviceChange(deviceGeneration);
+          bool publicationDeferred = false;
+          {
+            // A current-generation notification may arrive during start/resume's
+            // minimal proof. Native-mutex gaps do not admit full observation while
+            // those controls still hold their run scope and callback lock.
+            auto const optRunScope = runControl.tryCurrent(deviceGeneration);
+
+            if (optRunScope)
+            {
+              tryRefreshDevice(
+                deviceGeneration, detail::CoreAudioChannelRefreshMode::Observation, &publicationDeferred);
+            }
+          }
+
+          // Observers may close or reenter controls; release the run gate first.
+          if (publicationDeferred)
+          {
+            publishGraph();
+          }
         }
 
-        if (auto const encodedFault = pendingFault.exchange(0U, std::memory_order_acq_rel); encodedFault != 0U)
+        if (auto const optFault = controlMailbox.takeFault(); optFault)
         {
-          handleFault(encodedFault);
+          handleFault(*optFault);
         }
 
         if (auto const drainGeneration = pendingDrainGeneration.exchange(0U, std::memory_order_acq_rel);
@@ -424,26 +496,34 @@ namespace ao::audio::backend
         {
           handleDrain(drainGeneration);
         }
+
+        // Property changes may originate inside target callbacks. Publish only
+        // after their callback locks have unwound, using the current graph state.
+        if (pendingGraphPublication.exchange(false, std::memory_order_acq_rel))
+        {
+          publishGraph();
+        }
       }
     }
 
     void CoreAudioRuntimeState::handleDrain(std::uint64_t const drainGeneration)
     {
-      if (generation.load(std::memory_order_acquire) != drainGeneration ||
-          !runActive.exchange(false, std::memory_order_acq_rel))
       {
-        return;
-      }
+        auto const optRunScope = runControl.tryCurrent(drainGeneration);
 
-      renderFence.closeAndWait();
-      {
+        if (!optRunScope || !runActive.exchange(false, std::memory_order_acq_rel))
+        {
+          return;
+        }
+
+        renderFence.closeAndWait();
         auto const lock = std::scoped_lock{nativeMutex};
 
         if (unit != nullptr && started)
         {
           if (::AudioOutputUnitStop(unit) != ::noErr)
           {
-            signalFault(CoreAudioFault::DeviceLost);
+            signalFault(CoreAudioFault::DeviceLost, drainGeneration);
             return;
           }
 
@@ -453,7 +533,7 @@ namespace ao::audio::backend
 
       auto const callbackLock = std::scoped_lock{targetCallbackMutex};
 
-      if (generation.load(std::memory_order_relaxed) == drainGeneration && renderTarget != nullptr &&
+      if (runControl.isCurrent(drainGeneration) && renderTarget != nullptr &&
           deliveredDrainGeneration != drainGeneration)
       {
         deliveredDrainGeneration = drainGeneration;
@@ -461,20 +541,27 @@ namespace ao::audio::backend
       }
     }
 
-    void CoreAudioRuntimeState::handleDeviceChange(std::uint64_t const deviceGeneration)
+    bool CoreAudioRuntimeState::tryRefreshDevice(std::uint64_t const deviceGeneration,
+                                                 detail::CoreAudioChannelRefreshMode const mode,
+                                                 bool* const publicationDeferred)
     {
-      if (generation.load(std::memory_order_acquire) != deviceGeneration)
+      if (publicationDeferred != nullptr)
       {
-        return;
+        *publicationDeferred = false;
+      }
+
+      if (!runControl.isCurrent(deviceGeneration))
+      {
+        return false;
       }
 
       ::AudioObjectID device = ::kAudioObjectUnknown;
       {
         auto const lock = std::scoped_lock{nativeMutex};
 
-        if (generation.load(std::memory_order_relaxed) != deviceGeneration || unit == nullptr)
+        if (!runControl.isCurrent(deviceGeneration) || unit == nullptr)
         {
-          return;
+          return false;
         }
 
         device = deviceId;
@@ -487,63 +574,107 @@ namespace ao::audio::backend
 
       if (aliveStatus != ::noErr || alive == 0U)
       {
-        signalFault(CoreAudioFault::DeviceLost);
-        return;
+        signalFault(CoreAudioFault::DeviceLost, deviceGeneration);
+        return false;
       }
 
-      auto outputFormat = ::AudioStreamBasicDescription{};
-      std::uint32_t clientSampleRate = 0U;
+      auto optClient = std::optional<PcmFormat>{};
       {
         auto const lock = std::scoped_lock{graphStateMutex};
-
-        if (optClientFormat)
-        {
-          clientSampleRate = optClientFormat->sampleRate;
-        }
+        optClient = optClientFormat;
       }
-      auto optTailFrames = std::optional<std::uint64_t>{};
-      ::OSStatus formatStatus = ::noErr;
+
+      if (!optClient)
+      {
+        return false;
+      }
+
+      auto fault = CoreAudioFault::None;
       {
         auto const lock = std::scoped_lock{nativeMutex};
 
-        if (unit == nullptr)
+        if (!runControl.isCurrent(deviceGeneration) || unit == nullptr)
         {
-          return;
+          return false;
         }
 
-        formatStatus =
-          readAudioUnitProperty(unit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Output, 0U, outputFormat);
+        auto const refreshRes =
+          detail::refreshCoreAudioChannels(detail::coreAudioChannelOperations(unit, device),
+                                           *optClient,
+                                           channelPlan,
+                                           mode,
+                                           [&] { return runControl.isCurrent(deviceGeneration) && unit != nullptr; });
 
-        if (formatStatus == ::noErr)
+        // Borrow from refreshRes only for this native-locked refresh.
+        detail::CoreAudioChannelRefresh const* refreshed = nullptr;
+
+        if (refreshRes)
         {
-          if (auto const tailFramesRes = presentationTailFrames(unit, device, outputFormat, clientSampleRate);
-              tailFramesRes)
+          auto const& optRefresh = *refreshRes;
+
+          if (!optRefresh)
           {
-            optTailFrames = *tailFramesRes;
+            return false;
+          }
+
+          refreshed = std::addressof(*optRefresh);
+        }
+
+        auto optTailFrames = std::optional<std::uint64_t>{};
+        auto optOutputSignal = std::optional<SignalFormat>{};
+
+        if (!refreshRes)
+        {
+          fault = refreshRes.error().error.code == Error::Code::DeviceNotFound ? CoreAudioFault::DeviceLost
+                                                                               : CoreAudioFault::ChannelRouteChanged;
+        }
+        else if (auto const& optOutput = refreshed->optOutputFormat; optOutput)
+        {
+          auto const signalRes = detail::coreAudioSignalFormat(*optOutput);
+
+          if (signalRes)
+          {
+            optOutputSignal = *signalRes;
+          }
+
+          // The initial open-time tail remains provisioned until the worker
+          // observes a replacement. Start/resume never enumerate stream latency.
+          if (mode == detail::CoreAudioChannelRefreshMode::Observation)
+          {
+            if (auto const tailFramesRes = presentationTailFrames(unit, device, *optOutput, optClient->sampleRate);
+                tailFramesRes)
+            {
+              optTailFrames = *tailFramesRes;
+            }
           }
         }
-      }
 
-      if (formatStatus != ::noErr)
-      {
-        if (detail::isCoreAudioDeviceLossStatus(formatStatus))
+        // Retain nativeMutex through snapshot assignment so overlapping refreshes
+        // cannot publish an older read after a newer read of the same generation.
+        auto const graphLock = std::scoped_lock{graphStateMutex};
+
+        if (!runControl.isCurrent(deviceGeneration))
         {
-          signalFault(CoreAudioFault::DeviceLost);
+          return false;
         }
 
-        return;
-      }
+        // No cached/synthetic output numerics survive an unavailable observation.
+        optDeviceFormat = optOutputSignal;
 
-      auto const signalRes = detail::coreAudioSignalFormat(outputFormat);
-      {
-        auto const lock = std::scoped_lock{graphStateMutex};
-
-        if (generation.load(std::memory_order_relaxed) != deviceGeneration)
+        if (!refreshRes)
         {
-          return;
+          optNativeClientFormat.reset();
+          // Failed observation removes position certainty, not known conversion.
+          channelDelivery = {.hasSharedConversion = channelDelivery.hasSharedConversion};
+          outputChannelDelivery = {.hasSharedConversion = outputChannelDelivery.hasSharedConversion};
         }
-
-        optDeviceFormat = signalRes ? std::optional{*signalRes} : std::nullopt;
+        else
+        {
+          auto const& plan = refreshed->plan;
+          optNativeClientFormat = plan.nativeClientFormat;
+          channelDelivery = plan.delivery;
+          outputChannelDelivery = plan.outputDelivery;
+        }
 
         if (optTailFrames)
         {
@@ -551,23 +682,48 @@ namespace ao::audio::backend
         }
       }
 
-      publishGraph();
+      return tryFinishDeviceRefresh(deviceGeneration, fault, publicationDeferred);
     }
 
-    void CoreAudioRuntimeState::handleFault(std::uint64_t const encodedFault)
+    bool CoreAudioRuntimeState::tryFinishDeviceRefresh(std::uint64_t const deviceGeneration,
+                                                       CoreAudioFault const fault,
+                                                       bool* const publicationDeferred)
     {
-      auto const faultGeneration = encodedFault >> 8U;
-      auto const fault = static_cast<CoreAudioFault>(encodedFault & 0xffU);
-
-      if (generation.load(std::memory_order_acquire) != faultGeneration)
+      // Only a completed snapshot reaches this publication boundary, after
+      // nativeMutex and graphStateMutex have been released.
+      if (publicationDeferred != nullptr)
       {
-        return;
+        *publicationDeferred = true;
+      }
+      else
+      {
+        publishGraph();
       }
 
-      runActive.store(false, std::memory_order_release);
-      renderAllowed.store(false, std::memory_order_release);
-      renderFence.closeAndWait();
+      if (fault != CoreAudioFault::None && runControl.isCurrent(deviceGeneration))
       {
+        signalFault(fault, deviceGeneration);
+      }
+
+      return fault == CoreAudioFault::None && runControl.isCurrent(deviceGeneration);
+    }
+
+    void CoreAudioRuntimeState::handleFault(detail::CoreAudioControlFault const& packet)
+    {
+      auto const faultGeneration = packet.generation;
+      auto const fault = packet.kind;
+
+      {
+        auto const optRunScope = runControl.tryCurrent(faultGeneration);
+
+        if (!optRunScope)
+        {
+          return;
+        }
+
+        runActive.store(false, std::memory_order_release);
+        renderAllowed.store(false, std::memory_order_release);
+        renderFence.closeAndWait();
         auto const lock = std::scoped_lock{nativeMutex};
 
         if (unit != nullptr && started)
@@ -587,36 +743,45 @@ namespace ao::audio::backend
         return;
       }
 
-      auto const publicationLock = std::scoped_lock{graphPublicationMutex};
-      auto state = detail::CoreAudioRouteState{};
+      auto pendingDelivery = detail::BackendGraphRegistry::PendingDelivery{};
       {
-        auto const lock = std::scoped_lock{graphStateMutex};
-
-        if (!graphPublished)
+        auto const publicationLock = std::scoped_lock{graphPublicationMutex};
+        auto state = detail::CoreAudioRouteState{};
         {
-          return;
+          auto const lock = std::scoped_lock{graphStateMutex};
+
+          if (!graphPublished)
+          {
+            return;
+          }
+
+          state.routeAnchor = deviceUid;
+          state.deviceName = deviceName;
+          state.optClientFormat = optNativeClientFormat;
+          state.optDeviceFormat = optDeviceFormat;
+          state.channelDelivery = channelDelivery;
+          state.outputChannelDelivery = outputChannelDelivery;
         }
 
-        state.routeAnchor = deviceUid;
-        state.deviceName = deviceName;
-        state.optClientFormat = optClientFormat;
-        state.optDeviceFormat = optDeviceFormat;
+        {
+          auto const lock = std::scoped_lock{propertyMutex};
+          state.volume = cachedVolume;
+          state.muted = cachedMuted;
+        }
+
+        // Order the registry commit against close without retaining an owner
+        // lock while registry delivery waits for or invokes an observer.
+        pendingDelivery = graphRegistryPtr->preparePublish(state.routeAnchor, detail::coreAudioGraph(state));
       }
 
-      {
-        auto const lock = std::scoped_lock{propertyMutex};
-        state.volume = cachedVolume;
-        state.muted = cachedMuted;
-      }
-
-      graphRegistryPtr->publish(state.routeAnchor, detail::coreAudioGraph(state));
+      std::move(pendingDelivery).deliver();
     }
 
     void CoreAudioRuntimeState::reportError(std::uint64_t const errorGeneration, std::string_view const message)
     {
       auto const callbackLock = std::scoped_lock{targetCallbackMutex};
 
-      if (generation.load(std::memory_order_relaxed) == errorGeneration && renderTarget != nullptr &&
+      if (runControl.isCurrent(errorGeneration) && renderTarget != nullptr &&
           deliveredErrorGeneration != errorGeneration)
       {
         deliveredErrorGeneration = errorGeneration;
@@ -661,7 +826,12 @@ namespace ao::audio::backend
       }
 
       auto const byteCount = static_cast<std::size_t>(frameCount) * state.bytesPerFrame;
-      auto const outputBuffer = detail::bindCoreAudioRenderBuffer(outputData, state.stagingBuffer, byteCount);
+      // Identity rendering can use validated AU storage directly, including
+      // binding null AU storage to staging. Only a true permutation needs two buffers.
+      auto const hasIdentityOrder = state.channelPlan.hasIdentityOrder;
+      auto const fallbackBuffer = hasIdentityOrder ? std::span{state.stagingBuffer} : std::span{state.nativeBuffer};
+      auto const outputBuffer = detail::bindCoreAudioRenderBuffer(
+        outputData, fallbackBuffer, byteCount, state.channelPlan.nativeClientFormat.channels);
 
       if (!outputBuffer.valid)
       {
@@ -687,7 +857,7 @@ namespace ao::audio::backend
 
         if (state.drainTail.consume(frameCount) == detail::DrainTailEvent::Completed)
         {
-          state.signalDrainReady(state.generation.load(std::memory_order_relaxed));
+          state.signalDrainReady(state.runControl.current());
         }
 
         return ::noErr;
@@ -708,13 +878,15 @@ namespace ao::audio::backend
         return ::noErr;
       }
 
-      auto const renderResult = target->renderPcm(std::span{state.stagingBuffer}.first(byteCount));
-      auto const prepared = detail::prepareAudioBackendRenderBuffer(
-        std::span{state.stagingBuffer}.first(byteCount), state.bytesPerFrame, renderResult);
+      auto const renderBuffer =
+        hasIdentityOrder ? outputBuffer.output : std::span{state.stagingBuffer}.first(byteCount);
+      auto const renderResult = target->renderPcm(renderBuffer);
+      auto const prepared = detail::prepareAudioBackendRenderBuffer(renderBuffer, state.bytesPerFrame, renderResult);
 
-      if (outputBuffer.output.data() != state.stagingBuffer.data())
+      if (!hasIdentityOrder)
       {
-        std::memcpy(outputBuffer.output.data(), state.stagingBuffer.data(), byteCount);
+        detail::copyCoreAudioChannels(
+          outputBuffer.output, renderBuffer, state.sampleBytes, state.channelPlan.sourceSlots);
       }
 
       if (prepared.underrun)
@@ -740,7 +912,7 @@ namespace ao::audio::backend
         if (state.drainTail.start(state.presentationTailFrameCount.load(std::memory_order_acquire),
                                   silentSuffixFrames) == detail::DrainTailEvent::Completed)
         {
-          state.signalDrainReady(state.generation.load(std::memory_order_relaxed));
+          state.signalDrainReady(state.runControl.current());
         }
       }
 
@@ -764,33 +936,65 @@ namespace ao::audio::backend
       return ::noErr;
     }
 
-    Result<std::size_t> installDeviceListeners(::AudioObjectID const deviceId, CoreAudioRuntimeState& state)
+    void coreAudioUnitChannelsChanged(void* const context,
+                                      ::AudioUnit /*unit*/,
+                                      ::AudioUnitPropertyID /*property*/,
+                                      ::AudioUnitScope /*scope*/,
+                                      ::AudioUnitElement /*element*/) noexcept
+    {
+      auto& state = *static_cast<CoreAudioRuntimeState*>(context);
+
+      if (!state.deviceListenerFence.tryEnter())
+      {
+        return;
+      }
+
+      auto const callbackLeave = CallbackLeave{state.deviceListenerFence};
+      state.signalDeviceChange();
+    }
+
+    Result<> installDeviceListeners(::AudioObjectID const deviceId, CoreAudioRuntimeState& state)
     {
       state.deviceListenerFence.open();
-      std::size_t registeredListenerCount = 0U;
+      auto const lock = std::scoped_lock{state.nativeMutex};
 
-      for (auto const& address : kDevicePropertyAddresses)
+      for (std::size_t index = 0U; index < kDevicePropertyAddresses.size(); ++index)
       {
+        auto const& address = kDevicePropertyAddresses[index];
+
+        if (index >= 3U && ::AudioObjectHasProperty(deviceId, &address) == 0U)
+        {
+          continue;
+        }
+
         if (auto const status = ::AudioObjectAddPropertyListener(deviceId, &address, &coreAudioDeviceChanged, &state);
             status != ::noErr)
         {
-          state.deviceListenerFence.close();
-
-          while (registeredListenerCount != 0U)
-          {
-            --registeredListenerCount;
-            auto const& registeredAddress = kDevicePropertyAddresses[registeredListenerCount];
-            ::AudioObjectRemovePropertyListener(deviceId, &registeredAddress, &coreAudioDeviceChanged, &state);
-          }
-
-          state.deviceListenerFence.wait();
           return detail::makeCoreAudioError(status, "monitor Core Audio output device", Error::Code::InitFailed);
         }
 
-        ++registeredListenerCount;
+        state.registeredDeviceListeners[index] = true;
       }
 
-      return registeredListenerCount;
+      for (std::size_t index = 0U; index < kUnitChannelProperties.size(); ++index)
+      {
+        auto const status = ::AudioUnitAddPropertyListener(
+          state.unit, kUnitChannelProperties[index], &coreAudioUnitChannelsChanged, &state);
+
+        if (status == ::kAudioUnitErr_InvalidProperty || status == ::kAudioUnitErr_PropertyNotInUse)
+        {
+          continue;
+        }
+
+        if (status != ::noErr)
+        {
+          return detail::makeCoreAudioError(status, "monitor Core Audio channel relationship", Error::Code::InitFailed);
+        }
+
+        state.registeredUnitListeners[index] = true;
+      }
+
+      return {};
     }
   } // namespace
 
@@ -863,24 +1067,18 @@ namespace ao::audio::backend
     }
   }
 
+  std::optional<PcmFormat> CoreAudioBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
+  {
+    return canAdmitSourceFormat(sourceFormat) ? Backend::prewarmFormatHint(sourceFormat) : std::nullopt;
+  }
+
   BackendOpenResult CoreAudioBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
   {
     // Reject deterministic source refusals before this backend's own close().
     // Engine closes its previous playback before calling open().
     if (!canAdmitSourceFormat(sourceFormat))
     {
-      if (sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U)
-      {
-        return std::unexpected{BackendOpenFailure{
-          .error =
-            makeError(Error::Code::InvalidInput, "Core Audio PCM formats require a sample rate and channels").error(),
-          .cause = BackendOpenFailure::Cause::OutputFailure}};
-      }
-
-      return std::unexpected{BackendOpenFailure{
-        .error =
-          makeError(Error::Code::FormatRejected, "No lossless Core Audio client PCM encoding is available").error(),
-        .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
+      return std::unexpected{sourceFormatFailure(sourceFormat)};
     }
 
     close();
@@ -1052,6 +1250,40 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
+    auto initializedClient = ::AudioStreamBasicDescription{};
+    auto const requestedClientRes = detail::coreAudioFormat(selectedFormat);
+    auto const clientStatus =
+      readAudioUnitProperty(rawUnit, ::kAudioUnitProperty_StreamFormat, ::kAudioUnitScope_Input, 0U, initializedClient);
+
+    if (clientStatus != ::noErr)
+    {
+      return std::unexpected{BackendOpenFailure{
+        .error =
+          detail::makeCoreAudioError(clientStatus, "read Core Audio initialized client format", Error::Code::InitFailed)
+            .error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
+    }
+
+    if (!requestedClientRes || !detail::isSameCoreAudioPcmFormat(*requestedClientRes, initializedClient))
+    {
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::InitFailed, "Core Audio initialized a different client PCM mode").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
+    }
+
+    auto channelPlanRes = detail::configureCoreAudioChannels(
+      detail::coreAudioChannelOperations(rawUnit, deviceId), selectedFormat, outputDescription);
+
+    if (!channelPlanRes)
+    {
+      return std::unexpected{channelPlanRes.error()};
+    }
+
+    auto nativeBuffer = std::vector<std::byte>(channelPlanRes->hasIdentityOrder ? 0U : stagingBuffer.size());
+    auto const openedMode = detail::coreAudioOpenedPcmMode(selectedFormat, *channelPlanRes);
+    auto const channelDelivery = openedMode.channelDelivery;
+    auto const outputChannelDelivery = channelPlanRes->outputDelivery;
+    auto const nativeClientFormat = channelPlanRes->nativeClientFormat;
     auto const tailFramesRes = presentationTailFrames(rawUnit, deviceId, outputDescription, selectedFormat.sampleRate);
 
     if (!tailFramesRes)
@@ -1077,12 +1309,11 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    statePtr->generation.fetch_add(1U, std::memory_order_acq_rel);
-    statePtr->pendingDrainGeneration.store(0U, std::memory_order_release);
-    statePtr->pendingFault.store(0U, std::memory_order_release);
-    statePtr->runActive.store(false, std::memory_order_release);
-    statePtr->renderAllowed.store(false, std::memory_order_release);
     {
+      auto const runScope = statePtr->runControl.advance();
+      statePtr->pendingDrainGeneration.store(0U, std::memory_order_release);
+      statePtr->runActive.store(false, std::memory_order_release);
+      statePtr->renderAllowed.store(false, std::memory_order_release);
       auto const lock = std::scoped_lock{statePtr->nativeMutex};
       statePtr->unit = unitOwner.release();
       statePtr->deviceId = deviceId;
@@ -1091,13 +1322,19 @@ namespace ao::audio::backend
       statePtr->maximumFramesPerSlice = maximumFrames;
       statePtr->presentationTailFrameCount.store(*tailFramesRes, std::memory_order_release);
       statePtr->stagingBuffer = std::move(stagingBuffer);
+      statePtr->nativeBuffer = std::move(nativeBuffer);
+      statePtr->sampleBytes = bytesPerSample(selectedFormat.encoding);
+      statePtr->channelPlan = std::move(*channelPlanRes);
     }
 
     {
       auto const lock = std::scoped_lock{statePtr->graphStateMutex};
       auto const signalRes = detail::coreAudioSignalFormat(outputDescription);
       statePtr->optClientFormat = selectedFormat;
+      statePtr->optNativeClientFormat = nativeClientFormat;
       statePtr->optDeviceFormat = signalRes ? std::optional{*signalRes} : std::nullopt;
+      statePtr->channelDelivery = channelDelivery;
+      statePtr->outputChannelDelivery = outputChannelDelivery;
     }
 
     {
@@ -1107,18 +1344,13 @@ namespace ao::audio::backend
       statePtr->deliveredErrorGeneration = 0U;
     }
 
-    auto const registeredListenerCountRes = installDeviceListeners(deviceId, *statePtr);
+    auto const listenersRes = installDeviceListeners(deviceId, *statePtr);
 
-    if (!registeredListenerCountRes)
+    if (!listenersRes)
     {
       close();
-      return std::unexpected{BackendOpenFailure{
-        .error = registeredListenerCountRes.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
-    }
-
-    {
-      auto const lock = std::scoped_lock{statePtr->nativeMutex};
-      statePtr->registeredDeviceListenerCount = *registeredListenerCountRes;
+      return std::unexpected{
+        BackendOpenFailure{.error = listenersRes.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
     {
@@ -1129,44 +1361,67 @@ namespace ao::audio::backend
     target.handleRouteReady(statePtr->deviceUid);
     target.handleFormatChanged(selectedFormat);
     statePtr->publishGraph();
-    return OpenedPcmMode{.clientFormat = selectedFormat};
+    return openedMode;
   }
 
   void CoreAudioBackend::start()
   {
     auto const statePtr = _implPtr->statePtr;
-    auto const runGeneration = statePtr->generation.fetch_add(1U, std::memory_order_acq_rel) + 1U;
-    statePtr->pendingDrainGeneration.store(0U, std::memory_order_release);
-    statePtr->pendingFault.store(0U, std::memory_order_release);
-    statePtr->drainTail.reset();
+    std::uint64_t runGeneration = 0U;
+    ::OSStatus status = ::noErr;
+    bool publicationDeferred = false;
+    bool shouldRefreshObservation = false;
     {
       auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
-      statePtr->deliveredDrainGeneration = 0U;
-      statePtr->deliveredErrorGeneration = 0U;
-    }
-    statePtr->renderAllowed.store(true, std::memory_order_release);
-    statePtr->runActive.store(true, std::memory_order_release);
-    statePtr->renderFence.open();
-
-    ::OSStatus status = ::noErr;
-    {
-      auto const lock = std::scoped_lock{statePtr->nativeMutex};
-
-      if (statePtr->unit == nullptr)
+      auto const runScope = statePtr->runControl.advance();
+      runGeneration = runScope.generation();
+      statePtr->pendingDrainGeneration.store(0U, std::memory_order_release);
+      statePtr->drainTail.reset();
+      // Keep delivery markers: the preceding run's generation naturally differs.
+      // Advancing retires queued open-time notifications. Prove current execution
+      // before rendering, then requeue optional observation for this generation.
+      // Publication waits until both locks are released; observers may reenter.
+      if (statePtr->tryRefreshDevice(
+            runGeneration, detail::CoreAudioChannelRefreshMode::Execution, &publicationDeferred))
       {
-        statePtr->renderFence.closeAndWait();
-        statePtr->runActive.store(false, std::memory_order_release);
-        return;
-      }
+        shouldRefreshObservation = true;
+        statePtr->renderAllowed.store(true, std::memory_order_release);
+        statePtr->runActive.store(true, std::memory_order_release);
+        statePtr->renderFence.open();
 
-      status = ::AudioOutputUnitStart(statePtr->unit);
-      statePtr->started = status == ::noErr;
+        bool hasUnit = false;
+        {
+          auto const lock = std::scoped_lock{statePtr->nativeMutex};
+          hasUnit = statePtr->unit != nullptr;
+
+          if (hasUnit)
+          {
+            status = ::AudioOutputUnitStart(statePtr->unit);
+            statePtr->started = status == ::noErr;
+          }
+        }
+
+        if (!hasUnit || status != ::noErr)
+        {
+          statePtr->renderFence.closeAndWait();
+          statePtr->runActive.store(false, std::memory_order_release);
+          statePtr->renderAllowed.store(false, std::memory_order_release);
+        }
+      }
+    }
+
+    if (shouldRefreshObservation && statePtr->runControl.isCurrent(runGeneration))
+    {
+      statePtr->signalDeviceChange();
+    }
+
+    if (publicationDeferred)
+    {
+      statePtr->publishGraph();
     }
 
     if (status != ::noErr)
     {
-      statePtr->renderFence.closeAndWait();
-      statePtr->runActive.store(false, std::memory_order_release);
       auto const error = detail::makeCoreAudioError(status, "start Core Audio output", Error::Code::IoError).error();
       statePtr->reportError(runGeneration, error.message);
     }
@@ -1175,6 +1430,8 @@ namespace ao::audio::backend
   void CoreAudioBackend::pause()
   {
     auto const statePtr = _implPtr->statePtr;
+    auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+    auto const runScope = statePtr->runControl.lock();
     statePtr->renderFence.closeAndWait();
     auto const lock = std::scoped_lock{statePtr->nativeMutex};
 
@@ -1182,7 +1439,7 @@ namespace ao::audio::backend
     {
       if (auto const status = ::AudioOutputUnitStop(statePtr->unit); status != ::noErr)
       {
-        statePtr->signalFault(CoreAudioFault::DeviceLost);
+        statePtr->signalFault(CoreAudioFault::DeviceLost, runScope.generation());
       }
 
       statePtr->started = false;
@@ -1192,33 +1449,60 @@ namespace ao::audio::backend
   void CoreAudioBackend::resume()
   {
     auto const statePtr = _implPtr->statePtr;
-
-    if (!statePtr->runActive.load(std::memory_order_acquire))
+    std::uint64_t runGeneration = 0U;
+    bool publicationDeferred = false;
+    bool shouldRefreshObservation = false;
     {
-      return;
-    }
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+      auto const runScope = statePtr->runControl.lock();
+      runGeneration = runScope.generation();
 
-    statePtr->renderFence.open();
-    auto const lock = std::scoped_lock{statePtr->nativeMutex};
-
-    if (statePtr->unit == nullptr)
-    {
-      statePtr->renderFence.closeAndWait();
-      statePtr->runActive.store(false, std::memory_order_release);
-      return;
-    }
-
-    if (!statePtr->started)
-    {
-      if (auto const status = ::AudioOutputUnitStart(statePtr->unit); status != ::noErr)
+      if (statePtr->runActive.load(std::memory_order_acquire))
       {
-        statePtr->renderFence.closeAndWait();
-        statePtr->runActive.store(false, std::memory_order_release);
-        statePtr->signalFault(CoreAudioFault::DeviceLost);
-        return;
-      }
+        if (statePtr->tryRefreshDevice(
+              runGeneration, detail::CoreAudioChannelRefreshMode::Execution, &publicationDeferred))
+        {
+          shouldRefreshObservation = true;
+          statePtr->renderFence.open();
+          bool startFailed = false;
+          {
+            auto const lock = std::scoped_lock{statePtr->nativeMutex};
 
-      statePtr->started = true;
+            if (statePtr->unit == nullptr)
+            {
+              startFailed = true;
+            }
+            else if (!statePtr->started)
+            {
+              if (auto const status = ::AudioOutputUnitStart(statePtr->unit); status != ::noErr)
+              {
+                startFailed = true;
+                statePtr->signalFault(CoreAudioFault::DeviceLost, runScope.generation());
+              }
+              else
+              {
+                statePtr->started = true;
+              }
+            }
+          }
+
+          if (startFailed)
+          {
+            statePtr->renderFence.closeAndWait();
+            statePtr->runActive.store(false, std::memory_order_release);
+          }
+        }
+      }
+    }
+
+    if (shouldRefreshObservation && statePtr->runControl.isCurrent(runGeneration))
+    {
+      statePtr->signalDeviceChange();
+    }
+
+    if (publicationDeferred)
+    {
+      statePtr->publishGraph();
     }
   }
 
@@ -1226,8 +1510,12 @@ namespace ao::audio::backend
   {
     stop();
     auto const statePtr = _implPtr->statePtr;
+    std::uint64_t runGeneration = 0U;
     ::OSStatus status = ::noErr;
     {
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+      auto const runScope = statePtr->runControl.lock();
+      runGeneration = runScope.generation();
       auto const lock = std::scoped_lock{statePtr->nativeMutex};
 
       if (statePtr->unit != nullptr)
@@ -1238,16 +1526,16 @@ namespace ao::audio::backend
 
     if (status != ::noErr)
     {
-      auto const generation = statePtr->generation.load(std::memory_order_relaxed);
       auto const error = detail::makeCoreAudioError(status, "reset Core Audio output", Error::Code::IoError).error();
-      statePtr->reportError(generation, error.message);
+      statePtr->reportError(runGeneration, error.message);
     }
   }
 
   void CoreAudioBackend::stop()
   {
     auto const statePtr = _implPtr->statePtr;
-    statePtr->generation.fetch_add(1U, std::memory_order_acq_rel);
+    auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+    auto const runScope = statePtr->runControl.advance();
     statePtr->runActive.store(false, std::memory_order_release);
     statePtr->renderAllowed.store(false, std::memory_order_release);
     statePtr->renderFence.closeAndWait();
@@ -1263,48 +1551,84 @@ namespace ao::audio::backend
 
   void CoreAudioBackend::close()
   {
+    // Retire the control-side capability before callback/native retirement.
     auto const statePtr = _implPtr->statePtr;
-    statePtr->generation.fetch_add(1U, std::memory_order_acq_rel);
-    statePtr->runActive.store(false, std::memory_order_release);
-    statePtr->renderAllowed.store(false, std::memory_order_release);
-    statePtr->renderFence.closeAndWait();
-    statePtr->deviceListenerFence.close();
-
-    auto const publicationLock = std::scoped_lock{statePtr->graphPublicationMutex};
-    auto routeAnchor = std::string{};
-    bool clearGraph = false;
-    {
-      auto const lock = std::scoped_lock{statePtr->graphStateMutex};
-      routeAnchor = statePtr->deviceUid;
-      clearGraph = statePtr->graphPublished;
-      statePtr->graphPublished = false;
-      statePtr->optClientFormat.reset();
-      statePtr->optDeviceFormat.reset();
-    }
-
     ::AudioUnit unit = nullptr;
     ::AudioObjectID deviceId = ::kAudioObjectUnknown;
-    std::size_t registeredListenerCount = 0U;
+    auto registeredDeviceListeners = std::array<bool, kDevicePropertyAddresses.size()>{};
+    auto registeredUnitListeners = std::array<bool, kUnitChannelProperties.size()>{};
     {
-      auto const lock = std::scoped_lock{statePtr->nativeMutex};
-      unit = statePtr->unit;
-      deviceId = statePtr->deviceId;
-      registeredListenerCount = statePtr->registeredDeviceListenerCount;
-      statePtr->registeredDeviceListenerCount = 0U;
-      statePtr->unit = nullptr;
-      statePtr->deviceId = ::kAudioObjectUnknown;
-      statePtr->started = false;
-      statePtr->stagingBuffer.clear();
-      statePtr->bytesPerFrame = 0U;
-      statePtr->maximumFramesPerSlice = 0U;
-      statePtr->presentationTailFrameCount.store(0U, std::memory_order_release);
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+      auto const runScope = statePtr->runControl.advance();
+      statePtr->runActive.store(false, std::memory_order_release);
+      statePtr->renderAllowed.store(false, std::memory_order_release);
+      statePtr->renderFence.closeAndWait();
+      statePtr->deviceListenerFence.close();
+      {
+        auto const lock = std::scoped_lock{statePtr->nativeMutex};
+        unit = statePtr->unit;
+        deviceId = statePtr->deviceId;
+        registeredDeviceListeners = std::exchange(statePtr->registeredDeviceListeners, {});
+        registeredUnitListeners = std::exchange(statePtr->registeredUnitListeners, {});
+        statePtr->unit = nullptr;
+        statePtr->deviceId = ::kAudioObjectUnknown;
+        statePtr->started = false;
+        statePtr->stagingBuffer.clear();
+        statePtr->nativeBuffer.clear();
+        statePtr->channelPlan = {};
+        statePtr->sampleBytes = 0U;
+        statePtr->bytesPerFrame = 0U;
+        statePtr->maximumFramesPerSlice = 0U;
+        statePtr->presentationTailFrameCount.store(0U, std::memory_order_release);
+      }
+
+      // Render quiescence and callback serialization precede target revocation.
+      // Do not reacquire this mutex while holding graphPublicationMutex below.
+      statePtr->renderTarget = nullptr;
+      statePtr->deliveredDrainGeneration = 0U;
+      statePtr->deliveredErrorGeneration = 0U;
+      statePtr->drainTail.reset();
     }
 
-    while (registeredListenerCount != 0U)
+    auto pendingDelivery = detail::BackendGraphRegistry::PendingDelivery{};
     {
-      --registeredListenerCount;
-      auto const& address = kDevicePropertyAddresses[registeredListenerCount];
-      ::AudioObjectRemovePropertyListener(deviceId, &address, &coreAudioDeviceChanged, statePtr.get());
+      auto const publicationLock = std::scoped_lock{statePtr->graphPublicationMutex};
+      auto routeAnchor = std::string{};
+      bool clearGraph = false;
+      {
+        auto const lock = std::scoped_lock{statePtr->graphStateMutex};
+        routeAnchor = statePtr->deviceUid;
+        clearGraph = statePtr->graphPublished;
+        statePtr->graphPublished = false;
+        statePtr->optClientFormat.reset();
+        statePtr->optNativeClientFormat.reset();
+        statePtr->optDeviceFormat.reset();
+        statePtr->channelDelivery = {};
+        statePtr->outputChannelDelivery = {};
+      }
+
+      if (clearGraph && statePtr->graphRegistryPtr && !routeAnchor.empty())
+      {
+        pendingDelivery = statePtr->graphRegistryPtr->prepareClear(routeAnchor);
+      }
+    }
+
+    for (std::size_t index = 0U; index < registeredDeviceListeners.size(); ++index)
+    {
+      if (registeredDeviceListeners[index])
+      {
+        auto const& address = kDevicePropertyAddresses[index];
+        ::AudioObjectRemovePropertyListener(deviceId, &address, &coreAudioDeviceChanged, statePtr.get());
+      }
+    }
+
+    for (std::size_t index = 0U; index < registeredUnitListeners.size(); ++index)
+    {
+      if (registeredUnitListeners[index])
+      {
+        ::AudioUnitRemovePropertyListenerWithUserData(
+          unit, kUnitChannelProperties[index], &coreAudioUnitChannelsChanged, statePtr.get());
+      }
     }
 
     statePtr->deviceListenerFence.wait();
@@ -1316,19 +1640,7 @@ namespace ao::audio::backend
       ::AudioComponentInstanceDispose(unit);
     }
 
-    {
-      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
-      statePtr->renderTarget = nullptr;
-      statePtr->deliveredDrainGeneration = 0U;
-      statePtr->deliveredErrorGeneration = 0U;
-    }
-
-    statePtr->drainTail.reset();
-
-    if (clearGraph && statePtr->graphRegistryPtr && !routeAnchor.empty())
-    {
-      statePtr->graphRegistryPtr->clear(routeAnchor);
-    }
+    std::move(pendingDelivery).deliver();
   }
 
   Result<> CoreAudioBackend::setProperty(PropertyId const id, PropertyValue const& value)
@@ -1402,7 +1714,7 @@ namespace ao::audio::backend
       }
     }
 
-    statePtr->publishGraph();
+    statePtr->requestGraphPublication();
     return {};
   }
 

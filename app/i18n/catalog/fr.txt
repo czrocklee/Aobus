@@ -320,6 +320,7 @@ fr:table {
     audio_node_unknown { "[Inconnu]" }
     audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} can." }
+    audio_channels_identified { "{count} can. ({layout})" }
     audio_finding_lossy_source { "Source avec perte" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Atténuation logicielle du volume : {gain}} other {Atténuation logicielle du volume}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {Amplification logicielle : gain {gain} (risque d''écrêtage)} other {Amplification logicielle (risque d''écrêtage)}}" }
@@ -328,12 +329,13 @@ fr:table {
     audio_finding_muted { "Muet" }
     audio_finding_resampling { "{hasFormats, select, yes {Rééchantillonnage : {fromRate} Hz → {toRate} Hz} other {Rééchantillonnage}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Canaux : {fromChannels} can. → {toChannels} can.} other {Mappage des canaux}}" }
+    audio_finding_channel_layout { "Disposition des canaux : {fromLayout} → {toLayout}" }
     audio_finding_lossless_padding { "Extension d''entier sans perte" }
     audio_finding_lossless_float { "Conversion en virgule flottante sans perte" }
     audio_finding_lossless_round_trip { "Aller-retour sans perte (moteur en virgule flottante)" }
     audio_finding_truncation { "{kind, select, floatToInteger {Quantification de virgule flottante vers entier : {fromPrecision} → {toPrecision}} integerToFloat {Quantification d''entier vers virgule flottante : {fromPrecision} → {toPrecision}} precision {Précision tronquée : {fromPrecision} → {toPrecision}} other {Précision tronquée}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {Mixé avec {apps}} other {Sources mixées}}" }
-    audio_quality_bit_perfect_playback { "Lecture bit-perfect" }
+    audio_quality_bit_perfect_playback { "PCM exact bit à bit (chemin logiciel observé)" }
     audio_quality_signal_preserved { "Signal préservé" }
     audio_quality_pipeline_intervention { "Traitement dans la chaîne audio" }
     audio_quality_signal_clipping_detected { "Écrêtage du signal détecté" }
@@ -342,6 +344,9 @@ fr:table {
     audio_quality_partially_verified_path { "Chemin audio partiellement vérifié" }
     audio_quality_clean_lossy_delivery { "Source avec perte sans traitement supplémentaire" }
     audio_quality_clean_delivery { "Sortie sans traitement supplémentaire" }
+    audio_quality_unknown_channel_layout { "Disposition des canaux source inconnue" }
+    audio_quality_unverified_channel_delivery { "Transmission des canaux non vérifiée" }
+    audio_quality_inferred_channel_layout { "Disposition des canaux source déduite" }
     playback_control_play { "Lire" }
     playback_control_pause { "Mettre en pause" }
     playback_control_stop { "Arrêter" }

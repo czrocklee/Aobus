@@ -8,6 +8,7 @@
 #include "detail/Mp4PacketSource.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
@@ -168,6 +169,16 @@ namespace ao::audio
       _implPtr->info.sourceFormat.sampleRate = config.sampleRate;
       _implPtr->info.sourceFormat.precisionBits = config.bitDepth;
       _implPtr->info.sourceFormat.sampleKind = SampleKind::Integer;
+      _implPtr->info.sourceFormat.speakerMask = 0;
+      _implPtr->info.sourceChannelLayout = {};
+
+      // ALAC specifies C for mono and L/R for stereo when chan is absent.
+      // Only matching ALAC Mono/Stereo declarations share those defaults.
+      if ((config.numChannels == 1 || config.numChannels == 2) && !_implPtr->packetSource.hasNoncanonicalAlacLayout())
+      {
+        _implPtr->info.sourceFormat.speakerMask = config.numChannels == 1 ? 0x4U : 0x3U;
+        _implPtr->info.sourceChannelLayout.origin = ChannelLayoutOrigin::Identified;
+      }
 
       auto const configuredRes = _implPtr->outputAdapter.configure(
         _implPtr->info.sourceFormat, nativeAlacEncoding(_implPtr->info.sourceFormat.precisionBits));

@@ -22,6 +22,7 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -33,6 +34,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <variant>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -169,6 +171,28 @@ namespace ao::audio::backend::test
     CHECK(*mutedRes);
   }
 
+  TEST_CASE("CoreAudioBackend - an identified source reaches ordinary device lookup instead of a blanket layout ban",
+            "[audio][integration][coreaudio][backend]")
+  {
+    // No unit is created: a nonexistent device gives the ordinary route fault.
+    auto backend = CoreAudioBackend{
+      Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
+      kProfileShared};
+    auto target = ao::audio::test::NoopRenderTarget{};
+
+    // The channel count matches a normal stereo request, so only the assigned
+    // speaker identities distinguish this source.
+    auto const openedRes = backend.open(
+      {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer, .speakerMask = 0x3},
+      target);
+
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code == Error::Code::DeviceNotFound);
+    CHECK(openedRes.error().error.message == "Core Audio output device is no longer available");
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    backend.close();
+  }
+
   TEST_CASE("CoreAudioBackend - an unrepresentable source is refused as a track incompatibility before native access",
             "[audio][unit][coreaudio][backend]")
   {
@@ -239,12 +263,25 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - geometry refusal outranks precision refusal", "[audio][unit][coreaudio][backend]")
+  TEST_CASE("CoreAudioBackend - geometry refusal outranks layout and precision refusals",
+            "[audio][unit][coreaudio][backend]")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
       kProfileShared};
     auto target = ao::audio::test::NoopRenderTarget{};
+
+    SECTION("a masked source with no sample rate still reports the geometry refusal")
+    {
+      auto const openedRes = backend.open(
+        {.sampleRate = 0, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer, .speakerMask = 0x3},
+        target);
+
+      REQUIRE_FALSE(openedRes);
+      CHECK(openedRes.error().error.code == Error::Code::InvalidInput);
+      CHECK(openedRes.error().error.message == "Core Audio PCM formats require a sample rate and channels");
+      CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    }
 
     SECTION("an unrepresentable source with no channels still reports the geometry refusal")
     {
@@ -258,7 +295,34 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - prewarm predicts the lossless mode without native negotiation",
+  TEST_CASE("CoreAudioBackend - locally unsupported identity is refused before native access and prewarm",
+            "[audio][unit][coreaudio][backend]")
+  {
+    auto backend = CoreAudioBackend{
+      Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
+      kProfileShared};
+    auto target = ao::audio::test::NoopRenderTarget{};
+    auto source =
+      SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer};
+
+    SECTION("partial identities cannot supply a complete source permutation")
+    {
+      source.speakerMask = 0x1;
+    }
+
+    SECTION("reserved identities do not become a guessed native role")
+    {
+      source.speakerMask = 0x80000001;
+    }
+
+    CHECK_FALSE(backend.prewarmFormatHint(source));
+    auto const openedRes = backend.open(source, target);
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+    CHECK(openedRes.error().error.message == "Core Audio cannot identify the source channel set");
+  }
+
+  TEST_CASE("CoreAudioBackend - prewarm retains identified and unknown source eligibility",
             "[audio][unit][coreaudio][backend]")
   {
     // prewarmFormatHint is non-blocking and performs no native open or
@@ -267,7 +331,34 @@ namespace ao::audio::backend::test
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
       kProfileShared};
 
-    SECTION("an ordinary representable source retains its precision")
+    SECTION("identified stereo keeps its canonical mask in the hint")
+    {
+      auto const optHint = backend.prewarmFormatHint({.sampleRate = 44100,
+                                                      .channels = 2,
+                                                      .precisionBits = 16,
+                                                      .sampleKind = SampleKind::Integer,
+                                                      .speakerMask = 0x3});
+
+      REQUIRE(optHint);
+      CHECK(optHint->sampleRate == 44100U);
+      CHECK(optHint->channels == 2U);
+      CHECK(optHint->encoding == SampleEncoding::Signed16Le);
+      CHECK(optHint->speakerMask == 0x3U);
+    }
+
+    SECTION("identified multichannel keeps its compatibility hint")
+    {
+      auto const optHint = backend.prewarmFormatHint({.sampleRate = 48000,
+                                                      .channels = 6,
+                                                      .precisionBits = 24,
+                                                      .sampleKind = SampleKind::Integer,
+                                                      .speakerMask = 0x3F});
+      REQUIRE(optHint);
+      CHECK(optHint->channels == 6U);
+      CHECK(optHint->speakerMask == 0x3FU);
+    }
+
+    SECTION("the same source without identities keeps the ordinary hint")
     {
       auto const optHint = backend.prewarmFormatHint(
         {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer});
@@ -279,21 +370,52 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - native AUHAL open confirms the exact lossless client stream",
+  TEST_CASE("CoreAudioBackend - native AUHAL open retains canonical identities in the exact lossless client stream",
             "[audio][integration][coreaudio][backend]")
   {
     auto const device = requireNativeTestOutput();
     CAPTURE(device.id.raw());
 
     auto target = ao::audio::test::NoopRenderTarget{};
-    auto backend = CoreAudioBackend{device, kProfileShared};
+    auto graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
+    auto backend = CoreAudioBackend{device, kProfileShared, graphRegistryPtr};
+    auto const identified =
+      PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
     auto const openedRes = backend.open(
-      {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target);
+      {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer, .speakerMask = 0x3},
+      target);
     REQUIRE(openedRes);
     CHECK(openedRes->clientFormat.sampleRate == 44100U);
+    CHECK(openedRes->clientFormat.speakerMask == 0x3U);
     CHECK(openedRes->clientFormat.channels == 2U);
     CHECK(openedRes->clientFormat.encoding == SampleEncoding::Signed16Le);
     CHECK_FALSE(openedRes->optEndpoint);
+    CHECK_FALSE(openedRes->channelDelivery.isMapped);
+    // Only native observations may establish this set; unsupported layouts remain unknown.
+    CHECK((openedRes->channelDelivery.nativeSpeakerMask == 0U || openedRes->channelDelivery.nativeSpeakerMask == 0x3U));
+
+    // Observe this backend's published native storage, not the canonical open
+    // descriptor or the channel plan of a different disposable AudioUnit.
+    auto captureNativeGraph = [&]
+    {
+      auto graph = flow::Graph{};
+      auto sub = graphRegistryPtr->subscribe(device.id.raw(), [&](flow::Graph const& updated) { graph = updated; });
+      REQUIRE(sub);
+      // Cancellation waits behind in-flight delivery before reading this copy.
+      sub.reset();
+      return graph;
+    };
+    auto const nativeGraph = captureNativeGraph();
+    REQUIRE(nativeGraph.nodes.size() == 2U);
+    auto const& nativeNode = nativeGraph.nodes.front();
+    REQUIRE(nativeNode.optFormat);
+    REQUIRE(std::holds_alternative<PcmFormat>(*nativeNode.optFormat));
+    auto const nativeFormat = std::get<PcmFormat>(*nativeNode.optFormat);
+    CHECK(nativeFormat.sampleRate == identified.sampleRate);
+    CHECK(nativeFormat.channels == identified.channels);
+    CHECK(nativeFormat.encoding == identified.encoding);
+    CHECK(openedRes->clientFormat == identified);
+
     CHECK(backend.queryProperty(PropertyId::Volume).isAvailable);
     CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isHardwareAssisted);
     REQUIRE(backend.set(props::kVolume, 0.25F));
@@ -326,6 +448,7 @@ namespace ao::audio::backend::test
       REQUIRE(openedRes);
       CHECK(::ao::audio::detail::isLosslessPcmEncoding(sourceFormat, openedRes->clientFormat.encoding));
       CHECK_FALSE(openedRes->optEndpoint);
+      CHECK(openedRes->clientFormat.speakerMask == 0U);
       backend.close();
     }
   }
@@ -390,6 +513,73 @@ namespace ao::audio::backend::test
 
     backend.close();
     CHECK(graphCalls == 2U);
+  }
+
+  TEST_CASE("CoreAudioBackend - property graph publication is handed off before observer-driven close",
+            "[audio][integration][coreaudio][backend][concurrency]")
+  {
+    auto const device = requireNativeTestOutput();
+    CAPTURE(device.id.raw());
+
+    auto const setterThread = std::this_thread::get_id();
+    auto publicationThread = std::thread::id{};
+    auto cleared = std::binary_semaphore{0};
+    auto graphs = std::vector<flow::Graph>{};
+    auto setRes = Result<>{};
+    bool requested = false;
+    bool closeRequested = false;
+    auto graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
+    auto target = ao::audio::test::NoopRenderTarget{};
+    auto backend = CoreAudioBackend{device, kProfileShared, graphRegistryPtr};
+    REQUIRE(backend.open(
+      {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, target));
+
+    // Initial subscription delivery is synchronous. Requesting a property here
+    // must not wait for a second graph delivery under this callback's gate.
+    auto sub =
+      graphRegistryPtr->subscribe(device.id.raw(),
+                                  [&](flow::Graph const& graph)
+                                  {
+                                    if (!requested)
+                                    {
+                                      requested = true;
+                                      setRes = backend.set(props::kVolume, 0.25F);
+                                      return;
+                                    }
+
+                                    if (graph.nodes.empty())
+                                    {
+                                      if (closeRequested)
+                                      {
+                                        graphs.push_back(graph);
+                                        cleared.release();
+                                      }
+
+                                      return;
+                                    }
+
+                                    auto const sink = std::ranges::find(graph.nodes, device.id.raw(), &flow::Node::id);
+
+                                    if (!closeRequested && sink != graph.nodes.end() && sink->maxSoftwareGain == 0.25F)
+                                    {
+                                      publicationThread = std::this_thread::get_id();
+                                      graphs.push_back(graph);
+                                      closeRequested = true;
+                                      backend.close();
+                                    }
+                                  });
+
+    REQUIRE(sub);
+    REQUIRE(requested);
+    REQUIRE(setRes);
+    REQUIRE(cleared.try_acquire_for(std::chrono::seconds{5}));
+    CHECK(publicationThread != setterThread);
+    REQUIRE(graphs.size() == 2U);
+    auto const sink = std::ranges::find(graphs[0].nodes, device.id.raw(), &flow::Node::id);
+    REQUIRE(sink != graphs[0].nodes.end());
+    CHECK(sink->maxSoftwareGain == 0.25F);
+    CHECK(graphs[1] == flow::Graph{});
+    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
   }
 
   TEST_CASE("CoreAudioBackend - stop fences a blocked render and cancels its drain",

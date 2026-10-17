@@ -5,6 +5,7 @@
 
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/BackendGraphRegistry.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
@@ -39,28 +40,36 @@ namespace ao::audio::backend::detail
 
       if (state.optMode)
       {
-        // The stream carries bytes, so it keeps the concrete client encoding.
-        // The sink is hardware, so it reports the precision the endpoint
-        // actually resolves rather than the width of the container feeding it.
-        optStreamFormat = state.optMode->clientFormat;
+        // This native stream may be privately permuted. PcmFormat's mask
+        // implies canonical slot order, so it must not label native slots with
+        // the render target's canonical input mask. Keep storage facts here;
+        // delivery evidence and the endpoint set describe the established map.
+        auto nativeStorage = state.optMode->clientFormat;
+        nativeStorage.speakerMask = 0;
+        optStreamFormat = nativeStorage;
 
+        // Hardware precision remains useful even when positions are unknown.
         if (state.optMode->optEndpoint)
         {
           optSinkFormat = state.optMode->optEndpoint->signalFormat;
         }
       }
 
-      graph.nodes.push_back({.id = "alsa-stream",
-                             .type = flow::NodeType::Stream,
-                             .name = "ALSA Stream",
-                             .optFormat = optStreamFormat,
-                             .objectPath = ""});
+      graph.nodes.push_back(
+        {.id = "alsa-stream",
+         .type = flow::NodeType::Stream,
+         .name = "ALSA Stream",
+         .optFormat = optStreamFormat,
+         .objectPath = "",
+         .channelDelivery = state.optMode ? state.optMode->channelDelivery : ChannelDeliveryEvidence{}});
 
-      auto sink = flow::Node{.id = "alsa-sink",
-                             .type = flow::NodeType::Sink,
-                             .name = state.routeAnchor,
-                             .optFormat = optSinkFormat,
-                             .objectPath = state.routeAnchor};
+      auto sink =
+        flow::Node{.id = "alsa-sink",
+                   .type = flow::NodeType::Sink,
+                   .name = state.routeAnchor,
+                   .optFormat = optSinkFormat,
+                   .objectPath = state.routeAnchor,
+                   .channelDelivery = state.optMode ? state.optMode->channelDelivery : ChannelDeliveryEvidence{}};
 
       sink.isMuted = state.muted;
 

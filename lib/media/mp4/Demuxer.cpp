@@ -89,6 +89,83 @@ namespace ao::media::mp4
     static_assert(alignof(SampleSizeBodyLayout) == 1);
     static_assert(utility::layout::kIsBinaryLayoutType<SampleSizeBodyLayout>);
 
+    constexpr std::uint32_t kAlacMonoLayoutTag = 0x0064'0001U;
+    constexpr std::uint32_t kAlacStereoLayoutTag = 0x0065'0002U;
+
+    struct AlacChanBodyLayout final
+    {
+      boost::endian::big_uint32_buf_t versionAndFlags;
+      boost::endian::big_uint32_buf_t layoutTag;
+      boost::endian::big_uint32_buf_t bitmap;
+      boost::endian::big_uint32_buf_t descriptionCount;
+    };
+
+    static_assert(sizeof(AlacChanBodyLayout) == 16);
+    static_assert(alignof(AlacChanBodyLayout) == 1);
+    static_assert(utility::layout::kIsBinaryLayoutType<AlacChanBodyLayout>);
+
+    bool hasNoncanonicalAlacChan(AtomView const& container, std::uint8_t channels)
+    {
+      bool noncanonical = false;
+      auto const visitRes =
+        visitChildren(container,
+                      [&](AtomView const& atom)
+                      {
+                        // The cookie tail is viewed as a root only to reuse bounded atom parsing;
+                        // it remains nested data, where end-of-file sizes are not valid.
+                        if (utility::layout::view<AtomLayout>(atom.bytes())->length.value() == 0)
+                        {
+                          detail::throwMediaError(Error::Code::FormatRejected, "Invalid nested ALAC atom size");
+                        }
+
+                        if (atom.type() == "chan")
+                        {
+                          auto const payload = atom.payload();
+                          auto const* layout = utility::bytes::tryLayout<AlacChanBodyLayout>(payload);
+                          // Only ALAC's named Mono (C) and Stereo (L R) tags establish roles.
+                          // Ancillary fields and trailing bytes are not interpreted.
+                          auto const matchingTag = channels == 1 ? kAlacMonoLayoutTag : kAlacStereoLayoutTag;
+
+                          if (layout == nullptr || layout->layoutTag.value() != matchingTag)
+                          {
+                            noncanonical = true;
+                          }
+                        }
+
+                        return true;
+                      });
+
+      if (!visitRes)
+      {
+        detail::throwMediaError(Error::Code::FormatRejected, visitRes.error().message);
+      }
+
+      return noncanonical;
+    }
+
+    bool hasNoncanonicalAlacEntryLayout(AtomView const& sampleEntry, std::span<std::byte const> cookie)
+    {
+      // The decoder owns validation of the mandatory compact ALAC config.
+      constexpr std::size_t kConfigEnd = 36;
+      constexpr std::size_t kChannelCountOffset = 21;
+
+      if (cookie.size() < kConfigEnd)
+      {
+        return false;
+      }
+
+      auto const channels = std::to_integer<std::uint8_t>(cookie[kChannelCountOffset]);
+
+      if (channels != 1 && channels != 2)
+      {
+        return false;
+      }
+
+      auto const siblingNoncanonical = hasNoncanonicalAlacChan(sampleEntry, channels);
+      auto const cookieNoncanonical = hasNoncanonicalAlacChan(AtomView::root(cookie.subspan(kConfigEnd)), channels);
+      return siblingNoncanonical || cookieNoncanonical;
+    }
+
     struct TrackTiming final
     {
       std::uint32_t timescale = 0;
@@ -746,6 +823,16 @@ namespace ao::media::mp4
         _magicCookie.assign(bytes.begin(), bytes.end());
       }
 
+      if (targetFormat == "alac")
+      {
+        constexpr auto kEntryPath = std::to_array<std::string_view>({"stsd", "alac"});
+
+        if (auto const optEntry = findAtomOrThrow(selectionRes->stsd, kEntryPath); optEntry)
+        {
+          _hasNoncanonicalAlacLayout = hasNoncanonicalAlacEntryLayout(*optEntry, _magicCookie);
+        }
+      }
+
       if (targetFormat == "mp4a")
       {
         static constexpr auto kEsdsPath = std::to_array<std::string_view>({
@@ -803,6 +890,11 @@ namespace ao::media::mp4
   std::span<std::byte const> Demuxer::magicCookie() const
   {
     return _magicCookie;
+  }
+
+  bool Demuxer::hasNoncanonicalAlacLayout() const noexcept
+  {
+    return _hasNoncanonicalAlacLayout;
   }
 
   std::uint32_t Demuxer::sampleCount() const

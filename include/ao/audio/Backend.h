@@ -88,9 +88,10 @@ namespace ao::audio
     /**
      * @brief Opens one render target and returns the mode actually configured.
      *
-     * `clientFormat` keeps the source sample rate and channel count and carries
-     * the exact byte layout handed to the native API. It must preserve the
-     * source precision. When a backend can confirm the physical endpoint, that
+     * `clientFormat` keeps the source rate, count and effective identity in
+     * canonical render-target order. Native slot ordering is backend-owned and
+     * may use a lossless permutation. It must preserve source precision.
+     * When a backend can confirm the physical endpoint, that
      * endpoint must preserve the source precision as well. Endpoint evidence is
      * route truth, not permission to reduce precision. A failed native open or
      * the absence of a lossless mode is reported as an error and is never

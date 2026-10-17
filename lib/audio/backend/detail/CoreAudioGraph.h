@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
@@ -16,8 +17,11 @@ namespace ao::audio::backend::detail
   {
     std::string routeAnchor{};
     std::string deviceName{};
+    // Native client storage after the private permutation, not render input.
     std::optional<PcmFormat> optClientFormat{};
     std::optional<SignalFormat> optDeviceFormat{};
+    ChannelDeliveryEvidence channelDelivery{};
+    ChannelDeliveryEvidence outputChannelDelivery{};
     float volume = 1.0F;
     bool muted = false;
   };

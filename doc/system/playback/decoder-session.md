@@ -21,8 +21,8 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 - Every published `DecoderSession` is already open and has complete, valid `streamInfo()`; the public interface has no unopened or closed state.
 - A decoder created without a requested encoding inspects the stream and chooses its preferred lossless native representation.
 - A decoder created with a requested `SampleEncoding` either produces exactly that interleaved representation or is not published.
-- Decoders preserve inspected sample rate, channel count, sample kind, and precision; they do not silently resample, add or remove channels, or reduce precision.
-- A codec-native identified speaker layout is normalized to the order owned by the [PCM format reference](pcm-format.md); an unidentified channel layout retains its index order.
+- Decoders preserve inspected sample rate, channel count, sample kind, precision, and effective speaker mask; they do not silently resample, relabel slots, add or remove channels, or reduce precision.
+- The shared [PCM format reference](pcm-format.md) defines ascending-bit order for identified application layouts. WAV, FLAC, and mono/stereo ALAC apply their source interpretation before output adaptation and retain raw declarations independently; the other codec producers still report zero masks and unknown interpretation evidence. Their existing normalization obligations and the known ALAC multichannel limitation remain explicit in that reference and the [channel order reference](../../reference/media/channel-order.md).
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -50,6 +50,9 @@ Opus is internally a floating-point codec, but decoding it to float would make i
 
 The playback path first creates a short-lived inspection decoder with no requested encoding.
 Successful inspection supplies complete source and preferred output formats without reading PCM blocks.
+Interpretation evidence is retained independently in `DecodedStreamInfo::sourceChannelLayout`; encoding selection does not erase it.
+Final preparation requires the effective source format to remain equal to inspection; a change is `FormatRejected`.
+Evidence-only drift that re-describes the same effective layout is accepted.
 Explicit-start preparation next creates, seeks, and prerolls an optimistic final decoder in the selected Backend's valid prewarm hint when one is available.
 After a backend selects its exact encoding, playback reuses that prepared decoder on a complete PCM-mode match or creates a fresh ready decoder session with the selected encoding before seeking and preroll.
 The backend-selected encoding is always a member of the inspected signal's lossless output set, so the final decoder retains the same precision-preserving contract as optimistic preparation.
@@ -99,14 +102,20 @@ unchanged. The scan performs file-size-linear work during decoder preparation.
 `DecodedStreamInfo::codec` and `isLossy` are conservative.
 Unknown codecs remain `Unknown`, and every lossy decoder reports lossy.
 
-The current engine splice gate accepts only lossless FLAC, lossless ALAC, and WAV sessions whose concrete PCM modes are compatible.
-The already-open mode must preserve the successor signal; otherwise the transition drains and reopens.
+The engine splice gate accepts only lossless FLAC, lossless ALAC, and WAV sessions whose concrete PCM mode — rate, channel count, encoding, and effective speaker mask — exactly matches the installed mode; otherwise the transition drains and reopens.
+Source interpretation history is not part of that identity, but adoption always publishes the successor's evidence rather than retaining the previous track's interpretation.
 Lossy and unknown sessions use the drain path until delay/padding trim is parsed and fixture-tested.
 
 ## Failure behavior
 
 Malformed external media and unsupported requests return recoverable decoder errors.
-FLAC requires STREAMINFO to establish a valid source and output format before construction succeeds; missing required metadata is `DecodeFailed`.
+FLAC requires STREAMINFO to establish valid source geometry before construction succeeds; missing required metadata is `DecodeFailed`.
+It also requests Vorbis comments during initialization, resolves the complete [FLAC source identity](pcm-format.md#flac-source-interpretation), and only then configures the output adapter and publishes source/output formats together.
+Repeated Vorbis comment blocks are tolerated; mask declarations agree or fail across all blocks rather than choosing a first- or last-block override.
+An absent five/six-channel mask leaves the generic surround default unidentified in the WAVE-mask model; source and output mask zero with `Unknown` origin preserve count and bytes without imposing back-versus-side roles.
+A supported complete declaration still supplies its exact identity, including back or side five/six-channel sets.
+Unsupported explicit zero, partial or conflicting speaker assignments and malformed known mask values produce contextual source errors, not an unidentified fallback.
+No first PCM read is needed to finalize identity; later metadata cannot silently replace the ready session's interpretation.
 FLAC treats corrupted metadata, headers, frames, CRC mismatches, detected missing frames, and premature end before the declared sample count as `DecodeFailed`; a standalone loss-of-sync notice may remain recoverable for resynchronization.
 Delivered frame sample positions must continue the decoded timeline, or begin at the requested seek target.
 A missing-sample gap or additional write over pending PCM is rejected before any incorrectly positioned block is returned, even when libFLAC suppresses its missing-frame notice or the total sample count is unknown.
@@ -127,7 +136,10 @@ The source-private `openDecoderSession` construction boundary returns a non-null
 An Ogg stream whose pages carry no complete audio packet is translated to `FormatRejected`, while a malformed page structure or an unusable identification packet preserves its parser error. Because an Ogg page is atomic, a truncation reaching into the first audio page leaves no decodable audio.
 An Opus first audio page whose granule position is smaller than the samples it completes is corrupt unless that page also ends the stream, where the smaller position is permitted end trim.
 MP4 factory routing stops after selecting the first usable audio track. No matching audio track is translated to `NotSupported`, while a structural parser failure encountered before selection preserves its parser error.
+An ALAC session resolves its [source interpretation](pcm-format.md#alac-source-interpretation) only after the mandatory compact configuration validates, and publishes source and output formats together; count, order, and PCM bytes never change with the layout classification.
+Structural atom and container failures remain initialization errors rather than an unknown fallback, and an unknown `chan` never hides an invalid mandatory configuration.
 WAV construction validates chunk boundaries only through the first complete supported `fmt` and non-empty `data` pair; unrelated later chunks do not prevent decoding already-bounded audio data.
+It then applies the [WAV source policy](pcm-format.md#wav-source-interpretation), refusing partial assignments, active reserved positions, wildcard declarations and absent/zero layouts outside the bounded fallback table before final adaptation or backend open. These are ordinary-playback support restrictions, not new raw-parser or library-import bans. Attaching an admitted WAVE identity does not rewrite canonical sample order; first read, adaptation, seek and EOF retain the same effective identity.
 End of stream is a normal `PcmBlock` value.
 
 Implementations may use the private `ao::audio::detail::DecoderException` and `throwDecoderError` helper to unwind codec helpers.
@@ -146,6 +158,8 @@ The exact operation/code matrix and helper surface are in the [decoder error ref
 ## Test map
 
 Decoder session and malformed-input tests under [`test/unit/audio/`](../../../test/unit/audio) lock ready construction, requested-output adaptation, output representation, seeking, and failure behavior.
+[`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp) locks real WAV declarations/defaults, complete independent PCM and source refusals; [`EngineWavChannelLayoutTest.cpp`](../../../test/unit/audio/EngineWavChannelLayoutTest.cpp) proves their actual preparation, reuse/reopen and recoverable source-failure integration with a fake output, not native routing.
+[`AlacDecoderSessionTest.cpp`](../../../test/unit/audio/AlacDecoderSessionTest.cpp) and [`AlacDecoderMalformedMp4Test.cpp`](../../../test/unit/audio/AlacDecoderMalformedMp4Test.cpp) lock the mono/stereo defaults, the cookie and selected-sample-entry `chan` participation, and the structural-failure boundary.
 [`DecoderErrorTest.cpp`](../../../test/unit/audio/DecoderErrorTest.cpp) mechanically rejects direct concrete construction and instance `close()` operations.
 [`DecoderFactoryTest.cpp`](../../../test/unit/audio/DecoderFactoryTest.cpp) locks ready construction, routing, and initialization failure.
 [`DecoderOutputAdapterTest.cpp`](../../../test/unit/audio/detail/DecoderOutputAdapterTest.cpp) directly locks rejection of precision loss, pass-through behavior, exact byte conversion, and reset.
@@ -155,4 +169,5 @@ Decoder session and malformed-input tests under [`test/unit/audio/`](../../../te
 - [Playback architecture](README.md)
 - [Supported audio files](../../reference/media/audio-file.md)
 - [Track model](../../reference/library/model/track.md)
+- [Channel order and codec slot conventions](../../reference/media/channel-order.md)
 - [Decoder error reference](decoder-error.md)

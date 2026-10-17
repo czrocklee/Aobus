@@ -320,6 +320,7 @@ es:table {
     audio_node_unknown { "[Desconocido]" }
     audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} can." }
+    audio_channels_identified { "{count} can. ({layout})" }
     audio_finding_lossy_source { "Origen con pérdidas" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Atenuación de volumen por software: {gain}} other {Atenuación de volumen por software}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {Amplificación por software: ganancia de {gain} (riesgo de recorte)} other {Amplificación por software (riesgo de recorte)}}" }
@@ -328,12 +329,13 @@ es:table {
     audio_finding_muted { "Silenciado" }
     audio_finding_resampling { "{hasFormats, select, yes {Remuestreo: {fromRate} Hz → {toRate} Hz} other {Remuestreo}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Canales: {fromChannels} can. → {toChannels} can.} other {Asignación de canales}}" }
+    audio_finding_channel_layout { "Distribución de canales: {fromLayout} → {toLayout}" }
     audio_finding_lossless_padding { "Ampliación de enteros sin pérdida" }
     audio_finding_lossless_float { "Conversión a coma flotante sin pérdida" }
     audio_finding_lossless_round_trip { "Conversión de ida y vuelta sin pérdida (motor de coma flotante)" }
     audio_finding_truncation { "{kind, select, floatToInteger {Cuantización de coma flotante a entero: {fromPrecision} → {toPrecision}} integerToFloat {Cuantización de entero a coma flotante: {fromPrecision} → {toPrecision}} precision {Precisión truncada: {fromPrecision} → {toPrecision}} other {Precisión truncada}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {Mezclado con {apps}} other {Orígenes mezclados}}" }
-    audio_quality_bit_perfect_playback { "Reproducción bit-perfect" }
+    audio_quality_bit_perfect_playback { "PCM exacto bit a bit (ruta de software observada)" }
     audio_quality_signal_preserved { "Señal conservada" }
     audio_quality_pipeline_intervention { "Procesamiento en la cadena de audio" }
     audio_quality_signal_clipping_detected { "Recorte de señal detectado" }
@@ -342,6 +344,9 @@ es:table {
     audio_quality_partially_verified_path { "Ruta de audio verificada parcialmente" }
     audio_quality_clean_lossy_delivery { "Fuente con pérdidas sin procesamiento adicional" }
     audio_quality_clean_delivery { "Salida sin procesamiento adicional" }
+    audio_quality_unknown_channel_layout { "Disposición de canales de origen desconocida" }
+    audio_quality_unverified_channel_delivery { "Entrega de canales no verificada" }
+    audio_quality_inferred_channel_layout { "Disposición de canales de origen inferida" }
     playback_control_play { "Reproducir" }
     playback_control_pause { "Pausar" }
     playback_control_stop { "Detener" }

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/audio/ChannelDeliveryEvidence.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/NodeFormat.h>
 
 #include <cstdint>
@@ -45,6 +47,11 @@ namespace ao::audio::flow
     bool isMuted = false;
     bool isLossySource = false;
     std::string objectPath{};
+    // Only source nodes carry decoder interpretation history. Native route
+    // observations must not acquire it by copying the requested source.
+    ChannelLayoutEvidence sourceChannelLayout{};
+    // Native nodes carry backend-owned current delivery observations.
+    ChannelDeliveryEvidence channelDelivery{};
 
     bool operator==(Node const&) const = default;
   };
