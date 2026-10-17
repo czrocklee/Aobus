@@ -56,7 +56,7 @@ namespace ao::rt::test
 
     std::string trackDocument(std::string_view trackFields, ExportMode mode = ExportMode::Metadata)
     {
-      return std::format("version: {}\nexport_mode: {}\nlibrary:\n{}"
+      return std::format("version: {}\nexport-mode: {}\nlibrary:\n{}"
                          "  tracks:\n    - uri: song.flac\n{}  lists: []\n",
                          kYamlFormatVersion,
                          exportModeName(mode),

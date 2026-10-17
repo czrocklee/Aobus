@@ -57,7 +57,7 @@ Exactly one top-level command is required.
 | `lib verify` | none |
 | `lib relink` | `[--from <old-uri> --to <new-uri>] [--dry-run]` |
 | `lib fingerprint` | `--pending [--verbose]` |
-| `lib export` | `(<output> | -o, --output-file <file>) [-m, --mode delta|metadata|full|listOnly]`; default mode is `full` |
+| `lib export` | `(<output> | -o, --output-file <file>) [-m, --mode delta|metadata|full|list-only]`; default mode is `full` |
 | `lib import` | `(<input> | -i, --input <file>) [-m, --mode restore|merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
 | `lib dump` | `[--dict] [--manifest] [--meta] [--resources] [--raw]` |
 | `lib resource list` | none |
@@ -99,7 +99,7 @@ Only the space-separated triple grammar is supported; every attached `--credit=.
 **Warning:** `--credit performer Name --dry-run` stores the literal role `--dry-run`; it does not request a preview.
 The same happens when the invoking shell drops an empty role: the next argument becomes the role, and the arguments after it are parsed as though the role were never there.
 Place the preview flag before the triple (`--dry-run --credit performer Name ''`) or after an explicitly supplied role (`--credit performer Name '' --dry-run`).
-Kind tokens are exactly `conductor`, `ensemble`, `soloist`, `performer`, `lyricist`, `arranger`, `writer`, `producer`, `engineer`, `mixer`, `djmixer`, and `remixer`.
+Kind tokens are exactly `conductor`, `ensemble`, `soloist`, `performer`, `lyricist`, `arranger`, `writer`, `producer`, `engineer`, `mixer`, `dj-mixer`, and `remixer`.
 Pass an empty argument for an absent role. Punctuation has no separator meaning: `--credit conductor 'A=B: C' ''` supplies the roleless name `A=B: C`.
 Brackets have no list or escape meaning in these values: `[Smith, John]`, `[]`, and `[[aabb]]` remain literal name or role text.
 Names and roles have the six ASCII whitespace characters trimmed at their boundaries and are normalized to NFC; malformed UTF-8 or a blank name rejects the whole command, and a blank role means absence.
@@ -183,7 +183,7 @@ Other change-record nested fields are defined by the runtime mutation reply type
 In that path `updated` and `trackIds` are the sorted, deduplicated union of tracks mutated by metadata or tag changes, while `changes` stays metadata-only.
 Plain output appends `added tag: <tag> to N track(s)` and `removed tag: <tag> from N track(s)` lines with the `tag add`/`tag remove` wording.
 When no tag option is supplied, `updated` and `trackIds` report metadata field changes only, as before.
-For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `listOnly`, and `targetScope` uses exact lowercase `library` or `lists`.
+For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `list-only`, and `targetScope` uses exact lowercase `library` or `lists`.
 
 `lib stats` reports `resources` as the number of descriptor rows and `resourceBytes` as the summed described length of the descriptors tracks currently reference, counting each reachable descriptor once however many tracks name it.
 The two figures disagreeing is the normal state of a rescanned library: descriptor rows are never deleted, so a cover a file no longer carries keeps its row while leaving `resourceBytes`.

@@ -202,7 +202,7 @@ namespace ao::rt::test
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -210,12 +210,12 @@ library:
       uri: song.flac
   lists:
     - id: 2
-      parentId: 1
+      parent-id: 1
       name: Child
       order:
         - 10
     - id: 1
-      parentId: 0
+      parent-id: 0
       name: Parent
 )";
     }
@@ -272,7 +272,7 @@ library:
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -286,7 +286,7 @@ library:
         - 999
         - uri: invalid-uri.flac
     - id: 2
-      parentId: 999
+      parent-id: 999
       name: Dangling Parent
 )";
     }
@@ -448,7 +448,7 @@ library:
     {
       auto yaml = std::ofstream{inputPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:

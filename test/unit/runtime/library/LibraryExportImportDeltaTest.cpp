@@ -283,7 +283,7 @@ namespace ao::rt::test
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << "version: 8\n"
-           << "export_mode: delta\n"
+           << "export-mode: delta\n"
            << "library:\n"
            << "  tracks:\n"
            << "    - uri: \"blocked/song.flac\"\n"
@@ -319,7 +319,7 @@ namespace ao::rt::test
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: delta
+export-mode: delta
 library:
   tracks:
     - uri: existing.flac
@@ -368,7 +368,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 8\nexport_mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
+      yaml << "version: 8\nexport-mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
     }
 
     auto executorPtr = std::make_unique<QueuedExecutor>();
@@ -396,7 +396,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -503,7 +503,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << "version: 8\n"
-           << "export_mode: full\n"
+           << "export-mode: full\n"
            << "library:\n"
            << "  resources: []\n"
            << "  tracks:\n"

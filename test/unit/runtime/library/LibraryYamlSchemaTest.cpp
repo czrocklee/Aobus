@@ -126,7 +126,7 @@ namespace ao::rt::test
       {.label = "retired library id field",
        .yaml = R"(version: 8
 libraryId: 123e4567-e89b-12d3-a456-426614174000
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -135,7 +135,7 @@ library:
        .error = "YAML root contains unknown field 'libraryId'"},
       {.label = "library field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   future: true
@@ -145,7 +145,7 @@ library:
        .error = "library contains unknown field 'future'"},
       {.label = "track field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -156,7 +156,7 @@ library:
        .error = "Track record contains unknown field 'future'"},
       {.label = "duplicate track field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -167,7 +167,7 @@ library:
        .error = "Track record contains duplicate field 'uri'"},
       {.label = "cover field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -181,7 +181,7 @@ library:
        .error = "Track cover contains unknown field 'future'"},
       {.label = "cover payload",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -194,7 +194,7 @@ library:
        .error = "Track cover contains unknown field 'data'"},
       {.label = "list field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -206,7 +206,7 @@ library:
        .error = "List record contains unknown field 'type'"},
       {.label = "list-reference field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -222,7 +222,7 @@ library:
        .error = "List order reference contains unknown field 'future'"},
       {.label = "ambiguous list reference",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -238,7 +238,7 @@ library:
        .error = "exactly one of 'id' or 'uri'"},
       {.label = "unknown codec",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -249,7 +249,7 @@ library:
        .error = "Unknown codec 'VORBIS'"},
       {.label = "unknown cover type",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
@@ -270,6 +270,132 @@ library:
     }
   }
 
+  TEST_CASE("LibraryYaml - version 8 has no alias for the retired development spellings",
+            "[runtime][unit][import-export][schema]")
+  {
+    // Each pair differs only in the renamed key or token. The current spelling
+    // imports, so the retired one is rejected for its spelling alone.
+    struct RetiredSpelling final
+    {
+      std::string_view label;
+      std::string_view current;
+      std::string_view retired;
+      std::string_view error;
+    };
+
+    constexpr auto kSpellings = std::to_array<RetiredSpelling>({
+      {.label = "root export_mode",
+       .current = R"(version: 8
+export-mode: full
+library:
+  resources: []
+  tracks: []
+  lists: []
+)",
+       .retired = R"(version: 8
+export_mode: full
+library:
+  resources: []
+  tracks: []
+  lists: []
+)",
+       .error = "YAML root contains unknown field 'export_mode'"},
+      {.label = "Track fileSize",
+       .current = R"(version: 8
+export-mode: full
+library:
+  resources: []
+  tracks:
+    - uri: absent.flac
+      file-size: 345
+  lists: []
+)",
+       .retired = R"(version: 8
+export-mode: full
+library:
+  resources: []
+  tracks:
+    - uri: absent.flac
+      fileSize: 345
+  lists: []
+)",
+       .error = "Track record contains unknown field 'fileSize'"},
+      {.label = "List parentId",
+       .current = R"(version: 8
+export-mode: list-only
+library:
+  lists:
+    - id: 1
+      name: Parent
+    - id: 2
+      name: Child
+      parent-id: 1
+)",
+       .retired = R"(version: 8
+export-mode: list-only
+library:
+  lists:
+    - id: 1
+      name: Parent
+    - id: 2
+      name: Child
+      parentId: 1
+)",
+       .error = "List record contains unknown field 'parentId'"},
+      {.label = "listOnly mode token",
+       .current = R"(version: 8
+export-mode: list-only
+library:
+  lists: []
+)",
+       .retired = R"(version: 8
+export-mode: listOnly
+library:
+  lists: []
+)",
+       .error = "Unknown export-mode 'listOnly'"},
+      {.label = "djmixer credit kind",
+       .current = R"(version: 8
+export-mode: full
+library:
+  resources: []
+  tracks:
+    - uri: absent.flac
+      credits:
+        - name: DJ
+          kind: dj-mixer
+  lists: []
+)",
+       .retired = R"(version: 8
+export-mode: full
+library:
+  resources: []
+  tracks:
+    - uri: absent.flac
+      credits:
+        - name: DJ
+          kind: djmixer
+  lists: []
+)",
+       .error = "Unknown credit kind 'djmixer'"},
+    });
+
+    for (auto const& spelling : kSpellings)
+    {
+      CAPTURE(spelling.label);
+      auto const temp = ao::test::TempDir{};
+      auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+      auto const yamlPath = temp.path() / "current.yaml";
+      {
+        auto output = std::ofstream{yamlPath};
+        output << spelling.current;
+      }
+
+      REQUIRE(LibraryYamlImporter{library}.previewImportFromYamlOffline(yamlPath, ImportMode::Restore));
+      checkRejectedPayload({.label = spelling.label, .yaml = spelling.retired, .error = spelling.error});
+    }
+  }
+
   TEST_CASE("LibraryYaml - version 8 requires explicit scope and root-contained URIs",
             "[runtime][unit][import-export][schema]")
   {
@@ -281,10 +407,10 @@ library:
   tracks: []
   lists: []
 )",
-       .error = "missing required 'export_mode'"},
+       .error = "missing required 'export-mode'"},
       {.label = "missing tracks",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   lists: []
@@ -292,7 +418,7 @@ library:
        .error = "missing required 'tracks'"},
       {.label = "missing lists",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -300,7 +426,7 @@ library:
        .error = "missing required 'lists'"},
       {.label = "tracks in list-only payload",
        .yaml = R"(version: 8
-export_mode: listOnly
+export-mode: list-only
 library:
   tracks: []
   lists: []
@@ -308,13 +434,13 @@ library:
        .error = "library.tracks is forbidden"},
       {.label = "missing list-only lists",
        .yaml = R"(version: 8
-export_mode: listOnly
+export-mode: list-only
 library: {}
 )",
        .error = "missing required 'lists'"},
       {.label = "absolute track URI",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -324,7 +450,7 @@ library:
        .error = "must be root-relative"},
       {.label = "parent traversal",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -334,7 +460,7 @@ library:
        .error = "escapes the library root"},
       {.label = "absolute list URI",
        .yaml = R"(version: 8
-export_mode: listOnly
+export-mode: list-only
 library:
   lists:
     - id: 1
@@ -365,7 +491,7 @@ library:
     {
       auto output = std::ofstream{yamlPath};
       output << R"(version: 8
-export_mode: metadata
+export-mode: metadata
 library:
   tracks:
     - uri: alias/song.flac
@@ -392,7 +518,7 @@ library:
     auto const writePayload = [&yamlPath](std::string_view const tracksYaml)
     {
       auto output = std::ofstream{yamlPath};
-      output << "version: " << kYamlFormatVersion << "\nexport_mode: metadata\nlibrary:\n  tracks:\n"
+      output << "version: " << kYamlFormatVersion << "\nexport-mode: metadata\nlibrary:\n  tracks:\n"
              << tracksYaml << "  lists: []\n";
     };
 
@@ -503,7 +629,7 @@ library:
       REQUIRE_FALSE(std::filesystem::exists(absentPath));
       writePayload(R"(    - uri: absent.flac
       title: Absent
-      fileSize: 345
+      file-size: 345
 )");
 
       auto const res = importer.importFromYamlOffline(yamlPath, mode);
@@ -573,7 +699,7 @@ library:
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "canonical track URI",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -584,7 +710,7 @@ library:
        .error = "Duplicate canonical track URI 'albums/song.flac'"},
       {.label = "custom metadata key",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -608,14 +734,14 @@ library:
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "parent cycle",
        .yaml = R"(version: 8
-export_mode: listOnly
+export-mode: list-only
 library:
   lists:
     - id: 1
-      parentId: 2
+      parent-id: 2
       name: First
     - id: 2
-      parentId: 1
+      parent-id: 1
       name: Second
 )",
        .error = "parent graph contains a cycle"},
@@ -670,7 +796,7 @@ library:
       auto const yamlPath = temp.path() / "rejected-filter.yaml";
       {
         auto output = std::ofstream{yamlPath, std::ios::binary};
-        output << "version: 8\nexport_mode: listOnly\nlibrary:\n  lists:\n"
+        output << "version: 8\nexport-mode: list-only\nlibrary:\n  lists:\n"
                << "    - id: 1\n      name: Admitted\n      filter: '$genre = \"Rock\"'\n"
                << "    - id: 2\n      name: Rejected\n      filter: " << filter.node << "\n";
       }
@@ -702,7 +828,7 @@ library:
     auto const yamlPath = temp.path() / "longest-filter.yaml";
     {
       auto output = std::ofstream{yamlPath, std::ios::binary};
-      output << "version: 8\nexport_mode: listOnly\nlibrary:\n  lists:\n"
+      output << "version: 8\nexport-mode: list-only\nlibrary:\n  lists:\n"
              << "    - id: 1\n      name: Longest\n      filter: " << filter << "\n";
     }
 
@@ -727,7 +853,7 @@ library:
     auto overlongUri = std::string(LibraryUri::kMaxLength + 1U, 'a');
     checkRejectedPayload(RejectedPayload{
       .label = "overlong URI",
-      .yaml = std::string{"version: 8\nexport_mode: full\nlibrary:\n  tracks:\n    - uri: "} + overlongUri +
+      .yaml = std::string{"version: 8\nexport-mode: full\nlibrary:\n  tracks:\n    - uri: "} + overlongUri +
               "\n  lists: []\n",
       .error = "exceeds the maximum",
     });
@@ -735,7 +861,7 @@ library:
     auto const overlongListName = std::string(65536, 'n');
     checkRejectedPayload(RejectedPayload{
       .label = "overlong List name",
-      .yaml = std::string{"version: 8\nexport_mode: listOnly\nlibrary:\n  lists:\n    - id: 1\n      name: "} +
+      .yaml = std::string{"version: 8\nexport-mode: list-only\nlibrary:\n  lists:\n    - id: 1\n      name: "} +
               overlongListName + "\n",
       .error = "exceeds the 65535-byte product limit",
     });
@@ -743,7 +869,7 @@ library:
     constexpr auto kRejectedResourceRows = std::to_array<RejectedPayload>({
       {.label = "resource row without a length",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
@@ -753,7 +879,7 @@ library:
        .error = "Resource record missing required 'length' field"},
       {.label = "resource row without a digest",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - length: 3
@@ -763,7 +889,7 @@ library:
        .error = "Resource record missing required 'digest' field"},
       {.label = "non-numeric length",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
@@ -774,7 +900,7 @@ library:
        .error = "Resource record.length must be a valid scalar"},
       {.label = "negative length",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
@@ -793,7 +919,7 @@ library:
     checkRejectedPayload(RejectedPayload{
       .label = "digest spelling",
       .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - digest: 9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08
@@ -814,7 +940,7 @@ library:
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "nanoseconds beyond one second",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -827,7 +953,7 @@ library:
        .error = "mtime.nanoseconds must be below 1000000000"},
       {.label = "negative nanoseconds",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -840,7 +966,7 @@ library:
        .error = "mtime.nanoseconds must be a valid scalar"},
       {.label = "missing seconds",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -852,7 +978,7 @@ library:
        .error = "mtime missing required 'seconds' field"},
       {.label = "missing nanoseconds",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -864,7 +990,7 @@ library:
        .error = "mtime missing required 'nanoseconds' field"},
       {.label = "unknown mtime field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -878,7 +1004,7 @@ library:
        .error = "mtime contains unknown field 'epoch'"},
       {.label = "duplicate mtime field",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -892,7 +1018,7 @@ library:
        .error = "mtime contains duplicate field 'seconds'"},
       {.label = "scalar mtime",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -903,7 +1029,7 @@ library:
        .error = "mtime must be a map or null"},
       {.label = "quoted null string",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -914,7 +1040,7 @@ library:
        .error = "mtime must be a map or null"},
       {.label = "seconds beyond the signed width",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -927,7 +1053,7 @@ library:
        .error = "mtime.seconds must be a valid scalar"},
       {.label = "nanoseconds beyond the unsigned width",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -940,7 +1066,7 @@ library:
        .error = "mtime.nanoseconds must be a valid scalar"},
       {.label = "non-numeric seconds",
        .yaml = R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -989,7 +1115,7 @@ library:
     {
       auto output = std::ofstream{yamlPath};
       output << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:

@@ -152,7 +152,7 @@ library:
     {
       testError(R"(
 version: 1
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -164,7 +164,7 @@ library:
       // fallback or a migration path.
       testError(R"(
 version: 5
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -177,7 +177,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 )",
                 Error::Code::FormatRejected,
                 "Missing 'library' section");
@@ -187,7 +187,7 @@ export_mode: full
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -203,7 +203,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -219,7 +219,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -237,7 +237,7 @@ library:
     {
       auto yaml = std::string{R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -256,7 +256,7 @@ library:
     {
       auto yaml = std::string{R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -277,7 +277,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -292,7 +292,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -308,7 +308,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -326,7 +326,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -341,7 +341,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -359,7 +359,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources:
     - digest: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
@@ -376,13 +376,13 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: mystery
+export-mode: mystery
 library:
   tracks: []
   lists: []
 )",
                 Error::Code::FormatRejected,
-                "Unknown export_mode");
+                "Unknown export-mode");
     }
 
     SECTION("Malformed numeric version is rejected")
@@ -401,7 +401,7 @@ library:
     {
       testError(R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:
@@ -427,7 +427,7 @@ library:
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: "not-a-sequence"
@@ -446,7 +446,7 @@ library:
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
 version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks: []
@@ -550,7 +550,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(version: 8
-export_mode: full
+export-mode: full
 library:
   resources: []
   tracks:

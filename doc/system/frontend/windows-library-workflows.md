@@ -70,7 +70,7 @@ More menu and Classic's File menu. Modern's More menu owns global library and
 shell actions; its separate Playback options menu contains Stop and Reveal
 Current Track. The two menus have distinct accessible names.
 
-Export first selects `delta`, `metadata`, `full`, or `listOnly`, defaulting to
+Export first selects `delta`, `metadata`, `full`, or `list-only`, defaulting to
 `full`, then uses the Windows save picker for a `.yaml` or `.yml` path. Import
 first selects `merge` or `restore`, defaulting to `merge`, then uses the Windows
 open picker. Both submit to the active session's `LibraryJobs`.

@@ -237,14 +237,14 @@ namespace ao::cli
       {
         mode = rt::ExportMode::Full;
       }
-      else if (modeStr == "listOnly")
+      else if (modeStr == "list-only")
       {
         mode = rt::ExportMode::ListOnly;
       }
       else
       {
         throwCommandError(Error::Code::InvalidInput,
-                          "invalid export mode '{}'. Valid modes are: delta, metadata, full, listOnly.",
+                          "invalid export mode '{}'. Valid modes are: delta, metadata, full, list-only.",
                           modeStr);
       }
 
@@ -1460,7 +1460,7 @@ namespace ao::cli
     auto* exportCmd = lib->add_subcommand("export", "Export library to YAML");
     auto* exportPath = exportCmd->add_option("output,-o,--output-file", "Output YAML file path")->required();
     auto* exportMode =
-      exportCmd->add_option("-m,--mode", "Export mode (delta, metadata, full, listOnly)")->default_val("full");
+      exportCmd->add_option("-m,--mode", "Export mode (delta, metadata, full, list-only)")->default_val("full");
     exportCmd->callback(
       [&cli, exportPath, exportMode]
       {

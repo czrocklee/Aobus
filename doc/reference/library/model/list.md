@@ -46,7 +46,7 @@ Add and Remove to Playlist edit its membership by adding and removing that tag o
 
 - Membership is a set. A Track is a member at most once, adding a Track that already carries the tag changes nothing, and `orderTrackIds` holds each id at most once, so a Playlist cannot repeat a Track.
 - Playlists of the same tag share membership: adding a Track to one adds it to every other whose parent source contains it, and the tag also changes the membership of any other List whose expression uses it.
-- Tags are Track data. A `listOnly` [YAML transfer](../../../system/library/yaml-transfer.md) carries a List's filter and ranks but no tags, so in the target its members are the Tracks that already carry the tag there, and the ranks of its other Tracks stay hidden.
+- Tags are Track data. A `list-only` [YAML transfer](../../../system/library/yaml-transfer.md) carries a List's filter and ranks but no tags, so in the target its members are the Tracks that already carry the tag there, and the ranks of its other Tracks stay hidden.
 - No command renames a tag. Removing the tag from every Track empties the List, and its filter still names the tag.
 
 ## Validation rules

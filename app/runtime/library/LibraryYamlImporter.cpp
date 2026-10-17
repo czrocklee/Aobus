@@ -284,7 +284,7 @@ namespace ao::rt
       return {};
     }
 
-    constexpr auto kRootFields = std::to_array<std::string_view>({"version", "export_mode", "library"});
+    constexpr auto kRootFields = std::to_array<std::string_view>({"version", "export-mode", "library"});
     constexpr auto kLibraryFields = std::to_array<std::string_view>({"resources", "tracks", "lists"});
     constexpr auto kResourceFields = std::to_array<std::string_view>({"digest", "length"});
     constexpr auto kTrackFields = std::to_array<std::string_view>({
@@ -316,13 +316,13 @@ namespace ao::rt
       "codec",
       "channels",
       "bit-depth",
-      "fileSize",
+      "file-size",
       "mtime",
     });
     constexpr auto kCreditFields = std::to_array<std::string_view>({"name", "kind", "role"});
     constexpr auto kCoverFields = std::to_array<std::string_view>({"type", "resource"});
     constexpr auto kListFields =
-      std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "order"});
+      std::to_array<std::string_view>({"id", "parent-id", "name", "description", "filter", "order"});
     constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri"});
     constexpr auto kMtimeFields = std::to_array<std::string_view>({"seconds", "nanoseconds"});
 
@@ -642,7 +642,7 @@ namespace ao::rt
         return ExportMode::Full;
       }
 
-      if (modeStr == "listOnly")
+      if (modeStr == "list-only")
       {
         return ExportMode::ListOnly;
       }
@@ -686,9 +686,9 @@ namespace ao::rt
 
     Result<> validateListMetadata(ryml::ConstNodeRef const& listNode, ValidatedList& list)
     {
-      if (auto const parentIdNode = yaml::findChild(listNode, "parentId"); parentIdNode.readable())
+      if (auto const parentIdNode = yaml::findChild(listNode, "parent-id"); parentIdNode.readable())
       {
-        auto parentIdRes = requireScalarAs<std::uint32_t>(parentIdNode, "List record.parentId");
+        auto parentIdRes = requireScalarAs<std::uint32_t>(parentIdNode, "List record.parent-id");
 
         if (!parentIdRes)
         {
@@ -1346,7 +1346,7 @@ namespace ao::rt
       return res;
     }
 
-    auto exportModeTextRes = requireScalarField(root, "export_mode", "YAML root");
+    auto exportModeTextRes = requireScalarField(root, "export-mode", "YAML root");
 
     if (!exportModeTextRes)
     {
@@ -1357,7 +1357,7 @@ namespace ao::rt
 
     if (!optExportMode)
     {
-      return makeError(Error::Code::FormatRejected, std::format("Unknown export_mode '{}'", *exportModeTextRes));
+      return makeError(Error::Code::FormatRejected, std::format("Unknown export-mode '{}'", *exportModeTextRes));
     }
 
     validated.payloadMode = *optExportMode;
@@ -1390,10 +1390,10 @@ namespace ao::rt
     {
       if (tracks.readable())
       {
-        return makeError(Error::Code::FormatRejected, "library.tracks is forbidden for a listOnly payload");
+        return makeError(Error::Code::FormatRejected, "library.tracks is forbidden for a list-only payload");
       }
 
-      // A listOnly payload carries no track, so it can carry no table either.
+      // A list-only payload carries no track, so it can carry no table either.
       if (auto res = validateResources(library, validated); !res)
       {
         return res;
@@ -1998,7 +1998,7 @@ namespace ao::rt
                                                         library::FileManifestStore::Reader const& manifestReader,
                                                         library::FileManifestBuilder& manifestBuilder) const
   {
-    auto const fileSizeNode = yaml::findChild(trackNode, "fileSize");
+    auto const fileSizeNode = yaml::findChild(trackNode, "file-size");
     auto const mtimeNode = yaml::findChild(trackNode, "mtime");
 
     if (auto const optManifest = manifestReader.get(uriStr); optManifest)
@@ -2048,7 +2048,7 @@ namespace ao::rt
 
     if (fileSizeNode.readable())
     {
-      auto fileSizeRes = requireScalarAs<std::uint64_t>(fileSizeNode, "Track record.fileSize");
+      auto fileSizeRes = requireScalarAs<std::uint64_t>(fileSizeNode, "Track record.file-size");
 
       if (!fileSizeRes)
       {
