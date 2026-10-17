@@ -114,6 +114,10 @@ add_executable(ao_audio_fatal_probe
 )
 aobus_enable_windows_utf8_manifest(ao_audio_fatal_probe)
 target_link_libraries(ao_audio_fatal_probe PRIVATE ao_fatal_probe_support ao_test_support_audio)
+if(APPLE)
+  target_sources(ao_audio_fatal_probe PRIVATE fatal/AudioFatalProbeScenarioMacos.cpp)
+  target_link_libraries(ao_audio_fatal_probe PRIVATE ao_test_support_coreaudio)
+endif()
 add_test(NAME ao_audio_fatal_probe COMMAND ao_audio_fatal_probe)
 
 # Concrete test support is compiled once per layer. Keep these libraries
@@ -851,6 +855,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/runtime/PlaybackSessionAlsaMuteTest.cpp
 )
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
+  unit/audio/backend/CoreAudioBackendFatalProbeTest.cpp
   unit/audio/backend/CoreAudioBackendTest.cpp
   unit/audio/backend/CoreAudioProviderTest.cpp
   unit/audio/backend/CoreAudioTestOutputTest.cpp

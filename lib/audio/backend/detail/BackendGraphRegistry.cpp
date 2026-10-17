@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <deque>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -129,6 +130,37 @@ namespace ao::audio::backend::detail
     }
   } // namespace
 
+  BackendGraphRegistry::PendingDelivery::~PendingDelivery() = default;
+
+  BackendGraphRegistry::PendingDelivery::PendingDelivery(std::function<void()> callback) noexcept
+    : _callback{std::move(callback)}
+  {
+  }
+
+  BackendGraphRegistry::PendingDelivery::PendingDelivery(PendingDelivery&& other) noexcept
+    : _callback{std::exchange(other._callback, {})}
+  {
+  }
+
+  BackendGraphRegistry::PendingDelivery& BackendGraphRegistry::PendingDelivery::operator=(
+    PendingDelivery&& other) noexcept
+  {
+    if (this != &other)
+    {
+      _callback = std::exchange(other._callback, {});
+    }
+
+    return *this;
+  }
+
+  void BackendGraphRegistry::PendingDelivery::deliver() &&
+  {
+    if (auto callback = std::exchange(_callback, {}); callback)
+    {
+      callback();
+    }
+  }
+
   BackendGraphRegistry::BackendGraphRegistry()
     : _statePtr{std::make_shared<State>()}
   {
@@ -207,7 +239,8 @@ namespace ao::audio::backend::detail
                                        }};
   }
 
-  void BackendGraphRegistry::publish(std::string_view const routeAnchor, flow::Graph graph)
+  BackendGraphRegistry::PendingDelivery BackendGraphRegistry::preparePublish(std::string_view const routeAnchor,
+                                                                             flow::Graph graph)
   {
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
@@ -218,12 +251,12 @@ namespace ao::audio::backend::detail
 
       if (statePtr->shutdown)
       {
-        return;
+        return {};
       }
 
       if (auto const it = statePtr->graphs.find(anchor); it != statePtr->graphs.end() && it->second == delivery.graph)
       {
-        return;
+        return {};
       }
 
       statePtr->graphs[anchor] = delivery.graph;
@@ -239,10 +272,11 @@ namespace ao::audio::backend::detail
       }
     }
 
-    deliverGraph(statePtr, std::move(delivery));
+    return PendingDelivery{[statePtr, delivery = std::move(delivery)] mutable
+                           { deliverGraph(statePtr, std::move(delivery)); }};
   }
 
-  void BackendGraphRegistry::clear(std::string_view const routeAnchor)
+  BackendGraphRegistry::PendingDelivery BackendGraphRegistry::prepareClear(std::string_view const routeAnchor)
   {
     auto const statePtr = _statePtr;
     auto const anchor = std::string{routeAnchor};
@@ -253,7 +287,7 @@ namespace ao::audio::backend::detail
 
       if (statePtr->shutdown)
       {
-        return;
+        return {};
       }
 
       statePtr->graphs.erase(anchor);
@@ -269,7 +303,20 @@ namespace ao::audio::backend::detail
       }
     }
 
-    deliverGraph(statePtr, std::move(delivery));
+    return PendingDelivery{[statePtr, delivery = std::move(delivery)] mutable
+                           { deliverGraph(statePtr, std::move(delivery)); }};
+  }
+
+  void BackendGraphRegistry::publish(std::string_view const routeAnchor, flow::Graph graph)
+  {
+    auto delivery = preparePublish(routeAnchor, std::move(graph));
+    std::move(delivery).deliver();
+  }
+
+  void BackendGraphRegistry::clear(std::string_view const routeAnchor)
+  {
+    auto delivery = prepareClear(routeAnchor);
+    std::move(delivery).deliver();
   }
 
   void BackendGraphRegistry::shutdown() noexcept
