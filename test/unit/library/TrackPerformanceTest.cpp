@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <expected>
 #include <limits>
+#include <ranges>
 #include <span>
 #include <string>
 #include <utility>
@@ -99,7 +100,7 @@ namespace ao::library::test
     CHECK(reader.performance().credits().size() == entryCount);
     CHECK(header.blockOffsets[4] == 0);
     CHECK(header.uriOffset ==
-          sizeof(TrackColdHeader) + (hasWork ? 12 : 0) + (hasPerformance ? 12 + (8 * entryCount) : 0));
+          sizeof(TrackColdHeader) + (hasWork ? 12 : 0) + (hasPerformance ? 4 + (12 * entryCount) : 0));
     CHECK((header.blockOffsets[1] != 0) == hasWork);
     CHECK((header.blockOffsets[3] != 0) == hasPerformance);
   }
@@ -137,6 +138,9 @@ namespace ao::library::test
     CHECK(context.dictionary().get(performance.credits(CreditKind::Conductor)[0].nameId) == "Conductor");
     CHECK(context.dictionary().get(performance.credits(CreditKind::Ensemble)[0].nameId) == "Ensemble");
     CHECK_FALSE(context.dictionary().findId("Cafe\u0301"));
+    auto const storedKinds = performance.credits() | std::views::transform(&TrackCreditEntry::kind) |
+                             std::ranges::to<std::vector<std::uint8_t>>();
+    CHECK(storedKinds == std::vector<std::uint8_t>{0, 1, 2, 3, 3, 3, 3});
     auto const* header = utility::layout::view<TrackColdHeader>(cold);
     CHECK(utility::bytes::view(performance.credits()).data() ==
           cold.data() + header->blockOffsets[3] + sizeof(TrackPerformanceBlock));
@@ -175,7 +179,16 @@ namespace ao::library::test
                                     CreditView{.name = "Soloist", .kind = CreditKind::Soloist},
                                     CreditView{.name = "A", .role = "piano"},
                                     CreditView{.name = "B"},
-                                    CreditView{.name = "A", .role = "piano"}};
+                                    CreditView{.name = "A", .role = "piano"},
+                                    CreditView{.name = "Lyricist", .kind = CreditKind::Lyricist},
+                                    CreditView{.name = "Arranger", .kind = CreditKind::Arranger, .role = "strings"},
+                                    CreditView{.name = "Writer", .kind = CreditKind::Writer},
+                                    CreditView{.name = "Producer", .kind = CreditKind::Producer},
+                                    CreditView{.name = "Engineer", .kind = CreditKind::Engineer, .role = "recording"},
+                                    CreditView{.name = "Mixer", .kind = CreditKind::Mixer},
+                                    CreditView{.name = "DJ", .kind = CreditKind::DjMixer},
+                                    CreditView{.name = "Remixer", .kind = CreditKind::Remixer},
+                                    CreditView{.name = "Remixer", .kind = CreditKind::Remixer}};
     auto const date = RecordingDate{.year = 1981, .month = 5};
     original.metadata()
       .title("Title")
@@ -294,7 +307,7 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().artist("Do not intern");
     builder.property().uri("x");
-    std::size_t count = 8186;
+    std::size_t count = 5458;
 
     SECTION("prefix and tail exceed payload width")
     {
@@ -327,20 +340,20 @@ namespace ao::library::test
     CHECK(context.dictionary().size() == 0);
   }
 
-  TEST_CASE("TrackBuilder - largest credit segment fitting a short URI is stored without truncation",
+  TEST_CASE("TrackBuilder - largest credit list fitting a short URI is stored without truncation",
             "[library][unit][track-performance]")
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
-    auto const entries = std::vector<CreditView>(8185, CreditView{.name = "Name", .kind = CreditKind::Conductor});
+    auto const entries = std::vector<CreditView>(5457, CreditView{.name = "Name", .kind = CreditKind::Conductor});
     builder.metadata().credits(entries);
     builder.property().uri("x");
     auto const cold = context.serializeCold(builder);
-    CHECK(cold.size() == 65528);
+    CHECK(cold.size() == 65524);
     auto const reader = detail::TrackColdReader{cold};
     REQUIRE(reader.isValid());
     auto const credits = reader.performance().credits(CreditKind::Conductor);
-    REQUIRE(credits.size() == 8185);
+    REQUIRE(credits.size() == 5457);
     CHECK(reader.performance().credits(CreditKind::Performer).empty());
     CHECK(context.dictionary().get(credits.front().nameId) == "Name");
     CHECK(credits.back().nameId == credits.front().nameId);

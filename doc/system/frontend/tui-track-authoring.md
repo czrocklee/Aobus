@@ -93,10 +93,11 @@ Caret navigation (`Left`, `Right`, `Home`, `End`, `Ctrl-A`, `Ctrl-E`, `Alt-B`, `
 
 Conductor, Ensemble, and Soloist rows are read-only previews of the first name plus a localized additional-entry count, including duplicates.
 `Enter` or clicking a category preview opens the shared list editor with that kind locked.
-The full Credits row (`Enter`, or `Ctrl-O` anywhere on Metadata) opens all four kinds with an editable kind control.
+The full Credits row (`Enter`, or `Ctrl-O` anywhere on Metadata) opens every kind with an editable kind control.
 Neither route turns a preview string into a scalar mutation.
 
-The focused detail pane opens the same child over the effective edit selection that Properties captures (the marked tracks, otherwise the focused track): `Ctrl-K` selects all kinds, while `1` through `4` select Conductor, Ensemble, Soloist, and Performer respectively.
+The focused detail pane opens the same child over the effective edit selection that Properties captures (the marked tracks, otherwise the focused track): `Ctrl-K` selects all kinds, while `1` through `9` select the first nine kinds in `CreditKind` order, Conductor through Engineer; Mixer, DJ-mixer, and Remixer are edited in the all-kind editor.
+The focused pane lists the digit of Conductor, Ensemble, Soloist, and Performer, and of another kind only when the focused track has its credits; a digit opens its kind for the edit selection whether or not the pane lists it.
 The Credits session begins on the prepared baseline before the Properties editor is installed, so a refused scope opens nothing and reports like any other refused open.
 The pane displays those controls while focused, including when Credits are empty.
 Its complete owning per-kind facts are cached by focused track and observed library revision, not materialized into table rows or reread on each redraw.
@@ -106,7 +107,7 @@ The Credits child uses `Tab`/`Shift-Tab` to select Name, Role, Kind, Add, Delete
 `Up`/`Down` select an entry; `Enter` activates a control.
 Name and Role use the ordinary grapheme-aware input; `Ctrl-N` requests name completion for the selected kind or global role completion.
 Completion arrows select candidates, `Enter` accepts, and `Esc` dismisses completion first.
-Kind activation cycles the four kinds only in a full-scope editor and appends the entry to the destination section.
+Kind activation cycles every kind only in a full-scope editor and appends the entry to the destination section.
 Move controls reorder only within the current kind.
 Labels wrap and the focused control scrolls into view in constrained layouts.
 

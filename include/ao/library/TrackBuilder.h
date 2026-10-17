@@ -364,7 +364,6 @@ namespace ao::library
       std::uint16_t _uriLength = 0;
       DictionaryId _workId = kInvalidDictionaryId;
       DictionaryId _movementId = kInvalidDictionaryId;
-      std::array<std::uint16_t, 3> _sectionCounts{};
       std::vector<TrackCreditEntry> _credits{};
       Channels _channels{};
       std::size_t _size = 0;

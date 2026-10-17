@@ -4,8 +4,16 @@
 fr:table {
   messages:table {
     track_field_recording_date { "Date d’enregistrement" }
-    track_credits_heading { "Crédits d’interprétation" }
+    track_credits_heading { "Crédits" }
     track_credit_performer { "Interprète" }
+    track_credit_lyricist { "Parolier" }
+    track_credit_arranger { "Arrangeur" }
+    track_credit_writer { "Auteur-compositeur" }
+    track_credit_producer { "Producteur" }
+    track_credit_engineer { "Ingénieur du son" }
+    track_credit_mixer { "Ingénieur de mixage" }
+    track_credit_dj_mixer { "DJ mixeur" }
+    track_credit_remixer { "Remixeur" }
     track_credit_name { "Nom" }
     track_credit_role { "Rôle ou instrument (facultatif)" }
     track_credits_add { "Ajouter un crédit" }
@@ -822,8 +830,8 @@ fr:table {
     gtk_track_save_failed { "Échec de l''enregistrement" }
     gtk_track_save_stale_title { "Impossible d''appliquer l''enregistrement" }
     gtk_track_save_stale { "La bibliothèque a changé pendant que cette boîte de dialogue était ouverte. Rechargez les propriétés et réessayez." }
-    gtk_track_credits_discard_title { "Abandonner les modifications des crédits d’interprétation ?" }
-    gtk_track_credits_discard_message { "Si vous fermez les propriétés maintenant, les modifications non enregistrées des crédits d’interprétation seront perdues." }
+    gtk_track_credits_discard_title { "Abandonner les modifications des crédits ?" }
+    gtk_track_credits_discard_message { "Si vous fermez les propriétés maintenant, les modifications non enregistrées des crédits seront perdues." }
     gtk_track_credits_discard { "Abandonner les modifications" }
     gtk_track_credits_keep_editing { "Continuer la modification" }
     gtk_tag_add { "Ajouter…" }

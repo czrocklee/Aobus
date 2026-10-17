@@ -6,12 +6,14 @@
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
+#include <ao/library/Credits.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -71,22 +73,27 @@ namespace ao::library::detail
       auto const* block = utility::bytes::tryLayout<TrackPerformanceBlock>(payload);
 
       if (block == nullptr || (payload.size() - sizeof(TrackPerformanceBlock)) % sizeof(TrackCreditEntry) != 0 ||
-          block->reserved != 0 || !block->recordingDate.isValid())
+          !block->recordingDate.isValid())
       {
         return false;
       }
 
       auto const entries = utility::layout::viewArray<TrackCreditEntry>(payload.subspan(sizeof(TrackPerformanceBlock)));
-      auto const classified =
-        static_cast<std::size_t>(block->sectionCounts[0]) + block->sectionCounts[1] + block->sectionCounts[2];
 
-      if (classified > entries.size() || (entries.empty() && !block->recordingDate.isPresent()))
+      if (entries.empty() && !block->recordingDate.isPresent())
       {
         return false;
       }
 
-      return std::ranges::all_of(
-        entries, [](TrackCreditEntry const& entry) { return entry.nameId != kInvalidDictionaryId; });
+      auto const validEntry = [](TrackCreditEntry const& entry)
+      {
+        return entry.nameId != kInvalidDictionaryId && entry.kind < kCreditKindCount &&
+               std::ranges::all_of(entry.reserved, [](std::uint8_t value) { return value == 0; });
+      };
+
+      // Entries are grouped by kind, so a kind's credits form one run.
+      return std::ranges::all_of(entries, validEntry) &&
+             std::ranges::is_sorted(entries, std::ranges::less{}, &TrackCreditEntry::kind);
     }
 
     bool isValidCustomPayload(std::span<std::byte const> payload) noexcept

@@ -300,6 +300,13 @@ namespace ao::gtk::layout
 
   void TrackCreditsEditor::updateVisibility(bool metadataExpanded, bool showEmpty)
   {
+    // Show-empty also decides which category previews appear; an editing
+    // session hides them and renders them again when it ends.
+    if (showEmpty != _showEmpty && !draft().isEditing() && !_submitting)
+    {
+      queueRender();
+    }
+
     _metadataExpanded = metadataExpanded;
     _showEmpty = showEmpty;
     set_visible(_form != nullptr ||
@@ -702,7 +709,7 @@ namespace ao::gtk::layout
       auto& button = _categoryButtons[i];
       button.set_label(text);
       button.set_tooltip_text(text);
-      button.set_visible(!editing);
+      button.set_visible(!editing && uimodel::shouldShowTrackCreditKind(kind, currentSections[i], _showEmpty));
       button.set_sensitive(!_submitting && (_form != nullptr || !_snapshot.trackIds.empty()));
 
       if (auto* label = dynamic_cast<Gtk::Label*>(button.get_child()); label != nullptr)
@@ -863,7 +870,8 @@ namespace ao::gtk::layout
     {
       if (auto* button = std::exchange(_entryPoint, nullptr); button != nullptr)
       {
-        button->grab_focus();
+        // Render hides a category whose optional kind has just been emptied; Full Credits stays.
+        (button->get_visible() ? *button : _editButton).grab_focus();
       }
     }
     else if (target == FocusTarget::Draft && draft().isEditing())

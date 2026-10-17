@@ -4,8 +4,16 @@
 es:table {
   messages:table {
     track_field_recording_date { "Fecha de grabación" }
-    track_credits_heading { "Créditos de interpretación" }
+    track_credits_heading { "Créditos" }
     track_credit_performer { "Intérprete" }
+    track_credit_lyricist { "Letrista" }
+    track_credit_arranger { "Arreglista" }
+    track_credit_writer { "Autor" }
+    track_credit_producer { "Productor" }
+    track_credit_engineer { "Ingeniero de sonido" }
+    track_credit_mixer { "Ingeniero de mezcla" }
+    track_credit_dj_mixer { "DJ de mezcla" }
+    track_credit_remixer { "Remezclador" }
     track_credit_name { "Nombre" }
     track_credit_role { "Función o instrumento (opcional)" }
     track_credits_add { "Añadir crédito" }
@@ -822,8 +830,8 @@ es:table {
     gtk_track_save_failed { "Error al guardar" }
     gtk_track_save_stale_title { "No se pudo aplicar el guardado" }
     gtk_track_save_stale { "La biblioteca cambió mientras este cuadro de diálogo estaba abierto. Recarga las propiedades e inténtalo de nuevo." }
-    gtk_track_credits_discard_title { "¿Descartar los cambios en los créditos de interpretación?" }
-    gtk_track_credits_discard_message { "Si cierra Propiedades ahora, se perderán los cambios no guardados en los créditos de interpretación." }
+    gtk_track_credits_discard_title { "¿Descartar los cambios en los créditos?" }
+    gtk_track_credits_discard_message { "Si cierra Propiedades ahora, se perderán los cambios no guardados en los créditos." }
     gtk_track_credits_discard { "Descartar cambios" }
     gtk_track_credits_keep_editing { "Seguir editando" }
     gtk_tag_add { "Añadir…" }

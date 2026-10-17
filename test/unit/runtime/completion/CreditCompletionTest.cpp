@@ -60,13 +60,16 @@ namespace ao::rt::test
     });
     std::ignore = fixture.addTrack(library::test::TrackSpec{
       .title = "Second",
-      .credits = {{.name = "Bob", .kind = Kind::Ensemble, .role = "Violin"}, {.name = "Cara", .role = " \t "}},
+      .credits = {{.name = "Bob", .kind = Kind::Ensemble, .role = "Violin"},
+                  {.name = "Cara", .role = " \t "},
+                  {.name = "Rex", .kind = Kind::Remixer}},
     });
     auto changes = makeStateOnlyLibraryChanges(fixture.library());
     auto service = CompletionService{fixture.library(), changes};
 
     CHECK(creditVocabulary(service.creditNames()) ==
-          std::vector<std::pair<std::string, std::uint32_t>>{{"Bob", 2}, {"Ada", 1}, {"Cara", 1}, {"Featured", 1}});
+          std::vector<std::pair<std::string, std::uint32_t>>{
+            {"Bob", 2}, {"Ada", 1}, {"Cara", 1}, {"Featured", 1}, {"Rex", 1}});
     CHECK(creditVocabulary(service.creditRoles()) ==
           std::vector<std::pair<std::string, std::uint32_t>>{{"Violin", 2}, {"Piano", 1}});
     CHECK(creditVocabulary(service.creditNames(Kind::Conductor)) ==
@@ -77,6 +80,9 @@ namespace ao::rt::test
           std::vector<std::pair<std::string, std::uint32_t>>{{"Featured", 1}});
     CHECK(creditVocabulary(service.creditNames(Kind::Performer)) ==
           std::vector<std::pair<std::string, std::uint32_t>>{{"Bob", 1}, {"Cara", 1}});
+    CHECK(creditVocabulary(service.creditNames(Kind::Remixer)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"Rex", 1}});
+    CHECK(service.creditNames(Kind::DjMixer).empty());
     CHECK(service.valuesFor(TrackField::Conductor).data() == service.creditNames(Kind::Conductor).data());
     CHECK(service.valuesFor(TrackField::Ensemble).data() == service.creditNames(Kind::Ensemble).data());
     CHECK(service.valuesFor(TrackField::Soloist).data() == service.creditNames(Kind::Soloist).data());

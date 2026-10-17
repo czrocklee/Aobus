@@ -51,18 +51,14 @@ namespace ao::library
       return {};
     }
 
-    auto const& counts = utility::layout::view<TrackPerformanceBlock>(_payload)->sectionCounts;
-    auto const index = static_cast<std::size_t>(kind);
-    std::size_t begin = 0;
-
-    for (std::size_t previous = 0; previous < index; ++previous)
-    {
-      begin += counts[previous];
-    }
-
+    // Admission keeps entries in nondecreasing kind order, so one kind is one
+    // run; the scan stays in bounds for any entries.
     auto const entries = credits();
-    auto const count = index < counts.size() ? static_cast<std::size_t>(counts[index]) : entries.size() - begin;
-    return entries.subspan(begin, count);
+    auto const value = static_cast<std::uint8_t>(kind);
+    auto const first = std::ranges::find(entries, value, &TrackCreditEntry::kind);
+    auto const last = std::ranges::find_if(
+      first, entries.end(), [value](TrackCreditEntry const& entry) { return entry.kind != value; });
+    return {first, last};
   }
 
   CoverArt CoverArtProxy::at(std::uint16_t index) const noexcept
@@ -338,15 +334,6 @@ namespace ao::library
       if (block == nullptr ||
           (performancePayload.size() - sizeof(TrackPerformanceBlock)) % sizeof(TrackCreditEntry) != 0 ||
           !block->recordingDate.isValid())
-      {
-        return index;
-      }
-
-      auto const count = (performancePayload.size() - sizeof(TrackPerformanceBlock)) / sizeof(TrackCreditEntry);
-      auto const classified =
-        static_cast<std::size_t>(block->sectionCounts[0]) + block->sectionCounts[1] + block->sectionCounts[2];
-
-      if (classified > count)
       {
         return index;
       }

@@ -195,6 +195,14 @@ namespace ao::uimodel
       case library::CreditKind::Soloist: return trackFieldLabel(textCatalog, rt::TrackField::Soloist);
       case library::CreditKind::Performer:
         return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditPerformer);
+      case library::CreditKind::Lyricist: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditLyricist);
+      case library::CreditKind::Arranger: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditArranger);
+      case library::CreditKind::Writer: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditWriter);
+      case library::CreditKind::Producer: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditProducer);
+      case library::CreditKind::Engineer: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditEngineer);
+      case library::CreditKind::Mixer: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditMixer);
+      case library::CreditKind::DjMixer: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditDjMixer);
+      case library::CreditKind::Remixer: return i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditRemixer);
     }
 
     return {};
@@ -308,6 +316,15 @@ namespace ao::uimodel
             std::ranges::any_of(sections,
                                 [](auto const& section)
                                 { return section.mixed || (section.optValue && !section.optValue->empty()); }));
+  }
+
+  bool shouldShowTrackCreditKind(library::CreditKind const kind,
+                                 rt::AggregateValue<std::vector<library::Credit>> const& section,
+                                 bool const showEmpty)
+  {
+    using enum library::CreditKind;
+    auto const performance = kind == Conductor || kind == Ensemble || kind == Soloist || kind == Performer;
+    return performance || showEmpty || section.mixed || (section.optValue && !section.optValue->empty());
   }
 
   std::optional<rt::CreditReplacement> undoValueForClearedTrackCredits(

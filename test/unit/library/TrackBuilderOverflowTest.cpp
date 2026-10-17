@@ -195,8 +195,8 @@ namespace ao::library::test
 
     SECTION("A recording date after a fuller custom block crosses the limit at the performance block")
     {
-      // The date-only performance block is 12 bytes, so leave less room for it.
-      auto const fullerValue = fillingValue + "vvvv";
+      // Take the URI's room too, so the four-byte date-only performance block cannot fit.
+      auto const fullerValue = fillingValue + std::string(kAlignedUri.size(), 'v');
       builder.customMetadata().clear().add("key", fullerValue);
       builder.metadata().recordingDate(RecordingDate{.year = 1999});
       checkRejectedAt("Recording date and credit references");

@@ -173,7 +173,19 @@ namespace ao::library::test
 
   TEST_CASE("Credits - fixed kind tokens reject unknown enum values and spellings", "[library][unit][credits]")
   {
-    auto const tokens = std::array{"conductor", "ensemble", "soloist", "performer"};
+    auto const tokens = std::array{"conductor",
+                                   "ensemble",
+                                   "soloist",
+                                   "performer",
+                                   "lyricist",
+                                   "arranger",
+                                   "writer",
+                                   "producer",
+                                   "engineer",
+                                   "mixer",
+                                   "djmixer",
+                                   "remixer"};
+    static_assert(tokens.size() == kCreditKindCount);
 
     for (std::size_t index = 0; index < tokens.size(); ++index)
     {
@@ -183,11 +195,13 @@ namespace ao::library::test
       CHECK(parseCreditKind(tokens[index]) == kind);
     }
 
+    CHECK_FALSE(isValidCreditKind(static_cast<CreditKind>(kCreditKindCount)));
     auto const invalid = static_cast<CreditKind>(255);
     CHECK_FALSE(isValidCreditKind(invalid));
     CHECK(creditKindToken(invalid).empty());
     CHECK_FALSE(parseCreditKind("Soloist"));
     CHECK_FALSE(parseCreditKind("musician"));
+    CHECK_FALSE(parseCreditKind("dj-mixer"));
     CHECK_FALSE(parseCreditKind(""));
     auto const res = normalizeList({{.name = "Name", .kind = invalid}});
     REQUIRE_FALSE(res);

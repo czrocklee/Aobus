@@ -8,8 +8,10 @@
 #include "tui/TrackListEntry.h"
 #include <ao/AudioCodec.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/utility/Path.h>
 
@@ -18,6 +20,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -82,6 +85,42 @@ namespace ao::tui::test
         CHECK(rendered.screen.PixelAt(optTitle->x_min - 2, optTitle->y_min).character == " ");
         CHECK_FALSE(rendered.text.contains("Title:"));
       }
+    }
+  }
+
+  TEST_CASE("DetailFieldLayout - credit kind labels share the label column without shortening", "[tui][unit][detail]")
+  {
+    auto credits = uimodel::TrackCreditSections{};
+
+    for (auto& section : credits)
+    {
+      section.optValue.emplace();
+    }
+
+    credits[static_cast<std::size_t>(library::CreditKind::DjMixer)].optValue->push_back(
+      {"Mixmaster", library::CreditKind::DjMixer, ""});
+
+    // "DJ 混音师" is wider than every Chinese field label.
+    for (std::string_view const locale : {"en-US", "zh-Hans", "zh-Hant"})
+    {
+      CAPTURE(locale);
+      auto const catalog = ao::test::messageCatalog(locale);
+      auto const track = makeTrackListEntry(catalog, rt::TrackRow{.title = "Alpha"});
+      auto const rendered = renderElement(
+        detailPane(catalog, &track, {}, 40, nullptr, 0, {.sections = {.expanded = {true, true}}, .credits = &credits}),
+        40,
+        24);
+      INFO(rendered.text);
+      auto const optTitle = findTextCells(rendered.screen, "Alpha");
+      auto const optName = findTextCells(rendered.screen, "Mixmaster");
+      auto const optLabel =
+        findTextCells(rendered.screen, uimodel::trackCreditKindLabel(catalog, library::CreditKind::DjMixer));
+      REQUIRE(optTitle);
+      REQUIRE(optName);
+      REQUIRE(optLabel);
+      CHECK(optName->x_min == optTitle->x_min);
+      CHECK(optLabel->x_min == 2);
+      CHECK(optLabel->y_min == optName->y_min);
     }
   }
 

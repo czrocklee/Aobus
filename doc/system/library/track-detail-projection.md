@@ -40,7 +40,7 @@ Unrelated commits need not rebuild the projection, so consumers must use this re
 For each non-synthetic field, identical loaded values produce one `optValue`; differing values produce `mixed = true` with no value.
 If no requested track resolves, aggregate fields remain empty.
 
-Credits aggregate independently in four owning kind sections.
+Credits aggregate independently in one owning section per credit kind.
 Each section compares complete ordered entries, including names, roles, and duplicate multiplicity; identical loaded sections produce one common value, and differing sections are mixed with no representative list.
 A loaded empty section is a present common empty value, not a missing track.
 Missing requested tracks contribute no values: surviving tracks still supply common or mixed sections, while a selection with no loaded track leaves every section absent.

@@ -99,7 +99,7 @@ Only the space-separated triple grammar is supported; every attached `--credit=.
 **Warning:** `--credit performer Name --dry-run` stores the literal role `--dry-run`; it does not request a preview.
 The same happens when the invoking shell drops an empty role: the next argument becomes the role, and the arguments after it are parsed as though the role were never there.
 Place the preview flag before the triple (`--dry-run --credit performer Name ''`) or after an explicitly supplied role (`--credit performer Name '' --dry-run`).
-Kind tokens are exactly `conductor`, `ensemble`, `soloist`, and `performer`.
+Kind tokens are exactly `conductor`, `ensemble`, `soloist`, `performer`, `lyricist`, `arranger`, `writer`, `producer`, `engineer`, `mixer`, `djmixer`, and `remixer`.
 Pass an empty argument for an absent role. Punctuation has no separator meaning: `--credit conductor 'A=B: C' ''` supplies the roleless name `A=B: C`.
 Brackets have no list or escape meaning in these values: `[Smith, John]`, `[]`, and `[[aabb]]` remain literal name or role text.
 Names and roles have the six ASCII whitespace characters trimmed at their boundaries and are normalized to NFC; malformed UTF-8 or a blank name rejects the whole command, and a blank role means absence.
@@ -137,7 +137,7 @@ Zero/empty sentinel track values are omitted.
 `duration` is milliseconds.
 `recordingDate` is the canonical stored precision (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) and is omitted when absent.
 `credits` is one sequence of `{name, kind, role?}` entries, including an explicit empty sequence.
-It preserves duplicates and within-kind order, grouped canonically as conductor, ensemble, soloist, performer; absent roles omit the `role` key.
+It preserves duplicates and within-kind order, grouped canonically in kind order, conductor through remixer; absent roles omit the `role` key.
 There are no duplicated editable `conductor`, `ensemble`, or `soloist` keys in structured output.
 
 Mutation/administrative shapes:

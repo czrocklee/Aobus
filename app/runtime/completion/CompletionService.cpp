@@ -93,11 +93,9 @@ namespace ao::rt
       ids.names.clear();
       ids.roles.clear();
 
-      for (auto const kind : {library::CreditKind::Conductor,
-                              library::CreditKind::Ensemble,
-                              library::CreditKind::Soloist,
-                              library::CreditKind::Performer})
+      for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
       {
+        auto const kind = static_cast<library::CreditKind>(kindIndex);
         ids.categoryNames.clear();
 
         for (auto const& entry : performance.credits(kind))
@@ -304,15 +302,9 @@ namespace ao::rt
 
   CompletionService::Vocabulary CompletionService::creditVocabulary(library::CreditKind kind)
   {
-    switch (kind)
-    {
-      case library::CreditKind::Conductor: return Vocabulary::ConductorNames;
-      case library::CreditKind::Ensemble: return Vocabulary::EnsembleNames;
-      case library::CreditKind::Soloist: return Vocabulary::SoloistNames;
-      case library::CreditKind::Performer: return Vocabulary::PerformerNames;
-    }
-
-    AO_FATAL("Invalid credit completion kind");
+    AO_EXPECTS(library::isValidCreditKind(kind), "Invalid credit completion kind");
+    return static_cast<Vocabulary>(static_cast<std::size_t>(Vocabulary::FirstKindNames) +
+                                   static_cast<std::size_t>(kind));
   }
 
   std::optional<CompletionService::Vocabulary> CompletionService::categoryVocabulary(TrackField field)
@@ -415,7 +407,7 @@ namespace ao::rt
     auto titleCounts = OwnedValueFrequencies{};
     // The validated store guarantees matching hot/cold counts; reserve for the first build too.
     titleCounts.reserve(reader.entryCount());
-    auto vocabularyCounts = std::array<DictionaryCounts, static_cast<std::size_t>(Vocabulary::Count)>{};
+    auto vocabularyCounts = std::array<DictionaryCounts, kVocabularyCount>{};
 
     for (std::size_t index = 0; index < vocabularyCounts.size(); ++index)
     {

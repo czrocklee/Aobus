@@ -3,6 +3,7 @@
 
 #include "track/TrackCreditsEditorControl.h"
 
+#include <ao/library/Credits.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
@@ -29,10 +31,18 @@ namespace ao::winui
     using namespace winrt::Microsoft::UI::Xaml::Controls;
     using i18n::MessageId;
     using winrt::Windows::Foundation::IInspectable;
-    constexpr auto kKinds = std::array{library::CreditKind::Conductor,
-                                       library::CreditKind::Ensemble,
-                                       library::CreditKind::Soloist,
-                                       library::CreditKind::Performer};
+    // Every kind in CreditKind order; a combo box index names its kind.
+    constexpr auto kKinds = []
+    {
+      auto kinds = std::array<library::CreditKind, library::kCreditKindCount>{};
+
+      for (std::size_t index = 0; index < kinds.size(); ++index)
+      {
+        kinds[index] = static_cast<library::CreditKind>(index);
+      }
+
+      return kinds;
+    }();
     constexpr double kSpacing = 8.0;
 
     bool isFocusedWithin(AutoSuggestBox const& input)

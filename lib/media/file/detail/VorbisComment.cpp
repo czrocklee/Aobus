@@ -43,6 +43,13 @@ namespace ao::media::file::detail
       builder.metadata().orchestra(value);
     }
 
+    // A credit comment such as LYRICIST holds one name without a role.
+    template<CreditKind Kind>
+    void handleCredit(ContentBuilder& builder, std::string_view value)
+    {
+      builder.metadata().credit(value, Kind);
+    }
+
     // Appends one PERFORMER value as a list credit, conservatively recognizing
     // Picard's "name (instrument)" convention: one final isolated "(role)"
     // suffix separated from a nonempty name by ASCII whitespace, with a

@@ -840,7 +840,7 @@ namespace
             _ready = [this]
             {
               auto const label =
-                winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::AppKitDiscardChanges));
+                winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesDiscard));
               for (auto const& command : controls<Button>())
               {
                 if (auto text = command.Content().try_as<TextBlock>(); text && text.Text() == label)
@@ -1024,7 +1024,17 @@ namespace
       _ready = [this] { return _externalCompleted; };
     }
 
-    void checkDetailActions(bool const visible)
+    // The all-kind action and the four performance kinds, or with Show Empty every kind.
+    static constexpr std::size_t kPerformanceActions = 5;
+    static constexpr std::size_t kEveryKindActions = 1 + ao::library::kCreditKindCount;
+
+    void checkDetailActions(std::size_t const expected)
+    {
+      checkCreditActions(
+        expected, "Show Empty binds the whole Credits section and the actions of kinds after Performer");
+    }
+
+    void checkCreditActions(std::size_t const expected, std::string_view const observation)
     {
       std::size_t count = 0;
 
@@ -1043,9 +1053,9 @@ namespace
                                    {{"scope", ao::i18n::requiredText(*_optCatalog, MessageId::TrackCreditsAllKinds)}}));
         bool isCreditAction = text.Text() == allLabel;
 
-        for (auto const kind :
-             {CreditKind::Conductor, CreditKind::Ensemble, CreditKind::Soloist, CreditKind::Performer})
+        for (std::size_t kindIndex = 0; kindIndex < ao::library::kCreditKindCount; ++kindIndex)
         {
+          auto const kind = static_cast<CreditKind>(kindIndex);
           auto const label = winrt::to_hstring(
             ao::i18n::requiredFormat(*_optCatalog,
                                      MessageId::TrackCreditsScope,
@@ -1060,8 +1070,7 @@ namespace
         }
       }
 
-      check(
-        count == (visible ? 5 : 0), "Show Empty binds the whole Credits section, retaining all four category actions");
+      check(count == expected, observation);
     }
 
     void invokeDetailScope(std::bitset<ao::library::kCreditKindCount> const scope)
@@ -1336,19 +1345,18 @@ namespace
       _steps.push_back(
         [this]
         {
-          checkDetailActions(false);
+          checkDetailActions(0);
           invokeButton(_detailShowEmpty);
         });
       _steps.push_back(
         [this]
         {
-          checkDetailActions(true);
+          checkDetailActions(kEveryKindActions);
           invokeDetailScope(ao::uimodel::allTrackCreditKinds());
 
-          for (auto const kind :
-               {CreditKind::Conductor, CreditKind::Ensemble, CreditKind::Soloist, CreditKind::Performer})
+          for (std::size_t kindIndex = 0; kindIndex < ao::library::kCreditKindCount; ++kindIndex)
           {
-            invokeDetailScope(ao::uimodel::trackCreditScope(kind));
+            invokeDetailScope(ao::uimodel::trackCreditScope(static_cast<CreditKind>(kindIndex)));
           }
 
           invokeButton(_detailShowEmpty);
@@ -1356,38 +1364,39 @@ namespace
       _steps.push_back(
         [this]
         {
-          checkDetailActions(false);
+          checkDetailActions(0);
           showDetail({_trackId}, true);
         });
       _steps.push_back(
         [this]
         {
-          checkDetailActions(true);
+          checkDetailActions(kPerformanceActions);
           invokeDetailScope(ao::uimodel::trackCreditScope(CreditKind::Ensemble));
           invokeButton(_detailShowEmpty);
         });
       _steps.push_back(
         [this]
         {
-          checkDetailActions(true);
+          checkDetailActions(kEveryKindActions);
           invokeButton(_detailMetadataHeader);
         });
       _steps.push_back(
         [this]
         {
-          checkDetailActions(false);
+          checkDetailActions(0);
           invokeButton(_detailMetadataHeader);
         });
       _steps.push_back(
         [this]
         {
-          checkDetailActions(true);
+          checkDetailActions(kEveryKindActions);
           showDetail({_trackId, _emptyTrackId}, true);
         });
       _steps.push_back(
         [this]
         {
-          checkDetailActions(true);
+          // A fresh detail starts with Show Empty off, so only the performance kinds have actions.
+          checkDetailActions(kPerformanceActions);
           bool hasMixed = false;
 
           for (auto const& text : controls<TextBlock>())
@@ -1404,7 +1413,7 @@ namespace
       _steps.push_back(
         [this]
         {
-          checkDetailActions(false);
+          checkDetailActions(0);
           check(!_detailShowEmpty.IsEnabled(), "no selection disables the shipping Show Empty action");
           check(_detailCallbackIds.empty() && !_optDetailCallbackScope, "no selection emits no Credits callback");
         });
@@ -1433,6 +1442,8 @@ namespace
         {
           checkStored("Original title", expectedCredits("Conductor", "Anne"), 0);
           check(_workflowDialog.IsPrimaryButtonEnabled(), "accepted child enables one composed parent Save");
+          checkCreditActions(
+            kPerformanceActions, "Properties offers no one-kind action for an unused kind after Performer");
           invokeScope(CreditKind::Conductor);
         });
       _steps.push_back([this] { setText(singleCreditName(), L"Staged conductor"); });
@@ -1468,7 +1479,7 @@ namespace
         {
           check(_coordinatorPtr->isActive() && !_dialogClosed, "dirty native Close is cancelled for confirmation");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "discard decision blocks Save");
-          invoke(MessageId::TrackCreditsCancel);
+          invoke(MessageId::WinUiTrackPropertiesKeepEditing);
         });
       _steps.push_back([this] { invokeScope(CreditKind::Soloist); });
       _steps.push_back(
@@ -1481,7 +1492,7 @@ namespace
       _steps.push_back(
         [this]
         {
-          invoke(MessageId::AppKitDiscardChanges);
+          invoke(MessageId::WinUiTrackPropertiesDiscard);
           _ready = [this] { return _dialogClosed; };
         });
       _steps.push_back(
@@ -1508,35 +1519,18 @@ namespace
           check(!titleInput().IsEnabled() && titleInput().Text() == L"Stale title draft",
                 "stale ordinary draft remains visible and disabled");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "stale parent cannot submit");
-          invoke(MessageId::TuiEditorHintReload);
+          invoke(MessageId::WinUiTrackPropertiesReload);
         });
-      _steps.push_back(
-        [this]
-        {
-          // Both the disabled child and discard prompt have Cancel; invoke the enabled prompt action.
-          for (auto const& candidate : controls<Button>())
-          {
-            auto text = candidate.Content().try_as<TextBlock>();
-
-            if (candidate.IsEnabled() && text &&
-                text.Text() == winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::TrackCreditsCancel)))
-            {
-              invokeButton(candidate);
-              return;
-            }
-          }
-
-          throw winrt::hresult_invalid_argument{L"Reload cancellation action is missing"};
-        });
+      _steps.push_back([this] { invoke(MessageId::WinUiTrackPropertiesKeepEditing); });
       _steps.push_back(
         [this]
         {
           check(singleCreditName().Text() == L"Stale draft" && titleInput().Text() == L"Stale title draft",
                 "declining reload preserves child and ordinary drafts");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "declining reload does not silently rebind");
-          invoke(MessageId::TuiEditorHintReload);
+          invoke(MessageId::WinUiTrackPropertiesReload);
         });
-      _steps.push_back([this] { invoke(MessageId::AppKitDiscardChanges); });
+      _steps.push_back([this] { invoke(MessageId::WinUiTrackPropertiesDiscard); });
       _steps.push_back(
         [this]
         {

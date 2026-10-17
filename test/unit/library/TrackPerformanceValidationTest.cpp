@@ -20,7 +20,10 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -138,43 +141,36 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackView - performance gate requires an exact prefix plus whole eight-byte entries",
+  TEST_CASE("TrackView - performance gate requires an exact prefix plus whole twelve-byte entries",
             "[library][unit][track-performance]")
   {
     auto bytes = performanceRecord(TrackPerformanceBlock{.recordingDate = RecordingDate{.year = 1981}});
     auto* header = utility::layout::viewMutable<TrackColdHeader>(bytes);
-
-    SECTION("undersized prefix")
-    {
-      header->uriOffset = sizeof(TrackColdHeader) + 8;
-    }
-
-    SECTION("four-byte malformed tail")
-    {
-      header->uriOffset = sizeof(TrackColdHeader) + sizeof(TrackPerformanceBlock) + 4;
-      bytes.resize(alignToWord(header->uriOffset + header->uriLength));
-    }
-
+    auto const tailBytes = GENERATE(std::size_t{4}, std::size_t{8}, std::size_t{16});
+    CAPTURE(tailBytes);
+    header->uriOffset = static_cast<std::uint16_t>(sizeof(TrackColdHeader) + sizeof(TrackPerformanceBlock) + tailBytes);
+    bytes.resize(alignToWord(header->uriOffset + header->uriLength));
     checkPerformanceGateRejects(bytes);
   }
 
-  TEST_CASE("TrackView - segment count gate widens before addition and bounds every subspan",
-            "[library][unit][track-performance]")
+  TEST_CASE("TrackView - each kind's credits are one bounded run of the entries", "[library][unit][track-performance]")
   {
-    auto const entries = std::array{TrackCreditEntry{.nameId = DictionaryId{1}},
-                                    TrackCreditEntry{.nameId = DictionaryId{2}},
-                                    TrackCreditEntry{.nameId = DictionaryId{3}},
-                                    TrackCreditEntry{.nameId = DictionaryId{4}}};
-    auto prefix = TrackPerformanceBlock{.sectionCounts = {1, 1, 1}};
+    auto entries = std::vector<TrackCreditEntry>{};
 
-    SECTION("each explicit section and inferred performer")
+    for (std::size_t index = 0; index < kCreditKindCount; ++index)
     {
-      auto const bytes = performanceRecord(prefix, entries);
+      entries.push_back(
+        {.nameId = DictionaryId{static_cast<std::uint32_t>(index + 1)}, .kind = static_cast<std::uint8_t>(index)});
+    }
+
+    SECTION("one entry of every kind")
+    {
+      auto const bytes = performanceRecord({}, entries);
       auto const view = TrackView{{}, bytes};
       REQUIRE(view.isColdValid());
       REQUIRE(detail::TrackColdReader{bytes}.isValid());
       auto const performance = view.performance();
-      REQUIRE(performance.credits().size() == 4);
+      REQUIRE(performance.credits().size() == kCreditKindCount);
 
       for (std::size_t index = 0; index < kCreditKindCount; ++index)
       {
@@ -185,22 +181,49 @@ namespace ao::library::test
       }
     }
 
-    SECTION("sum exceeds tail")
+    SECTION("a kind with no entries is an empty run")
     {
-      prefix.sectionCounts = {2, 2, 1};
-      checkPerformanceGateRejects(performanceRecord(prefix, entries));
+      entries.erase(entries.begin() + 1);
+      auto const bytes = performanceRecord({}, entries);
+      auto const performance = TrackView{{}, bytes}.performance();
+      CHECK(performance.credits(CreditKind::Ensemble).empty());
+      REQUIRE(performance.credits(CreditKind::Soloist).size() == 1);
+      CHECK(performance.credits(CreditKind::Soloist).front().nameId == DictionaryId{3});
     }
 
-    SECTION("sum would wrap in sixteen bits")
+    // The read gate stays constant-time, so entry order, kind range, and
+    // reserved bytes belong to the deep gate; a per-kind read of such entries
+    // stays inside them.
+    SECTION("kinds out of order")
     {
-      prefix.sectionCounts = {65535, 65535, 2};
-      checkPerformanceGateRejects(performanceRecord(prefix, entries));
+      std::ranges::reverse(entries);
+      auto const bytes = performanceRecord({}, entries);
+      auto const view = TrackView{{}, bytes};
+      CHECK(view.isColdValid());
+      CHECK_FALSE(detail::TrackColdReader{bytes}.isValid());
+
+      for (std::size_t index = 0; index < kCreditKindCount; ++index)
+      {
+        auto const section = view.performance().credits(static_cast<CreditKind>(index));
+        REQUIRE(section.size() == 1);
+        CHECK(section.front().nameId == DictionaryId{static_cast<std::uint32_t>(index + 1)});
+      }
     }
 
-    SECTION("reserved word belongs to deep gate")
+    SECTION("a kind beyond the vocabulary")
     {
-      prefix.reserved = 1;
-      auto const bytes = performanceRecord(prefix, entries);
+      entries.back().kind = static_cast<std::uint8_t>(kCreditKindCount);
+      auto const bytes = performanceRecord({}, entries);
+      CHECK(TrackView{{}, bytes}.isColdValid());
+      CHECK_FALSE(detail::TrackColdReader{bytes}.isValid());
+    }
+
+    SECTION("a nonzero reserved byte")
+    {
+      auto const reservedIndex = GENERATE(std::size_t{0}, std::size_t{1}, std::size_t{2});
+      CAPTURE(reservedIndex);
+      entries.front().reserved[reservedIndex] = 1;
+      auto const bytes = performanceRecord({}, entries);
       CHECK(TrackView{{}, bytes}.isColdValid());
       CHECK_FALSE(detail::TrackColdReader{bytes}.isValid());
     }
@@ -304,41 +327,28 @@ namespace ao::library::test
       hasMalformedTail = true;
     }
 
-    SECTION("unresolved conductor ID")
+    SECTION("unresolved credit name ID of each kind")
     {
-      prefix.sectionCounts[0] = 1;
-      entries.push_back({.nameId = DictionaryId{1}});
+      auto const kindIndex = GENERATE(range(std::size_t{0}, kCreditKindCount));
+      CAPTURE(kindIndex);
+      entries.push_back({.nameId = DictionaryId{1}, .kind = static_cast<std::uint8_t>(kindIndex)});
       expected = "Track record contains an unresolved credit dictionary id";
     }
 
-    SECTION("unresolved ensemble ID")
+    SECTION("nonzero reserved credit byte")
     {
-      prefix.sectionCounts[1] = 1;
-      entries.push_back({.nameId = DictionaryId{1}});
-      expected = "Track record contains an unresolved credit dictionary id";
+      entries.push_back({.nameId = DictionaryId{1}, .reserved = {0, 1, 0}});
     }
 
-    SECTION("unresolved soloist ID")
+    SECTION("credit kind beyond the vocabulary")
     {
-      prefix.sectionCounts[2] = 1;
-      entries.push_back({.nameId = DictionaryId{1}});
-      expected = "Track record contains an unresolved credit dictionary id";
+      entries.push_back({.nameId = DictionaryId{1}, .kind = static_cast<std::uint8_t>(kCreditKindCount)});
     }
 
-    SECTION("unresolved performer name ID")
+    SECTION("credit kinds out of order")
     {
-      entries.push_back({.nameId = DictionaryId{1}});
-      expected = "Track record contains an unresolved credit dictionary id";
-    }
-
-    SECTION("reserved prefix word")
-    {
-      prefix.reserved = 1;
-    }
-
-    SECTION("classified count exceeds tail")
-    {
-      prefix.sectionCounts = {65535, 65535, 2};
+      entries.push_back({.nameId = DictionaryId{1}, .kind = static_cast<std::uint8_t>(CreditKind::Performer)});
+      entries.push_back({.nameId = DictionaryId{1}, .kind = static_cast<std::uint8_t>(CreditKind::Conductor)});
     }
 
     SECTION("unresolved credit role ID")

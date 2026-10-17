@@ -195,14 +195,14 @@ Defined block slots are written in slot order:
 | `0` cover art | Zero or more eight-byte `CoverArtEntry` values: `ResourceId`, picture type, three reserved bytes. |
 | `1` work | One 12-byte `TrackWorkBlock`: work and movement dictionary ids, then two unsigned 16-bit movement number/total values. |
 | `2` custom metadata | Eight-byte header, eight-byte entries, then value bytes. |
-| `3` performance | One 12-byte `TrackPerformanceBlock` prefix, followed by eight-byte `TrackCreditEntry` values. |
+| `3` performance | One four-byte `TrackPerformanceBlock` prefix, followed by 12-byte `TrackCreditEntry` values. |
 | `4` | Last unused cold slot; zero. The next per-Track block a later version adds, such as a sub-file segment, would use it; a block beyond it needs a new cold header. |
 
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
 The whole cold record, including the header, every present block, the URI, and padding, is at most 65,535 bytes (`kTrackColdRecordSizeLimit`); because the record is padded to a four-byte multiple, the largest stored record is 65,532 bytes.
 Cover-art references, the work block, custom metadata, the recording date and credit references, and the URI share that one budget; no block or value has a separate allowance.
-Only inline bytes count: cover-art image bytes are Resources, and work, credit, and custom-metadata key text is stored in the dictionary, so each cover-art reference, credit, and custom-metadata entry costs eight bytes.
+Only inline bytes count: cover-art image bytes are Resources, and work, credit, and custom-metadata key text is stored in the dictionary, so each cover-art reference and custom-metadata entry costs eight bytes and each credit costs 12.
 In practice, custom-metadata values dominate the record; the URI is separately capped at 1,976 bytes (`LibraryUri::kMaxLength`) but still consumes the shared budget.
 Track preflight sizes these components in physical order and rejects a record that would exceed the limit with `ValueTooLarge`, naming the first component that crosses it, before any mutation; open applies the same limit and rejects a larger record as `CorruptData`.
 The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI bytes.
@@ -212,22 +212,29 @@ The URI is filesystem identity and is explicitly outside this text-normalization
 
 Work structure and performance are independently optional.
 The work block is omitted when both ids and both movement numbers are zero.
-Performance is omitted iff RecordingDate is absent and all four credit segments are empty; a date-only or credits-only performance is valid without a work block.
+Performance is omitted iff RecordingDate is absent and there are no credits; a date-only or credits-only performance is valid without a work block.
 Composer, artist, album artist, and the existing Year retain their hot access paths rather than moving to a logically related cold block.
 These blocks are storage domains, not Work or Performance entities or recording identities.
 
-The performance prefix has this exact layout; integers use the format's little-endian byte order:
+The performance payload has this exact layout; integers use the format's little-endian byte order:
 
 | Byte offset | Value | Bytes |
 |---:|---|---:|
 | `0` | Recording year, unsigned 16-bit | `2` |
 | `2` | Recording month, unsigned 8-bit | `1` |
 | `3` | Recording day, unsigned 8-bit | `1` |
-| `4` | Conductor entry count, unsigned 16-bit | `2` |
-| `6` | Ensemble entry count, unsigned 16-bit | `2` |
-| `8` | Soloist entry count, unsigned 16-bit | `2` |
-| `10` | Reserved unsigned 16-bit word; zero | `2` |
-| `12` onward | Conductor, Ensemble, Soloist, Performer segments: name id, optional role id | `8` per entry |
+| `4` onward | Credit entries | `12` per entry |
+
+Each credit entry has this layout:
+
+| Byte offset | Value | Bytes |
+|---:|---|---:|
+| `0` | Name dictionary id, unsigned 32-bit | `4` |
+| `4` | Role dictionary id, unsigned 32-bit; zero is no role | `4` |
+| `8` | `CreditKind` value, unsigned 8-bit | `1` |
+| `9` | Reserved bytes; zero | `3` |
+
+Entries are in nondecreasing kind order, so each kind's credits are one contiguous run.
 
 An absent recording date is exactly four zero bytes.
 Year zero requires month and day zero; a present year is `1..9999`, month/day zero retain partial precision, and supplied components must form a valid proleptic Gregorian date.
@@ -237,17 +244,17 @@ A credit name id must be nonzero and resolve to nonempty, ASCII-trimmed, scalar-
 Role id zero is absence; every nonzero role id must resolve to the same admitted nonempty text form.
 All other nonzero dictionary ids must also resolve.
 Ids identify supplied text, not entities; duplicates and within-kind order are retained.
-Kind comes from the physical segment, not an entry member or dictionary label. Credits are the sole participant authority; category fields are projections.
+Kind comes from the entry's kind byte, not a dictionary label. Credits are the sole participant authority; category fields are projections.
 
 The next present slot offset, or `uriOffset` for the last block, supplies the performance boundary.
-Its length must be exactly `12 + 8 * N`: at least 12 bytes, with the remaining length divisible by eight and no tail padding.
-The first three `sectionCounts` sum, widened before addition, must not exceed `N`; Performer count is `N` minus that sum.
-Unsigned 16-bit counts leave the whole cold-record byte limit as the effective cardinality bound, not a 255-entry category cap.
+Its length must be exactly `4 + 12 * N`: at least four bytes, with the remaining length divisible by 12 and no tail padding.
+Every entry's kind byte must name a `CreditKind` and its reserved bytes must be zero.
+The whole cold-record byte limit is the only cardinality bound, not a per-kind cap: with a one-byte URI and no other cold block, a record holds at most 5,457 credits.
 A present prefix without date or entries is noncanonical and rejected, as is a logically empty work block.
-A structurally valid changed count can reclassify entries: this nonredundant encoding cannot detect every semantic corruption.
+A changed kind byte that keeps kind order can reclassify an entry: this nonredundant encoding cannot detect every semantic corruption.
 The five-offset directory and both fixed headers remain unchanged.
 Compute multiplication, additions, and alignment in a wide checked type before narrowing, including URI and every retained block in the full merged record.
-This layout is not a general compression or performance guarantee; first-entry access remains O(1), but timings, heap use, and RSS do not follow from encoded size.
+This layout is not a general compression or performance guarantee; `credits()` is O(1) and `credits(kind)` scans entries up to the end of that kind's run, but timings, heap use, and RSS do not follow from encoded size.
 
 Production callers pass a `TrackBuilder` to the logical writer returned by `LibraryWrite::tracks()`.
 The writer performs preparation itself and keeps the resulting immutable `TrackBuilder::PreparedHot` and `PreparedCold` values inside `ao_library`.
@@ -261,7 +268,7 @@ Private serialization helpers used by representation tests follow the same prefl
 Those gates validate scalar UTF-8, canonical Track URI, representable inline post-NFC sizes, and complete encoded record bounds before dictionary interning, Resource creation, or Track mutation begins.
 Already-NFC inline scalar input uses a quick check to avoid a temporary normalized allocation during size preflight.
 Credit preflight independently checks valid kinds, trimmed nonempty names, name/role UTF-8, date validity, counters, and full cold-record bounds, without requiring upstream normalization.
-Preparation stably groups the four fixed kinds, trims and interns names/nonempty roles, and obtains NFC from dictionary admission.
+Preparation stably groups credits in `CreditKind` order, trims and interns names/nonempty roles, and obtains NFC from dictionary admission.
 The owning-input setter still retains copied borrowed descriptors; all supplied text must survive through preparation.
 Failures after interning starts abort the enclosing root write; there is no per-call rollback or permission to continue and commit that transaction, and private dictionary changes are not published early.
 Prepared values own every byte their encoder emits, including performance entries and the exact date precision.
@@ -428,7 +435,7 @@ A row whose key is not the first free slot at or above its digest's initial key 
 Reachability is checked over the occupied key runs the same traversal already collects, so it stays linear in the number of rows.
 It validates dictionary key width, dense ids, scalar-valid UTF-8 NFC, and unique canonical text while building the in-memory index.
 It merge-checks the hot/cold Track key sets, validates canonical records including scalar-valid UTF-8 NFC inline text plus every dictionary and Resource reference, and proves a strict Track-to-manifest bijection.
-For performance records it rejects malformed prefix/tail bounds, a widened count sum greater than the physical entry count, a nonzero reserved word, noncanonical empty prefixes, invalid partial dates, zero or unresolved credit name ids, unresolved role ids, and empty or untrimmed referenced name/role text.
+For performance records it rejects a block shorter than its date prefix or with a partial credit entry, an unknown kind byte, nonzero entry reserved bytes, entries out of kind order, noncanonical empty blocks, invalid partial dates, zero or unresolved credit name ids, unresolved role ids, and empty or untrimmed referenced name/role text.
 Dictionary admission has already proved scalar UTF-8 and NFC, so checking the extra credit text rules requires no per-entry normalization or temporary string.
 The bijection first compares row counts, then performs one canonical manifest point read for each Track URI and requires the manifest's Track id to equal that Track id.
 Equal counts, unique Track ids, and the exact point matches prove that no extra manifest row exists without allocating a Track- or manifest-sized set; duplicate Track URIs and duplicate manifest bindings cannot pass.
@@ -451,12 +458,12 @@ Directly constructed read views perform one constant-time structural gate that p
 A decoded hot or cold accessor requires that side to be valid; calling it for an absent or structurally invalid side is a programmer error that fails fast through `AO_EXPECTS`.
 Raw diagnostic access remains available for the exact bytes supplied to the view.
 An absent optional block inside a valid cold side is not an invalid tier: work and performance views, and cover-art and custom-metadata proxies, remain legal and empty, with their documented optional-block defaults.
-The performance read gate checks prefix bounds/alignment, whole-entry tail stride, the widened sum of the first three section counts against `N`, and RecordingDate validity in constant time, before creating subspans or subtracting the Performer count.
-It never materializes the list or scans its members; invalid layouts expose no out-of-bounds segment.
+The performance read gate checks prefix bounds/alignment, whole-entry tail stride, and RecordingDate validity in constant time, before creating subspans.
+It never materializes the list or scans its members; `credits(kind)` stays inside the entry table even when kinds are out of order.
 Because date formatting and comparison require a valid date, a stored invalid date makes the cold side invalid instead of reaching them.
-Reserved-word validity, name ids, and canonical omission of logically empty performance blocks are enforced by deep validation at write/open time, not repeated by the shallow read gate.
+Kind values and order, reserved bytes, name ids, and canonical omission of logically empty performance blocks are enforced by deep validation at write/open time, not repeated by the shallow read gate.
 A directly constructed raw view may therefore expose a present all-zero prefix; structural validity does not prove semantic validity.
-`PerformanceView::credits()` and `credits(kind)` borrow physical id-entry spans, sharing the cold record's transaction/buffer lifetime; consumers supply logical kind from segment context.
+`PerformanceView::credits()` and `credits(kind)` borrow physical entry spans, sharing the cold record's transaction/buffer lifetime; each entry carries its kind byte.
 The canonical write validator additionally checks exact size and zero padding, tag ids and bloom agreement, cold block ordering, and every credit name id.
 Those linear checks do not add a per-row scan to normal decoded access.
 `TrackBuilder::fromCompleteView()` requires both valid sides.
@@ -493,12 +500,14 @@ Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, 
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
-Version `10` gates the id space record and its never-reused Track and List ids, the explicit zero reserved word in the metadata header, the non-nil library id, and the `UINT32_MAX` List-key reservation.
+Version `10` gates the id space record and its never-reused Track and List ids, the explicit zero reserved word in the metadata header, the non-nil library id, the `UINT32_MAX` List-key reservation, and the kind byte in each credit entry.
 Only the exact version-10 layout defined here is accepted; alternative layouts labeled version 10 are unsupported.
 Version 10 has not been released. Until the first public release, a development build may change its layout or widen one of its limits without incrementing it, and the result is an alternative layout to earlier development builds.
-An earlier build rejects such a database on open as `CorruptData`, and one that already has it open fails through the fatal facility when it reads an affected row; for example, a URI longer than 500 bytes is rejected by builds made before the limit became 1,976 bytes.
+An earlier build usually rejects such a database on open as `CorruptData`, and one that already has it open fails through the fatal facility when it reads an affected row; for example, a URI longer than 500 bytes is rejected by builds made before the limit became 1,976 bytes.
+Rejection is not guaranteed across a layout change: when each credit entry gained its kind byte, some Credits blocks remained valid under both layouts with different credits.
+A development library therefore moves between such builds only through YAML, exported by the build that wrote it and restored into a new library.
 The [YAML version 8 reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
-Version `9` gated the independent work and performance blocks, partial RecordingDate, and segmented Credits described above.
+Version `9` gated the independent work and performance blocks, partial RecordingDate, and Credits segmented by per-kind counts in the performance prefix.
 Version `8` gated the portable manifest modification-time record: the 12-byte `FileTimestamp` seconds/nanoseconds instant with its `hasMtime` absence flag replaces the unsigned host file-clock count.
 Version `7` gated scalar-valid UTF-8 NFC admission for dictionary values, inline Track text, and List display text; it deliberately excluded filesystem URI bytes and opaque List filter source.
 Version `6` gated the `resources` descriptor record and its reachability rule; version `5` gated the `orderTrackIds` representation and List record layout, while stored `filter` text remains syntactically opaque to database admission.

@@ -93,6 +93,40 @@ namespace ao::uimodel::test
     CHECK(formatTrackCreditSectionSummary(catalog, {}).empty());
   }
 
+  TEST_CASE("TrackCredits - every kind has its own label and kinds after Performer show only when used",
+            "[uimodel][unit][track-credits]")
+  {
+    using K = library::CreditKind;
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const labels = std::to_array<std::string_view>({"Conductor",
+                                                         "Ensemble",
+                                                         "Soloist",
+                                                         "Performer",
+                                                         "Lyricist",
+                                                         "Arranger",
+                                                         "Writer",
+                                                         "Producer",
+                                                         "Engineer",
+                                                         "Mixer",
+                                                         "DJ-mixer",
+                                                         "Remixer"});
+    static_assert(labels.size() == library::kCreditKindCount);
+    auto sections = commonCredits({{"Lee", K::Lyricist, ""}});
+    sections[static_cast<std::size_t>(K::Remixer)] = {.mixed = true};
+
+    for (std::size_t index = 0; index < labels.size(); ++index)
+    {
+      auto const kind = static_cast<K>(index);
+      CAPTURE(index);
+      CHECK(trackCreditKindLabel(catalog, kind) == labels[index]);
+      CHECK(trackCreditScopeLabel(catalog, trackCreditScope(kind)) == labels[index]);
+      auto const used = index < 4 || kind == K::Lyricist || kind == K::Remixer;
+      CHECK(shouldShowTrackCreditKind(kind, sections[index], false) == used);
+      CHECK(shouldShowTrackCreditKind(kind, sections[index], true));
+      CHECK(shouldShowTrackCreditKind(kind, {}, false) == (index < 4));
+    }
+  }
+
   TEST_CASE("TrackCredits - validation messages localize every reason and the actual one-based row",
             "[uimodel][unit][track-credits]")
   {
@@ -132,12 +166,12 @@ namespace ao::uimodel::test
        {"第 2 行：请输入名称。",
         "第 3 行：名称包含无效文本。",
         "第 4 行：角色或乐器包含无效文本。",
-        "第 5 行：请选择此范围内的有效署名类别。"}},
+        "第 5 行：请选择此范围内的有效类别。"}},
       {"zh-Hant",
        {"第 2 行：請輸入名稱。",
         "第 3 行：名稱包含無效文字。",
         "第 4 行：角色或樂器包含無效文字。",
-        "第 5 行：請選擇此範圍內的有效署名類別。"}},
+        "第 5 行：請選擇此範圍內的有效類別。"}},
     });
     auto const reasons = std::to_array<TrackCreditValidationReason>({TrackCreditValidationReason::BlankName,
                                                                      TrackCreditValidationReason::InvalidNameText,
@@ -175,8 +209,8 @@ namespace ao::uimodel::test
       {"es", {"Mover el crédito 3 hacia arriba", "Mover el crédito 3 hacia abajo", "Eliminar el crédito 3"}},
       {"fr", {"Monter le crédit 3", "Descendre le crédit 3", "Supprimer le crédit 3"}},
       {"ja", {"クレジット 3 を上へ移動", "クレジット 3 を下へ移動", "クレジット 3 を削除"}},
-      {"zh-Hans", {"上移第 3 条署名", "下移第 3 条署名", "删除第 3 条署名"}},
-      {"zh-Hant", {"上移第 3 條署名", "下移第 3 條署名", "刪除第 3 條署名"}},
+      {"zh-Hans", {"上移第 3 项", "下移第 3 项", "删除第 3 项"}},
+      {"zh-Hant", {"上移第 3 項", "下移第 3 項", "刪除第 3 項"}},
     });
     auto const actions = std::to_array<TrackCreditRowAction>(
       {TrackCreditRowAction::MoveUp, TrackCreditRowAction::MoveDown, TrackCreditRowAction::Delete});

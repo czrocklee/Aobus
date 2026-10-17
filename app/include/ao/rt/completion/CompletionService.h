@@ -83,12 +83,12 @@ namespace ao::rt
       CustomKeys,
       CreditNames,
       CreditRoles,
-      ConductorNames,
-      EnsembleNames,
-      SoloistNames,
-      PerformerNames,
-      Count,
+      // One name vocabulary per CreditKind, in kind order.
+      FirstKindNames,
     };
+
+    static constexpr std::size_t kVocabularyCount =
+      static_cast<std::size_t>(Vocabulary::FirstKindNames) + library::kCreditKindCount;
 
     struct VocabularyCache final
     {
@@ -149,7 +149,7 @@ namespace ao::rt
     std::array<bool, kTrackFieldCount> _valuesReady{};
 
     std::vector<VocabularyEntry> _titleFrequencies;
-    std::array<VocabularyCache, static_cast<std::size_t>(Vocabulary::Count)> _vocabularies;
+    std::array<VocabularyCache, kVocabularyCount> _vocabularies;
     std::array<std::vector<DictionaryFrequency>, kTrackFieldCount> _valueFrequencies;
     std::vector<AliasRecord> _dictionaryAliases;
     std::vector<AliasRecord> _titleAliases;

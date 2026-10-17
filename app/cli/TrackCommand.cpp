@@ -1622,11 +1622,12 @@ namespace ao::cli
         .recordingDate =
           update->add_option("--recording-date", "recording date (YYYY, YYYY-MM, or YYYY-MM-DD; empty clears)"),
         .credit = addCreditOption(*update, args, originalArgs, creditValuesPtr),
-        .creditScope = update
-                         ->add_option("--credit-scope",
-                                      "conductor, ensemble, soloist, or performer; repeatable union; default all kinds")
-                         ->expected(1)
-                         ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll),
+        .creditScope =
+          update
+            ->add_option(
+              "--credit-scope", "credit kind token, conductor through remixer; repeatable union; default all kinds")
+            ->expected(1)
+            ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll),
         .clearCredits = addBooleanFlag(*update, "--clear-credits", "clear credits in the selected scope"),
         .year = update->add_option("--year", "year"),
         .trackNumber = update->add_option("--track-number", "track number"),

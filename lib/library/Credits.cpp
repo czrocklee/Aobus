@@ -71,6 +71,14 @@ namespace ao::library
       case CreditKind::Ensemble: return "ensemble";
       case CreditKind::Soloist: return "soloist";
       case CreditKind::Performer: return "performer";
+      case CreditKind::Lyricist: return "lyricist";
+      case CreditKind::Arranger: return "arranger";
+      case CreditKind::Writer: return "writer";
+      case CreditKind::Producer: return "producer";
+      case CreditKind::Engineer: return "engineer";
+      case CreditKind::Mixer: return "mixer";
+      case CreditKind::DjMixer: return "djmixer";
+      case CreditKind::Remixer: return "remixer";
     }
 
     return {};

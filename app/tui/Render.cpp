@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <format>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <print>
@@ -375,12 +376,20 @@ namespace ao::tui
     /// The label column this locale asks for, capped and including the column gap.
     std::int32_t detailLabelContentColumns(i18n::MessageCatalog const& textCatalog)
     {
-      // The filename fallback is a detail label outside the TrackField schema.
-      std::int32_t labelColumns = cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailFileName));
+      // The filename fallback and the credit lines are detail labels outside the TrackField schema.
+      std::int32_t labelColumns =
+        std::max(cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TuiDetailFileName)),
+                 cellWidth(i18n::requiredText(textCatalog, i18n::MessageId::TrackCreditsHeading)));
 
       for (auto const field : trackDetailFields())
       {
         labelColumns = std::max(labelColumns, cellWidth(uimodel::trackFieldLabel(textCatalog, field)));
+      }
+
+      for (std::size_t index = 0; index < library::kCreditKindCount; ++index)
+      {
+        labelColumns = std::max(
+          labelColumns, cellWidth(uimodel::trackCreditKindLabel(textCatalog, static_cast<library::CreditKind>(index))));
       }
 
       return std::min(labelColumns, kDetailLabelColumns) + kDetailColumnGap;
@@ -439,6 +448,28 @@ namespace ao::tui
 
       return hbox({text(fitCellText(detailLabelText(line.label, split.labelColumns), split.labelColumns)) | dim,
                    std::move(valuePtr) | xflex});
+    }
+
+    // Names each shown kind that has a digit; later kinds are reached through Ctrl-K.
+    ftxui::Elements creditShortcutLegend(i18n::MessageCatalog const& textCatalog,
+                                         uimodel::TrackCreditSections const* credits)
+    {
+      auto const emptySection = uimodel::TrackCreditSections::value_type{};
+      auto elements = ftxui::Elements{};
+
+      for (std::size_t index = 0; index < kTrackCreditShortcutCount; ++index)
+      {
+        auto const kind = static_cast<library::CreditKind>(index);
+        auto const& section = credits != nullptr ? (*credits)[index] : emptySection;
+
+        if (uimodel::shouldShowTrackCreditKind(kind, section, false))
+        {
+          elements.push_back(ftxui::text(std::string{uimodel::trackCreditKindLabel(textCatalog, kind)} + " [" +
+                                         std::to_string(index + 1) + "]"));
+        }
+      }
+
+      return elements;
     }
 
     ftxui::Element detailMetadata(i18n::MessageCatalog const& textCatalog,
@@ -501,12 +532,7 @@ namespace ao::tui
 
         if (options.focused)
         {
-          for (std::size_t index = 0; index < library::kCreditKindCount; ++index)
-          {
-            elements.push_back(
-              text(std::string{uimodel::trackCreditKindLabel(textCatalog, static_cast<library::CreditKind>(index))} +
-                   " [" + std::to_string(index + 1) + "]"));
-          }
+          std::ranges::move(creditShortcutLegend(textCatalog, options.credits), std::back_inserter(elements));
         }
       }
 

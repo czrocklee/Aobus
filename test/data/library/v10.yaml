@@ -68,7 +68,32 @@ library:
       track-number: 2
       track-total: 13
       recording-date: 1998-11
-      credits: []
+      credits:
+        - name: 宇多田ヒカル
+          kind: lyricist
+        - name: 山田太郎
+          kind: arranger
+          role: strings
+        - name: 宇多田ヒカル
+          kind: writer
+        - name: Jane Doe
+          kind: producer
+        - name: John Doe
+          kind: producer
+          role: co-producer
+        - name: 佐藤花子
+          kind: engineer
+          role: recording
+        - name: 佐藤花子
+          kind: engineer
+          role: mastering
+        - name: Max Mustermann
+          kind: mixer
+        - name: DJ Été
+          kind: djmixer
+        - name: Erika Mustermann
+          kind: remixer
+          role: club mix
       duration: 257000
       bitrate: 320000
       sample-rate: 44100

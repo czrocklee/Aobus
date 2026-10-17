@@ -1039,22 +1039,15 @@ namespace ao::library
     _workId = TrackBuilder::resolveDictionaryId(metadata._work, transaction);
     _movementId = TrackBuilder::resolveDictionaryId(metadata._movement, transaction);
     _credits.reserve(metadata._credits.size());
-    auto kindCounts = std::array<std::size_t, kCreditKindCount>{};
     detail::forEachCreditInKindOrder(
       metadata._credits,
       [&](CreditView const& credit)
       {
         auto const trimmed = detail::trimCredit(credit);
         _credits.push_back({.nameId = TrackBuilder::internDictionaryId(trimmed.name, transaction),
-                            .roleId = TrackBuilder::resolveDictionaryId(trimmed.role, transaction)});
-        ++kindCounts[static_cast<std::size_t>(credit.kind)];
+                            .roleId = TrackBuilder::resolveDictionaryId(trimmed.role, transaction),
+                            .kind = static_cast<std::uint8_t>(credit.kind)});
       });
-
-    // Performer is the unrecorded tail segment.
-    for (std::size_t index = 0; index < _sectionCounts.size(); ++index)
-    {
-      _sectionCounts[index] = checkedUint16(kindCounts[index], "Credit section count");
-    }
   }
 
   std::vector<std::pair<DictionaryId, std::string>> TrackBuilder::PreparedCold::resolveCustomMetadata(
@@ -1176,9 +1169,7 @@ namespace ao::library
 
     auto const payloadSize = sizeof(TrackPerformanceBlock) + (_credits.size() * sizeof(TrackCreditEntry));
     auto payload = std::vector<std::byte>(payloadSize, std::byte{0});
-    writePod(std::span<std::byte>{payload},
-             0,
-             TrackPerformanceBlock{.recordingDate = metadata._recordingDate, .sectionCounts = _sectionCounts});
+    writePod(std::span<std::byte>{payload}, 0, TrackPerformanceBlock{.recordingDate = metadata._recordingDate});
     auto offset = sizeof(TrackPerformanceBlock);
 
     for (auto const& entry : _credits)

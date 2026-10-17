@@ -75,7 +75,8 @@ A refresh updates authoring validity but never reseeds the open draft; stale Sav
 Adding/deleting/reordering/reclassifying rows, replacing the selection, canceling, or completing a save retires the row generation on a later main-loop turn; signals from those retired rows cannot update shifted draft indices.
 Custom-key topology changes keep the Credits surface parented at its stable grid position.
 
-Category preview buttons open a fixed one-kind editor; Full Credits opens all four kinds.
+Category preview buttons open a fixed one-kind editor; Full Credits opens every kind.
+Conductor, Ensemble, Soloist, and Performer always have a preview; another kind has one only when a selected track has its credits or show-empty is active.
 The same native adapter exposes name, role, delete, within-kind move buttons, and an all-kind-only kind selector.
 Kind changes append to the destination section; completion follows the selected row kind, while role completion is global.
 Mixed scopes begin unseeded and require explicit replacement intent. Clear is a separate action inside the visibly labelled scope, staged until Commit.

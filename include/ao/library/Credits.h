@@ -21,9 +21,18 @@ namespace ao::library
     Ensemble,
     Soloist,
     Performer,
+    Lyricist,
+    Arranger,
+    Writer,
+    Producer,
+    Engineer,
+    Mixer,
+    DjMixer,
+    Remixer,
   };
 
-  constexpr std::size_t kCreditKindCount = 4;
+  constexpr std::size_t kCreditKindCount = 12;
+  static_assert(kCreditKindCount == static_cast<std::size_t>(CreditKind::Remixer) + 1);
 
   struct Credit final
   {

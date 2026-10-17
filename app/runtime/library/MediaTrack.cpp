@@ -101,6 +101,14 @@ namespace ao::rt
           case media::file::CreditKind::Ensemble: return library::CreditKind::Ensemble;
           case media::file::CreditKind::Soloist: return library::CreditKind::Soloist;
           case media::file::CreditKind::Performer: return library::CreditKind::Performer;
+          case media::file::CreditKind::Lyricist: return library::CreditKind::Lyricist;
+          case media::file::CreditKind::Arranger: return library::CreditKind::Arranger;
+          case media::file::CreditKind::Writer: return library::CreditKind::Writer;
+          case media::file::CreditKind::Producer: return library::CreditKind::Producer;
+          case media::file::CreditKind::Engineer: return library::CreditKind::Engineer;
+          case media::file::CreditKind::Mixer: return library::CreditKind::Mixer;
+          case media::file::CreditKind::DjMixer: return library::CreditKind::DjMixer;
+          case media::file::CreditKind::Remixer: return library::CreditKind::Remixer;
         }
 
         AO_FATAL("Unknown media credit kind");

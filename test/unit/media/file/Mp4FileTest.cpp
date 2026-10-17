@@ -581,6 +581,52 @@ namespace ao::media::file::mp4::test
                                });
   }
 
+  TEST_CASE("MP4 File - maps Picard freeform and mdta credit names to their kinds", "[media][unit][mp4][file]")
+  {
+    auto const names = std::to_array<std::string_view>(
+      {"LYRICIST", "arranger", "Writer", "PRODUCER", "ENGINEER", "MIXER", "DJMIXER", "REMIXER", "LYRICS"});
+    auto const expected = std::vector<Credit>{
+      {.name = "Lee", .kind = CreditKind::Lyricist},
+      {.name = "Ann", .kind = CreditKind::Arranger},
+      {.name = "Wes", .kind = CreditKind::Writer},
+      {.name = "Pat", .kind = CreditKind::Producer},
+      {.name = "Eve", .kind = CreditKind::Engineer},
+      {.name = "Max", .kind = CreditKind::Mixer},
+      {.name = "Dee", .kind = CreditKind::DjMixer},
+      {.name = "Rex", .kind = CreditKind::Remixer},
+    };
+    auto const values =
+      std::to_array<std::string_view>({"Lee", "Ann", "Wes", "Pat", "Eve", "Max", "Dee", "Rex", "Text"});
+
+    SECTION("freeform items")
+    {
+      auto ilstChildren = std::vector<std::uint8_t>{};
+
+      for (std::size_t index = 0; index < names.size(); ++index)
+      {
+        auto const atom = makeFreeformTextAtom(names[index], values[index]);
+        ilstChildren.insert(ilstChildren.end(), atom.begin(), atom.end());
+      }
+
+      auto const temp = TempFile{createMinimalM4aWithRawIlstAtom(ilstChildren), ".m4a"};
+      CHECK(readContent(File{temp.path}).credits() == expected);
+    }
+
+    SECTION("mdta items")
+    {
+      auto ilstChildren = std::vector<std::uint8_t>{};
+
+      for (std::size_t index = 0; index < names.size(); ++index)
+      {
+        auto const atom = makeMdtaTextAtom(static_cast<std::uint32_t>(index + 1), values[index]);
+        ilstChildren.insert(ilstChildren.end(), atom.begin(), atom.end());
+      }
+
+      auto const temp = TempFile{createMinimalM4aWithIlstAndKeys(ilstChildren, makeMdtaKeysAtom(names)), ".m4a"};
+      CHECK(readContent(File{temp.path}).credits() == expected);
+    }
+  }
+
   TEST_CASE("MP4 File - maps orchestra freeform fallback when ensemble is absent", "[media][unit][mp4][file]")
   {
     auto const data = createMinimalM4aWithRawIlstAtom(makeFreeformTextAtom("orchestra", "Fallback Ensemble"));

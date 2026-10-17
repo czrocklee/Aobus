@@ -3,9 +3,10 @@
 
 #include "track/TrackCreditsEditorControl.h"
 #include "track/TrackPropertiesCoordinator.h"
+#include <ao/library/Credits.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 
-#include <array>
+#include <cstddef>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -18,10 +19,6 @@ namespace ao::winui
     using namespace winrt::Microsoft::UI::Xaml::Controls;
     using i18n::MessageId;
     using winrt::Windows::Foundation::IInspectable;
-    constexpr auto kKinds = std::array{library::CreditKind::Conductor,
-                                       library::CreditKind::Ensemble,
-                                       library::CreditKind::Soloist,
-                                       library::CreditKind::Performer};
 
     Button textButton(std::string_view text)
     {
@@ -88,8 +85,16 @@ namespace ao::winui
     auto const sections = _formModel.creditSections();
     auto const rows = uimodel::formatTrackCreditDisplayRows(_textCatalog, sections);
 
-    for (auto const kind : kKinds)
+    for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
     {
+      auto const kind = static_cast<library::CreditKind>(kindIndex);
+
+      // The dialog has no show-empty mode, so an empty optional kind stays in the all-kind editor.
+      if (!uimodel::shouldShowTrackCreditKind(kind, sections[kindIndex], /*showEmpty=*/false))
+      {
+        continue;
+      }
+
       appendScope(uimodel::trackCreditKindLabel(_textCatalog, kind), uimodel::trackCreditScope(kind));
 
       for (auto const& row : rows)

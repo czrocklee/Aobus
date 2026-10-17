@@ -4,32 +4,40 @@
 zh_Hant:table {
   messages:table {
     track_field_recording_date { "錄音日期" }
-    track_credits_heading { "演出署名" }
-    track_credit_performer { "演奏者" }
+    track_credits_heading { "製作人員" }
+    track_credit_performer { "演出者" }
+    track_credit_lyricist { "作詞" }
+    track_credit_arranger { "編曲" }
+    track_credit_writer { "詞曲作者" }
+    track_credit_producer { "製作人" }
+    track_credit_engineer { "工程師" }
+    track_credit_mixer { "混音師" }
+    track_credit_dj_mixer { "DJ 混音師" }
+    track_credit_remixer { "重混師" }
     track_credit_name { "名稱" }
     track_credit_role { "角色或樂器（選填）" }
-    track_credits_add { "新增署名" }
+    track_credits_add { "新增製作人員" }
     track_credits_replace { "取代…" }
     track_credits_clear { "清空此範圍" }
-    track_credits_commit { "儲存署名" }
+    track_credits_commit { "儲存製作人員" }
     track_credits_cancel { "取消" }
-    track_credit_delete { "刪除署名" }
+    track_credit_delete { "刪除製作人員" }
     track_credit_blank_name { "第 {row} 行：請輸入名稱。" }
     track_credit_invalid_name_text { "第 {row} 行：名稱包含無效文字。" }
     track_credit_invalid_role_text { "第 {row} 行：角色或樂器包含無效文字。" }
-    track_credit_invalid_kind { "第 {row} 行：請選擇此範圍內的有效署名類別。" }
-    track_credits_cleared { "已清空署名" }
+    track_credit_invalid_kind { "第 {row} 行：請選擇此範圍內的有效類別。" }
+    track_credits_cleared { "已清空製作人員名單" }
     track_credits_summary { "{first} +{count}" }
     track_credit_kind { "類別" }
-    track_credits_scope { "署名範圍：{scope}" }
-    track_credits_all_kinds { "全部署名類別" }
+    track_credits_scope { "製作人員範圍：{scope}" }
+    track_credits_all_kinds { "全部類別" }
     track_credits_replace_scope { "取代所有選取曲目的此範圍" }
     track_credit_move_up { "上移" }
     track_credit_move_down { "下移" }
-    track_credit_row_move_up { "上移第 {row} 條署名" }
-    track_credit_row_move_down { "下移第 {row} 條署名" }
-    track_credit_row_delete { "刪除第 {row} 條署名" }
-    track_credit_row_position { "第 {row} 條署名，共 {count} 條" }
+    track_credit_row_move_up { "上移第 {row} 項" }
+    track_credit_row_move_down { "下移第 {row} 項" }
+    track_credit_row_delete { "刪除第 {row} 項" }
+    track_credit_row_position { "第 {row} 項，共 {count} 項" }
     track_credit_kind_summary { "{kind}：{summary}" }
     track_credit_kind_value { "類別：{kind}" }
     track_credit_name_role { "{name}（{role}）" }
@@ -135,7 +143,7 @@ zh_Hant:table {
     track_field_genre { "曲風" }
     track_field_composer { "作曲家" }
     track_field_conductor { "指揮" }
-    track_field_ensemble { "合奏團" }
+    track_field_ensemble { "樂團" }
     track_field_work { "作品" }
     track_field_movement { "樂章" }
     track_field_soloist { "獨奏者" }
@@ -166,7 +174,7 @@ zh_Hant:table {
     missing_track_genre { "未知曲風" }
     missing_track_composer { "未知作曲家" }
     missing_track_conductor { "未知指揮" }
-    missing_track_ensemble { "未知合奏團" }
+    missing_track_ensemble { "未知樂團" }
     missing_track_work { "未知作品" }
     track_presentation_library { "音樂庫" }
     track_presentation_description_library { "所有曲目按專輯藝人和專輯排序。" }
@@ -822,8 +830,8 @@ zh_Hant:table {
     gtk_track_save_failed { "儲存失敗" }
     gtk_track_save_stale_title { "無法儲存變更" }
     gtk_track_save_stale { "此對話框開啟期間，音樂庫已變更。請重新載入屬性後再試一次。" }
-    gtk_track_credits_discard_title { "捨棄演出署名的修改？" }
-    gtk_track_credits_discard_message { "現在關閉屬性會遺失尚未儲存的演出署名修改。" }
+    gtk_track_credits_discard_title { "捨棄對製作人員名單的修改？" }
+    gtk_track_credits_discard_message { "現在關閉屬性會遺失對製作人員名單尚未儲存的修改。" }
     gtk_track_credits_discard { "捨棄修改" }
     gtk_track_credits_keep_editing { "繼續編輯" }
     gtk_tag_add { "新增…" }

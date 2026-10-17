@@ -59,8 +59,8 @@ namespace ao::rt::test
     constexpr std::uint16_t kEqualityYear = 1955;
     constexpr std::uint16_t kRangeStartYear = 1950;
     constexpr std::uint16_t kRangeEndYear = 1959;
-    constexpr std::size_t kPerformanceBlockBytes = 12;
-    constexpr std::size_t kMusicianEntryBytes = 8;
+    constexpr std::size_t kPerformanceBlockBytes = 4;
+    constexpr std::size_t kMusicianEntryBytes = 12;
     constexpr auto kListLengths = std::to_array<std::size_t>({0, 1, 8, 32});
 
     struct PerformanceMetadataFixture final
@@ -178,8 +178,8 @@ namespace ao::rt::test
     }
 
     // Structural payload arithmetic over the fixture, outside every clock. The
-    // byte counts are expected encoded shapes (12-byte prefix per engaged
-    // performance block plus eight bytes per entry), not live payload or heap.
+    // byte counts are expected encoded shapes (4-byte prefix per engaged
+    // performance block plus 12 bytes per entry), not live payload or heap.
     std::size_t expectedMusicianEntries(std::size_t const trackCount)
     {
       auto const performanceCount = trackCount / kMovementsPerPerformance;

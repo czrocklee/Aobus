@@ -6,6 +6,14 @@ root:table {
     track_field_recording_date { "Recording Date" }
     track_credits_heading { "Credits" }
     track_credit_performer { "Performer" }
+    track_credit_lyricist { "Lyricist" }
+    track_credit_arranger { "Arranger" }
+    track_credit_writer { "Writer" }
+    track_credit_producer { "Producer" }
+    track_credit_engineer { "Engineer" }
+    track_credit_mixer { "Mixer" }
+    track_credit_dj_mixer { "DJ-mixer" }
+    track_credit_remixer { "Remixer" }
     track_credit_name { "Name" }
     track_credit_role { "Role or instrument (optional)" }
     track_credits_add { "Add credit" }

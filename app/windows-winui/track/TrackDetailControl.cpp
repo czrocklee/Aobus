@@ -6,6 +6,7 @@
 #include "platform/StringResources.h"
 #include <ao/Contract.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
@@ -20,6 +21,7 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -422,11 +424,15 @@ namespace ao::winui
 
       auto const creditRows = uimodel::formatTrackCreditDisplayRows(_textCatalog, _snapshot.credits);
 
-      for (auto const kind : {library::CreditKind::Conductor,
-                              library::CreditKind::Ensemble,
-                              library::CreditKind::Soloist,
-                              library::CreditKind::Performer})
+      for (std::size_t kindIndex = 0; kindIndex < library::kCreditKindCount; ++kindIndex)
       {
+        auto const kind = static_cast<library::CreditKind>(kindIndex);
+
+        if (!uimodel::shouldShowTrackCreditKind(kind, _snapshot.credits[kindIndex], showEmpty))
+        {
+          continue;
+        }
+
         appendCreditsAction(rows, uimodel::trackCreditKindLabel(_textCatalog, kind), uimodel::trackCreditScope(kind));
 
         for (auto const& entry : creditRows)

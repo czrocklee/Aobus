@@ -234,7 +234,7 @@ Outside queries, exact date equality includes every component and stored precisi
 ### Credit member predicates
 
 `$conductor`, `$ensemble`, `$soloist`, and `$performer` select their respective credit categories.
-`$credit` selects all four categories; `$performer` does not include the other categories.
+`$credit` selects every credit kind, including kinds without their own selector; `$performer` does not include the other categories.
 `$musician` is not a field or an alias.
 These selectors test names, never role text, and are not scalar text or ordinary dictionary-id fields:
 
@@ -264,7 +264,7 @@ These predicates require cold data; existence needs no dictionary lookup, while 
 ### Credit display projections
 
 In format expressions only, each member selector renders all selected names joined by `; `.
-The result preserves duplicates and canonical kind order (Conductor, Ensemble, Soloist, Performer), with stored order within each kind; an empty selection renders empty text.
+The result preserves duplicates and canonical `CreditKind` order (Conductor, Ensemble, Soloist, Performer, Lyricist, Arranger, Writer, Producer, Engineer, Mixer, DJ-mixer, Remixer), with stored order within each kind; an empty selection renders empty text.
 Roles are omitted. A name can itself contain `; `, so this is a lossy display operation, not serialization, identity, or editable input.
 The format plan requires both cold data and dictionary access, without making member selectors scalar dictionary fields.
 
