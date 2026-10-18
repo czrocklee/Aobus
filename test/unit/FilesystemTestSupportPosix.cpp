@@ -202,9 +202,17 @@ namespace ao::test
         throw std::system_error{ec, "failed to inspect directory permissions"};
       }
 
-      auto const deniedPermissions = inputAccess == DeniedDirectoryAccess::Read
-                                       ? std::filesystem::perms::none
-                                       : std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec;
+      auto deniedPermissions = std::filesystem::perms::none;
+
+      switch (inputAccess)
+      {
+        case DeniedDirectoryAccess::Read: break;
+        case DeniedDirectoryAccess::List: deniedPermissions = std::filesystem::perms::owner_exec; break;
+        case DeniedDirectoryAccess::Write:
+          deniedPermissions = std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec;
+          break;
+      }
+
       std::filesystem::permissions(path, deniedPermissions, std::filesystem::perm_options::replace, ec);
 
       if (ec)
@@ -216,8 +224,8 @@ namespace ao::test
 
       try
       {
-        restrictionEffective = inputAccess == DeniedDirectoryAccess::Read ? isReadRestrictionEffective(path)
-                                                                          : isWriteRestrictionEffective(path);
+        restrictionEffective = inputAccess == DeniedDirectoryAccess::Write ? isWriteRestrictionEffective(path)
+                                                                           : isReadRestrictionEffective(path);
       }
       catch (...)
       {

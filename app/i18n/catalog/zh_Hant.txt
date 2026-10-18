@@ -813,6 +813,20 @@ zh_Hant:table {
     track_multiple_values { "<多個值>" }
     track_metadata_heading { "後設資料" }
     track_audio_properties_heading { "音訊屬性" }
+    library_scan_cue_invalid_encoding { "{uri}：請將 CUE 檔案另存為 UTF-8 後重新掃描。" }
+    library_scan_cue_unreadable { "{uri}：無法讀取 CUE 檔案，或其格式有誤。請修正後重新掃描。" }
+    library_scan_cue_ambiguous { "{uri}：有多個 CUE 檔案與此檔案相符。請僅保留一個相符的 CUE 檔案。" }
+    library_scan_cue_unsupported { "{uri}：無法透過 CUE 分割此檔案。請刪除 CUE 檔案或為其重新命名，以匯入整個音訊檔案。" }
+    library_scan_cue_no_matching_audio { "{uri}：沒有支援的音訊檔案與此 CUE 檔案同名。" }
+    library_scan_cue_whole_file { "{uri}：已作為整個檔案匯入。請移除該音軌後重新掃描以分割檔案。" }
+    library_scan_cue_missing { "{uri}：沒有用於分割此檔案的 CUE 檔案。已保留匯入的片段。" }
+    library_scan_cue_layout_mismatch { "{uri}：CUE 分段無效，或與已匯入的範圍不一致。請檢查 CUE 檔案後重新掃描。若要替換既有範圍，請先移除已匯入的音軌。" }
+    library_scan_cue_carrier_mismatch { "{uri}：檔案的影格數或取樣率與已匯入的片段不一致。未變更已匯入的音軌。" }
+    library_scan_cue_detail { " 詳細資訊：{detail}" }
+    library_scan_cue_additional_issues { "{count, plural, other {另有 # 個 CUE 問題；詳情請查看記錄。}}" }
+    track_cue_number { "CUE 音軌編號" }
+    track_segment_start { "開始時間" }
+    track_segment_end { "結束時間（不含）" }
     track_show_empty_fields { "顯示空白欄位" }
     track_hide_empty_fields { "隱藏空白欄位" }
     track_missing_on_some { "部分曲目未設定" }

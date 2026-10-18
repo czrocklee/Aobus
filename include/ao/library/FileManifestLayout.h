@@ -31,8 +31,6 @@ namespace ao::library
    */
   struct FileManifestHeader final
   {
-    static constexpr std::size_t kPaddingSize = 2;
-
     // 4-byte section
     TrackId trackId{};                // 4B: Links to the logical track
     std::uint32_t fileSizeLo{};       // 4B: Lower 32 bits of file size
@@ -50,8 +48,7 @@ namespace ao::library
     FileStatus status = FileStatus::Available; // 1B
     std::uint8_t hasMtime = 0;                 // 1B: 1 marks the three time words as a present instant
 
-    // 2 bytes padding to reach 52 bytes total
-    std::array<std::byte, kPaddingSize> padding{};
+    std::uint16_t segmentCount{};
 
     // Reconstruct stored values
     std::uint64_t fileSize() const noexcept { return (static_cast<std::uint64_t>(fileSizeHi) << 32) | fileSizeLo; }
@@ -107,6 +104,6 @@ namespace ao::library
                 offsetof(FileManifestHeader, audioSignatureBytes) + sizeof(FileManifestHeader::audioSignatureBytes));
   static_assert(offsetof(FileManifestHeader, hasMtime) ==
                 offsetof(FileManifestHeader, status) + sizeof(FileManifestHeader::status));
-  static_assert(offsetof(FileManifestHeader, padding) ==
+  static_assert(offsetof(FileManifestHeader, segmentCount) ==
                 offsetof(FileManifestHeader, hasMtime) + sizeof(FileManifestHeader::hasMtime));
 } // namespace ao::library

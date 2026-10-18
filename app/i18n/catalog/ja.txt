@@ -813,6 +813,20 @@ ja:table {
     track_multiple_values { "<複数の値>" }
     track_metadata_heading { "メタデータ" }
     track_audio_properties_heading { "オーディオ情報" }
+    library_scan_cue_invalid_encoding { "{uri}: CUE シートを UTF-8 で保存して再スキャンしてください。" }
+    library_scan_cue_unreadable { "{uri}: CUE シートを読み取れないか、形式が不正です。修正して再スキャンしてください。" }
+    library_scan_cue_ambiguous { "{uri}: このファイルに一致する CUE シートが複数あります。一致するシートを1つだけ残してください。" }
+    library_scan_cue_unsupported { "{uri}: このファイルは CUE で分割できません。シートを削除または改名すると、ファイル全体を取り込めます。" }
+    library_scan_cue_no_matching_audio { "{uri}: この CUE シートと同名の対応音声ファイルがありません。" }
+    library_scan_cue_whole_file { "{uri}: すでにファイル全体として取り込まれています。分割するにはトラックを削除して再スキャンしてください。" }
+    library_scan_cue_missing { "{uri}: このファイルを分割する CUE シートがありません。取り込み済みのセグメントは保持されました。" }
+    library_scan_cue_layout_mismatch { "{uri}: CUE の区間が無効か、取り込み済みの範囲と異なります。シートを確認して再スキャンしてください。既存の範囲を置き換える場合は、先に取り込み済みのトラックを削除してください。" }
+    library_scan_cue_carrier_mismatch { "{uri}: ファイルのフレーム数またはサンプルレートが取り込み済みのセグメントと異なります。取り込み済みのトラックは変更されていません。" }
+    library_scan_cue_detail { " 詳細: {detail}" }
+    library_scan_cue_additional_issues { "{count, plural, other {ほかに # 件の CUE の問題があります。詳細はログを確認してください。}}" }
+    track_cue_number { "CUE トラック番号" }
+    track_segment_start { "開始時刻" }
+    track_segment_end { "終了時刻（含まない）" }
     track_show_empty_fields { "空のフィールドを表示" }
     track_hide_empty_fields { "空のフィールドを非表示" }
     track_missing_on_some { "一部の曲で未設定" }

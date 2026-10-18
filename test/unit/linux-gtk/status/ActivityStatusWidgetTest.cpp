@@ -5,6 +5,7 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/AppRuntime.h>
@@ -14,7 +15,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/button.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
 #include <gtkmm/widget.h>
+
+#include <cstddef>
+#include <string>
 
 namespace ao::gtk::test
 {
@@ -158,6 +164,50 @@ namespace ao::gtk::test
       CHECK_FALSE(status.widget().get_visible());
       CHECK_FALSE(status.detailPopover().get_visible());
     }
+  }
+
+  TEST_CASE("ActivityStatusWidget - long notification details wrap without losing diagnostic text",
+            "[gtk][unit][status][activity]")
+  {
+    auto mounted = MountedActivityStatus{};
+    auto message = std::string{};
+
+    SECTION("a complete CUE diagnosis wraps at a bounded natural width")
+    {
+      for (std::size_t index = 0; index < 12; ++index)
+      {
+        message += "The CUE layout is invalid or differs from imported ranges. Check the sheet and scan again. ";
+      }
+    }
+
+    SECTION("an unbroken UTF-8 URI can wrap between characters")
+    {
+      for (std::size_t index = 0; index < 120; ++index)
+      {
+        message += "音乐";
+      }
+
+      message += std::string(600, 'x') + ".flac";
+    }
+
+    mounted.runtime().notifications().post(
+      rt::NotificationSeverity::Warning, message, rt::NotificationLifetime::history());
+    mounted.drain();
+    auto* const title = findWidgetByClass<Gtk::Label>(mounted.status.detailContent(), "ao-activity-detail-title");
+    REQUIRE(title != nullptr);
+    CHECK(title->get_text() == message);
+
+    auto unwrapped = Gtk::Label{message};
+    auto const width = measureWidget(*title, Gtk::Orientation::HORIZONTAL);
+    auto const unwrappedWidth = measureWidget(unwrapped, Gtk::Orientation::HORIZONTAL);
+    REQUIRE(width.natural > 0);
+    CHECK(width.minimum <= width.natural);
+    CHECK(width.natural < unwrappedWidth.natural);
+    CHECK(width.minimum < unwrappedWidth.minimum);
+
+    auto const height = measureWidget(*title, Gtk::Orientation::VERTICAL, width.natural);
+    auto const unwrappedHeight = measureWidget(unwrapped, Gtk::Orientation::VERTICAL, unwrappedWidth.natural);
+    CHECK(height.natural > unwrappedHeight.natural);
   }
 
   TEST_CASE("ActivityStatusWidget - detail dismiss hides row without deleting notification feed",

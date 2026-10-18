@@ -335,8 +335,10 @@ namespace ao::rt
     static BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision);
 
     Submission captureSubmission() const noexcept;
-    static async::Task<Result<Mutation>> beginInteractiveMutationAsync(Submission submission,
-                                                                       library::WriteTransaction::Options options = {});
+    static async::Task<Result<Mutation>> beginInteractiveMutationAsync(
+      Submission submission,
+      library::WriteTransaction::Options options = {},
+      compat::MoveOnlyFunction<Result<>(std::stop_token)> preTransaction = {});
     static async::Task<AuthoringStart> beginAuthoringMutationAsync(Submission submission, BoundTrackTargets targets);
     static async::Task<AuthoringStart> beginListOrderAuthoringMutationAsync(Submission submission,
                                                                             BoundListOrder order);

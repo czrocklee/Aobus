@@ -247,7 +247,7 @@ namespace ao::library::test
     auto bytes = performanceRecord(TrackPerformanceBlock{.recordingDate = RecordingDate{.year = 1981}});
     auto* header = utility::layout::viewMutable<TrackColdHeader>(bytes);
 
-    SECTION("unused slot remains zero")
+    SECTION("segment slot cannot point at URI")
     {
       header->blockOffsets[4] = header->uriOffset;
     }

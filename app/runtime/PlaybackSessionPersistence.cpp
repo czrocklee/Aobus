@@ -13,6 +13,7 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -62,10 +63,17 @@ namespace ao::rt
       bool _previous = false;
     };
 
+    std::uint16_t trackOrdinalFor(LibrarySnapshot const& snapshot, TrackId const trackId)
+    {
+      auto const optSegment = snapshot.trackSegment(trackId);
+      return optSegment ? optSegment->ordinal : std::uint16_t{0};
+    }
+
     PlaybackSessionState snapshotState(utility::UuidBytes const& libraryId,
                                        PlaybackLaunchSpec launchSpec,
                                        TrackId const currentTrackId,
                                        std::string currentTrackUri,
+                                       std::uint16_t const currentTrackOrdinal,
                                        std::size_t const anchorIndex,
                                        std::chrono::milliseconds const elapsed,
                                        PlaybackSnapshot const& snapshot)
@@ -77,6 +85,7 @@ namespace ao::rt
         .sortBy = std::move(launchSpec.order.sortBy),
         .currentTrackId = currentTrackId,
         .currentTrackUri = std::move(currentTrackUri),
+        .currentTrackOrdinal = currentTrackOrdinal,
         .anchorIndex = static_cast<std::uint64_t>(anchorIndex),
         .positionMs = static_cast<std::uint64_t>(std::max(elapsed, std::chrono::milliseconds{0}).count()),
         .shuffleMode = snapshot.succession.shuffle,
@@ -108,10 +117,11 @@ namespace ao::rt
 
       if (auto const optUri = reader.trackUri(loaded.currentTrackId); optUri)
       {
-        return *optUri == loaded.currentTrackUri;
+        auto const ordinal = trackOrdinalFor(reader, loaded.currentTrackId);
+        return *optUri == loaded.currentTrackUri && ordinal == loaded.currentTrackOrdinal;
       }
 
-      return !reader.containsTrackUri(loaded.currentTrackUri);
+      return !reader.containsTrackUri(loaded.currentTrackUri, loaded.currentTrackOrdinal);
     }
   } // namespace
 
@@ -165,10 +175,13 @@ namespace ao::rt
           return;
         }
 
-        if (auto optUri = _library.snapshot().trackUri(trackId); optUri)
+        auto const reader = _library.snapshot();
+
+        if (auto optUri = reader.trackUri(trackId); optUri)
         {
           _confirmedTrackId = trackId;
           _confirmedTrackUri = std::move(*optUri);
+          _confirmedTrackOrdinal = trackOrdinalFor(reader, trackId);
           // Persist the new file without waiting for the next playback change.
           requestDebouncedSave();
         }
@@ -373,15 +386,28 @@ namespace ao::rt
     // file the track last played, which the restored library may now hold.
     // Trusting the id here relies on the open library never reissuing an id;
     // switching libraries retires this persistence.
-    if (auto optUri = _library.snapshot().trackUri(currentTrackId); optUri)
     {
-      _confirmedTrackId = currentTrackId;
-      _confirmedTrackUri = std::move(*optUri);
+      auto const reader = _library.snapshot();
+
+      if (auto optUri = reader.trackUri(currentTrackId); optUri)
+      {
+        _confirmedTrackId = currentTrackId;
+        _confirmedTrackUri = std::move(*optUri);
+        _confirmedTrackOrdinal = trackOrdinalFor(reader, currentTrackId);
+      }
     }
 
     auto currentTrackUri = _confirmedTrackId == currentTrackId ? _confirmedTrackUri : transportSession.trackUri;
-    auto const session = snapshotState(
-      _libraryId, std::move(launchSpec), currentTrackId, std::move(currentTrackUri), anchorIndex, elapsed, snapshot);
+    auto const currentTrackOrdinal =
+      _confirmedTrackId == currentTrackId ? _confirmedTrackOrdinal : transportSession.trackOrdinal;
+    auto const session = snapshotState(_libraryId,
+                                       std::move(launchSpec),
+                                       currentTrackId,
+                                       std::move(currentTrackUri),
+                                       currentTrackOrdinal,
+                                       anchorIndex,
+                                       elapsed,
+                                       snapshot);
 
     return _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
   }

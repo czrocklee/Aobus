@@ -27,6 +27,7 @@ For internal object declarations, use the linked headers. Cross-object behavior 
 - [Linux MPRIS interfaces and mappings](linux/mpris.md)
 - [Desktop successor-process protocol](application/desktop-successor-protocol.md)
 - [Supported audio files and imported metadata](media/audio-file.md)
+- [CUE sheet grammar and segment ranges](media/cue-sheet.md)
 - [Runtime track-field vocabulary](library/model/track-field.md)
 - [Built-in track presentation presets](presentation/track-preset.md)
 

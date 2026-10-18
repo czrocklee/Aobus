@@ -35,19 +35,30 @@ namespace ao::uimodel
 
     void logPlan(LibraryScanPlanSummary const& summary)
     {
-      APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors",
+      APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors, {} notices",
                    summary.newCount,
                    summary.changedCount,
                    summary.movedCount,
                    summary.missingCount,
-                   summary.errorCount);
+                   summary.errorCount,
+                   summary.noticeCount);
     }
 
-    void logIssues(std::vector<LibraryScanIssue> const& issues)
+    // No apply pass reports a notice, so this pass logs every one. Failures are
+    // logged here only when @p logsFailures, because an applied plan reports
+    // its own failed items.
+    void logIssues(std::vector<LibraryScanIssue> const& issues, bool const logsFailures)
     {
       for (auto const& issue : issues)
       {
-        APP_LOG_ERROR("Failed to scan {}: {}", issue.uri, issue.message);
+        if (issue.isNotice)
+        {
+          APP_LOG_WARN("Scan notice for {}: {}", issue.uri, issue.message);
+        }
+        else if (logsFailures)
+        {
+          APP_LOG_ERROR("Failed to scan {}: {}", issue.uri, issue.message);
+        }
       }
     }
 
@@ -110,16 +121,21 @@ namespace ao::uimodel
     auto outcome = LibraryScanOutcome{
       .summary = completed.summary,
       .shouldBackfillAudioIdentity = completed.shouldBackfillAudioIdentity,
+      .issues = completed.issues,
     };
+
+    // Nothing was applied on an unreadable plan, so nothing else reported its
+    // failures. On an actionable plan the apply operation reports each failed
+    // item as it reaches it, and logging them again here would double every entry.
+    logIssues(completed.issues, completed.disposition == LibraryScanPlanDisposition::ErrorsOnly);
+    auto const hasNotices = completed.summary.noticeCount > 0;
 
     switch (completed.disposition)
     {
-      case LibraryScanPlanDisposition::UpToDate: outcome.verdict = LibraryScanVerdict::UpToDate; return outcome;
+      case LibraryScanPlanDisposition::UpToDate:
+        outcome.verdict = hasNotices ? LibraryScanVerdict::NeedsReview : LibraryScanVerdict::UpToDate;
+        return outcome;
       case LibraryScanPlanDisposition::ErrorsOnly:
-        // Nothing was applied, so nothing else reported these. On an actionable
-        // plan the apply operation reports each failed item as it reaches it,
-        // and logging them again here would double every entry.
-        logIssues(completed.issues);
         outcome.verdict = LibraryScanVerdict::Unreadable;
         outcome.failureCount = completed.summary.errorCount;
         return outcome;
@@ -139,7 +155,7 @@ namespace ao::uimodel
     }
 
     auto const& applied = *completed.optApplyResult;
-    outcome.relinkedCount = applied.relinkedIds.size();
+    outcome.relinkedCount = nonNegative(applied.relinkedFileCount);
     outcome.missingCount = nonNegative(applied.missingCount);
     outcome.staleCount = nonNegative(applied.staleCount);
     outcome.failureCount = nonNegative(applied.failureCount);
@@ -148,7 +164,7 @@ namespace ao::uimodel
     {
       outcome.verdict = LibraryScanVerdict::CompletedWithErrors;
     }
-    else if (outcome.missingCount > 0)
+    else if (outcome.missingCount > 0 || hasNotices)
     {
       outcome.verdict = LibraryScanVerdict::NeedsReview;
     }

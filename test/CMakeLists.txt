@@ -188,6 +188,7 @@ target_link_libraries(ao_test_support_audio
 add_library(ao_test_support_runtime STATIC
     unit/runtime/AppRuntimeTestSupport.cpp
     unit/runtime/AsyncTestSupport.cpp
+    unit/runtime/CueYamlTestSupport.cpp
     unit/runtime/ExecutorTestSupport.cpp
     unit/runtime/PlaybackSuccessionBaseTestSupport.cpp
     unit/runtime/PlaybackSuccessionSeekTestSupport.cpp
@@ -393,6 +394,8 @@ add_executable(ao_core_test
     unit/media/file/DecoderTest.cpp
 
     # media tests
+    unit/media/CueSheetTest.cpp
+    unit/media/ExactExtentTest.cpp
     unit/media/ogg/TestOgg.cpp
     unit/media/ogg/DemuxerTest.cpp
     unit/media/opus/HeaderTest.cpp
@@ -438,6 +441,8 @@ add_executable(ao_core_test
     unit/library/WriteTransactionTest.cpp
     unit/library/IdSpaceTest.cpp
     unit/library/TrackWriterTest.cpp
+    unit/library/CarrierTrackTest.cpp
+    unit/library/CarrierAdmissionRegressionTest.cpp
     unit/library/ListWriterTest.cpp
 
     unit/library/TrackStoreTest.cpp
@@ -490,6 +495,7 @@ add_executable(ao_core_test
     unit/audio/OpusDecoderSessionTest.cpp
     unit/audio/OpusDecoderMalformedTest.cpp
     unit/audio/WavDecoderSessionTest.cpp
+    unit/audio/SegmentDecoderSessionTest.cpp
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
     unit/audio/FormatTest.cpp
@@ -659,6 +665,13 @@ add_executable(ao_core_test
     unit/runtime/playback/ShuffleHistoryTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
     unit/runtime/PlaybackGuardedSeekTest.cpp
+    unit/runtime/PlaybackEndSeekTest.cpp
+    unit/runtime/CarrierPlaybackTest.cpp
+    unit/runtime/CarrierSuccessionTest.cpp
+    unit/runtime/CuePlaybackSessionTest.cpp
+    unit/runtime/CueYamlTest.cpp
+    unit/runtime/CueYamlBaselineTest.cpp
+    unit/runtime/CueYamlPreparationTest.cpp
     unit/runtime/PlaybackPositionQueryTest.cpp
     unit/runtime/PlaybackMetadataTest.cpp
     unit/runtime/PlaybackTransportControlTest.cpp
@@ -684,7 +697,9 @@ add_executable(ao_core_test
     unit/runtime/library/ScanPlanTest.cpp
     unit/runtime/library/ScanApplyDatabaseAdmissionTest.cpp
     unit/runtime/library/ScanApplyFilesystemRevalidationTest.cpp
+    unit/runtime/library/ScanApplyPathProvenanceTest.cpp
     unit/runtime/library/ScanApplyOperationTest.cpp
+    unit/runtime/library/ScanCuePreparationTest.cpp
     unit/runtime/library/ScanWorkMetadataTest.cpp
     unit/runtime/library/ScanPerformanceMetadataTest.cpp
     unit/runtime/library/TrackBuilderSnapshotTest.cpp
@@ -722,6 +737,10 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryExportImportErrorTest.cpp
     unit/runtime/library/LibraryExportImportListTest.cpp
     unit/runtime/library/LibraryFormatFixtureTest.cpp
+    unit/runtime/library/CueScanTest.cpp
+    unit/runtime/library/CueSheetAccessTest.cpp
+    unit/runtime/library/CueCarrierFactsTest.cpp
+    unit/runtime/library/CueRelinkPlanTest.cpp
     unit/runtime/library/LibraryYamlSchemaTest.cpp
     unit/runtime/library/LibraryYamlExporterTest.cpp
     unit/runtime/library/LibraryYamlImporterTest.cpp
@@ -1031,6 +1050,7 @@ aobus_target_test_sources(ao_cli_test "${AOBUS_BUILD_CLI}" "AOBUS_BUILD_CLI=OFF"
     unit/cli/CliSmokeTest.cpp
     unit/cli/InitCommandTest.cpp
     unit/cli/LibCommandTest.cpp
+    unit/cli/CueRelinkCommandTest.cpp
     unit/cli/ListCommandTest.cpp
     unit/cli/ListDestructiveCommandTest.cpp
     unit/cli/QueryHelpTest.cpp

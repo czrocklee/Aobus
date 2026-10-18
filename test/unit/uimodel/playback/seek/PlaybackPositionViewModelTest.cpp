@@ -151,9 +151,15 @@ namespace ao::uimodel::test
       CHECK(seekEvents.back().mode == PlaybackTransport::SeekMode::Final);
       CHECK(seekEvents.back().elapsed == std::chrono::milliseconds{0});
 
+      // Hold the end request while exercising saturation: a playing end now
+      // completes the occurrence, so further guarded seeks would be stale.
+      playbackTransport.pause();
+      fixture.executor.drain();
+      REQUIRE(playbackTransport.state().transport == audio::Transport::Paused);
       viewModel.seekBy(expectedDuration + std::chrono::seconds{1});
       REQUIRE(seekEvents.size() == 3);
       CHECK(seekEvents.back().elapsed == expectedDuration);
+      CHECK(playbackTransport.state().transport == audio::Transport::Paused);
 
       viewModel.seekBy(std::chrono::milliseconds::max());
       REQUIRE(seekEvents.size() == 4);

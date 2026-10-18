@@ -613,6 +613,11 @@ namespace ao::rt
         auto refNode = orderNode.append_child();
         refNode.set_map();
         appendString(refNode, "uri", uriRes->value());
+
+        if (auto const optSegment = optTrackView->property().segment(); optSegment)
+        {
+          appendKeyValue(refNode, "ordinal", optSegment->ordinal);
+        }
       }
 
       return {};
@@ -776,6 +781,29 @@ namespace ao::rt
                  id.raw());
 
     appendString(trackNode, "uri", uriRes->value());
+
+    if (auto const optSegment = property.segment(); optSegment)
+    {
+      auto const optManifest = manifestReader.get(property.uri());
+      AO_INVARIANT(optManifest && optManifest->segmentCount() != 0,
+                   "Segment Track {} has no carrier manifest after library validation",
+                   id.raw());
+      auto segmentNode = trackNode.append_child();
+      yaml::setKey(segmentNode, "segment");
+      segmentNode.set_map();
+      appendKeyValue(segmentNode, "ordinal", optSegment->ordinal);
+      appendKeyValue(segmentNode, "start-frame", optSegment->startFrame);
+      appendKeyValue(segmentNode, "frame-count", optSegment->frameCount);
+      appendKeyValue(segmentNode, "total-frames", optManifest->totalFrames());
+      appendKeyValue(segmentNode, "sample-rate", property.sampleRate().raw());
+
+      if (mode != ExportMode::Full)
+      {
+        auto const optDuration = library::segmentDuration(optSegment->frameCount, property.sampleRate());
+        AO_INVARIANT(optDuration, "Segment duration is unrepresentable after library validation");
+        appendKeyValue(trackNode, "duration", optDuration->count());
+      }
+    }
 
     auto optMediaTrack = std::optional<MediaTrack>{};
     auto optBaseline = std::optional<library::TrackBuilder>{};

@@ -7,6 +7,7 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/library/ScanApplyTestSupport.h"
+#include <ao/AudioScalars.h>
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/Credits.h>
@@ -17,6 +18,7 @@
 #include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWriter.h>
 #include <ao/utility/Sha256.h>
@@ -24,8 +26,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -218,5 +222,83 @@ namespace ao::rt::test
     CHECK(ml.tracks().reader(readTransaction).entryCount() == 0);
     CHECK_FALSE(ml.manifest().reader(readTransaction).get("invalid.flac"));
     CHECK(ml.dictionary().size() == 0);
+  }
+
+  TEST_CASE("TrackBuilderSnapshot - whole builder round-trip keeps absent segment with owned source text",
+            "[runtime][unit][track-builder-snapshot]")
+  {
+    auto const optSegment = std::optional<library::TrackSegment>{};
+    auto snapshot = [&]
+    {
+      auto const title = std::string{"Whole Title"};
+      auto const artist = std::string{"Whole Artist"};
+      auto const uri = std::string{"album/whole.flac"};
+      auto builder = library::TrackBuilder::makeEmpty();
+      builder.metadata().title(title).artist(artist);
+      builder.property()
+        .uri(uri)
+        .duration(std::chrono::milliseconds{183250})
+        .sampleRate(SampleRate{96000})
+        .segment(optSegment);
+
+      auto snapshotRes = TrackBuilderSnapshot::make(builder);
+      REQUIRE(snapshotRes);
+      return std::move(*snapshotRes);
+    }();
+
+    // Views are taken only after this move. Moving the owner does not keep
+    // borrows into its previous storage alive, and the source text is already gone.
+    auto moved = std::move(snapshot);
+    auto rebuilt = moved.makeBuilder();
+
+    CHECK(rebuilt.metadata().title() == "Whole Title");
+    CHECK(rebuilt.metadata().artist() == "Whole Artist");
+    CHECK(rebuilt.property().uri() == "album/whole.flac");
+    CHECK_FALSE(rebuilt.property().segment());
+    CHECK(rebuilt.property().sampleRate() == SampleRate{96000});
+    CHECK(rebuilt.property().duration() == std::chrono::milliseconds{183250});
+  }
+
+  TEST_CASE("TrackBuilderSnapshot - segmented builder round-trip keeps structural range rate and duration",
+            "[runtime][unit][track-builder-snapshot]")
+  {
+    auto const optSegment = std::optional<library::TrackSegment>{library::TrackSegment{
+      .startFrame = 264600,
+      .frameCount = 441,
+      .ordinal = 7,
+    }};
+    auto snapshot = [&]
+    {
+      auto const title = std::string{"OutsideIntro"};
+      auto const artist = std::string{"Cue Artist"};
+      auto const uri = std::string{"disc.wav"};
+      auto builder = library::TrackBuilder::makeEmpty();
+      builder.metadata().title(title).artist(artist);
+      // Stored duration differs from the public range duration. The snapshot must
+      // keep the structural range and the rate that defines that public duration.
+      builder.property()
+        .uri(uri)
+        .duration(std::chrono::milliseconds{1})
+        .sampleRate(SampleRate{44100})
+        .segment(optSegment);
+
+      auto snapshotRes = TrackBuilderSnapshot::make(builder);
+      REQUIRE(snapshotRes);
+      return std::move(*snapshotRes);
+    }();
+
+    auto moved = std::move(snapshot);
+    auto rebuilt = moved.makeBuilder();
+    auto const optRebuilt = rebuilt.property().segment();
+
+    CHECK(rebuilt.metadata().title() == "OutsideIntro");
+    CHECK(rebuilt.metadata().artist() == "Cue Artist");
+    CHECK(rebuilt.property().uri() == "disc.wav");
+    REQUIRE(optRebuilt);
+    CHECK(optRebuilt->startFrame == 264600);
+    CHECK(optRebuilt->frameCount == 441);
+    CHECK(optRebuilt->ordinal == 7);
+    CHECK(rebuilt.property().sampleRate() == SampleRate{44100});
+    CHECK(rebuilt.property().duration() == std::chrono::milliseconds{10});
   }
 } // namespace ao::rt::test

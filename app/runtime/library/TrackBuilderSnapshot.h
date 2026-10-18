@@ -12,9 +12,11 @@
 #include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -24,8 +26,9 @@ namespace ao::rt
 {
   // Owning value snapshot of a TrackBuilder. It releases borrowed LMDB, YAML,
   // and media-file views before a write transaction begins. Credit text, kinds,
-  // duplicates and source order are copied verbatim; admission belongs to the
-  // reconstructed builder's writer, not this transient ownership boundary.
+  // duplicates, source order, and the optional structural segment are copied
+  // verbatim; admission belongs to the reconstructed builder's writer, not this
+  // transient ownership boundary.
   class TrackBuilderSnapshot final
   {
   public:
@@ -61,6 +64,7 @@ namespace ao::rt
     std::uint16_t _movementNumber = 0;
     std::uint16_t _movementTotal = 0;
     library::RecordingDate _recordingDate{};
+    std::optional<library::TrackSegment> _optSegment{};
     std::chrono::milliseconds _duration{0};
     Bitrate _bitrate{};
     SampleRate _sampleRate{};

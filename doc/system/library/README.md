@@ -23,7 +23,7 @@ Interactive `AppRuntime` composition adds `ViewService`, live projections, works
 |---|---|
 | Add a read or mutation command | [Reads and mutation](mutation.md), then [change publication](change-publication.md) |
 | Schedule a long-running operation | [Task execution](task-execution.md), then the operation's own contract |
-| Scan, reconcile, relink, or recover file identity | [Scan and identity](scan-and-identity.md) |
+| Scan, reconcile, relink, recover file identity, or bind a CUE sheet | [Scan and identity](scan-and-identity.md) |
 | Export, restore, merge, or preview library YAML | [Transfer](yaml-transfer.md) and [YAML format](../../reference/library/format/yaml.md) |
 | Change ordered membership, leases, or cached sources | [Track sources](track-source.md) |
 | Change rows, grouping, deltas, or invalidation | [Track-list projection](track-list-projection.md) |

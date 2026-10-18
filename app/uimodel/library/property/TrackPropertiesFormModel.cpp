@@ -23,6 +23,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <format>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -35,6 +37,16 @@ namespace ao::uimodel
 {
   namespace
   {
+    // Floored milliseconds, which resolve every CUE frame (1/75 s) boundary.
+    std::string segmentPosition(std::uint64_t const frame, std::uint32_t const sampleRate)
+    {
+      constexpr std::uint64_t kMillisPerSecond = 1000;
+      auto const seconds = frame / sampleRate;
+      // The remainder is below a 32-bit rate, so the product cannot overflow.
+      auto const millis = (frame % sampleRate) * kMillisPerSecond / sampleRate;
+      return std::format("{}:{:02}.{:03}", seconds / 60, seconds % 60, millis);
+    }
+
     bool matchesOriginalEdit(TrackPropertiesFormFieldState const& state)
     {
       if (auto const* text = std::get_if<std::string>(&state.currentEditValue); text != nullptr)
@@ -134,6 +146,27 @@ namespace ao::uimodel
     }
   } // namespace
 
+  std::vector<TrackSegmentDisplayRow> formatTrackSegmentRows(i18n::MessageCatalog const& textCatalog,
+                                                             std::uint16_t const ordinal,
+                                                             std::uint64_t const startFrame,
+                                                             std::uint64_t const frameCount,
+                                                             std::uint32_t const sampleRate)
+  {
+    if (sampleRate == 0 || frameCount > std::numeric_limits<std::uint64_t>::max() - startFrame)
+    {
+      return {};
+    }
+
+    return {
+      {.label = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackCueNumber)},
+       .text = std::to_string(ordinal)},
+      {.label = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackSegmentStart)},
+       .text = segmentPosition(startFrame, sampleRate)},
+      {.label = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TrackSegmentEnd)},
+       .text = segmentPosition(startFrame + frameCount, sampleRate)},
+    };
+  }
+
   TrackPropertiesFormModel::TrackPropertiesFormModel(i18n::MessageCatalog textCatalog)
     : _textCatalog{std::move(textCatalog)}
   {
@@ -149,6 +182,7 @@ namespace ao::uimodel
   {
     _fields.clear();
     _capturedCredits = {};
+    _segmentRows.clear();
     _optPendingCredits.reset();
     _creditsEditor.cancel();
   }
@@ -320,6 +354,11 @@ namespace ao::uimodel
     return TrackPropertiesFormRowView{.field = field, .mixed = false, .editable = false};
   }
 
+  std::vector<TrackSegmentDisplayRow> const& TrackPropertiesFormModel::segmentRows() const noexcept
+  {
+    return _segmentRows;
+  }
+
   bool TrackPropertiesFormModel::canSave() const
   {
     return !_creditsEditor.isEditing() && (_optPendingCredits || std::ranges::any_of(_fields, hasFieldChange));
@@ -397,6 +436,21 @@ namespace ao::uimodel
 
     auto baseline = TrackPropertiesFormModel{form._textCatalog};
     baseline._capturedCredits = std::move(*creditsRes);
+
+    if (targetIds.size() == 1)
+    {
+      if (auto const optSegment = snapshot.trackSegment(targetIds.front()); optSegment)
+      {
+        auto const sampleRate = snapshot.trackField(targetIds.front(), rt::TrackField::SampleRate);
+        auto const* rate = std::get_if<std::uint32_t>(&sampleRate);
+        baseline._segmentRows = formatTrackSegmentRows(form._textCatalog,
+                                                       optSegment->ordinal,
+                                                       optSegment->startFrame,
+                                                       optSegment->frameCount,
+                                                       rate != nullptr ? *rate : 0);
+      }
+    }
+
     addBaselineRows(baseline, spec.metadataRows);
     addBaselineRows(baseline, spec.propertyRows);
 

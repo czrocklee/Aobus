@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompilation.h>
 #include <ao/rt/PlaybackMode.h>
@@ -79,7 +80,8 @@ namespace ao::rt
 
     Result<> validatePlaybackSessionState(PlaybackSessionState const& state)
     {
-      if (state.sourceListId == kInvalidListId || state.currentTrackId == kInvalidTrackId)
+      if (state.sourceListId == kInvalidListId || state.currentTrackId == kInvalidTrackId ||
+          state.currentTrackOrdinal > library::kMaxTrackSegmentOrdinal)
       {
         return makeError(Error::Code::CorruptData, "Playback session contains an invalid source or current track id");
       }
@@ -148,6 +150,7 @@ namespace ao::rt
       .sequence("sortBy", state.sortBy, writeSortTerm)
       .scalar("currentTrackId", state.currentTrackId.raw())
       .scalar("currentTrackUri", state.currentTrackUri)
+      .scalar("currentTrackOrdinal", state.currentTrackOrdinal)
       .scalar("anchorIndex", state.anchorIndex)
       .scalar("positionMs", state.positionMs)
       .scalar("shuffleMode", static_cast<std::int32_t>(state.shuffleMode))
@@ -187,6 +190,7 @@ namespace ao::rt
                                                             "sortBy",
                                                             "currentTrackId",
                                                             "currentTrackUri",
+                                                            "currentTrackOrdinal",
                                                             "anchorIndex",
                                                             "positionMs",
                                                             "shuffleMode",
@@ -206,6 +210,7 @@ namespace ao::rt
       .requiredSequence("sortBy", state.sortBy, readSortTerm)
       .requiredScalar("currentTrackId", currentTrackId)
       .requiredScalar("currentTrackUri", state.currentTrackUri)
+      .optionalScalar("currentTrackOrdinal", state.currentTrackOrdinal)
       .requiredScalar("anchorIndex", state.anchorIndex)
       .requiredScalar("positionMs", state.positionMs)
       .requiredScalar("shuffleMode", shuffleMode)

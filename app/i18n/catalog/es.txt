@@ -813,6 +813,20 @@ es:table {
     track_multiple_values { "<Varios valores>" }
     track_metadata_heading { "Metadatos" }
     track_audio_properties_heading { "Propiedades de audio" }
+    library_scan_cue_invalid_encoding { "{uri}: Guarde la hoja CUE como UTF-8 y vuelva a explorar." }
+    library_scan_cue_unreadable { "{uri}: La hoja CUE no se puede leer o está mal formada. Corríjala y vuelva a explorar." }
+    library_scan_cue_ambiguous { "{uri}: Varias hojas CUE coinciden con este archivo. Conserve solo una hoja coincidente." }
+    library_scan_cue_unsupported { "{uri}: Este archivo no se puede dividir mediante CUE. Elimine o cambie el nombre de la hoja para importar el archivo completo." }
+    library_scan_cue_no_matching_audio { "{uri}: Ningún archivo de audio compatible tiene el nombre de esta hoja CUE." }
+    library_scan_cue_whole_file { "{uri}: Ya se importó como archivo completo. Elimine la pista y vuelva a explorar para dividirlo." }
+    library_scan_cue_missing { "{uri}: Ninguna hoja CUE divide este archivo. Se conservaron los segmentos importados." }
+    library_scan_cue_layout_mismatch { "{uri}: La división CUE no es válida o difiere de los intervalos importados. Revise la hoja y vuelva a explorar. Para reemplazar los intervalos existentes, elimine primero las pistas importadas." }
+    library_scan_cue_carrier_mismatch { "{uri}: El número de fotogramas de audio o la frecuencia de muestreo del archivo difieren de los segmentos importados. Las pistas importadas no se modificaron." }
+    library_scan_cue_detail { " Detalles: {detail}" }
+    library_scan_cue_additional_issues { "{count, plural, one {# problema CUE adicional; consulte el registro para obtener detalles.} other {# problemas CUE adicionales; consulte el registro para obtener detalles.}}" }
+    track_cue_number { "Número de pista CUE" }
+    track_segment_start { "Tiempo de inicio" }
+    track_segment_end { "Tiempo final (exclusivo)" }
     track_show_empty_fields { "Mostrar campos vacíos" }
     track_hide_empty_fields { "Ocultar campos vacíos" }
     track_missing_on_some { "Falta en algunas pistas" }

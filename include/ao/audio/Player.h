@@ -121,6 +121,7 @@ namespace ao::audio
     void pause();
     void resume();
     Engine::PreparedCancellationBarrier stopWithBarrier();
+    std::optional<Engine::PreparedCancellationBarrier> tryStopWithBarrier(Engine::PlaybackItemId expectedItemId);
     void stop();
     void seek(std::chrono::milliseconds offset);
     /// Returns true when the expected current item matched and the seek was

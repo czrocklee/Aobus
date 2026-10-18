@@ -2781,6 +2781,49 @@ namespace ao::audio
     return PreparedCancellationBarrier{.generation = generation};
   }
 
+  std::optional<Engine::PreparedCancellationBarrier> Engine::tryStopWithBarrier(PlaybackItemId const expectedItemId)
+  {
+    std::uint64_t generation = 0;
+    {
+      auto const controlLock = _implPtr->lockControl();
+
+      if (!controlLock || expectedItemId.value == 0)
+      {
+        return std::nullopt;
+      }
+
+      {
+        auto const lock = std::scoped_lock{_implPtr->stateMutex};
+
+        if (_implPtr->status.transport == Transport::Error || !_implPtr->optCurrentItem ||
+            _implPtr->optCurrentItem->id != expectedItemId)
+        {
+          return std::nullopt;
+        }
+      }
+
+      // A render cycle can claim the successor after the first observation.
+      // Disarm and settle it before deciding which item this stop may retire.
+      _implPtr->clearPreparedNext();
+
+      {
+        auto const lock = std::scoped_lock{_implPtr->stateMutex};
+
+        if (_implPtr->status.transport == Transport::Error || !_implPtr->optCurrentItem ||
+            _implPtr->optCurrentItem->id != expectedItemId)
+        {
+          return std::nullopt;
+        }
+      }
+
+      _implPtr->stopUnlocked();
+      generation = _implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
+    }
+
+    _implPtr->synchronizeCallbackBarrier();
+    return PreparedCancellationBarrier{.generation = generation};
+  }
+
   Transport Engine::transport() const
   {
     auto const lock = std::scoped_lock{_implPtr->stateMutex};

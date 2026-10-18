@@ -23,6 +23,7 @@
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
+#include <ao/library/detail/TrackViewRawAccess.h>
 #include <ao/utility/ByteView.h>
 
 #include <algorithm>
@@ -34,6 +35,7 @@
 #include <expected>
 #include <format>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -114,6 +116,16 @@ namespace ao::library
       if (uriRes->value() != property.uri())
       {
         return makeError(Error::Code::InvalidInput, "Track URI is not canonical");
+      }
+
+      if (auto const optSegment = property.segment(); optSegment)
+      {
+        if (optSegment->ordinal == 0 || optSegment->ordinal > kMaxTrackSegmentOrdinal || optSegment->frameCount == 0 ||
+            optSegment->startFrame > std::numeric_limits<std::uint64_t>::max() - optSegment->frameCount ||
+            !segmentDuration(optSegment->frameCount, property.sampleRate()))
+        {
+          return makeError(Error::Code::InvalidInput, "Invalid segment range, ordinal, sample rate, or duration");
+        }
       }
 
       if (property.duration() < std::chrono::milliseconds::zero())
@@ -233,7 +245,12 @@ namespace ao::library
     auto builder = fromHotView(view, dictionary);
     builder._baselineKind = BaselineKind::Complete;
     auto prop = view.property();
-    builder.property().uri(prop.uri()).duration(prop.duration()).bitrate(prop.bitrate()).channels(prop.channels());
+    builder.property()
+      .uri(prop.uri())
+      .duration(prop.duration())
+      .bitrate(prop.bitrate())
+      .channels(prop.channels())
+      .segment(prop.segment());
 
     auto metadata = view.metadata();
     builder.metadata()
@@ -457,6 +474,19 @@ namespace ao::library
   //=============================================================================
   // PropertyBuilder
   //=============================================================================
+
+  std::chrono::milliseconds TrackBuilder::PropertyBuilder::duration() const
+  {
+    return _optSegment ? std::chrono::milliseconds{segmentDuration(_optSegment->frameCount, _sampleRate)
+                                                     .value_or(TrackDuration{})}
+                       : _duration;
+  }
+
+  TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::segment(std::optional<TrackSegment> optSegment)
+  {
+    _optSegment = optSegment;
+    return *this;
+  }
 
   TrackBuilder::PropertyBuilder& TrackBuilder::PropertyBuilder::duration(std::chrono::milliseconds duration)
   {
@@ -821,6 +851,11 @@ namespace ao::library
           kPerformanceComponent);
       }
 
+      if (_propertyBuilder.segment())
+      {
+        addComponent(sizeof(TrackSegmentBlock), "Segment");
+      }
+
       addComponent(_propertyBuilder._uri.size(), "URI");
       return {};
     }
@@ -1028,8 +1063,64 @@ namespace ao::library
     prepared.appendWorkBlock(builder->_metadataBuilder);
     prepared.appendCustomMetadataBlock(resolvedPairs);
     prepared.appendPerformanceBlock(builder->_metadataBuilder);
+
+    if (auto const optSegment = builder->property().segment(); optSegment)
+    {
+      auto payload = std::vector<std::byte>(sizeof(TrackSegmentBlock));
+      writePod(std::span<std::byte>{payload},
+               0,
+               TrackSegmentBlock{.startFrameLo = static_cast<std::uint32_t>(optSegment->startFrame),
+                                 .startFrameHi = static_cast<std::uint32_t>(optSegment->startFrame >> 32),
+                                 .frameCountLo = static_cast<std::uint32_t>(optSegment->frameCount),
+                                 .frameCountHi = static_cast<std::uint32_t>(optSegment->frameCount >> 32),
+                                 .ordinal = optSegment->ordinal});
+      prepared.appendBlock(TrackColdBlockSlot::Segment, std::move(payload));
+    }
+
     prepared.assignLayout(builder->_propertyBuilder._uri);
     prepared.snapshot(builder);
+    return prepared;
+  }
+
+  TrackBuilder::PreparedCold TrackBuilder::PreparedCold::relink(TrackView const& view, std::string_view uri)
+  {
+    auto prepared = PreparedCold{};
+    auto const bytes = detail::TrackViewRawAccess::coldData(view);
+    auto const& header = *utility::layout::view<TrackColdHeader>(bytes);
+    prepared._duration = header.duration;
+    prepared._bitrate = header.bitrate;
+    prepared._trackNumber = header.trackNumber;
+    prepared._trackTotal = header.trackTotal;
+    prepared._discNumber = header.discNumber;
+    prepared._discTotal = header.discTotal;
+    prepared._channels = header.channels;
+
+    for (std::size_t index = 0; index < kTrackColdBlockSlotCount; ++index)
+    {
+      auto const begin = header.blockOffsets[index];
+
+      if (begin == 0)
+      {
+        continue;
+      }
+
+      auto end = header.uriOffset;
+
+      for (auto next = index + 1; next < kTrackColdBlockSlotCount; ++next)
+      {
+        if (header.blockOffsets[next] != 0)
+        {
+          end = header.blockOffsets[next];
+          break;
+        }
+      }
+
+      auto const payload = bytes.subspan(begin, end - begin);
+      prepared.appendBlock(static_cast<TrackColdBlockSlot>(index), {payload.begin(), payload.end()});
+    }
+
+    prepared.assignLayout(uri);
+    prepared._uri = std::string{uri};
     return prepared;
   }
 
@@ -1286,7 +1377,7 @@ namespace ao::library
     auto const& property = builder->_propertyBuilder;
 
     _uri = std::string{property._uri};
-    _duration = std::chrono::duration_cast<TrackDuration>(property._duration);
+    _duration = std::chrono::duration_cast<TrackDuration>(property.duration());
     _bitrate = property._bitrate;
     _trackNumber = metadata._trackNumber;
     _trackTotal = metadata._trackTotal;

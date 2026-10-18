@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include "CueBinding.h"
 #include "MediaTrack.h"
-#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/AudioIdentity.h>
@@ -22,6 +22,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace ao::library
@@ -83,12 +84,24 @@ namespace ao::rt
       Terminal,
     };
 
+    using CueDirectorySheets = std::unordered_map<std::filesystem::path, Result<std::vector<CueSheetSnapshot>>>;
+    Result<> prepareItem(std::size_t itemIndex, CueDirectorySheets& directories, std::stop_token stopToken);
+    bool tryValidatePreparedBinding(std::size_t itemIndex, MediaTrack const& media, CueBinding const& binding);
+    Result<> prepareCarrierMembers(std::size_t itemIndex,
+                                   MediaTrack const& media,
+                                   CueBinding const& binding,
+                                   PreparedScanItem& prepared);
     Result<> validatePlan() const;
     void admitItemsAgainstDatabase(library::TrackWriter const& trackWriter, std::stop_token stopToken);
     Result<std::filesystem::path> resolveItemPath(ScanItem const& item) const;
-    void revalidatePreparedRegularFile(std::size_t itemIndex);
+    bool tryValidatePathProvenance(std::size_t itemIndex, std::filesystem::path const& fullPath);
+    void revalidatePreparedItem(std::size_t itemIndex, CueDirectorySheets& directories, std::stop_token stopToken);
+    void revalidatePreparedCueSheets(std::size_t itemIndex,
+                                     std::filesystem::path const& fullPath,
+                                     CueDirectorySheets& directories);
+    void revalidatePreparedRegularFile(std::size_t itemIndex, std::filesystem::path const& fullPath);
     void revalidateMissingPath(std::size_t itemIndex);
-    void revalidateMovedFile(std::size_t itemIndex, std::stop_token stopToken);
+    void revalidateMovedFile(std::size_t itemIndex, std::filesystem::path const& fullPath, std::stop_token stopToken);
 
     Result<> applyScanItem(std::size_t itemIndex,
                            PreparedScanItem const* preparedItem,
@@ -120,12 +133,21 @@ namespace ao::rt
                            library::TrackBuilder& builder,
                            library::AudioIdentity const& identity);
 
+    Result<> applyCarrierItem(ScanItem const& item,
+                              PreparedScanItem const& prepared,
+                              library::TrackWriter& writer,
+                              library::DictionaryStore const& dictionary);
+
+    Result<> insertCarrierSegments(ScanItem const& item,
+                                   PreparedScanItem const& prepared,
+                                   library::TrackWriter& writer);
+
     Result<> applyNewItem(ScanItem const& item,
                           library::TrackWriter& trackWriter,
                           library::TrackBuilder& builder,
                           std::optional<library::AudioIdentity> const& optIdentity);
 
-    std::optional<MediaTrack> loadTrackBuilder(ScanItem const& item);
+    std::optional<MediaTrack> loadTrackBuilder(ScanItem const& item, std::filesystem::path const& fullPath);
 
     std::optional<library::AudioIdentity> cachedAudioIdentity(ScanItem const& item) const noexcept;
 
@@ -149,10 +171,7 @@ namespace ao::rt
     // Reports a rejection as an item failure and returns false. Use it only
     // where a false return is item-neutral, or where the caller has already
     // armed _abortTransaction for the complete item, as the Moved path does.
-    bool tryWriteManifest(library::TrackWriter& writer,
-                          TrackId trackId,
-                          std::string const& uri,
-                          library::FileManifestBuilder& builder);
+    bool tryWriteManifest(library::TrackWriter& writer, std::string const& uri, library::FileManifestBuilder& builder);
 
     library::MusicLibrary& _ml;
     ScanPlan _plan;

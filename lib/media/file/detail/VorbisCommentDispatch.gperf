@@ -12,6 +12,7 @@ struct VorbisCommentDispatchEntry
   VorbisCommentHandler handler;
 };
 %%
+CUESHEET, &handleCueSheet
 TITLE, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::title>
 ARTIST, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::artist>
 ALBUM, &handleText<&ao::media::file::detail::ContentBuilder::MetadataBuilder::album>

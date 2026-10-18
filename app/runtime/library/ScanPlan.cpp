@@ -3,6 +3,7 @@
 
 #include <ao/rt/library/ScanPlan.h>
 
+#include "CueBinding.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -30,6 +31,52 @@ namespace ao::rt
       return iter == items.end() ? nullptr : &*iter;
     }
   } // namespace
+
+  bool isRelinkDestination(ScanItem const& item) noexcept
+  {
+    if (item.classification == ScanClassification::New)
+    {
+      return item.cueDiagnostic != ScanCueDiagnostic::CarrierFactsMismatch;
+    }
+
+    if (item.classification != ScanClassification::Error || item.optManifestEvidence || !item.optMtime ||
+        item.fullPath.empty() || !hasAudioIdentity(item))
+    {
+      return false;
+    }
+
+    switch (item.cueDiagnostic)
+    {
+      case ScanCueDiagnostic::InvalidEncoding:
+      case ScanCueDiagnostic::SheetUnreadableOrMalformed:
+      case ScanCueDiagnostic::AmbiguousSheets:
+      case ScanCueDiagnostic::UnsupportedCarrier:
+      case ScanCueDiagnostic::LayoutMismatch: return true;
+      default: return false;
+    }
+  }
+
+  bool canRelinkItems(ScanItem const& source, ScanItem const& destination) noexcept
+  {
+    if (source.classification != ScanClassification::Missing || source.uri.empty() ||
+        (source.trackId == kInvalidTrackId &&
+         (!source.optManifestEvidence || source.optManifestEvidence->members.empty())) ||
+        !isRelinkDestination(destination) || !hasAudioIdentity(source) || !hasAudioIdentity(destination) ||
+        source.audioPayloadLength != destination.audioPayloadLength ||
+        source.audioSignature != destination.audioSignature)
+    {
+      return false;
+    }
+
+    if (source.optManifestEvidence && !source.optManifestEvidence->members.empty())
+    {
+      auto const& stored = *source.optManifestEvidence;
+      return destination.hasExactMediaFacts && destination.totalFrames == stored.totalFrames &&
+             destination.sampleRate == stored.sampleRate;
+    }
+
+    return true;
+  }
 
   ScanPlan::ScanPlan(std::array<std::byte, 16> libraryId,
                      std::uint64_t const libraryRevision,
@@ -84,14 +131,26 @@ namespace ao::rt
 
     auto const* const missingItem = findItem(_items, ScanClassification::Missing, oldUri);
 
-    if (missingItem == nullptr || missingItem->trackId == kInvalidTrackId || missingItem->uri.empty())
+    if (missingItem == nullptr || missingItem->uri.empty() ||
+        (missingItem->trackId == kInvalidTrackId &&
+         (!missingItem->optManifestEvidence || missingItem->optManifestEvidence->members.empty())))
     {
       return makeError(Error::Code::InvalidInput, "Relink source is not an unresolved missing item");
     }
 
-    auto const* const newItem = findItem(_items, ScanClassification::New, newUri);
+    auto const* newItem = findItem(_items, ScanClassification::New, newUri);
 
     if (newItem == nullptr)
+    {
+      auto const* const candidate = findItem(_items, ScanClassification::Error, newUri);
+
+      if (candidate != nullptr && isRelinkDestination(*candidate))
+      {
+        newItem = candidate;
+      }
+    }
+
+    if (newItem == nullptr || !isRelinkDestination(*newItem))
     {
       return makeError(Error::Code::InvalidInput, "Relink destination is not an unresolved new item");
     }
@@ -103,11 +162,17 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "Relink source and destination audio identities do not match");
     }
 
+    if (!canRelinkItems(*missingItem, *newItem))
+    {
+      return makeError(Error::Code::InvalidInput, "Relink destination carrier extent or sample rate does not match");
+    }
+
     auto movedItem = *newItem;
     movedItem.classification = ScanClassification::Moved;
     movedItem.oldUri = missingItem->uri;
     movedItem.trackId = missingItem->trackId;
     movedItem.optManifestEvidence = missingItem->optManifestEvidence;
+    classifyStoredCueBinding(movedItem);
 
     auto items = std::vector<ScanItem>{};
     items.reserve(1);

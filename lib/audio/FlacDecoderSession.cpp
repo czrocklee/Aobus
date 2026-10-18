@@ -324,6 +324,14 @@ namespace ao::audio
   // termination if that escapes its recoverable decoder-error boundary.
   Result<> FlacDecoderSession::seek(std::chrono::milliseconds offset) noexcept
   {
+    auto const requestedSample = durationToSamples(offset, _implPtr->info.sourceFormat.sampleRate);
+    auto const totalFrames = _implPtr->totalFrames;
+    // Preserve whole-file millisecond seeks' last-sample clamp.
+    return seekFrame((totalFrames != 0 && requestedSample >= totalFrames) ? totalFrames - 1 : requestedSample);
+  }
+
+  Result<> FlacDecoderSession::seekFrame(std::uint64_t frameIndex) noexcept
+  {
     try
     {
       // libFLAC cannot seek out of these states until explicitly flushed.
@@ -352,16 +360,19 @@ namespace ao::audio
         detail::throwDecoderError(Error::Code::SeekFailed, "Sample rate is 0");
       }
 
-      auto const requestedSample = durationToSamples(offset, sampleRate);
+      if (_implPtr->totalFrames != 0 && frameIndex > _implPtr->totalFrames)
+      {
+        detail::throwDecoderError(Error::Code::SeekFailed, "FLAC frame seek is out of bounds");
+      }
 
-      // total_samples is one past the last valid sample index. Seeking libFLAC at
-      // or beyond it is out of range, and builds disagree on the outcome: some
-      // position at end of stream and immediately drain the source, dropping the
-      // committed seek position. Clamp to the last decodable sample so a seek to
-      // the reported duration lands on the final frame instead of past the end.
-      auto const totalFrames = _implPtr->totalFrames;
-      auto const targetSample = static_cast<::FLAC__uint64>(
-        (totalFrames != 0 && requestedSample >= totalFrames) ? totalFrames - 1 : requestedSample);
+      if (_implPtr->totalFrames != 0 && frameIndex == _implPtr->totalFrames)
+      {
+        _implPtr->nextFrameIndex = frameIndex;
+        _implPtr->eof = true;
+        return {};
+      }
+
+      auto const targetSample = static_cast<::FLAC__uint64>(frameIndex);
 
       // libFLAC delivers the seek target before seek_absolute returns and may
       // trim it to a partial block. Validate that delivery against the target,
@@ -733,6 +744,8 @@ namespace ao::audio
 
           impl->info.outputFormat = *configuredRes;
           impl->totalFrames = streamInfo.total_samples;
+          impl->info.optTotalFrames =
+            streamInfo.total_samples != 0 ? std::optional<std::uint64_t>{streamInfo.total_samples} : std::nullopt;
 
           if (streamInfo.sample_rate > 0)
           {

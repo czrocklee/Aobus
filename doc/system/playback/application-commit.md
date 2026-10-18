@@ -67,8 +67,8 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
   `elapsed()` samples nonnegative live position without publishing, bounded by the committed duration when positive.
   Runtime/audio occurrence checks before and after the sample keep it correlated to the last committed snapshot; a mismatch falls back to that snapshot's anchor.
 - Every installed explicit start, replay, natural advance, and deferred restore
-  receives a new nonzero playback occurrence; refresh, pause, resume, and seek
-  preserve it, and Stop invalidates it.
+  receives a new nonzero playback occurrence; refresh, pause, resume, and seeks inside a Track
+  preserve it, and Stop invalidates it. An end-of-Track seek follows natural completion.
   Natural terminal Idle without deferred resume ownership also invalidates it, while a natural successor keeps its newly installed identity.
 - An unexpected command or settlement exception terminally closes the service, retains the last committed snapshot, and abandons the queued backlog.
 - Shutdown closes command admission and makes deferred service tasks safe to
@@ -154,9 +154,9 @@ orthogonal command temporarily owned the boundary. The original occurrence-free
 
 `seekBy` captures an occurrence and signed delta in the same FIFO.
 At execution it requires the matching occurrence and positive duration, samples live Transport elapsed, and clamps the relative target without overflowing before issuing a guarded Final.
-Its default `Clamp` end behavior preserves UI positioning; `Next` instead advances for a positive offset strictly past the live endpoint, only with an available successor and matching runtime/audio identity.
+Its default `Clamp` behavior issues a Final seek at the clamped target, including the end request at a positive duration; `Next` instead explicitly advances for a positive offset strictly past the live endpoint, only with an available successor and matching runtime/audio identity.
 The accepted Next uses existing succession cancellation of pending explicit preparation and lookahead; a rejected or ordinary relative seek does not invalidate command generations.
-An exact-end target remains a seek, and unavailable or stale past-end Next is a no-op.
+An exact-end target remains a Final seek and therefore an end request; unavailable or stale past-end Next is a no-op.
 Sequential queued relative commands therefore accumulate from each execution's live position rather than a cached publication; headless consumers do not need rendering subscriptions.
 The live query and seek are separate observations: an intervening realtime replacement is rejected by the existing Engine item guard, not treated as a new target.
 
@@ -169,7 +169,7 @@ Transport and Engine accepted the expected occurrence/audio-item chain.
 `tryNext` is likewise synchronous-only. It first validates the nonzero runtime
 occurrence and subject. Active playback then asks Player and Engine whether the
 settled realtime timeline still exposes Transport's expected audio item; an
-exact restored Idle occurrence is the sole no-active-audio exception. Only a
+exact deferred occurrence (restored Idle or a held paused position) is the no-active-audio exception. Only a
 match advances the invalidating generation and enters normal synchronous Next
 planning. The Engine observation releases its control lock before succession
 runs. This admission observation does not replace `trySeek`'s mutation-time
@@ -244,20 +244,20 @@ Pause and resume publish their lower transient events only when the refreshed
 transport actually enters `Paused` or `Playing`; idle and duplicate commands
 publish no false transition.
 
-An accepted final seek advances both revision identities while preserving the
-playback occurrence. A guarded seek first requires its nonzero expected
-occurrence, a valid current subject and positive duration, and an elapsed value
-in the inclusive range `[0, duration]`. Deferred Idle restore updates its
-existing resume token with the same offset normalization as an unconditional
-Final seek: the exact duration endpoint becomes zero, including the offset
-later consumed by resume. Active playback additionally requires the expected
-opaque audio item to remain Engine-current across prepared-next disarm and RT
-splice settlement. Preview applies the same occurrence, subject, duration, and inclusive-range
-checks but only publishes the preview event; it never mutates audio, disarms
-lookahead, or advances either seek revision. Any rejection emits no seek event
-and advances no seek revision; a matched final issuance reports success even
-when an audio failure later appears through the existing transport-status
-channel.
+An accepted Final seek advances both revision identities. A target inside the Track preserves its playback occurrence.
+An unguarded Final clamps its target to `[0, duration]`; a guarded seek first requires its nonzero expected occurrence, a valid current subject, positive duration, and a target in that inclusive range, rejecting a target past the duration.
+Active playback additionally requires the expected opaque audio item to remain Engine-current across prepared-next disarm and RT splice settlement, including for an end request.
+Preview applies the guarded occurrence, subject, duration, and range checks but only publishes a position; it never mutates audio, disarms lookahead, ends the Track, or advances either seek revision.
+Any rejection emits no seek event and advances no seek revision; a matched final issuance reports success even when an audio failure later appears through the existing transport-status channel.
+
+A Final seek to a **positive** duration is a transport end request, not a decoder seek.
+While Playing it cancels prepared audio through an item-guarded stop barrier and completes the subject through natural Idle succession, without emitting Stopped or replaying a successor whose splice already won.
+While Paused, or Idle with deferred resume ownership, it holds the endpoint; resume completes the subject without opening a decoder at the endpoint.
+Seeking back inside drops the end intent, retains the paused/deferred state, and resumes at the new offset.
+Resuming any deferred playback, held or restored, reads its Track again, so a Track relinked in the meantime opens its current file; a Track the library no longer resolves keeps the held request.
+The held millisecond position itself carries that intent, so a nonpositive duration has no end request: zero remains the start of an unknown-duration file or a nonempty sub-millisecond segment.
+Session capture/restore separately normalize a saved endpoint to zero; that persistence rule does not reset a live endpoint seek.
+Whole-file codecs and segments obey the same application policy, while the [segment decoder](decoder-session.md#segment-playback) retains frame-exact tail delivery at its floored duration.
 
 Rejection is not a rollback of audio settlement or internal prepared-slot
 bookkeeping. A guarded Final may settle an already-consumed RT splice and clear

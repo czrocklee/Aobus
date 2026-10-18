@@ -48,6 +48,58 @@ namespace ao::i18n::test
   static_assert(!std::constructible_from<MessageArgument, std::string_view, bool>);
   static_assert(!std::constructible_from<MessageArgument, std::string_view, MessageId>);
 
+  TEST_CASE("MessageCatalog - CUE property labels and scan reasons are authored in every maintained locale",
+            "[core][unit][catalog]")
+  {
+    auto const reasons = std::array{
+      MessageId::LibraryScanCueInvalidEncoding,
+      MessageId::LibraryScanCueUnreadable,
+      MessageId::LibraryScanCueAmbiguous,
+      MessageId::LibraryScanCueUnsupported,
+      MessageId::LibraryScanCueNoMatchingAudio,
+      MessageId::LibraryScanCueWholeFile,
+      MessageId::LibraryScanCueMissing,
+      MessageId::LibraryScanCueLayoutMismatch,
+      MessageId::LibraryScanCueCarrierMismatch,
+    };
+
+    for (auto const* const locale : {"en", "de", "es", "fr", "ja", "zh-Hans", "zh-Hant"})
+    {
+      INFO(locale);
+      auto catalogRes = MessageCatalog::create(locale);
+      REQUIRE(catalogRes);
+
+      for (auto const id : reasons)
+      {
+        auto messageRes = catalogRes->format(id, {{"uri", "外部/image.flac"}});
+        REQUIRE(messageRes);
+        CHECK(messageRes->locale == locale);
+        CHECK(messageRes->text.contains("外部/image.flac"));
+      }
+
+      for (auto const id : {MessageId::TrackCueNumber, MessageId::TrackSegmentStart, MessageId::TrackSegmentEnd})
+      {
+        auto messageRes = catalogRes->format(id, {});
+        REQUIRE(messageRes);
+        CHECK(messageRes->locale == locale);
+        CHECK_FALSE(messageRes->text.empty());
+      }
+
+      auto detailRes = catalogRes->format(MessageId::LibraryScanCueDetail, {{"detail", "INDEX 01"}});
+      REQUIRE(detailRes);
+      CHECK(detailRes->locale == locale);
+      CHECK(detailRes->text.contains("INDEX 01"));
+
+      for (auto const count : {1, 2})
+      {
+        auto additionalRes = catalogRes->format(MessageId::LibraryScanCueAdditionalIssues, {{"count", count}});
+        REQUIRE(additionalRes);
+        CHECK(additionalRes->locale == locale);
+        CHECK(additionalRes->text.contains(std::to_string(count)));
+      }
+    }
+  }
+
   TEST_CASE("MessageCatalog - Settings steps use singular and plural forms", "[core][unit][catalog]")
   {
     struct Forms final

@@ -3,17 +3,21 @@
 
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
+#include <ao/rt/library/ScanPlan.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
+#include <ao/utility/UnicodeText.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <variant>
 
 namespace ao::uimodel
@@ -22,6 +26,117 @@ namespace ao::uimodel
   using i18n::MessageId;
   using i18n::requiredFormat;
   using i18n::requiredText;
+
+  namespace
+  {
+    constexpr std::size_t kMaxScanCueIssues = 5;
+    constexpr auto kScanMessageBytes = rt::NotificationFeedLimits::kDefaultMaxTextBytes;
+
+    void appendScanCueIssue(std::string& message, MessageCatalog const& catalog, LibraryScanIssue const& issue)
+    {
+      auto const optMessageId = [&] -> std::optional<MessageId>
+      {
+        switch (issue.cueDiagnostic)
+        {
+          case rt::ScanCueDiagnostic::None: return std::nullopt;
+          case rt::ScanCueDiagnostic::InvalidEncoding: return MessageId::LibraryScanCueInvalidEncoding;
+          case rt::ScanCueDiagnostic::SheetUnreadableOrMalformed: return MessageId::LibraryScanCueUnreadable;
+          case rt::ScanCueDiagnostic::AmbiguousSheets: return MessageId::LibraryScanCueAmbiguous;
+          case rt::ScanCueDiagnostic::UnsupportedCarrier: return MessageId::LibraryScanCueUnsupported;
+          case rt::ScanCueDiagnostic::NoMatchingAudio: return MessageId::LibraryScanCueNoMatchingAudio;
+          case rt::ScanCueDiagnostic::WholeFileAlreadyImported: return MessageId::LibraryScanCueWholeFile;
+          case rt::ScanCueDiagnostic::SheetMissingForCarrier: return MessageId::LibraryScanCueMissing;
+          case rt::ScanCueDiagnostic::LayoutMismatch: return MessageId::LibraryScanCueLayoutMismatch;
+          case rt::ScanCueDiagnostic::CarrierFactsMismatch: return MessageId::LibraryScanCueCarrierMismatch;
+        }
+
+        return std::nullopt;
+      }();
+
+      if (!optMessageId)
+      {
+        return;
+      }
+
+      message += '\n';
+      message += requiredFormat(catalog, *optMessageId, {{"uri", issue.uri}});
+
+      if ((issue.cueDiagnostic == rt::ScanCueDiagnostic::SheetUnreadableOrMalformed ||
+           issue.cueDiagnostic == rt::ScanCueDiagnostic::LayoutMismatch) &&
+          !issue.message.empty())
+      {
+        message += requiredFormat(catalog, MessageId::LibraryScanCueDetail, {{"detail", issue.message}});
+      }
+      else if (issue.cueDiagnostic == rt::ScanCueDiagnostic::AmbiguousSheets && !issue.detail.empty())
+      {
+        message += requiredFormat(catalog, MessageId::LibraryScanCueDetail, {{"detail", issue.detail}});
+      }
+    }
+
+    std::string scanCueOmission(MessageCatalog const& catalog, std::size_t count)
+    {
+      return count == 0 ? std::string{}
+                        : '\n' + requiredFormat(catalog, MessageId::LibraryScanCueAdditionalIssues, {{"count", count}});
+    }
+
+    void boundScanVerdict(std::string& message, MessageCatalog const& catalog, std::size_t maxBytes)
+    {
+      if (message.size() <= maxBytes)
+      {
+        return;
+      }
+
+      auto prefixEndRes = utility::previousUtf8GraphemeBoundary(message, maxBytes);
+
+      if (prefixEndRes && *prefixEndRes > 0)
+      {
+        message.resize(*prefixEndRes);
+      }
+      else
+      {
+        message = requiredFormat(catalog, MessageId::LibraryScanFailed, {{"hasError", "no"}, {"error", ""}});
+      }
+    }
+
+    void appendScanCueSummary(std::string& message, MessageCatalog const& catalog, LibraryScanOutcome const& outcome)
+    {
+      auto remaining = static_cast<std::size_t>(std::ranges::count_if(
+        outcome.issues,
+        [](LibraryScanIssue const& issue) { return issue.cueDiagnostic != rt::ScanCueDiagnostic::None; }));
+      auto const omission = scanCueOmission(catalog, remaining);
+      AO_INVARIANT(omission.size() < kScanMessageBytes, "The CUE summary suffix must leave room for its verdict");
+      boundScanVerdict(message, catalog, kScanMessageBytes - omission.size());
+      std::size_t included = 0;
+
+      for (auto const& issue : outcome.issues)
+      {
+        if (issue.cueDiagnostic == rt::ScanCueDiagnostic::None)
+        {
+          continue;
+        }
+
+        if (included == kMaxScanCueIssues)
+        {
+          break;
+        }
+
+        auto line = std::string{};
+        appendScanCueIssue(line, catalog, issue);
+
+        if (auto const tail = scanCueOmission(catalog, remaining - 1);
+            message.size() + line.size() + tail.size() > kScanMessageBytes)
+        {
+          break;
+        }
+
+        message += line;
+        ++included;
+        --remaining;
+      }
+
+      message += scanCueOmission(catalog, remaining);
+    }
+  } // namespace
 
   std::string notificationMessage(MessageCatalog const& catalog, rt::NotificationMessage const& message)
   {
@@ -179,36 +294,50 @@ namespace ao::uimodel
       return missing;
     };
 
-    switch (outcome.verdict)
+    auto message = [&] -> std::string
     {
-      case LibraryScanVerdict::UpToDate: return std::string{requiredText(catalog, MessageId::LibraryScanUpToDate)};
-      case LibraryScanVerdict::Complete:
-      case LibraryScanVerdict::NeedsReview:
+      switch (outcome.verdict)
       {
-        auto changes = changeSummary();
-        return changes.empty() ? std::string{requiredText(catalog, MessageId::LibraryScanComplete)}
-                               : std::move(changes);
-      }
-      case LibraryScanVerdict::CompletedWithErrors:
-      {
-        auto const changes = changeSummary();
-        return requiredFormat(catalog,
-                              MessageId::LibraryScanCompletedWithErrors,
-                              {{"hasChanges", changes.empty() ? "no" : "yes"}, {"changes", changes}});
-      }
-      case LibraryScanVerdict::Unreadable:
-      {
-        return requiredFormat(catalog, MessageId::LibraryScanUnreadable, {{"count", outcome.failureCount}});
-      }
-      case LibraryScanVerdict::Failed:
-      {
-        auto const error = outcome.optError ? std::string_view{outcome.optError->message} : std::string_view{};
-        return requiredFormat(
-          catalog, MessageId::LibraryScanFailed, {{"hasError", error.empty() ? "no" : "yes"}, {"error", error}});
-      }
-    }
+        case LibraryScanVerdict::UpToDate: return std::string{requiredText(catalog, MessageId::LibraryScanUpToDate)};
+        case LibraryScanVerdict::Complete:
+        case LibraryScanVerdict::NeedsReview:
+        {
+          if (auto changes = changeSummary(); !changes.empty())
+          {
+            return changes;
+          }
 
-    return requiredFormat(catalog, MessageId::LibraryScanFailed, {{"hasError", "no"}, {"error", ""}});
+          // Notices on a plan with nothing to apply leave the library current.
+          auto const& summary = outcome.summary;
+          auto const hadNothingToApply =
+            summary.newCount == 0 && summary.changedCount == 0 && summary.movedCount == 0 && summary.missingCount == 0;
+          return std::string{
+            requiredText(catalog, hadNothingToApply ? MessageId::LibraryScanUpToDate : MessageId::LibraryScanComplete)};
+        }
+        case LibraryScanVerdict::CompletedWithErrors:
+        {
+          auto const changes = changeSummary();
+          return requiredFormat(catalog,
+                                MessageId::LibraryScanCompletedWithErrors,
+                                {{"hasChanges", changes.empty() ? "no" : "yes"}, {"changes", changes}});
+        }
+        case LibraryScanVerdict::Unreadable:
+        {
+          return requiredFormat(catalog, MessageId::LibraryScanUnreadable, {{"count", outcome.failureCount}});
+        }
+        case LibraryScanVerdict::Failed:
+        {
+          auto const error = outcome.optError ? std::string_view{outcome.optError->message} : std::string_view{};
+          return requiredFormat(
+            catalog, MessageId::LibraryScanFailed, {{"hasError", error.empty() ? "no" : "yes"}, {"error", error}});
+        }
+      }
+
+      return requiredFormat(catalog, MessageId::LibraryScanFailed, {{"hasError", "no"}, {"error", ""}});
+    }();
+
+    appendScanCueSummary(message, catalog, outcome);
+    return message;
   }
 
   rt::NotificationRequest librarySwitchNotSavedNotification(MessageCatalog const& catalog, Error const& error)

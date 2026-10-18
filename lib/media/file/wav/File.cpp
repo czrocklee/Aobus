@@ -352,7 +352,8 @@ namespace ao::media::file::wav
       .sampleRate(SampleRate{wave.format.sampleRate})
       .channels(Channels{static_cast<std::uint8_t>(wave.format.channels)})
       .bitDepth(BitDepth{static_cast<std::uint8_t>(wave.format.validBitsPerSample)})
-      .codec(AudioCodec::Wav);
+      .codec(AudioCodec::Wav)
+      .exactFrameCount(totalFrames);
 
     if (duration > std::chrono::milliseconds{0})
     {

@@ -42,6 +42,7 @@
 
 #include <CLI/App.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -437,15 +438,20 @@ namespace ao::cli
       std::println(os, "mapBytes: {}", stats.mapBytes);
     }
 
-    bool isVerifyIssue(rt::ScanClassification classification)
+    bool isVerifyIssue(rt::ScanItem const& item)
     {
-      return classification == rt::ScanClassification::Changed || classification == rt::ScanClassification::Moved ||
-             classification == rt::ScanClassification::Missing || classification == rt::ScanClassification::Error;
+      return !item.errorMessage.empty() || item.classification == rt::ScanClassification::Changed ||
+             item.classification == rt::ScanClassification::MissingSegments ||
+             item.classification == rt::ScanClassification::Moved ||
+             item.classification == rt::ScanClassification::Missing ||
+             item.classification == rt::ScanClassification::Error;
     }
 
-    bool isVerifyFailure(rt::ScanClassification classification)
+    // A notice is listed but does not fail verification; it reports state that
+    // the library tolerates, such as a sheet beside a whole-file import.
+    bool isVerifyFailure(rt::ScanItem const& item)
     {
-      return classification == rt::ScanClassification::Missing || classification == rt::ScanClassification::Error;
+      return rt::isScanFailure(item) || item.classification == rt::ScanClassification::Missing;
     }
   } // namespace
 
@@ -483,8 +489,11 @@ namespace ao::cli
   {
     std::string oldUri{};
     std::string newUri{};
+    // Stored physical binding. A carrier keeps Track zero; that is not a logical Track.
     TrackId trackId{};
     std::uint64_t audioPayloadLength = 0;
+    // Carrier members in stored order. Omitted for a whole-file row.
+    std::optional<std::vector<TrackId>> optTrackIds{};
   };
 
   struct RelinkListDto final
@@ -499,7 +508,10 @@ namespace ao::cli
     bool dryRun = false;
     std::string oldUri{};
     std::string newUri{};
+    // Stored physical binding. A carrier keeps Track zero; that is not a logical Track.
     TrackId trackId{};
+    // Carrier members in stored order. Omitted for a whole-file row.
+    std::optional<std::vector<TrackId>> optTrackIds{};
   };
 
   struct FingerprintReportDto final
@@ -530,12 +542,48 @@ namespace ao::cli
   struct ManifestRecordDto final
   {
     std::string uri{};
+    // Stored physical binding. A carrier keeps Track zero; that is not a logical Track.
     TrackId trackId{};
     std::uint64_t fileSize = 0;
     std::optional<FileTimestamp> optMtime{};
     std::string status{};
+    // Carrier membership and extent, omitted for a whole-file row.
+    std::optional<std::vector<TrackId>> optTrackIds{};
+    std::optional<std::uint16_t> optSegmentCount{};
+    std::optional<std::uint64_t> optTotalFrames{};
   };
+} // namespace ao::cli
 
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::RelinkCandidateDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optTrackIds")
+    {
+      return "trackIds";
+    }
+
+    return memberName;
+  }
+};
+
+template<>
+struct ao::yaml::ReflectNameOverrides<ao::cli::RelinkApplyDto>
+{
+  static constexpr std::string_view keyFor(std::string_view memberName) noexcept
+  {
+    if (memberName == "optTrackIds")
+    {
+      return "trackIds";
+    }
+
+    return memberName;
+  }
+};
+
+namespace ao::cli
+{
   namespace
   {
     VerifyIssueDto toVerifyIssueDto(rt::ScanItem const& item)
@@ -596,12 +644,12 @@ namespace ao::cli
 
       for (auto const& item : planRes->items())
       {
-        if (!isVerifyIssue(item.classification))
+        if (!isVerifyIssue(item))
         {
           continue;
         }
 
-        failed = failed || isVerifyFailure(item.classification);
+        failed = failed || isVerifyFailure(item);
         issues.push_back(item);
       }
 
@@ -684,6 +732,65 @@ namespace ao::cli
       return std::string{uriRes->value()};
     }
 
+    // Track zero is the stored physical binding of a carrier, not a logical Track.
+    // Member ids are reported separately and are never substituted for that binding.
+    std::optional<std::vector<TrackId>> carrierMemberIds(rt::ScanItem const& item)
+    {
+      if (!item.optManifestEvidence || item.optManifestEvidence->members.empty())
+      {
+        return std::nullopt;
+      }
+
+      auto ids = std::vector<TrackId>{};
+      auto const& members = item.optManifestEvidence->members;
+      ids.reserve(members.size());
+
+      for (auto const& member : members)
+      {
+        ids.push_back(member.trackId);
+      }
+
+      return ids;
+    }
+
+    std::string formatTrackIdList(std::span<TrackId const> ids)
+    {
+      auto text = std::string{};
+
+      for (std::size_t index = 0; index < ids.size(); ++index)
+      {
+        if (index != 0)
+        {
+          text += ", ";
+        }
+
+        text += std::to_string(ids[index].raw());
+      }
+
+      return text;
+    }
+
+    std::string relinkTrackIdSuffix(std::optional<std::vector<TrackId>> const& optTrackIds)
+    {
+      if (!optTrackIds)
+      {
+        return {};
+      }
+
+      return std::format(" trackIds {}", formatTrackIdList(*optTrackIds));
+    }
+
+    RelinkCandidateDto makeRelinkCandidate(rt::ScanItem const& missingItem,
+                                           std::string newUri,
+                                           std::uint64_t audioPayloadLength)
+    {
+      return RelinkCandidateDto{.oldUri = missingItem.uri,
+                                .newUri = std::move(newUri),
+                                .trackId = missingItem.trackId,
+                                .audioPayloadLength = audioPayloadLength,
+                                .optTrackIds = carrierMemberIds(missingItem)};
+    }
+
     std::vector<RelinkCandidateDto> relinkCandidates(rt::ScanPlan const& plan)
     {
       auto missingIndices = std::vector<std::size_t>{};
@@ -703,7 +810,7 @@ namespace ao::cli
       {
         auto const& item = items[index];
 
-        if (item.classification != rt::ScanClassification::New)
+        if (!rt::isRelinkDestination(item))
         {
           continue;
         }
@@ -729,10 +836,13 @@ namespace ao::cli
           }
 
           auto const& newItem = items[newIndex];
-          candidates.push_back(RelinkCandidateDto{.oldUri = missingItem.uri,
-                                                  .newUri = newItem.uri,
-                                                  .trackId = missingItem.trackId,
-                                                  .audioPayloadLength = missingIdentity.payloadLength});
+
+          if (!rt::canRelinkItems(missingItem, newItem))
+          {
+            continue;
+          }
+
+          candidates.push_back(makeRelinkCandidate(missingItem, newItem.uri, missingIdentity.payloadLength));
         }
       }
 
@@ -749,7 +859,7 @@ namespace ao::cli
         {
           dto.missing.push_back(item.uri);
         }
-        else if (item.classification == rt::ScanClassification::New)
+        else if (rt::isRelinkDestination(item))
         {
           dto.newFiles.push_back(item.uri);
         }
@@ -786,7 +896,8 @@ namespace ao::cli
 
       for (auto const& candidate : dto.candidates)
       {
-        std::println(os, "candidate {} -> {}", candidate.oldUri, candidate.newUri);
+        std::println(
+          os, "candidate {} -> {}{}", candidate.oldUri, candidate.newUri, relinkTrackIdSuffix(candidate.optTrackIds));
       }
     }
 
@@ -822,9 +933,11 @@ namespace ao::cli
                           oldUri);
       }
 
-      auto const* const newItem = findPlanItem(plan, rt::ScanClassification::New, newUri);
+      auto const newItem = std::ranges::find_if(plan.items(),
+                                                [&newUri](rt::ScanItem const& item)
+                                                { return item.uri == newUri && rt::isRelinkDestination(item); });
 
-      if (newItem == nullptr)
+      if (newItem == plan.items().end())
       {
         throwCommandError(Error::Code::InvalidInput, "new file is not unresolved: {}", newUri);
       }
@@ -837,25 +950,34 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "audio identity mismatch: {} -> {}", oldUri, newUri);
       }
 
-      return RelinkCandidateDto{.oldUri = oldUri,
-                                .newUri = newUri,
-                                .trackId = missingItem->trackId,
-                                .audioPayloadLength = missingIdentity.payloadLength};
+      if (!rt::canRelinkItems(*missingItem, *newItem))
+      {
+        throwCommandError(Error::Code::InvalidInput, "incompatible relink carrier facts: {} -> {}", oldUri, newUri);
+      }
+
+      return makeRelinkCandidate(*missingItem, newUri, missingIdentity.payloadLength);
     }
 
     void printRelinkApply(RelinkCandidateDto const& candidate, bool dryRun, OutputFormat format, std::ostream& os)
     {
       if (format != OutputFormat::Plain)
       {
-        emitDocument(
-          os,
-          format,
-          RelinkApplyDto{
-            .dryRun = dryRun, .oldUri = candidate.oldUri, .newUri = candidate.newUri, .trackId = candidate.trackId});
+        emitDocument(os,
+                     format,
+                     RelinkApplyDto{.dryRun = dryRun,
+                                    .oldUri = candidate.oldUri,
+                                    .newUri = candidate.newUri,
+                                    .trackId = candidate.trackId,
+                                    .optTrackIds = candidate.optTrackIds});
         return;
       }
 
-      std::println(os, "relinked {} -> {}{}", candidate.oldUri, candidate.newUri, dryRun ? " (dry-run)" : "");
+      std::println(os,
+                   "relinked {} -> {}{}{}",
+                   candidate.oldUri,
+                   candidate.newUri,
+                   relinkTrackIdSuffix(candidate.optTrackIds),
+                   dryRun ? " (dry-run)" : "");
     }
 
     void applyRelink(CliRuntime& cli,
@@ -869,6 +991,18 @@ namespace ao::cli
       {
         printRelinkApply(candidate, true, format, os);
         return;
+      }
+
+      // A notice, such as a carrier moved without its sheet, accompanies a
+      // relink that still commits; it is reported but does not fail the command.
+      auto notices = std::vector<std::string>{};
+
+      for (auto const& item : relinkPlan.items())
+      {
+        if (rt::isScanNotice(item))
+        {
+          notices.push_back(std::format("warning: {}: {}", item.uri, item.errorMessage));
+        }
       }
 
       auto failures = std::vector<std::string>{};
@@ -895,10 +1029,15 @@ namespace ao::cli
         throwCommandError(error, "relink failed: {}", error.message);
       }
 
-      if (res->failureCount != 0 || res->relinkedIds.size() != 1)
+      if (res->failureCount != 0 || res->relinkedFileCount != 1)
       {
         auto const message = failures.empty() ? "relink did not update the library" : failures.front();
         throwCommandError(Error::Code::IoError, "relink failed: {}", message);
+      }
+
+      for (auto const& notice : notices)
+      {
+        std::println(cli.io().err, "{}", notice);
       }
 
       printRelinkApply(candidate, false, format, os);
@@ -1178,6 +1317,21 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::ManifestRecordDto>
       return "mtime";
     }
 
+    if (memberName == "optTrackIds")
+    {
+      return "trackIds";
+    }
+
+    if (memberName == "optSegmentCount")
+    {
+      return "segmentCount";
+    }
+
+    if (memberName == "optTotalFrames")
+    {
+      return "totalFrames";
+    }
+
     return memberName;
   }
 };
@@ -1207,11 +1361,21 @@ namespace ao::cli
 
       for (auto const& [uri, view] : reader)
       {
-        records.push_back(ManifestRecordDto{.uri = std::string{uri},
-                                            .trackId = view.trackId(),
-                                            .fileSize = view.fileSize(),
-                                            .optMtime = view.mtime(),
-                                            .status = std::string{formatFileStatus(view.status())}});
+        auto record = ManifestRecordDto{.uri = std::string{uri},
+                                        .trackId = view.trackId(),
+                                        .fileSize = view.fileSize(),
+                                        .optMtime = view.mtime(),
+                                        .status = std::string{formatFileStatus(view.status())}};
+
+        if (view.segmentCount() != 0)
+        {
+          auto const members = view.segmentTrackIds();
+          record.optTrackIds = std::vector<TrackId>(members.begin(), members.end());
+          record.optSegmentCount = view.segmentCount();
+          record.optTotalFrames = view.totalFrames();
+        }
+
+        records.push_back(std::move(record));
       }
 
       return records;
@@ -1309,6 +1473,14 @@ namespace ao::cli
         }
 
         std::println(os, "    Status: {}", formatFileStatus(view.status()));
+
+        // Membership stays beside the stored binding. Track zero is not replaced by a member.
+        if (view.segmentCount() != 0)
+        {
+          std::println(os, "    Track IDs: {}", formatTrackIdList(view.segmentTrackIds()));
+          std::println(os, "    Segment Count: {}", view.segmentCount());
+          std::println(os, "    Total Frames: {}", view.totalFrames());
+        }
       }
     }
 

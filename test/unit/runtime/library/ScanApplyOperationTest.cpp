@@ -961,6 +961,7 @@ namespace ao::rt::test
     CHECK(runRes->mutatedIds.empty());
     CHECK(runRes->relinkedIds == std::vector{originalTrackId});
     CHECK(runRes->relinkedIds.size() == 1);
+    CHECK(runRes->relinkedFileCount == 1);
     CHECK(runRes->failureCount == 0);
     CHECK(counts.failed == 0);
     CHECK(sawFingerprinting);
@@ -1056,6 +1057,7 @@ namespace ao::rt::test
 
     CHECK(changedTrackIds(*runRes).empty());
     CHECK(runRes->relinkedIds.empty());
+    CHECK(runRes->relinkedFileCount == 0);
     CHECK(runRes->failureCount == 1);
     CHECK(counts.failed == 1);
     CHECK(sawFingerprinting);
@@ -1474,6 +1476,7 @@ namespace ao::rt::test
     auto runRes = executor.run();
     REQUIRE(runRes);
     CHECK(runRes->relinkedIds == std::vector{trackId});
+    CHECK(runRes->relinkedFileCount == 1);
     CHECK(counts.failed == 0);
 
     // A relink that kept the old reference would conceal itself: the manifest now

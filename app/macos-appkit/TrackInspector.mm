@@ -161,6 +161,15 @@ namespace
                      credits:(ao::uimodel::TrackCreditSections const&)credits
                    canReveal:(BOOL)canReveal
 {
+  [self renderSelectionCount:count row:optRow credits:credits segmentRows:{} canReveal:canReveal];
+}
+
+- (void)renderSelectionCount:(std::size_t)count
+                         row:(std::optional<ao::rt::TrackRow> const&)optRow
+                     credits:(ao::uimodel::TrackCreditSections const&)credits
+                 segmentRows:(std::vector<ao::uimodel::TrackSegmentDisplayRow> const&)segmentRows
+                   canReveal:(BOOL)canReveal
+{
   if (_detached != NO)
   {
     return;
@@ -226,6 +235,11 @@ namespace
 
       detail([self text:MessageId::AppKitAudio],
              ao::uimodel::formatTechnicalSummary(row.codec, row.sampleRate, row.bitDepth, row.bitrate));
+
+      for (auto const& segmentRow : segmentRows)
+      {
+        detail(nativeText(segmentRow.label), segmentRow.text);
+      }
 
       if (row.optUriPath)
       {

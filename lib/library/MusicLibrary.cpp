@@ -14,6 +14,7 @@
 #include "detail/LibraryError.h"
 #include "lmdb/detail/TransactionFailure.h"
 #include "lmdb/detail/UnvalidatedDatabase.h"
+#include <ao/AudioScalars.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
@@ -795,6 +796,60 @@ namespace ao::library
       return {};
     }
 
+    // Completes the Track pass's point bindings with an allocation-free carrier
+    // traversal and weighted row count, proving that no manifest member is extra.
+    Result<> validateCarrierMemberships(lmdb::IntegerKeyDatabase::Reader const& hotReader,
+                                        lmdb::IntegerKeyDatabase::Reader const& coldReader,
+                                        lmdb::ByteKeyDatabase::Reader const& manifestReader)
+    {
+      std::size_t memberCount = 0;
+
+      for (auto const& [key, payload] : manifestReader)
+      {
+        auto const uriRes = validateFileManifestKey(key);
+        AO_INVARIANT(uriRes, "Previously validated manifest key became invalid during admission");
+        auto const manifest = FileManifestView{payload};
+        memberCount += std::max(std::size_t{1}, static_cast<std::size_t>(manifest.segmentCount()));
+        std::uint16_t previousOrdinal = 0;
+        std::uint64_t previousEnd = 0;
+        auto rate = SampleRate{};
+
+        for (auto const id : manifest.segmentTrackIds())
+        {
+          auto const optHot = hotReader.get(id.raw());
+          auto const optCold = coldReader.get(id.raw());
+
+          if (!optHot || !optCold)
+          {
+            return makeError(Error::Code::CorruptData, "Carrier references a missing Track");
+          }
+
+          auto const view = TrackView{*optHot, *optCold};
+          auto const optSegment = view.property().segment();
+
+          if (!optSegment || view.property().uri() != *uriRes ||
+              (previousOrdinal != 0 && rate != view.property().sampleRate()) ||
+              optSegment->ordinal <= previousOrdinal || optSegment->startFrame < previousEnd ||
+              optSegment->startFrame > manifest.totalFrames() ||
+              optSegment->frameCount > manifest.totalFrames() - optSegment->startFrame)
+          {
+            return makeError(Error::Code::CorruptData, "Carrier membership, order, rate, or extent is invalid");
+          }
+
+          previousOrdinal = optSegment->ordinal;
+          previousEnd = optSegment->startFrame + optSegment->frameCount;
+          rate = view.property().sampleRate();
+        }
+      }
+
+      if (memberCount != hotReader.entryCount())
+      {
+        return makeError(Error::Code::CorruptData, "Track and manifest membership counts disagree");
+      }
+
+      return {};
+    }
+
     Result<> validateTrackDatabases(lmdb::IntegerKeyDatabase const& hotDatabase,
                                     lmdb::IntegerKeyDatabase const& coldDatabase,
                                     lmdb::IntegerKeyDatabase const& resourceDatabase,
@@ -807,11 +862,6 @@ namespace ao::library
       auto const coldReader = coldDatabase.reader(transaction);
       auto const resourceReader = resourceDatabase.reader(transaction);
       auto const manifestReader = manifestDatabase.reader(transaction);
-
-      if (hotReader.entryCount() != manifestReader.entryCount())
-      {
-        return makeError(Error::Code::CorruptData, "Track and file manifest databases contain different row counts");
-      }
 
       auto hot = hotReader.begin();
       auto cold = coldReader.begin();
@@ -881,7 +931,10 @@ namespace ao::library
 
         auto const manifestView = FileManifestView{*optManifestPayload};
 
-        if (!manifestView.isValid() || manifestView.trackId().raw() != *hotIdRes)
+        if (auto const isSegment = view.property().segment().has_value();
+            !manifestView.isValid() ||
+            (isSegment ? !std::ranges::contains(manifestView.segmentTrackIds(), TrackId{*hotIdRes})
+                       : manifestView.segmentCount() != 0 || manifestView.trackId().raw() != *hotIdRes))
         {
           return makeError(Error::Code::CorruptData,
                            std::format("Track {} has a mismatched file manifest binding for '{}'", *hotIdRes, uri));
@@ -896,7 +949,7 @@ namespace ao::library
         return makeError(Error::Code::CorruptData, "Hot and cold Track databases contain different key sets");
       }
 
-      return {};
+      return validateCarrierMemberships(hotReader, coldReader, manifestReader);
     }
 
     /// One List row's key and record, including the id space rules that keep

@@ -18,6 +18,7 @@
 
 #include <CLI/App.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -42,10 +43,12 @@ namespace ao::cli
     bool dryRun = false;
     std::uint64_t newCount = 0;
     std::uint64_t changed = 0;
+    std::uint64_t missingSegments = 0;
     std::uint64_t moved = 0;
     std::uint64_t missing = 0;
     std::uint64_t unchanged = 0;
     std::uint64_t errors = 0;
+    std::uint64_t warnings = 0;
     std::optional<std::vector<ScanItemDto>> optItems{};
   };
 } // namespace ao::cli
@@ -108,20 +111,24 @@ namespace ao::cli
     {
       auto const newCount = plan.count(rt::ScanClassification::New);
       auto const changedCount = plan.count(rt::ScanClassification::Changed);
+      auto const missingSegmentsCount = plan.count(rt::ScanClassification::MissingSegments);
       auto const movedCount = plan.count(rt::ScanClassification::Moved);
       auto const missingCount = plan.count(rt::ScanClassification::Missing);
       auto const unchangedCount = plan.count(rt::ScanClassification::Unchanged);
-      auto const errorCount = plan.count(rt::ScanClassification::Error);
+      auto const errorCount = std::ranges::count_if(plan.items(), rt::isScanFailure);
+      auto const warningCount = std::ranges::count_if(plan.items(), rt::isScanNotice);
 
       if (format != OutputFormat::Plain)
       {
         auto report = ScanReportDto{.dryRun = dryRun,
                                     .newCount = static_cast<std::uint64_t>(newCount),
                                     .changed = static_cast<std::uint64_t>(changedCount),
+                                    .missingSegments = static_cast<std::uint64_t>(missingSegmentsCount),
                                     .moved = static_cast<std::uint64_t>(movedCount),
                                     .missing = static_cast<std::uint64_t>(missingCount),
                                     .unchanged = static_cast<std::uint64_t>(unchangedCount),
-                                    .errors = static_cast<std::uint64_t>(errorCount)};
+                                    .errors = static_cast<std::uint64_t>(errorCount),
+                                    .warnings = static_cast<std::uint64_t>(warningCount)};
 
         if (dryRun)
         {
@@ -129,7 +136,7 @@ namespace ao::cli
 
           for (auto const& item : plan.items())
           {
-            if (item.classification == rt::ScanClassification::Unchanged)
+            if (item.classification == rt::ScanClassification::Unchanged && item.errorMessage.empty())
             {
               continue;
             }
@@ -142,14 +149,17 @@ namespace ao::cli
         return;
       }
 
-      std::println(os,
-                   "new {}  changed {}  moved {}  missing {}  unchanged {}  errors {}",
-                   newCount,
-                   changedCount,
-                   movedCount,
-                   missingCount,
-                   unchangedCount,
-                   errorCount);
+      std::println(
+        os,
+        "new {}  changed {}  moved {}  missing {}  unchanged {}  errors {}  missing-segments {}  warnings {}",
+        newCount,
+        changedCount,
+        movedCount,
+        missingCount,
+        unchangedCount,
+        errorCount,
+        missingSegmentsCount,
+        warningCount);
 
       if (!dryRun)
       {
@@ -158,7 +168,7 @@ namespace ao::cli
 
       for (auto const& item : plan.items())
       {
-        if (item.classification == rt::ScanClassification::Unchanged)
+        if (item.classification == rt::ScanClassification::Unchanged && item.errorMessage.empty())
         {
           continue;
         }
@@ -171,6 +181,20 @@ namespace ao::cli
         }
 
         std::println(os);
+      }
+    }
+
+    // Notices accompany items that still apply, so they are diagnostics rather
+    // than failures: the apply pass does not repeat them and they leave the
+    // exit status alone. A dry run lists them with its planned items instead.
+    void printNotices(rt::ScanPlan const& plan, std::ostream& err)
+    {
+      for (auto const& item : plan.items())
+      {
+        if (rt::isScanNotice(item))
+        {
+          std::println(err, "warning: {}: {}", itemLabel(item), item.errorMessage);
+        }
       }
     }
 
@@ -193,10 +217,10 @@ namespace ao::cli
           os, "Skipped {} item{} that changed during the scan", result.staleCount, result.staleCount == 1 ? "" : "s");
       }
 
-      if (!result.relinkedIds.empty())
+      if (result.relinkedFileCount > 0)
       {
         std::println(
-          os, "Relinked {} moved file{}", result.relinkedIds.size(), result.relinkedIds.size() == 1 ? "" : "s");
+          os, "Relinked {} moved file{}", result.relinkedFileCount, result.relinkedFileCount == 1 ? "" : "s");
       }
 
       if (result.missingCount > 0)
@@ -253,6 +277,8 @@ namespace ao::cli
     {
       return;
     }
+
+    printNotices(plan, cli.io().err);
 
     auto options = rt::ScanApplyOptions{};
 

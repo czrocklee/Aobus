@@ -252,6 +252,10 @@ namespace ao::audio
     Result<PreparedPlaybackStart> stagePlayback(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<PlaybackStartReceipt> commitPlayback(PreparedPlaybackStart&& preparedStart);
     PreparedCancellationBarrier stopWithBarrier();
+    /// Stops only the expected active item, after closing the realtime splice
+    /// handoff. Rejection leaves playback running and yields no barrier; Error
+    /// rejects as for trySeek(). An accepted stop fences obsolete callbacks.
+    std::optional<PreparedCancellationBarrier> tryStopWithBarrier(PlaybackItemId expectedItemId);
 
     void play(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<PreparedNextResult> setNext(PlaybackItem const& item);

@@ -6,11 +6,14 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/ScanPlan.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <stop_token>
+#include <string>
+#include <vector>
 
 namespace ao::rt
 {
@@ -25,6 +28,18 @@ namespace ao::uimodel
     FastBootstrap
   };
 
+  struct LibraryScanIssue final
+  {
+    std::string uri{};
+    std::string message{};
+    rt::ScanCueDiagnostic cueDiagnostic = rt::ScanCueDiagnostic::None;
+    std::string detail{};
+    /// A notice accompanies an item that kept its classification; it is not a failure.
+    bool isNotice = false;
+
+    friend bool operator==(LibraryScanIssue const&, LibraryScanIssue const&) = default;
+  };
+
   struct LibraryScanPlanSummary final
   {
     std::size_t newCount = 0;
@@ -32,6 +47,7 @@ namespace ao::uimodel
     std::size_t movedCount = 0;
     std::size_t missingCount = 0;
     std::size_t errorCount = 0;
+    std::size_t noticeCount = 0;
 
     friend bool operator==(LibraryScanPlanSummary const&, LibraryScanPlanSummary const&) = default;
   };
@@ -44,8 +60,9 @@ namespace ao::uimodel
     /// The scan completed without item failures. Items whose evidence became
     /// stale may have been left for a later scan.
     Complete,
-    /// Applied, but files the library knows about are no longer where it left
-    /// them, which only a person can settle.
+    /// Applied or already current, but files the library knows about are no
+    /// longer where it left them, or notices report state that only a person
+    /// can settle.
     NeedsReview,
     /// Applied, and files were lost along the way.
     CompletedWithErrors,
@@ -76,6 +93,7 @@ namespace ao::uimodel
     std::optional<Error> optError{};
     /// Whether the scan deferred audio identity work it expects to be finished.
     bool shouldBackfillAudioIdentity = false;
+    std::vector<LibraryScanIssue> issues{};
   };
 
   /// How loudly @p verdict should be said.

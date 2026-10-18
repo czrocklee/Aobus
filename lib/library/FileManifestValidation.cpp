@@ -10,11 +10,13 @@
 #include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Hash128.h>
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <expected>
 #include <format>
@@ -77,11 +79,6 @@ namespace ao::library
       return makeError(Error::Code::CorruptData, "File manifest payload contains an invalid status");
     }
 
-    if (!std::ranges::all_of(header.padding, [](std::byte const value) { return value == std::byte{0}; }))
-    {
-      return makeError(Error::Code::CorruptData, "File manifest payload contains nonzero reserved bytes");
-    }
-
     if (header.hasMtime > 1U)
     {
       return makeError(Error::Code::CorruptData, "File manifest payload contains an invalid mtime presence flag");
@@ -111,7 +108,7 @@ namespace ao::library
 
   Result<> validateFileManifestPayload(std::span<std::byte const> const payload)
   {
-    if (payload.size() != sizeof(FileManifestHeader))
+    if (payload.size() < sizeof(FileManifestHeader))
     {
       return makeError(Error::Code::CorruptData, "File manifest payload has an invalid size");
     }
@@ -119,9 +116,35 @@ namespace ao::library
     auto header = FileManifestHeader{};
     std::memcpy(&header, payload.data(), sizeof(header));
 
-    if (header.trackId == kInvalidTrackId)
+    auto const count = header.segmentCount;
+    auto const expectedSize = sizeof(FileManifestHeader) + (count == 0 ? 0 : 8 + (count * sizeof(TrackId)));
+
+    if (count > kMaxTrackSegmentOrdinal || payload.size() != expectedSize ||
+        (count == 0 ? header.trackId == kInvalidTrackId : header.trackId != kInvalidTrackId))
     {
-      return makeError(Error::Code::CorruptData, "File manifest payload contains track id zero");
+      return makeError(Error::Code::CorruptData, "File manifest payload has invalid membership or size");
+    }
+
+    if (count != 0)
+    {
+      std::uint64_t totalFrames = 0;
+      std::memcpy(&totalFrames, payload.data() + sizeof(FileManifestHeader), sizeof(totalFrames));
+
+      if (totalFrames == 0)
+      {
+        return makeError(Error::Code::CorruptData, "Carrier extent is zero");
+      }
+
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        auto id = TrackId{};
+        std::memcpy(&id, payload.data() + sizeof(FileManifestHeader) + 8 + (index * sizeof(TrackId)), sizeof(id));
+
+        if (id == kInvalidTrackId)
+        {
+          return makeError(Error::Code::CorruptData, "Carrier member id is zero");
+        }
+      }
     }
 
     return validateManifestFacts(header);

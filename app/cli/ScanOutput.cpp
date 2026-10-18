@@ -15,10 +15,12 @@ namespace ao::cli
     {
       case rt::ScanClassification::New: return "new";
       case rt::ScanClassification::Changed: return "changed";
+      case rt::ScanClassification::MissingSegments: return "missing-segments";
       case rt::ScanClassification::Moved: return "moved";
       case rt::ScanClassification::Missing: return "missing";
       case rt::ScanClassification::Unchanged: return "unchanged";
       case rt::ScanClassification::Error: return "error";
+      case rt::ScanClassification::Notice: return "notice";
     }
 
     return "unknown";

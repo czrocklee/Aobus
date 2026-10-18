@@ -38,6 +38,7 @@ namespace ao::rt
     , _movementNumber{source.metadata().movementNumber()}
     , _movementTotal{source.metadata().movementTotal()}
     , _recordingDate{source.metadata().recordingDate()}
+    , _optSegment{source.property().segment()}
     , _duration{source.property().duration()}
     , _bitrate{source.property().bitrate()}
     , _sampleRate{source.property().sampleRate()}
@@ -141,6 +142,8 @@ namespace ao::rt
 
     // Borrowed views into this snapshot's own text, like the scalar fields.
     result.metadata().credits(_credits);
+    // Structural range is restored after rate and duration so those snapshotted
+    // values stay in place. Public duration follows the range when it is present.
     result.property()
       .uri(_uri)
       .duration(_duration)
@@ -148,7 +151,8 @@ namespace ao::rt
       .sampleRate(_sampleRate)
       .codec(_codec)
       .channels(_channels)
-      .bitDepth(_bitDepth);
+      .bitDepth(_bitDepth)
+      .segment(_optSegment);
 
     for (auto const& tag : _tags)
     {

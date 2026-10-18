@@ -474,7 +474,7 @@ namespace
   [line.widthAnchor constraintEqualToAnchor:row.widthAnchor].active = YES;
   [_rows[section] addObject:row];
 
-  if (_model->state().kind == ao::appkit::LibraryEditorKind::Properties && field != _tags)
+  if (_model->state().kind == ao::appkit::LibraryEditorKind::Properties && field != _tags && field.tag >= 0)
   {
     auto* const error = textLabel(@"", kCaptionSize);
     error.textColor = NSColor.systemRedColor;
@@ -549,6 +549,13 @@ namespace
          label:nativeText(value.spec.label)
        section:propertySection(value.spec.field)
       editable:static_cast<BOOL>(value.spec.editorKind != ao::uimodel::TrackPropertiesFormEditorKind::ReadonlyText)];
+  }
+
+  for (auto const& row : _model->segmentRows())
+  {
+    auto* const field = [NSTextField textFieldWithString:nativeText(row.text)];
+    field.tag = -1;
+    [self addField:field label:nativeText(row.label) section:4 editable:NO];
   }
 
   [self addSection:[self text:MessageId::TrackCreditsHeading] expanded:YES];

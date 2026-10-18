@@ -66,7 +66,7 @@ namespace ao::library::test
 
   TEST_CASE("TrackCold extension blocks - have stable size and alignment", "[library][unit][track]")
   {
-    CHECK(kTrackColdKnownBlockSlotCount == 4);
+    CHECK(kTrackColdKnownBlockSlotCount == 5);
     CHECK(kTrackColdBlockSlotCount == 5);
     CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::CoverArt) == 0);
     CHECK(trackColdBlockSlotIndex(TrackColdBlockSlot::Work) == 1);

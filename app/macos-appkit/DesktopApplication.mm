@@ -1023,6 +1023,7 @@ namespace ao::appkit
   _layoutPending = static_cast<BOOL>(_layoutPending != NO || hadSelection != !selection.empty());
   auto optRow = std::optional<ao::rt::TrackRow>{};
   auto credits = ao::uimodel::TrackCreditSections{};
+  auto segmentRows = std::vector<ao::uimodel::TrackSegmentDisplayRow>{};
 
   if (selection.size() == 1)
   {
@@ -1030,6 +1031,15 @@ namespace ao::appkit
     // between two reads cannot pair one revision's fields with another's Credits.
     auto const snapshot = _sessionPtr->runtime().library().snapshot();
     optRow = snapshot.trackRow(selection.front());
+
+    if (auto const optSegment = snapshot.trackSegment(selection.front()); optRow && optSegment)
+    {
+      segmentRows = ao::uimodel::formatTrackSegmentRows(_sessionPtr->catalog(),
+                                                        optSegment->ordinal,
+                                                        optSegment->startFrame,
+                                                        optSegment->frameCount,
+                                                        optRow->sampleRate);
+    }
 
     if (auto creditsRes = ao::uimodel::loadTrackCreditsEditorBaseline(snapshot, selection); optRow && creditsRes)
     {
@@ -1050,6 +1060,7 @@ namespace ao::appkit
   [_trackInspector renderSelectionCount:selection.size()
                                     row:optRow
                                 credits:credits
+                            segmentRows:segmentRows
                               canReveal:static_cast<BOOL>(_closing == NO && optRow && optRow->optUriPath)];
 }
 

@@ -813,6 +813,20 @@ fr:table {
     track_multiple_values { "<Valeurs multiples>" }
     track_metadata_heading { "Métadonnées" }
     track_audio_properties_heading { "Propriétés audio" }
+    library_scan_cue_invalid_encoding { "{uri} : Enregistrez la feuille CUE en UTF-8 et relancez l''analyse." }
+    library_scan_cue_unreadable { "{uri} : La feuille CUE est illisible ou mal formée. Corrigez-la et relancez l''analyse." }
+    library_scan_cue_ambiguous { "{uri} : Plusieurs feuilles CUE correspondent à ce fichier. Ne conservez qu''une seule feuille correspondante." }
+    library_scan_cue_unsupported { "{uri} : Ce fichier ne peut pas être divisé par CUE. Supprimez ou renommez la feuille pour importer le fichier entier." }
+    library_scan_cue_no_matching_audio { "{uri} : Aucun fichier audio pris en charge ne porte le nom de cette feuille CUE." }
+    library_scan_cue_whole_file { "{uri} : Déjà importé comme fichier entier. Supprimez la piste et relancez l''analyse pour le diviser." }
+    library_scan_cue_missing { "{uri} : Aucune feuille CUE ne divise ce fichier. Les segments importés ont été conservés." }
+    library_scan_cue_layout_mismatch { "{uri} : Le découpage CUE est invalide ou diffère des plages importées. Vérifiez la feuille et relancez l''analyse. Pour remplacer les plages existantes, supprimez d''abord les pistes importées." }
+    library_scan_cue_carrier_mismatch { "{uri} : Le nombre de trames ou la fréquence d''échantillonnage du fichier diffère des segments importés. Les pistes importées n''ont pas été modifiées." }
+    library_scan_cue_detail { " Détails : {detail}" }
+    library_scan_cue_additional_issues { "{count, plural, one {# autre problème CUE ; consultez le journal pour plus de détails.} other {# autres problèmes CUE ; consultez le journal pour plus de détails.}}" }
+    track_cue_number { "Numéro de piste CUE" }
+    track_segment_start { "Temps de début" }
+    track_segment_end { "Temps de fin (exclu)" }
     track_show_empty_fields { "Afficher les champs vides" }
     track_hide_empty_fields { "Masquer les champs vides" }
     track_missing_on_some { "Manquant sur certains morceaux" }

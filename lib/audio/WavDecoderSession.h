@@ -10,6 +10,7 @@
 #include <ao/audio/SampleEncoding.h>
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -27,6 +28,8 @@ namespace ao::audio
     WavDecoderSession& operator=(WavDecoderSession&&) = delete;
 
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
+    bool supportsFrameSeek() const noexcept override { return true; }
+    Result<> seekFrame(std::uint64_t frameIndex) noexcept override;
     void flush() noexcept override;
 
     Result<PcmBlock> readNextBlock() noexcept override;

@@ -318,6 +318,16 @@ namespace ao::winui
     {
       appendFieldEditor(content, row);
     }
+
+    for (auto const& row : _formModel.segmentRows())
+    {
+      auto value = TextBox{};
+      value.Header(winrt::box_value(winrt::to_hstring(row.label)));
+      value.Text(winrt::to_hstring(row.text));
+      value.IsReadOnly(true);
+      value.TextWrapping(TextWrapping::Wrap);
+      content.Children().Append(value);
+    }
   }
 
   void TrackPropertiesCoordinator::appendFieldEditor(StackPanel const& content,

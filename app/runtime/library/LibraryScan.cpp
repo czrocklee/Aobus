@@ -3,6 +3,9 @@
 
 #include <ao/rt/library/LibraryScan.h>
 
+#include "CueBinding.h"
+#include "MediaTrack.h"
+#include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/FileTimestamp.h>
@@ -14,6 +17,8 @@
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
+#include <ao/media/cue/Sheet.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
@@ -27,7 +32,9 @@
 #include <filesystem>
 #include <format>
 #include <functional>
+#include <map>
 #include <optional>
+#include <set>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -51,6 +58,9 @@ namespace ao::rt
       std::uint64_t audioPayloadLength = 0;
       utility::Hash128 audioSignature = {};
       library::FileStatus status = library::FileStatus::Available;
+      std::uint64_t totalFrames = 0;
+      std::uint32_t sampleRate = 0;
+      std::vector<ScanCarrierMember> members{};
     };
 
     class ManifestSnapshot final
@@ -88,6 +98,7 @@ namespace ao::rt
       auto const header = source.metadataHeader(transaction);
       auto const libraryRevision = source.libraryRevision(transaction);
       auto const manifestReader = source.manifest().reader(transaction);
+      auto const trackReader = source.tracks().reader(transaction);
       auto entries = std::vector<ManifestSnapshotEntry>{};
 
       for (auto const& [uri, view] : manifestReader)
@@ -99,7 +110,18 @@ namespace ao::rt
                                                 .optMtime = view.mtime(),
                                                 .audioPayloadLength = view.audioPayloadLength(),
                                                 .audioSignature = view.audioSignature(),
-                                                .status = view.status()});
+                                                .status = view.status(),
+                                                .totalFrames = view.totalFrames()});
+
+        for (auto const id : view.segmentTrackIds())
+        {
+          auto const optTrack = trackReader.get(id, library::TrackStore::Reader::LoadMode::Both);
+          AO_INVARIANT(optTrack, "Carrier member lost its Track");
+          auto const optSegment = optTrack->property().segment();
+          AO_INVARIANT(optSegment, "Carrier member lost its segment");
+          entries.back().sampleRate = optTrack->property().sampleRate().raw();
+          entries.back().members.push_back({.trackId = id, .segment = *optSegment});
+        }
       }
 
       return PlanSnapshot{
@@ -211,6 +233,9 @@ namespace ao::rt
           .audioPayloadLength = manifestEntry->audioPayloadLength,
           .audioSignature = manifestEntry->audioSignature,
           .status = manifestEntry->status,
+          .totalFrames = manifestEntry->totalFrames,
+          .sampleRate = manifestEntry->sampleRate,
+          .members = manifestEntry->members,
         };
 
         if (manifestEntry->status != library::FileStatus::Missing && manifestEntry->fileSize == item.fileSize &&
@@ -402,13 +427,50 @@ namespace ao::rt
                                  .audioPayloadLength = entry.audioPayloadLength,
                                  .audioSignature = entry.audioSignature,
                                  .status = entry.status,
+                                 .totalFrames = entry.totalFrames,
+                                 .sampleRate = entry.sampleRate,
+                                 .members = entry.members,
                                }};
           items.push_back(std::move(item));
         }
       }
     }
 
-    void classifyMovedEntries(std::vector<ScanItem>& items, std::stop_token const stopToken)
+    bool tryValidateMovedCarrier(ScanItem& destination, ScanItem const& source)
+    {
+      if (!source.optManifestEvidence || source.optManifestEvidence->members.empty())
+      {
+        return true;
+      }
+
+      auto mediaRes = readMediaTrack(destination.fullPath);
+
+      if (!mediaRes)
+      {
+        destination.classification = ScanClassification::Error;
+        destination.errorMessage = mediaRes.error().message;
+        return false;
+      }
+
+      destination.totalFrames = mediaRes->optTotalFrames().value_or(0);
+      destination.sampleRate = mediaRes->builder().property().sampleRate().raw();
+      destination.hasExactMediaFacts = mediaRes->optTotalFrames().has_value();
+
+      if (auto const& expected = *source.optManifestEvidence; !destination.hasExactMediaFacts ||
+                                                              destination.totalFrames != expected.totalFrames ||
+                                                              destination.sampleRate != expected.sampleRate)
+      {
+        destination.classification = ScanClassification::Error;
+        destination.errorMessage = "Moved carrier extent or sample rate differs from imported segments";
+        destination.cueDiagnostic = ScanCueDiagnostic::CarrierFactsMismatch;
+        return false;
+      }
+
+      return true;
+    }
+
+    // Returns the paired Missing sources it removed from the plan.
+    std::vector<ScanItem> classifyMovedEntries(std::vector<ScanItem>& items, std::stop_token const stopToken)
     {
       auto missingByLength = std::unordered_map<std::uint64_t, std::vector<std::size_t>>{};
       auto missingByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
@@ -430,7 +492,7 @@ namespace ao::rt
 
       if (missingByLength.empty())
       {
-        return;
+        return {};
       }
 
       auto newByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
@@ -501,6 +563,12 @@ namespace ao::rt
 
         auto& newItem = items[newIndices.front()];
         auto const& missingItem = items[missingIndices.front()];
+
+        if (!tryValidateMovedCarrier(newItem, missingItem))
+        {
+          continue;
+        }
+
         newItem.classification = ScanClassification::Moved;
         newItem.oldUri = missingItem.uri;
         newItem.trackId = missingItem.trackId;
@@ -510,23 +578,211 @@ namespace ao::rt
 
       if (matchedMissingIndices.empty())
       {
-        return;
+        return {};
       }
 
       auto filteredItems = std::vector<ScanItem>{};
       filteredItems.reserve(items.size() - matchedMissingIndices.size());
+      auto sources = std::vector<ScanItem>{};
+      sources.reserve(matchedMissingIndices.size());
 
       for (std::size_t index = 0; index < items.size(); ++index)
       {
         async::throwIfStopRequested(stopToken);
 
-        if (!matchedMissingIndices.contains(index))
+        if (matchedMissingIndices.contains(index))
+        {
+          sources.push_back(std::move(items[index]));
+        }
+        else
         {
           filteredItems.push_back(std::move(items[index]));
         }
       }
 
       items = std::move(filteredItems);
+      return sources;
+    }
+
+    // A move refused after pairing applies nothing, so its source is still
+    // absent. Restoring that Missing item lets apply mark the row and a later
+    // scan pair the files again; the destination keeps only its own failure.
+    void restoreRefusedMoveSources(std::vector<ScanItem>& items, std::vector<ScanItem> sources)
+    {
+      auto refusedSourceUris = std::unordered_set<std::string>{};
+
+      for (auto& item : items)
+      {
+        if (item.oldUri.empty() || item.classification == ScanClassification::Moved)
+        {
+          continue;
+        }
+
+        refusedSourceUris.insert(std::exchange(item.oldUri, {}));
+        item.trackId = kInvalidTrackId;
+        item.optManifestEvidence.reset();
+      }
+
+      for (auto& source : sources)
+      {
+        if (refusedSourceUris.contains(source.uri))
+        {
+          items.push_back(std::move(source));
+        }
+      }
+    }
+
+    bool needsCueBinding(ScanItem const& item) noexcept
+    {
+      return item.classification != ScanClassification::Missing && item.classification != ScanClassification::Error &&
+             item.classification != ScanClassification::Notice;
+    }
+
+    // Ordered so reports and their notification excerpt do not depend on hashing.
+    using CueDirectorySheets = std::map<std::filesystem::path, Result<std::vector<CueSheetSnapshot>>>;
+
+    // Keys are the resolved parents that bindPlanItem looks up. An item path
+    // is its symlink target, whose directory the walk may never have listed,
+    // so the set comes from the planned items rather than the walk. A
+    // directory that cannot be read affects only its own items.
+    CueDirectorySheets readPlanCueDirectories(std::filesystem::path const& root,
+                                              std::span<ScanItem const> items,
+                                              std::set<std::filesystem::path> directories,
+                                              std::stop_token stopToken)
+    {
+      for (auto const& item : items)
+      {
+        if (needsCueBinding(item))
+        {
+          directories.insert(item.fullPath.parent_path());
+        }
+      }
+
+      auto sheetsByDirectory = CueDirectorySheets{};
+
+      for (auto const& directory : directories)
+      {
+        async::throwIfStopRequested(stopToken);
+        sheetsByDirectory.emplace(directory, readCueDirectory(root, directory));
+      }
+
+      return sheetsByDirectory;
+    }
+
+    void bindPlanItem(ScanItem& item, std::span<CueSheetSnapshot const> sheets)
+    {
+      auto const audioName = utility::pathToGenericUtf8(utility::pathFromUtf8(item.uri).filename());
+      auto const candidates = cueEvidenceFor(audioName, sheets);
+      auto const& optStored = item.optManifestEvidence;
+      auto const isCarrier = optStored && !optStored->members.empty();
+
+      if (!isCarrier && item.classification == ScanClassification::Unchanged && candidates.general.empty() &&
+          candidates.extensionSpecific.empty())
+      {
+        // Admission already recorded this whole file's embedded result. Matching
+        // file facts preserve that empty evidence without reopening the file.
+        item.cueEvidence = candidates;
+        return;
+      }
+
+      // Member codecs can be absent or disagree after a full restore. They
+      // are metadata hints, not authority for physical binding capability.
+      auto mediaRes = readMediaTrack(item.fullPath);
+
+      if (!mediaRes)
+      {
+        if (!isCarrier && candidates.general.empty() && candidates.extensionSpecific.empty())
+        {
+          // Whole-file planning historically needs file facts only; media
+          // parse failures remain preparation failures when no sheet applies.
+          item.cueEvidence = candidates;
+          return;
+        }
+
+        item.classification = ScanClassification::Error;
+        item.errorMessage = mediaRes.error().message;
+        return;
+      }
+
+      auto binding = bindCueSheet(audioName, *mediaRes, sheets);
+      item.totalFrames = mediaRes->optTotalFrames().value_or(0);
+      item.sampleRate = mediaRes->builder().property().sampleRate().raw();
+      item.hasExactMediaFacts = mediaRes->optTotalFrames().has_value();
+
+      item.cueEvidence = std::move(binding.evidence);
+      item.cueLayout = std::move(binding.layout);
+      item.cueDiagnostic = binding.cueDiagnostic;
+      item.cueDetail = std::move(binding.cueDetail);
+
+      item.errorMessage = std::move(binding.errorMessage);
+
+      if (item.classification == ScanClassification::New && binding.state == CueBindingState::Undetermined)
+      {
+        item.classification = ScanClassification::Error;
+      }
+      else
+      {
+        classifyStoredCueBinding(item);
+      }
+    }
+
+    bool hasMatchingAudio(std::filesystem::path const& directory,
+                          std::string_view sheetName,
+                          std::span<ScanItem const> items)
+    {
+      return std::ranges::any_of(items,
+                                 [&directory, sheetName](ScanItem const& item)
+                                 {
+                                   return item.fullPath.parent_path() == directory &&
+                                          media::file::File::isSupported(item.fullPath) &&
+                                          media::cue::classifySheetCandidate(
+                                            utility::pathToGenericUtf8(utility::pathFromUtf8(item.uri).filename()),
+                                            sheetName) != media::cue::SheetCandidate::None;
+                                 });
+    }
+
+    bool isImageSheet(CueSheetSnapshot const& sheet)
+    {
+      if (!sheet.optSheet)
+      {
+        return false;
+      }
+
+      return std::ranges::count(sheet.optSheet->tracks, media::cue::TrackType::Audio, &media::cue::Track::type) >= 2;
+    }
+
+    void appendUnmatchedSheetReports(std::vector<ScanItem>& items,
+                                     CueDirectorySheets const& sheetsByDirectory,
+                                     std::filesystem::path const& resolvedRoot,
+                                     std::stop_token stopToken)
+    {
+      auto reports = std::vector<ScanItem>{};
+
+      for (auto const& [directory, sheetsRes] : sheetsByDirectory)
+      {
+        if (!sheetsRes)
+        {
+          continue;
+        }
+
+        for (auto const& sheet : *sheetsRes)
+        {
+          async::throwIfStopRequested(stopToken);
+          auto const hasMatch = hasMatchingAudio(directory, sheet.evidence.name, items);
+
+          if (!hasMatch && isImageSheet(sheet))
+          {
+            auto const path = directory / utility::pathFromUtf8(sheet.evidence.name);
+            reports.push_back(ScanItem{.uri = utility::pathToGenericUtf8(path.lexically_relative(resolvedRoot)),
+                                       .fullPath = path,
+                                       .classification = ScanClassification::Notice,
+                                       .errorMessage = "No supported audio file has this CUE sheet's name",
+                                       .cueDiagnostic = ScanCueDiagnostic::NoMatchingAudio});
+          }
+        }
+      }
+
+      items.append_range(std::move(reports));
     }
   } // namespace
 
@@ -567,6 +823,9 @@ namespace ao::rt
 
     auto snapshot = capturePlanSnapshot(_library, stopToken);
     auto items = std::vector<ScanItem>{};
+    // Directories whose sheets may match no planned item. Item directories
+    // are added from their resolved paths after the walk.
+    auto sheetDirectories = std::set<std::filesystem::path>{};
 
     // Track which URIs we've seen on disk to identify MISSING tracks later
     auto seenUris = std::unordered_set<std::string>{};
@@ -588,6 +847,18 @@ namespace ao::rt
     {
       async::throwIfStopRequested(stopToken);
       auto const& entry = *it;
+
+      if (isCueSheet(entry.path()))
+      {
+        // A directory that cannot be resolved loses only its unmatched-sheet
+        // reports; its media items resolve their own parents.
+        auto directoryEc = std::error_code{};
+
+        if (auto directory = std::filesystem::weakly_canonical(entry.path().parent_path(), directoryEc); !directoryEc)
+        {
+          sheetDirectories.insert(std::move(directory));
+        }
+      }
 
       if (progress)
       {
@@ -618,8 +889,44 @@ namespace ao::rt
 
     // 2. Identify MISSING (In manifest but not on disk)
     addMissingEntries(items, snapshot.manifest, seenUris, blockedUriPrefixes, stopToken);
-    classifyMovedEntries(items, stopToken);
+    auto pairedSources = classifyMovedEntries(items, stopToken);
 
+    auto const sheetsByDirectory = readPlanCueDirectories(resolvedRoot, items, std::move(sheetDirectories), stopToken);
+
+    for (auto& item : items)
+    {
+      async::throwIfStopRequested(stopToken);
+
+      if (!needsCueBinding(item))
+      {
+        continue;
+      }
+
+      auto const found = sheetsByDirectory.find(item.fullPath.parent_path());
+      AO_INVARIANT(found != sheetsByDirectory.end(), "Planned media directory has no CUE snapshot");
+
+      if (auto const& sheetsRes = found->second; !sheetsRes)
+      {
+        // Unknown sheet state must neither import the file whole nor rebind it.
+        // An unchanged item applies nothing, so for it the state is only reported.
+        if (item.classification == ScanClassification::Unchanged)
+        {
+          item.cueDiagnostic = ScanCueDiagnostic::SheetUnreadableOrMalformed;
+        }
+        else
+        {
+          item.classification = ScanClassification::Error;
+        }
+
+        item.errorMessage = sheetsRes.error().message;
+        continue;
+      }
+
+      bindPlanItem(item, *found->second);
+    }
+
+    restoreRefusedMoveSources(items, std::move(pairedSources));
+    appendUnmatchedSheetReports(items, sheetsByDirectory, resolvedRoot, stopToken);
     return ScanPlan{snapshot.libraryId, snapshot.libraryRevision, std::move(items)};
   }
 } // namespace ao::rt

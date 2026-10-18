@@ -190,6 +190,21 @@ namespace ao::library
       _track._hotData.subspan(sizeof(TrackHotHeader) + header.tagLength, header.titleLength));
   }
 
+  std::optional<TrackSegment> TrackView::PropertyProxy::segment() const noexcept
+  {
+    auto const payload = _track.requiredColdIndex().segment;
+
+    if (payload.empty())
+    {
+      return std::nullopt;
+    }
+
+    auto const& block = *utility::layout::view<TrackSegmentBlock>(payload);
+    return TrackSegment{.startFrame = (std::uint64_t{block.startFrameHi} << 32) | block.startFrameLo,
+                        .frameCount = (std::uint64_t{block.frameCountHi} << 32) | block.frameCountLo,
+                        .ordinal = block.ordinal};
+  }
+
   DictionaryId TrackView::TagProxy::id(std::uint16_t index) const noexcept
   {
     AO_EXPECTS(index < count());
@@ -318,6 +333,13 @@ namespace ao::library
       endOffset = beginOffset;
     }
 
+    auto const segmentPayload = payloads[trackColdBlockSlotIndex(TrackColdBlockSlot::Segment)];
+
+    if (!segmentPayload.empty() && segmentPayload.size() != sizeof(TrackSegmentBlock))
+    {
+      return index;
+    }
+
     auto const workPayload = payloads[trackColdBlockSlotIndex(TrackColdBlockSlot::Work)];
 
     if (!workPayload.empty() && workPayload.size() != sizeof(TrackWorkBlock))
@@ -360,6 +382,7 @@ namespace ao::library
     index.work = workPayload;
     index.custom = customPayload;
     index.performance = performancePayload;
+    index.segment = segmentPayload;
     index.header = header;
     return index;
   }

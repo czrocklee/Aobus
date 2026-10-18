@@ -813,6 +813,20 @@ de:table {
     track_multiple_values { "<Mehrere Werte>" }
     track_metadata_heading { "Metadaten" }
     track_audio_properties_heading { "Audioeigenschaften" }
+    library_scan_cue_invalid_encoding { "{uri}: Speichern Sie die CUE-Datei als UTF-8 und scannen Sie erneut." }
+    library_scan_cue_unreadable { "{uri}: Die CUE-Datei ist unlesbar oder fehlerhaft. Korrigieren Sie sie und scannen Sie erneut." }
+    library_scan_cue_ambiguous { "{uri}: Mehrere CUE-Dateien passen zu dieser Datei. Behalten Sie nur eine passende CUE-Datei." }
+    library_scan_cue_unsupported { "{uri}: Diese Datei kann nicht per CUE aufgeteilt werden. Entfernen Sie die CUE-Datei oder benennen Sie sie um, um die ganze Audiodatei zu importieren." }
+    library_scan_cue_no_matching_audio { "{uri}: Keine unterstützte Audiodatei hat den Namen dieser CUE-Datei." }
+    library_scan_cue_whole_file { "{uri}: Bereits als ganze Datei importiert. Entfernen Sie den Titel und scannen Sie erneut, um die Datei aufzuteilen." }
+    library_scan_cue_missing { "{uri}: Keine CUE-Datei teilt diese Datei auf. Importierte Segmente wurden beibehalten." }
+    library_scan_cue_layout_mismatch { "{uri}: Die CUE-Aufteilung ist ungültig oder weicht von importierten Bereichen ab. Prüfen Sie die CUE-Datei und scannen Sie erneut. Um vorhandene Bereiche zu ersetzen, entfernen Sie zuerst die importierten Titel." }
+    library_scan_cue_carrier_mismatch { "{uri}: Frame-Anzahl oder Abtastrate der Datei weichen von den importierten Segmenten ab. Die importierten Titel wurden nicht geändert." }
+    library_scan_cue_detail { " Details: {detail}" }
+    library_scan_cue_additional_issues { "{count, plural, one {# weiteres CUE-Problem; Einzelheiten finden Sie im Protokoll.} other {# weitere CUE-Probleme; Einzelheiten finden Sie im Protokoll.}}" }
+    track_cue_number { "CUE-Titelnummer" }
+    track_segment_start { "Startzeit" }
+    track_segment_end { "Endzeit (exklusiv)" }
     track_show_empty_fields { "Leere Felder anzeigen" }
     track_hide_empty_fields { "Leere Felder ausblenden" }
     track_missing_on_some { "Bei einigen Titeln nicht vorhanden" }

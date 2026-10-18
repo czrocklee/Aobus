@@ -14,6 +14,7 @@
 #include <ao/uimodel/library/track/TrackAuthoring.h>
 
 #include <bitset>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -46,6 +47,19 @@ namespace ao::uimodel
     bool editable = false;
   };
 
+  struct TrackSegmentDisplayRow final
+  {
+    std::string label{};
+    std::string text{};
+  };
+
+  // End is exclusive. Integer frame coordinates retain sub-millisecond boundaries.
+  std::vector<TrackSegmentDisplayRow> formatTrackSegmentRows(i18n::MessageCatalog const& textCatalog,
+                                                             std::uint16_t ordinal,
+                                                             std::uint64_t startFrame,
+                                                             std::uint64_t frameCount,
+                                                             std::uint32_t sampleRate);
+
   class TrackPropertiesFormModel final
   {
   public:
@@ -71,6 +85,7 @@ namespace ao::uimodel
 
     /// The captured baseline, independent of pending edits.
     TrackPropertiesFormRowView rowView(rt::TrackField field) const;
+    std::vector<TrackSegmentDisplayRow> const& segmentRows() const noexcept;
     bool canSave() const;
     rt::MetadataPatch buildPatch() const;
 
@@ -86,6 +101,7 @@ namespace ao::uimodel
     i18n::MessageCatalog _textCatalog;
     std::vector<TrackPropertiesFormFieldState> _fields;
     TrackCreditSections _capturedCredits;
+    std::vector<TrackSegmentDisplayRow> _segmentRows;
     std::optional<rt::CreditReplacement> _optPendingCredits;
     TrackCreditsEditorModel _creditsEditor;
   };

@@ -76,11 +76,25 @@ Tag additions/removals use the separate tag command contract in [library access 
 | `codec` | `AudioCodec` | See codec table | Hot header |
 | `channels` | Unsigned 8-bit | Channel count | Cold header |
 | `bit-depth` | Unsigned 8-bit | Bits per sample | Hot header |
-| `file-path` | Text path | Music-root-relative URI | Cold URI |
+| `file-path` | Text path | Music-root-relative URI. Unique for a whole-file Track; shared by the segment Tracks of one carrier. | Cold URI |
 | `file-size` | Unsigned 64-bit | Bytes | Manifest |
 | `modified-time` | Optional portable instant | Signed 64-bit Unix/POSIX-epoch seconds plus nanoseconds below `1000000000`; absent when unknown | Manifest |
 
 Display projects `modified-time` without changing it: a present instant renders in the local zone, or UTC when that zone is unavailable; an instant outside the display calendar's range renders empty, and an absent value renders empty.
+
+## Segment
+
+A whole-file Track has no segment. A segment Track is one CUE audio track of a carrier file, as the [CUE sheet reference](../../media/cue-sheet.md) defines.
+
+| Field | Logical type | Meaning |
+|---|---|---|
+| `ordinal` | Unsigned 16-bit, 1 through 99 | CUE `TRACK` number. Stable across rescans, and distinct from the curated track number. |
+| `start-frame` | Unsigned 64-bit | Inclusive PCM start in the carrier. |
+| `frame-count` | Unsigned 64-bit, nonzero | Length in PCM frames. The end is exclusive. |
+
+The carrier's exact frame count and the shared sample rate live on the manifest row and in the hot header, not as a second copy of the range.
+Cold `duration` is `floor(frame-count * 1000 / sample-rate)` and is a display value. The builder derives it; a caller cannot store a different duration for a segment Track.
+Byte placement, carrier rows, and the writer rule that no operation changes a stored range belong to the [database reference](../storage/database.md#carrier-mutation).
 
 ## Codec values
 
@@ -167,8 +181,9 @@ Runtime writes use the [typed scoped replacement](../../../system/presentation/m
 
 ## Compatibility and versioning
 
-Changing a persisted type, codec value, block meaning, or field width requires a library format version increment.
+Changing a persisted type, codec value, block meaning, or field width requires a library format version increment once that version has been released.
 Database version 10 gates never-reused Track ids through the id space record; version 9 gated the work/performance split with RecordingDate and Credits, version 8 gated the portable manifest modification-time instant, and version 7 made scalar-valid UTF-8 NFC an admission invariant for Track text and its dictionary references.
+The current unreleased version 10 layout also includes the segment block. That addition did not increment the version, under the development-build rule in the [database reference](../storage/database.md#compatibility-and-versioning).
 Version 9 and earlier libraries are rejected rather than converted, relabeled, backfilled, or deleted automatically.
 Only the exact layouts defined by the database version 10 and YAML version 8 references are accepted; alternative layouts with those version labels are unsupported.
 There is no dual reader, layout autodetection, or migration.
@@ -191,6 +206,7 @@ Portable YAML names and runtime field ids are separate compatibility surfaces ow
 
 - [Resource descriptors](../../resource/blob.md)
 - [Supported audio files](../../media/audio-file.md)
+- [CUE sheet](../../media/cue-sheet.md)
 - [Library YAML format](../format/yaml.md)
 - [Runtime track field catalog](track-field.md)
 - [Track sources](../../../system/library/track-source.md)

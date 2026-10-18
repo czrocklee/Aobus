@@ -74,7 +74,7 @@ PlaybackTransport owns runtime metadata separately; `audio::PlaybackInput` conta
 
 ### Control and query serialization
 
-Concurrent calls to `play`, `stagePlayback`, `commitPlayback`, `setNext`, `clearNext`, `pause`, `resume`, `stop`, `seek`, `trySeek`, `setBackend`, `updateDevice`, `setVolume`, and `setMuted` enter the Engine control serialization.
+Concurrent calls to `play`, `stagePlayback`, `commitPlayback`, `setNext`, `clearNext`, `pause`, `resume`, `stop`, `tryStopWithBarrier`, `seek`, `trySeek`, `setBackend`, `updateDevice`, `setVolume`, and `setMuted` enter the Engine control serialization.
 This order guarantees safety and a coherent final state, not user-intent priority between racing callers.
 The synchronous compatibility forms of `stagePlayback` and `setNext` retain that serialization across decoder preparation and token or lookahead publication.
 For a compatible lookahead, `setNext` also retains it across final decoder open, preroll, and activation.
@@ -116,6 +116,12 @@ A matched `trySeek()` that issued the failing seek still returns true; the failu
 Recovery establishes a new playback through `play()` or an accepted staged start, including a start chosen by application succession; it is not a same-source seek retry.
 The new start clears the previous playback's error text and retains the existing generation fences against retired failure events.
 This Engine rule does not retire application occurrences or change Preview semantics; those remain owned by the [application commit specification](application-commit.md).
+
+`tryStopWithBarrier` supports application end requests without substituting a decoder seek.
+It rejects Error and a mismatched or zero expected item, disarms lookahead, settles a render-consumed successor, and checks the expected item again before stopping.
+A rejected old-item request must not stop the successor whose advance callback is still pending.
+An accepted stop returns the same callback/preparation cancellation proof as ordinary stop; Player raises its callback floor and retires covered work only on acceptance.
+Transport consumes that proof and emits natural completion rather than the application Stopped event, so succession is not retired and an obsolete queued EOF cannot complete the subject twice.
 
 ### Event delivery and reentrancy
 
@@ -277,6 +283,9 @@ The successor's precision may never exceed what that mode can represent: an S16 
 
 Current gapless-capable codecs are lossless FLAC, ALAC, and WAV.
 Lossy/unknown codecs or format mismatch drain and close; no resampling, channel remapping, or artificial silence forces compatibility.
+Consecutive segments use this same gate and one-lookahead arming contract.
+They splice without a gap when the successor is armed before the current segment ends; a segment shorter than callback/preparation latency can drain before its successor is armed.
+There is no callback-independent continuous-carrier source or unconditional gapless promise for arbitrarily short segments.
 Lookahead open failure, cancellation, or stale completion leaves the current
 session and successor choice unchanged; it neither skips nor redraws a shuffle
 candidate.

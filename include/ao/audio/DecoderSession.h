@@ -8,6 +8,7 @@
 #include <ao/audio/PcmBlock.h>
 
 #include <chrono>
+#include <cstdint>
 
 namespace ao::audio
 {
@@ -34,6 +35,12 @@ namespace ao::audio
      * @brief Seeks to a specific playback position.
      */
     virtual Result<> seek(std::chrono::milliseconds offset) noexcept = 0;
+
+    virtual bool supportsFrameSeek() const noexcept { return false; }
+    virtual Result<> seekFrame(std::uint64_t /*frameIndex*/) noexcept
+    {
+      return makeError(Error::Code::NotSupported, "Decoder does not support exact frame seeking");
+    }
 
     /**
      * @brief Flushes internal decoder buffers.

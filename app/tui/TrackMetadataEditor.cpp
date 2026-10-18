@@ -458,10 +458,15 @@ namespace ao::tui
       labelColumns = std::max(labelColumns, cellWidth(specRow.label));
     }
 
+    for (auto const& row : _baseline.segmentRows())
+    {
+      labelColumns = std::max(labelColumns, cellWidth(row.label));
+    }
+
     labelColumns = std::min(labelColumns, kMaximumLabelColumns);
 
     auto rows = std::vector<SelectableListRow>{};
-    rows.reserve(_spec.propertyRows.size());
+    rows.reserve(_spec.propertyRows.size() + _baseline.segmentRows().size());
 
     for (auto const& specRow : _spec.propertyRows)
     {
@@ -474,6 +479,13 @@ namespace ao::tui
           text("  "),
           view.mixed ? std::move(valuePtr) | style::muted() : std::move(valuePtr),
         }),
+      });
+    }
+
+    for (auto const& row : _baseline.segmentRows())
+    {
+      rows.push_back(SelectableListRow{
+        .elementPtr = hbox({text(fitCellText(row.label, labelColumns)) | style::muted(), text("  "), text(row.text)}),
       });
     }
 
@@ -530,7 +542,7 @@ namespace ao::tui
 
   void TrackMetadataEditor::scrollProperties(std::int32_t const delta)
   {
-    auto const count = static_cast<std::int32_t>(_spec.propertyRows.size());
+    auto const count = static_cast<std::int32_t>(_spec.propertyRows.size() + _baseline.segmentRows().size());
 
     if (count == 0)
     {

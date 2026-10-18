@@ -9,6 +9,8 @@
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <expected>
 #include <optional>
 #include <stop_token>
@@ -21,25 +23,31 @@ namespace ao::uimodel
   {
     LibraryScanPlanSummary summarize(rt::ScanPlan const& plan) noexcept
     {
+      auto const noticeCount = static_cast<std::size_t>(std::ranges::count_if(plan.items(), rt::isScanNotice));
+
       return {
-        .newCount = plan.count(rt::ScanClassification::New),
+        .newCount = plan.count(rt::ScanClassification::New) + plan.count(rt::ScanClassification::MissingSegments),
         .changedCount = plan.count(rt::ScanClassification::Changed),
         .movedCount = plan.count(rt::ScanClassification::Moved),
         .missingCount = plan.count(rt::ScanClassification::Missing),
         .errorCount = plan.count(rt::ScanClassification::Error),
+        .noticeCount = noticeCount,
       };
     }
 
     std::vector<LibraryScanIssue> collectIssues(rt::ScanPlan const& plan)
     {
       auto issues = std::vector<LibraryScanIssue>{};
-      issues.reserve(plan.count(rt::ScanClassification::Error));
 
       for (auto const& item : plan.items())
       {
-        if (item.classification == rt::ScanClassification::Error)
+        if (!item.errorMessage.empty())
         {
-          issues.push_back({.uri = item.uri, .message = item.errorMessage});
+          issues.push_back({.uri = item.uri,
+                            .message = item.errorMessage,
+                            .cueDiagnostic = item.cueDiagnostic,
+                            .detail = item.cueDetail,
+                            .isNotice = rt::isScanNotice(item)});
         }
       }
 

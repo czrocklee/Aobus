@@ -50,8 +50,8 @@ This display contract does not authorize surviving-subset edits; [editor binding
 Custom metadata is sorted by key.
 Each item reports whether it appears on any or all loaded tracks, and whether its values differ.
 
-A single-track snapshot exposes that track's primary cover resource and tag ids.
-Current multi-selection snapshots do not compute a tag intersection or a shared cover value.
+A single-track snapshot exposes that track's primary cover resource, tag ids, and, when the Track is a CUE segment, `optSegment`.
+A multi-selection snapshot does not invent a range, a tag intersection, or a shared cover value.
 
 ## Refresh and publication
 

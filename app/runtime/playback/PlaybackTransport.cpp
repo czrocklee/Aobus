@@ -22,6 +22,7 @@
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -229,14 +230,16 @@ namespace ao::rt
     }
 
     std::chrono::milliseconds clampSessionElapsed(std::chrono::milliseconds elapsed,
-                                                  std::chrono::milliseconds duration) noexcept
+                                                  std::chrono::milliseconds duration,
+                                                  bool isBoundedSegment) noexcept
     {
       if (elapsed <= std::chrono::milliseconds{0})
       {
         return std::chrono::milliseconds{0};
       }
 
-      if (duration > std::chrono::milliseconds{0} && elapsed >= duration)
+      // A segment has a known bound even when its frames floor to zero milliseconds.
+      if ((isBoundedSegment || duration > std::chrono::milliseconds{0}) && elapsed >= duration)
       {
         return std::chrono::milliseconds{0};
       }
@@ -392,6 +395,25 @@ namespace ao::rt
     }
 
     request.trackUri = std::string{property.uri()};
+
+    if (auto const optSegment = property.segment(); optSegment)
+    {
+      auto const optManifest = library.manifest().reader(transaction).get(property.uri());
+
+      if (!optManifest || optManifest->segmentCount() == 0 ||
+          !std::ranges::contains(optManifest->segmentTrackIds(), trackId))
+      {
+        return makeError(Error::Code::CorruptData, "Segment Track has no matching carrier manifest");
+      }
+
+      request.input.optSegment = audio::PlaybackSegment{
+        .startFrame = optSegment->startFrame,
+        .frameCount = optSegment->frameCount,
+        .totalFrames = optManifest->totalFrames(),
+      };
+      request.trackOrdinal = optSegment->ordinal;
+    }
+
     return request;
   }
 
@@ -722,6 +744,14 @@ namespace ao::rt
 
       if (optDeferredResume && state.transport == audio::Transport::Idle)
       {
+        // A held paused end has released its audio route. The deferred token
+        // owns its position, while the snapshot retains the paused intent even
+        // after a subsequent seek back inside the Track.
+        if (previousState.transport == audio::Transport::Paused)
+        {
+          state.transport = audio::Transport::Paused;
+        }
+
         state.elapsed = optDeferredResume->elapsed;
         state.duration = optDeferredResume->request.input.duration;
       }
@@ -882,19 +912,15 @@ namespace ao::rt
 
     PlaybackTransportSessionState currentSessionState() const
     {
-      auto elapsed = state.elapsed < std::chrono::milliseconds{0} ? std::chrono::milliseconds{0} : state.elapsed;
       auto const duration =
         state.duration > std::chrono::milliseconds{0} ? state.duration : currentRequest.input.duration;
-
-      if (duration > std::chrono::milliseconds{0} && elapsed >= duration)
-      {
-        elapsed = std::chrono::milliseconds{0};
-      }
+      auto const elapsed = clampSessionElapsed(state.elapsed, duration, currentRequest.input.optSegment.has_value());
 
       return PlaybackTransportSessionState{
         .sourceListId = currentRequest.item.sourceListId,
         .trackId = currentRequest.item.trackId,
         .trackUri = currentRequest.trackUri,
+        .trackOrdinal = currentRequest.trackOrdinal,
         .positionMs = static_cast<std::uint64_t>(elapsed.count()),
         .volume = normalizePlaybackVolume(state.volume.level),
         .muted = state.volume.muted,
@@ -937,7 +963,8 @@ namespace ao::rt
       std::ignore = clearPreparedNext();
       auto const restoredElapsed =
         clampSessionElapsed(std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(session.positionMs)},
-                            request.input.duration);
+                            request.input.duration,
+                            request.input.optSegment.has_value());
       optDeferredResume = DeferredResumeRequest{
         .request = request,
         .sourceListId = session.sourceListId,
@@ -1169,6 +1196,111 @@ namespace ao::rt
       publishCurrentRequest(optPrepared->request, optPrepared->sourceListId, optPrepared->itemId, event.generation);
       refreshState();
       announceNowPlaying(optPrepared->request, optPrepared->sourceListId, winningToken);
+    }
+
+    bool hasDeferredPlayback() const noexcept
+    {
+      return optDeferredResume &&
+             (state.transport == audio::Transport::Idle || state.transport == audio::Transport::Paused);
+    }
+
+    void completeDeferredEnd()
+    {
+      auto const audioBarrier = playerPtr->stopWithBarrier();
+      clearPreparedRequestsCoveredBy(PreparedCancellationBarrier{.generation = audioBarrier.generation});
+      optDeferredResume.reset();
+      currentPlaybackItemId = {};
+      currentPlaybackGeneration = 0;
+      handleTrackEnded();
+    }
+
+    bool tryFinalSeek(std::chrono::milliseconds const elapsed, bool const guarded)
+    {
+      if (isClosing())
+      {
+        return false;
+      }
+
+      auto const duration = std::max(state.duration, std::chrono::milliseconds{0});
+      // A zero-ms segment is bounded, but zero is still its playable start, not
+      // an end request. Only a whole file with unknown duration has no upper bound.
+      auto const targetElapsed = duration > std::chrono::milliseconds{0} || currentRequest.input.optSegment
+                                   ? std::clamp(elapsed, std::chrono::milliseconds{0}, duration)
+                                   : std::max(elapsed, std::chrono::milliseconds{0});
+
+      if (hasDeferredPlayback())
+      {
+        AO_INVARIANT(optDeferredResume, "Deferred playback must retain its resume request");
+        optDeferredResume->elapsed = targetElapsed;
+        state.elapsed = targetElapsed;
+        enqueueOutbound(SeekUpdate{.elapsed = targetElapsed, .mode = SeekMode::Final});
+        return true;
+      }
+
+      auto const wasPaused = state.transport == audio::Transport::Paused;
+      auto const expectedOccurrence = currentOccurrenceId;
+      std::ignore = clearPreparedNext();
+
+      if (duration > std::chrono::milliseconds{0} && targetElapsed == duration)
+      {
+        // A successor may already own the realtime timeline while its callback
+        // is pending. The mutation-time guard must reject that old occurrence
+        // rather than stop the successor and advance it a second time.
+        auto const optAudioBarrier = playerPtr->tryStopWithBarrier(currentPlaybackItemId);
+
+        if (!optAudioBarrier)
+        {
+          return false;
+        }
+
+        clearPreparedRequestsCoveredBy(PreparedCancellationBarrier{.generation = optAudioBarrier->generation});
+        currentPlaybackItemId = {};
+        currentPlaybackGeneration = 0;
+
+        if (wasPaused)
+        {
+          auto request = currentRequest;
+          request.input.duration = duration;
+          optDeferredResume = DeferredResumeRequest{
+            .request = std::move(request),
+            .sourceListId = currentRequest.item.sourceListId,
+            .elapsed = targetElapsed,
+          };
+          state.transport = audio::Transport::Paused;
+        }
+
+        refreshState();
+        enqueueOutbound(SeekUpdate{.elapsed = targetElapsed, .mode = SeekMode::Final});
+
+        if (!isClosing() && !wasPaused && expectedOccurrence == currentOccurrenceId)
+        {
+          // Do not emit Stopped: that would retire the succession session.
+          // The audio cancellation barrier suppresses any old queued end.
+          handleTrackEnded();
+        }
+
+        return true;
+      }
+
+      if (guarded)
+      {
+        if (!playerPtr->trySeek(currentPlaybackItemId, targetElapsed))
+        {
+          return false;
+        }
+      }
+      else
+      {
+        playerPtr->seek(targetElapsed);
+      }
+
+      if (!isClosing())
+      {
+        refreshState();
+        enqueueOutbound(SeekUpdate{.elapsed = targetElapsed, .mode = SeekMode::Final});
+      }
+
+      return true;
     }
 
     void handleTrackEnded()
@@ -1602,8 +1734,9 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
-    if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
+    if (impl->hasDeferredPlayback())
     {
+      AO_INVARIANT(impl->optDeferredResume, "Deferred playback must retain its resume request");
       return impl->optDeferredResume->elapsed;
     }
 
@@ -1821,12 +1954,19 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
 
-    // A deferred resume token only fires when we still own the idle state it
-    // was armed against; an intervening player transition (e.g. an async
-    // backend ready callback) means resume() should just hand control back to
-    // the player rather than restart the restored track from scratch.
-    if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
+    // Deferred playback also represents a paused end whose audio route was
+    // released. Consume its end intent without opening a decoder at the end.
+    if (impl->hasDeferredPlayback())
     {
+      AO_INVARIANT(impl->optDeferredResume, "Deferred playback must retain its resume request");
+      auto const duration = impl->optDeferredResume->request.input.duration;
+
+      if (duration > std::chrono::milliseconds{0} && impl->optDeferredResume->elapsed >= duration)
+      {
+        impl->completeDeferredEnd();
+        return;
+      }
+
       // The token stays armed across the attempt: commitStagedPlayback() clears
       // it once the start commits, and a rejected start (for example a restored
       // file that no longer opens) must keep the restored idle state reportable
@@ -1834,7 +1974,17 @@ namespace ao::rt
       // keep the restored offset instead of collapsing the position to zero.
       // play() copies what staging needs, so a reentrant command that resets the
       // armed token cannot dangle this request copy.
-      auto const deferred = *impl->optDeferredResume;
+      auto deferred = *impl->optDeferredResume;
+
+      // The held request may predate a relink of its Track, so the start opens
+      // the Track's current file. A Track the library no longer resolves keeps
+      // the held request, whose failed open stays reportable and retryable.
+      if (auto currentRes = playbackRequestForTrack(impl->library, deferred.request.item.trackId); currentRes)
+      {
+        deferred.request.input = std::move(currentRes->input);
+        deferred.request.trackUri = std::move(currentRes->trackUri);
+      }
+
       std::ignore = play(deferred.request, deferred.sourceListId, deferred.elapsed);
       return;
     }
@@ -1895,7 +2045,7 @@ namespace ao::rt
       return false;
     }
 
-    if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
+    if (impl->hasDeferredPlayback())
     {
       return true;
     }
@@ -1910,31 +2060,8 @@ namespace ao::rt
 
     if (mode == SeekMode::Final)
     {
-      if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
-      {
-        // While armed with a deferred resume token, redirect seeks into the
-        // token so the engine starts at the user's chosen position when resume
-        // finally consumes it. Avoids opening the audio route just to seek an
-        // idle pipeline.
-        auto const clampedElapsed = clampSessionElapsed(elapsed, impl->optDeferredResume->request.input.duration);
-        impl->optDeferredResume->elapsed = clampedElapsed;
-        impl->state.elapsed = clampedElapsed;
-        impl->enqueueOutbound(SeekUpdate{.elapsed = clampedElapsed, .mode = mode});
-        return;
-      }
-
-      std::ignore = impl->clearPreparedNext();
-      impl->playerPtr->seek(elapsed);
-
-      if (impl->isClosing())
-      {
-        return;
-      }
-
-      // seek() does stop/flush/start with no open(), so it fires no async
-      // onStateChanged; refresh the snapshot explicitly to pick up the new
-      // transport/elapsed, matching every other control command.
-      impl->refreshState();
+      std::ignore = impl->tryFinalSeek(elapsed, false);
+      return;
     }
 
     impl->enqueueOutbound(SeekUpdate{.elapsed = elapsed, .mode = mode});
@@ -1960,34 +2087,7 @@ namespace ao::rt
       return true;
     }
 
-    if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
-    {
-      auto const clampedElapsed = clampSessionElapsed(elapsed, impl->optDeferredResume->request.input.duration);
-      impl->optDeferredResume->elapsed = clampedElapsed;
-      impl->state.elapsed = clampedElapsed;
-      impl->enqueueOutbound(SeekUpdate{.elapsed = clampedElapsed, .mode = SeekMode::Final});
-      return true;
-    }
-
-    // Preserve the runtime token handshake before issuing the guarded audio
-    // command. A splice already consumed by Engine returns no disarm id, so its
-    // prepared metadata remains available for the pending advance callback.
-    // Rejection may therefore retire the active-slot marker without issuing a
-    // seek. Clearing after trySeek would lose the disarmed item's receipt.
-    std::ignore = impl->clearPreparedNext();
-
-    if (!impl->playerPtr->trySeek(impl->currentPlaybackItemId, elapsed))
-    {
-      return false;
-    }
-
-    if (!impl->isClosing())
-    {
-      impl->refreshState();
-      impl->enqueueOutbound(SeekUpdate{.elapsed = elapsed, .mode = SeekMode::Final});
-    }
-
-    return true;
+    return impl->tryFinalSeek(elapsed, true);
   }
 
   void PlaybackTransport::setOutputDevice(audio::BackendId const& backendId,

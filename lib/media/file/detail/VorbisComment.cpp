@@ -22,6 +22,11 @@ namespace ao::media::file::detail
 {
   namespace
   {
+    void handleCueSheet(ContentBuilder& builder, std::string_view value)
+    {
+      builder.cueSheet(value);
+    }
+
     using TextSetter = ContentBuilder::MetadataBuilder& (ContentBuilder::MetadataBuilder::*)(std::string_view);
     using NumberSetter = ContentBuilder::MetadataBuilder& (ContentBuilder::MetadataBuilder::*)(std::uint16_t);
 

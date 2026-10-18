@@ -292,7 +292,7 @@ namespace ao::library::test
     };
     auto validHeader = FileManifestHeader{.trackId = TrackId{1}};
     auto nonzeroPadding = validHeader;
-    nonzeroPadding.padding[1] = std::byte{1};
+    nonzeroPadding.segmentCount = 100;
     auto zeroTrack = validHeader;
     zeroTrack.trackId = kInvalidTrackId;
     auto invalidMtimeFlag = validHeader;

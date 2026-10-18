@@ -16,6 +16,7 @@
 #include <ao/library/Credits.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/FileManifestView.h>
 #include <ao/library/FileTimeConversion.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/LibraryWrite.h>
@@ -26,7 +27,9 @@
 #include <ao/library/RecordingDate.h>
 #include <ao/library/ResourceLayout.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
 #include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/media/file/File.h>
@@ -37,6 +40,7 @@
 #include <ao/rt/library/LibraryTransfer.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/Sha256.h>
+#include <ao/utility/String.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
@@ -45,6 +49,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
@@ -66,10 +71,18 @@ namespace ao::rt
 {
   namespace
   {
+    struct SegmentFacts final
+    {
+      library::TrackSegment segment;
+      std::uint64_t totalFrames = 0;
+      SampleRate sampleRate{};
+    };
+
     struct ValidatedTrack final
     {
       std::uint32_t yamlId = 0;
       std::string uri;
+      std::optional<SegmentFacts> optSegment;
       ryml::ConstNodeRef node;
     };
 
@@ -81,6 +94,7 @@ namespace ao::rt
     struct ValidatedListOrderUriReference final
     {
       std::string uri;
+      std::optional<std::uint16_t> optOrdinal;
     };
 
     using ValidatedListOrderReference = std::variant<ValidatedListOrderIdReference, ValidatedListOrderUriReference>;
@@ -124,6 +138,9 @@ namespace ao::rt
       std::uint32_t yamlId = 0;
       std::string uri;
       std::optional<TrackId> optExistingTrackId;
+      std::optional<SegmentFacts> optSegment;
+      // Own the complete target membership, including ordinals outside this payload.
+      std::vector<TrackId> carrierTrackIds{};
       TrackBuilderSnapshot builder;
       library::FileManifestBuilder manifest;
     };
@@ -308,6 +325,7 @@ namespace ao::rt
       "recording-date",
       kCreditsMetadataKey,
       "custom",
+      "segment",
       "tags",
       "covers",
       "duration",
@@ -323,8 +341,402 @@ namespace ao::rt
     constexpr auto kCoverFields = std::to_array<std::string_view>({"type", "resource"});
     constexpr auto kListFields =
       std::to_array<std::string_view>({"id", "parent-id", "name", "description", "filter", "order"});
-    constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri"});
+    constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri", "ordinal"});
+    constexpr auto kSegmentFields =
+      std::to_array<std::string_view>({"ordinal", "start-frame", "frame-count", "total-frames", "sample-rate"});
     constexpr auto kMtimeFields = std::to_array<std::string_view>({"seconds", "nanoseconds"});
+
+    // Matches CUE binding, which divides only FLAC and WAV files.
+    bool isCarrierExtension(std::string_view const uri)
+    {
+      auto extension = utility::pathToUtf8(utility::pathFromUtf8(uri).extension());
+      std::ranges::transform(extension, extension.begin(), utility::toAsciiLower);
+      return extension == ".flac" || extension == ".wav";
+    }
+
+    Result<SegmentFacts> parseSegment(ryml::ConstNodeRef const& node, ryml::ConstNodeRef const& trackNode)
+    {
+      if (auto res = requireMap(node, "Track record.segment"); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      if (auto res = rejectUnknownFields(node, kSegmentFields, "Track record.segment"); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      auto ordinalRes = requireScalarFieldAs<std::uint16_t>(node, "ordinal", "Track record.segment");
+      auto startRes = requireScalarFieldAs<std::uint64_t>(node, "start-frame", "Track record.segment");
+      auto countRes = requireScalarFieldAs<std::uint64_t>(node, "frame-count", "Track record.segment");
+      auto totalRes = requireScalarFieldAs<std::uint64_t>(node, "total-frames", "Track record.segment");
+      auto rateRes = requireScalarFieldAs<std::uint32_t>(node, "sample-rate", "Track record.segment");
+
+      if (!ordinalRes)
+      {
+        return std::unexpected{ordinalRes.error()};
+      }
+
+      if (!startRes)
+      {
+        return std::unexpected{startRes.error()};
+      }
+
+      if (!countRes)
+      {
+        return std::unexpected{countRes.error()};
+      }
+
+      if (!totalRes)
+      {
+        return std::unexpected{totalRes.error()};
+      }
+
+      if (!rateRes)
+      {
+        return std::unexpected{rateRes.error()};
+      }
+
+      if (*ordinalRes == 0 || *ordinalRes > library::kMaxTrackSegmentOrdinal || *countRes == 0 || *totalRes == 0 ||
+          *rateRes == 0 || *startRes > *totalRes || *countRes > *totalRes - *startRes)
+      {
+        return makeError(
+          Error::Code::FormatRejected, "Track record.segment has invalid ordinal, range, extent or sample-rate");
+      }
+
+      auto const optDuration = library::segmentDuration(*countRes, SampleRate{*rateRes});
+
+      if (!optDuration)
+      {
+        return makeError(Error::Code::FormatRejected, "Track record.segment duration cannot be represented");
+      }
+
+      for (auto const* field : {"duration", "sample-rate"})
+      {
+        if (auto const scalar = yaml::findChild(trackNode, field); scalar.readable())
+        {
+          auto valueRes = requireScalarAs<std::uint32_t>(scalar, field);
+
+          if (!valueRes)
+          {
+            return std::unexpected{valueRes.error()};
+          }
+
+          auto const expected =
+            std::string_view{field} == "duration" ? static_cast<std::uint32_t>(optDuration->count()) : *rateRes;
+
+          if (*valueRes != expected)
+          {
+            return makeError(Error::Code::FormatRejected, std::format("Track record.{} contradicts segment", field));
+          }
+        }
+      }
+
+      return SegmentFacts{.segment = {.startFrame = *startRes, .frameCount = *countRes, .ordinal = *ordinalRes},
+                          .totalFrames = *totalRes,
+                          .sampleRate = SampleRate{*rateRes}};
+    }
+
+    Result<> validateCarrierRanges(std::vector<library::TrackSegment> segments, std::uint64_t totalFrames)
+    {
+      std::ranges::sort(segments, {}, &library::TrackSegment::ordinal);
+      std::uint16_t previousOrdinal = 0;
+      std::uint64_t previousEnd = 0;
+
+      for (auto const& segment : segments)
+      {
+        if (segment.ordinal <= previousOrdinal || segment.startFrame < previousEnd ||
+            segment.startFrame > totalFrames || segment.frameCount == 0 ||
+            segment.frameCount > totalFrames - segment.startFrame)
+        {
+          return makeError(
+            Error::Code::FormatRejected, "Carrier has duplicate ordinals, overlapping or out-of-bounds ranges");
+        }
+
+        previousOrdinal = segment.ordinal;
+        previousEnd = segment.startFrame + segment.frameCount;
+      }
+
+      return {};
+    }
+
+    std::optional<TrackId> findTrack(library::FileManifestView const& manifest,
+                                     std::optional<std::uint16_t> optOrdinal,
+                                     library::TrackStore::Reader const& trackReader)
+    {
+      if (manifest.segmentCount() == 0)
+      {
+        return optOrdinal ? std::nullopt : std::optional{manifest.trackId()};
+      }
+
+      if (optOrdinal)
+      {
+        for (auto const id : manifest.segmentTrackIds())
+        {
+          auto const optView = trackReader.get(id, library::TrackStore::Reader::LoadMode::Both);
+          AO_INVARIANT(optView, "Carrier member missing after library validation");
+
+          auto const optSegment = optView->property().segment();
+          AO_INVARIANT(optSegment, "Carrier member has no segment after library validation");
+
+          if (optSegment->ordinal == *optOrdinal)
+          {
+            return id;
+          }
+        }
+      }
+
+      return std::nullopt;
+    }
+
+    std::optional<std::uint16_t> segmentOrdinal(std::optional<SegmentFacts> const& optSegment)
+    {
+      return optSegment ? std::optional<std::uint16_t>{optSegment->segment.ordinal} : std::nullopt;
+    }
+
+    SegmentFacts const& carrierFacts(PreparedTrack const& track)
+    {
+      auto const& optSegment = track.optSegment;
+      AO_INVARIANT(optSegment, "Prepared carrier member has no segment");
+      return *optSegment;
+    }
+
+    Result<std::vector<library::TrackSegment>> readTargetCarrierSegments(library::FileManifestView const& manifest,
+                                                                         SegmentFacts const& facts,
+                                                                         library::TrackStore::Reader const& trackReader)
+    {
+      if (manifest.totalFrames() != facts.totalFrames)
+      {
+        return makeError(Error::Code::FormatRejected, "YAML carrier extent differs from target");
+      }
+
+      auto segments = std::vector<library::TrackSegment>{};
+
+      for (auto const id : manifest.segmentTrackIds())
+      {
+        auto const optView = trackReader.get(id, library::TrackStore::Reader::LoadMode::Both);
+        AO_INVARIANT(optView, "Carrier member missing after library validation");
+
+        if (optView->property().sampleRate() != facts.sampleRate)
+        {
+          return makeError(Error::Code::FormatRejected, "YAML carrier sample-rate differs from target");
+        }
+
+        auto const optSegment = optView->property().segment();
+        AO_INVARIANT(optSegment, "Carrier member has no segment after library validation");
+        segments.push_back(*optSegment);
+      }
+
+      return segments;
+    }
+
+    Result<> validatePreparedCarrierMember(PreparedTrack const& member,
+                                           PreparedTrack const& first,
+                                           std::optional<library::FileManifestView> const& optManifest,
+                                           library::TrackStore::Reader const& trackReader,
+                                           std::vector<library::TrackSegment>& segments)
+    {
+      auto const optCurrentId =
+        optManifest ? findTrack(*optManifest, segmentOrdinal(member.optSegment), trackReader) : std::nullopt;
+
+      if (optCurrentId != member.optExistingTrackId)
+      {
+        return makeError(Error::Code::InvalidState, "Library changed after preparing YAML track");
+      }
+
+      if (!member.optSegment)
+      {
+        return {};
+      }
+
+      if (member.manifest.serialize() != first.manifest.serialize())
+      {
+        return makeError(Error::Code::FormatRejected, "Carrier records disagree on file facts");
+      }
+
+      auto const& segment = member.optSegment->segment;
+      auto const found = std::ranges::find(segments, segment.ordinal, &library::TrackSegment::ordinal);
+
+      if (found == segments.end())
+      {
+        segments.push_back(segment);
+      }
+      else if (*found != segment)
+      {
+        return makeError(Error::Code::FormatRejected, "YAML merge cannot change a stored segment range");
+      }
+
+      return {};
+    }
+
+    Result<> validatePreparedCarrierGroup(std::span<PreparedTrack const* const> members,
+                                          library::TrackStore::Reader const& trackReader,
+                                          library::FileManifestStore::Reader const& manifestReader,
+                                          ImportMode mode)
+    {
+      auto const& first = *members.front();
+      auto const optManifest = mode == ImportMode::Merge ? manifestReader.get(first.uri) : std::nullopt;
+      auto segments = std::vector<library::TrackSegment>{};
+
+      if (mode == ImportMode::Merge && first.optSegment)
+      {
+        auto const currentIds = optManifest ? optManifest->segmentTrackIds() : std::span<TrackId const>{};
+
+        if (!std::ranges::equal(first.carrierTrackIds, currentIds))
+        {
+          return makeError(
+            Error::Code::InvalidState, std::format("Carrier '{}' changed after preparing YAML import", first.uri));
+        }
+      }
+
+      if (optManifest)
+      {
+        if ((optManifest->segmentCount() != 0) != first.optSegment.has_value())
+        {
+          return makeError(Error::Code::FormatRejected, "YAML whole-file/carrier form conflicts with target");
+        }
+
+        if (first.optSegment)
+        {
+          auto segmentsRes = readTargetCarrierSegments(*optManifest, *first.optSegment, trackReader);
+
+          if (!segmentsRes)
+          {
+            return std::unexpected{segmentsRes.error()};
+          }
+
+          segments = std::move(*segmentsRes);
+        }
+      }
+
+      for (auto const* member : members)
+      {
+        if (auto res = validatePreparedCarrierMember(*member, first, optManifest, trackReader, segments); !res)
+        {
+          return res;
+        }
+      }
+
+      if (first.optSegment)
+      {
+        return validateCarrierRanges(std::move(segments), first.optSegment->totalFrames);
+      }
+
+      return {};
+    }
+
+    // Validate the final aggregate before staging any Track, including when
+    // every payload ordinal is new. Reused at apply to close offline preparation races.
+    Result<> validatePreparedCarriers(std::vector<PreparedTrack> const& tracks,
+                                      library::TrackStore::Reader const& trackReader,
+                                      library::FileManifestStore::Reader const& manifestReader,
+                                      ImportMode mode)
+    {
+      auto groups = std::unordered_map<std::string_view, std::vector<PreparedTrack const*>>{};
+
+      for (auto const& track : tracks)
+      {
+        groups[track.uri].push_back(&track);
+      }
+
+      // Validate groups in record order so the reported error does not depend on hashing.
+      for (auto const& track : tracks)
+      {
+        auto const& group = groups.at(track.uri);
+
+        if (group.front() != &track)
+        {
+          continue;
+        }
+
+        if (auto res = validatePreparedCarrierGroup(group, trackReader, manifestReader, mode); !res)
+        {
+          return res;
+        }
+      }
+
+      return {};
+    }
+
+    Result<> importCarrierGroup(std::span<PreparedTrack const* const> members,
+                                library::TrackWriter& trackWriter,
+                                library::FileManifestStore::Reader const& manifestReader,
+                                std::unordered_map<std::uint32_t, TrackId>& yamlTrackIdToInternalId,
+                                ImportReport& report)
+    {
+      auto const& first = *members.front();
+      auto const& facts = carrierFacts(first);
+      auto newMembers = std::vector<PreparedTrack const*>{};
+
+      for (auto const* member : members)
+      {
+        auto const optExistingTrackId = member->optExistingTrackId;
+
+        if (!optExistingTrackId)
+        {
+          newMembers.push_back(member);
+          continue;
+        }
+
+        auto builder = member->builder.makeBuilder();
+
+        if (auto res = trackWriter.update(*optExistingTrackId, builder); !res)
+        {
+          return yamlRepresentationError(res.error(), member->uri);
+        }
+
+        ++report.tracksUpdated;
+
+        if (member->yamlId != 0)
+        {
+          yamlTrackIdToInternalId[member->yamlId] = *optExistingTrackId;
+        }
+      }
+
+      std::ranges::sort(newMembers, {}, [](auto const* member) { return carrierFacts(*member).segment.ordinal; });
+      auto builders = std::vector<library::TrackBuilder>{};
+      builders.reserve(newMembers.size());
+
+      for (auto const* member : newMembers)
+      {
+        builders.push_back(member->builder.makeBuilder());
+      }
+
+      bool const hasCarrier = manifestReader.get(first.uri).has_value();
+
+      if (!builders.empty())
+      {
+        auto idsRes = hasCarrier ? trackWriter.addCarrierMembers(first.uri, builders)
+                                 : trackWriter.createCarrier(builders, first.manifest, facts.totalFrames);
+
+        if (!idsRes)
+        {
+          return yamlRepresentationError(idsRes.error(), first.uri);
+        }
+
+        AO_INVARIANT(idsRes->size() == newMembers.size(), "Carrier creation returned a different member count");
+
+        for (std::size_t index = 0; index < newMembers.size(); ++index)
+        {
+          if (newMembers[index]->yamlId != 0)
+          {
+            yamlTrackIdToInternalId[newMembers[index]->yamlId] = (*idsRes)[index];
+          }
+
+          ++report.tracksCreated;
+        }
+      }
+
+      if (hasCarrier)
+      {
+        if (auto res = trackWriter.updateManifest(first.uri, first.manifest); !res)
+        {
+          return yamlRepresentationError(res.error(), first.uri);
+        }
+      }
+
+      return {};
+    }
 
     /**
      * @brief Interprets a track record's `mtime` field.
@@ -625,6 +1037,135 @@ namespace ao::rt
       return {};
     }
 
+    Result<ValidatedTrack> validateTrackRecord(ryml::ConstNodeRef const& trackNode,
+                                               std::unordered_set<std::uint32_t>& seenYamlIds)
+    {
+      if (auto res = requireMap(trackNode, "Track record"); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      if (auto res = rejectUnknownFields(trackNode, kTrackFields, "Track record"); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      if (auto res = validateTrackNestedSchema(trackNode); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      auto uriRes = requireScalarField(trackNode, "uri", "Track record");
+
+      if (!uriRes)
+      {
+        return std::unexpected{uriRes.error()};
+      }
+
+      auto parsedUriRes = parseLibraryUri(*uriRes, "Track record.uri");
+
+      if (!parsedUriRes)
+      {
+        return std::unexpected{parsedUriRes.error()};
+      }
+
+      auto track = ValidatedTrack{};
+      track.uri = std::move(*parsedUriRes);
+      track.node = trackNode;
+
+      if (auto const segmentNode = yaml::findChild(trackNode, "segment"); segmentNode.readable())
+      {
+        auto segmentRes = parseSegment(segmentNode, trackNode);
+
+        if (!segmentRes)
+        {
+          return std::unexpected{segmentRes.error()};
+        }
+
+        track.optSegment = *segmentRes;
+      }
+
+      // Match manual creation and scanning: unsupported extensions are rejected,
+      // while supported but absent files remain restorable.
+      if (!media::file::File::isSupported(utility::pathFromUtf8(track.uri)))
+      {
+        return makeError(Error::Code::FormatRejected,
+                         std::format("Track record.uri '{}' has an unsupported media file extension", track.uri));
+      }
+
+      if (track.optSegment && !isCarrierExtension(track.uri))
+      {
+        return makeError(Error::Code::FormatRejected,
+                         std::format("Track record.segment names '{}', which is not a FLAC or WAV carrier", track.uri));
+      }
+
+      if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())
+      {
+        auto yamlIdRes = requireScalarAs<std::uint32_t>(idNode, "Track record.id");
+
+        if (!yamlIdRes)
+        {
+          return std::unexpected{yamlIdRes.error()};
+        }
+
+        track.yamlId = *yamlIdRes;
+
+        if (track.yamlId != 0 && !seenYamlIds.insert(track.yamlId).second)
+        {
+          return makeError(
+            Error::Code::FormatRejected, std::format("Duplicate track YAML id {} in payload", track.yamlId));
+        }
+      }
+
+      return track;
+    }
+
+    Result<> validatePayloadTrackGroup(std::span<std::size_t const> indices, std::span<ValidatedTrack const> tracks)
+    {
+      auto const& first = tracks[indices.front()];
+      auto const& optFirstSegment = first.optSegment;
+
+      if (!optFirstSegment)
+      {
+        if (indices.size() == 1)
+        {
+          return {};
+        }
+
+        auto const mixesCarrier = std::ranges::any_of(
+          indices, [tracks](std::size_t const index) { return tracks[index].optSegment.has_value(); });
+        return makeError(
+          Error::Code::FormatRejected,
+          mixesCarrier
+            ? std::format("Duplicate canonical track URI '{}' mixes whole-file and carrier records", first.uri)
+            : std::format("Duplicate canonical track URI '{}' in payload", first.uri));
+      }
+
+      auto segments = std::vector<library::TrackSegment>{};
+
+      for (auto const index : indices)
+      {
+        auto const& optSegment = tracks[index].optSegment;
+
+        if (!optSegment)
+        {
+          return makeError(
+            Error::Code::FormatRejected,
+            std::format("Duplicate canonical track URI '{}' mixes whole-file and carrier records", first.uri));
+        }
+
+        if (optSegment->totalFrames != optFirstSegment->totalFrames ||
+            optSegment->sampleRate != optFirstSegment->sampleRate)
+        {
+          return makeError(Error::Code::FormatRejected, "Carrier records disagree on extent or sample-rate");
+        }
+
+        segments.push_back(optSegment->segment);
+      }
+
+      return validateCarrierRanges(std::move(segments), optFirstSegment->totalFrames);
+    }
+
     std::optional<ExportMode> parseExportMode(std::string_view modeStr)
     {
       if (modeStr == "delta")
@@ -745,8 +1286,15 @@ namespace ao::rt
         return makeError(Error::Code::FormatRejected, "List order reference must contain exactly one of 'id' or 'uri'");
       }
 
+      auto const ordinalNode = yaml::findChild(orderRef, "ordinal");
+
       if (trackIdNode.readable())
       {
+        if (ordinalNode.readable())
+        {
+          return makeError(Error::Code::FormatRejected, "List order ordinal requires uri");
+        }
+
         auto trackIdRes = requireScalarAs<std::uint32_t>(trackIdNode, "List record.order[].id");
 
         if (!trackIdRes)
@@ -771,7 +1319,26 @@ namespace ao::rt
         return std::unexpected{normalizedRes.error()};
       }
 
-      return ValidatedListOrderUriReference{.uri = std::move(*normalizedRes)};
+      auto optOrdinal = std::optional<std::uint16_t>{};
+
+      if (ordinalNode.readable())
+      {
+        auto ordinalRes = requireScalarAs<std::uint16_t>(ordinalNode, "List record.order[].ordinal");
+
+        if (!ordinalRes)
+        {
+          return std::unexpected{ordinalRes.error()};
+        }
+
+        if (*ordinalRes == 0 || *ordinalRes > library::kMaxTrackSegmentOrdinal)
+        {
+          return makeError(Error::Code::FormatRejected, "List order ordinal must be between 1 and 99");
+        }
+
+        optOrdinal = *ordinalRes;
+      }
+
+      return ValidatedListOrderUriReference{.uri = std::move(*normalizedRes), .optOrdinal = optOrdinal};
     }
 
     Result<> validateListOrder(ryml::ConstNodeRef const& orderNode, ValidatedList& list)
@@ -904,6 +1471,12 @@ namespace ao::rt
     LibraryChangeSet buildPreparedChangeSet(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
                                             library::LibraryWrite const& transaction) const;
     Result<std::vector<PreparedTrack>> prepareTracks(ValidatedImport const& validated, ImportMode mode) const;
+    Result<PreparedTrack> prepareTrackRecord(ValidatedTrack const& track,
+                                             ExportMode payloadMode,
+                                             ValidatedResourceMap const& resources,
+                                             ImportMode mode,
+                                             library::TrackStore::Reader const& trackReader,
+                                             library::FileManifestStore::Reader const& manifestReader) const;
 
     void populateDeletionStats(ValidatedImport const& val, ImportReport& rep) const;
     Result<> clearDatabase(ValidatedImport const& val, library::LibraryWrite& writeTransaction) const;
@@ -945,12 +1518,14 @@ namespace ao::rt
                           library::TrackBuilder& builder) const;
     Result<> applyFileMetadata(ryml::ConstNodeRef const& trackNode,
                                std::string_view uriStr,
+                               ImportMode mode,
                                library::FileManifestStore::Reader const& manifestReader,
                                library::FileManifestBuilder& manifestBuilder) const;
     Result<> buildListOrder(library::ListBuilder& builder,
                             ValidatedList const& importedList,
                             std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
                             library::FileManifestStore::Reader const& manifestReader,
+                            library::TrackStore::Reader const& trackReader,
                             ImportReport& report) const;
     Result<> updateListParent(ValidatedList const& importedList,
                               std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
@@ -1222,15 +1797,11 @@ namespace ao::rt
       }
     }
 
-    auto const manifestReader = ml.manifest().reader(transaction);
-
     for (auto const& importedTrack : prepared.tracks)
     {
-      auto const optManifest = manifestReader.get(importedTrack.uri);
-
-      if (optManifest && beforeTracks.contains(optManifest->trackId()))
+      if (importedTrack.optExistingTrackId && beforeTracks.contains(*importedTrack.optExistingTrackId))
       {
-        changeSet.tracksMutated.push_back(optManifest->trackId());
+        changeSet.tracksMutated.push_back(*importedTrack.optExistingTrackId);
       }
     }
 
@@ -1607,83 +2178,37 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
-    auto seenUris = std::unordered_set<std::string>{};
+    auto uriGroups = std::unordered_map<std::string, std::vector<std::size_t>>{};
+
+    auto const firstIndex = validated.tracks.size();
 
     for (auto const& trackNode : tracks.children())
     {
-      if (auto res = requireMap(trackNode, "Track record"); !res)
+      auto trackRes = validateTrackRecord(trackNode, seenYamlIds);
+
+      if (!trackRes)
       {
-        return std::unexpected{res.error()};
+        return std::unexpected{trackRes.error()};
       }
 
-      if (auto res = rejectUnknownFields(trackNode, kTrackFields, "Track record"); !res)
+      uriGroups[trackRes->uri].push_back(validated.tracks.size());
+      validated.tracks.push_back(std::move(*trackRes));
+    }
+
+    // Validate groups in record order so the reported error does not depend on hashing.
+    for (auto index = firstIndex; index < validated.tracks.size(); ++index)
+    {
+      auto const& group = uriGroups.at(validated.tracks[index].uri);
+
+      if (group.front() != index)
       {
-        return std::unexpected{res.error()};
+        continue;
       }
 
-      if (auto res = validateTrackNestedSchema(trackNode); !res)
+      if (auto res = validatePayloadTrackGroup(group, validated.tracks); !res)
       {
-        return std::unexpected{res.error()};
+        return res;
       }
-
-      auto track = ValidatedTrack{};
-      auto uriRes = requireScalarField(trackNode, "uri", "Track record");
-
-      if (!uriRes)
-      {
-        return std::unexpected{uriRes.error()};
-      }
-
-      auto parsedUriRes = parseLibraryUri(*uriRes, "Track record.uri");
-
-      if (!parsedUriRes)
-      {
-        return std::unexpected{parsedUriRes.error()};
-      }
-
-      track.uri = std::move(*parsedUriRes);
-
-      if (!seenUris.insert(track.uri).second)
-      {
-        return makeError(
-          Error::Code::FormatRejected, std::format("Duplicate canonical track URI '{}' in payload", track.uri));
-      }
-
-      // Manual track creation admits only supported audio files, and library
-      // scanning ignores unsupported ones entirely. The interchange entry point
-      // applies the same admission rule, avoiding unsupported-file rows that
-      // scanning cannot reconcile. Supported but absent files remain restorable.
-      if (!media::file::File::isSupported(utility::pathFromUtf8(track.uri)))
-      {
-        return makeError(Error::Code::FormatRejected,
-                         std::format("Track record.uri '{}' has an unsupported media file extension", track.uri));
-      }
-
-      if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())
-      {
-        auto yamlIdRes = requireScalarAs<std::uint32_t>(idNode, "Track record.id");
-
-        if (!yamlIdRes)
-        {
-          return std::unexpected{yamlIdRes.error()};
-        }
-
-        track.yamlId = *yamlIdRes;
-
-        if (track.yamlId != 0)
-        {
-          if (seenYamlIds.contains(track.yamlId))
-          {
-            return makeError(
-              Error::Code::FormatRejected, std::format("Duplicate track YAML id {} in payload", track.yamlId));
-          }
-
-          seenYamlIds.insert(track.yamlId);
-        }
-      }
-
-      track.node = trackNode;
-      validated.tracks.push_back(std::move(track));
     }
 
     return {};
@@ -1756,85 +2281,138 @@ namespace ao::rt
   Result<std::vector<PreparedTrack>> LibraryYamlImporter::Impl::prepareTracks(ValidatedImport const& validated,
                                                                               ImportMode mode) const
   {
-    auto result = std::vector<PreparedTrack>{};
-    result.reserve(validated.tracks.size());
+    auto preparedTracks = std::vector<PreparedTrack>{};
+    preparedTracks.reserve(validated.tracks.size());
     auto transaction = ml.readTransaction();
     auto trackReader = ml.tracks().reader(transaction);
     auto manifestReader = ml.manifest().reader(transaction);
 
-    for (auto const& validatedTrack : validated.tracks)
+    for (auto const& track : validated.tracks)
     {
-      auto optExistingTrackId = std::optional<TrackId>{};
+      auto trackRes =
+        prepareTrackRecord(track, validated.payloadMode, validated.resources, mode, trackReader, manifestReader);
 
-      if (mode == ImportMode::Merge)
+      if (!trackRes)
       {
-        if (auto const optManifest = manifestReader.get(validatedTrack.uri); optManifest)
-        {
-          optExistingTrackId = optManifest->trackId();
-        }
+        return std::unexpected{trackRes.error()};
       }
 
-      auto optMediaTrack = std::optional<MediaTrack>{};
-      auto optBuilder = std::optional<library::TrackBuilder>{};
-
-      if (auto baselineRes = loadTrackBaseline(
-            validatedTrack.uri, optExistingTrackId, validated.payloadMode, optBuilder, optMediaTrack, trackReader);
-          !baselineRes)
-      {
-        return std::unexpected{baselineRes.error()};
-      }
-
-      auto builder = optBuilder ? *optBuilder : library::TrackBuilder::makeEmpty();
-
-      if (!optBuilder)
-      {
-        builder.property().uri(validatedTrack.uri);
-      }
-
-      if (auto overlayRes = overlayMetadata(builder, validatedTrack.node); !overlayRes)
-      {
-        return std::unexpected{overlayRes.error()};
-      }
-
-      if (auto overlayRes = overlayTagsAndCustomMetadata(builder, validatedTrack.node); !overlayRes)
-      {
-        return std::unexpected{overlayRes.error()};
-      }
-
-      if (auto overlayRes = overlayTechnicalProperties(builder, validatedTrack.node); !overlayRes)
-      {
-        return std::unexpected{overlayRes.error()};
-      }
-
-      if (auto coversRes = importCovers(validatedTrack.node, validated.resources, builder); !coversRes)
-      {
-        return std::unexpected{coversRes.error()};
-      }
-
-      auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
-
-      if (auto metadataRes =
-            applyFileMetadata(validatedTrack.node, validatedTrack.uri, manifestReader, manifestBuilder);
-          !metadataRes)
-      {
-        return std::unexpected{metadataRes.error()};
-      }
-
-      auto snapshotRes = TrackBuilderSnapshot::make(builder);
-
-      if (!snapshotRes)
-      {
-        return std::unexpected{snapshotRes.error()};
-      }
-
-      result.push_back(PreparedTrack{.yamlId = validatedTrack.yamlId,
-                                     .uri = validatedTrack.uri,
-                                     .optExistingTrackId = optExistingTrackId,
-                                     .builder = std::move(*snapshotRes),
-                                     .manifest = std::move(manifestBuilder)});
+      preparedTracks.push_back(std::move(*trackRes));
     }
 
-    return result;
+    if (auto res = validatePreparedCarriers(preparedTracks, trackReader, manifestReader, mode); !res)
+    {
+      return std::unexpected{res.error()};
+    }
+
+    return preparedTracks;
+  }
+
+  Result<PreparedTrack> LibraryYamlImporter::Impl::prepareTrackRecord(
+    ValidatedTrack const& validatedTrack,
+    ExportMode payloadMode,
+    ValidatedResourceMap const& resources,
+    ImportMode mode,
+    library::TrackStore::Reader const& trackReader,
+    library::FileManifestStore::Reader const& manifestReader) const
+  {
+    auto optExistingTrackId = std::optional<TrackId>{};
+    auto carrierTrackIds = std::vector<TrackId>{};
+
+    if (mode == ImportMode::Merge)
+    {
+      if (auto const optManifest = manifestReader.get(validatedTrack.uri); optManifest)
+      {
+        if ((optManifest->segmentCount() != 0) != validatedTrack.optSegment.has_value())
+        {
+          return makeError(Error::Code::FormatRejected, "YAML whole-file/carrier form conflicts with target");
+        }
+
+        optExistingTrackId = findTrack(*optManifest, segmentOrdinal(validatedTrack.optSegment), trackReader);
+
+        if (validatedTrack.optSegment)
+        {
+          carrierTrackIds.assign_range(optManifest->segmentTrackIds());
+        }
+      }
+    }
+
+    auto optMediaTrack = std::optional<MediaTrack>{};
+    auto optBuilder = std::optional<library::TrackBuilder>{};
+
+    if (auto baselineRes = loadTrackBaseline(
+          validatedTrack.uri, optExistingTrackId, payloadMode, optBuilder, optMediaTrack, trackReader);
+        !baselineRes)
+    {
+      return std::unexpected{baselineRes.error()};
+    }
+
+    if (validatedTrack.optSegment && optMediaTrack)
+    {
+      if (auto const& facts = *validatedTrack.optSegment;
+          optMediaTrack->optTotalFrames() != std::optional<std::uint64_t>{facts.totalFrames} ||
+          optMediaTrack->builder().property().sampleRate() != facts.sampleRate)
+      {
+        return makeError(
+          Error::Code::FormatRejected, "Readable carrier extent or sample-rate differs from YAML segment");
+      }
+    }
+
+    auto builder = optBuilder ? *optBuilder : library::TrackBuilder::makeEmpty();
+
+    if (!optBuilder)
+    {
+      builder.property().uri(validatedTrack.uri);
+    }
+
+    if (auto overlayRes = overlayMetadata(builder, validatedTrack.node); !overlayRes)
+    {
+      return std::unexpected{overlayRes.error()};
+    }
+
+    if (auto overlayRes = overlayTagsAndCustomMetadata(builder, validatedTrack.node); !overlayRes)
+    {
+      return std::unexpected{overlayRes.error()};
+    }
+
+    if (auto overlayRes = overlayTechnicalProperties(builder, validatedTrack.node); !overlayRes)
+    {
+      return std::unexpected{overlayRes.error()};
+    }
+
+    if (validatedTrack.optSegment)
+    {
+      builder.property().sampleRate(validatedTrack.optSegment->sampleRate).segment(validatedTrack.optSegment->segment);
+    }
+
+    if (auto coversRes = importCovers(validatedTrack.node, resources, builder); !coversRes)
+    {
+      return std::unexpected{coversRes.error()};
+    }
+
+    auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
+
+    if (auto metadataRes =
+          applyFileMetadata(validatedTrack.node, validatedTrack.uri, mode, manifestReader, manifestBuilder);
+        !metadataRes)
+    {
+      return std::unexpected{metadataRes.error()};
+    }
+
+    auto snapshotRes = TrackBuilderSnapshot::make(builder);
+
+    if (!snapshotRes)
+    {
+      return std::unexpected{snapshotRes.error()};
+    }
+
+    return PreparedTrack{.yamlId = validatedTrack.yamlId,
+                         .uri = validatedTrack.uri,
+                         .optExistingTrackId = optExistingTrackId,
+                         .optSegment = validatedTrack.optSegment,
+                         .carrierTrackIds = std::move(carrierTrackIds),
+                         .builder = std::move(*snapshotRes),
+                         .manifest = std::move(manifestBuilder)};
   }
 
   Result<> LibraryYamlImporter::Impl::importTracks(std::vector<PreparedTrack> const& tracks,
@@ -1845,14 +2423,49 @@ namespace ao::rt
   {
     auto trackWriter = transaction.tracks();
     auto manifestReader = ml.manifest().reader(transaction);
+    auto trackReader = ml.tracks().reader(transaction);
+
+    if (auto res = validatePreparedCarriers(tracks, trackReader, manifestReader, strategy); !res)
+    {
+      return res;
+    }
+
+    auto carrierGroups = std::unordered_map<std::string_view, std::vector<PreparedTrack const*>>{};
+
+    for (auto const& track : tracks)
+    {
+      if (track.optSegment)
+      {
+        carrierGroups[track.uri].push_back(&track);
+      }
+    }
+
+    auto importedUris = std::unordered_set<std::string_view>{};
 
     for (auto const& preparedTrack : tracks)
     {
-      if (auto res =
-            importTrackRecord(preparedTrack, trackWriter, manifestReader, strategy, yamlTrackIdToInternalId, report);
+      if (!preparedTrack.optSegment)
+      {
+        if (auto res =
+              importTrackRecord(preparedTrack, trackWriter, manifestReader, strategy, yamlTrackIdToInternalId, report);
+            !res)
+        {
+          return res;
+        }
+
+        continue;
+      }
+
+      if (!importedUris.insert(preparedTrack.uri).second)
+      {
+        continue;
+      }
+
+      if (auto res = importCarrierGroup(
+            carrierGroups.at(preparedTrack.uri), trackWriter, manifestReader, yamlTrackIdToInternalId, report);
           !res)
       {
-        return std::unexpected{res.error()};
+        return res;
       }
     }
 
@@ -1995,16 +2608,28 @@ namespace ao::rt
 
   Result<> LibraryYamlImporter::Impl::applyFileMetadata(ryml::ConstNodeRef const& trackNode,
                                                         std::string_view uriStr,
+                                                        ImportMode mode,
                                                         library::FileManifestStore::Reader const& manifestReader,
                                                         library::FileManifestBuilder& manifestBuilder) const
   {
     auto const fileSizeNode = yaml::findChild(trackNode, "file-size");
     auto const mtimeNode = yaml::findChild(trackNode, "mtime");
 
-    if (auto const optManifest = manifestReader.get(uriStr); optManifest)
+    auto const optManifest = mode == ImportMode::Merge ? manifestReader.get(uriStr) : std::nullopt;
+
+    if (optManifest)
     {
-      manifestBuilder.fileSize(optManifest->fileSize());
-      manifestBuilder.mtime(optManifest->mtime());
+      if (optManifest->segmentCount() != 0)
+      {
+        // Carrier membership is append-only here; retain the one physical
+        // file's identity and status while overlaying its portable facts.
+        manifestBuilder = library::FileManifestBuilder::fromView(*optManifest);
+      }
+      else
+      {
+        manifestBuilder.fileSize(optManifest->fileSize());
+        manifestBuilder.mtime(optManifest->mtime());
+      }
     }
     else
     {
@@ -2181,10 +2806,14 @@ namespace ao::rt
 
     auto const& fileBuilder = optMediaTrack->builder();
     auto const& props = fileBuilder.property();
+
+    if (!optBuilder->property().segment())
+    {
+      optBuilder->property().duration(props.duration()).sampleRate(props.sampleRate());
+    }
+
     optBuilder->property()
-      .duration(props.duration())
       .bitrate(props.bitrate())
-      .sampleRate(props.sampleRate())
       .codec(props.codec())
       .channels(props.channels())
       .bitDepth(props.bitDepth());
@@ -2457,7 +3086,7 @@ namespace ao::rt
   {
     auto listWriter = transaction.lists();
     auto manifestReader = ml.manifest().reader(transaction);
-
+    auto trackReader = ml.tracks().reader(transaction);
     auto yamlListIdToNewListId = std::unordered_map<std::uint32_t, ListId>{};
     yamlListIdToNewListId.reserve(lists.size());
 
@@ -2468,7 +3097,9 @@ namespace ao::rt
                        .description(importedList.description)
                        .filter(importedList.filter);
 
-      if (auto res = buildListOrder(builder, importedList, yamlTrackIdToInternalId, manifestReader, report); !res)
+      if (auto res =
+            buildListOrder(builder, importedList, yamlTrackIdToInternalId, manifestReader, trackReader, report);
+          !res)
       {
         return res;
       }
@@ -2513,6 +3144,7 @@ namespace ao::rt
     ValidatedList const& importedList,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
     library::FileManifestStore::Reader const& manifestReader,
+    library::TrackStore::Reader const& trackReader,
     ImportReport& report) const
   {
     for (auto const& orderReference : importedList.orderReferences)
@@ -2533,9 +3165,13 @@ namespace ao::rt
 
       auto const& uriReference = std::get<ValidatedListOrderUriReference>(orderReference);
 
-      if (auto const optManifest = manifestReader.get(uriReference.uri); optManifest)
+      auto const optManifest = manifestReader.get(uriReference.uri);
+      auto const optTrackId =
+        optManifest ? findTrack(*optManifest, uriReference.optOrdinal, trackReader) : std::nullopt;
+
+      if (optTrackId)
       {
-        builder.orderTrackIds().add(optManifest->trackId());
+        builder.orderTrackIds().add(*optTrackId);
       }
       else
       {
