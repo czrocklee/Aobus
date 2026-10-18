@@ -14,7 +14,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <source_location>
 #include <string>
+#include <string_view>
 
 namespace ao::audio::backend::detail::test
 {
@@ -26,6 +28,56 @@ namespace ao::audio::backend::detail::test
     CHECK(coreAudioErrorCode(::kAudioUnitErr_CannotDoInCurrentContext, Error::Code::InitFailed) ==
           Error::Code::ResourceBusy);
     CHECK(coreAudioErrorCode(-123456, Error::Code::IoError) == Error::Code::IoError);
+  }
+
+  TEST_CASE("CoreAudioError - device loss errors retain native context independently of fallback",
+            "[audio][unit][coreaudio]")
+  {
+    auto const statuses = std::to_array<::OSStatus>(
+      {::kAudioHardwareBadDeviceError, ::kAudioHardwareBadObjectError, ::kAudioHardwareNotRunningError});
+    auto const fallbacks = std::array{Error::Code::InitFailed, Error::Code::IoError};
+    auto const location = std::source_location::current();
+
+    for (auto const status : statuses)
+    {
+      for (auto const fallback : fallbacks)
+      {
+        CAPTURE(status, fallback);
+        CHECK(coreAudioErrorCode(status, fallback) == Error::Code::DeviceNotFound);
+
+        auto const error = makeCoreAudioError(status, "required channel property read", fallback, location).error();
+        CHECK(error.code == Error::Code::DeviceNotFound);
+        CHECK(error.message.contains("required channel property read"));
+        CHECK(error.message.contains(coreAudioStatusText(status)));
+        CHECK(std::string_view{error.location.file_name()} == location.file_name());
+        CHECK(std::string_view{error.location.function_name()} == location.function_name());
+        CHECK(error.location.line() == location.line());
+        CHECK(error.location.column() == location.column());
+      }
+    }
+  }
+
+  TEST_CASE("CoreAudioError - arbitrary native faults preserve fallback and native context", "[audio][unit][coreaudio]")
+  {
+    ::OSStatus const status = -123456;
+    auto const fallbacks = std::array{Error::Code::InitFailed, Error::Code::IoError};
+    auto const location = std::source_location::current();
+    CHECK_FALSE(isCoreAudioDeviceLossStatus(status));
+
+    for (auto const fallback : fallbacks)
+    {
+      CAPTURE(fallback);
+      CHECK(coreAudioErrorCode(status, fallback) == fallback);
+
+      auto const error = makeCoreAudioError(status, "required channel property read", fallback, location).error();
+      CHECK(error.code == fallback);
+      CHECK(error.message.contains("required channel property read"));
+      CHECK(error.message.contains("OSStatus -123456"));
+      CHECK(std::string_view{error.location.file_name()} == location.file_name());
+      CHECK(std::string_view{error.location.function_name()} == location.function_name());
+      CHECK(error.location.line() == location.line());
+      CHECK(error.location.column() == location.column());
+    }
   }
 
   TEST_CASE("CoreAudioError - recognizes terminal device statuses", "[audio][unit][coreaudio]")
@@ -70,5 +122,21 @@ namespace ao::audio::backend::detail::test
       makeCoreAudioError(::kAudioHardwareBadDeviceError, "select Core Audio device", Error::Code::InitFailed);
     CHECK(error.error().code == Error::Code::DeviceNotFound);
     CHECK(error.error().message.contains("select Core Audio device"));
+  }
+
+  TEST_CASE("CoreAudioError - preserves the owning call site alongside native operation context",
+            "[audio][unit][coreaudio]")
+  {
+    auto const location = std::source_location::current();
+    auto const error =
+      makeCoreAudioError(::kAudioUnitErr_FormatNotSupported, "required map readback", Error::Code::InitFailed, location)
+        .error();
+    CHECK(error.code == Error::Code::FormatRejected);
+    CHECK(error.message.contains("required map readback"));
+    CHECK(error.message.contains(coreAudioStatusText(::kAudioUnitErr_FormatNotSupported)));
+    CHECK(std::string_view{error.location.file_name()} == location.file_name());
+    CHECK(std::string_view{error.location.function_name()} == location.function_name());
+    CHECK(error.location.line() == location.line());
+    CHECK(error.location.column() == location.column());
   }
 } // namespace ao::audio::backend::detail::test

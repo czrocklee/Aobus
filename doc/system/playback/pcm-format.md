@@ -49,9 +49,9 @@ Only a zero-mask source keeps the legacy positions: the existing count-derived F
 The WASAPI graph stream publishes this accepted native descriptor, including legacy fills, rather than changing the canonical opened client's source mask.
 Native roles can constrain downstream conversion analysis without identifying the source or proving its mapping.
 This also applies to independent native-only evidence: ALSA may clear a stream format mask for privately permuted slots while retaining a native speaker set as a downstream constraint.
-Core Audio does not yet implement native admission for identified source roles: its backend open entry point explicitly refuses every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and its prewarm query withholds such modes.
-This availability boundary precedes native stream access and does not relax common opened-mode validation or reinterpret native faults.
-For Core Audio, zero-mask playback follows its existing path.
+Core Audio admits complete supported identities through a [bounded AUHAL observation and permutation bridge](audio-execution.md#core-audio-channel-admission).
+Its returned client mode stays canonical; native byte order and initial delivery evidence remain separate, and acceptance does not prove physical routing.
+Core Audio hints preserve exact source identity without native I/O and are neither admission nor observation guarantees.
 Existing byte-order conventions remain unchanged. The following legacy WAV/Microsoft orders are not a rule for filling a zero mask:
 
 | Channels | Order |
@@ -199,6 +199,7 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 - [`PcmConversionTest.cpp`](../../../test/unit/audio/PcmConversionTest.cpp) locks packed, 24-in-32, full-scale 32-bit, float, and precision-loss rejection behavior.
 - [`OpenedModeValidationTest.cpp`](../../../test/unit/audio/OpenedModeValidationTest.cpp) locks strict lossless client and endpoint validation.
 - Decoder session tests under [`test/unit/audio/`](../../../test/unit/audio) lock per-codec production of the selected encoding.
+- [`CoreAudioChannelLayoutTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh; [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) retains native open and lifetime controls.
 
 ## Related documents
 

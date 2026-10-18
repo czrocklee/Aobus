@@ -450,6 +450,48 @@ A zero-mask source retains legacy no-permutation eligibility and never acquires 
 The playback loop checks tightly interleaved MMAP geometry and uses preallocated frame scratch for any permutation before gain and commit.
 The graph reports native storage without a canonical input mask and carries observed native positions separately.
 
+#### Core Audio channel admission
+
+Core Audio admits zero-mask legacy sources and complete supported WAVE speaker sets without deriving roles from count.
+Direct open checks geometry, then lossless encoding/precision, then local identity completeness before its own close or native access; precision wins over layout for composite-invalid input.
+Known-mask prewarm preserves rate, count and identity using only lossless local policy, not native observation or an admission guarantee.
+After initialization, a fresh exact input ASBD must still match the selected storage.
+The canonical opened client mode and initial delivery snapshot are returned even when notification reentry retires that open; AUHAL shared output never supplies a `ConfirmedEndpoint`.
+
+The bounded bridge independently reads actual AU client/output layouts and destination-to-source output ordinals (`-1` is silence).
+Current AU output layout is authoritative; device preference is only an applicable-count fallback, never proof of current output geometry.
+Native tags and bitmaps expand through AudioFormat, with exact byte extent, description/count and map-range bounds.
+Only documented AU property-absence statuses withhold actual layout/map evidence; native faults and malformed successful required reads remain output failures.
+Ordinary unusable optional preferences withhold evidence, but queried device loss is terminal.
+Explicit native labels distinguish back from side; opaque Mono never implies Center, and coordinate positions are not proved by this vocabulary.
+A local output-unit map may be set only after incompatibility and independently complete equal-set observations; explicit map SET capability refusals are contextual incompatibilities, while successful SET requires fresh matching readback and subsequent role proof.
+All accepted paths remain `isMapped == false`: no physical-route or mono-gain guarantee is supplied.
+
+Before render admission, Core Audio provisions immutable canonical pull geometry, source slots, sample/frame sizes, frame capacity and buffers.
+Identity binds validated native storage directly with a preallocated null-storage fallback; only nonidentity allocates a second buffer.
+Permutation copies every sample-storage byte without numerical conversion.
+One interleaved buffer, exact client count, capacity and UInt32 byte bounds are checked before binding mutation.
+No realtime allocation, property read, layout parsing, map change or plan replacement occurs; the full callback fence covers render and associated position, underrun and drain work.
+Observed native sets do not imply canonical native byte order; the graph reports native storage, with client-to-output channel conversion only on the receiving Sink, not a duplicate Stream finding.
+
+Start/resume synchronously prove fresh exact input storage and unchanged provisioned slots under target serialization then the control-only run gate.
+Execution omits dispensable output numerics, preference and latency work when current layouts/maps suffice, and queues optional worker observation afterward.
+Observation clears unavailable downstream numerics instead of borrowing client, preference or cached geometry; missing current output geometry or a changed required permutation faults rather than remapping active buffers.
+A queried downstream ASBD must have a finite positive rate and nonzero channel count, independently of the optional `SignalFormat` projection's integer-rate and eight-bit-count limits.
+Unrepresentable downstream numerics withhold diagnostic signal evidence without rejecting the proved client transport; this does not validate downstream sample storage or add client encodings.
+Exact successful ASBD byte extents, fresh client storage and native device-loss failures remain mandatory checks.
+The worker holds native ownership through getters, relationship validation and snapshot assignment so an older read cannot publish after a newer one.
+Retired/closed refreshes discard both success and failure. Tail-latency replacement is non-realtime serialized native work.
+Listeners only enter/leave their fence and signal pending work; partial registrations are tracked and listener admission closes before unregister/wait/disposal.
+
+`CoreAudioControlMailbox` arbitrates pending listener/render generations monotonically and retains the first pending fault cause per generation.
+That coalescing does not order already consumed actions: `CoreAudioRunControl` separately orders worker refresh/fault/drain native work against public run advancement.
+Realtime/listener generation reads remain lock-free; tokens do not retain owner lifetime.
+Workers release run/native/snapshot locks before target callbacks or graph delivery and never hold the run gate while waiting for target serialization.
+The [final close and unlocked delivery ordering](#backend-graph-delivery) remains the target lifetime authority; worker handoff alone does not prove another callback has returned.
+
+#### Shared client formats
+
 PipeWire, WASAPI, and Core Audio negotiate a client stream in front of a graph that may resample, remix, or requantize without reporting a direct endpoint.
 They therefore offer only lossless client encodings and leave `ConfirmedEndpoint` absent, in both shared and exclusive mode.
 PipeWire shared mode offers only the first ordered lossless client encoding, while PipeWire exclusive mode retains the complete lossless candidate set and returns the negotiated client stream format.
@@ -615,6 +657,12 @@ Its move-only delivery ticket is one-shot; dropping it cancels delivery without 
 Delayed delivery still checks route revision, subscription cancellation, and registry retirement.
 Core Audio prepares publications and clears under its owner publication lock, then releases that lock before delivering.
 Run controls, drain and fault transitions, and non-render target notifications share callback serialization.
+Core Audio render admission binds each admitted cycle to an immutable run generation before its geometry checks, rendering, or drain work.
+The admission generation is published before opening the fence and replaced only while admission is closed and all admitted cycles have settled; capturing it requires no realtime lock or allocation.
+All render-origin faults and drain signals carry that captured generation rather than sampling the current control generation when they publish.
+A callback admitted between stop's generation advance and fence closure therefore still belongs to the retiring render interval and cannot rebrand its fault as the stopped generation's current error.
+Pause does not advance the generation, so resume preserves the same run identity and genuine same-run faults remain eligible.
+Native control and device-listener failures retain their separate explicit generation checks; this does not make stop a universal error-callback revocation boundary or retract an error already delivered before retirement.
 Start retains that serialization through render admission and native activation, including when called by a graph observer without an enclosing target notification.
 Close closes listener admission, then acquires the same serialization before retiring the target attachment and run, disabling render admission, and waiting for final render quiescence.
 That final fence follows admitted non-render notifications and run controls: an open-origin notification can reenter start while close waits for it.
@@ -642,7 +690,10 @@ Core Audio additionally diagnoses same-backend target-origin open/close misuse a
 That assertion covers misuse reached through a graph callback nested beneath a target callback.
 It reports the defect rather than recovering from it: the deferral requirement above still governs, and a rejected call neither succeeds nor substitutes a deferred replacement.
 Ordinary raw graph-observer close and the run-only start/stop supported above fall outside the check and remain allowed.
-The assertion covers the Core Audio open/close mutation boundaries only, not every SDK or native-fault path, and other backends are not promised an equivalent runtime diagnostic; they remain bound by the Backend deferral contract.
+A separate per-backend render-domain marker rejects `start()`, `pause()`, `resume()`, `flush()`, and `stop()` before control locking when called from PCM, underrun, position, or ordered drain-complete callbacks.
+Drain completion runs on the control worker rather than the realtime thread, but remains part of the serialized render-producer domain.
+The marker is distinct from the general target-callback identity, so the supported route/format-origin start/stop paths remain allowed.
+These diagnostics cover only the named Core Audio mutation boundaries, not every SDK or native-fault path, and other backends are not promised equivalent runtime diagnostics; they remain bound by the Backend callback preconditions.
 Property writes retain synchronous native error reporting and cached intent, but coalesce graph-publication requests on the existing non-realtime control worker when a graph registry is present.
 That handoff avoids outward graph delivery on a target callback's property-write stack and publishes current state rather than replaying an old property snapshot.
 
@@ -789,6 +840,9 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
   The different-backend identity case uses an early-refused synthetic open and an inert close, not successful cross-backend shared-gate entry.
   Apple-only [`CoreAudioBackendFatalProbeTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendFatalProbeTest.cpp) protects the Core Audio target callback-origin open/close misuse diagnostics through child-process fatal probes; it exercises those owned diagnostic scenarios, not every native fault producer path.
   Its nested-graph scenarios deliberately violate the gate-deferral precondition to reach the owned lifecycle diagnostic; they do not establish support for synchronous shared-registry entry from target callbacks.
+- [`CoreAudioChannelLayoutTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) protects observation bounds, role admission, byte permutations, required readback failures and execution/observation refresh; [`CoreAudioGraphTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioGraphTest.cpp) protects sink-only conversion findings and [`CoreAudioRenderBufferTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp) protects nonmutating shape refusal.
+- [`CoreAudioControlMailboxTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioControlMailboxTest.cpp) protects pending-generation arbitration; [`CoreAudioRunControlTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioRunControlTest.cpp) protects consumed-action ordering. These controlled cases do not establish native SDK or callback-lifetime behavior.
+- [`CoreAudioChannelObservationTest.cpp`](../../../test/unit/audio/backend/CoreAudioChannelObservationTest.cpp) is a hidden exact-UID disposable-AUHAL map readback probe, not rendered/captured PCM or hardware routing proof.
 - [`EngineRtSignalRingTest.cpp`](../../../test/unit/audio/EngineRtSignalRingTest.cpp) protects the exact two-entry capacity, serialized producer handoff, sequential-splice occupancy, pending-drain arm behavior, and legal full-ring delivery.
 - [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.

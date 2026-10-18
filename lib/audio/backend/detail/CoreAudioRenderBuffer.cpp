@@ -7,6 +7,7 @@
 #include <MacTypes.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <span>
 
@@ -14,9 +15,11 @@ namespace ao::audio::backend::detail
 {
   BoundCoreAudioRenderBuffer bindCoreAudioRenderBuffer(::AudioBufferList* const buffers,
                                                        std::span<std::byte> const stagingBuffer,
-                                                       std::size_t const byteCount) noexcept
+                                                       std::size_t const byteCount,
+                                                       std::uint32_t const clientChannels) noexcept
   {
-    if (buffers == nullptr || buffers->mNumberBuffers != 1U || byteCount > stagingBuffer.size() ||
+    if (clientChannels == 0U || buffers == nullptr || buffers->mNumberBuffers != 1U ||
+        buffers->mBuffers[0].mNumberChannels != clientChannels || byteCount > stagingBuffer.size() ||
         byteCount > std::numeric_limits<::UInt32>::max())
     {
       return {};

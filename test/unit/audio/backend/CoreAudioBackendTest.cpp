@@ -40,6 +40,7 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::audio::backend::test
@@ -327,15 +328,15 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("CoreAudioBackend - identified source roles are refused before native channel admission is available",
+  TEST_CASE("CoreAudioBackend - locally unsupported identity is refused before native access and prewarm",
             "[audio][unit][coreaudio][backend]")
   {
     auto backend = CoreAudioBackend{
       Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
       kProfileShared};
     auto target = ::ao::audio::test::NoopRenderTarget{};
-    // ASBD storage agreement alone cannot establish either requested speaker set.
-    auto const speakerMask = GENERATE(0x30U, 0x3U);
+    // Partial, excess and reserved identities cannot provision a permutation.
+    auto const speakerMask = GENERATE(0x1U, 0x7U, 0x80000001U);
     auto const sourceFormat =
       SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = speakerMask};
 
@@ -344,8 +345,82 @@ namespace ao::audio::backend::test
 
     REQUIRE_FALSE(openedRes);
     CHECK(openedRes.error().error.code == Error::Code::FormatRejected);
-    CHECK(openedRes.error().error.message == "Core Audio source speaker identity is not supported");
+    CHECK(openedRes.error().error.message == "Core Audio cannot identify the source channel set");
     CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
+  }
+
+  TEST_CASE("CoreAudioBackend - an identified source reaches ordinary device lookup instead of a blanket layout ban",
+            "[audio][integration][coreaudio][backend]")
+  {
+    auto backend = CoreAudioBackend{
+      Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
+      kProfileShared};
+    auto target = ao::audio::test::NoopRenderTarget{};
+    // Complete alternate roles are not made stereo merely from channel count.
+    auto const speakerMask = GENERATE(0x3U, 0x30U);
+    auto const openedRes = backend.open({.sampleRate = 44100,
+                                         .channels = 2,
+                                         .precisionBits = 16,
+                                         .sampleKind = SampleKind::Integer,
+                                         .speakerMask = speakerMask},
+                                        target);
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code == Error::Code::DeviceNotFound);
+    CHECK(openedRes.error().error.message == "Core Audio output device is no longer available");
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    backend.close();
+  }
+
+  TEST_CASE("CoreAudioBackend - local refusals retain geometry then precision then identity precedence",
+            "[audio][unit][coreaudio][backend]")
+  {
+    auto backend = CoreAudioBackend{
+      Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
+      kProfileShared};
+    auto target = ao::audio::test::NoopRenderTarget{};
+    auto source = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 33, .speakerMask = 0x1};
+    bool isGeometryFailure = false;
+
+    SECTION("zero rate wins over precision and partial identity")
+    {
+      source.sampleRate = 0;
+      isGeometryFailure = true;
+    }
+
+    SECTION("zero count wins over precision and reserved identity")
+    {
+      source.channels = 0;
+      source.speakerMask = 0x80000001;
+      isGeometryFailure = true;
+    }
+
+    SECTION("33-bit precision wins over partial identity")
+    {
+    }
+
+    SECTION("nonrepresentable float precision wins over reserved identity")
+    {
+      source.precisionBits = 16;
+      source.sampleKind = SampleKind::FloatingPoint;
+      source.speakerMask = 0x80000001;
+    }
+
+    SECTION("zero precision has no lossless encoding")
+    {
+      source.precisionBits = 0;
+      source.speakerMask = 0;
+    }
+
+    CHECK_FALSE(backend.prewarmFormatHint(source));
+    auto const openedRes = backend.open(source, target);
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code ==
+          (isGeometryFailure ? Error::Code::InvalidInput : Error::Code::FormatRejected));
+    CHECK(openedRes.error().error.message == (isGeometryFailure
+                                                ? "Core Audio PCM formats require a sample rate and channels"
+                                                : "No lossless Core Audio client PCM encoding is available"));
+    CHECK(openedRes.error().cause == (isGeometryFailure ? BackendOpenFailure::Cause::OutputFailure
+                                                        : BackendOpenFailure::Cause::TrackRouteIncompatible));
   }
 
   TEST_CASE("CoreAudioBackend - prewarm predicts the lossless mode without native negotiation",
@@ -367,6 +442,87 @@ namespace ao::audio::backend::test
       CHECK(optHint->channels == 2U);
       CHECK(optHint->encoding == SampleEncoding::Signed16Le);
     }
+  }
+
+  TEST_CASE("CoreAudioBackend - prewarm retains identified source eligibility without native negotiation",
+            "[audio][unit][coreaudio][backend]")
+  {
+    auto backend = CoreAudioBackend{
+      Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
+      kProfileShared};
+
+    SECTION("identified stereo retains its canonical mask")
+    {
+      auto const optHint =
+        backend.prewarmFormatHint({.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3});
+      REQUIRE(optHint);
+      CHECK(optHint->sampleRate == 44100U);
+      CHECK(optHint->channels == 2U);
+      CHECK(optHint->encoding == SampleEncoding::Signed16Le);
+      CHECK(optHint->speakerMask == 0x3U);
+    }
+
+    SECTION("identified multichannel retains its lossless geometry")
+    {
+      auto const optHint =
+        backend.prewarmFormatHint({.sampleRate = 48000, .channels = 6, .precisionBits = 24, .speakerMask = 0x3F});
+      REQUIRE(optHint);
+      CHECK(optHint->sampleRate == 48000U);
+      CHECK(optHint->channels == 6U);
+      CHECK(optHint->encoding == SampleEncoding::Signed24PackedLe);
+      CHECK(optHint->speakerMask == 0x3FU);
+    }
+  }
+
+  TEST_CASE("CoreAudioBackend - native AUHAL open retains canonical identities in the exact lossless client stream",
+            "[audio][integration][coreaudio][backend]")
+  {
+    auto const device = requireNativeTestOutput();
+    CAPTURE(device.id.raw());
+    auto target = ao::audio::test::NoopRenderTarget{};
+    auto graphRegistryPtr = std::make_shared<detail::BackendGraphRegistry>();
+    auto backend = CoreAudioBackend{device, kProfileShared, graphRegistryPtr};
+    auto const identified =
+      PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+    auto const openedRes = backend.open(
+      {.sampleRate = 44100, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer, .speakerMask = 0x3},
+      target);
+    REQUIRE(openedRes);
+    CHECK(openedRes->clientFormat.sampleRate == 44100U);
+    CHECK(openedRes->clientFormat.speakerMask == 0x3U);
+    CHECK(openedRes->clientFormat.channels == 2U);
+    CHECK(openedRes->clientFormat.encoding == SampleEncoding::Signed16Le);
+    CHECK_FALSE(openedRes->optEndpoint);
+    CHECK_FALSE(openedRes->channelDelivery.isMapped);
+    CHECK((openedRes->channelDelivery.nativeSpeakerMask == 0U || openedRes->channelDelivery.nativeSpeakerMask == 0x3U));
+    auto captureNativeGraph = [&]
+    {
+      auto graph = flow::Graph{};
+      auto sub = graphRegistryPtr->subscribe(device.id.raw(), [&](flow::Graph const& updated) { graph = updated; });
+      REQUIRE(sub);
+      sub.reset(); // Fence native worker delivery before inspecting its copy.
+      return graph;
+    };
+    auto const nativeGraph = captureNativeGraph();
+    REQUIRE(nativeGraph.nodes.size() == 2U);
+    auto const& nativeNode = nativeGraph.nodes.front();
+    REQUIRE(nativeNode.optFormat);
+    REQUIRE(std::holds_alternative<PcmFormat>(*nativeNode.optFormat));
+    auto const nativeFormat = std::get<PcmFormat>(*nativeNode.optFormat);
+    CHECK(nativeFormat.sampleRate == identified.sampleRate);
+    CHECK(nativeFormat.channels == identified.channels);
+    CHECK(nativeFormat.encoding == identified.encoding);
+    CHECK(openedRes->clientFormat == identified);
+    CHECK(backend.queryProperty(PropertyId::Volume).isAvailable);
+    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isHardwareAssisted);
+    REQUIRE(backend.set(props::kVolume, 0.25F));
+    REQUIRE(backend.set(props::kMuted, true));
+    REQUIRE(backend.set(props::kMuted, false));
+    auto const volumeRes = backend.get(props::kVolume);
+    REQUIRE(volumeRes);
+    CHECK(*volumeRes == 0.25F);
+    backend.close();
+    CHECK_FALSE(backend.queryProperty(PropertyId::Volume).isAvailable);
   }
 
   TEST_CASE("CoreAudioBackend - native AUHAL open confirms the exact lossless client stream",

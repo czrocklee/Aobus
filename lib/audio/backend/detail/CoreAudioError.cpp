@@ -28,7 +28,8 @@ namespace ao::audio::backend::detail
     switch (status)
     {
       case ::kAudioHardwareBadDeviceError:
-      case ::kAudioHardwareBadObjectError: return Error::Code::DeviceNotFound;
+      case ::kAudioHardwareBadObjectError:
+      case ::kAudioHardwareNotRunningError: return Error::Code::DeviceNotFound;
       case ::kAudioDeviceUnsupportedFormatError:
       case ::kAudioUnitErr_FormatNotSupported: return Error::Code::FormatRejected;
       case ::kAudioUnitErr_CannotDoInCurrentContext: return Error::Code::ResourceBusy;
