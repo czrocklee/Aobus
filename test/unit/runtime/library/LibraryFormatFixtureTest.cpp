@@ -155,8 +155,9 @@ namespace ao::rt::test
         auto const temp = ao::test::TempDir{};
         auto const databasePath = temp.path() / "library";
         REQUIRE(std::filesystem::create_directory(databasePath));
-        // A copy, because opening writes the lock file and the test writes the
-        // database; the committed fixture must stay as its platform made it.
+        // A copy, because opening creates lock files beside the database and the
+        // test writes the database; the committed fixture must stay as its
+        // platform made it.
         REQUIRE(std::filesystem::copy_file(fixtureRoot() / fixture.directory / "data.mdb", databasePath / "data.mdb"));
 
         // The page size is the creating host's, and these shapes are what the

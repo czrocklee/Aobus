@@ -3,32 +3,26 @@
 
 #pragma once
 
+#include "LockFile.h"
 #include <ao/Error.h>
 
 #include <filesystem>
-#include <memory>
 #include <string_view>
 
 namespace ao::library::detail
 {
+  /// The exclusive lock that admits one writer process to a database at a time.
   class WriterSessionLease final
   {
   public:
     static constexpr std::string_view kFileName = ".aobus-writer.lock";
 
+    /// Fails as `Conflict` while another writer session holds the lease.
     static Result<WriterSessionLease> acquire(std::filesystem::path const& databasePath);
 
-    ~WriterSessionLease();
-
-    WriterSessionLease(WriterSessionLease const&) = delete;
-    WriterSessionLease& operator=(WriterSessionLease const&) = delete;
-    WriterSessionLease(WriterSessionLease&&) noexcept;
-    WriterSessionLease& operator=(WriterSessionLease&&) noexcept;
-
   private:
-    struct Impl;
-    explicit WriterSessionLease(std::unique_ptr<Impl> implPtr);
+    explicit WriterSessionLease(LockFile lock) noexcept;
 
-    std::unique_ptr<Impl> _implPtr;
+    LockFile _lock;
   };
 } // namespace ao::library::detail

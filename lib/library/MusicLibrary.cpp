@@ -6,6 +6,7 @@
 #include "FileManifestValidation.h"
 #include "LibraryIdentity.h"
 #include "ListRecordValidation.h"
+#include "LockFile.h"
 #include "MetadataState.h"
 #include "MetadataStore.h"
 #include "OpenValidationMetrics.h"
@@ -76,6 +77,29 @@ namespace ao::library
     constexpr std::uint64_t kLmdbMapCeiling = std::uint64_t{64} * 1024 * 1024 * 1024; // 64 GiB
     constexpr std::uint32_t kLmdbMaxDatabases = 8; // Seven named stores plus one spare.
     constexpr std::uint32_t kLmdbFileMode = 0664;
+
+    // Every process holds this file's shared lock for as long as it has the
+    // environment open, readers and writers alike, beside the writer lease. An
+    // upgrade or rollback takes it exclusively, so neither can run while any
+    // other process has the library open (decision 0020). The file has no
+    // payload, and no operation moves or removes it.
+    constexpr std::string_view kOpenLockFileName = ".aobus-open.lock";
+
+    Result<detail::LockFile> acquireOpenLock(std::filesystem::path const& databasePath)
+    {
+      auto lockRes = detail::LockFile::acquire(
+        databasePath / utility::pathFromUtf8(kOpenLockFileName), detail::LockFile::Mode::Shared);
+
+      if (!lockRes && lockRes.error().code == Error::Code::ResourceBusy)
+      {
+        return makeError(Error::Code::ResourceBusy,
+                         std::format("The library at '{}' is being upgraded or rolled back by another Aobus process; "
+                                     "open it again when that has finished",
+                                     utility::pathToUtf8(databasePath)));
+      }
+
+      return lockRes;
+    }
 
     /// Capacity management for one open, or none when the caller pinned the map.
     lmdb::CapacityPolicy capacityPolicyFor(MusicLibrary::Options const& options)
@@ -1080,6 +1104,8 @@ namespace ao::library
 
   struct MusicLibrary::Impl final
   {
+    // Declared first, so it is released only after the environment closes.
+    detail::LockFile openLock;
     std::filesystem::path const musicRoot;
     std::filesystem::path const databasePath;
     lmdb::Environment env;
@@ -1093,7 +1119,8 @@ namespace ao::library
     DictionaryStore dictionary;
     FileManifestStore manifest;
 
-    Impl(std::filesystem::path musicRoot,
+    Impl(detail::LockFile openLock,
+         std::filesystem::path musicRoot,
          std::filesystem::path databasePath,
          lmdb::Environment env,
          lmdb::WriteTransaction initializationTransaction,
@@ -1106,7 +1133,8 @@ namespace ao::library
          lmdb::IntegerKeyDatabase resourcesDb,
          lmdb::IntegerKeyDatabase dictionaryDb,
          lmdb::ByteKeyDatabase manifestDb)
-      : musicRoot{std::move(musicRoot)}
+      : openLock{std::move(openLock)}
+      , musicRoot{std::move(musicRoot)}
       , databasePath{std::move(databasePath)}
       , env{std::move(env)}
       , initializationTransaction{std::move(initializationTransaction)}
@@ -1125,6 +1153,13 @@ namespace ao::library
                                                 Options const& options)
     {
       detail::resetOpenValidationMetrics();
+
+      auto openLockRes = acquireOpenLock(databasePath);
+
+      if (!openLockRes)
+      {
+        return std::unexpected{openLockRes.error()};
+      }
 
       auto envRes = lmdb::Environment::open(databasePath,
                                             lmdb::Environment::Options{.flags = environmentFlagsFor(options),
@@ -1178,7 +1213,8 @@ namespace ao::library
       auto admittedSchema = std::move(*admittedSchemaRes);
       auto& schema = admittedSchema.databases;
 
-      auto implPtr = std::make_unique<Impl>(std::move(musicRoot),
+      auto implPtr = std::make_unique<Impl>(std::move(*openLockRes),
+                                            std::move(musicRoot),
                                             std::move(databasePath),
                                             std::move(*envRes),
                                             std::move(*initializationTransactionRes),
@@ -1414,6 +1450,7 @@ namespace ao::library
       .mapBytes = capacity.mapBytes,
       .highWaterBytes = capacity.highWaterBytes,
       .diskBytes = utility::allocatedFileBytes(path / "data.mdb") + utility::allocatedFileBytes(path / "lock.mdb") +
+                   utility::allocatedFileBytes(path / utility::pathFromUtf8(kOpenLockFileName)) +
                    utility::allocatedFileBytes(path / utility::pathFromUtf8(detail::WriterSessionLease::kFileName)),
     };
   }

@@ -49,7 +49,8 @@ UIModel and frontends consume runtime values and semantic commands; they do not 
 Its recoverable construction boundary is `MusicLibrary::open()`.
 Open admits the schema and validates current-version local and cross-store invariants before exposing a usable library; it never exposes a partial store graph or partial All Tracks source.
 The database combines scan-derived facts with library-only identities and user-authored curation, so rescanning media is not a reconstruction guarantee.
-See the [database reference](../../reference/library/storage/database.md) for the exact catalog, layout, capacity, admission, and compatibility contracts.
+Every open, reader or writer, holds the shared open lock beside the environment until it closes, so a future exclusive upgrade or rollback cannot run beneath it.
+See the [database reference](../../reference/library/storage/database.md) for the exact catalog, layout, capacity, locking, admission, and compatibility contracts.
 
 A `ReadTransaction` owns one coherent native snapshot.
 Store readers accept only transactions carrying the same stable `MusicLibrary` identity.
@@ -228,6 +229,7 @@ See [scan and identity](scan-and-identity.md) for ordinary stale-item skips and 
 - Write transactions are process-serialized and non-nested.
 - Only `WritableMusicLibrary` can construct a write transaction; only the live coordinator owns that capability in a runtime.
 - Every recoverable root-operation failure aborts the complete transaction before it is returned.
+- Every open holds the shared open lock until its environment closes, and an open that fails releases it before returning.
 - An active transaction keeps the cross-process writer lease alive.
 - A candidate revision is persisted with the content commit and is not consumed on abort or failed commit.
 - A live committed revision becomes available only after ordered publication settlement.
@@ -267,7 +269,7 @@ Source and projection subscriptions release before the owners they observe; proj
 
 ## Test map
 
-- Storage tests under [`test/unit/library/`](../../../test/unit/library) protect open admission, transaction capabilities, rollback, writer exclusion, and logical aggregate writes.
+- Storage tests under [`test/unit/library/`](../../../test/unit/library) protect open admission, transaction capabilities, rollback, open-lock and writer exclusion, and logical aggregate writes.
 - [`DictionaryStoreTest.cpp`](../../../test/unit/library/DictionaryStoreTest.cpp) protects complete dictionary publication, hidden uncommitted entries, failed-commit rollback, id reuse, and stable borrowed text; [`MetadataStoreTest.cpp`](../../../test/unit/library/MetadataStoreTest.cpp) protects external-tail refresh on read snapshots and writer admission.
 - Runtime library tests under [`test/unit/runtime/library/`](../../../test/unit/runtime/library) protect command admission, publication settlement, scan/transfer behavior, and shutdown retirement.
 - Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source) protect leases, cache identity, expression/rank composition, and deltas.
