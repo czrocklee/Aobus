@@ -1083,7 +1083,7 @@ namespace ao::rt
   /**
    * @brief Replaces @p merged's cover references with the ones @p parsed found.
    *
-   * An embedded cover is a scan fact in version 6, not curated metadata. A
+   * An embedded cover is a scan fact, not curated metadata. A
    * reference names content by digest, so leaving the previous set in place after
    * a file's art changed would leave the library naming content that file no
    * longer holds, and every read for it would fall through to another carrier or

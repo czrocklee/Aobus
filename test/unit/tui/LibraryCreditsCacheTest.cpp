@@ -139,7 +139,7 @@ namespace ao::tui::test
     auto const path = tempDir.path() / "restore.yaml";
     {
       auto yaml = std::ofstream{path};
-      yaml << "version: 8\nexport-mode: full\nlibrary:\n  resources: []\n  tracks:\n"
+      yaml << "version: 1\nexport-mode: full\nlibrary:\n  resources: []\n  tracks:\n"
               "    - uri: restored.flac\n      title: After\n      credits:\n"
               "        - name: After\n          kind: performer\n          role: Voice\n  lists: []\n";
       REQUIRE(yaml.good());

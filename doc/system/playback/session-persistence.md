@@ -6,7 +6,7 @@ id: playback.session-persistence
 ## Scope
 
 This specification defines current behavior for capturing, validating, restoring, normalizing, saving on natural application events, discarding, terminally retiring for a library switch, and shutting down the last restorable playback state.
-The [playback session state reference](../../reference/playback/session-state.md) owns the exact version 5 payload.
+The [playback session state reference](../../reference/playback/session-state.md) owns the exact version 1 payload.
 
 It does not persist a materialized queue, workspace selection, prepared-next token, Engine generation, or decoder/output state.
 
@@ -25,7 +25,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 
 ## Invariants
 
-- Restore validates the complete version 5 payload before resolving a source.
+- Restore validates the complete version 1 payload before resolving a source.
 - Restore never resumes a payload saved for another library, or whose current track's id no longer names the URI and segment ordinal it named when saved.
 - A candidate is prepared completely before it replaces live sequence or transport state.
 - Restore never autoplays, arms an output route, or creates a frontend view.
@@ -219,7 +219,7 @@ Terminal retirement instead cancels and enters `Retired` without a final save.
 ## Persistence and versioning
 
 The literal group is `playback-session`.
-Only schema version `5` is accepted; older or newer values are rejected rather than migrated.
+Only schema version `1` is accepted; older or newer values are rejected rather than migrated.
 
 GTK injects its global application config as the playback-session store. WinUI
 injects its separate global `windows-playback.yaml` store. Current TUI

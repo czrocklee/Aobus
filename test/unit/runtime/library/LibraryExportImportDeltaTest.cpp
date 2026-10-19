@@ -219,7 +219,7 @@ namespace ao::rt::test
       CHECK(yaml::scalarView(tracks[1]["title"]) == "Will fallback to full export because media file read fails");
       CHECK(yaml::scalarView(tracks[2]["title"]) == "Different Title");
 
-      // A delta document carries no embedded cover in version 8. The library holds
+      // A delta document carries no embedded cover in version 1. The library holds
       // what the last scan saw, so a file retagged since then makes the two
       // differ, and the sequence delta would carry is the stale one: applying it
       // would overwrite the covers the baseline just read from the file with
@@ -282,7 +282,7 @@ namespace ao::rt::test
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 8\n"
+      yaml << "version: 1\n"
            << "export-mode: delta\n"
            << "library:\n"
            << "  tracks:\n"
@@ -318,7 +318,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: delta
 library:
   tracks:
@@ -368,7 +368,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 8\nexport-mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
+      yaml << "version: 1\nexport-mode: full\nlibrary:\n  resources: []\n  tracks: []\n  lists: []\n";
     }
 
     auto executorPtr = std::make_unique<QueuedExecutor>();
@@ -395,7 +395,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: full
 library:
   resources: []
@@ -502,7 +502,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "preview.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 8\n"
+      yaml << "version: 1\n"
            << "export-mode: full\n"
            << "library:\n"
            << "  resources: []\n"

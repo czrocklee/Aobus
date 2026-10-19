@@ -17,7 +17,7 @@
 namespace ao::uimodel
 {
   inline constexpr auto kTrackColumnLayoutsConfigGroup = std::string_view{"trackView.columnLayouts"};
-  inline constexpr std::uint32_t kTrackColumnLayoutVersion = 3;
+  inline constexpr std::uint32_t kTrackColumnLayoutVersion = 1;
 
   // Persistence DTOs isolate the versioned wire shape from live UIModel state.
   struct StoredTrackColumn final

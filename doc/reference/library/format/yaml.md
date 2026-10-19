@@ -5,7 +5,7 @@ id: library.yaml-format
 
 ## Scope and version
 
-This reference defines the exact version 8 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
+This reference defines the exact version 1 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
 Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../system/library/yaml-transfer.md).
@@ -24,7 +24,7 @@ Keys of a Track's `custom` map are user-defined and exempt from this rule; [Cred
 The root is a closed map with this shape:
 
 ```yaml
-version: 8
+version: 1
 export-mode: full
 library:
   resources: []
@@ -34,7 +34,7 @@ library:
 
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
-| `version` | Yes. | Always `8`. | Unsigned 32-bit integer; only `8` is accepted. |
+| `version` | Yes. | Always `1`. | Unsigned 32-bit integer; only `1` is accepted. |
 | `export-mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `list-only`. |
 | `library` | Yes. | Always emitted. | Closed map containing only `resources`, `tracks`, and `lists`. |
 
@@ -274,7 +274,7 @@ Each list is a closed map.
 | `order` | No. | Sequence of saved rank references; empty or omitted means no saved rank. |
 
 `filter` and `order` are independent and may coexist.
-The document version names the predicate language of its filters, which carry no version of their own: a version-8 filter means what the version-8 [predicate language](../../query/predicate-language.md) defines, and a grammar, field-binding, or evaluation change that alters the outcome of filter text that language accepts increments the format version, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) defines.
+The document version names the predicate language of its filters, which carry no version of their own: a version-1 filter means what the version-1 [predicate language](../../query/predicate-language.md) defines, and a grammar, field-binding, or evaluation change that alters the outcome of filter text that language accepts increments the format version, as the [predicate language reference](../../query/predicate-language.md#compatibility-and-versioning) defines.
 A non-empty `filter` that does not parse or compile is still imported byte-exactly and counted in the import report's `invalidFiltersKept`, so a library that holds such a filter can restore its own backup.
 The producer always emits `id`, `parent-id`, and `name`; it omits an empty description, identity filter, and empty order.
 Order references do not define membership and need not currently match the List expression.
@@ -327,24 +327,19 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 
 The recording date and the complete Credits list are validated in the document preflight, so their violations reject the whole document before any durable import effect.
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 8 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
+Version 1 does not otherwise cap total document bytes; covers contribute a fixed-size row each rather than their content.
 The observable failure and rollback contract is defined by the [transfer specification](../../../system/library/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
-The importer accepts version 8 only.
-It has no reader for versions 1 through 7, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
-A version-7 document is rejected with `FormatRejected` rather than converted.
-There is no migration contract for earlier interchange files, and a version-3 document's embedded cover bytes cannot be read by this version.
+Version 1 is the first supported interchange format, and the importer accepts version 1 only.
+Development builds made before the first release wrote earlier schemas under the numbers 1 through 8. Those documents are unsupported: one labeled with another version is rejected with `FormatRejected`, and one labeled version 1 is validated against this schema like any other.
+There is no reader for an earlier schema, permissive unknown-field path, restore bypass, or conversion command.
 
 Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.
-Version 8 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 8. There is no dual reader or layout autodetection.
-Version 8 has not been released. Until the first public release, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change; for example, a URI longer than 500 bytes is rejected by builds made before the limit became 1,976 bytes.
-A renamed key or token rejects documents in both directions: earlier development builds spelled `export-mode`, `file-size`, `parent-id`, `list-only`, and the credit kind `dj-mixer` as `export_mode`, `fileSize`, `parentId`, `listOnly`, and `djmixer`.
-Version 8 removed the root `libraryId`: a library id names only the database that drew it, so a document has none to carry; version 7 introduced `recording-date` and typed `credits`.
-`recording-date` defines empty scalar text, including quoted empty scalars and a present empty plain scalar, as its clear form.
-Version 6 existed for one such change: `mtime` stopped being an unsigned host file-clock scalar and became the portable `seconds`/`nanoseconds` instant map or an explicit YAML null.
-Version 5 recorded the Unicode-caseless meaning of `~`, which later versions carry forward; decomposed scalar-valid display text remains accepted and is emitted in the canonical representation required by physical database version 10.
+Version 1 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 1. There is no dual reader or layout autodetection.
+Version 1 has not been released. Until the first public release, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change.
+After the first release, a version is incremented at most once per release, and every later release imports every released version without losing curation, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
 Payload versioning is independent of the database's `kLibraryVersion`, except that a predicate-language change that alters accepted filter text increments both.
 
 ## Examples
@@ -352,7 +347,7 @@ Payload versioning is independent of the database's `kLibraryVersion`, except th
 Full payload:
 
 ```yaml
-version: 8
+version: 1
 export-mode: full
 library:
   resources:
@@ -396,7 +391,7 @@ library:
 List-only payload:
 
 ```yaml
-version: 8
+version: 1
 export-mode: list-only
 library:
   lists:

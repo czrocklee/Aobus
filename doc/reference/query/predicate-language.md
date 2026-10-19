@@ -301,12 +301,13 @@ The grammar and catalog in this reference, together with the truth behavior in t
 
 A change that alters the outcome of filter text the current language accepts, meaning text that parses and compiles, increments both versions, so that a later migration can tell which language a filter was written in.
 The changes listed above are such changes, and so is a new keyword that a bare string spells today: `like` as an operator would invalidate `$genre = like`.
-Neither format reads an earlier version, so such a change leaves existing libraries and backups unsupported, as any other format change does.
+No upgrade exists yet, so neither format reads an earlier version.
+After the first release, such a change ships the upgrade steps that rewrite stored and document filters, as [decision 0020](../../decision/0020-versioning-and-upgrade-policy.md) records.
 
 A change that only gives meaning to text the current language rejects, such as a new variable or alias, increments neither version.
 Every filter that an earlier build of the version accepts means the same in later builds.
 An earlier build reports a filter that uses the addition as an expression error and keeps its text, and a stored filter that was rejected when written takes on the new meaning.
-Incrementing for such a change would make every existing library and backup unsupported without protecting any accepted filter.
+Incrementing for such a change would force every library and backup through an upgrade without protecting any accepted filter.
 
 Neither format requires a filter to parse or compile for admission.
 If retained saved-List text does not parse or compile, source materialization reports an expression error and exposes empty membership; the database remains structurally valid, and a YAML import keeps the text byte-exactly.

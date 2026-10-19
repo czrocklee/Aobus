@@ -17,7 +17,7 @@
 namespace ao::uimodel
 {
   inline constexpr auto kListPresentationsConfigGroup = std::string_view{"trackView.presentations"};
-  inline constexpr std::uint32_t kListPresentationPreferenceVersion = 2;
+  inline constexpr std::uint32_t kListPresentationPreferenceVersion = 1;
 
   // Persistence DTOs isolate the versioned wire shape from live UIModel state.
   struct StoredListPresentationPreference final

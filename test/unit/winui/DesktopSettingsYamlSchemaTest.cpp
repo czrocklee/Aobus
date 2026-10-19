@@ -215,31 +215,6 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - reads a version 2 document and upgrades it", "[winui][unit][layout]")
-  {
-    auto const* source = R"(
-version: 2
-window: {x: 17, y: 29, width: 1500, height: 950, maximized: true}
-shellMode: classic
-lastLibraryPath: 'C:/Legacy Music'
-navigationPaneWidth: 271
-inspectorPaneWidth: 371
-)";
-    auto tree = ryml::Tree{yaml::callbacks()};
-    ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
-
-    auto const res = DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
-
-    REQUIRE(res);
-    CHECK(res->version == kDesktopSettingsVersion);
-    CHECK(res->window == WindowPlacement{.x = 17, .y = 29, .width = 1500, .height = 950, .maximized = true});
-    CHECK(res->shellMode == ShellMode::Classic);
-    CHECK(res->lastLibraryPath == "C:/Legacy Music");
-    CHECK(res->navigationPaneWidth == 271.0);
-    CHECK(res->inspectorPaneWidth == 371.0);
-    CHECK(res->preferredOutputSelection == audio::OutputDeviceSelection{});
-  }
-
   TEST_CASE("DesktopSettingsYamlSchema - refuses a newer document rather than truncating it", "[winui][unit][layout]")
   {
     auto const source = std::format(R"(
@@ -258,10 +233,10 @@ shellMode: modern
 
   TEST_CASE("DesktopSettingsYamlSchema - accepts exactly the versions that were written", "[winui][unit][layout]")
   {
-    // The schema shipped at version 2, so 0 and 1 name no document that ever
-    // existed. Zero in particular is what a missing or malformed marker parses
-    // to, and reading one under current field semantics would dress a corrupt
-    // document up as an old one.
+    // The schema starts at version 1, so 0 names no document that ever
+    // existed. It is what a missing or malformed marker parses to, and reading
+    // one under current field semantics would dress a corrupt document up as an
+    // old one.
     auto const deserialized = [](std::uint32_t const version)
     {
       auto const source = std::format("version: {}\nshellMode: modern\n", version);
@@ -270,7 +245,7 @@ shellMode: modern
       return DesktopSettingsYamlSchema{}.deserialize(tree.rootref(), DesktopSettings{});
     };
 
-    for (auto const rejected : {std::uint32_t{0}, std::uint32_t{1}, kDesktopSettingsVersion + 1})
+    for (auto const rejected : {std::uint32_t{0}, kDesktopSettingsVersion + 1})
     {
       INFO("version " << rejected);
       auto const res = deserialized(rejected);
@@ -278,13 +253,9 @@ shellMode: modern
       CHECK(res.error().code == Error::Code::NotSupported);
     }
 
-    for (auto const accepted : {std::uint32_t{2}, kDesktopSettingsVersion})
-    {
-      INFO("version " << accepted);
-      auto const res = deserialized(accepted);
-      REQUIRE(res);
-      CHECK(res->version == kDesktopSettingsVersion);
-    }
+    auto const res = deserialized(kDesktopSettingsVersion);
+    REQUIRE(res);
+    CHECK(res->version == kDesktopSettingsVersion);
   }
 
   TEST_CASE("DesktopSettingsYamlSchema - an absent field keeps the seeded value", "[winui][unit][layout]")
@@ -303,7 +274,7 @@ shellMode: modern
     SECTION("every optional field absent")
     {
       auto const* source = R"(
-version: 3
+version: 1
 shellMode: classic
 )";
       auto tree = ryml::Tree{yaml::callbacks()};
@@ -323,7 +294,7 @@ shellMode: classic
     SECTION("partial window placement")
     {
       auto const* source = R"(
-version: 3
+version: 1
 window: {maximized: true}
 )";
       auto tree = ryml::Tree{yaml::callbacks()};
@@ -342,7 +313,7 @@ window: {maximized: true}
     SECTION("unknown shell mode")
     {
       auto const* source = R"(
-version: 3
+version: 1
 window: {x: 0, y: 0, width: 1280, height: 800, maximized: false}
 shellMode: future
 lastLibraryPath: ''
@@ -364,7 +335,7 @@ inspectorPaneWidth: 320
     SECTION("unknown token")
     {
       auto const* source = R"(
-version: 3
+version: 1
 window: {x: 0, y: 0, width: 1280, height: 800, maximized: false}
 shellMode: modern
 lastLibraryPath: ''
@@ -412,7 +383,7 @@ future: true
     SECTION("oversized inspector pane")
     {
       auto const* source = R"(
-version: 3
+version: 1
 window: {x: 0, y: 0, width: 1280, height: 800, maximized: false}
 shellMode: modern
 lastLibraryPath: ''

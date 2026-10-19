@@ -143,7 +143,7 @@ Track-field, sort-field, and group-key ids appear in versioned presentation stat
 Current presentation documents never serialize their enum raw values.
 RecordingDate is appended after Quality, and both new sort keys are appended after Duration; existing numeric identities remain unchanged.
 RecordingYear derives from the date and does not duplicate storage or supply a separate editable field.
-The playback-session version-5 schema separately persists numeric `TrackSortField` raw values; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
+The playback-session schema separately persists numeric `TrackSortField` raw values; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
 The raw `TrackField` and `TrackGroupKey` columns remain C++ lookup information rather than current presentation-format tokens.
 
 Query-variable text is owned by the predicate language.

@@ -315,7 +315,7 @@ namespace ao::rt::test
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "covers.yaml";
     writeFileText(yamlPath,
-                  std::format(R"(version: 8
+                  std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -377,7 +377,7 @@ library:
 
     auto const yamlPath = std::filesystem::path{temp.path()} / "hint.yaml";
     writeFileText(yamlPath,
-                  std::format(R"(version: 8
+                  std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -421,7 +421,7 @@ library:
     SECTION("a cover reference naming no row rejects the document")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources: []
@@ -439,7 +439,7 @@ library:
     SECTION("a row no track references rejects the document")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -456,7 +456,7 @@ library:
     SECTION("two rows carrying one digest reject the document")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -487,7 +487,7 @@ library:
       }
 
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -507,7 +507,7 @@ library:
 
     SECTION("a short digest rejects the document")
     {
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: full
 library:
   resources:
@@ -526,7 +526,7 @@ library:
     SECTION("a length above the 32-bit field rejects the document")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -547,7 +547,7 @@ library:
     SECTION("a negative length rejects the document")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -568,7 +568,7 @@ library:
     SECTION("an unknown key inside a resource row rejects the document")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources:
@@ -589,7 +589,7 @@ library:
 
     SECTION("a full document without the table rejects")
     {
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: full
 library:
   tracks:
@@ -601,7 +601,7 @@ library:
 
     SECTION("a full document with an empty table is accepted")
     {
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: full
 library:
   resources: []
@@ -617,7 +617,7 @@ library:
     SECTION("a table in a metadata payload rejects")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: metadata
 library:
   resources:
@@ -634,7 +634,7 @@ library:
     SECTION("a cover reference in a delta payload rejects")
     {
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: delta
 library:
   tracks:
@@ -646,21 +646,6 @@ library:
 )",
                                 otherText));
       requireRejected(ml, yamlPath, ImportMode::Merge);
-    }
-
-    SECTION("a version-3 document is refused outright")
-    {
-      writeFileText(yamlPath, R"(version: 3
-export-mode: full
-library:
-  tracks:
-    - uri: song.flac
-      covers:
-        - type: 3
-          data: BAUG
-  lists: []
-)");
-      requireRejected(ml, yamlPath, ImportMode::Restore);
     }
   }
 
@@ -720,7 +705,7 @@ library:
     SECTION("a metadata restore leaves the file's current art, whatever the database held")
     {
       seedTrack(ml, "song.flac", curatedBytes);
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: metadata
 library:
   tracks:
@@ -736,7 +721,7 @@ library:
 
     SECTION("a metadata restore of an unreadable file yields no cover and no properties")
     {
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: metadata
 library:
   tracks:
@@ -757,7 +742,7 @@ library:
     SECTION("a metadata merge leaves the target track's covers alone")
     {
       seedTrack(ml, "song.flac", curatedBytes);
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: metadata
 library:
   tracks:
@@ -775,7 +760,7 @@ library:
 
     SECTION("a delta restore leaves the file's current art, and none when the file cannot be read")
     {
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: delta
 library:
   tracks:
@@ -797,7 +782,7 @@ library:
       seedTrack(ml, "song.flac", curatedBytes);
       std::filesystem::copy_file(carrierPath, std::filesystem::path{temp.path()} / "bare.flac");
       seedTrack(ml, "bare.flac", {});
-      writeFileText(yamlPath, R"(version: 8
+      writeFileText(yamlPath, R"(version: 1
 export-mode: delta
 library:
   tracks:
@@ -838,7 +823,7 @@ library:
     {
       seedTrack(ml, "song.flac", curatedBytes);
       writeFileText(yamlPath,
-                    std::format(R"(version: 8
+                    std::format(R"(version: 1
 export-mode: full
 library:
   resources:

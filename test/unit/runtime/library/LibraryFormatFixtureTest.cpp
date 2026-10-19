@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/library/LibraryYamlExporter.h"
+#include "runtime/library/LibraryYamlImporter.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -30,14 +31,21 @@
 #include <utility>
 
 // Each directory under test/data/library holds the data.mdb of one platform's
-// version-10 library. Every fixture was made on its platform by restoring
-// v10.yaml with that platform's CLI:
+// version-1 library. Every fixture was made on its platform with that
+// platform's CLI, from an empty directory <root>:
 //
-//   aobus -C <empty dir> lib import v10.yaml --mode restore --confirm-destructive-restore
+//   aobus -C <root> lib import v1.yaml --mode restore --confirm-destructive-restore
+//   aobus -C <root> track create <root>/identity-history.flac   (a copy of test/data/audio/basic_metadata.flac)
+//   aobus -C <root> track delete 264
+//   aobus -C <root> list create --name "Identity history"
+//   aobus -C <root> list delete 6
 //
-// and copying <empty dir>/.aobus/library/data.mdb. v10.yaml is the full export
-// of that restore, so exporting any of the fixtures reproduces it byte for
-// byte. Regenerate all of them when the database format changes.
+// and copying <root>/.aobus/library/data.mdb. The created and deleted Track
+// and List give the library an identity history: its highest ids are gone, and
+// a later write must not reuse them. v1.yaml is the full export of the result,
+// so exporting any of the fixtures reproduces it byte for byte. The fixtures
+// are frozen at the first release; a later format change adds fixtures of its
+// own version instead of regenerating these.
 
 namespace ao::rt::test
 {
@@ -59,10 +67,11 @@ namespace ao::rt::test
       PlatformFixture{.directory = "windows-x64", .pageBytes = 4096},
     };
 
-    // What restoring v10.yaml leaves behind, so a write after it gets the next ids.
-    constexpr auto kFixtureTrackCount = std::size_t{261};
-    constexpr auto kNextTrackId = TrackId{262};
-    constexpr auto kNextListId = ListId{6};
+    // What the procedure above leaves behind. The next ids follow the deleted
+    // Track 264 and List 6, not the 263 Tracks and 5 Lists that remain.
+    constexpr auto kFixtureTrackCount = std::size_t{263};
+    constexpr auto kNextTrackId = TrackId{265};
+    constexpr auto kNextListId = ListId{7};
     constexpr auto kWrittenTag = std::string_view{"written-after-copy"};
 
     std::filesystem::path fixtureRoot()
@@ -136,7 +145,7 @@ namespace ao::rt::test
   TEST_CASE("Library format fixtures - a library from each platform reads back and accepts a write",
             "[runtime][integration][import-export][format-fixture]")
   {
-    auto const expectedYaml = ao::test::readFile(fixtureRoot() / "v10.yaml");
+    auto const expectedYaml = ao::test::readFile(fixtureRoot() / "v1.yaml");
     REQUIRE_FALSE(expectedYaml.empty());
 
     for (auto const& fixture : kFixtures)
@@ -210,5 +219,25 @@ namespace ao::rt::test
         CHECK(optList->orderTrackIds()[0] == kNextTrackId);
       }
     }
+  }
+
+  TEST_CASE("Library format fixtures - the version 1 document restores into an empty library and exports unchanged",
+            "[runtime][integration][import-export][format-fixture]")
+  {
+    auto const yamlPath = fixtureRoot() / "v1.yaml";
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "library";
+    REQUIRE(std::filesystem::create_directory(databasePath));
+    auto libraryRes = library::test::openTestMusicLibrary(temp.path(), databasePath);
+    REQUIRE(libraryRes);
+
+    // The music root holds none of the audio files the document names, so the
+    // restore, CUE members and saved ranks included, comes from the document alone.
+    auto importer = LibraryYamlImporter{*libraryRes};
+    auto const reportRes = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
+    REQUIRE(reportRes);
+    CHECK(reportRes->payloadVersion == kYamlFormatVersion);
+    CHECK(reportRes->tracksCreated == kFixtureTrackCount);
+    CHECK(exportFull(*libraryRes, temp.path() / "export.yaml") == ao::test::readFile(yamlPath));
   }
 } // namespace ao::rt::test

@@ -84,7 +84,7 @@ It does not decide membership, ordering, repeat, shuffle, or source recovery. Co
 
 `PlaybackSessionPersistence` coordinates the composite restorable state across succession and transport. It validates stored input, prepares candidates before installation, observes coherent state, and schedules natural-boundary or debounced saves. It is not a third live-state authority.
 
-The payload contains application listening intent, not projection rows, prepared handles, output devices, decoder state, audio generations, or thread state. See [session persistence](session-persistence.md) and the [version 5 format](../../reference/playback/session-state.md).
+The payload contains application listening intent, not projection rows, prepared handles, output devices, decoder state, audio generations, or thread state. See [session persistence](session-persistence.md) and the [version 1 format](../../reference/playback/session-state.md).
 
 ### Player and Engine
 

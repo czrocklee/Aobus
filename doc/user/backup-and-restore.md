@@ -17,10 +17,10 @@ Back up the music files separately and preserve their paths relative to the musi
 GTK and the Windows desktop prepare a restore preview and require confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
-Only version 8 YAML is accepted.
-Earlier interchange files, including version 7, have no compatibility or conversion path, and no build can re-export an older library as version 8: the current build opens only the current database version, while older builds write YAML versions it rejects.
-A library from an earlier version can be rebuilt by explicitly scanning its music files, which loses curation such as lists and edited metadata unless you already have a version 8 backup.
-Opening an old library never converts, relabels, or deletes it automatically.
+Backups are version 1 YAML, the first supported format, and only version 1 is accepted.
+Libraries and backups made by development builds before the first release are not supported, and no build converts them.
+Such a library can be rebuilt by explicitly scanning its music files, which loses curation such as lists and edited metadata.
+Opening a library of another version never converts, relabels, or deletes it automatically.
 
 A disc image that a CUE sheet splits is several tracks with one path. A backup records each track's CUE number and range, so a **Full** restore can rebuild that split without opening the audio file.
 **Merge** updates a split track only when the backup's path and CUE number match, and it never turns a whole file into a split file or the reverse. To change that form, remove the tracks and scan, as [Manage a music library](manage-library.md#disc-images-and-cue-sheets) describes.

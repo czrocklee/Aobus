@@ -467,7 +467,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "merge.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: delta
 library:
   tracks:
@@ -523,7 +523,7 @@ library:
     SECTION("omitted collections preserve the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: full
 library:
   resources: []
@@ -551,7 +551,7 @@ library:
     SECTION("present empty collections clear the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: full
 library:
   resources: []
@@ -617,7 +617,7 @@ library:
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
       {
         auto yaml = std::ofstream{yamlPath};
-        yaml << R"(version: 8
+        yaml << R"(version: 1
 export-mode: delta
 library:
   tracks:
@@ -674,7 +674,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 8
+version: 1
 export-mode: full
 library:
   resources: []
@@ -758,7 +758,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 8\n";
+      yaml << "version: 1\n";
       yaml << "export-mode: metadata\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
@@ -785,7 +785,7 @@ library:
     }
 
     REQUIRE(res);
-    CHECK(*res == ImportReport{.payloadVersion = 8,
+    CHECK(*res == ImportReport{.payloadVersion = 1,
                                .payloadMode = ExportMode::Metadata,
                                .tracksCreated = 2,
                                .listsCreated = 1,
@@ -824,7 +824,7 @@ library:
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
     {
       auto yaml = std::ofstream{yamlPathDelta};
-      yaml << "version: 8\n";
+      yaml << "version: 1\n";
       yaml << "export-mode: delta\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
@@ -841,7 +841,7 @@ library:
 
     auto resultDeltaRes = importer.importFromYamlOffline(yamlPathDelta, ImportMode::Merge);
     REQUIRE(resultDeltaRes);
-    CHECK(*resultDeltaRes == ImportReport{.payloadVersion = 8,
+    CHECK(*resultDeltaRes == ImportReport{.payloadVersion = 1,
                                           .payloadMode = ExportMode::Delta,
                                           .tracksUpdated = 1,
                                           .listsCreated = 1,
@@ -879,33 +879,17 @@ library:
     CHECK(addedLists == 1);
   }
 
-  TEST_CASE("LibraryYaml - version 8 rejects aliases and extension fields", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 rejects unknown root fields", "[runtime][unit][import-export][schema]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto importer = LibraryYamlImporter{ml};
     auto const yamlPath = std::filesystem::path{temp.path()} / "strict.yaml";
 
-    SECTION("legacy mode alias")
-    {
-      auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
-export-mode: minimum
-library:
-  tracks: []
-  lists: []
-)";
-      yaml.close();
-
-      auto const res = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::FormatRejected);
-    }
-
     SECTION("unknown root field")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: full
 extension_root: future
 library:
@@ -933,7 +917,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 8\n";
+      yaml << "version: 1\n";
       yaml << "export-mode: metadata\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
@@ -1084,7 +1068,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 8
+version: 1
 export-mode: full
 library:
   resources: []
@@ -1132,7 +1116,7 @@ library:
     auto const overlayPayload = [&](std::string_view mtimeLines)
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 8\n";
+      yaml << "version: 1\n";
       yaml << "export-mode: full\n";
       yaml << "library:\n";
       yaml << "  resources: []\n";

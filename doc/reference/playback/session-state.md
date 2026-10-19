@@ -5,7 +5,7 @@ id: playback.session-state
 
 ## Scope and version
 
-This reference owns the exact serialized `PlaybackSessionState` payload in schema version `5`.
+This reference owns the exact serialized `PlaybackSessionState` payload in schema version `1`.
 Capture, validation, restore, normalization, save scheduling, failure, discard, and shutdown behavior belongs to the [playback session persistence specification](../../system/playback/session-persistence.md).
 
 ## Code boundary
@@ -20,7 +20,7 @@ The schema requires every root field below except `currentTrackOrdinal`, whose o
 
 | Field | C++ type | Default | Meaning |
 |---|---|---|---|
-| `schemaVersion` | Unsigned 32-bit integer | `5` | Exact compatibility gate. |
+| `schemaVersion` | Unsigned 32-bit integer | `1` | Exact compatibility gate. |
 | `libraryId` | Canonical UUID string | Nil UUID | Library the session was saved for. |
 | `sourceListId` | `ListId` | Invalid id | Library-scoped source list. |
 | `quickFilterExpression` | String | Empty | Ad-hoc filter applied over the source. |
@@ -60,7 +60,7 @@ The payload contains none of these:
 
 ## Validation rules
 
-- `schemaVersion` must equal `5`.
+- `schemaVersion` must equal `1`.
 - `libraryId` must be a canonical 8-4-4-4-12 hexadecimal UUID.
 - `currentTrackUri` must be a canonical library URI; `currentTrackOrdinal` must be in `0..99`.
 - List and track identities must satisfy semantic restore validation against the active library.
@@ -75,17 +75,17 @@ The payload contains none of these:
 
 ## Compatibility and versioning
 
-Only version `5` is accepted.
+Only version `1` is accepted. Development builds before the first release wrote versions 1 through 5 of earlier schemas; those payloads are unsupported and not detected, so one marked version `1` is validated against this schema like any other.
 There is no migration or seeded missing-field fallback for another/malformed version.
-Version `5` includes the accepted predicate grammar, field binding, and Unicode-caseless `~` evaluation meaning of `quickFilterExpression`.
-A predicate change that can emit quick-filter text an existing version-5 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `5` or provide an explicit tested migration.
+Version `1` includes the accepted predicate grammar, field binding, and Unicode-caseless `~` evaluation meaning of `quickFilterExpression`.
+A predicate change that can emit quick-filter text an existing version-1 reader rejects, or can reject or reinterpret retained quick-filter text, requires a new playback schema version; the owner may then reject version `1` or provide an explicit tested migration.
 The expression carries no separate language version.
 
-Version `5` also includes the current numeric `TrackSortField` mapping.
-Changing a sort-field raw value requires a playback schema version or an explicit version-5 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
+Version `1` also includes the current numeric `TrackSortField` mapping.
+Changing a sort-field raw value requires a playback schema version or an explicit version-1 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
-List and track ids are scoped to one library, so version 5 records that library's UUID and the current subject's URI and ordinal.
-The unreleased development schema adds the ordinal without a version increment; a missing ordinal retains whole-file identity rather than matching an arbitrary carrier member.
+List and track ids are scoped to one library, so version 1 records that library's UUID and the current subject's URI and ordinal.
+A missing ordinal retains whole-file identity rather than matching an arbitrary carrier member.
 The [persistence specification](../../system/playback/session-persistence.md#check-identity) drops a payload whose library or subject no longer matches.
 Independently, the GTK library-switch lifecycle physically deletes the group and terminally seals persistence in the old process, fully destroys that graph, and activates a successor process with idle playback.
 The successor admits future playback writes only after the matching root is durable; root-commit failure keeps the prior root, no payload, and a permanent write seal.
@@ -94,7 +94,7 @@ The successor admits future playback writes only after the matching root is dura
 
 ```yaml
 playback-session:
-  schemaVersion: 5
+  schemaVersion: 1
   libraryId: "123e4567-e89b-12d3-a456-426614174000"
   sourceListId: 1
   quickFilterExpression: "$artist = 'Example'"
@@ -110,7 +110,7 @@ playback-session:
   muted: false
 ```
 
-The runtime schema writes strong ids through their explicit unsigned raw values and writes playback and sort enums through the version-5 numeric mappings above.
+The runtime schema writes strong ids through their explicit unsigned raw values and writes playback and sort enums through the version-1 numeric mappings above.
 
 ## Implementation authority
 

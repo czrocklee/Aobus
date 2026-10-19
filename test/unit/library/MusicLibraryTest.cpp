@@ -490,21 +490,28 @@ namespace ao::library::test
   TEST_CASE("MusicLibrary - reports unsupported library versions as NotSupported", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
-    constexpr std::uint32_t kLegacyV1LibraryVersion = 1;
-    constexpr std::uint32_t kPreviousColdLayoutLibraryVersion = 2;
-    constexpr std::uint32_t kPreUnifiedListOrderingLibraryVersion = 4;
-    constexpr std::uint32_t kPreNfcTextLibraryVersion = 6;
-    constexpr std::uint32_t kPreUnixMtimeLibraryVersion = 7;
-    constexpr std::uint32_t kPrePerformanceMetadataLibraryVersion = 8;
-    constexpr std::uint32_t kPreIdSpaceLibraryVersion = 9;
 
-    SECTION("future version")
+    SECTION("future version is refused without touching the header")
     {
       createLibraryMetadataHeader(temp.path(), kLibraryVersion + 1);
+      auto const readHeaderBytes = [&]
+      {
+        auto optBytes = lmdb::test::readExistingIntegerKeyRecord(temp.path(), "meta", kMetadataHeaderRecordId);
+        REQUIRE(optBytes);
+        return std::move(*optBytes);
+      };
+      auto const before = readHeaderBytes();
 
       auto const res = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotSupported);
+      CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
+      CHECK(res.error().message.contains("version 2 (current 1)"));
+      CHECK(res.error().message.contains("No automatic migration"));
+      CHECK(res.error().message.contains("keep this library"));
+      CHECK(res.error().message.contains("build supporting its stored version"));
+      CHECK(res.error().message.contains("Rebuilding it from media files loses the tags, lists, and custom fields"));
+      CHECK(readHeaderBytes() == before);
     }
 
     SECTION("future version takes precedence over current metadata key flags")
@@ -518,91 +525,6 @@ namespace ao::library::test
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
-    }
-
-    SECTION("old version")
-    {
-      static_assert(kLegacyV1LibraryVersion != kLibraryVersion);
-      createLibraryMetadataHeader(temp.path(), kLegacyV1LibraryVersion);
-
-      auto const res = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("previous cold layout version")
-    {
-      static_assert(kPreviousColdLayoutLibraryVersion != kLibraryVersion);
-      createLibraryMetadataHeader(temp.path(), kPreviousColdLayoutLibraryVersion);
-
-      auto const res = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("version 4 before unified List ordering")
-    {
-      static_assert(kPreUnifiedListOrderingLibraryVersion != kLibraryVersion);
-      createLibraryMetadataHeader(temp.path(), kPreUnifiedListOrderingLibraryVersion);
-
-      auto const res = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("version 6 before NFC text admission")
-    {
-      static_assert(kPreNfcTextLibraryVersion != kLibraryVersion);
-      createLibraryMetadataHeader(temp.path(), kPreNfcTextLibraryVersion);
-
-      auto const res = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("version 7 before Unix-scale file timestamps")
-    {
-      static_assert(kPreUnixMtimeLibraryVersion != kLibraryVersion);
-      createLibraryMetadataHeader(temp.path(), kPreUnixMtimeLibraryVersion);
-
-      auto const res = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-    }
-
-    SECTION("version 8 before separate Work and Performance blocks")
-    {
-      static_assert(kPrePerformanceMetadataLibraryVersion != kLibraryVersion);
-      createLibraryMetadataHeader(temp.path(), kPrePerformanceMetadataLibraryVersion);
-      auto const readHeaderBytes = [&]
-      {
-        auto optBytes = lmdb::test::readExistingIntegerKeyRecord(temp.path(), "meta", kMetadataHeaderRecordId);
-        REQUIRE(optBytes);
-        return std::move(*optBytes);
-      };
-      auto const before = readHeaderBytes();
-
-      auto const res = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-      CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
-      CHECK(res.error().message.contains("version 8 (current 10)"));
-      CHECK(res.error().message.contains("No automatic migration"));
-      CHECK(res.error().message.contains("keep this library"));
-      CHECK(res.error().message.contains("build supporting its stored version"));
-      CHECK(res.error().message.contains("Rebuilding it from media files loses the tags, lists, and custom fields"));
-      CHECK(readHeaderBytes() == before);
-    }
-
-    SECTION("version 9 before the id space record")
-    {
-      static_assert(kPreIdSpaceLibraryVersion != kLibraryVersion);
-      createLibraryMetadataHeader(temp.path(), kPreIdSpaceLibraryVersion);
-
-      auto const res = openTestMusicLibrary(temp.path(), temp.path());
-      REQUIRE_FALSE(res);
-      CHECK(res.error().code == Error::Code::NotSupported);
-      CHECK(res.error().message.contains("version 9 (current 10)"));
     }
   }
 
@@ -1251,7 +1173,7 @@ namespace ao::library::test
     }
 
     // A later version's sub-file Track key continues its file's whole-file key
-    // after a zero byte, so version 10 must refuse it as a manifest key, both
+    // after a zero byte, so version 1 must refuse it as a manifest key, both
     // when the zero byte starts a new block after the URI and when it is the
     // URI's first padding byte. The message pins that the key check refuses it.
     auto const requireReservedKeyRefused = [&temp](std::string_view const reservedKey)

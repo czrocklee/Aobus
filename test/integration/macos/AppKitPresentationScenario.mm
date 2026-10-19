@@ -1115,7 +1115,7 @@ namespace
     auto text = readText(workspaceStorePath(musicRoot));
     auto const group = text.find("trackView.presentations:");
     AO_INVARIANT(group != std::string::npos, "The preference group must be persisted before the version probe");
-    constexpr auto kCurrentVersion = std::string_view{"version: 2"};
+    constexpr auto kCurrentVersion = std::string_view{"version: 1"};
     auto const version = text.find(kCurrentVersion, group);
     AO_INVARIANT(version != std::string::npos, "The preference group must carry its current version");
     text.replace(version, kCurrentVersion.size(), "version: 99");

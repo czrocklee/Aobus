@@ -201,7 +201,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: full
 library:
   resources: []
@@ -271,7 +271,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 8
+version: 1
 export-mode: full
 library:
   resources: []
@@ -293,7 +293,7 @@ library:
 
     auto const reportRes = importer.importFromYamlOffline(yamlPath);
     REQUIRE(reportRes);
-    CHECK(reportRes->payloadVersion == 8);
+    CHECK(reportRes->payloadVersion == 1);
     CHECK(reportRes->payloadMode == ExportMode::Full);
     CHECK(reportRes->targetScope == ImportTargetScope::Library);
     CHECK(reportRes->danglingReferencesIgnored == 3);
@@ -447,7 +447,7 @@ library:
 
     {
       auto yaml = std::ofstream{inputPath};
-      yaml << R"(version: 8
+      yaml << R"(version: 1
 export-mode: full
 library:
   resources: []

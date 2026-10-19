@@ -17,7 +17,7 @@
 namespace ao::rt
 {
   inline constexpr auto kPlaybackSessionConfigGroup = std::string_view{"playback-session"};
-  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 5;
+  inline constexpr std::uint32_t kPlaybackSessionSchemaVersion = 1;
   inline constexpr std::size_t kPlaybackSessionMaxSortTerms = kTrackSortFieldCount;
 
   struct PlaybackSessionState final

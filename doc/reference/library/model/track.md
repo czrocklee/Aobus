@@ -6,7 +6,7 @@ id: library.track-model
 ## Scope and version
 
 This reference enumerates the current logical track values owned by library storage and core read models.
-Physical byte placement belongs to [library database version 10](../storage/database.md), and portable names belong to [library YAML version 8](../format/yaml.md).
+Physical byte placement belongs to [library database version 1](../storage/database.md), and portable names belong to [library YAML version 1](../format/yaml.md).
 Application-facing ids, presentation capabilities, sort/group mappings, completion flags, and query bridges belong to the [runtime track field catalog](track-field.md).
 
 Zero numeric values and invalid ids represent unknown or absent values unless a narrower contract states otherwise.
@@ -182,12 +182,9 @@ Runtime writes use the [typed scoped replacement](../../../system/presentation/m
 ## Compatibility and versioning
 
 Changing a persisted type, codec value, block meaning, or field width requires a library format version increment once that version has been released.
-Database version 10 gates never-reused Track ids through the id space record; version 9 gated the work/performance split with RecordingDate and Credits, version 8 gated the portable manifest modification-time instant, and version 7 made scalar-valid UTF-8 NFC an admission invariant for Track text and its dictionary references.
-The current unreleased version 10 layout also includes the segment block. That addition did not increment the version, under the development-build rule in the [database reference](../storage/database.md#compatibility-and-versioning).
-Version 9 and earlier libraries are rejected rather than converted, relabeled, backfilled, or deleted automatically.
-Only the exact layouts defined by the database version 10 and YAML version 8 references are accepted; alternative layouts with those version labels are unsupported.
+Database version 1 is the first supported layout. Libraries and documents from development builds before the first release are unsupported, and are never converted, relabeled, backfilled, or deleted automatically.
+Only the exact layouts defined by the database version 1 and YAML version 1 references are accepted; alternative layouts with those version labels are unsupported.
 There is no dual reader, layout autodetection, or migration.
-The YAML version 8 importer rejects version-7 documents.
 Portable YAML names and runtime field ids are separate compatibility surfaces owned by their respective references.
 
 ## Implementation authority

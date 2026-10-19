@@ -18,7 +18,7 @@ namespace ao::library
   static_assert(sizeof(void*) == 8, "The library format requires a 64-bit host");
 
   constexpr std::uint32_t kMetadataMagic = 0x42534C52U;
-  constexpr std::uint32_t kLibraryVersion = 10;
+  constexpr std::uint32_t kLibraryVersion = 1;
   constexpr std::size_t kMetadataHeaderSize = 40;
   constexpr std::size_t kIdSpaceSize = 8;
   constexpr std::uint32_t kMetadataHeaderRecordId = 1;
