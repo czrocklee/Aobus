@@ -149,8 +149,8 @@ namespace ao::gtk
 
     // Printable ASCII range used to distinguish single-character key names from tokens like
     // named keys (Right, Home, etc.) that gdk_keyval_name() handles natively.
-    constexpr auto kMinPrintableAscii = std::int32_t{0x21};
-    constexpr auto kMaxPrintableAscii = std::int32_t{0x7E};
+    constexpr std::int32_t kMinPrintableAscii = 0x21;
+    constexpr std::int32_t kMaxPrintableAscii = 0x7E;
 
     // Keyvals that only modify other keys; a chord is incomplete while one of these is the
     // pressed key, so interactive capture must ignore them and keep waiting for a real key.

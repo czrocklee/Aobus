@@ -33,11 +33,11 @@ namespace ao::lmdb::test
     constexpr auto kFloor = std::uint64_t{16} * 1024 * 1024;
     constexpr auto kCeiling = std::uint64_t{1024} * 1024 * 1024;
     constexpr auto kWideMap = std::size_t{64} * 1024 * 1024;
-    constexpr auto kFillRecordSize = std::size_t{4096};
-    constexpr auto kFillBatchSize = std::uint32_t{64};
+    constexpr std::size_t kFillRecordSize = 4096;
+    constexpr std::uint32_t kFillBatchSize = 64;
     // Every batch adds pages, so a bound this loose only catches a map that has
     // stopped growing at all.
-    constexpr auto kFillBatchLimit = 4096;
+    constexpr std::int32_t kFillBatchLimit = 4096;
     // Past half of the floor, which is where the growth rule starts asking for a
     // larger map.
     constexpr auto kPastHalfOfFloor = (kFloor / 2) + (kFloor / 8);

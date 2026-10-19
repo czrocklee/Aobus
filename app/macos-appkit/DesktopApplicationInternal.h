@@ -61,9 +61,9 @@ namespace ao::appkit
   // Whether one mode saved its inspector as visible; any value other than a
   // number reads as hidden.
   BOOL isInspectorSavedVisible(NSDictionary* settings, BOOL modern);
-  inline constexpr auto kContentInset = 16;
-  inline constexpr auto kCaptionFontSize = 10;
-  inline constexpr auto kBodyFontSize = 13;
+  inline constexpr CGFloat kContentInset = 16;
+  inline constexpr CGFloat kCaptionFontSize = 10;
+  inline constexpr CGFloat kBodyFontSize = 13;
 } // namespace ao::appkit
 
 @interface AobusDesktopDelegate

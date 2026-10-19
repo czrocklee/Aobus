@@ -525,6 +525,90 @@ class CompileCommandCoverageTest(unittest.TestCase):
                 with self.subTest(path=path):
                     self.assertTrue(tidyengine._is_platform_incompatible(path, root))
 
+    def test_system_locale_linux_source_matches_its_cmake_and_native_compile_ownership(self):
+        relative = Path("app/i18n/SystemLocaleLinux.cpp")
+        cmake = (tidyengine.PROJECT_ROOT / relative.parent / "CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn(f"else()\n  target_sources(ao_app_i18n PRIVATE {relative.name})\nendif()", cmake)
+        self.assertTrue((tidyengine.PROJECT_ROOT / relative).is_file())
+
+        cases = (
+            (tidyengine.builddir.LINUX_PROFILE, "SystemLocaleLinux.cpp", None),
+            (tidyengine.builddir.MACOS_PROFILE, "SystemLocaleMacos.cpp", "platform-incompatible"),
+            (tidyengine.builddir.WINDOWS_PROFILE, "SystemLocaleWindows.cpp", "platform-incompatible"),
+            (tidyengine.builddir.LINUX_PROFILE, None, "native-coverage"),
+        )
+        for profile, native_name, expected_kind in cases:
+            with (
+                self.subTest(profile=profile.name, native_name=native_name),
+                tempfile.TemporaryDirectory() as temp_dir,
+            ):
+                root = Path(temp_dir) / "repo"
+                build_dir = Path(temp_dir) / "build"
+                source = root / relative
+                source.parent.mkdir(parents=True)
+                source.touch()
+                build_dir.mkdir()
+                entries = []
+                if native_name is not None:
+                    native = source.with_name(native_name)
+                    native.touch()
+                    entries.append(
+                        {"directory": str(build_dir), "file": str(native), "arguments": ["clang++", "-c", str(native)]}
+                    )
+                (build_dir / "compile_commands.json").write_text(json.dumps(entries), encoding="utf-8")
+
+                with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+                    self.assertEqual(tidyengine._is_platform_incompatible(source, root), profile.name != "linux")
+                    plan = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
+
+                if expected_kind is None:
+                    self.assertEqual(list(plan.targets), [tidyengine.CompileCommandTarget(source, source)])
+                    self.assertEqual(list(plan.deferred), [])
+                    self.assertEqual(list(plan.deferral_details), [])
+                else:
+                    self.assertEqual(list(plan.targets), [])
+                    self.assertEqual(list(plan.deferred), [source])
+                    self.assertEqual([detail.kind for detail in plan.deferral_details], [expected_kind])
+                    self.assertEqual([detail.selected for detail in plan.deferral_details], [source])
+
+    def test_shared_posix_source_requires_its_exact_native_command_on_macos(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            build_dir = Path(temp_dir) / "build"
+            source = root / "lib" / "utility" / "AtomicFilePosix.cpp"
+            source.parent.mkdir(parents=True)
+            source.touch()
+            build_dir.mkdir()
+            database = build_dir / "compile_commands.json"
+            database.write_text(
+                json.dumps(
+                    [{"directory": str(build_dir), "file": str(source), "arguments": ["clang++", "-c", str(source)]}]
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(
+                tidyengine.builddir, "platform_profile", return_value=tidyengine.builddir.MACOS_PROFILE
+            ):
+                self.assertFalse(tidyengine._is_platform_incompatible(source, root))
+                plan = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
+                self.assertEqual(list(plan.targets), [tidyengine.CompileCommandTarget(source, source)])
+                self.assertEqual(list(plan.deferred), [])
+
+                database.write_text("[]\n", encoding="utf-8")
+                uncovered = tidyengine.compile_command_plan(build_dir, [source], project_root=root)
+
+            self.assertEqual(list(uncovered.targets), [])
+            self.assertEqual(list(uncovered.deferred), [source])
+            self.assertEqual(
+                list(uncovered.deferral_details),
+                [
+                    tidyengine.CompileCommandDeferral(
+                        source, "the source file has no exact compile command", "native-coverage"
+                    )
+                ],
+            )
+
     def test_posix_suffix_impl_is_incompatible_with_the_windows_native_graph(self):
         root = Path("/repo")
         with mock.patch.object(

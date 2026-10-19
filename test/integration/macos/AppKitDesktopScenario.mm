@@ -24,7 +24,7 @@
 
 namespace
 {
-  constexpr auto kPollIntervalSeconds = 0.05;
+  constexpr double kPollIntervalSeconds = 0.05;
   constexpr auto kScenarioTimeout = std::chrono::seconds{90};
   constexpr double kSeekFraction = 0.25;
   constexpr double kVolume = 0.35;

@@ -99,7 +99,7 @@ namespace ao::winui
     }
 
     /// The oldest document this schema ever wrote; nothing below it was ever valid.
-    constexpr auto kOldestReadableDesktopSettingsVersion = std::uint32_t{1};
+    constexpr std::uint32_t kOldestReadableDesktopSettingsVersion = 1;
 
     static_assert(kOldestReadableDesktopSettingsVersion <= kDesktopSettingsVersion);
 

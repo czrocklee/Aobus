@@ -34,10 +34,10 @@ namespace ao::i18n::detail
     using MessagePatternPtr = std::unique_ptr<icu::MessagePattern>;
     using ResourceBundlePtr = std::unique_ptr<UResourceBundle, decltype(&::ures_close)>;
 
-    constexpr auto kLatinCapitalLetterCWithCedilla = UChar32{0x00C7};
-    constexpr auto kLatinSmallLetterCWithCedilla = UChar32{0x00E7};
-    constexpr auto kLatinCapitalLetterNWithTilde = UChar32{0x00D1};
-    constexpr auto kLatinSmallLetterNWithTilde = UChar32{0x00F1};
+    constexpr UChar32 kLatinCapitalLetterCWithCedilla = 0x00C7;
+    constexpr UChar32 kLatinSmallLetterCWithCedilla = 0x00E7;
+    constexpr UChar32 kLatinCapitalLetterNWithTilde = 0x00D1;
+    constexpr UChar32 kLatinSmallLetterNWithTilde = 0x00F1;
 
     std::unexpected<Error> makeIcuError(std::string_view const operation,
                                         UErrorCode const status,

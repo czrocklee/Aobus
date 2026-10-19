@@ -70,7 +70,7 @@ namespace ao::rt::test
 
     // What the procedure above leaves behind. The next ids follow the deleted
     // Track 264 and List 6, not the 263 Tracks and 5 Lists that remain.
-    constexpr auto kFixtureTrackCount = std::size_t{263};
+    constexpr std::size_t kFixtureTrackCount = 263;
     constexpr auto kNextTrackId = TrackId{265};
     constexpr auto kNextListId = ListId{7};
     constexpr auto kWrittenTag = std::string_view{"written-after-copy"};

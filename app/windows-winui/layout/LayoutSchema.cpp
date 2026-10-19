@@ -38,7 +38,7 @@ namespace ao::winui
     constexpr auto kFlyoutPresentation = std::string_view{"flyout"};
     constexpr auto kInlinePresentation = std::string_view{"inline"};
     constexpr auto kNavigationPaneType = std::string_view{"windows.navigationPane"};
-    constexpr auto kDefaultSplitPosition = 0.5;
+    constexpr double kDefaultSplitPosition = 0.5;
 
     constexpr auto kWindowsBindableActionSlots = uimodel::actionSlotBit(ActionSlot::PrimaryClick) |
                                                  uimodel::actionSlotBit(ActionSlot::PrimaryLongPress) |

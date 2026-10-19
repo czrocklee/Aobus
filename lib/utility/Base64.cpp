@@ -19,12 +19,12 @@ namespace ao::utility
   {
     constexpr auto kAlphabet = std::string_view{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
 
-    constexpr auto kBase64BitsPerChar = 6;
-    constexpr auto kBitsPerByte = 8;
-    constexpr auto kBase64ChunkSize = 3;
-    constexpr auto kBase64EncodedChunkSize = 4;
-    constexpr auto kBase64Mask = 0x3F;
-    constexpr auto kByteMask = 0xFF;
+    constexpr std::int32_t kBase64BitsPerChar = 6;
+    constexpr std::int32_t kBitsPerByte = 8;
+    constexpr std::int32_t kBase64ChunkSize = 3;
+    constexpr std::int32_t kBase64EncodedChunkSize = 4;
+    constexpr std::int32_t kBase64Mask = 0x3F;
+    constexpr std::int32_t kByteMask = 0xFF;
 
     constexpr std::array<std::int8_t, 256> kDecodingTable = []
     {

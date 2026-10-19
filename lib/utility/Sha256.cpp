@@ -18,8 +18,8 @@ namespace ao::utility
   namespace
   {
     constexpr auto kHexDigits = std::string_view{"0123456789abcdef"};
-    constexpr auto kNibbleShift = 4U;
-    constexpr auto kLowNibbleMask = 0x0FU;
+    constexpr std::uint32_t kNibbleShift = 4U;
+    constexpr std::uint32_t kLowNibbleMask = 0x0FU;
 
     std::optional<std::byte> parseHexBytePair(char const high, char const low) noexcept
     {

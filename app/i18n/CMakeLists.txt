@@ -144,7 +144,7 @@ elseif(APPLE)
   target_sources(ao_app_i18n PRIVATE SystemLocaleMacos.cpp)
   target_link_libraries(ao_app_i18n PRIVATE "-framework CoreFoundation")
 else()
-  target_sources(ao_app_i18n PRIVATE SystemLocalePosix.cpp)
+  target_sources(ao_app_i18n PRIVATE SystemLocaleLinux.cpp)
 endif()
 target_include_directories(ao_app_i18n
     PUBLIC

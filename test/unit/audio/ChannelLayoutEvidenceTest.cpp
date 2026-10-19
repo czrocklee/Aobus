@@ -36,7 +36,7 @@ namespace ao::audio::test
     using rt::test::ManualExecutor;
 
     // WAVE-style four-speaker identity set: front pair plus back pair.
-    constexpr auto kQuadMask = std::uint32_t{0x33};
+    constexpr std::uint32_t kQuadMask = 0x33;
 
     constexpr auto kQuadSourceFormat = SignalFormat{
       .sampleRate = 48000,

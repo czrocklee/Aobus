@@ -28,25 +28,25 @@
 
 namespace
 {
-  constexpr auto kPropertiesHeight = 760;
-  constexpr auto kListHeight = 470;
-  constexpr auto kDeletionHeight = 420;
-  constexpr auto kMinimumHeight = 500;
-  constexpr auto kMinimumWidth = 580;
-  constexpr auto kInset = 24;
-  constexpr auto kCoverSize = 64;
-  constexpr auto kTitleSize = 20;
-  constexpr auto kBodySize = 13;
-  constexpr auto kCaptionSize = 11;
-  constexpr auto kContentGap = 12;
-  constexpr auto kGroupGap = 16;
-  constexpr auto kRowInset = 16;
-  constexpr auto kSectionRowGap = 6;
-  constexpr auto kSectionBottomInset = 10;
-  constexpr auto kFieldColumnGap = 10;
-  constexpr auto kLabelWidth = 124;
-  constexpr auto kActionWidth = 28;
-  constexpr auto kCornerRadius = 12;
+  constexpr CGFloat kPropertiesHeight = 760;
+  constexpr CGFloat kListHeight = 470;
+  constexpr CGFloat kDeletionHeight = 420;
+  constexpr CGFloat kMinimumHeight = 500;
+  constexpr CGFloat kMinimumWidth = 580;
+  constexpr CGFloat kInset = 24;
+  constexpr CGFloat kCoverSize = 64;
+  constexpr CGFloat kTitleSize = 20;
+  constexpr CGFloat kBodySize = 13;
+  constexpr CGFloat kCaptionSize = 11;
+  constexpr CGFloat kContentGap = 12;
+  constexpr CGFloat kGroupGap = 16;
+  constexpr CGFloat kRowInset = 16;
+  constexpr CGFloat kSectionRowGap = 6;
+  constexpr CGFloat kSectionBottomInset = 10;
+  constexpr CGFloat kFieldColumnGap = 10;
+  constexpr CGFloat kLabelWidth = 124;
+  constexpr CGFloat kActionWidth = 28;
+  constexpr CGFloat kCornerRadius = 12;
   // Credits follows the five ordinary Track Properties sections.
   constexpr NSUInteger kCreditsSectionIndex = 5;
   // The List form rows are Name, Description, then the query Expression.
@@ -214,9 +214,7 @@ namespace
 
       if (state.kind == ao::appkit::LibraryEditorKind::Properties)
       {
-        height = std::clamp(_parent.frame.size.height - kInset,
-                            static_cast<CGFloat>(kMinimumHeight),
-                            static_cast<CGFloat>(kPropertiesHeight));
+        height = std::clamp(_parent.frame.size.height - kInset, kMinimumHeight, kPropertiesHeight);
       }
       else if (state.kind == ao::appkit::LibraryEditorKind::DeleteList)
       {

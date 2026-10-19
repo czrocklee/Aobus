@@ -40,8 +40,15 @@ The [test-suite reference](../test/test-suite.md) owns the complete runner behav
 Use these markers immediately before the source line:
 
 - `// POSITIVE` requires a diagnostic;
-- `// NEGATIVE` forbids a diagnostic; and
-- `// POSITIVE: FIX-TO: <fixed line>` requires a diagnostic and the stated replacement.
+- `// NEGATIVE` forbids a diagnostic;
+- `// POSITIVE: FIX-TO: <fixed line>` requires a diagnostic and the stated replacement; and
+- `// NO-FIX` requires the exported fix report to contain no replacement records.
+
+`NO-FIX` is a per-fixture contract on the main file, written as a standalone comment: the fixture stays in the diagnostic stage, and the runner inspects the exported `clang-tidy` fix report for zero replacement records in the known machine-generated serialization.
+The assertion covers the whole fixture, context-header replacements included, and rejects a no-op replacement or a replacement in another file rather than merely unchanged file bytes.
+The bounded inspection requires the pinned report envelope and an exactly empty `Replacements` field per diagnostic message, and it fails closed on a missing, unreadable, or unfamiliar report; the runner does not parse arbitrary YAML.
+clang-tidy writes the export only when it emits a diagnostic, so a `NO-FIX` fixture must declare at least one `POSITIVE` expectation of its owning check in the main file.
+A fixture cannot combine `NO-FIX` with `FIX-TO`, which the runner rejects before applying fixes, and context headers cannot carry the marker themselves.
 
 Only fixtures with `FIX-TO` enter the auto-fix stage, and the runner syntax-checks the fixed temporary copies.
 Markers assert normalized file and line identity plus FixIt output, not diagnostic wording.

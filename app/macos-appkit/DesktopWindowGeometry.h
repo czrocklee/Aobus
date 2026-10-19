@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include <CoreGraphics/CGBase.h>
+
 namespace ao::appkit
 {
-  inline constexpr auto kMinimumWindowWidth = 760;
-  inline constexpr auto kMinimumWindowHeight = 520;
-  inline constexpr auto kInitialWindowWidth = 1240;
-  inline constexpr auto kInitialWindowHeight = 800;
+  inline constexpr CGFloat kMinimumWindowWidth = 760;
+  inline constexpr CGFloat kMinimumWindowHeight = 520;
+  inline constexpr CGFloat kInitialWindowWidth = 1240;
+  inline constexpr CGFloat kInitialWindowHeight = 800;
   // Compact windows show the inspector in a sheet rather than docked.
-  inline constexpr auto kDockedInspectorMinimumWidth = 1000;
+  inline constexpr CGFloat kDockedInspectorMinimumWidth = 1000;
 } // namespace ao::appkit

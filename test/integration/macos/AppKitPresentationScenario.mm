@@ -126,8 +126,8 @@
 
 namespace
 {
-  constexpr auto kActivityMaximumHeight = 360.0;
-  constexpr auto kNotificationCount = std::size_t{40};
+  constexpr CGFloat kActivityMaximumHeight = 360.0;
+  constexpr std::size_t kNotificationCount = 40;
   constexpr auto kFixturePrefix = "Activity scenario ";
   constexpr auto kInitialUpdate = "Activity scenario live update: initial";
   constexpr auto kFinalUpdate = "Activity scenario live update: refreshed";

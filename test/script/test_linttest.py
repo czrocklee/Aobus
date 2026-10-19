@@ -11,6 +11,27 @@ from unittest import mock
 from ao.core import linttest
 
 
+def pinned_fixes_export(main: str = "/tmp/case/BasicFixture.cpp", replacements: str = "Replacements:    []") -> str:
+    """One diagnostic in the known machine-generated clang-tidy export format."""
+    return "\n".join(
+        (
+            "---",
+            f"MainSourceFile:  '{main}'",
+            "Diagnostics:",
+            "  - DiagnosticName:  aobus-example",
+            "    DiagnosticMessage:",
+            "      Message:         'expected'",
+            f"      FilePath:        '{main}'",
+            "      FileOffset:      8",
+            f"      {replacements}",
+            "    Level:           Warning",
+            "    BuildDirectory:  '/tmp/case'",
+            "...",
+            "",
+        )
+    )
+
+
 class LintTestVerifierTest(unittest.TestCase):
     def test_fixture_discovery_uses_parent_directory_as_check_name(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -252,6 +273,124 @@ int original;
         self.assertIn("--tidy-arg=--extra-arg=-fblocks", args)
         self.assertNotIn("--tidy-arg=--extra-arg=c++", args)
 
+    def test_no_fix_marker_requires_a_standalone_comment_line(self):
+        self.assertTrue(linttest.no_fix_asserted("// NO-FIX\nint original;\n"))
+        self.assertTrue(linttest.no_fix_asserted("// NO-FIX: exported replacements must stay empty\nint original;\n"))
+        self.assertFalse(linttest.no_fix_asserted("int original; // NO-FIX\n"))
+        self.assertFalse(linttest.no_fix_asserted("// NO-FIXES is not the marker\n"))
+
+    def test_no_fix_marker_is_not_a_diagnostic_expectation(self):
+        expectations = linttest.parse_expectations("// NO-FIX\nint original;\n", "aobus-example")
+
+        self.assertEqual(expectations.expected, {})
+        self.assertEqual(expectations.negated, {})
+
+    def test_expects_diagnostics_requires_the_owning_check(self):
+        self.assertTrue(linttest.expects_diagnostics("// POSITIVE\nint bad;\n", "aobus-example"))
+        self.assertFalse(linttest.expects_diagnostics("int named; // POSITIVE:aobus-other\n", "aobus-example"))
+
+    def test_no_fix_export_accepts_the_pinned_empty_report(self):
+        self.assertEqual(linttest.verify_no_fix_export(pinned_fixes_export()), [])
+
+    def test_no_fix_export_rejects_a_report_without_diagnostic_messages(self):
+        export = "---\nMainSourceFile:  'x.cpp'\nDiagnostics:      []\n...\n"
+
+        self.assertEqual(
+            linttest.verify_no_fix_export(export),
+            ["fixes export contains no diagnostic message; a NO-FIX fixture with expected diagnostics must export one"],
+        )
+
+    def test_no_fix_export_accepts_note_entries_with_empty_replacements(self):
+        export = "\n".join(
+            (
+                "---",
+                "MainSourceFile:  'x.cpp'",
+                "Diagnostics:",
+                "  - DiagnosticName:  aobus-example",
+                "    DiagnosticMessage:",
+                "      Message:         'expected'",
+                "      FilePath:        'x.cpp'",
+                "      FileOffset:      8",
+                "      Replacements:    []",
+                "    Level:           Warning",
+                "    BuildDirectory:  '/tmp'",
+                "    Notes:",
+                "      - Message:         'related finding'",
+                "        FilePath:        'x.cpp'",
+                "        FileOffset:      24",
+                "        Replacements:    []",
+                "...",
+                "",
+            )
+        )
+
+        self.assertEqual(linttest.verify_no_fix_export(export), [])
+
+    def test_no_fix_export_rejects_a_report_without_the_pinned_envelope(self):
+        export = "Diagnostics:\n  - DiagnosticName:  aobus-example\n    DiagnosticMessage:\n      Message: 'x'\n"
+
+        errors = linttest.verify_no_fix_export(export)
+
+        self.assertIn("fixes export does not start with the pinned '---' document header", errors)
+        self.assertIn("fixes export does not end with the pinned '...' document terminator", errors)
+        self.assertIn("fixes export does not name its MainSourceFile", errors)
+        self.assertIn("diagnostic message on line 3 has no Replacements field", errors)
+
+    def test_no_fix_export_rejects_any_replacement_record(self):
+        record = """Replacements:
+        - FilePath:        '{path}'
+          Offset:          8
+          Length:          5
+          ReplacementText: '{text}'"""
+        cases = {
+            "no-op replacement": ("/tmp/case/BasicFixture.cpp", "int original"),
+            "same-file empty text": ("/tmp/case/BasicFixture.cpp", ""),
+            "other-header replacement": ("/tmp/case/Declarations.h", "int replacement"),
+        }
+        for label, (path, text) in cases.items():
+            with self.subTest(label):
+                export = pinned_fixes_export(replacements=record.format(path=path, text=text))
+
+                errors = linttest.verify_no_fix_export(export)
+
+            self.assertTrue(any(error.startswith("replacement record exported on line 10") for error in errors))
+            self.assertTrue(any(error.startswith("replacement record exported on line 13") for error in errors))
+            self.assertIn("diagnostic message on line 5 exports replacements on line 9", errors)
+
+    def test_no_fix_export_rejects_a_missing_replacements_field(self):
+        export = "\n".join(
+            (
+                "---",
+                "MainSourceFile:  'x.cpp'",
+                "Diagnostics:",
+                "  - DiagnosticName:  aobus-example",
+                "    DiagnosticMessage:",
+                "      Message:         'expected'",
+                "      FilePath:        'x.cpp'",
+                "      FileOffset:      8",
+                "    Level:           Warning",
+                "    BuildDirectory:  '/tmp'",
+                "...",
+                "",
+            )
+        )
+
+        self.assertIn(
+            "diagnostic message on line 5 has no Replacements field",
+            linttest.verify_no_fix_export(export),
+        )
+
+    def test_no_fix_export_rejects_unexpected_section_and_field_shapes(self):
+        errors = linttest.verify_no_fix_export("---\nMainSourceFile:  'x.cpp'\nDiagnostics:      [surprise]\n...\n")
+
+        self.assertIn("fixes export declares an unexpected Diagnostics section on line 3", errors)
+        export = pinned_fixes_export(replacements="Replacements:       ~")
+
+        self.assertIn(
+            "diagnostic message on line 5 exports replacements on line 9",
+            linttest.verify_no_fix_export(export),
+        )
+
     def test_objective_cpp_header_diagnostics_stay_in_the_fixture_directory(self):
         include_dir = Path("/tmp/fixture [owned]")
         args = linttest._fixture_tidy_args(include_dir, "objective-c++")
@@ -368,6 +507,143 @@ class LintTestRunnerTest(unittest.TestCase):
             text = log.read_text(encoding="utf-8")
             self.assertIn("clang-tidy reported a fatal compiler diagnostic", text)
             self.assertIn("clang-tidy exited with status 1", text)
+
+    def test_no_fix_fixture_exports_and_verifies_an_empty_replacement_report(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("// NO-FIX\nint bad; // POSITIVE\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+
+            def run_tidy(command, **_kwargs):
+                export = next(
+                    Path(argument.removeprefix("--tidy-arg=-export-fixes="))
+                    for argument in command
+                    if argument.startswith("--tidy-arg=-export-fixes=")
+                )
+                export.write_text(pinned_fixes_export(main=str(fixture_path)), encoding="utf-8")
+                return linttest.subprocess.CompletedProcess(
+                    command, 1, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
+                )
+
+            with mock.patch.object(linttest.subprocess, "run", side_effect=run_tidy):
+                success, log = linttest._run_diagnostic(fixture, root, root)
+
+            self.assertTrue(success)
+            self.assertNotIn("ERROR:", log.read_text(encoding="utf-8"))
+
+    def test_no_fix_fixture_rejects_exported_replacement_records(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("// NO-FIX\nint bad; // POSITIVE\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+            record = """Replacements:
+        - FilePath:        '/tmp/case/Declarations.h'
+          Offset:          8
+          Length:          5
+          ReplacementText: 'int replacement'"""
+
+            def run_tidy(command, **_kwargs):
+                export = next(
+                    Path(argument.removeprefix("--tidy-arg=-export-fixes="))
+                    for argument in command
+                    if argument.startswith("--tidy-arg=-export-fixes=")
+                )
+                export.write_text(pinned_fixes_export(main=str(fixture_path), replacements=record), encoding="utf-8")
+                return linttest.subprocess.CompletedProcess(
+                    command, 1, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
+                )
+
+            with mock.patch.object(linttest.subprocess, "run", side_effect=run_tidy):
+                success, log = linttest._run_diagnostic(fixture, root, root)
+
+            self.assertFalse(success)
+            text = log.read_text(encoding="utf-8")
+            self.assertIn("replacement record exported on line 10", text)
+            self.assertIn("=== Exported fixes report", text)
+
+    def test_no_fix_fixture_fails_when_the_report_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("// NO-FIX\nint bad; // POSITIVE\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+            completed = linttest.subprocess.CompletedProcess(
+                [], 1, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
+            )
+
+            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
+                success, log = linttest._run_diagnostic(fixture, root, root)
+
+            self.assertFalse(success)
+            self.assertIn(
+                "clang-tidy created no fixes export; a NO-FIX fixture with expected diagnostics must produce one",
+                log.read_text(encoding="utf-8"),
+            )
+
+    def test_no_fix_fixture_rejects_an_empty_diagnostic_report(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("// NO-FIX\nint bad; // POSITIVE\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+
+            def run_tidy(command, **_kwargs):
+                export = next(
+                    Path(argument.removeprefix("--tidy-arg=-export-fixes="))
+                    for argument in command
+                    if argument.startswith("--tidy-arg=-export-fixes=")
+                )
+                export.write_text(
+                    f"---\nMainSourceFile:  '{fixture_path}'\nDiagnostics:      []\n...\n", encoding="utf-8"
+                )
+                return linttest.subprocess.CompletedProcess(
+                    command, 1, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
+                )
+
+            with mock.patch.object(linttest.subprocess, "run", side_effect=run_tidy):
+                success, log = linttest._run_diagnostic(fixture, root, root)
+
+            self.assertFalse(success)
+            self.assertIn("fixes export contains no diagnostic message", log.read_text(encoding="utf-8"))
+
+    def test_unmarked_fixture_does_not_request_a_fixes_export(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("int bad; // POSITIVE\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+            completed = linttest.subprocess.CompletedProcess(
+                [], 1, stdout=f"{fixture_path}:1:1: warning: expected [aobus-example]\n"
+            )
+
+            with mock.patch.object(linttest.subprocess, "run", return_value=completed) as run:
+                success, _log = linttest._run_diagnostic(fixture, root, root)
+
+            self.assertTrue(success)
+            for call in run.call_args_list:
+                self.assertFalse(any(argument.startswith("--tidy-arg=-export-fixes=") for argument in call.args[0]))
+
+    def test_context_header_no_fix_markers_require_a_standalone_fixture(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Source.mm"
+            header = root / "Declarations.h"
+            source.write_text('#include "Declarations.h"\n', encoding="utf-8")
+            header.write_text("// NO-FIX\nint adviceOnly;\n", encoding="utf-8")
+            completed = linttest.subprocess.CompletedProcess(
+                [], 1, stdout=f"{header}:2:1: warning: expected [aobus-example]\n"
+            )
+
+            with mock.patch.object(linttest.subprocess, "run", return_value=completed):
+                success, log = linttest._run_diagnostic(linttest.Fixture(source, "aobus-example"), root, root)
+
+            self.assertFalse(success)
+            self.assertIn(
+                "context header NO-FIX markers require a standalone fixture",
+                log.read_text(encoding="utf-8"),
+            )
 
     def test_runner_requires_existing_compile_database_and_plugin(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -703,6 +979,62 @@ class LintTestRunnerTest(unittest.TestCase):
             run_diagnostic.assert_not_called()
             run_fix.assert_called_once_with(fixture, build_dir, mock.ANY)
             remove_tree.assert_called_once()
+
+    def test_runner_rejects_a_no_fix_and_fix_to_combination_before_applying_fixes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").touch()
+            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+            plugin.parent.mkdir(parents=True)
+            plugin.touch()
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text(
+                "// NO-FIX\n// POSITIVE: FIX-TO: int replacement;\nint original;\n",
+                encoding="utf-8",
+            )
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+
+            with (
+                mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
+                mock.patch.object(linttest, "_run_diagnostic") as run_diagnostic,
+                mock.patch.object(linttest, "_run_fix") as run_fix,
+            ):
+                with contextlib.redirect_stdout(io.StringIO()) as stdout:
+                    self.assertEqual(linttest.run(build_dir, jobs=1), 1)
+
+            self.assertIn("fixture cannot combine NO-FIX and FIX-TO markers", stdout.getvalue())
+            run_diagnostic.assert_not_called()
+            run_fix.assert_not_called()
+
+    def test_runner_rejects_a_no_fix_fixture_without_positive_expectations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").touch()
+            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+            plugin.parent.mkdir(parents=True)
+            plugin.touch()
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("// NO-FIX\nint clean;\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+
+            with (
+                mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
+                mock.patch.object(linttest, "_run_diagnostic") as run_diagnostic,
+                mock.patch.object(linttest, "_run_fix") as run_fix,
+            ):
+                with contextlib.redirect_stdout(io.StringIO()) as stdout:
+                    self.assertEqual(linttest.run(build_dir, jobs=1), 1)
+
+            self.assertIn(
+                "NO-FIX fixture must declare a POSITIVE expectation of aobus-example",
+                stdout.getvalue(),
+            )
+            run_diagnostic.assert_not_called()
+            run_fix.assert_not_called()
 
 
 if __name__ == "__main__":

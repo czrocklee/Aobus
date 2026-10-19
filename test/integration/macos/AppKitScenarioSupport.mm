@@ -29,9 +29,9 @@ namespace ao::appkit::test
 {
   namespace
   {
-    constexpr auto kFixtureTrackCount = std::size_t{20};
-    constexpr auto kFixtureSampleRate = std::uint32_t{44100};
-    constexpr auto kFixtureDurationSeconds = std::size_t{12};
+    constexpr std::size_t kFixtureTrackCount = 20;
+    constexpr std::uint32_t kFixtureSampleRate = 44100;
+    constexpr std::size_t kFixtureDurationSeconds = 12;
 
     bool containsPath(std::filesystem::path const& parent, std::filesystem::path const& child)
     {

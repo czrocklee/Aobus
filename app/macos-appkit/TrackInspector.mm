@@ -21,24 +21,24 @@ namespace
 {
   using ao::appkit::nativeText;
   using ao::i18n::MessageId;
-  constexpr auto kContentGap = 12;
-  constexpr auto kContentInset = 16;
-  constexpr auto kOuterInset = 20;
-  constexpr auto kSecondaryFontSize = 11;
-  constexpr auto kBodyFontSize = 13;
-  constexpr auto kLargeTitleFontSize = 20;
-  constexpr auto kControlHeight = 28;
-  constexpr auto kInitialPaneHeight = 600;
-  constexpr auto kInitialInspectorWidth = 270;
-  constexpr auto kInspectorTextVerticalInsets = 86;
-  constexpr auto kMinimumInspectorTextHeight = 500.0;
-  constexpr auto kInspectorSheetWidth = 420;
-  constexpr auto kInspectorSheetHeight = 540;
-  constexpr auto kInspectorSheetFooterHeight = 90;
-  constexpr auto kInspectorSheetButtonHeight = 30;
-  constexpr auto kInspectorDoneButtonWidth = 90;
-  constexpr auto kSheetDoneLeading = 310;
-  constexpr auto kInspectorEditButtonWidth = 146;
+  constexpr CGFloat kContentGap = 12;
+  constexpr CGFloat kContentInset = 16;
+  constexpr CGFloat kOuterInset = 20;
+  constexpr CGFloat kSecondaryFontSize = 11;
+  constexpr CGFloat kBodyFontSize = 13;
+  constexpr CGFloat kLargeTitleFontSize = 20;
+  constexpr CGFloat kControlHeight = 28;
+  constexpr CGFloat kInitialPaneHeight = 600;
+  constexpr CGFloat kInitialInspectorWidth = 270;
+  constexpr CGFloat kInspectorTextVerticalInsets = 86;
+  constexpr CGFloat kMinimumInspectorTextHeight = 500.0;
+  constexpr CGFloat kInspectorSheetWidth = 420;
+  constexpr CGFloat kInspectorSheetHeight = 540;
+  constexpr CGFloat kInspectorSheetFooterHeight = 90;
+  constexpr CGFloat kInspectorSheetButtonHeight = 30;
+  constexpr CGFloat kInspectorDoneButtonWidth = 90;
+  constexpr CGFloat kSheetDoneLeading = 310;
+  constexpr CGFloat kInspectorEditButtonWidth = 146;
   void setFrame(NSView* view, CGFloat left, CGFloat top, CGFloat width, CGFloat height)
   {
     view.frame = NSMakeRect(left, top, std::max(0.0, width), std::max(0.0, height));

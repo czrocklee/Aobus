@@ -11,9 +11,9 @@
 
 namespace
 {
-  constexpr auto kMinimumDelaySeconds = 0.001;
-  constexpr auto kMaximumToleranceSeconds = 0.05;
-  constexpr auto kToleranceFraction = 0.1;
+  constexpr double kMinimumDelaySeconds = 0.001;
+  constexpr double kMaximumToleranceSeconds = 0.05;
+  constexpr double kToleranceFraction = 0.1;
 }
 
 @implementation AobusActivityExpirationTimer {

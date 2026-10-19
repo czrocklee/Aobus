@@ -25,8 +25,8 @@ namespace ao::audio::backend::detail::test
     // rate, channel count, and precision, and differ only in their WAVE-style
     // speaker masks: front pair plus back pair, vs front pair, front center,
     // and back center.
-    constexpr auto kQuadBackPairMask = std::uint32_t{0x33};
-    constexpr auto kQuadCenterBackMask = std::uint32_t{0x107};
+    constexpr std::uint32_t kQuadBackPairMask = 0x33;
+    constexpr std::uint32_t kQuadCenterBackMask = 0x107;
 
     constexpr SignalFormat quadSource(std::uint32_t speakerMask)
     {

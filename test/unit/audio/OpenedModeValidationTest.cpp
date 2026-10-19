@@ -20,11 +20,11 @@ namespace ao::audio::detail::test
 {
   namespace
   {
-    constexpr auto kRate = std::uint32_t{48000};
+    constexpr std::uint32_t kRate = 48000;
     // WAVE-style FL | FR, the canonical two-speaker identity at this boundary.
-    constexpr auto kFrontStereoMask = std::uint32_t{0x3};
+    constexpr std::uint32_t kFrontStereoMask = 0x3;
     // WAVE-style FL | FC, a different complete two-speaker identity.
-    constexpr auto kFrontLeftCenterMask = std::uint32_t{0x5};
+    constexpr std::uint32_t kFrontLeftCenterMask = 0x5;
 
     SignalFormat integerSignal(std::uint8_t const precisionBits)
     {

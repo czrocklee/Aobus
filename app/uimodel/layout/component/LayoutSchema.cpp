@@ -26,7 +26,7 @@ namespace ao::uimodel
                                                 ActionSlot::PrimaryLongPress,
                                                 ActionSlot::SecondaryClick,
                                                 ActionSlot::SecondaryLongPress};
-    constexpr auto kDefaultGlyphScale = 1.0;
+    constexpr double kDefaultGlyphScale = 1.0;
 
     PropertySchema stringProperty(std::string_view const name, std::string_view const label)
     {

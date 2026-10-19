@@ -120,13 +120,18 @@ For local initialization:
 
 - For non-primitive types, prefer `auto value = T{args};` or `auto value = T{};`.
 - When a container's braces are ambiguous with `std::initializer_list`, use `auto value = T(args);` unless list initialization is intended.
-- For primitive types, use `T value = initial;` or an unambiguous `auto`; do not use braces.
+- For primitive types, use `T value = initial;`; do not use braces or `auto` with a literal or functional-cast initializer. Other deduced expressions, such as function results and `static_cast`, may keep `auto`.
 - For string constants, import the standard literal namespace and prefer `"text"s` or `"text"sv` to explicit construction.
 - Treat enums and `std::byte` as non-primitive types and use `auto value = T{...};`.
 - Use class template argument deduction only when every template argument is non-primitive; spell the arguments when any is primitive, as in `auto count = std::atomic<std::size_t>{0};`.
   For an `std::array` of primitive elements, use `std::to_array<T>({...})` so the size stays deduced.
 - Use an explicit type when a C API requires a pointer to that exact C type.
 - Initialize a null pointer as `T* pointer = nullptr;`.
+
+A namespace-scope variable, static data member, or static local follows the same primitive rule: write `constexpr std::size_t kCount = 263;` and `constexpr double kRatio = 0.5;`, not `auto` with a literal or functional cast, or braced initialization of an explicit primitive type.
+Choose the type from the quantity and its consumers; native geometry may use `CGFloat`, while counts and timer durations have different contracts.
+A cast inside a larger expression, such as `std::size_t{8} * 1024`, stays where it prevents `int` overflow; the declaration's type alone does not control the arithmetic on its right-hand side.
+The `aobus-modernize-local-initialization-style` check is diagnostic-only: changing types or removing conversions requires source review. The non-primitive preference remains limited to locals.
 
 ## Ownership and class design
 
