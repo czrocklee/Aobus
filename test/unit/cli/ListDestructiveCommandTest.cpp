@@ -2,7 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "CliTestSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListWriter.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <CLI/Error.hpp>
@@ -481,5 +489,70 @@ namespace ao::cli::test
     CHECK(storedOrderIds(result.out, playlistId) == orderAfter);
 
     checkDomainFailure(fixture.run({"list", "order", "forget-hidden", "999"}), "List 999 does not exist");
+  }
+
+  TEST_CASE("CLI - list order edits refuse a List whose stored filter does not compile and keep its saved order",
+            "[cli][integration][list][list-order]")
+  {
+    auto fixture = CliFixture{};
+    auto const alpha =
+      fixture.addTrack(library::test::TrackSpec{.title = "Alpha", .uri = "alpha.flac", .tags = {"playlist"}});
+    fixture.addTrack(library::test::TrackSpec{.title = "Beta", .uri = "beta.flac", .tags = {"playlist"}});
+    auto const gamma =
+      fixture.addTrack(library::test::TrackSpec{.title = "Gamma", .uri = "gamma.flac", .tags = {"playlist"}});
+
+    auto result = fixture.run({"list", "create", "--name", "Playlist", "--filter", "#playlist"});
+    REQUIRE(result.status == 0);
+    auto const playlistId = parseCreatedListId(result.out);
+
+    result = fixture.run({"list",
+                          "order",
+                          "move",
+                          std::to_string(playlistId),
+                          std::to_string(gamma.raw()),
+                          "--before",
+                          std::to_string(alpha.raw())});
+    REQUIRE(result.status == 0);
+
+    result = fixture.run({"-O", "json", "list", "dump"});
+    REQUIRE(result.status == 0);
+    auto const orderBefore = storedOrderIds(result.out, playlistId);
+    REQUIRE(orderBefore.size() == 3);
+
+    // The CLI does not store a filter that fails to compile, so the test
+    // writes one directly; the saved order stays as it was.
+    {
+      auto musicLibrary =
+        library::test::makeTestMusicLibrary(fixture.root(), rt::LibraryPaths{fixture.root()}.databasePath());
+      auto transaction = library::test::writeTransaction(musicLibrary);
+      auto const listId = ListId{playlistId};
+      REQUIRE(transaction.apply(
+        [listId](library::LibraryWrite& write)
+        {
+          auto const optView = write.lists().get(listId);
+          REQUIRE(optView);
+          return write.lists().update(listId, library::ListBuilder::fromView(*optView).filter("("));
+        }));
+      REQUIRE(transaction.commit());
+    }
+
+    // The broken List shows no members. Forgetting hidden positions against
+    // that empty membership would forget every saved position, so each edit
+    // is refused.
+    auto const storedFilterError = "List " + std::to_string(playlistId) + " stored filter";
+    checkDomainFailure(fixture.run({"list",
+                                    "order",
+                                    "move",
+                                    std::to_string(playlistId),
+                                    std::to_string(alpha.raw()),
+                                    "--before",
+                                    std::to_string(gamma.raw())}),
+                       storedFilterError);
+    checkDomainFailure(fixture.run({"list", "order", "reset", std::to_string(playlistId)}), storedFilterError);
+    checkDomainFailure(fixture.run({"list", "order", "forget-hidden", std::to_string(playlistId)}), storedFilterError);
+
+    result = fixture.run({"-O", "json", "list", "dump"});
+    REQUIRE(result.status == 0);
+    CHECK(storedOrderIds(result.out, playlistId) == orderBefore);
   }
 } // namespace ao::cli::test

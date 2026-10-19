@@ -183,10 +183,12 @@ namespace ao::rt::test
     CHECK(projectionPtr->size() == 0);
   }
 
-  TEST_CASE("ViewService - repairing a stored parent filter refreshes live child error state",
+  TEST_CASE("ViewService - repairing a stored parent filter refreshes live child error state and orderable membership",
             "[runtime][unit][view][filter]")
   {
     auto libraryFixture = MusicLibraryFixture{};
+    auto const oldTrackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     auto parentId = kInvalidListId;
     auto childId = kInvalidListId;
 
@@ -205,6 +207,7 @@ namespace ao::rt::test
     auto changes = makeLibraryChanges(executor, libraryFixture.library());
     auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
     auto sources = TrackSourceCache{libraryFixture.library(), changes};
+    sources.reloadAllTracks();
     auto service = ViewService{executor, libraryFixture.library(), sources, changes};
     auto workspace = WorkspaceService{executor, service, libraryFixture.library(), changes};
     auto const viewId = ao::test::requireValue(workspace.navigate(NavigationRequest{
@@ -219,6 +222,11 @@ namespace ao::rt::test
     REQUIRE(state.optFilterError);
     CHECK(state.optFilterError->code == Error::Code::FormatRejected);
 
+    auto const failedIdsRes = service.listSourceTrackIds(viewId);
+    REQUIRE_FALSE(failedIdsRes);
+    CHECK(failedIdsRes.error().code == Error::Code::InvalidState);
+    CHECK(failedIdsRes.error().message.contains("List " + std::to_string(parentId.raw()) + " stored filter"));
+
     auto changedErrors = std::vector<ViewService::FilterErrorChanged>{};
     auto subscription = service.onFilterErrorChanged([&changedErrors](ViewService::FilterErrorChanged const& changed)
                                                      { changedErrors.push_back(changed); });
@@ -230,5 +238,19 @@ namespace ao::rt::test
     REQUIRE(changedErrors.size() == 1);
     CHECK(changedErrors.back().viewId == viewId);
     CHECK_FALSE(changedErrors.back().optFilterError);
+
+    // A saved order binds to the List's own membership, never to the narrower
+    // quick-filtered projection.
+    REQUIRE(service.setFilter(viewId, "$year > 2000"));
+
+    while (executor.tryRunReadyTurn())
+    {
+    }
+
+    auto const projectionPtr = ao::test::requireValue(service.findTrackListProjection(viewId));
+    REQUIRE(projectionPtr != nullptr);
+    REQUIRE(projectionPtr->size() == 1);
+    CHECK(projectionPtr->trackIdAt(0) == newTrackId);
+    CHECK(ao::test::requireValue(service.listSourceTrackIds(viewId)) == std::vector{oldTrackId, newTrackId});
   }
 } // namespace ao::rt::test

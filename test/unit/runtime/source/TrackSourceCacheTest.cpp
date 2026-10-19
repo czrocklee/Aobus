@@ -282,6 +282,64 @@ namespace ao::rt::test
     CHECK(optFilteredChildError->message == optParentError->message);
   }
 
+  TEST_CASE("TrackSourceCache - orderable track ids require a live source whose stored filter evaluates",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const firstId = libraryFixture.addTrack("First");
+    auto const secondId = libraryFixture.addTrack("Second");
+    auto validId = kInvalidListId;
+    auto emptyId = kInvalidListId;
+    auto invalidParentId = kInvalidListId;
+    auto invalidChildId = kInvalidListId;
+
+    {
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
+      auto validBuilder = ListBuilder::makeEmpty().name("Valid");
+      validId = ao::test::requireValue(
+        transaction.apply([&validBuilder](LibraryWrite& write) { return write.lists().create(validBuilder); }));
+      auto emptyBuilder = ListBuilder::makeEmpty().name("Empty").filter("false");
+      emptyId = ao::test::requireValue(
+        transaction.apply([&emptyBuilder](LibraryWrite& write) { return write.lists().create(emptyBuilder); }));
+      auto invalidParentBuilder = ListBuilder::makeEmpty().name("Invalid parent").filter("(");
+      invalidParentId = ao::test::requireValue(transaction.apply(
+        [&invalidParentBuilder](LibraryWrite& write) { return write.lists().create(invalidParentBuilder); }));
+      auto invalidChildBuilder = ListBuilder::makeEmpty().name("Child").parentId(invalidParentId);
+      invalidChildId = ao::test::requireValue(transaction.apply([&invalidChildBuilder](LibraryWrite& write)
+                                                                { return write.lists().create(invalidChildBuilder); }));
+      REQUIRE(transaction.commit());
+    }
+
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    cache.reloadAllTracks();
+
+    auto const validLease = ao::test::requireValue(cache.acquire(validId));
+    CHECK(ao::test::requireValue(cache.orderableTrackIds(validLease)) == std::vector{firstId, secondId});
+
+    // A valid filter that matches nothing is an empty membership, not a failure.
+    auto const emptyLease = ao::test::requireValue(cache.acquire(emptyId));
+    CHECK(ao::test::requireValue(cache.orderableTrackIds(emptyLease)).empty());
+
+    // An unevaluable definition shows no members; forgetting hidden positions
+    // against that empty membership would forget every saved position.
+    for (auto const listId : std::array{invalidParentId, invalidChildId})
+    {
+      auto const lease = ao::test::requireValue(cache.acquire(listId));
+      auto const res = cache.orderableTrackIds(lease);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidState);
+      CHECK(res.error().message.contains("List " + std::to_string(invalidParentId.raw()) + " stored filter"));
+    }
+
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    REQUIRE(commandsFixture.runTask(commandsFixture.commands().deleteListAsync(validId)));
+    REQUIRE(validLease->state() == TrackSourceState::Invalidated);
+    auto const deletedRes = cache.orderableTrackIds(validLease);
+    REQUIRE_FALSE(deletedRes);
+    CHECK(deletedRes.error().code == Error::Code::InvalidState);
+  }
+
   TEST_CASE("TrackSourceCache - shutdown does not semantically invalidate a leased All Tracks source",
             "[runtime][unit][source][track-source-cache]")
   {

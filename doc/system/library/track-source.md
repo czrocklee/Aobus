@@ -66,6 +66,9 @@ An empty expression matches all upstream tracks.
 An invalid expression exposes empty membership and an expression error without invalidating sibling sources.
 The error identifies the saved List whose stored expression failed.
 A child whose own expression is valid but whose parent chain contains that failure also exposes empty membership and propagates the originating parent error unchanged.
+`TrackSourceCache::orderableTrackIds` returns a saved List's effective sequence only when its source is live and has no source error, and otherwise fails as `InvalidState`.
+Moving, resetting, and forgetting hidden positions bind to that sequence, so none runs against the empty membership of a failed expression, where forgetting hidden positions would forget every saved position.
+Removing Tracks from a List and deleting a Track or List drop only the ranks of the tracks they name, and YAML restore writes the payload's order; none of them binds to that sequence.
 
 For filtered membership `M` and raw order `R`, `ListOrderSource` exposes:
 
@@ -156,7 +159,7 @@ Subscriptions release before their source or changes owner; source destruction d
 
 - [`TrackSourcePublicationTest.cpp`](../../../test/unit/runtime/source/TrackSourcePublicationTest.cpp) proves one mixed commit publishes one final all-tracks batch and smart membership transition before phase-two observers and command completion.
 - [`TrackSourceCachePublicationLifetimeTest.cpp`](../../../test/unit/runtime/source/TrackSourceCachePublicationLifetimeTest.cpp) proves that a handler may release its own or a sibling's last lease, retire a whole evaluator bucket, or acquire a new sibling during update-only, structural, reset, and invalidation publication without stale batches or use-after-free.
-- [`TrackSourceCacheTest.cpp`](../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, expired ad-hoc pruning, dependency composition, and contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership.
+- [`TrackSourceCacheTest.cpp`](../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves cache identity, expired ad-hoc pruning, dependency composition, contextual propagation of an invalid stored ancestor expression through saved and ad-hoc sources with empty membership, and that orderable track ids refuse a failed or invalidated source while a valid empty one succeeds.
 - Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source) prove in-place indexed edits, update-only smart-list membership transitions, edit validation, leases, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
 
 ## Related documents

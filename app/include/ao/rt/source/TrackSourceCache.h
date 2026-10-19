@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ao::library
 {
@@ -52,6 +53,15 @@ namespace ao::rt
     Result<TrackSourceLease> acquire(ListId listId);
     Result<TrackSourceLease> acquire(SourceSpec const& spec);
     std::optional<Error> sourceError(TrackSourceLease const& lease) const;
+    /**
+     * @brief The effective sequence of a live source whose definition evaluates.
+     *
+     * This is the only membership a saved List order may be bound to. A source
+     * whose stored filter does not parse or compile shows no members, and
+     * forgetting hidden positions against that membership would forget every
+     * saved position, so it is refused.
+     */
+    Result<std::vector<TrackId>> orderableTrackIds(TrackSourceLease const& lease) const;
     void reloadAllTracks();
 
   private:
