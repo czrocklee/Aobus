@@ -481,14 +481,27 @@ namespace ao::library
         return std::unexpected{prefixRes.error()};
       }
 
-      if (prefixRes->libraryVersion != kLibraryVersion)
+      // Version 1 is the first layout any release writes, so a stored version
+      // other than the current one is newer or one no build writes. The first
+      // format change adds the upgrade path for older versions here.
+      static_assert(kLibraryVersion == 1, "an older stored library version needs the upgrade path of decision 0020");
+
+      if (prefixRes->libraryVersion > kLibraryVersion)
       {
         return makeError(Error::Code::NotSupported,
-                         std::format("Unsupported library version {} (current {}). No automatic migration is provided; "
-                                     "keep this library and use a build supporting its stored version. Rebuilding "
-                                     "it from media files loses the tags, lists, and custom fields stored only in it.",
+                         std::format("Unsupported library version {} (current {}): a newer version of Aobus created "
+                                     "or upgraded this library. Open it with that version or a later one; this build "
+                                     "has not changed it. Rebuilding it from media files loses the tags, lists, and "
+                                     "custom fields stored only in it.",
                                      prefixRes->libraryVersion,
                                      kLibraryVersion));
+      }
+
+      if (prefixRes->libraryVersion != kLibraryVersion)
+      {
+        return makeError(Error::Code::CorruptData,
+                         std::format("Library metadata header records version {}, which no Aobus build writes",
+                                     prefixRes->libraryVersion));
       }
 
       if (auto catalogRes = validateCurrentCatalog(mainDatabase, transaction); !catalogRes)

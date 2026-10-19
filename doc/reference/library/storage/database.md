@@ -469,7 +469,7 @@ Track encoders validate the bytes they fill with the same canonical local valida
 Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
 After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-1 catalog closure, exact header size, named-database flags, or extra-database checks; no conversion is attempted, even when an existing named database's key flags differ from the current schema.
+A newer version returns `NotSupported`, and version `0` returns `CorruptData`, before version-1 catalog closure, exact header size, named-database flags, or extra-database checks; no conversion is attempted, even when an existing named database's key flags differ from the current schema.
 The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
 For version 1, the header is exactly 40 bytes with zero flags, a zero reserved word, and a non-nil library id, and the catalog is exactly the seven named databases above.
 Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
@@ -543,8 +543,9 @@ It cannot turn an underlying mapped-file fault into a recoverable record-validat
 
 ## Compatibility and versioning
 
-Opening a database with invalid metadata magic returns `CorruptData`; a valid non-current stored version returns `NotSupported` after only the stable prefix is read.
-There is no migration path today; the current reset-and-rescan recovery instruction loses database-only user-authored state and must be treated as an explicit destructive fallback rather than a reconstruction guarantee.
+Opening a database with invalid metadata magic returns `CorruptData`; a stored version newer than the current one returns `NotSupported` after only the stable prefix is read, and version `0`, which no build writes, returns `CorruptData`.
+The newer-version error tells the user to open the library with the build that created or upgraded it, states that this build has not changed it, and warns that rebuilding it from media files loses the tags, Lists, and custom fields held only in the database.
+There is no upgrade path today; rebuilding a library by rescanning loses database-only user-authored state and must be treated as an explicit destructive fallback rather than a reconstruction guarantee.
 Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, or manifest state likewise rejects open as a unit.
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
@@ -563,7 +564,8 @@ Admission still never parses a filter, and stored text that does not parse or co
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
 After the first release, a version is incremented at most once per release and a released number is never reused; a later release brings every earlier released library forward through an explicit, confirmed upgrade, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
-No upgrade exists yet. Open accepts only version 1, and any other stored version returns `NotSupported`; opening it never relabels, rewrites, or deletes it automatically.
+No upgrade exists yet. Open accepts only version 1 and never relabels, rewrites, or deletes a library of another version automatically.
+`MusicLibrary.cpp` asserts at compile time that the current version is 1, so incrementing `kLibraryVersion` does not build until open gains the upgrade path for the older version.
 Explicit recreation by rescanning abandons database-only curation, lists, and other state not held in the media files; it is a destructive user choice, not a reconstruction guarantee.
 The current build cannot open an environment of another version to export its curation, and a backup in another format does not become a current-format import merely by changing its version number.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created index and adds no legacy-layout migration or validation path.
@@ -589,7 +591,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, same-library plus cross-process writer-session exclusion, and same-process plus cross-process open-lock exclusion.
+- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, the newer-version and version-0 open errors, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, same-library plus cross-process writer-session exclusion, and same-process plus cross-process open-lock exclusion.
 - [`FileTimeConversionTest.cpp`](../../../../test/unit/library/FileTimeConversionTest.cpp) locks the native file-clock conversion behind the manifest modification-time record: Unix seconds with a nonnegative fraction, epoch zero, instants beyond the Unix nanosecond range, leap-second mapping, and `FileTimestamp` ordering and normalization.
 - [`LibraryFormatFixtureTest.cpp`](../../../../test/unit/runtime/library/LibraryFormatFixtureTest.cpp) opens a library created on each of Linux x86-64, Windows x64, and macOS arm64, checks its page size, that its Track and manifest trees have a branch level, and that a List record overflows, compares its full export with the [`v1.yaml`](../../../../test/data/library/v1.yaml) it was restored from, and writes a Track and a List to it. Each fixture holds a CUE carrier and has deleted its highest Track and List after the restore, so the write checks that neither id is reused.
   It also restores `v1.yaml` into an empty library with none of its audio files and checks that the full export reproduces the document byte for byte.

@@ -158,7 +158,7 @@ library:
   tracks: []
 )",
                 Error::Code::FormatRejected,
-                "Unsupported YAML version");
+                "Unsupported YAML version 0, which no Aobus build writes");
 
       // A newer document is rejected without a fallback or a conversion path.
       testError(R"(

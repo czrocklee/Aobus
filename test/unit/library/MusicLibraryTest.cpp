@@ -491,7 +491,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("may take 1976 bytes"));
   }
 
-  TEST_CASE("MusicLibrary - reports unsupported library versions as NotSupported", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - refuses a library version other than the current one", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -511,9 +511,9 @@ namespace ao::library::test
       CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
       CHECK(res.error().message.contains("version 2 (current 1)"));
-      CHECK(res.error().message.contains("No automatic migration"));
-      CHECK(res.error().message.contains("keep this library"));
-      CHECK(res.error().message.contains("build supporting its stored version"));
+      CHECK(res.error().message.contains("a newer version of Aobus created or upgraded this library"));
+      CHECK(res.error().message.contains("Open it with that version or a later one"));
+      CHECK(res.error().message.contains("this build has not changed it"));
       CHECK(res.error().message.contains("Rebuilding it from media files loses the tags, lists, and custom fields"));
       CHECK(readHeaderBytes() == before);
     }
@@ -529,6 +529,16 @@ namespace ao::library::test
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
+    }
+
+    SECTION("version zero is a corrupt header rather than an older library")
+    {
+      createLibraryMetadataHeader(temp.path(), 0);
+
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
+      CHECK(res.error().message.contains("records version 0, which no Aobus build writes"));
     }
   }
 

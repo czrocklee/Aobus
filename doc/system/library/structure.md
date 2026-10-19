@@ -244,7 +244,7 @@ Synchronous readers finish their snapshot scope before returning retained values
 Asynchronous writers hold no transaction across suspension and return only after abort/no-op or publication settlement.
 Cancellation may stop only operations with explicit checkpoints and never reinterprets a durable commit as rolled back.
 
-Persisted corruption safely detected during `MusicLibrary::open()` rejects the whole library as `CorruptData`; a valid non-current version returns `NotSupported` before current-schema interpretation.
+Persisted corruption safely detected during `MusicLibrary::open()` rejects the whole library as `CorruptData`; a version newer than the current one returns `NotSupported` before current-schema interpretation, and version `0`, which no build writes, returns `CorruptData`.
 After admission, a supported-writer invariant breach fails fast instead of becoming a miss or partial result.
 Raw mapped-file faults may still terminate the process; no degraded-library or salvage-row contract exists.
 A media rescan cannot preserve database-only curation, and a damaged database cannot be assumed exportable.
