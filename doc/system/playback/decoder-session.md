@@ -21,7 +21,7 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 - Every published `DecoderSession` is already open and has complete, valid `streamInfo()`; the public interface has no unopened or closed state.
 - A decoder created without a requested encoding inspects the stream and chooses its preferred lossless native representation.
 - A decoder created with a requested `SampleEncoding` either produces exactly that interleaved representation or is not published.
-- Decoders preserve inspected sample rate, channel count, sample kind, and precision; they do not silently resample, add or remove channels, or reduce precision.
+- Decoders preserve inspected sample rate, channel count, sample kind, precision, and effective speaker mask; they do not silently resample, add or remove channels, or reduce precision.
 - A codec-native identified speaker layout is normalized to the order owned by the [PCM format reference](pcm-format.md); an unidentified channel layout retains its index order.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
@@ -53,6 +53,8 @@ Successful inspection supplies complete source and preferred output formats with
 Explicit-start preparation next creates, seeks, and prerolls an optimistic final decoder in the selected Backend's valid prewarm hint when one is available.
 After a backend selects its exact encoding, playback reuses that prepared decoder on a complete PCM-mode match or creates a fresh ready decoder session with the selected encoding before seeking and preroll.
 The backend-selected encoding is always a member of the inspected signal's lossless output set, so the final decoder retains the same precision-preserving contract as optimistic preparation.
+Inspection-to-final stability covers the complete effective source format, including the effective speaker mask: a final session whose source format differs from the inspection is `FormatRejected`.
+A drift limited to the source layout's evidence origin re-describes the same layout, changes no PCM identity, and is accepted.
 
 Decoder blocks containing PCM remain consumable before a later empty end-of-stream block.
 `firstFrameIndex` identifies the actual first PCM frame in a block, including after decoder-level seek adjustment.

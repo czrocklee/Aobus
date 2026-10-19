@@ -502,6 +502,8 @@ add_executable(ao_core_test
     unit/audio/SegmentDecoderSessionTest.cpp
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
+    unit/audio/ChannelQualityTest.cpp
+    unit/audio/ChannelLayoutEvidenceTest.cpp
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/StreamingPrerollTest.cpp
@@ -520,6 +522,8 @@ add_executable(ao_core_test
     unit/audio/EngineErrorTest.cpp
     unit/audio/EngineFatalProbeTest.cpp
     unit/audio/EngineGaplessTest.cpp
+    unit/audio/EngineChannelLayoutTest.cpp
+    unit/audio/EngineEndpointPrecisionTest.cpp
     unit/audio/EngineRtSignalRingTest.cpp
     unit/audio/EngineSeekErrorTest.cpp
     unit/audio/EngineTest.cpp
@@ -863,9 +867,12 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireBackendTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
+  unit/audio/backend/AlsaChannelObservationTest.cpp
   unit/audio/backend/AlsaProviderTest.cpp
   unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
   unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
+  unit/audio/backend/detail/AlsaChannelMapTest.cpp
+  unit/audio/backend/detail/AlsaPrewarmCacheTest.cpp
   unit/audio/backend/detail/AlsaMixerSessionTest.cpp
   unit/audio/backend/detail/AlsaModeSelectorTest.cpp
   unit/audio/backend/detail/AlsaPcmErrorTest.cpp

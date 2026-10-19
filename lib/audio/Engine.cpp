@@ -21,6 +21,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
@@ -494,6 +495,9 @@ namespace ao::audio
     mutable std::mutex transitionMutex;
     std::optional<PcmFormat> optCurrentBackendFormat;
     std::optional<DecodedStreamInfo> optCurrentStreamInfo;
+    // A direct endpoint's admitted precision remains a bound for every source
+    // using this open, even when its client container is wider.
+    std::optional<ConfirmedEndpoint> optCurrentEndpoint;
 
     // Marks the tiny window where the RT thread has consumed the lookahead
     // cursor and is about to publish the splice signal. Timeline ownership is
@@ -640,14 +644,6 @@ namespace ao::audio
              (info.codec == AudioCodec::Flac || info.codec == AudioCodec::Alac || info.codec == AudioCodec::Wav);
     }
 
-    static bool canSplice(DecodedStreamInfo const& currentInfo,
-                          PcmFormat const& currentBackendFormat,
-                          TrackNode const& preparedNext) noexcept
-    {
-      return isGaplessCapable(currentInfo) && isGaplessCapable(preparedNext.info) &&
-             isSamePcmMode(currentBackendFormat, preparedNext.backendFormat);
-    }
-
     void waitForSpliceHandoff() const noexcept
     {
       while (spliceHandoffInProgress.load(std::memory_order_acquire))
@@ -699,6 +695,7 @@ namespace ao::audio
         auto const lock = std::scoped_lock{transitionMutex};
         optCurrentBackendFormat.reset();
         optCurrentStreamInfo.reset();
+        optCurrentEndpoint.reset();
       }
       clearPreparedNext();
     }
@@ -747,11 +744,12 @@ namespace ao::audio
       return std::nullopt;
     }
 
-    void publishCurrentTransitionState(TrackNode const& session)
+    void publishCurrentTransitionState(TrackNode const& session, std::optional<ConfirmedEndpoint> optEndpoint)
     {
       auto const lock = std::scoped_lock{transitionMutex};
       optCurrentBackendFormat = session.backendFormat;
       optCurrentStreamInfo = session.info;
+      optCurrentEndpoint = std::move(optEndpoint);
     }
 
     // ── Helpers ────────────────────────────────────────────────────
@@ -1297,7 +1295,7 @@ namespace ao::audio
         status.elapsed = std::chrono::milliseconds{0};
         status.statusText.clear();
         status.transport = Transport::Playing;
-        routeTracker.setDecoder(info.sourceFormat, info.outputFormat, info.isLossy, info.codec);
+        routeTracker.setDecoder(info);
         routeTracker.setEngineFormat(info.outputFormat);
         status.routeState = routeTracker.state();
 
@@ -1625,8 +1623,7 @@ namespace ao::audio
       status.duration = session.info.duration;
       status.elapsed = std::chrono::milliseconds{0};
       accumulatedFrames.store(0, std::memory_order_relaxed);
-      routeTracker.setDecoder(
-        session.info.sourceFormat, session.info.outputFormat, session.info.isLossy, session.info.codec);
+      routeTracker.setDecoder(session.info);
       routeTracker.setEngineFormat(session.info.outputFormat);
       status.routeState = routeTracker.state();
       engineSampleRate.store(session.info.outputFormat.sampleRate, std::memory_order_relaxed);
@@ -1707,6 +1704,7 @@ namespace ao::audio
     Purpose purpose = Purpose::ExplicitStart;
     std::optional<PcmFormat> optCurrentBackendFormat;
     std::optional<DecodedStreamInfo> optCurrentStreamInfo;
+    std::optional<ConfirmedEndpoint> optCurrentEndpoint;
     std::optional<detail::TrackSession::Inspection> optInspection;
     std::optional<PcmFormat> optPrewarmFormat;
     std::optional<detail::TrackSession::PreparedTrack> optPreparedTrack;
@@ -1806,9 +1804,10 @@ namespace ao::audio
       }
 
       auto const& currentFormat = *_implPtr->optCurrentBackendFormat;
-      auto const sameLayout =
-        currentFormat.sampleRate == sourceFormat.sampleRate && currentFormat.channels == sourceFormat.channels;
-      auto const reuseLossless = sameLayout && detail::isLosslessPcmEncoding(sourceFormat, currentFormat.encoding);
+      auto const nextFormat = pcmFormat(sourceFormat, currentFormat.encoding);
+      auto const nextMode = OpenedPcmMode{.clientFormat = nextFormat, .optEndpoint = _implPtr->optCurrentEndpoint};
+      auto const reuseLossless =
+        isSamePcmMode(currentFormat, nextFormat) && detail::validateOpenedMode(sourceFormat, nextMode).has_value();
 
       if (!Engine::Impl::isGaplessCapable(_implPtr->optInspection->info) || !reuseLossless)
       {
@@ -1816,7 +1815,7 @@ namespace ao::audio
         return {};
       }
 
-      _implPtr->optPrewarmFormat = pcmFormat(sourceFormat, currentFormat.encoding);
+      _implPtr->optPrewarmFormat = nextFormat;
       return {};
     }
 
@@ -1826,6 +1825,7 @@ namespace ao::audio
     // stays authoritative, so a stale hint costs one discarded decoder rather
     // than a wrong output mode. A lossy hint is ignored defensively.
     if (optHint && optHint->sampleRate == sourceFormat.sampleRate && optHint->channels == sourceFormat.channels &&
+        optHint->speakerMask == sourceFormat.speakerMask &&
         detail::isLosslessPcmEncoding(sourceFormat, optHint->encoding))
     {
       _implPtr->optPrewarmFormat = *optHint;
@@ -2113,7 +2113,7 @@ namespace ao::audio
       return std::unexpected{error};
     }
 
-    publishCurrentTransitionState(*openedTrackRes);
+    publishCurrentTransitionState(*openedTrackRes, openedModeRes->optEndpoint);
     publishCurrentTrackState(*openedTrackRes);
     accumulatedFrames.store(
       durationToSamples(initialOffset, openedTrackRes->info.outputFormat.sampleRate), std::memory_order_relaxed);
@@ -2541,6 +2541,7 @@ namespace ao::audio
       }
 
       preparationImplPtr->optCurrentStreamInfo = engine._implPtr->optCurrentStreamInfo;
+      preparationImplPtr->optCurrentEndpoint = engine._implPtr->optCurrentEndpoint;
       preparationImplPtr->logicalDrainFallback =
         !Engine::Impl::isGaplessCapable(*preparationImplPtr->optCurrentStreamInfo);
     }
@@ -2632,8 +2633,11 @@ namespace ao::audio
     if (preparationImpl->optPreparedTrack)
     {
       auto const& preparedTrack = *preparationImpl->optPreparedTrack;
+      auto const nextMode =
+        OpenedPcmMode{.clientFormat = preparedTrack.backendFormat, .optEndpoint = preparationImpl->optCurrentEndpoint};
       capable = Engine::Impl::isGaplessCapable(preparedTrack.info) &&
-                isSamePcmMode(currentBackendFormat, preparedTrack.backendFormat);
+                isSamePcmMode(currentBackendFormat, preparedTrack.backendFormat) &&
+                detail::validateOpenedMode(preparedTrack.info.sourceFormat, nextMode).has_value();
 
       if (capable)
       {

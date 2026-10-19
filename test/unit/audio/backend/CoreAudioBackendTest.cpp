@@ -22,6 +22,7 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
 #include <array>
@@ -324,6 +325,27 @@ namespace ao::audio::backend::test
       CHECK(openedRes.error().error.message == "Core Audio PCM formats require a sample rate and channels");
       CHECK(openedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
     }
+  }
+
+  TEST_CASE("CoreAudioBackend - identified source roles are refused before native channel admission is available",
+            "[audio][unit][coreaudio][backend]")
+  {
+    auto backend = CoreAudioBackend{
+      Device{.id = DeviceId{"synthetic-uid"}, .displayName = "Synthetic Output", .backendId = kBackendCoreAudio},
+      kProfileShared};
+    auto target = ::ao::audio::test::NoopRenderTarget{};
+    // ASBD storage agreement alone cannot establish either requested speaker set.
+    auto const speakerMask = GENERATE(0x30U, 0x3U);
+    auto const sourceFormat =
+      SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = speakerMask};
+
+    CHECK_FALSE(backend.prewarmFormatHint(sourceFormat));
+    auto const openedRes = backend.open(sourceFormat, target);
+
+    REQUIRE_FALSE(openedRes);
+    CHECK(openedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(openedRes.error().error.message == "Core Audio source speaker identity is not supported");
+    CHECK(openedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
   TEST_CASE("CoreAudioBackend - prewarm predicts the lossless mode without native negotiation",

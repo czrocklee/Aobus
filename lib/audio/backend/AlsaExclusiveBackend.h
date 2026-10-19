@@ -50,6 +50,7 @@ namespace ao::audio::backend
     AlsaExclusiveBackend& operator=(AlsaExclusiveBackend&&) = delete;
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept override;
+
     BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;

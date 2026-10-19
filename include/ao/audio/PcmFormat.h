@@ -17,6 +17,9 @@ namespace ao::audio
     std::uint32_t sampleRate = 0;
     std::uint8_t channels = 0;
     SampleEncoding encoding = SampleEncoding::Unknown;
+    // Effective speaker identity, independent of container width and stride.
+    // Zero does not select a default layout from the channel count.
+    std::uint32_t speakerMask = 0;
 
     bool operator==(PcmFormat const&) const = default;
   };
@@ -27,12 +30,16 @@ namespace ao::audio
       .sampleRate = format.sampleRate,
       .channels = format.channels,
       .precisionBits = encodingNominalBits(format.encoding),
-      .sampleKind = isFloatEncoding(format.encoding) ? SampleKind::FloatingPoint : SampleKind::Integer};
+      .sampleKind = isFloatEncoding(format.encoding) ? SampleKind::FloatingPoint : SampleKind::Integer,
+      .speakerMask = format.speakerMask};
   }
 
   constexpr PcmFormat pcmFormat(SignalFormat const& signal, SampleEncoding const encoding) noexcept
   {
-    return PcmFormat{.sampleRate = signal.sampleRate, .channels = signal.channels, .encoding = encoding};
+    return PcmFormat{.sampleRate = signal.sampleRate,
+                     .channels = signal.channels,
+                     .encoding = encoding,
+                     .speakerMask = signal.speakerMask};
   }
 
   constexpr std::size_t frameBytes(PcmFormat const& format) noexcept
@@ -57,6 +64,6 @@ namespace ao::audio
 
   constexpr bool isSamePcmMode(PcmFormat const& lhs, PcmFormat const& rhs) noexcept
   {
-    return lhs.sampleRate == rhs.sampleRate && lhs.channels == rhs.channels && lhs.encoding == rhs.encoding;
+    return lhs == rhs;
   }
 } // namespace ao::audio

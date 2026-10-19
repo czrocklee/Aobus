@@ -28,6 +28,11 @@ namespace ao::audio::detail
                                    static_cast<std::uint32_t>(sourceFormat.channels)));
     }
 
+    if (client.speakerMask != sourceFormat.speakerMask)
+    {
+      return makeError(Error::Code::FormatRejected, "Backend returned a different client speaker mask");
+    }
+
     if (!isLosslessPcmEncoding(sourceFormat, client.encoding))
     {
       return makeError(Error::Code::FormatRejected,
@@ -46,6 +51,14 @@ namespace ao::audio::detail
     if (endpoint.sampleRate != sourceFormat.sampleRate || endpoint.channels != sourceFormat.channels)
     {
       return makeError(Error::Code::FormatRejected, "Backend confirmed an endpoint with a different rate or layout");
+    }
+
+    // Unknown endpoint positions provide no matching-speaker proof. Only a
+    // known contradiction is rejected here; never fill them from the request.
+    if (sourceFormat.speakerMask != 0U && endpoint.speakerMask != 0U &&
+        endpoint.speakerMask != sourceFormat.speakerMask)
+    {
+      return makeError(Error::Code::FormatRejected, "Backend confirmed an endpoint with a different speaker mask");
     }
 
     if (endpoint.precisionBits == 0U || endpoint.precisionBits > encodingNominalBits(client.encoding))
