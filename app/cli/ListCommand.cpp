@@ -30,6 +30,7 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
+#include <ao/rt/source/TrackSourceLease.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
@@ -276,7 +277,7 @@ namespace ao::cli
       emitDocument(os, format, dto);
     }
 
-    std::vector<TrackId> effectiveListTrackIds(CliRuntime& cli, ListId const listId)
+    rt::TrackSourceLease acquireListSource(CliRuntime& cli, ListId const listId)
     {
       auto& sources = cli.core().sources();
       sources.reloadAllTracks();
@@ -287,7 +288,14 @@ namespace ao::cli
         throwCommandError(sourceRes.error());
       }
 
-      auto sourceLease = std::move(*sourceRes);
+      return std::move(*sourceRes);
+    }
+
+    // Display only: a saved-order binding reads TrackSourceCache::orderableTrackIds,
+    // which refuses a List whose stored filter failed instead of seeing it empty.
+    std::vector<TrackId> displayListTrackIds(CliRuntime& cli, ListId const listId)
+    {
+      auto const sourceLease = acquireListSource(cli, listId);
       auto const& source = sourceLease.source();
       auto ids = std::vector<TrackId>{};
       ids.reserve(source.size());
@@ -361,7 +369,7 @@ namespace ao::cli
         throwCommandError(Error::Code::NotFound, "list not found: {}", listId);
       }
 
-      auto const ids = effectiveListTrackIds(cli, listId);
+      auto const ids = displayListTrackIds(cli, listId);
       auto const rows = resolveRows(snapshot, ids);
       auto const order = snapshot.listOrderTrackIds(listId);
 
@@ -831,8 +839,15 @@ namespace ao::cli
 
     rt::BoundListOrder bindCurrentListOrder(CliRuntime& cli, ListId const listId)
     {
-      auto effectiveIds = effectiveListTrackIds(cli, listId);
-      auto res = cli.library().bindListOrder(listId, std::move(effectiveIds));
+      auto const sourceLease = acquireListSource(cli, listId);
+      auto effectiveIdsRes = cli.core().sources().orderableTrackIds(sourceLease);
+
+      if (!effectiveIdsRes)
+      {
+        throwCommandError(effectiveIdsRes.error());
+      }
+
+      auto res = cli.library().bindListOrder(listId, std::move(*effectiveIdsRes));
 
       if (!res)
       {

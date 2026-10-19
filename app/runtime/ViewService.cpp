@@ -29,7 +29,6 @@
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
@@ -588,22 +587,14 @@ namespace ao::rt
       return missingViewError(viewId);
     }
 
-    auto const& source = *iter->second.baseSourceLease;
+    auto trackIdsRes = _implPtr->sources.orderableTrackIds(iter->second.baseSourceLease);
 
-    if (source.state() != TrackSourceState::Live)
+    if (!trackIdsRes)
     {
-      return makeError(Error::Code::InvalidState, std::format("View {} List source is unavailable", viewId));
+      return makeError(trackIdsRes.error().code, std::format("View {}: {}", viewId, trackIdsRes.error().message));
     }
 
-    auto trackIds = std::vector<TrackId>{};
-    trackIds.reserve(source.size());
-
-    for (std::size_t index = 0; index < source.size(); ++index)
-    {
-      trackIds.push_back(source.trackIdAt(index));
-    }
-
-    return trackIds;
+    return trackIdsRes;
   }
 
   std::unique_ptr<TrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,

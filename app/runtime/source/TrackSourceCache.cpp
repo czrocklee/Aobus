@@ -134,6 +134,32 @@ namespace ao::rt
     return _implPtr->sourceError(lease);
   }
 
+  Result<std::vector<TrackId>> TrackSourceCache::orderableTrackIds(TrackSourceLease const& lease) const
+  {
+    auto const& source = lease.source();
+
+    if (source.state() != TrackSourceState::Live)
+    {
+      return makeError(Error::Code::InvalidState, "Track source is unavailable");
+    }
+
+    if (auto const optError = _implPtr->sourceError(lease); optError)
+    {
+      return makeError(
+        Error::Code::InvalidState, std::format("{}; fix the filter before editing the saved order", optError->message));
+    }
+
+    auto trackIds = std::vector<TrackId>{};
+    trackIds.reserve(source.size());
+
+    for (std::size_t index = 0; index < source.size(); ++index)
+    {
+      trackIds.push_back(source.trackIdAt(index));
+    }
+
+    return trackIds;
+  }
+
   void TrackSourceCache::reloadAllTracks()
   {
     _implPtr->reloadAllTracks();

@@ -258,6 +258,7 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 - `list order forget-hidden` forgets only positions outside current effective membership, preserving the saved relative order of visible tracks.
   Neither command changes track tags.
   Their reports include `selectedTrackIds: []` and the number of forgotten positions; an unchanged order is a successful no-op.
+- `list order move`, `reset`, and `forget-hidden` fail as `InvalidState` and change nothing while the List's own or a saved ancestor's stored filter is invalid.
 - No `list order` subcommand accepts `--dry-run`; supplying it is a usage failure.
 - The saved-order runtime may return `Applied`, `NoOp`, `Stale`, or `Unavailable`.
   CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
@@ -323,7 +324,7 @@ Otherwise the next argument becomes the role: `--credit conductor X "" --dry-run
 
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects the command tree and representative exact shapes.
 - [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects encoding rules.
-- [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal, saved-order cleanup and rejected negated presence flags.
+- [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal, saved-order cleanup, order edits refused while a stored filter is invalid, and rejected negated presence flags.
 - [`TrackPerformanceMetadataCommandTest.cpp`](../../../test/unit/cli/TrackPerformanceMetadataCommandTest.cpp) protects recording-date and Credits show/update options, literal fixed-triple arguments, native argv dry-run placement, attached-form rejection, exact arity, option context, scope/clear/conflict/rejection rules, negated-clear rejection, and structured sequence output.
 - [`TrackLiteralMetadataCommandTest.cpp`](../../../test/unit/cli/TrackLiteralMetadataCommandTest.cpp) protects literal tag/custom operands, attached and multiargument forms, argument-order set/unset, contextual recognition, and atomic rejection.
 
