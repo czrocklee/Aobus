@@ -1,0 +1,58 @@
+version: 1
+export-mode: delta
+library:
+  tracks:
+    - id: 1
+      uri: Jazz/Example Quartet/Night Session/01 Blue Hour.flac
+      title: Blue Hour
+      artist: Example Quartet
+      album: Night Session
+      genre: Jazz
+      year: 1961
+      track-number: 1
+      track-total: 5
+      recording-date: 1961-03
+      credits:
+        - name: Example Quartet
+          kind: ensemble
+        - name: Sam Example
+          kind: performer
+          role: saxophone
+      custom:
+        session: take 3
+      tags:
+        - jazz
+    - id: 2
+      uri: Jazz/Example Quartet/Night Session/02 Late Train.opus
+      title: Late Train
+      artist: Example Quartet
+      tags:
+        - jazz
+        - late
+    - id: 3
+      uri: Jazz/Example Quartet/Night Session (Live).wav
+      segment:
+        ordinal: 1
+        start-frame: 0
+        frame-count: 96000
+        total-frames: 288000
+        sample-rate: 48000
+      duration: 2000
+      title: Intro
+      artist: Example Quartet
+  lists:
+    - id: 1
+      parent-id: 0
+      name: Jazz
+      filter: '#jazz'
+      order:
+        - 2
+    - id: 2
+      parent-id: 1
+      name: Late
+      filter: '#late'
+    - id: 3
+      parent-id: 0
+      name: Live intro
+      order:
+        - 3

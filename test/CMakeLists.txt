@@ -27,6 +27,7 @@ set_property(SOURCE
 )
 set_property(SOURCE
   unit/runtime/library/LibraryFormatFixtureTest.cpp
+  unit/runtime/library/LibraryYamlModeFixtureTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS LIBRARY_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/library"
 )
 set_property(SOURCE
@@ -754,6 +755,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryYamlImporterTest.cpp
     unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp
     unit/runtime/library/LibraryYamlCreditBoundaryTest.cpp
+    unit/runtime/library/LibraryYamlModeFixtureTest.cpp
     unit/runtime/library/LibraryExportImportTest.cpp
     unit/runtime/resource/ResourceByteDiskCacheTest.cpp
     unit/runtime/resource/ResourceByteMemoryCacheTest.cpp
