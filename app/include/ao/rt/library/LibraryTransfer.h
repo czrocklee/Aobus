@@ -9,7 +9,7 @@
 namespace ao::rt
 {
   /** The interchange format version this build writes, and the only one it reads. */
-  constexpr std::uint32_t kYamlFormatVersion = 8;
+  constexpr std::uint32_t kYamlFormatVersion = 1;
 
   enum class ExportMode : std::uint8_t
   {

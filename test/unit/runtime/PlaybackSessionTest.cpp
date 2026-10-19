@@ -89,7 +89,7 @@ namespace ao::rt::test
 {
   namespace
   {
-    constexpr auto kPlaybackSessionV5SortFieldOrdinals = std::to_array<std::pair<TrackSortField, std::int32_t>>({
+    constexpr auto kPlaybackSessionV1SortFieldOrdinals = std::to_array<std::pair<TrackSortField, std::int32_t>>({
       {TrackSortField::Artist, 0},
       {TrackSortField::Album, 1},
       {TrackSortField::AlbumArtist, 2},
@@ -715,12 +715,12 @@ namespace ao::rt::test
     CHECK(sessionPtr->preparedNextRegistry().size() == 0);
   }
 
-  TEST_CASE("PlaybackSession - schema v5 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
+  TEST_CASE("PlaybackSession - schema v1 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
   {
-    static_assert(kPlaybackSessionV5SortFieldOrdinals.size() == kTrackSortFieldCount);
-    CHECK(kPlaybackSessionSchemaVersion == 5);
+    static_assert(kPlaybackSessionV1SortFieldOrdinals.size() == kTrackSortFieldCount);
+    CHECK(kPlaybackSessionSchemaVersion == 1);
 
-    for (auto const& [field, ordinal] : kPlaybackSessionV5SortFieldOrdinals)
+    for (auto const& [field, ordinal] : kPlaybackSessionV1SortFieldOrdinals)
     {
       CHECK(static_cast<std::int32_t>(field) == ordinal);
     }
@@ -746,7 +746,7 @@ namespace ao::rt::test
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(PlaybackSessionYamlSchema{}.serialize(tree.rootref(), state));
-    CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "5");
+    CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "1");
     CHECK(yaml::scalarView(tree.rootref()["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
     CHECK(yaml::scalarView(tree.rootref()["currentTrackUri"]) == "albums/first.flac");
     CHECK(yaml::scalarView(tree.rootref()["currentTrackOrdinal"]) == "7");
@@ -760,9 +760,9 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSessionYamlSchema - rejects future and unknown YAML structure",
             "[runtime][unit][playback-session][schema]")
   {
-    SECTION("Previous version is rejected before interpreting its payload")
+    SECTION("Version zero is rejected before interpreting its payload")
     {
-      auto const* source = "schemaVersion: 4\nsortBy: malformed\n";
+      auto const* source = "schemaVersion: 0\nsortBy: malformed\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
@@ -785,7 +785,7 @@ namespace ao::rt::test
     SECTION("Unknown structural keys are rejected")
     {
       auto const* source = R"(
-        schemaVersion: 5
+        schemaVersion: 1
         libraryId: 123e4567-e89b-12d3-a456-426614174000
         sourceListId: 1
         quickFilterExpression: ""
@@ -835,7 +835,7 @@ namespace ao::rt::test
     CHECK(*playbackSessionStore.contains(kPlaybackSessionConfigGroup));
 
     auto const saved = storedSession(playbackSessionStore);
-    CHECK(saved.schemaVersion == 5);
+    CHECK(saved.schemaVersion == 1);
     CHECK(saved.libraryId == runtimePtr->library().snapshot().libraryId());
     CHECK(saved.sourceListId == kAllTracksListId);
     CHECK(saved.quickFilterExpression == "$year > 2000");
@@ -1279,7 +1279,7 @@ namespace ao::rt::test
     };
     auto expectedError = Error::Code::CorruptData;
 
-    SECTION("schema v2 is rejected")
+    SECTION("a newer schema version is rejected")
     {
       payload.schemaVersion = 2;
       expectedError = Error::Code::NotSupported;
@@ -1361,7 +1361,7 @@ namespace ao::rt::test
     auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const trackId = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->sources().reloadAllTracks();
-    auto schemaLine = std::string_view{"  schemaVersion: 5\n"};
+    auto schemaLine = std::string_view{"  schemaVersion: 1\n"};
     auto sortBy = std::string_view{"[]"};
     auto libraryIdLine = std::string_view{"  libraryId: 123e4567-e89b-12d3-a456-426614174000\n"};
 
@@ -1417,7 +1417,7 @@ namespace ao::rt::test
       // The open library's id, so parsing alone can reject the document.
       auto const libraryIdLine =
         std::format("  libraryId: {}\n", utility::formatUuid(runtimePtr->library().snapshot().libraryId()));
-      auto yaml = rawPlaybackSessionYaml(trackId, "  schemaVersion: 5\n", "[]", libraryIdLine);
+      auto yaml = rawPlaybackSessionYaml(trackId, "  schemaVersion: 1\n", "[]", libraryIdLine);
       auto const uriLine = std::string_view{"  currentTrackUri: current.flac\n"};
       auto const uriPosition = yaml.find(uriLine);
       REQUIRE(uriPosition != std::string::npos);

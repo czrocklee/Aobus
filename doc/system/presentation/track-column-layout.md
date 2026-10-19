@@ -132,7 +132,7 @@ Persistence I/O failures belong to the [persistence and managed-state architectu
 Column state is UI-local per-library managed state keyed by list id.
 GTK stores desktop geometry in `gtk_layout.yaml`; WinUI stores desktop geometry in `winui_layout.yaml`; TUI stores terminal geometry in `tui_layout.yaml`.
 All three are per-library documents that record the id of the library they were saved for, so a list id keyed in one is never read back against another library's lists.
-The `trackView.columnLayouts` group carries required `version: 3` and
+The `trackView.columnLayouts` group carries required `version: 1` and
 `libraryId`, and stores field id, canonical dimensions, and visibility.
 The exact group shape is owned by the [persisted presentation-state reference](../../reference/presentation/persisted-state.md), while its containing document is registered by the [application managed-state reference](../../reference/persistence/application-config.md).
 

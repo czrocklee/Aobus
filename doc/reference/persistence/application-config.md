@@ -66,18 +66,18 @@ It does not denote nested mappings.
 | Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | TUI Settings through `ao::uimodel::saveKeymap` and the App-owned `ConfigStore`. |
 | Global TUI config | `preferences` | `ao::tui::Preferences` | TUI-local `PreferencesSchema`. | Required `version`; current value `1`. | TUI Settings through the App-owned `ConfigStore`. |
 | Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | None; WinUI loads hand-authored overrides. |
-| Frontend-selected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `5`. | `PlaybackSessionPersistence`. |
+| Frontend-selected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `1`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
-| AppKit library state | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `2`. | AppKit `LibrarySession`. |
-| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `3`. | `GtkLayoutStateStore`. |
-| GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
-| TUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`; positive widths are terminal cells. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `3`. | `LayoutStateStore`. |
-| TUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `2`. | `LayoutStateStore`. |
+| AppKit library state | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | AppKit `LibrarySession`. |
+| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
+| GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
+| TUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`; positive widths are terminal cells. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `1`. | `LayoutStateStore`. |
+| TUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `LayoutStateStore`. |
 | TUI library presentation | `navigation` | Boolean `enabled`. | TUI-local `NavigationSchema` in `LayoutStateStore.cpp`. | Required `version`; current value `1`. | `LayoutStateStore`. |
 | TUI library presentation | `panels` | `ao::tui::PanelWidths`. | TUI-local `PanelWidthsSchema` in `LayoutStateStore.cpp`. | Required `version`; current value `1`. | `LayoutStateStore`. |
-| Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `3`. | WinUI `LibrarySession`. |
-| WinUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `3`. | WinUI `LibrarySession`. |
-| WinUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
+| Windows desktop settings | `desktop` | `ao::winui::DesktopSettings`. | WinUI frontend `DesktopSettingsYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
+| WinUI library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayouts::Snapshot`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
+| WinUI library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
 | Shell layout preset | `layout` | `ao::uimodel::LayoutDocument` | UIModel `LayoutDocumentYamlSchema`. | Required `version`; accepted value `1`. | Shell-layout workflow through `ShellLayoutStore`. |
 | Shell component state | No group; standalone root. | `ao::uimodel::LayoutComponentStateDocument` | UIModel `LayoutComponentStateYamlSchema`. | Root `version = 1`; each entry has `stateVersion = 1`. | Layout runtime and promotion workflow through `ShellLayoutComponentStateStore`. |
 
@@ -215,9 +215,9 @@ The registry fixes the group-to-type association, but these domain owners define
 - Unregistered top-level groups have no application consumer even though a loaded `ConfigStore` can retain them while rewriting another group.
 - Every registered payload uses an explicit owner-local schema; no field, enum, id, container, or aggregate schema is inferred from its C++ type.
 - The [grouped configuration store specification](../../system/persistence/config-store.md) owns explicit schema invocation, missing-group presence results, candidate isolation, and multi-group atomic replacement, not payload deserialization policy.
-- `playback-session` accepts only schema version `4`, uses explicit enum and identifier mappings, and validates the complete structural and semantic candidate.
+- `playback-session` accepts only schema version `1`, uses explicit enum and identifier mappings, and validates the complete structural and semantic candidate.
 - `workspace` accepts only presentation version `1` and validates its complete stable presentation vocabulary before view creation.
-- Interactive column-layout groups accept only version `2`; interactive
+- Interactive column-layout groups accept only version `1`; interactive
   list-presentation groups accept only version `1`. Each validates a complete
   candidate before replacing seeded UIModel state.
 - Shell layout files require a readable `layout` group whose payload contains `version` and `root`; `templates` is optional.
@@ -252,11 +252,11 @@ The composition root logs the degraded application-preference session once, wher
 | `shortcuts` | No explicit version or migration. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. |
 | TUI `preferences` | Required payload version `1`, strict field membership and value validation, defaults for missing preference fields, and no earlier-version migration. |
 | `workspace` | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
-| `trackView.columnLayouts` | Independent payload version `2`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
+| `trackView.columnLayouts` | Independent payload version `1`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
 | `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
 | TUI `navigation` and `panels` | Independent payload version `1` for each group, strict field membership, and no earlier-version migration. Invalid navigation falls back to enabled; invalid panel widths fall back to automatic sizing at the owning workflow. |
-| Windows `desktop` | Explicit version, currently `3`, read down to the oldest this schema ever wrote (`2`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
-| `playback-session` | Explicit schema version `4`; other versions are rejected rather than migrated. |
+| Windows `desktop` | Explicit version, currently `1`, read down to the oldest this schema ever wrote (`1`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
+| `playback-session` | Explicit schema version `1`; other versions are rejected rather than migrated. |
 | `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. |
 | Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |
 

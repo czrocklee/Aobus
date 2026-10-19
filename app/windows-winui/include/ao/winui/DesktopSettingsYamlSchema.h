@@ -14,7 +14,7 @@
 
 namespace ao::winui
 {
-  inline constexpr std::uint32_t kDesktopSettingsVersion = 3;
+  inline constexpr std::uint32_t kDesktopSettingsVersion = 1;
   inline constexpr std::int32_t kDefaultWindowX = 80;
   inline constexpr std::int32_t kDefaultWindowY = 80;
   inline constexpr std::int32_t kDefaultWindowWidth = 1280;

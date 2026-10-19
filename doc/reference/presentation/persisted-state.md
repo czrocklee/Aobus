@@ -5,19 +5,17 @@ id: presentation.persisted-state
 
 ## Scope and version
 
-This reference owns the exact version-3 `trackView.columnLayouts` payload and
-version-2 `trackView.presentations` payload stored by interactive frontends.
+This reference owns the exact version-1 `trackView.columnLayouts` payload and
+version-1 `trackView.presentations` payload stored by interactive frontends.
 GTK stores them per library in `gtk_layout.yaml`; TUI stores them per library in `tui_layout.yaml`; WinUI stores them per library in `winui_layout.yaml`.
 It also routes the stable textual vocabulary shared with nested workspace presentation state.
 
 The [workspace session-state reference](../workspace/session-state.md) owns the exact workspace group.
 The [application managed-state surface](../persistence/application-config.md) owns group-to-document registration and writer identity, while presentation specifications own runtime behavior and fallback.
 
-Column-layout version 3 and list-presentation version 2 add a required
-`libraryId` that binds each document to the library whose list ids it names.
-Column-layout version 2 had added required per-field visibility to the
-canonical sizing and order state.
-There is no migration from earlier or unversioned payloads.
+Both payloads carry a required `libraryId` that binds each document to the
+library whose list ids it names.
+There is no migration from development-era or unversioned payloads.
 
 ## Code boundary
 
@@ -49,7 +47,7 @@ Its exact shape is:
 
 ```yaml
 trackView.columnLayouts:
-  version: 3
+  version: 1
   libraryId: 123e4567-e89b-12d3-a456-426614174000
   layouts:
     - listId: 10
@@ -68,7 +66,7 @@ trackView.columnLayouts:
 
 | Field | Type | Requirement |
 |---|---|---|
-| `version` | Unsigned 32-bit integer. | Required and exactly `3`. |
+| `version` | Unsigned 32-bit integer. | Required and exactly `1`. |
 | `libraryId` | Canonical UUID string. | Required; the library the layouts were saved for. |
 | `layouts` | Sequence of layout mappings. | Required; may be empty. |
 
@@ -102,7 +100,7 @@ Its exact shape is:
 
 ```yaml
 trackView.presentations:
-  version: 2
+  version: 1
   libraryId: 123e4567-e89b-12d3-a456-426614174000
   preferences:
     - listId: 10
@@ -113,7 +111,7 @@ trackView.presentations:
 
 | Field | Type | Requirement |
 |---|---|---|
-| `version` | Unsigned 32-bit integer. | Required and exactly `2`. |
+| `version` | Unsigned 32-bit integer. | Required and exactly `1`. |
 | `libraryId` | Canonical UUID string. | Required; the library the preferences were saved for. |
 | `preferences` | Sequence of preference mappings. | Required; may be empty. |
 
@@ -153,12 +151,12 @@ It is not a complete workspace root schema version.
 
 ## Compatibility and versioning
 
-Writers emit column-layout version 3 and list-presentation version 2 with stable
+Writers emit column-layout version 1 and list-presentation version 1 with stable
 text ids and canonical member names.
 Unversioned legacy state, numeric field values, unknown closed tokens, and future versions are rejected without an automatic rewrite.
 Future versions return `NotSupported` before version-specific sibling fields are interpreted.
 
-This textual-id contract does not make C++ enum ordinals freely reorderable across all consumers. Playback-session version 5 separately serializes numeric `TrackSortField` values; changing them requires a playback-schema compatibility decision even when these presentation tokens stay unchanged. See the [track-field compatibility boundary](../library/model/track-field.md#compatibility-and-versioning) and [playback session state](../playback/session-state.md).
+This textual-id contract does not make C++ enum ordinals freely reorderable across all consumers. The playback-session schema separately serializes numeric `TrackSortField` values; changing them requires a playback-schema compatibility decision even when these presentation tokens stay unchanged. See the [track-field compatibility boundary](../library/model/track-field.md#compatibility-and-versioning) and [playback session state](../playback/session-state.md).
 
 Changing a stable token's meaning or spelling requires an explicit compatibility decision.
 Adding a token does not change the meaning of existing documents, but older

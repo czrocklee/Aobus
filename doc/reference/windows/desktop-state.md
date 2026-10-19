@@ -6,8 +6,8 @@ id: reference.windows-desktop-state
 ## Scope and version
 
 This reference exhaustively defines the Windows-owned `desktop` group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml` and the complete `%LOCALAPPDATA%\Aobus\windows-theme.yaml` document for the unpackaged native Windows frontend.
-The `desktop` group is version 3.
-The shared version-3 `trackView.columnLayouts` and version-2 `trackView.presentations` groups defined by the [persisted presentation-state reference](../presentation/persisted-state.md) are not in this file: they are keyed by list id and live in the per-library `winui_layout.yaml` document instead.
+The `desktop` group is version 1.
+The shared version-1 `trackView.columnLayouts` and version-1 `trackView.presentations` groups defined by the [persisted presentation-state reference](../presentation/persisted-state.md) are not in this file: they are keyed by list id and live in the per-library `winui_layout.yaml` document instead.
 The theme document is strict and unversioned.
 
 ## Code boundary
@@ -20,7 +20,7 @@ The [system architecture](../../system/overview.md), [application shell architec
 
 | Field | Type | Default |
 |---|---|---|
-| `version` | unsigned integer | `3` |
+| `version` | unsigned integer | `1` |
 | `window.x`, `window.y` | signed integer | `80`, `80` |
 | `window.width`, `window.height` | signed integer | `1280`, `800` |
 | `window.maximized` | Boolean | `false` |
@@ -74,15 +74,19 @@ The shared presentation groups apply their own recursive list-id, field-id, orde
 
 ## Compatibility and versioning
 
-Desktop settings read version 2 or 3, which are the versions this schema has written. Because every field other than
-`version` is optional over the caller's seed, an older document is read in full
-and the fields it predates keep their seeded values; the group is stamped with
-the current version and the next checkpoint writes it back upgraded. A version
-above 3 is rejected instead of read: this build cannot preserve fields it does
-not know, so reading such a document would discard them at the next save. A
-version below 2 is rejected as well, because no document was ever written that
-way; the value marks a missing or malformed marker, and reading it under current
-field semantics would dress a corrupt document up as an old one.
+Desktop settings read every version this schema has written, which is version 1
+alone. Because every field other than `version` is optional over the caller's
+seed, a document of an older version is read in full and the fields it predates
+keep their seeded values; the group is stamped with the current version and the
+next checkpoint writes it back upgraded. A version above 1 is rejected instead
+of read: this build cannot preserve fields it does not know, so reading such a
+document would discard them at the next save. Version 0 is rejected as well,
+because no document was ever written that way; the value marks a missing or
+malformed marker, and reading it under current field semantics would dress a
+corrupt document up as an old one. Documents written by development builds
+before the first release are unsupported and not detected: their versions 2 and
+3 are rejected like any newer version, and one marked version 1 is read as
+version 1.
 A rejected group leaves typed defaults in effect.
 Each settings group is loaded independently, so rejection of `desktop` does not reject a valid sibling group and vice versa.
 The theme has no compatibility envelope: adding, removing, or renaming a token requires coordinated schema, reference, and test changes.
@@ -105,7 +109,7 @@ The settings and theme files remain separate writer domains; changing or rejecti
 
 ```yaml
 desktop:
-  version: 3
+  version: 1
   window: {x: 80, y: 80, width: 1280, height: 800, maximized: false}
   shellMode: modern
   lastLibraryPath: 'D:\Music'

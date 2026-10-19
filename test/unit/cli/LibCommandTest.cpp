@@ -123,7 +123,7 @@ namespace ao::cli::test
     auto const documentPath = fixture.root() / "mtime-overlay.yaml";
     {
       auto document = std::ofstream{documentPath};
-      document << R"yaml(version: 8
+      document << R"yaml(version: 1
 export-mode: full
 library:
   resources: []
@@ -165,7 +165,7 @@ library:
     auto const documentPath = fixture.root() / "mtime-overlay.yaml";
     {
       auto document = std::ofstream{documentPath};
-      document << R"yaml(version: 8
+      document << R"yaml(version: 1
 export-mode: full
 library:
   resources: []
@@ -814,7 +814,7 @@ library:
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "8");
+    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "1");
     CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
     CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
@@ -822,7 +822,7 @@ library:
 
     result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Payload: YAML v8, mode 'full', target scope 'library'."));
+    CHECK(contains(result.out, "Payload: YAML v1, mode 'full', target scope 'library'."));
     CHECK(contains(
       result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0, invalid filters kept 0."));
 
@@ -877,7 +877,7 @@ library:
 
     result = target.run({"lib", "import", "--dry-run", exportPath.string()});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Payload: YAML v8, mode 'list-only'"));
+    CHECK(contains(result.out, "Payload: YAML v1, mode 'list-only'"));
   }
 
   TEST_CASE("CLI - lib import counts kept invalid List filters in every output and phase",
@@ -887,7 +887,7 @@ library:
     auto const documentPath = fixture.root() / "invalid-filter.yaml";
     {
       auto document = std::ofstream{documentPath};
-      document << R"yaml(version: 8
+      document << R"yaml(version: 1
 export-mode: list-only
 library:
   lists:

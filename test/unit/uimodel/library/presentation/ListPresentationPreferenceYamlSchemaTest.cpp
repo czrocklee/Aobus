@@ -28,7 +28,7 @@ namespace ao::uimodel::test
     auto const documentRes = toListPresentationPreferenceDocument(state, kLibraryId);
 
     REQUIRE(documentRes);
-    CHECK(documentRes->version == 2);
+    CHECK(documentRes->version == 1);
     CHECK(documentRes->libraryId == kLibraryId);
     REQUIRE(documentRes->preferences.size() == 1);
     CHECK(documentRes->preferences[0].listId == 10);
@@ -53,7 +53,7 @@ namespace ao::uimodel::test
 
     SECTION("Unsupported version")
     {
-      document.version = 3;
+      document.version = 2;
       auto const res = listPresentationPreferenceStateFromDocument(document);
 
       REQUIRE_FALSE(res);
@@ -97,7 +97,7 @@ namespace ao::uimodel::test
 
     REQUIRE(ListPresentationPreferenceYamlSchema{kLibraryId}.serialize(tree.rootref(), state));
     CHECK(tree.rootref().num_children() == 3);
-    CHECK(yaml::scalarView(tree.rootref()["version"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["version"]) == "1");
     CHECK(yaml::scalarView(tree.rootref()["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(tree.rootref()["preferences"].is_seq());
     REQUIRE(tree.rootref()["preferences"].num_children() == 1);
@@ -142,7 +142,7 @@ namespace ao::uimodel::test
 
     SECTION("Missing required fields are rejected")
     {
-      auto const* source = "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\n";
+      auto const* source = "version: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
@@ -155,7 +155,7 @@ namespace ao::uimodel::test
 
     SECTION("Missing library id is rejected")
     {
-      auto const* source = "version: 2\npreferences: []\n";
+      auto const* source = "version: 1\npreferences: []\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
@@ -168,7 +168,7 @@ namespace ao::uimodel::test
 
     SECTION("Malformed library id is rejected")
     {
-      auto const* source = "version: 2\nlibraryId: 123e4567\npreferences: []\n";
+      auto const* source = "version: 1\nlibraryId: 123e4567\npreferences: []\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
@@ -182,7 +182,7 @@ namespace ao::uimodel::test
     SECTION("Unknown structural keys are rejected")
     {
       auto const* source =
-        "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences: []\nfuture: true\n";
+        "version: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences: []\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
@@ -196,7 +196,7 @@ namespace ao::uimodel::test
     SECTION("Unknown preference keys are rejected")
     {
       auto const* source = R"(
-        version: 2
+        version: 1
         libraryId: 123e4567-e89b-12d3-a456-426614174000
         preferences:
           - listId: 1
@@ -215,7 +215,7 @@ namespace ao::uimodel::test
 
     SECTION("Preference sequence entries must be mappings")
     {
-      auto const* source = "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences:\n  - malformed\n";
+      auto const* source = "version: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences:\n  - malformed\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
@@ -228,7 +228,7 @@ namespace ao::uimodel::test
 
     SECTION("Missing nested presentation id is rejected")
     {
-      auto const* source = "version: 2\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences:\n  - listId: 1\n";
+      auto const* source = "version: 1\nlibraryId: 123e4567-e89b-12d3-a456-426614174000\npreferences:\n  - listId: 1\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decodedRes =
@@ -242,7 +242,7 @@ namespace ao::uimodel::test
     SECTION("Malformed nested entries reject the whole candidate")
     {
       auto const* source = R"(
-        version: 2
+        version: 1
         libraryId: 123e4567-e89b-12d3-a456-426614174000
         preferences:
           - listId: malformed

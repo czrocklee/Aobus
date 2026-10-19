@@ -1,4 +1,4 @@
-version: 8
+version: 1
 export-mode: full
 library:
   resources:
@@ -3739,6 +3739,60 @@ library:
       file-size: 0
       mtime: null
       covers: []
+    - id: 262
+      uri: Live/Concert/disc.flac
+      segment:
+        ordinal: 1
+        start-frame: 0
+        frame-count: 13229412
+        total-frames: 26460000
+        sample-rate: 44100
+      title: Opening
+      artist: The Carrier Band
+      album: Live at the Hall
+      track-number: 1
+      track-total: 2
+      credits: []
+      duration: 299986
+      bitrate: 1411200
+      sample-rate: 44100
+      codec: FLAC
+      channels: 2
+      bit-depth: 16
+      file-size: 52920044
+      mtime:
+        seconds: 1700000100
+        nanoseconds: 0
+      covers: []
+      tags:
+        - live
+    - id: 263
+      uri: Live/Concert/disc.flac
+      segment:
+        ordinal: 2
+        start-frame: 13230000
+        frame-count: 13230000
+        total-frames: 26460000
+        sample-rate: 44100
+      title: Encore
+      artist: The Carrier Band
+      album: Live at the Hall
+      track-number: 2
+      track-total: 2
+      credits: []
+      duration: 300000
+      bitrate: 1411200
+      sample-rate: 44100
+      codec: FLAC
+      channels: 2
+      bit-depth: 16
+      file-size: 52920044
+      mtime:
+        seconds: 1700000100
+        nanoseconds: 0
+      covers: []
+      tags:
+        - live
   lists:
     - id: 1
       parent-id: 0
@@ -3758,6 +3812,7 @@ library:
         - 3
         - 2
         - 5
+        - 263
     - id: 4
       parent-id: 0
       name: 夜のプレイリスト

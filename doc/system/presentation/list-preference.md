@@ -130,7 +130,7 @@ Workspace/history replay retains exact specs, and live List deletion retires the
 
 WinUI persists the group with desktop column-layout state in the library-specific `winui_layout.yaml` store, keeps opaque ids across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
 It loads that store when the runtime graph binds rather than at startup, because the list ids the group is keyed by only mean anything against an open library.
-The `trackView.presentations` group carries required `version: 2` and the `libraryId` it was saved for, and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
+The `trackView.presentations` group carries required `version: 1` and the `libraryId` it was saved for, and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
 The exact fields belong to the [persisted presentation-state reference](../../reference/presentation/persisted-state.md); group registration belongs to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
 
 The persisted value is a presentation id, so changing or removing a built-in id requires a compatibility path.
