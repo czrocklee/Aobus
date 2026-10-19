@@ -337,7 +337,7 @@ Development builds made before the first release wrote earlier schemas under the
 A rejection of a newer version tells the user to import the document with the build that exported it and that nothing was imported, and warns that a fresh media scan does not recover the tags, Lists, and custom fields the document holds.
 A document labeled version `0`, which no build writes, is rejected without that guidance.
 Both rejections use `FormatRejected` rather than the database's `NotSupported`, because import reports every document it cannot accept with that code, as [YAML transfer](../../../system/library/yaml-transfer.md#failure-and-cancellation) records; the message tells a newer document from a malformed one.
-`LibraryYamlImporter.cpp` asserts at compile time that the current version is 1, so incrementing `kYamlFormatVersion` does not build until import gains the tree step for the older version.
+`LibraryYamlImporter.cpp` asserts at compile time that the current version is 1, so incrementing `kYamlFormatVersion` does not build until import gains the tree step for the older version; `kLastReleasedYamlFormatVersion` records the last released version, as the [library format change guide](../../../development/library-format-changes.md) describes.
 There is no reader for an earlier schema, permissive unknown-field path, restore bypass, or conversion command.
 
 Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.

@@ -12,6 +12,7 @@
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryTransfer.h>
@@ -140,7 +141,22 @@ namespace ao::rt::test
 
       return count;
     }
+
+    // Before the first release a format is at version 1. After it, the current
+    // version is the last released one or exactly one past it, because a format
+    // changes version at most once per release.
+    consteval bool matchesReleaseRule(std::uint32_t const current, std::uint32_t const lastReleased)
+    {
+      return lastReleased == 0 ? current == 1 : current == lastReleased || current == lastReleased + 1;
+    }
   } // namespace
+
+  TEST_CASE("Library format fixtures - each library format version changes at most once per release",
+            "[runtime][unit][format-fixture]")
+  {
+    STATIC_REQUIRE(matchesReleaseRule(library::kLibraryVersion, library::kLastReleasedLibraryVersion));
+    STATIC_REQUIRE(matchesReleaseRule(kYamlFormatVersion, kLastReleasedYamlFormatVersion));
+  }
 
   TEST_CASE("Library format fixtures - a library from each platform reads back and accepts a write",
             "[runtime][integration][import-export][format-fixture]")

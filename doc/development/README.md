@@ -24,6 +24,7 @@ Product structure and behavior live in the [system guide](../system/README.md), 
 | Change GTK appearance | [GTK style](gtk-style.md) |
 | Add messages, translations, or a locale | [Localization workflow](localization.md) |
 | Change a managed payload | [Managed-state schemas](managed-state-schemas.md) |
+| Change the library database or library YAML | [Library format changes](library-format-changes.md) |
 | Write or reorganize documentation | [Documentation maintenance](documentation.md) |
 
 ## Test and validate
