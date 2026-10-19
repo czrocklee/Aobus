@@ -57,6 +57,9 @@ The [application managed-state reference](../../reference/persistence/applicatio
 
 The AppKit `desktop.plist` is a Foundation dictionary that every save rewrites whole, keeping top-level keys that the build does not know.
 Its rule is that every existing top-level key keeps its value schema, including whole subtrees, and new content uses new top-level keys.
+Every read checks the value's type.
+A value of another type, such as one from a damaged or hand-edited file, or a name the build does not know gives that setting its default, and a list skips each such item instead.
+The rule is recorded beside the settings dictionary in [`DesktopApplicationInternal.h`](../../../app/macos-appkit/DesktopApplicationInternal.h), and the AppKit `desktop` smoke scenario starts from such values and an unknown key.
 
 The Windows theme document is authored by the user, and Aobus only reads it.
 A document that fails to load at startup leaves Windows appearance in effect and posts a warning with the reason.

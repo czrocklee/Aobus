@@ -59,6 +59,7 @@ static_assert(__cplusplus > kCpp23Version, "The AppKit bridge must compile as Ob
 
 namespace
 {
+  using ao::appkit::isInspectorSavedVisible;
   using ao::appkit::kContentInset;
   using ao::appkit::nativeAppearance;
   using ao::appkit::nativeCallback;
@@ -156,7 +157,7 @@ namespace ao::appkit
     field.lineBreakMode = NSLineBreakByTruncatingTail;
     return field;
   }
-  NSAppearance* nativeAppearance(NSString* name)
+  NSAppearance* nativeAppearance(id name)
   {
     if ([name isEqual:@"Dark"] != NO)
     {
@@ -169,6 +170,12 @@ namespace ao::appkit
     }
 
     return nil;
+  }
+
+  BOOL isInspectorSavedVisible(NSDictionary* settings, BOOL modern)
+  {
+    NSNumber* const visible = settings[(modern != NO) ? @"modernInspector" : @"classicInspector"];
+    return static_cast<BOOL>([visible isKindOfClass:NSNumber.class] != NO && visible.boolValue != NO);
   }
 } // namespace ao::appkit
 
@@ -310,7 +317,7 @@ namespace ao::appkit
       }
 
       _modern = static_cast<BOOL>([_settings[@"mode"] isEqual:@"classic"] == 0);
-      _inspectorVisible = [_settings[_modern ? @"modernInspector" : @"classicInspector"] boolValue];
+      _inspectorVisible = isInspectorSavedVisible(_settings, _modern);
       NSApp.appearance = nativeAppearance(_settings[@"appearance"]);
       [self buildMenu];
       [self buildWindow];
@@ -319,8 +326,8 @@ namespace ao::appkit
 
       if (planRes->optSelectedRootCommit)
       {
-        NSString* const previousRoot = _settings[@"libraryRoot"];
-        NSArray* const previousRecent = [_settings[@"recentLibraries"] copy];
+        id const previousRoot = _settings[@"libraryRoot"];
+        id const previousRecent = [_settings[@"recentLibraries"] copy];
         _settings[@"libraryRoot"] = nativeText(ao::utility::pathToUtf8(*planRes->optSelectedRootCommit));
         [self rememberLibraryURL:[NSURL fileURLWithPath:_settings[@"libraryRoot"]]];
 
@@ -1295,14 +1302,16 @@ namespace ao::appkit
                            [NSFileManager.defaultManager fileExistsAtPath:path isDirectory:&directory] == NO ||
                            directory == NO)
   {
-    NSMutableArray* const recent = [_settings[@"recentLibraries"] mutableCopy];
+    NSArray* const saved = _settings[@"recentLibraries"];
+    NSMutableArray* const recent =
+      [saved isKindOfClass:NSArray.class] != NO ? [saved mutableCopy] : [NSMutableArray array];
 
     if ([path isKindOfClass:NSString.class] != NO)
     {
       [recent removeObject:path];
     }
 
-    _settings[@"recentLibraries"] = recent != nil ? recent : @[];
+    _settings[@"recentLibraries"] = recent;
     [self saveSettings];
     [self refreshRecentLibrariesMenu];
     showError(

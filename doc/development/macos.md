@@ -215,7 +215,7 @@ Treat each scenario only as evidence for the surface it drives:
 
 | Scenario | Direct evidence |
 |---|---|
-| `desktop` | Shipping-window composition, native browsing and playback controls, close/quit coordination, restoration and geometry ownership, and supervised library-successor handoff. |
+| `desktop` | Shipping-window composition, native browsing and playback controls, close/quit coordination, restoration and geometry ownership, `desktop.plist` defaults for malformed values and unknown appearance names, per-mode inspector visibility restoration, unknown-key preservation, and supervised library-successor handoff. |
 | `authoring` | Native property/List editors, validation and stale-draft behavior, save/close/discard ordering, and authoring teardown. |
 | `presentation` | Browser projection and reuse, selection/sort/drag adaptation, activity and inspector presentation, accessibility dismissal actions, and inert callbacks after detach. |
 | `media` | MediaPlayer metadata/artwork publication, the seven supported remote commands and disabled unsupported commands, stale-seek guards, main-thread admission, runtime handoff, and retirement. |

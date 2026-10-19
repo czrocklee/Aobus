@@ -5,6 +5,7 @@
 #include "ArtworkView.h"
 #include "DesktopApplicationInternal.h"
 #include "DesktopControls.h"
+#include "DesktopWindowGeometry.h"
 #include "EntryCompletionAdapter.h"
 #include "LibraryBrowser.h"
 #include "LibrarySession.h"
@@ -26,9 +27,11 @@
 
 namespace
 {
+  using ao::appkit::isInspectorSavedVisible;
   using ao::appkit::kBodyFontSize;
   using ao::appkit::kCaptionFontSize;
   using ao::appkit::kContentInset;
+  using ao::appkit::kDockedInspectorMinimumWidth;
   using ao::appkit::kInitialWindowHeight;
   using ao::appkit::kInitialWindowWidth;
   using ao::appkit::kMinimumWindowHeight;
@@ -434,7 +437,7 @@ namespace
   auto const splitTop = (_modern != NO) ? 0 : classicTop + [_playbackBar heightForModern:NO];
   _splitTopConstraint.constant = splitTop;
   _splitBottomConstraint.constant = (_modern != NO) ? -[_playbackBar heightForModern:YES] : -kClassicStatusAreaHeight;
-  auto const showInspector = (_inspectorVisible != NO) && width >= 1000;
+  auto const showInspector = (_inspectorVisible != NO) && width >= kDockedInspectorMinimumWidth;
   _inspectorItem.collapsed = static_cast<BOOL>(!showInspector);
   [_root layoutSubtreeIfNeeded];
 
@@ -536,7 +539,7 @@ namespace
 
 - (NSSize)windowWillResize:(NSWindow*) [[maybe_unused]] window toSize:(NSSize)size
 {
-  _inspectorItem.collapsed = static_cast<BOOL>(_inspectorVisible == NO || size.width < 1000);
+  _inspectorItem.collapsed = static_cast<BOOL>(_inspectorVisible == NO || size.width < kDockedInspectorMinimumWidth);
   return size;
 }
 
@@ -576,7 +579,7 @@ namespace
       _settings[_modern ? @"modernInspector" : @"classicInspector"] = @(_inspectorVisible);
       _modern = static_cast<BOOL>(sender.tag != 0);
       _settings[@"mode"] = _modern ? @"modern" : @"classic";
-      _inspectorVisible = [_settings[_modern ? @"modernInspector" : @"classicInspector"] boolValue];
+      _inspectorVisible = isInspectorSavedVisible(_settings, _modern);
       [self layoutContent];
       [_libraryBrowser.trackScroll.contentView scrollToPoint:origin];
       [_libraryBrowser.trackScroll reflectScrolledClipView:_libraryBrowser.trackScroll.contentView];
@@ -604,7 +607,7 @@ namespace
     return;
   }
 
-  if (_root.bounds.size.width < 1000 && (_closing == NO))
+  if (_root.bounds.size.width < kDockedInspectorMinimumWidth && (_closing == NO))
   {
     if (_window.attachedSheet != nil)
     {

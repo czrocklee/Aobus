@@ -3,6 +3,7 @@
 
 #include "AppKitText.h"
 #include "DesktopApplicationInternal.h"
+#include "DesktopWindowGeometry.h"
 #include "LibraryBrowser.h"
 #include "LibrarySession.h"
 #include "PlaybackBar.h"
@@ -23,7 +24,9 @@ namespace
 {
   using ao::appkit::kBodyFontSize;
   using ao::appkit::kCaptionFontSize;
+  using ao::appkit::kDockedInspectorMinimumWidth;
   using ao::appkit::label;
+  using ao::appkit::nativeAppearance;
   using ao::appkit::nativeCallback;
   using ao::appkit::nativeText;
   using ao::i18n::MessageId;
@@ -634,7 +637,9 @@ namespace
   }
   else if (action == @selector(selectAppearance:))
   {
-    NSString* const selected = _settings[@"appearance"] != nil ? _settings[@"appearance"] : @"Follow System";
+    // Startup follows the system for any value that names no appearance.
+    id const saved = _settings[@"appearance"];
+    id const selected = nativeAppearance(saved) != nil ? saved : @"Follow System";
     item.state = ([item.representedObject isEqual:selected] != NO) ? NSControlStateValueOn : NSControlStateValueOff;
     *result = YES;
   }
@@ -646,7 +651,8 @@ namespace
   }
   else if (action == @selector(toggleInspector:))
   {
-    auto const shown = _trackInspector.sheet != nil || (_inspectorVisible != NO && _root.bounds.size.width >= 1000);
+    auto const shown = _trackInspector.sheet != nil ||
+                       (_inspectorVisible != NO && _root.bounds.size.width >= kDockedInspectorMinimumWidth);
     item.title = shown ? [self text:MessageId::AppKitHideInspector] : [self text:MessageId::AppKitShowInspector];
     *result = static_cast<BOOL>(_window.attachedSheet == nil || _trackInspector.sheet != nil);
   }
@@ -730,7 +736,8 @@ namespace
   }
   else if ([item.itemIdentifier isEqual:NSToolbarToggleInspectorItemIdentifier] != NO)
   {
-    auto const shown = _trackInspector.sheet != nil || (_inspectorVisible != NO && _root.bounds.size.width >= 1000);
+    auto const shown = _trackInspector.sheet != nil ||
+                       (_inspectorVisible != NO && _root.bounds.size.width >= kDockedInspectorMinimumWidth);
     item.label = shown ? [self text:MessageId::AppKitHideInspector] : [self text:MessageId::AppKitShowInspector];
   }
 

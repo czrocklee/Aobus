@@ -4,6 +4,7 @@
 #include "AppKitDesktopScenarioHelpers.h"
 #include "AppKitScenarioSupport.h"
 #include "app/macos-appkit/AppKitText.h"
+#include "app/macos-appkit/DesktopWindowGeometry.h"
 #include "test/unit/audio/backend/CoreAudioTestSupport.h"
 #include <ao/Contract.h>
 #include <ao/audio/BackendIds.h>
@@ -89,6 +90,7 @@ namespace
     Complete,
   };
 
+  using ao::appkit::kDockedInspectorMinimumWidth;
   using namespace ao::appkit::test::desktop;
 
   bool matchesTestOutput(NSDictionary* route, ao::audio::Device const& output)
@@ -237,6 +239,131 @@ namespace
 - (NSMenuItem*)modeItem:(NSInteger)tag
 {
   return findMenuItem(NSApp.mainMenu, ::NSSelectorFromString(@"selectMode:"), true, tag);
+}
+
+// The preseeded settings hold values of types this build never writes.
+- (void)requireSettingDefaults
+{
+  // The library has been saved by now, so the file is this build's rewrite.
+  AO_INVARIANT(hasUnknownSetting(_launch.stateRoot), "A settings save must keep a top-level key it does not know");
+  AO_INVARIANT(ao::appkit::test::findView(_window.contentView, @"playback.modern").window == _window,
+               "A mode of another type must start in Modern mode");
+  auto const contentSize = _window.contentView.bounds.size;
+  AO_INVARIANT(
+    std::abs(contentSize.width - 1240.0) < 0.5 && std::abs(contentSize.height - 800.0) < 0.5,
+    "A frame of another type must retain the default 1240x800 content size, observed root {}x{}, frame {}x{}",
+    contentSize.width,
+    contentSize.height,
+    _window.frame.size.width,
+    _window.frame.size.height);
+  auto* const toolbar = _window.toolbar;
+  AO_INVARIANT(toolbar != nil && toolbar.displayMode == NSToolbarDisplayModeIconOnly,
+               "A toolbar display mode of another type must retain the icon-only default");
+  auto* const defaultToolbarItems = @[
+    NSToolbarToggleSidebarItemIdentifier,
+    NSToolbarSidebarTrackingSeparatorItemIdentifier,
+    @"destination",
+    NSToolbarFlexibleSpaceItemIdentifier,
+    @"search",
+    @"activity",
+    NSToolbarInspectorTrackingSeparatorItemIdentifier,
+    NSToolbarToggleInspectorItemIdentifier
+  ];
+  AO_INVARIANT([toolbar.itemIdentifiers isEqualToArray:defaultToolbarItems] != NO,
+               "Toolbar identifiers of another type must retain the production default items in order");
+  [self requireAppearance:@"Follow System" name:nil context:"An appearance of another type"];
+  [self requireInspectorShown:NO mode:"Modern" context:"An inspector flag of another type"];
+}
+
+// The menu reports the docked inspector only on a window wide enough to dock
+// it, so a narrower window would read as hidden whatever the saved flag says.
+- (void)requireInspectorShown:(BOOL)shown mode:(char const*)mode context:(char const*)context
+{
+  AO_INVARIANT(_window.contentView.bounds.size.width >= kDockedInspectorMinimumWidth,
+               "The {} window must be wide enough to dock the inspector",
+               mode);
+  auto* const inspector = [self menuItem:@"toggleInspector:"];
+  AO_INVARIANT(inspector != nil, "The production menu must offer the inspector toggle");
+  [inspector.menu update];
+  AO_INVARIANT([inspector.title isEqual:shown != NO ? @"Hide Inspector" : @"Show Inspector"] != NO,
+               "{} must leave the docked {} inspector {}",
+               context,
+               mode,
+               shown != NO ? "shown" : "hidden");
+}
+
+- (void)requireAppearance:(NSString*)choice name:(NSAppearanceName)name context:(char const*)context
+{
+  AO_INVARIANT(name == nil ? NSApp.appearance == nil : [NSApp.appearance.name isEqual:name] != NO,
+               "{} must apply the expected native appearance for {}",
+               context,
+               choice.UTF8String);
+  auto* const appearance = findMenuItem(NSApp.mainMenu, ::NSSelectorFromString(@"selectAppearance:"), false, 0, choice);
+  AO_INVARIANT(appearance != nil, "The production menu must offer {}", choice.UTF8String);
+  [appearance.menu update];
+  NSInteger checkedCount = 0;
+  auto* const items = appearance.menu.itemArray;
+
+  for (NSUInteger index = 0; index < items.count; ++index)
+  {
+    if (auto* const item = items[index];
+        item.action == ::NSSelectorFromString(@"selectAppearance:") && item.state == NSControlStateValueOn)
+    {
+      ++checkedCount;
+    }
+  }
+
+  AO_INVARIANT(checkedCount == 1 && appearance.state == NSControlStateValueOn,
+               "{} must check exactly one appearance item, {}",
+               context,
+               choice.UTF8String);
+}
+
+- (void)verifyAppearanceActions
+{
+  auto* const action = ::NSSelectorFromString(@"selectAppearance:");
+  auto* const system = findMenuItem(NSApp.mainMenu, action, false, 0, @"Follow System");
+  AO_INVARIANT(system != nil, "The production menu must offer Follow System");
+  activateMenuItem(findMenuItem(NSApp.mainMenu, action, false, 0, @"Light"), @"select Light appearance");
+  [self requireAppearance:@"Light" name:NSAppearanceNameAqua context:"The Light action"];
+  activateMenuItem(findMenuItem(NSApp.mainMenu, action, false, 0, @"Dark"), @"select Dark appearance");
+  [self requireAppearance:@"Dark" name:NSAppearanceNameDarkAqua context:"The Dark action"];
+
+  auto* const unknown = [[NSMenuItem alloc] initWithTitle:@"Unsupported scenario appearance"
+                                                   action:system.action
+                                            keyEquivalent:@""];
+  unknown.target = system.target;
+  unknown.representedObject = @"Unsupported scenario appearance";
+  activateMenuItem(unknown, @"select an unknown appearance string");
+  [self requireAppearance:@"Follow System" name:nil context:"An unknown appearance string"];
+  activateMenuItem(system, @"restore Follow System appearance");
+  [self requireAppearance:@"Follow System" name:nil context:"The Follow System action"];
+}
+
+// Switch away and back before checking numeric flags, so these assertions
+// observe the production settings reader, not just the toggle's live state.
+- (void)verifyNumericInspectorFlags
+{
+  activateMenuItem([self menuItem:@"toggleInspector:"], @"save Classic inspector @YES");
+  [self requireInspectorShown:YES mode:"Classic" context:"The docked toggle"];
+  activateMenuItem([self modeItem:1], @"read Modern inspector @NO while Classic is shown");
+  [self requireInspectorShown:NO mode:"Modern" context:"Reading numeric @NO after a mode switch"];
+  activateMenuItem([self menuItem:@"toggleInspector:"], @"save Modern inspector @YES");
+  [self requireInspectorShown:YES mode:"Modern" context:"The docked toggle"];
+  activateMenuItem([self modeItem:0], @"read Classic inspector @YES");
+  [self requireInspectorShown:YES mode:"Classic" context:"Reading numeric @YES after a mode switch"];
+  activateMenuItem([self menuItem:@"toggleInspector:"], @"save Classic inspector @NO");
+  [self requireInspectorShown:NO mode:"Classic" context:"The docked toggle"];
+  activateMenuItem([self modeItem:1], @"read Modern inspector @YES while Classic is hidden");
+  [self requireInspectorShown:YES mode:"Modern" context:"Reading numeric @YES after a mode switch"];
+  activateMenuItem([self menuItem:@"toggleInspector:"], @"save Modern inspector @NO");
+  [self requireInspectorShown:NO mode:"Modern" context:"The docked toggle"];
+  activateMenuItem([self modeItem:0], @"read Classic inspector @NO");
+  [self requireInspectorShown:NO mode:"Classic" context:"Reading numeric @NO after a mode switch"];
+  activateMenuItem([self modeItem:1], @"read Modern inspector @NO");
+  [self requireInspectorShown:NO mode:"Modern" context:"Reading numeric @NO after a mode switch"];
+  activateMenuItem([self modeItem:0], @"restore Classic with both inspectors hidden");
+  [self requireInspectorShown:NO mode:"Classic" context:"Restoring the main scenario"];
 }
 
 - (NSMenuItem*)successorItem
@@ -622,6 +749,8 @@ namespace
           }
 
           _idleTransportText = [soul.toolTip copy];
+          [self requireSettingDefaults];
+          [self verifyAppearanceActions];
           _stage = Stage::SelectAlbums;
         }
 
@@ -922,6 +1051,9 @@ namespace
       case Stage::WaitForClassic:
         if (ao::appkit::test::findView(_window.contentView, @"playback.classic").window == _window)
         {
+          // The first switch reads the classic flag the settings were seeded with.
+          [self requireInspectorShown:NO mode:"Classic" context:"An inspector flag of another type"];
+          [self verifyNumericInspectorFlags];
           _stage = Stage::ClassicSearch;
         }
 
@@ -949,7 +1081,7 @@ namespace
         _stage = Stage::ShowCompactInspector;
         break;
       case Stage::ShowCompactInspector:
-        if (_window.contentView.bounds.size.width < 1000)
+        if (_window.contentView.bounds.size.width < kDockedInspectorMinimumWidth)
         {
           activateMenuItem([self menuItem:@"toggleInspector:"], @"show compact inspector");
           _stage = Stage::WaitForCompactInspector;
@@ -1184,6 +1316,14 @@ namespace ao::appkit::test
     if (driver.completed == NO)
     {
       return 1;
+    }
+
+    if (!successor)
+    {
+      // The library switch closed the window through the close-time save,
+      // which rewrites the frame and toolbar before it writes the file.
+      AO_INVARIANT(
+        hasUnknownSetting(stateRoot), "The close-time settings save must keep a top-level key it does not know");
     }
 
     writeMarker(stateRoot / (successor ? "successor-pass.txt" : "desktop-pass.txt"), markerContents);

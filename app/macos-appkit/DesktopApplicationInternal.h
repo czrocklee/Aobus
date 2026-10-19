@@ -55,14 +55,15 @@ namespace ao::appkit
   };
 
   NSTextField* label(NSString* text, CGFloat size, BOOL secondary = NO);
-  NSAppearance* nativeAppearance(NSString* name);
+  // The appearance a saved or chosen value names; a value of any other type
+  // or name follows the system.
+  NSAppearance* nativeAppearance(id name);
+  // Whether one mode saved its inspector as visible; any value other than a
+  // number reads as hidden.
+  BOOL isInspectorSavedVisible(NSDictionary* settings, BOOL modern);
   inline constexpr auto kContentInset = 16;
   inline constexpr auto kCaptionFontSize = 10;
   inline constexpr auto kBodyFontSize = 13;
-  inline constexpr auto kMinimumWindowWidth = 760;
-  inline constexpr auto kMinimumWindowHeight = 520;
-  inline constexpr auto kInitialWindowWidth = 1240;
-  inline constexpr auto kInitialWindowHeight = 800;
 } // namespace ao::appkit
 
 @interface AobusDesktopDelegate
@@ -70,6 +71,14 @@ namespace ao::appkit
   ao::appkit::DesktopLaunch _launch;
   std::unique_ptr<ao::appkit::LibrarySession> _sessionPtr;
   std::optional<ao::desktop::LibrarySwitchRequest> _optPendingSuccessor;
+  // desktop.plist, which carries no version, so its keys are frozen:
+  // - every top-level key keeps its value schema, including the output and
+  //   toolbarConfiguration subtrees that a save replaces whole;
+  // - new content takes a new top-level key, which an older build keeps,
+  //   because a save rewrites the whole dictionary;
+  // - every read checks the value's type: a value of another type, or a name
+  //   this build does not know, reads as the default, and a list skips each
+  //   such item.
   NSMutableDictionary* _settings;
   NSWindow* _window;
   NSViewController* _rootController;
