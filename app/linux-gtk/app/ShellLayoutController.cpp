@@ -126,20 +126,16 @@ namespace ao::gtk
 
     LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
                                         ShellLayoutComponentStateStore* componentStateStore,
-                                        AppConfigStore& configStore,
+                                        std::string_view const lastLayoutPreset,
                                         uimodel::LayoutSchema const& schema)
     {
-      auto prefs = rt::AppPrefsState{};
-      configStore.loadAppPrefs(prefs);
-
       static constexpr auto kSupportedPresets = std::array<std::string_view, 2>{"classic", "modern"};
 
-      auto const selection = uimodel::LayoutSession::selectPreset(prefs.lastLayoutPreset, kSupportedPresets);
+      auto const selection = uimodel::LayoutSession::selectPreset(lastLayoutPreset, kSupportedPresets);
 
       if (selection.usedFallback)
       {
-        APP_LOG_DEBUG(
-          "ShellLayoutController: Unknown layout preset '{}', falling back to classic", prefs.lastLayoutPreset);
+        APP_LOG_DEBUG("ShellLayoutController: Unknown layout preset '{}', falling back to classic", lastLayoutPreset);
       }
 
       auto const presetId = layout::presetIdFromString(selection.presetId);
@@ -680,10 +676,18 @@ namespace ao::gtk
 
   void ShellLayoutController::loadLayout()
   {
+    if (!_layoutStorePtr || !_configStorePtr)
+    {
+      return;
+    }
+
     auto* const asyncRuntime = &_runtime.async();
     // startCancellable invokes the task factory on a worker. Snapshot all
     // controller-owned inputs and guard the sole presentation closure before
-    // publishing the lazy coroutine.
+    // publishing the lazy coroutine. The configuration store is confined to
+    // this thread, so the worker receives the preferred preset, not the store.
+    auto prefs = rt::AppPrefsState{};
+    _configStorePtr->loadAppPrefs(prefs);
     auto schema = _registry.schema();
     auto present = _callbackScope.guard(
       [this](std::string presetId,
@@ -700,14 +704,14 @@ namespace ao::gtk
       [asyncRuntime,
        storePtr = _layoutStorePtr,
        componentStateStorePtr = _componentStateStorePtr,
-       configStorePtr = _configStorePtr,
+       lastLayoutPreset = std::move(prefs.lastLayoutPreset),
        schema = std::move(schema),
        present = std::move(present)](std::stop_token const stopToken) mutable
       {
         return loadLayoutWorkflowAsync(asyncRuntime,
                                        std::move(storePtr),
                                        std::move(componentStateStorePtr),
-                                       std::move(configStorePtr),
+                                       std::move(lastLayoutPreset),
                                        std::move(schema),
                                        std::move(present),
                                        stopToken);
@@ -719,7 +723,7 @@ namespace ao::gtk
     async::Runtime* const asyncRuntime,
     std::shared_ptr<ShellLayoutStore> layoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-    std::shared_ptr<AppConfigStore> configStorePtr,
+    std::string lastLayoutPreset,
     uimodel::LayoutSchema schema,
     std::function<
       void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument)>
@@ -732,9 +736,9 @@ namespace ao::gtk
     co_await asyncRuntime->resumeOnWorkerAsync(stopToken);
     APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
 
-    if (layoutStorePtr && configStorePtr)
+    if (layoutStorePtr)
     {
-      optRes = loadLayoutOnWorker(*layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, schema);
+      optRes = loadLayoutOnWorker(*layoutStorePtr, componentStateStorePtr.get(), lastLayoutPreset, schema);
     }
 
     co_await asyncRuntime->resumeOnCallbackExecutorAsync(stopToken);
