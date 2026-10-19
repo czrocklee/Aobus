@@ -50,6 +50,13 @@ namespace ao::audio::test
 
   std::int32_t runAudioFatalProbeScenario(std::string_view const scenario)
   {
+#ifdef __APPLE__
+    if (scenario.starts_with("coreaudio-"))
+    {
+      return runCoreAudioFatalProbeScenario(scenario);
+    }
+#endif
+
     if (scenario == "rt-ring-overflow")
     {
       auto ring = detail::EngineRtSignalRing<ProbeSignal>{};

@@ -47,10 +47,15 @@ namespace ao::audio
    *   RenderTarget callback if a public backend method can acquire that same
    *   lock. Non-realtime Engine events are handed off internally, but the
    *   backend must still avoid callback/native-lock reentrancy hazards.
-   * - stop() is called from the non-render Engine control domain. It closes
+   *   Render-domain callbacks must not synchronously invoke backend controls.
+   * - Engine calls stop() from its non-render control domain. It closes
    *   render admission and does not return until every in-flight render cycle,
    *   including its RenderTarget render notifications, has returned. No new
-   *   render cycle begins until start() reactivates the backend.
+   *   render cycle begins until start() reactivates the backend. Core Audio
+   *   accepts run-only start()/stop() from its route/format notification
+   *   origins under the graph-delivery contract in the audio execution
+   *   documentation; this does not imply the same reentry support for other
+   *   backends.
    * - All render notifications and the corresponding drain-complete callback
    *   form one serialized producer domain for an active target. They may run on
    *   different backend threads only when backend synchronization orders them
@@ -62,6 +67,15 @@ namespace ao::audio
    * - close() is the render-target lifetime boundary. After close() returns, the
    *   backend must not issue further callbacks to the RenderTarget passed to
    *   open(), and all in-flight callbacks for that target must have returned.
+   *   A RenderTarget callback must defer close() and target replacement, including
+   *   open(), on its invoking backend until it returns. This also covers nested
+   *   calls on that stack; there is no self-callback completion exception.
+   * - Core Audio target callbacks must defer operations that may wait for their
+   *   shared graph delivery gate until the callback returns, including indirect
+   *   operations on another backend sharing that registry. They must not wait
+   *   for the deferred work. Non-render callbacks may prepare graph facts without
+   *   delivering them; the audio execution graph-delivery contract defines the
+   *   gate boundary. This is a caller precondition, not a runtime rejection.
    * - stop() stops active rendering but does not revoke the open target; seek-like
    *   flows may call stop(), flush(), and start() on the same target.
    */
@@ -102,6 +116,14 @@ namespace ao::audio
      * message determines this distinction. The original Error is preserved.
      * Engine closes its previous stream before this call; an implementation's
      * early admission check does not promise to preserve Engine playback.
+     *
+     * A successful result is evidence of the mode actually configured on the
+     * native handle for this attempt, not a liveness lease: a permitted
+     * observer-driven close or target retirement may already have completed, or
+     * may complete before open() returns. The result is never a mere format
+     * prediction. A caller exposing raw backend observers must itself coordinate
+     * the observer controls it allows; this contract does not authorize
+     * reentrant Engine controls.
      */
     virtual BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) = 0;
 

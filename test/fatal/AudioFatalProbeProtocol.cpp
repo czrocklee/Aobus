@@ -37,4 +37,44 @@ namespace ao::audio::test
 
     return kExpectations;
   }
+
+#ifdef __APPLE__
+  std::span<AudioFatalProbeExpectation const> coreAudioFatalProbeExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      AudioFatalProbeExpectation{"coreaudio-open-from-route-ready",
+                                 "category=expects",
+                                 "Cannot open Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-close-from-route-ready",
+                                 "category=expects",
+                                 "Cannot close Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-open-from-format-changed",
+                                 "category=expects",
+                                 "Cannot open Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-close-from-format-changed",
+                                 "category=expects",
+                                 "Cannot close Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-open-from-graph-callback",
+                                 "category=expects",
+                                 "Cannot open Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-close-from-graph-callback",
+                                 "category=expects",
+                                 "Cannot close Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-open-from-render-pcm",
+                                 "category=expects",
+                                 "Cannot open Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-close-from-render-pcm",
+                                 "category=expects",
+                                 "Cannot close Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-open-from-drain-complete",
+                                 "category=expects",
+                                 "Cannot open Core Audio backend from its RenderTarget callback"},
+      AudioFatalProbeExpectation{"coreaudio-close-from-drain-complete",
+                                 "category=expects",
+                                 "Cannot close Core Audio backend from its RenderTarget callback"},
+    };
+
+    return kExpectations;
+  }
+#endif
 } // namespace ao::audio::test

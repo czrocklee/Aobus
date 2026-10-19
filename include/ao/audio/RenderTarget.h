@@ -25,6 +25,17 @@ namespace ao::audio
    * @brief Interface for receiving render requests and events from an audio backend.
    *
    * This interface decouples the Engine logic from the specific backend implementation.
+   *
+   * Implementer note: while any callback below is running, the implementation
+   * must defer close(), open(), and target replacement on the same backend that
+   * invoked the callback until that callback returns. This also covers graph or
+   * observer calls nested beneath the target callback; there is no nested-call
+   * exception. Render-domain callbacks (renderPcm and its associated render
+   * notifications) must not synchronously invoke backend controls at all.
+   * Core Audio callbacks must also defer operations that may wait for the shared
+   * graph delivery gate, including indirect other-backend operations, and must
+   * not wait for that work. This additional precondition is not runtime-enforced.
+   * @see Backend for the threading contract.
    */
   class RenderTarget
   {

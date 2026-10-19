@@ -30,6 +30,31 @@ namespace ao::audio::backend::detail
   public:
     using Callback = std::function<void(flow::Graph const&)>;
 
+    /**
+     * @brief One-shot observer delivery for an already committed snapshot.
+     *
+     * Moving to another ticket or delivering empties the source. Destruction never invokes observers;
+     * dropping this ticket does not undo the stored snapshot. Delivery uses the
+     * calling thread and retains revision, cancellation and shutdown checks.
+     */
+    class [[nodiscard]] PendingDelivery final
+    {
+    public:
+      PendingDelivery() = default;
+      ~PendingDelivery();
+      PendingDelivery(PendingDelivery const&) = delete;
+      PendingDelivery& operator=(PendingDelivery const&) = delete;
+      PendingDelivery(PendingDelivery&& other) noexcept;
+      PendingDelivery& operator=(PendingDelivery&& other) noexcept;
+
+      void deliver() &&;
+
+    private:
+      friend class BackendGraphRegistry;
+      explicit PendingDelivery(std::function<void()> callback) noexcept;
+      std::function<void()> _callback{};
+    };
+
     BackendGraphRegistry();
     ~BackendGraphRegistry();
 
@@ -50,6 +75,18 @@ namespace ao::audio::backend::detail
     utility::ScopedRegistration subscribe(std::string_view routeAnchor,
                                           Callback callback,
                                           flow::Graph initialGraph = {});
+
+    /**
+     * @brief Commits a changed snapshot without waiting for or invoking observers.
+     *
+     * Preparation acquires only the registry state lock. An owner may prepare
+     * under its snapshot lock, then release that lock before delivering the
+     * returned ticket. Later preparations supersede older pending deliveries.
+     */
+    PendingDelivery preparePublish(std::string_view routeAnchor, flow::Graph graph);
+
+    /// Removes the stored snapshot immediately, deferring its empty delivery.
+    PendingDelivery prepareClear(std::string_view routeAnchor);
 
     /// Replaces a changed route snapshot and publishes it to current subscribers.
     void publish(std::string_view routeAnchor, flow::Graph graph);
