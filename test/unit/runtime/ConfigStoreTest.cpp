@@ -75,6 +75,61 @@ namespace ao::rt::test
       }
     };
 
+    struct VersionedState final
+    {
+      std::uint32_t version = 1;
+      std::int32_t count = 0;
+    };
+
+    // Writes version 1 and reads any version, so that every refusal in the
+    // tests below is the store's rather than the schema's.
+    struct VersionedStateYamlSchema final
+    {
+      Result<> serialize(ryml::NodeRef node, VersionedState const& state) const
+      {
+        auto writer = yaml::MapWriter{node};
+        writer.scalar("version", std::uint32_t{1}).scalar("count", state.count);
+        return std::move(writer).finish();
+      }
+
+      Result<VersionedState> deserialize(ryml::ConstNodeRef node, VersionedState const& seed) const
+      {
+        constexpr auto kKeys = std::to_array<std::string_view>({"version", "count"});
+
+        auto state = seed;
+        auto reader = yaml::MapReader{node, kKeys, "versioned test state", yaml::UnknownKeyPolicy::Allow};
+        reader.requiredScalar("version", state.version).optionalScalar("count", state.count);
+        return std::move(reader).finish(std::move(state));
+      }
+    };
+
+    struct ProtectedStateYamlSchema final
+    {
+      static constexpr std::uint32_t kVersion = 1;
+
+      Result<> serialize(ryml::NodeRef node, VersionedState const& state) const
+      {
+        return VersionedStateYamlSchema{}.serialize(node, state);
+      }
+
+      Result<VersionedState> deserialize(ryml::ConstNodeRef node, VersionedState const& seed) const
+      {
+        return VersionedStateYamlSchema{}.deserialize(node, seed);
+      }
+    };
+
+    static_assert(ProtectedConfigSchema<ProtectedStateYamlSchema, VersionedState>);
+    static_assert(!ProtectedConfigSchema<VersionedStateYamlSchema, VersionedState>);
+
+    constexpr auto kNewerProtectedDocument = std::string_view{R"(protected:
+  version: 2
+  count: 7
+  fromTheFuture: true
+unprotected:
+  version: 2
+  count: 9
+)"};
+
     struct RejectingYamlSchema final
     {
       Result<> serialize(ryml::NodeRef /*node*/, State const& /*state*/) const
@@ -501,6 +556,110 @@ namespace ao::rt::test
       auto store = ConfigStore{configPath};
       REQUIRE(store.removeGroup("missing"));
       CHECK_FALSE(std::filesystem::exists(configPath));
+    }
+  }
+
+  TEST_CASE("ConfigStore - a protected group of a newer version is neither read nor written", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    writeFile(configPath, kNewerProtectedDocument);
+    auto store = ConfigStore{configPath};
+    auto const replacement = VersionedState{.count = 1};
+
+    SECTION("load leaves the value unchanged and remembers the group")
+    {
+      auto value = VersionedState{.count = 3};
+      auto const loadedRes = store.load("protected", value, ProtectedStateYamlSchema{});
+
+      REQUIRE_FALSE(loadedRes);
+      CHECK(loadedRes.error().code == Error::Code::NotSupported);
+      CHECK(loadedRes.error().message.contains("newer version of Aobus"));
+      CHECK(value.count == 3);
+      CHECK(store.hasNewerGroup("protected"));
+      CHECK_FALSE(store.hasNewerGroup("unprotected"));
+
+      auto const removedRes = store.removeGroup("protected");
+      REQUIRE_FALSE(removedRes);
+      CHECK(removedRes.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("save refuses without an earlier load")
+    {
+      auto const savedRes = store.save("protected", replacement, ProtectedStateYamlSchema{});
+
+      REQUIRE_FALSE(savedRes);
+      CHECK(savedRes.error().code == Error::Code::NotSupported);
+      CHECK(store.hasNewerGroup("protected"));
+
+      auto const removedRes = store.removeGroup("protected");
+      REQUIRE_FALSE(removedRes);
+      CHECK(removedRes.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("a batch save that includes the group writes nothing")
+    {
+      auto const savedRes = store.saveTogether(configWrite("other", replacement, VersionedStateYamlSchema{}),
+                                               configWrite("protected", replacement, ProtectedStateYamlSchema{}));
+
+      REQUIRE_FALSE(savedRes);
+      CHECK(savedRes.error().code == Error::Code::NotSupported);
+
+      // The store keeps what it held, not only the file.
+      auto const containsRes = store.contains("other");
+      REQUIRE(containsRes);
+      CHECK_FALSE(*containsRes);
+    }
+
+    CHECK(ao::test::readFile(configPath) == kNewerProtectedDocument);
+  }
+
+  TEST_CASE("ConfigStore - protection covers only protected schemas and newer versions", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    writeFile(configPath, kNewerProtectedDocument);
+    auto store = ConfigStore{configPath};
+
+    SECTION("an unprotected schema reads and replaces the group as before")
+    {
+      auto value = VersionedState{};
+      REQUIRE(store.load("unprotected", value, VersionedStateYamlSchema{}));
+      CHECK(value.count == 9);
+      REQUIRE(store.save("unprotected", VersionedState{.count = 4}, VersionedStateYamlSchema{}));
+      REQUIRE(store.removeGroup("unprotected"));
+    }
+
+    SECTION("a sibling group of a newer protected group is still written")
+    {
+      REQUIRE(store.save("other", VersionedState{.count = 5}, VersionedStateYamlSchema{}));
+
+      // The newer group keeps the field this build does not know.
+      CHECK(ao::test::readFile(configPath).contains("protected:\n  version: 2\n  count: 7\n  fromTheFuture: true\n"));
+
+      auto reloaded = ConfigStore{configPath};
+      auto value = VersionedState{};
+      CHECK_FALSE(reloaded.load("protected", value, ProtectedStateYamlSchema{}));
+      REQUIRE(reloaded.load("protected", value, VersionedStateYamlSchema{}));
+      CHECK(value.version == 2);
+      CHECK(value.count == 7);
+      REQUIRE(reloaded.load("other", value, VersionedStateYamlSchema{}));
+      CHECK(value.count == 5);
+    }
+
+    SECTION("the current version and a malformed version go to the schema")
+    {
+      writeFile(configPath, "protected:\n  version: 1\n  count: 2\nmalformed:\n  version: soon\n");
+      auto current = ConfigStore{configPath};
+      auto value = VersionedState{};
+      REQUIRE(current.load("protected", value, ProtectedStateYamlSchema{}));
+      CHECK(value.count == 2);
+
+      auto const malformedRes = current.load("malformed", value, ProtectedStateYamlSchema{});
+      REQUIRE_FALSE(malformedRes);
+      CHECK(malformedRes.error().code != Error::Code::NotSupported);
+      CHECK_FALSE(current.hasNewerGroup("malformed"));
+      REQUIRE(current.save("protected", VersionedState{.count = 6}, ProtectedStateYamlSchema{}));
     }
   }
 } // namespace ao::rt::test

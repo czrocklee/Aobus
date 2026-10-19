@@ -15,6 +15,7 @@ Follow the linked topic contracts and references for exact behavior, paths, grou
 - Grouped application-managed YAML: [grouped configuration store](config-store.md)
 - YAML parsing, scalar conversion, and arena lifetime: [reusable YAML adapter](yaml-adapter.md)
 - File replacement, permissions, cleanup, and durability limits: [atomic file replacement](atomic-replacement.md)
+- How each persisted format treats another version, and which formats are protected: [persisted format versioning](versioning.md)
 - Exact managed paths and overrides: [managed file locations](../../reference/persistence/location.md)
 - Registered groups, payload owners, and current versions: [application managed-state surface](../../reference/persistence/application-config.md)
 - Workspace restore and save: [workspace architecture](../workspace/README.md)

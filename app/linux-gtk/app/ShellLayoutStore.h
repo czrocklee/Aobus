@@ -50,6 +50,8 @@ namespace ao::gtk
     ShellLayoutStore& operator=(ShellLayoutStore&&) noexcept;
 
     Result<std::optional<uimodel::LayoutDocument>> load(std::string_view presetId) const;
+    /// Save and remove fail as `NotSupported`, changing nothing, for a preset a newer version saved.
+    /// Remove also keeps a preset whose bytes it cannot read, and returns that failure.
     Result<> save(uimodel::LayoutDocument const& doc, std::string_view presetId);
     Result<> remove(std::string_view presetId);
 

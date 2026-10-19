@@ -56,6 +56,9 @@
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/ScopedRegistration.h>
+#include <ao/yaml/Serialization.h>
+
+#include <ryml.hpp>
 
 #ifdef _WIN32
 #include <ao/winui/app/DestructiveLibraryRestart.h>
@@ -1146,6 +1149,44 @@ namespace ao::rt::test
       return 3;
     }
 
+    // A protected schema whose serializer writes another version than its own,
+    // or none when optWrittenVersion is empty.
+    struct MisversionedProtectedSchema final
+    {
+      static constexpr std::uint32_t kVersion = 1;
+
+      std::optional<std::uint32_t> optWrittenVersion;
+
+      Result<> serialize(ryml::NodeRef node, std::uint32_t const& value) const
+      {
+        auto writer = yaml::MapWriter{node};
+
+        if (optWrittenVersion)
+        {
+          writer.scalar("version", *optWrittenVersion);
+        }
+
+        writer.scalar("value", value);
+        return std::move(writer).finish();
+      }
+
+      Result<std::uint32_t> deserialize(ryml::ConstNodeRef /*node*/, std::uint32_t const& seed) const { return seed; }
+    };
+
+    std::int32_t runConfigProtectedSchemaSave(std::string_view const scratchName,
+                                              std::optional<std::uint32_t> const optWrittenVersion)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto store = ConfigStore{std::filesystem::temp_directory_path() / std::string{scratchName} / "config.yaml"};
+      std::ignore =
+        store.save("probe", std::uint32_t{1}, MisversionedProtectedSchema{.optWrittenVersion = optWrittenVersion});
+      return 3;
+    }
+
     std::int32_t runWorkspaceObservationAdmissionException(std::string_view const scratchName)
     {
       auto executorPtr = std::make_unique<RejectingDeferExecutor>();
@@ -1464,6 +1505,16 @@ namespace ao::rt::test
     if (name == "workspace-observation-admission-exception")
     {
       return runWorkspaceObservationAdmissionException(scratchName);
+    }
+
+    if (name == "config-protected-schema-without-version")
+    {
+      return runConfigProtectedSchemaSave(scratchName, std::nullopt);
+    }
+
+    if (name == "config-protected-schema-other-version")
+    {
+      return runConfigProtectedSchemaSave(scratchName, MisversionedProtectedSchema::kVersion + 1);
     }
 
     if (name == "view-projection-observation-admission-exception")

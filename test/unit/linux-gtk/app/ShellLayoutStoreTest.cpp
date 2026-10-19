@@ -153,11 +153,11 @@ namespace ao::gtk::test
       CHECK(ao::test::readFile(filePath) == original);
     }
 
-    SECTION("save preserves an existing document from an unsupported version")
+    SECTION("save keeps a preset a newer version saved")
     {
       std::filesystem::create_directories(layoutsDir);
       auto const filePath = layoutsDir / "classic.yaml";
-      auto const original = std::string{"layout:\n  version: 99\n  root: future-layout\n"};
+      auto const original = std::string{"layout:\n  version: 2\n  root: future-layout\n"};
       std::ofstream{filePath, std::ios::binary} << original;
 
       auto store = ShellLayoutStore{layoutsDir};
@@ -186,5 +186,75 @@ namespace ao::gtk::test
     CHECK_FALSE(std::filesystem::exists(layoutsDir / "classic.yaml"));
 
     REQUIRE(store.remove("classic"));
+  }
+
+  TEST_CASE("ShellLayoutStore - remove keeps a preset a newer version saved", "[gtk][unit][app][layout]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
+    std::filesystem::create_directories(layoutsDir);
+    auto store = ShellLayoutStore{layoutsDir};
+
+    SECTION("a newer preset stays in place")
+    {
+      auto const filePath = layoutsDir / "classic.yaml";
+      auto const original = std::string{"layout:\n  version: 2\n  root: future-layout\n"};
+      std::ofstream{filePath, std::ios::binary} << original;
+
+      auto const res = store.remove("classic");
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
+      CHECK(ao::test::readFile(filePath) == original);
+    }
+
+    SECTION("a newer preset above the size ceiling stays in place")
+    {
+      // The ceiling stops the read before the version is seen, so nothing
+      // shows the preset is not newer.
+      auto const filePath = layoutsDir / "classic.yaml";
+      auto const original = std::string{"layout:\n  version: 2\n  root: future-layout\n# "} +
+                            std::string(uimodel::LayoutDocumentLimits::kDefaultMaxFileBytes, 'x') + "\n";
+      std::ofstream{filePath, std::ios::binary} << original;
+
+      auto const res = store.remove("classic");
+
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ValueTooLarge);
+      CHECK(ao::test::readFile(filePath) == original);
+    }
+
+    SECTION("a preset that is malformed for another reason is still removed")
+    {
+      auto const filePath = layoutsDir / "broken.yaml";
+      std::ofstream{filePath} << "layout: \"corrupted_data_not_a_map\"\n";
+
+      REQUIRE(store.remove("broken"));
+      CHECK_FALSE(std::filesystem::exists(filePath));
+    }
+  }
+
+  TEST_CASE("ShellLayoutStore - remove keeps a preset it cannot open", "[gtk][unit][app][layout]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
+    std::filesystem::create_directories(layoutsDir);
+    auto store = ShellLayoutStore{layoutsDir};
+    auto const filePath = layoutsDir / "classic.yaml";
+    auto const original = std::string{"layout:\n  version: 2\n  root: future-layout\n"};
+    std::ofstream{filePath, std::ios::binary} << original;
+    std::filesystem::permissions(filePath, std::filesystem::perms::none);
+
+    if (std::ifstream{filePath}.is_open())
+    {
+      SKIP("this process reads files regardless of their permission bits");
+    }
+
+    auto const res = store.remove("classic");
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::IoError);
+    std::filesystem::permissions(filePath, std::filesystem::perms::owner_read | std::filesystem::perms::owner_write);
+    CHECK(ao::test::readFile(filePath) == original);
   }
 } // namespace ao::gtk::test

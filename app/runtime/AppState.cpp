@@ -9,6 +9,9 @@
 #include <ao/yaml/Serialization.h>
 
 #include <array>
+#include <cstdint>
+#include <expected>
+#include <format>
 #include <string_view>
 #include <utility>
 
@@ -16,12 +19,16 @@ namespace ao::rt
 {
   namespace
   {
+    // Protected configuration (decision 0020): an older build never overwrites a newer group.
     struct AppPrefsStateYamlSchema final
     {
+      static constexpr std::uint32_t kVersion = 1;
+
       Result<> serialize(ryml::NodeRef node, AppPrefsState const& state) const
       {
         auto writer = yaml::MapWriter{node};
-        writer.scalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
+        writer.scalar("version", kVersion)
+          .scalar("lastOutputBackendId", state.preferredOutputSelection.backendId)
           .scalar("lastOutputProfileId", state.preferredOutputSelection.profileId)
           .scalar("lastOutputDeviceId", state.preferredOutputSelection.deviceId)
           .scalar("lastLayoutPreset", state.lastLayoutPreset)
@@ -32,8 +39,36 @@ namespace ao::rt
       Result<AppPrefsState> deserialize(ryml::ConstNodeRef node, AppPrefsState const& seed) const
       {
         constexpr auto kContext = std::string_view{"application preferences"};
-        constexpr auto kKeys = std::to_array<std::string_view>(
-          {"lastOutputBackendId", "lastOutputProfileId", "lastOutputDeviceId", "lastLayoutPreset", "lastThemePreset"});
+
+        if (auto const res = yaml::requireMap(node, kContext); !res)
+        {
+          return std::unexpected{res.error()};
+        }
+
+        auto const versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
+
+        if (!versionRes)
+        {
+          return std::unexpected{versionRes.error()};
+        }
+
+        // Version 1 is the first version any release writes, and the store refuses a
+        // newer one first. Every older version stays readable (decision 0020), so the
+        // first increment replaces this check with a reader for each older version.
+        static_assert(kVersion == 1, "an older protected config version needs its own reader under decision 0020");
+
+        if (*versionRes != kVersion)
+        {
+          return makeError(
+            Error::Code::NotSupported, std::format("Unsupported application preferences version {}", *versionRes));
+        }
+
+        constexpr auto kKeys = std::to_array<std::string_view>({"version",
+                                                                "lastOutputBackendId",
+                                                                "lastOutputProfileId",
+                                                                "lastOutputDeviceId",
+                                                                "lastLayoutPreset",
+                                                                "lastThemePreset"});
 
         auto state = seed;
         auto reader = yaml::MapReader{node, kKeys, kContext, yaml::UnknownKeyPolicy::Allow};

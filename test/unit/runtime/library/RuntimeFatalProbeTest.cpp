@@ -80,9 +80,9 @@ namespace ao::rt::test
     // Each registered scenario runs from its own case below, so a new registry
     // entry needs a matching case and an updated count here.
 #ifdef _WIN32
-    constexpr std::size_t kFatalScenarioCount = 38;
+    constexpr std::size_t kFatalScenarioCount = 40;
 #else
-    constexpr std::size_t kFatalScenarioCount = 36;
+    constexpr std::size_t kFatalScenarioCount = 38;
 #endif
     CHECK(runtimeFatalProbeExpectations().size() == kFatalScenarioCount);
     CHECK(runtimeCleanProbeScenarios().size() == 2);
@@ -241,6 +241,18 @@ namespace ao::rt::test
   TEST_CASE("Runtime fatal roots - view reads require executor affinity", "[runtime][integration][fatal][concurrency]")
   {
     requireFatalScenario("view-service-read-off-executor");
+  }
+
+  TEST_CASE("Runtime fatal roots - a protected config save that writes no version aborts",
+            "[runtime][integration][fatal]")
+  {
+    requireFatalScenario("config-protected-schema-without-version");
+  }
+
+  TEST_CASE("Runtime fatal roots - a protected config save that writes another version aborts",
+            "[runtime][integration][fatal]")
+  {
+    requireFatalScenario("config-protected-schema-other-version");
   }
 
   TEST_CASE("Runtime fatal roots - workspace observation admission exceptions abort", "[runtime][integration][fatal]")

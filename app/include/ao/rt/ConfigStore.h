@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
@@ -13,6 +14,7 @@
 #include <expected>
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -26,6 +28,20 @@ namespace ao::rt
       { schema.serialize(output, value) } -> std::same_as<Result<>>;
       { schema.deserialize(input, value) } -> std::same_as<Result<T>>;
     };
+
+  /**
+   * @brief A schema for a protected group, which an older build never overwrites (decision 0020).
+   *
+   * The group is a mapping whose `version` field records the version that wrote
+   * it, and `Schema::kVersion` is the version this build writes. The store reads
+   * that field before the schema sees the group, so a newer group is reported as
+   * newer rather than as whatever its unknown content would fail as. A save
+   * whose schema writes another version, or none, stops the process.
+   */
+  template<typename Schema, typename T>
+  concept ProtectedConfigSchema = ConfigSchema<Schema, T> && requires {
+    { Schema::kVersion } -> std::convertible_to<std::uint32_t>;
+  };
 
   template<typename T, ConfigSchema<T> Schema>
   struct ConfigWrite final
@@ -85,7 +101,12 @@ namespace ao::rt
     /// Whether this store has somewhere to read from and write to.
     bool hasLocation() const noexcept { return _hasLocation; }
 
+    /// Whether a protected load or save has found @p group written by a newer version.
+    bool hasNewerGroup(std::string_view group) const;
+
     Result<bool> contains(std::string_view group);
+
+    /// Fails as `NotSupported`, removing nothing, for a group `hasNewerGroup` reports.
     Result<> removeGroup(std::string_view group);
 
     template<typename T, ConfigSchema<T> Schema>
@@ -117,6 +138,14 @@ namespace ao::rt
         return false;
       }
 
+      if constexpr (ProtectedConfigSchema<Schema, T>)
+      {
+        if (auto const res = refuseNewerGroup(group, Schema::kVersion); !res)
+        {
+          return std::unexpected{res.error()};
+        }
+      }
+
       auto deserializedRes = schema.deserialize(child, value);
 
       if (!deserializedRes)
@@ -131,9 +160,20 @@ namespace ao::rt
   private:
     static Error withGroupContext(Error error, std::string_view operation, std::string_view group);
 
+    /// Fails as `NotSupported`, and remembers @p group, when its stored `version` exceeds @p currentVersion.
+    Result<> refuseNewerGroup(std::string_view group, std::uint32_t currentVersion);
+
     template<typename T, ConfigSchema<T> Schema>
-    static Result<> serializeGroup(ryml::Tree& candidate, std::string_view group, T const& value, Schema const& schema)
+    Result<> serializeGroup(ryml::Tree& candidate, std::string_view group, T const& value, Schema const& schema)
     {
+      if constexpr (ProtectedConfigSchema<Schema, T>)
+      {
+        if (auto const res = refuseNewerGroup(group, Schema::kVersion); !res)
+        {
+          return res;
+        }
+      }
+
       auto root = candidate.rootref();
 
       if (auto const groupName = yaml::toCsubstr(group); root[groupName].readable())
@@ -146,6 +186,14 @@ namespace ao::rt
       if (auto const res = schema.serialize(output, value); !res)
       {
         return std::unexpected{withGroupContext(res.error(), "serialize", group)};
+      }
+
+      if constexpr (ProtectedConfigSchema<Schema, T>)
+      {
+        // An older build recognizes a newer group only by this field.
+        auto const writtenVersionRes = yaml::requireScalar<std::uint32_t>(output, "version", "protected config group");
+        AO_INVARIANT(writtenVersionRes && *writtenVersionRes == Schema::kVersion,
+                     "A protected config schema must write its version");
       }
 
       return {};
@@ -164,11 +212,11 @@ namespace ao::rt
       auto candidate = std::move(*candidateRes);
 
       auto serializedRes = Result<>{};
-      auto const serialize = [&candidate, &serializedRes](auto const& write)
+      auto const serialize = [this, &candidate, &serializedRes](auto const& write)
       {
         if (serializedRes)
         {
-          serializedRes = serializeGroup(candidate, write.group, write.value, write.schema);
+          serializedRes = this->serializeGroup(candidate, write.group, write.value, write.schema);
         }
       };
       (serialize(writes), ...);
@@ -191,6 +239,7 @@ namespace ao::rt
     ryml::Tree _root;
     std::vector<char> _inputBuffer;
     std::optional<std::size_t> _optMaxFileBytes;
+    std::vector<std::string> _newerGroups;
     bool _hasLocation = true;
     bool _loaded = false;
   };

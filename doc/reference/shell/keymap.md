@@ -8,7 +8,7 @@ id: shell.keymap
 This reference owns the exact neutral `KeyChord` string surface, shipped application defaults, terminal defaults, persisted override shape, and the rules deciding which bindings a shell installs.
 Merge, conflict, editor, and shell-projection behavior belongs to the [keyboard shortcut specification](../../system/shell/keyboard-shortcut.md).
 
-The surface has no explicit schema version.
+Chord text carries no schema version; the persisted [override group](#override-surface) does, currently `1`.
 
 ## Code boundary
 
@@ -209,10 +209,11 @@ The same event may therefore be configurable at the root while remaining protoco
 GTK, TUI, and Windows read overrides from the same `shortcuts` group, each in its own application-global file: GTK in its global config, TUI in `<config>/tui.yaml`, and Windows in its desktop settings document.
 The group has one shape and one schema; only the file and frontend lifecycle differ, and the [application config reference](../persistence/application-config.md) owns those document boundaries.
 
-The `shortcuts` group is:
+The `shortcuts` group holds a required `version`, currently `1`, and the `bindings` mapping:
 
 ```text
-mapping<action-id string, sequence<canonical chord string>>
+version: 1
+bindings: mapping<action-id string, sequence<canonical chord string>>
 ```
 
 A present action replaces its complete default list.
@@ -225,9 +226,11 @@ Example:
 
 ```yaml
 shortcuts:
-  playback.playPause:
-    - Ctrl+Shift+P
-  playback.cycleRepeat: []
+  version: 1
+  bindings:
+    playback.playPause:
+      - Ctrl+Shift+P
+    playback.cycleRepeat: []
 ```
 
 ## Validation rules
@@ -235,7 +238,8 @@ shortcuts:
 - A chord requires a non-empty key token.
 - A modifier segment must be recognized before the final key token.
 - Equivalent parsed chords compare equal and are deduplicated within one action.
-- The persistence schema requires a mapping with nonempty, nonduplicate action-id keys and sequence values whose every element is a non-null scalar string.
+- The persistence schema requires `version` and `bindings`, and requires `bindings` to be a mapping with nonempty, nonduplicate action-id keys and sequence values whose every element is a non-null scalar string.
+- A group of a newer version is neither read nor rewritten: the defaults apply for the session, and saving a changed keymap fails without touching the file.
 - A structurally valid action id need not be known to the current schema; it remains in the effective and persisted mapping but does not produce a schema-backed editor row.
 - A structurally valid but unparsable chord string is skipped by semantic keymap application without discarding valid siblings.
 - Shortcut-editor eligibility excludes actions with `RequiresAnchor` or `PresentsMenu`.

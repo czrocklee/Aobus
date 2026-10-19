@@ -4,6 +4,7 @@
 #include "tui/Preferences.h"
 
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -179,5 +180,25 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(path) == original);
     auto noLocation = rt::ConfigStore{rt::ConfigStore::NoLocation{}};
     CHECK_FALSE(savePreferences(noLocation, Preferences{}));
+  }
+
+  TEST_CASE("Preferences - a newer version is reported before its fields and never overwritten", "[tui][unit][config]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
+    // A field this build rejects must not decide the outcome for a newer document.
+    auto const document = std::string{"preferences: {version: 2, wheelStep: 0, fromTheFuture: true}"};
+    std::ofstream{path} << document;
+    auto store = rt::ConfigStore{path};
+
+    auto const loadedRes = loadPreferences(store);
+    REQUIRE_FALSE(loadedRes);
+    CHECK(loadedRes.error().code == Error::Code::NotSupported);
+    CHECK(store.hasNewerGroup("preferences"));
+
+    auto const savedRes = savePreferences(store, Preferences{});
+    REQUIRE_FALSE(savedRes);
+    CHECK(savedRes.error().code == Error::Code::NotSupported);
+    CHECK(ao::test::readFile(path) == document);
   }
 } // namespace ao::tui::test

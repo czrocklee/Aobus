@@ -176,6 +176,7 @@ namespace ao::gtk::test
     auto const configPath = tempDir.path() / "config.yaml";
     auto output = std::ofstream{configPath};
     output << "runtime:\n"
+              "  version: 1\n"
               "  lastOutputBackendId: replacement-backend\n";
     output.close();
 

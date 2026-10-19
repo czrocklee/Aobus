@@ -15,7 +15,7 @@ It also does not own library YAML interchange, standalone layout documents, comp
 
 The [persistence and managed-state architecture](README.md) assigns grouped file mechanics to `ConfigStore`, reusable YAML and file-replacement mechanics to Core, schema and semantic policy to payload owners, and path selection to composition roots.
 
-The public store and `ConfigSchema` concept are in [`app/include/ao/rt/ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h); non-template document mechanics are in [`app/runtime/ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp).
+The public store and the `ConfigSchema` and `ProtectedConfigSchema` concepts are in [`app/include/ao/rt/ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h); non-template document mechanics are in [`app/runtime/ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp).
 The store builds on the Core [YAML adapter](yaml-adapter.md) and [`AtomicFile`](../../../include/ao/utility/AtomicFile.h) without making either mechanism specific to configuration.
 
 `ConfigStore` may not depend on UIModel, a frontend, platform path discovery, or a payload-specific schema.
@@ -43,7 +43,7 @@ The payload owner decides whether `deserialize()` uses the seed, requires every 
 
 ## Invariants
 
-- One non-copyable, non-movable store owns its optional backing location, live tree, parser input buffer, and parser callback state.
+- One non-copyable, non-movable store owns its optional backing location, live tree, parser input buffer, parser callback state, and the protected groups it has found newer.
 - A successfully established document is cached for the rest of the instance lifetime; the store does not merge or reload later external changes.
 - An existing file is established only after complete reading, YAML parsing, top-level mapping validation, and rejection of duplicate or keyless group entries.
 - When configured, the file-byte ceiling is checked from the existing file size before allocating its input buffer or parsing it.
@@ -121,7 +121,7 @@ A later save may therefore replace the external change with the cached whole-fil
 | Operation | Present accepted group | Missing group | Initialization or deserialize failure |
 |---|---|---|---|
 | `contains(group)` | Returns `true`. | Returns `false`. | Returns the initialization error. |
-| `load(group, value, schema)` | Calls `schema.deserialize(node, value)`, move-assigns its returned value, and returns `true`. | Returns `false` without invoking the schema or changing `value`. | Returns the initialization or contextualized schema error and leaves `value` unchanged. |
+| `load(group, value, schema)` | Calls `schema.deserialize(node, value)`, move-assigns its returned value, and returns `true`. A [protected schema](#protected-groups) first refuses a newer group without invoking the schema. | Returns `false` without invoking the schema or changing `value`. | Returns the initialization or contextualized schema error and leaves `value` unchanged. |
 
 `load()` returns `Result<bool>` so callers do not need a separate `contains()` call to distinguish absence.
 The value type must be move-assignable.
@@ -130,6 +130,24 @@ The store passes the caller's current value to the schema as a const seed; it ne
 The schema's returned error code is preserved.
 For example, a schema may return `FormatRejected` for malformed structure, `NotSupported` for an unsupported future version, or another domain-appropriate recoverable error.
 The store adds bounded group and operation context to the message.
+
+### Protected groups
+
+A schema that also declares `static constexpr std::uint32_t kVersion`, the version it writes, satisfies `ProtectedConfigSchema`.
+Its group is protected configuration, which an older build never overwrites, as [decision 0020](../../decision/0020-versioning-and-upgrade-policy.md) requires; the [versioning page](versioning.md) lists which groups are protected.
+
+Before such a schema sees a present group, the store reads the group's `version` field from the stored document.
+When that version exceeds `kVersion`:
+
+- `load()` returns `NotSupported` without invoking the schema or changing the value;
+- `save()`, and a `saveTogether()` that includes the group, return `NotSupported` and write nothing;
+- the store remembers the group, so `hasNewerGroup(group)` reports it and `removeGroup(group)` refuses with `NotSupported`.
+
+The check reads the stored document, so a save is refused even when this instance never loaded the group.
+Removal takes no schema, so it refuses only a group that a protected load or save has already found newer.
+A group that is not a mapping, or whose `version` is missing or not an unsigned 32-bit integer, goes to the schema like any other.
+Sibling groups stay writable: each complete-document replacement carries the newer group through unchanged.
+An older build recognizes a newer group only by its `version`, so a save whose schema writes another version, or none, stops the process through the fatal facility.
 
 ### Save
 
@@ -176,6 +194,7 @@ Repeated removal is idempotent.
 | Existing or emitted complete file exceeds the configured byte ceiling | `Result` with `ValueTooLarge`; the live document and backing file remain unchanged. |
 | YAML syntax parsing or root mapping validation fails | `Result` with `FormatRejected` and backing-file context. |
 | A schema returns an error | That error code with bounded group/operation context. |
+| A protected group's stored `version` exceeds the schema's `kVersion` | `Result` with `NotSupported`; the value, the live document, and the backing file remain unchanged. |
 | An exception escapes deserialization | The exception propagates; assignment has not occurred, so the seeded value remains unchanged. |
 | An exception escapes serialization, candidate assembly, or emission | The exception propagates; replacement has not been attempted, so the live document and backing file remain unchanged. |
 | Atomic replacement fails | The helper's recoverable error, currently `IoError`; the live document remains unchanged. |
@@ -191,6 +210,7 @@ Every effective mutation of a located store replaces one complete YAML file; gro
 The [atomic file replacement specification](atomic-replacement.md) owns temporary files, permissions, write barriers, replacement, cleanup, and platform-specific guarantees.
 
 `ConfigStore` defines no file-level schema identifier, schema version, group registry, field alias, enum representation, migration, or compatibility window.
+It reads a group's `version` field only for a protected schema, as described above, and leaves its meaning to that schema.
 Group names and payload schemas belong to their semantic owners and exact serialized references.
 The store has no reflected read path or compatibility fallback.
 
@@ -209,7 +229,7 @@ A runtime or frontend workflow decides how to report or recover from a store fai
 
 ## Test map
 
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, propagation and isolation of schema exceptions, replacement failure, temporary-string ownership, removal, read-only behavior, and the no-location session's same-instance live groups and lack of filesystem output.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, propagation and isolation of schema exceptions, replacement failure, temporary-string ownership, removal, read-only behavior, protected-group refusal of load, save, batch save, and removal, and the no-location session's same-instance live groups and lack of filesystem output.
 - [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects strict scalar parsing and parser diagnostics; [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects node-kind and key validation, duplicate detection, unknown-key policy, bounded context, failure order, and arena-owned writes.
 - Payload schema tests protect field vocabulary, versions, unknown and missing fields, enum membership, semantic rejection, and representative documents at their owning layers.
 - [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) protects replacement, owner-only permissions, and lower write-failure behavior.

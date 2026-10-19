@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <string_view>
 #include <utility>
 
@@ -41,8 +42,11 @@ namespace ao::tui
       return {};
     }
 
+    // Protected configuration (decision 0020): an older build never overwrites a newer group.
     struct PreferencesSchema final
     {
+      static constexpr std::uint32_t kVersion = 1;
+
       Result<> serialize(ryml::NodeRef node, Preferences const& value) const
       {
         if (auto const res = validatePreferences(value); !res)
@@ -51,7 +55,7 @@ namespace ao::tui
         }
 
         auto writer = yaml::MapWriter{node};
-        writer.scalar("version", 1)
+        writer.scalar("version", kVersion)
           .scalar("language", value.language)
           .scalar("coverArtMode", value.coverArtMode)
           .scalar("panelSeparator", value.panelSeparator)
@@ -70,6 +74,31 @@ namespace ao::tui
 
       Result<Preferences> deserialize(ryml::ConstNodeRef node, Preferences const& /*seed*/) const
       {
+        constexpr auto kContext = std::string_view{"TUI preferences"};
+
+        if (auto const res = yaml::requireMap(node, kContext); !res)
+        {
+          return std::unexpected{res.error()};
+        }
+
+        auto const versionRes = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
+
+        if (!versionRes)
+        {
+          return std::unexpected{versionRes.error()};
+        }
+
+        // Version 1 is the first version any release writes, and the store refuses a
+        // newer one first. Every older version stays readable (decision 0020), so the
+        // first increment replaces this check with a reader for each older version.
+        static_assert(kVersion == 1, "an older protected config version needs its own reader under decision 0020");
+
+        if (*versionRes != kVersion)
+        {
+          return makeError(
+            Error::Code::NotSupported, std::format("Unsupported TUI preferences version {}", *versionRes));
+        }
+
         constexpr auto kKeys = std::to_array<std::string_view>({"version",
                                                                 "language",
                                                                 "coverArtMode",
@@ -85,10 +114,8 @@ namespace ao::tui
                                                                 "seekSeconds",
                                                                 "volumePercent"});
         auto value = Preferences{};
-        std::int32_t version = 0;
-        auto reader = yaml::MapReader{node, kKeys, "TUI preferences"};
-        reader.requiredScalar("version", version)
-          .optionalScalar("language", value.language)
+        auto reader = yaml::MapReader{node, kKeys, kContext};
+        reader.optionalScalar("language", value.language)
           .optionalScalar("coverArtMode", value.coverArtMode)
           .optionalScalar("panelSeparator", value.panelSeparator)
           .optionalScalar("terminalTitleFormat", value.terminalTitleFormat)
@@ -106,11 +133,6 @@ namespace ao::tui
         if (!readRes)
         {
           return readRes;
-        }
-
-        if (version != 1)
-        {
-          return makeError(Error::Code::NotSupported, "Unsupported TUI preferences version");
         }
 
         if (auto const res = validatePreferences(*readRes); !res)

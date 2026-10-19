@@ -59,13 +59,13 @@ It does not denote nested mappings.
 | Logical document | Literal group | Payload type | Deserialize/serialize path | Current version authority | Semantic writer |
 |---|---|---|---|---|---|
 | Global GTK config | `window` | `ao::gtk::WindowState` | Frontend-local `WindowStateYamlSchema`. | None. | `MainWindow::saveSessionState`. |
-| Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppPrefs`. |
+| Global GTK config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`, shared with every frontend that keeps this group. | Required `version`; current value `1`. | `AppConfigStore::saveAppPrefs`. |
 | Global GTK config | `session` | `ao::rt::AppSessionState` | Runtime `AppState`, shared with every frontend that keeps this group. | None. | `AppConfigStore::saveAppSession`. |
-| Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
-| Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | None. | `ao::rt::saveAppPrefs`. |
-| Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | TUI Settings through `ao::uimodel::saveKeymap` and the App-owned `ConfigStore`. |
+| Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | Required `version`; current value `1`. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
+| Global TUI config | `runtime` | `ao::rt::AppPrefsState` | Runtime `AppState`. | Required `version`; current value `1`. | `ao::rt::saveAppPrefs`. |
+| Global TUI config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | Required `version`; current value `1`. | TUI Settings through `ao::uimodel::saveKeymap` and the App-owned `ConfigStore`. |
 | Global TUI config | `preferences` | `ao::tui::Preferences` | TUI-local `PreferencesSchema`. | Required `version`; current value `1`. | TUI Settings through the App-owned `ConfigStore`. |
-| Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | None; WinUI loads hand-authored overrides. |
+| Windows desktop settings | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | Required `version`; current value `1`. | None; WinUI loads hand-authored overrides. |
 | Frontend-selected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `1`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
 | AppKit library state | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentations::Snapshot`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | AppKit `LibrarySession`. |
@@ -105,7 +105,7 @@ The persistence schema does not impose positive-size or display-geometry bounds.
 
 ### Global runtime-preference group
 
-The `runtime` group is a mapping whose fields are all strings with an empty C++ default:
+The `runtime` group is a mapping of a required `version`, which must be `1` and is read before every other field, and string fields with an empty C++ default:
 
 | Field | Stored identity |
 |---|---|
@@ -133,13 +133,13 @@ The `session` group is a mapping whose fields are all strings with an empty C++ 
 | `lastOutputDeviceId` | Last active output device id. |
 
 The schema stores `lastLibraryPath` as text and applies no normalization, existence check, or platform-path validation.
-It uses the same seeded-missing, unknown-field, duplicate-field, and malformed-known-field policy as the `runtime` group.
+It has no `version` and otherwise uses the same seeded-missing, unknown-field, duplicate-field, and malformed-known-field policy as the `runtime` group.
 When the preferred runtime-group tuple is not restorable, the session tuple is the GTK fallback.
 An incomplete session tuple is ignored; restore never synthesizes missing identity fields.
 
 ### Global TUI preferences
 
-The `preferences` mapping in `<config>/tui.yaml` is owned by `Preferences` and its local `PreferencesSchema`. `version` is required and must be `1`; missing preference fields use the defaults below. Malformed present values reject the group.
+The `preferences` mapping in `<config>/tui.yaml` is owned by `Preferences` and its local `PreferencesSchema`. `version` is required, must be `1`, and is read before every other field; missing preference fields use the defaults below. Malformed present values reject the group.
 
 | Field | Default | Accepted values |
 |---|---|---|
@@ -157,16 +157,17 @@ The `preferences` mapping in `<config>/tui.yaml` is owned by `Preferences` and i
 | `seekSeconds` | `5` | Integer 1–60 seconds |
 | `volumePercent` | `5` | Integer 1–10 percentage points |
 
-If saved TUI preferences cannot be read or validated, startup uses defaults and posts a warning without resetting the store or rewriting that group. A malformed document remains protected by `ConfigStore` write rejection; a later explicit Settings save can replace a schema-invalid preference group in an otherwise valid document.
+If saved TUI preferences cannot be read or validated, startup uses defaults and posts a warning without resetting the store or rewriting that group. A malformed document remains protected by `ConfigStore` write rejection; a later explicit Settings save can replace a schema-invalid preference group in an otherwise valid document, but never a group of a newer version.
 
 Settings persists the complete candidate before publishing live behavior. A missing persistent location is a save failure. The one global store preserves `runtime`, `shortcuts`, and unknown sibling groups.
 
 ### Global shortcut group
 
-The `shortcuts` group is itself the dynamic mapping; its complete serialized shape is:
+The `shortcuts` group is a mapping of exactly two fields, a required `version`, which must be `1` and is read first, and the dynamic `bindings` mapping:
 
 ```text
-mapping<action-id string, sequence<key-chord string>>
+version: 1
+bindings: mapping<action-id string, sequence<key-chord string>>
 ```
 
 Each present action id replaces the complete shipped chord list for that action.
@@ -183,7 +184,7 @@ Action ids are plain strings in this payload.
 Persistence accepts arbitrary action ids; the GTK editor derives shortcut eligibility from the layout schema, while TUI recognizes only its frontend descriptor inventory.
 Loading the group itself does not reject an unknown action id.
 Chord values use the canonical `KeyChord::toString()` representation; the exact chord tokens, aliases, and shipped default bindings belong to the [keyboard map reference](../shell/keymap.md).
-The schema rejects an empty action id, duplicate action id, non-sequence binding, null or non-scalar sequence element, or other malformed group structure as one failed candidate.
+The schema rejects a missing `bindings`, an unknown field, an empty action id, duplicate action id, non-sequence binding, null or non-scalar sequence element, or other malformed group structure as one failed candidate.
 After structural acceptance, `KeymapModel` treats an unparseable chord string as an invalid semantic entry and continues with other usable chords.
 
 ### TUI sidebar widths
@@ -248,17 +249,20 @@ The composition root logs the degraded application-preference session once, wher
 
 | Surface | Compatibility mechanism |
 |---|---|
-| `window`, `runtime`, and `session` | No explicit version or migration. Their schemas retain seeded values for missing known fields and tolerate unknown fields while rejecting duplicates and malformed known fields. |
-| `shortcuts` | No explicit version or migration. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. |
-| TUI `preferences` | Required payload version `1`, strict field membership and value validation, defaults for missing preference fields, and no earlier-version migration. |
+| `window` and `session` | No explicit version or migration. Their schemas retain seeded values for missing known fields and tolerate unknown fields while rejecting duplicates and malformed known fields. |
+| `runtime` | Required version `1`, read first; otherwise the `window` and `session` field policy. A protected group. |
+| `shortcuts` | Required version `1`, read first, and strict group fields. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. A protected group. |
+| TUI `preferences` | Required payload version `1`, read first, strict field membership and value validation, defaults for missing preference fields, and no earlier-version migration. A protected group. |
 | `workspace` | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
 | `trackView.columnLayouts` | Independent payload version `1`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
 | `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
 | TUI `navigation` and `panels` | Independent payload version `1` for each group, strict field membership, and no earlier-version migration. Invalid navigation falls back to enabled; invalid panel widths fall back to automatic sizing at the owning workflow. |
-| Windows `desktop` | Explicit version, currently `1`, read down to the oldest this schema ever wrote (`1`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
+| Windows `desktop` | Explicit version, currently `1`, read down to the oldest this schema ever wrote (`1`). Every field is optional over the caller's seed, so an accepted older document is read in full and rewritten at the current version on the next checkpoint. A newer version is rejected and kept unchanged because this build cannot preserve fields it does not know; a version below the oldest is rejected because no document was written that way and the value marks a malformed one. A protected group. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
 | `playback-session` | Explicit schema version `1`; other versions are rejected rather than migrated. |
-| `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. |
+| `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. A protected group. `ShellLayoutStore` also refuses to remove a preset file of a newer version, or one whose bytes it cannot read. |
 | Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |
+
+A protected group of a newer version is neither read nor written: the store refuses every load and save of it, and every removal once a load or save has found it newer, as the [grouped configuration store](../../system/persistence/config-store.md#protected-groups) specifies. The build keeps its defaults for that group for the session.
 
 No file-level envelope declares which groups are present or which application version wrote them.
 Moving a group to another logical document changes composition and lifecycle ownership even when its payload bytes are unchanged; a path override alone does not.
@@ -273,6 +277,7 @@ window:
   height: 801
   maximized: false
 runtime:
+  version: 1
   lastOutputBackendId: pipewire
   lastOutputProfileId: default
   lastOutputDeviceId: speakers
@@ -284,9 +289,11 @@ session:
   lastOutputProfileId: default
   lastOutputDeviceId: speakers
 shortcuts:
-  playback.playPause:
-    - Ctrl+Shift+P
-  playback.cycleRepeat: []
+  version: 1
+  bindings:
+    playback.playPause:
+      - Ctrl+Shift+P
+    playback.cycleRepeat: []
 ```
 
 Mapping order is not significant.
@@ -311,11 +318,12 @@ The example intentionally omits the domain-owned `playback-session` payload.
 
 ## Test authority
 
-- [`PreferencesTest.cpp`](../../../test/unit/tui/PreferencesTest.cpp) protects TUI preference defaults, validation, version rejection, round trips, and preservation of sibling groups.
+- [`PreferencesTest.cpp`](../../../test/unit/tui/PreferencesTest.cpp) protects TUI preference defaults, validation, version rejection, a newer group kept unchanged, round trips, and preservation of sibling groups.
+- [`AppStateTest.cpp`](../../../test/unit/runtime/AppStateTest.cpp) protects the shared `runtime` and `session` schemas, including a missing `version` and a newer `runtime` group kept unchanged.
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the `window`, `runtime`, and `session` group round trips, missing-file behavior, and the no-location session.
 - [`WindowStateTest.cpp`](../../../test/unit/linux-gtk/app/WindowStateTest.cpp) protects current-session normal geometry across a maximized checkpoint.
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory.
-- [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the `shortcuts` group, merge, and delta-only persistence; [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects the shared-plus-terminal default seed and executable projection.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory, and the protected-group refusals.
+- [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the versioned `shortcuts` group, a newer group kept unchanged, merge, and delta-only persistence; [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects the shared-plus-terminal default seed and executable projection.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, store use, and repeated frozen checkpoints.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip; [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects TUI attachment to the exact restored active view.
 - [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp), [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp), [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp), and [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protect the shared presentation groups, independent files, TUI writer-path alias rejection, version gates, and seeded-state fallback.

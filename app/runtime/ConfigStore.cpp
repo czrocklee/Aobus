@@ -13,8 +13,10 @@
 
 #include <ryml.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -40,6 +42,11 @@ namespace ao::rt
   {
   }
 
+  bool ConfigStore::hasNewerGroup(std::string_view const group) const
+  {
+    return std::ranges::contains(_newerGroups, group);
+  }
+
   Result<bool> ConfigStore::contains(std::string_view const group)
   {
     if (auto const loadedRes = ensureLoaded(); !loadedRes)
@@ -59,6 +66,13 @@ namespace ao::rt
       return std::unexpected{candidateRes.error()};
     }
 
+    if (hasNewerGroup(group))
+    {
+      return makeError(Error::Code::NotSupported,
+                       std::format("Config group '{}' was written by a newer version of Aobus; it is kept unchanged",
+                                   yaml::boundedErrorContext(group)));
+    }
+
     auto candidate = std::move(*candidateRes);
     auto const groupName = yaml::toCsubstr(group);
     auto root = candidate.rootref();
@@ -70,6 +84,36 @@ namespace ao::rt
 
     root.remove_child(groupName);
     return commitCandidate(std::move(candidate));
+  }
+
+  Result<> ConfigStore::refuseNewerGroup(std::string_view const group, std::uint32_t const currentVersion)
+  {
+    auto const child = _root.rootref()[yaml::toCsubstr(group)];
+
+    if (!child.readable() || !child.is_map())
+    {
+      return {};
+    }
+
+    // A missing or malformed version is the schema's to reject.
+    auto const versionRes = yaml::requireScalar<std::uint32_t>(child, "version", "protected config group");
+
+    if (!versionRes || *versionRes <= currentVersion)
+    {
+      return {};
+    }
+
+    if (!hasNewerGroup(group))
+    {
+      _newerGroups.emplace_back(group);
+    }
+
+    return makeError(Error::Code::NotSupported,
+                     std::format("Config group '{}' has version {}, which a newer version of Aobus wrote (this build "
+                                 "writes version {}); it is kept unchanged",
+                                 yaml::boundedErrorContext(group),
+                                 *versionRes,
+                                 currentVersion));
   }
 
   Error ConfigStore::withGroupContext(Error error, std::string_view operation, std::string_view group)
