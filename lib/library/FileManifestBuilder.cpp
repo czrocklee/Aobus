@@ -11,10 +11,13 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/library/TrackLayout.h>
+#include <ao/utility/ByteView.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <optional>
 #include <span>
@@ -40,6 +43,9 @@ namespace ao::library
       .audioPayloadLength(view.audioPayloadLength())
       .audioSignature(view.audioSignature())
       .status(view.status());
+    builder._segmentTrackIds.assign(view.segmentTrackIds().begin(), view.segmentTrackIds().end());
+    builder._totalFrames = view.totalFrames();
+    builder._header.segmentCount = view.segmentCount();
     return builder;
   }
 
@@ -84,6 +90,12 @@ namespace ao::library
   {
   }
 
+  std::span<std::byte const> FileManifestBuilder::Prepared::bytes() const noexcept
+  {
+    return _carrierBytes.empty() ? std::as_bytes(std::span{&_header, std::size_t{1}})
+                                 : std::span<std::byte const>{_carrierBytes};
+  }
+
   FileManifestBuilder::Unbound::Unbound(LibraryUri uri, FileManifestHeader header)
     : _uri{std::move(uri)}, _header{header}
   {
@@ -99,6 +111,21 @@ namespace ao::library
 
     AO_ENSURES(validateFileManifestPayload(prepared.bytes()),
                "Bound file manifest payload failed the complete record validator");
+    return prepared;
+  }
+
+  FileManifestBuilder::Prepared FileManifestBuilder::Unbound::bindCarrier(std::span<TrackId const> ids,
+                                                                          std::uint64_t totalFrames) &&
+  {
+    AO_EXPECTS(!ids.empty() && ids.size() <= kMaxTrackSegmentOrdinal && totalFrames != 0);
+    _header.trackId = kInvalidTrackId;
+    _header.segmentCount = static_cast<std::uint16_t>(ids.size());
+    auto prepared = Prepared{std::move(_uri), _header};
+    prepared._carrierBytes.resize(sizeof(FileManifestHeader) + 8 + ids.size_bytes());
+    std::memcpy(prepared._carrierBytes.data(), &_header, sizeof(_header));
+    std::memcpy(prepared._carrierBytes.data() + sizeof(FileManifestHeader), &totalFrames, sizeof(totalFrames));
+    std::memcpy(prepared._carrierBytes.data() + sizeof(FileManifestHeader) + 8, ids.data(), ids.size_bytes());
+    AO_ENSURES(validateFileManifestPayload(prepared.bytes()));
     return prepared;
   }
 
@@ -130,12 +157,23 @@ namespace ao::library
 
     auto unboundHeader = _header;
     unboundHeader.trackId = kInvalidTrackId;
+    unboundHeader.segmentCount = 0;
     return Unbound{std::move(uri), unboundHeader};
   }
 
   std::vector<std::byte> FileManifestBuilder::serialize() const
   {
     auto const bytes = std::as_bytes(std::span{&_header, std::size_t{1}});
-    return {bytes.begin(), bytes.end()};
+    auto encoded = std::vector<std::byte>{bytes.begin(), bytes.end()};
+
+    if (!_segmentTrackIds.empty())
+    {
+      auto const extentBytes = utility::bytes::view(_totalFrames);
+      auto const idBytes = std::as_bytes(std::span<TrackId const>{_segmentTrackIds});
+      encoded.insert(encoded.end(), extentBytes.begin(), extentBytes.end());
+      encoded.insert(encoded.end(), idBytes.begin(), idBytes.end());
+    }
+
+    return encoded;
   }
 } // namespace ao::library

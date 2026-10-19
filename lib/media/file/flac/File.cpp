@@ -66,7 +66,14 @@ namespace ao::media::file::flac
         .bitDepth(BitDepth{bitDepth(*layout)})
         .codec(AudioCodec::Flac);
 
-      if (auto const samples = totalSamples(*layout); rate > 0 && samples > 0)
+      auto const samples = totalSamples(*layout);
+
+      if (samples > 0)
+      {
+        builder.property().exactFrameCount(samples);
+      }
+
+      if (rate > 0 && samples > 0)
       {
         auto const duration = std::chrono::milliseconds{(samples * std::chrono::milliseconds::period::den) / rate};
 

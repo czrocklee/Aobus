@@ -29,6 +29,8 @@ namespace ao::test
   enum class DeniedDirectoryAccess : std::uint8_t
   {
     Read,
+    // Denies listing the directory while its entries stay reachable by name.
+    List,
     Write,
   };
 

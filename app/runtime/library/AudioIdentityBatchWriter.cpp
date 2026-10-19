@@ -52,7 +52,7 @@ namespace ao::rt
       auto builder = library::FileManifestBuilder::fromView(*optCurrent);
       builder.audioPayloadLength(candidate.identity.payloadLength).audioSignature(candidate.identity.signature);
 
-      if (auto putRes = writer.updateManifest(optCurrent->trackId(), builder); !putRes)
+      if (auto putRes = writer.updateManifest(candidate.uri, builder); !putRes)
       {
         return std::unexpected{putRes.error()};
       }

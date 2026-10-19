@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <ratio>
 #include <type_traits>
 
@@ -124,16 +125,70 @@ namespace ao::library
     Work = 1,
     CustomMetadata = 2,
     Performance = 3,
+    Segment = 4,
   };
 
-  constexpr std::size_t kTrackColdKnownBlockSlotCount = 4;
-  // Slot 4 is the last unused cold slot.
+  constexpr std::size_t kTrackColdKnownBlockSlotCount = 5;
   constexpr std::size_t kTrackColdBlockSlotCount = 5;
 
   constexpr std::size_t trackColdBlockSlotIndex(TrackColdBlockSlot slot) noexcept
   {
     return static_cast<std::size_t>(slot);
   }
+
+  constexpr std::uint16_t kMaxTrackSegmentOrdinal = 99;
+
+  struct TrackSegment final
+  {
+    std::uint64_t startFrame{};
+    std::uint64_t frameCount{};
+    std::uint16_t ordinal{};
+
+    bool operator==(TrackSegment const&) const = default;
+  };
+
+  constexpr std::optional<TrackDuration> segmentDuration(std::uint64_t frameCount, SampleRate sampleRate) noexcept
+  {
+    auto const rate = sampleRate.raw();
+
+    if (rate == 0 || frameCount / rate > static_cast<std::uint64_t>(TrackDuration::max().count()) / 1000)
+    {
+      return std::nullopt;
+    }
+
+    auto const milliseconds = ((frameCount / rate) * 1000) + (((frameCount % rate) * 1000) / rate);
+
+    if (milliseconds > static_cast<std::uint64_t>(TrackDuration::max().count()))
+    {
+      return std::nullopt;
+    }
+
+    return TrackDuration{static_cast<std::int32_t>(milliseconds)};
+  }
+
+  struct TrackSegmentBlock final
+  {
+    static constexpr std::size_t kSize = 20;
+    static constexpr std::size_t kFrameCountHiOffset = 12;
+    static constexpr std::size_t kReservedOffset = 18;
+
+    std::uint32_t startFrameLo{};
+    std::uint32_t startFrameHi{};
+    std::uint32_t frameCountLo{};
+    std::uint32_t frameCountHi{};
+    std::uint16_t ordinal{};
+    std::uint16_t reserved{};
+  };
+
+  static_assert(sizeof(TrackSegmentBlock) == TrackSegmentBlock::kSize);
+  static_assert(alignof(TrackSegmentBlock) == 4);
+  static_assert(std::has_unique_object_representations_v<TrackSegmentBlock>);
+  static_assert(offsetof(TrackSegmentBlock, startFrameLo) == 0);
+  static_assert(offsetof(TrackSegmentBlock, startFrameHi) == 4);
+  static_assert(offsetof(TrackSegmentBlock, frameCountLo) == 8);
+  static_assert(offsetof(TrackSegmentBlock, frameCountHi) == TrackSegmentBlock::kFrameCountHiOffset);
+  static_assert(offsetof(TrackSegmentBlock, ordinal) == 16);
+  static_assert(offsetof(TrackSegmentBlock, reserved) == TrackSegmentBlock::kReservedOffset);
 
   struct TrackWorkBlock final
   {

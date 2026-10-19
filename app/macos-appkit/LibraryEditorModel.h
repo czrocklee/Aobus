@@ -87,6 +87,7 @@ namespace ao::appkit
     void editTags(std::vector<std::string> tags);
     void editList(std::string name, std::string description, std::string expression);
     uimodel::TrackCreditSections creditSections() const;
+    std::vector<uimodel::TrackSegmentDisplayRow> const& segmentRows() const noexcept;
     uimodel::TrackCreditsEditorModel& creditsEditor() noexcept;
     Result<> beginCreditsEdit(std::bitset<library::kCreditKindCount> kinds);
     Result<> acceptCreditsEdit();

@@ -110,6 +110,8 @@ namespace ao::rt
       // Root-relative URI read with the track, so a saved session names the file
       // that played even after the track's id disappears from the library.
       std::string trackUri{};
+      // Zero identifies a whole file; a CUE ordinal identifies one carrier member.
+      std::uint16_t trackOrdinal = 0;
     };
 
     // PlaybackTransport takes exclusive ownership of its direct audio collaborator.

@@ -400,11 +400,11 @@ namespace ao::library::test
       checkColdGateRejects(data);
     }
 
-    SECTION("reserved slot is nonzero")
+    SECTION("segment slot points at URI")
     {
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
-      header->blockOffsets[kTrackColdKnownBlockSlotCount] = header->uriOffset;
+      header->blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Segment)] = header->uriOffset;
       checkColdGateRejects(data);
     }
 

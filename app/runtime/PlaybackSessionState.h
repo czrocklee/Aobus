@@ -32,6 +32,7 @@ namespace ao::rt
     // Canonical library URI of the current track's file as the library last
     // confirmed it, which follows a relink while the app runs.
     std::string currentTrackUri{};
+    std::uint16_t currentTrackOrdinal = 0;
     std::uint64_t anchorIndex = 0;
     std::uint64_t positionMs = 0;
     ShuffleMode shuffleMode = ShuffleMode::Off;
@@ -48,6 +49,7 @@ namespace ao::rt
     ListId sourceListId = kInvalidListId;
     TrackId trackId = kInvalidTrackId;
     std::string trackUri{};
+    std::uint16_t trackOrdinal = 0;
     std::uint64_t positionMs = 0;
     float volume = 1.0F;
     bool muted = false;

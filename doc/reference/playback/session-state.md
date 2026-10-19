@@ -16,7 +16,7 @@ The payload belongs to the **application runtime** layer in the [system architec
 ## Surface
 
 The literal top-level group is `playback-session`.
-The schema requires every root field:
+The schema requires every root field below except `currentTrackOrdinal`, whose omission identifies a whole-file Track:
 
 | Field | C++ type | Default | Meaning |
 |---|---|---|---|
@@ -27,6 +27,7 @@ The schema requires every root field:
 | `sortBy` | Sequence of `TrackSortTerm` | Empty | Ordered field/direction terms. |
 | `currentTrackId` | `TrackId` | Invalid id | Last restorable subject. |
 | `currentTrackUri` | String | Empty | Library URI of that subject's file as the library last confirmed it, including after a relink while the app runs; the URI it was opened with when the library never confirmed another. A saved value is never empty. |
+| `currentTrackOrdinal` | Unsigned 16-bit integer | `0` | `0` for a whole file, otherwise CUE ordinal `1..99`. Always emitted; accepted as `0` when omitted. URI and ordinal together identify the subject within a carrier. |
 | `anchorIndex` | Unsigned 64-bit integer | `0` | Saved semantic cursor anchor. |
 | `positionMs` | Unsigned 64-bit integer | `0` | Transport offset in milliseconds. |
 | `shuffleMode` | `ShuffleMode` | `Off` | Current shuffle policy. |
@@ -61,7 +62,7 @@ The payload contains none of these:
 
 - `schemaVersion` must equal `5`.
 - `libraryId` must be a canonical 8-4-4-4-12 hexadecimal UUID.
-- `currentTrackUri` must be a canonical library URI.
+- `currentTrackUri` must be a canonical library URI; `currentTrackOrdinal` must be in `0..99`.
 - List and track identities must satisfy semantic restore validation against the active library.
 - Anchor and position must convert to their runtime index/duration representations without overflow.
 - Shuffle and repeat values must be supported enumerators.
@@ -69,7 +70,7 @@ The payload contains none of these:
 - Sort fields and directions must be valid, fields cannot repeat, and term count cannot exceed the field catalog.
 - The quick filter must parse and compile under the active library vocabulary.
 - Root and sort-term mappings reject unknown and duplicate fields; every sequence element is validated.
-- Missing fields, wrong node kinds, malformed scalars, and malformed sort entries reject the complete candidate before live state changes.
+- Missing required fields, wrong node kinds, malformed scalars, and malformed sort entries reject the complete candidate before live state changes.
 - The schema checks `schemaVersion` first and returns `NotSupported` for another version before interpreting version-specific siblings.
 
 ## Compatibility and versioning
@@ -83,7 +84,8 @@ The expression carries no separate language version.
 Version `5` also includes the current numeric `TrackSortField` mapping.
 Changing a sort-field raw value requires a playback schema version or an explicit version-5 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
-List and track ids are scoped to one library, so version 5 records that library's UUID and the current subject's URI.
+List and track ids are scoped to one library, so version 5 records that library's UUID and the current subject's URI and ordinal.
+The unreleased development schema adds the ordinal without a version increment; a missing ordinal retains whole-file identity rather than matching an arbitrary carrier member.
 The [persistence specification](../../system/playback/session-persistence.md#check-identity) drops a payload whose library or subject no longer matches.
 Independently, the GTK library-switch lifecycle physically deletes the group and terminally seals persistence in the old process, fully destroys that graph, and activates a successor process with idle playback.
 The successor admits future playback writes only after the matching root is durable; root-commit failure keeps the prior root, no payload, and a permanent write seal.
@@ -99,6 +101,7 @@ playback-session:
   sortBy: []
   currentTrackId: 42
   currentTrackUri: "Example/Album/01 Opening.flac"
+  currentTrackOrdinal: 0
   anchorIndex: 7
   positionMs: 12500
   shuffleMode: 0

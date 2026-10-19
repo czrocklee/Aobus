@@ -112,7 +112,9 @@ namespace ao::rt
 
   struct CreateTrackReply final
   {
+    // First member for single-subject navigation; trackIds contains the whole import.
     TrackId trackId{};
+    std::vector<TrackId> trackIds{};
     std::string uri{};
     std::string title{};
     std::string artist{};

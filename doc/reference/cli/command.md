@@ -130,11 +130,14 @@ Each track record contains:
 id, title, artist, album, albumArtist, genre, composer,
 work, movement, recordingDate, credits, year,
 trackNumber, trackTotal, discNumber, discTotal, movementNumber,
-movementTotal, tags, duration, sampleRate, uri, custom
+movementTotal, tags, duration, sampleRate, uri, segment?, custom
 ```
 
 Zero/empty sentinel track values are omitted.
 `duration` is milliseconds.
+`segment`, present only for a CUE segment, is `{ordinal, startFrame, frameCount, endFrame, startTime, endTime}`.
+`endFrame` is exclusive. The times are `m:ss.mmm` display text from the hot sample rate, floored to whole milliseconds; the frames are the exact stored range.
+Plain `track show` prints `CUE Track Number`, `Start Time`, and `End Time (exclusive)` for that same range.
 `recordingDate` is the canonical stored precision (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`) and is omitted when absent.
 `credits` is one sequence of `{name, kind, role?}` entries, including an explicit empty sequence.
 It preserves duplicates and within-kind order, grouped canonically in kind order, conductor through remixer; absent roles omit the `role` key.
@@ -144,8 +147,8 @@ Mutation/administrative shapes:
 
 | Command | Top-level fields |
 | --- | --- |
-| `scan` | `dryRun, new, changed, moved, missing, unchanged, errors`; dry-run adds `items[{type,uri,message?}]` |
-| `track create` | `action, dryRun, trackId?, uri, title, artist` |
+| `scan` | `dryRun, new, changed, missingSegments, moved, missing, unchanged, errors, warnings`; dry-run adds `items[{type,uri,message?}]` |
+| `track create` | `action, dryRun, trackId?, trackIds, uri, title, artist` |
 | `track update` | `dryRun, matched, updated, trackIds, changes, tagChanges?` |
 | `track delete` | `action, dryRun, trackId, uri, title, removedFromListIds` |
 | `list show` | collection rows use `id,name,description,parentId,filter,order`; the detail document wraps one row in `list` and additionally uses effective `tracks[{id,title,artist,album}]` |
@@ -161,14 +164,25 @@ Mutation/administrative shapes:
 | `lib show` | `libraryId, libraryVersion, flags, createdTime` |
 | `lib stats` | `tracks, lists, resources, resourceBytes, manifest, dictionary, tags, diskBytes, highWaterBytes, mapBytes` |
 | `lib verify` | `ok, issues[{type,uri,message?}]` |
-| `lib relink` list | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength}]` |
-| `lib relink` apply | `dryRun, oldUri, newUri, trackId` |
+| `lib relink` list | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength,trackIds?}]` |
+| `lib relink` apply | `dryRun, oldUri, newUri, trackId, trackIds?` |
 | `lib fingerprint` | `completed, skipped, failures` |
 | `lib import` | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored, invalidFiltersKept` |
 | `lib export` | `action, path, mode` |
 | `lib resource list` | `resources[{id,size}]`, where `size` is the descriptor's described length |
 | `lib resource export` | `id, output, size` |
 | `lib dump` | selected optional `meta`, `dictionary`, `manifest`, `resources` sections |
+
+A whole-file `lib relink` candidate and apply result keep `trackId` as that Track's id and omit `trackIds`.
+A carrier candidate, dry-run preview, and committed result keep header `trackId` zero and add `trackIds`, the member ids in stored order.
+`trackId: 0` is the physical binding, not membership.
+Plain candidate lines stay `candidate {old} -> {new}` for a whole file; a carrier appends ` trackIds {id}, {id}`.
+Plain apply stays `relinked {old} -> {new}` and appends that same suffix before a dry-run marker.
+A whole-file manifest row omits `trackIds`, `segmentCount`, and `totalFrames`.
+A carrier row adds those keys: member ids in stored order, the member count, and the carrier extent.
+Header `trackId` remains zero.
+Non-raw plain dump still prints `Track ID:` for every row, including zero for a carrier, and adds `Track IDs:`, `Segment Count:`, and `Total Frames:` only for a carrier.
+`--raw` remains a hex dump of the stored value and does not add those labels.
 
 For `list delete --descendants`, `deletedLists` is a root-first sequence of `{listId, name, forgottenPositionCount, tagImpact?}` entries.
 `forgottenPositionCount` has the same meaning as in ordinary deletion.
@@ -199,11 +213,12 @@ Neither figure counts stored bytes, because the library stores no cover content.
 Scan summary is:
 
 ```text
-new N  changed C  moved R  missing M  unchanged U  errors E
+new N  changed C  moved R  missing M  unchanged U  errors E  missing-segments S  warnings W
 ```
 
-A non-dry-run `scan` or `init` follows the plan summary with apply lines for skipped, relinked, and missing-review counts, plus an `N items failed to apply` line (`1 item failed to apply` for one item) when items failed.
+A non-dry-run `scan` or `init` writes one `warning: {uri}: {message}` line to stderr for each warning, for plain and structured output alike, then follows the plan summary with apply lines for skipped, relinked, and missing-review counts, plus an `N items failed to apply` line (`1 item failed to apply` for one item) when items failed.
 Any apply failure also fails the command with `scan apply failed: ...` on stderr and exit `1`, for plain and structured output alike.
+Warnings alone leave the exit status `0`.
 
 Fingerprint summary is `fingerprinted N  skipped N  failed N`.
 Tag list is descending frequency then name.
@@ -227,6 +242,10 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 ## Validation rules
 
 - `track show --format` is mutually exclusive with YAML/JSON.
+- `track create` of a CUE image emits every created id in `trackIds`. `trackId` is the first of those ids when the commit allocated one; a dry-run omits `trackId` and emits an empty `trackIds` array because allocation is not durable. Plain output prints one `added track` line per id.
+- Plain `scan` counts `missing-segments` separately from `new`. Structured output uses `missingSegments`, and a dry-run item of that class has `type: missing-segments`.
+- A dry-run item list omits `Unchanged` items only when they have no accompanying diagnostic. Binding diagnostics preserve the file classification and remain visible.
+  `errors` counts Error items, which were not applied. `warnings` counts every other item with a diagnostic, such as a CUE sheet beside a whole-file import, and `notice` items, which name a CUE sheet that matches no supported audio file and are never applied.
 - `track update` applies field options and tag options as one atomic edit; the same tag in `--add-tag` and `--remove-tag` is rejected, and `--dry-run` is rejected when tag options are present.
 - `track update` rejects credit arity, scope, kind, text, and clear/replacement conflicts, invalid recording-date literals, and reserved keys in `--set`, all before mutation.
 - `track update` change records use the runtime field names: `recordingDate` values are canonical date strings, and `credits` values are diagnostics-only text, never replacement input.
@@ -243,7 +262,8 @@ Both write the error to stderr, emit no success document, and exit `1`; only `Ap
 - The saved-order runtime may return `Applied`, `NoOp`, `Stale`, or `Unavailable`.
   CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
 - Ordinary List deletion rejects a List with descendants; `--descendants` explicitly selects complete-subtree deletion, and `--dry-run` reports the same subtree without committing.
-- `lib verify` fails only for Missing or Error, while still reporting Changed/Moved.
+- `lib verify` reports Changed, MissingSegments, Moved, Missing, Error, Notice, and any item with an accompanying diagnostic. It fails only for Missing or Error; a warning is listed but does not fail verification.
+- A committed `lib relink` writes each warning on its moved item, such as a carrier moved without its sheet, to stderr as `warning: {uri}: {message}` and exits `0`.
 - `lib resource list` reports each descriptor without reading content; `lib dump --resources` additionally prints each digest.
 - `lib resource export` reads content through the same source walk interactive consumers use, with no size ceiling, so it can write a cover that exceeds the interactive limit.
 - `lib resource export` fails with `resource not found` for an id with no descriptor row, `resource not available` when no cache entry or referencing file could reproduce the content, and for file IO, which includes an output below a directory that does not exist; it writes nothing in every failure case, replaces an existing output only once the complete content is on hand, and creates no directory.

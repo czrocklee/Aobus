@@ -8,6 +8,8 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <chrono>
+#include <cstdint>
+#include <optional>
 
 namespace ao::audio
 {
@@ -21,6 +23,7 @@ namespace ao::audio
     std::chrono::milliseconds duration{0};
     bool isLossy = false;
     AudioCodec codec = AudioCodec::Unknown;
+    std::optional<std::uint64_t> optTotalFrames{};
 
     bool operator==(DecodedStreamInfo const&) const = default;
   };

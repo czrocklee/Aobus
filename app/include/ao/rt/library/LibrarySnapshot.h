@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/library/Credits.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
@@ -62,6 +63,10 @@ namespace ao::rt
     std::optional<std::string> trackUri(TrackId id) const;
     /// True when some track's file has @p uri.
     bool containsTrackUri(std::string_view uri) const;
+    /// One member's immutable range; nullopt for a whole-file or absent Track.
+    std::optional<library::TrackSegment> trackSegment(TrackId id) const;
+    /// Matches the whole file when ordinal is zero, otherwise one carrier member.
+    bool containsTrackUri(std::string_view uri, std::uint16_t ordinal) const;
     ResourceId trackCoverArtId(TrackId id) const;
     TrackFieldRawValue trackField(TrackId id, TrackField field) const;
     /// Owns canonical credits at this revision; a present empty list remains

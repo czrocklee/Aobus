@@ -13,6 +13,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -40,6 +41,63 @@ namespace ao::uimodel::test
       return TrackFieldEditValue{std::in_place_type<std::uint16_t>, value};
     }
   } // namespace
+
+  TEST_CASE("Track segment properties - an unloaded form has no CUE rows", "[uimodel][unit][property]")
+  {
+    auto const form = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    CHECK(form.segmentRows().empty());
+  }
+
+  TEST_CASE("Track segment properties - sparse ordinals retain frame-derived exclusive boundaries",
+            "[uimodel][unit][property]")
+  {
+    auto const rows = formatTrackSegmentRows(ao::test::englishMessageCatalog(), 7, 588, 588, 44100);
+    REQUIRE(rows.size() == 3);
+    CHECK(rows[0].label == "CUE Track Number");
+    CHECK(rows[0].text == "7");
+    CHECK(rows[1].text == "0:00.013");
+    CHECK(rows[2].label == "End Time (exclusive)");
+    CHECK(rows[2].text == "0:00.026");
+  }
+
+  TEST_CASE("Track segment properties - positions floor to whole milliseconds", "[uimodel][unit][property]")
+  {
+    auto const rows = formatTrackSegmentRows(ao::test::englishMessageCatalog(), 99, 191, 1, 192000);
+    REQUIRE(rows.size() == 3);
+    CHECK(rows[0].text == "99");
+    CHECK(rows[1].text == "0:00.000");
+    CHECK(rows[2].text == "0:00.001");
+    // One CUE frame at 44.1 kHz is 588 PCM frames; the 75th lands on a second.
+    auto const cueFrames =
+      formatTrackSegmentRows(ao::test::englishMessageCatalog(), 1, std::uint64_t{588} * 74, 588, 44100);
+    REQUIRE(cueFrames.size() == 3);
+    CHECK(cueFrames[1].text == "0:00.986");
+    CHECK(cueFrames[2].text == "0:01.000");
+  }
+
+  TEST_CASE("Track segment properties - integer formatting retains large coordinates and high rates",
+            "[uimodel][unit][property]")
+  {
+    auto const large =
+      formatTrackSegmentRows(ao::test::englishMessageCatalog(), 2, std::numeric_limits<std::uint64_t>::max() - 1, 1, 1);
+    REQUIRE(large.size() == 3);
+    CHECK(large[1].text == "307445734561825860:14.000");
+    CHECK(large[2].text == "307445734561825860:15.000");
+    auto const fast =
+      formatTrackSegmentRows(ao::test::englishMessageCatalog(), 2, 1, 1, std::numeric_limits<std::uint32_t>::max());
+    REQUIRE(fast.size() == 3);
+    CHECK(fast[1].text == "0:00.000");
+    CHECK(fast[2].text == "0:00.000");
+  }
+
+  TEST_CASE("Track segment properties - invalid rate and overflowing range render no invented times",
+            "[uimodel][unit][property]")
+  {
+    CHECK(formatTrackSegmentRows(ao::test::englishMessageCatalog(), 2, 1, 1, 0).empty());
+    CHECK(
+      formatTrackSegmentRows(ao::test::englishMessageCatalog(), 2, std::numeric_limits<std::uint64_t>::max(), 1, 44100)
+        .empty());
+  }
 
   TEST_CASE("TrackPropertiesFormModel - merges multi-track field state", "[uimodel][unit][property]")
   {

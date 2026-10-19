@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/library/CueBinding.h"
 #include "runtime/library/LibraryCommandsInternal.h"
 #include "runtime/library/LibraryWriteLane.h"
 #include "runtime/library/MediaTrack.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/FileTimestamp.h>
 #include <ao/async/Task.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileTimeConversion.h>
@@ -26,6 +28,7 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <stop_token>
 #include <string>
 #include <system_error>
 #include <unordered_set>
@@ -140,6 +143,9 @@ namespace ao::rt
     {
       ImportTarget target;
       MediaTrack mediaTrack;
+      CueBinding binding;
+      std::uint64_t fileSize = 0;
+      FileTimestamp mtime{};
     };
 
     Result<PreparedTrackImport> prepareTrackImport(library::MusicLibrary const& library,
@@ -159,7 +165,94 @@ namespace ao::rt
         return std::unexpected{mediaTrackRes.error()};
       }
 
-      return PreparedTrackImport{.target = std::move(*targetRes), .mediaTrack = std::move(*mediaTrackRes)};
+      auto sheetsRes = readCueDirectory(library.rootPath(), targetRes->fullPath.parent_path());
+
+      if (!sheetsRes)
+      {
+        return std::unexpected{sheetsRes.error()};
+      }
+
+      auto binding = bindCueSheet(
+        utility::pathToGenericUtf8(utility::pathFromUtf8(targetRes->uri).filename()), *mediaTrackRes, *sheetsRes);
+
+      if (binding.state == CueBindingState::Undetermined)
+      {
+        return makeError(Error::Code::InvalidInput, binding.errorMessage);
+      }
+
+      auto fileEc = std::error_code{};
+      auto const fileSize = std::filesystem::file_size(targetRes->fullPath, fileEc);
+      auto const timestampRes = library::lastWriteTimestamp(targetRes->fullPath);
+
+      if (fileEc)
+      {
+        return makeError(Error::Code::IoError, "Failed to inspect track file: " + fileEc.message());
+      }
+
+      if (!timestampRes)
+      {
+        return std::unexpected{timestampRes.error()};
+      }
+
+      return PreparedTrackImport{.target = std::move(*targetRes),
+                                 .mediaTrack = std::move(*mediaTrackRes),
+                                 .binding = std::move(binding),
+                                 .fileSize = fileSize,
+                                 .mtime = *timestampRes};
+    }
+
+    Result<> revalidateTrackImport(library::MusicLibrary const& library,
+                                   std::filesystem::path const& path,
+                                   PreparedTrackImport const& prepared)
+    {
+      auto targetRes = importTargetForPath(library, path);
+
+      if (!targetRes)
+      {
+        return std::unexpected{targetRes.error()};
+      }
+
+      if (targetRes->fullPath != prepared.target.fullPath || targetRes->uri != prepared.target.uri)
+      {
+        return makeError(Error::Code::Conflict, "Track file path changed after preparation; retry the import");
+      }
+
+      auto ec = std::error_code{};
+      auto const fileSize = std::filesystem::file_size(targetRes->fullPath, ec);
+
+      if (ec)
+      {
+        return makeError(Error::Code::IoError, "Failed to revalidate track file: " + ec.message());
+      }
+
+      auto const timestampRes = library::lastWriteTimestamp(targetRes->fullPath);
+
+      if (!timestampRes)
+      {
+        return std::unexpected{timestampRes.error()};
+      }
+
+      if (fileSize != prepared.fileSize || *timestampRes != prepared.mtime)
+      {
+        return makeError(Error::Code::Conflict, "Track file changed after preparation; retry the import");
+      }
+
+      // Re-read both candidate sets, including absence and sheet byte digests,
+      // on the same admitted physical path used for the file proof.
+      auto sheetsRes = readCueDirectory(library.rootPath(), targetRes->fullPath.parent_path());
+
+      if (!sheetsRes)
+      {
+        return std::unexpected{sheetsRes.error()};
+      }
+
+      if (cueEvidenceFor(utility::pathToGenericUtf8(utility::pathFromUtf8(targetRes->uri).filename()), *sheetsRes) !=
+          prepared.binding.evidence)
+      {
+        return makeError(Error::Code::Conflict, "CUE sheets changed after preparation; retry the import");
+      }
+
+      return {};
     }
 
     struct ListOrderRemovalResult final
@@ -279,7 +372,7 @@ namespace ao::rt
 
     struct CreateTrackFacts final
     {
-      TrackId provisionalTrackId{};
+      std::vector<TrackId> provisionalTrackIds;
       std::string uri{};
       std::string title{};
       std::string artist{};
@@ -288,7 +381,8 @@ namespace ao::rt
     CreateTrackReply committedCreateTrackReply(CreateTrackFacts facts)
     {
       return CreateTrackReply{
-        .trackId = facts.provisionalTrackId,
+        .trackId = facts.provisionalTrackIds.front(),
+        .trackIds = std::move(facts.provisionalTrackIds),
         .uri = std::move(facts.uri),
         .title = std::move(facts.title),
         .artist = std::move(facts.artist),
@@ -302,9 +396,10 @@ namespace ao::rt
     }
 
     Result<CreateTrackFacts> applyCreateTrackInTransaction(library::LibraryWrite& transaction,
-                                                           ImportTarget const& target,
-                                                           MediaTrack& mediaTrack)
+                                                           PreparedTrackImport& prepared)
     {
+      auto const& target = prepared.target;
+      auto& mediaTrack = prepared.mediaTrack;
       auto writer = transaction.tracks();
 
       if (auto const optExistingManifest = writer.manifest(target.uri); optExistingManifest)
@@ -314,41 +409,49 @@ namespace ao::rt
 
       auto& builder = mediaTrack.builder();
       builder.property().uri(target.uri);
-      auto const title = std::string{builder.metadata().title()};
-      auto const artist = std::string{builder.metadata().artist()};
+      auto title = std::string{builder.metadata().title()};
+      auto artist = std::string{builder.metadata().artist()};
 
-      auto fileEc = std::error_code{};
-      auto const fileSize = std::filesystem::file_size(target.fullPath, fileEc);
+      auto ids = std::vector<TrackId>{};
+      auto manifest = library::FileManifestBuilder::makeEmpty();
+      manifest.fileSize(prepared.fileSize).mtime(prepared.mtime);
 
-      if (fileEc)
+      if (prepared.binding.state == CueBindingState::Bound)
       {
-        return makeError(
-          Error::Code::IoError,
-          std::format("failed to inspect track file '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
+        auto builders = makeCueTracks(mediaTrack, prepared.binding);
+        title = builders.front().metadata().title();
+        artist = builders.front().metadata().artist();
+
+        for (auto& segmentBuilder : builders)
+        {
+          segmentBuilder.property().uri(target.uri);
+        }
+
+        auto const optTotalFrames = mediaTrack.optTotalFrames();
+        AO_INVARIANT(optTotalFrames, "Bound CUE import lost its exact carrier extent");
+        auto createRes = writer.createCarrier(builders, manifest, *optTotalFrames);
+
+        if (!createRes)
+        {
+          return detail::storageError("Failed to create carrier Tracks", createRes.error());
+        }
+
+        ids = std::move(*createRes);
       }
-
-      auto const timestampRes = library::lastWriteTimestamp(target.fullPath);
-
-      if (!timestampRes)
+      else
       {
-        auto error = timestampRes.error();
-        error.message = std::format(
-          "failed to read track file timestamp '{}': {}", utility::pathToUtf8(target.fullPath), error.message);
-        return std::unexpected{std::move(error)};
-      }
+        auto createRes = writer.create(builder, manifest);
 
-      auto manifestBuilder = library::FileManifestBuilder::makeEmpty();
-      manifestBuilder.fileSize(static_cast<std::uint64_t>(fileSize)).mtime(*timestampRes);
+        if (!createRes)
+        {
+          return detail::storageError("Failed to create track data", createRes.error());
+        }
 
-      auto createRes = writer.create(builder, manifestBuilder);
-
-      if (!createRes)
-      {
-        return detail::storageError("Failed to create track data", createRes.error());
+        ids.push_back(*createRes);
       }
 
       return CreateTrackFacts{
-        .provisionalTrackId = *createRes,
+        .provisionalTrackIds = std::move(ids),
         .uri = target.uri,
         .title = title,
         .artist = artist,
@@ -389,12 +492,21 @@ namespace ao::rt
 
     auto& prepared = *preparedRes;
 
-    auto executionRes = co_await detail::executeInteractiveMutationAsync(
+    auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(
       std::move(submission),
-      "Create track",
+      {},
+      [this, &path, &prepared](std::stop_token) { return revalidateTrackImport(library, path, prepared); });
+
+    if (!mutationRes)
+    {
+      co_return std::unexpected{mutationRes.error()};
+    }
+
+    auto mutation = std::move(*mutationRes);
+    auto executionRes = co_await mutation.executeAsync(
       [&prepared](library::LibraryWrite& transaction) -> Result<OperationOutcome<CreateTrackFacts>>
       {
-        auto factsRes = applyCreateTrackInTransaction(transaction, prepared.target, prepared.mediaTrack);
+        auto factsRes = applyCreateTrackInTransaction(transaction, prepared);
 
         if (!factsRes)
         {
@@ -402,12 +514,13 @@ namespace ao::rt
         }
 
         auto facts = std::move(*factsRes);
-        auto const trackId = facts.provisionalTrackId;
+        auto trackIds = facts.provisionalTrackIds;
         return Changed<CreateTrackFacts>{
           .value = std::move(facts),
-          .changeSet = LibraryChangeSet{.tracksInserted = {trackId}},
+          .changeSet = LibraryChangeSet{.tracksInserted = std::move(trackIds)},
         };
-      });
+      },
+      "Create track");
 
     if (!executionRes)
     {
@@ -431,10 +544,20 @@ namespace ao::rt
 
     auto& prepared = *preparedRes;
 
-    auto factsRes = co_await detail::applyInteractivePreviewAsync(
+    auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(
       std::move(submission),
-      [&prepared](library::LibraryWrite& transaction)
-      { return applyCreateTrackInTransaction(transaction, prepared.target, prepared.mediaTrack); });
+      {},
+      [this, &path, &prepared](std::stop_token) { return revalidateTrackImport(library, path, prepared); });
+
+    if (!mutationRes)
+    {
+      co_return std::unexpected{mutationRes.error()};
+    }
+
+    auto mutation = std::move(*mutationRes);
+    auto factsRes = mutation.apply([&prepared](library::LibraryWrite& transaction)
+                                   { return applyCreateTrackInTransaction(transaction, prepared); });
+    mutation.abort();
 
     if (!factsRes)
     {

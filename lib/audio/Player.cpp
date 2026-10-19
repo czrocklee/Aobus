@@ -1282,6 +1282,24 @@ namespace ao::audio
     return barrier;
   }
 
+  std::optional<Engine::PreparedCancellationBarrier> Player::tryStopWithBarrier(
+    Engine::PlaybackItemId const expectedItemId)
+  {
+    _implPtr->ensureOnExecutor();
+    auto const optBarrier = _implPtr->enginePtr->tryStopWithBarrier(expectedItemId);
+
+    if (!optBarrier)
+    {
+      return std::nullopt;
+    }
+
+    _implPtr->cancelStartPreparation();
+    _implPtr->cancelLookaheadPreparation();
+    _implPtr->acceptAudioBarrier(*optBarrier);
+    std::ignore = _implPtr->resetPlaybackGraph();
+    return optBarrier;
+  }
+
   void Player::stop()
   {
     std::ignore = stopWithBarrier();

@@ -16,6 +16,7 @@
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
@@ -337,8 +338,51 @@ namespace ao::rt
       return false;
     }
 
-    // Open admission binds every manifest row to exactly one live track.
+    // Open admission binds every manifest row to one file's live Tracks.
     return _implPtr->library.manifest().reader(_implPtr->transaction).get(uri).has_value();
+  }
+
+  std::optional<library::TrackSegment> LibrarySnapshot::trackSegment(TrackId const id) const
+  {
+    auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Cold);
+    return optView && optView->isColdValid() ? optView->property().segment() : std::nullopt;
+  }
+
+  bool LibrarySnapshot::containsTrackUri(std::string_view const uri, std::uint16_t const ordinal) const
+  {
+    if (auto const parsedRes = library::LibraryUri::parse(uri); !parsedRes || parsedRes->value() != uri)
+    {
+      return false;
+    }
+
+    auto const optManifest = _implPtr->library.manifest().reader(_implPtr->transaction).get(uri);
+
+    if (!optManifest)
+    {
+      return false;
+    }
+
+    if (ordinal == 0)
+    {
+      return optManifest->segmentCount() == 0;
+    }
+
+    auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
+
+    return std::ranges::any_of(optManifest->segmentTrackIds(),
+                               [&reader, ordinal](TrackId const id)
+                               {
+                                 auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Cold);
+
+                                 if (!optView || !optView->isColdValid())
+                                 {
+                                   return false;
+                                 }
+
+                                 auto const optSegment = optView->property().segment();
+                                 return optSegment && optSegment->ordinal == ordinal;
+                               });
   }
 
   ResourceId LibrarySnapshot::trackCoverArtId(TrackId id) const

@@ -7,6 +7,7 @@
 #include "../TrackFieldValue.h"
 #include <ao/CoreIds.h>
 #include <ao/library/Credits.h>
+#include <ao/library/TrackLayout.h>
 
 #include <array>
 #include <cstdint>
@@ -47,6 +48,8 @@ namespace ao::rt
     std::vector<TrackId> trackIds{};
 
     ResourceId singleCoverArtId{kInvalidResourceId};
+    // Only a single loaded Track has a segment; multi-selection never invents a range.
+    std::optional<library::TrackSegment> optSegment{};
     std::array<AggregateValue<TrackFieldRawValue>, kTrackFieldCount> fields{};
     // Complete owning sections compare names, roles, order and multiplicity.
     // Empty is a common value; absent means no track was loaded. Section

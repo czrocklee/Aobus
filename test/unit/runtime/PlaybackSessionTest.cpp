@@ -735,6 +735,7 @@ namespace ao::rt::test
       .sortBy = {{.field = TrackSortField::Title, .ascending = false}},
       .currentTrackId = TrackId{42},
       .currentTrackUri = "albums/first.flac",
+      .currentTrackOrdinal = 7,
       .anchorIndex = 3,
       .positionMs = 900,
       .shuffleMode = ShuffleMode::On,
@@ -748,6 +749,7 @@ namespace ao::rt::test
     CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "5");
     CHECK(yaml::scalarView(tree.rootref()["libraryId"]) == "123e4567-e89b-12d3-a456-426614174000");
     CHECK(yaml::scalarView(tree.rootref()["currentTrackUri"]) == "albums/first.flac");
+    CHECK(yaml::scalarView(tree.rootref()["currentTrackOrdinal"]) == "7");
     CHECK(yaml::scalarView(tree.rootref()["sortBy"][0]["field"]) == "13");
 
     auto const decodedRes = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
@@ -1288,6 +1290,11 @@ namespace ao::rt::test
       payload.sourceListId = kInvalidListId;
     }
 
+    SECTION("out-of-range segment ordinal is rejected")
+    {
+      payload.currentTrackOrdinal = 100;
+    }
+
     SECTION("anchor overflow is rejected")
     {
       payload.anchorIndex = std::numeric_limits<std::uint64_t>::max();
@@ -1824,7 +1831,7 @@ namespace ao::rt::test
     CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 0);
   }
 
-  TEST_CASE("PlaybackSession - final seeks to a restored endpoint restart from zero",
+  TEST_CASE("PlaybackSession - restored endpoint seek is held until resume and saved as zero",
             "[runtime][unit][playback-session][async]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -1881,18 +1888,24 @@ namespace ao::rt::test
     }
 
     auto const sought = playback.snapshot().transport;
-    REQUIRE(sought.elapsed == std::chrono::milliseconds{0});
+    REQUIRE(sought.elapsed == restored.duration);
     CHECK(sought.transport == audio::Transport::Idle);
     CHECK(sought.occurrenceId == restored.occurrenceId);
     CHECK(sought.finalSeekRevision.value == restored.finalSeekRevision.value + 1);
+    REQUIRE(runtimePtr->savePlaybackSession());
+    CHECK(storedSession(runtimePtr->workspaceConfigStore()).positionMs == 0);
 
-    // Resume must consume the normalized token, not merely display zero while
-    // retaining an end-of-stream offset for the later audio start.
+    // Resume consumes the live end request, rather than reopening at zero.
     playback.commands().resume();
-    REQUIRE(
-      executor->tryDrainUntil([&] { return playback.snapshot().transport.transport == audio::Transport::Playing; }));
+    executor->runUntilIdle();
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
+    CHECK(playback.snapshot().transport.occurrenceId.value == 0);
+
+    // Persistence has a separate normalization rule: the saved subject restarts.
+    auto const restartedRes = runtimePtr->restorePlaybackSession();
+    REQUIRE(restartedRes);
+    REQUIRE(restartedRes->restored);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == current);
-    CHECK(playback.snapshot().transport.occurrenceId != restored.occurrenceId);
     CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{0});
   }
 

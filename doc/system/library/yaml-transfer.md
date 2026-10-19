@@ -47,7 +47,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - A prepared plan can commit only against the exact source bytes and target runtime, library identity, and committed revision it previewed.
 - A collection field that is present replaces its complete baseline collection; an omitted collection preserves its baseline.
 - Restore scope is determined by payload mode, never inferred from omitted collections.
-- A payload has at most one track record for each canonical URI; merge matches tracks only by canonical manifest URI, and payload track IDs exist only for intra-payload references.
+- A payload has at most one whole-file record for each canonical URI. Several records may share a URI only as one carrier's segments, with distinct ordinals and agreeing file facts and extent. Merge matches a whole-file Track by canonical URI and a segment by `(uri, ordinal)`. Payload track IDs exist only for intra-payload references.
 - Lists in the payload are recreated with new target IDs and then have parents remapped.
 - A List filter and saved order are independent: the filter determines local membership, while order references preserve rank only.
 - Track preparation validates credit kinds, text, dates, counts, and complete-record bounds before interning dictionary text or creating cover resources. NFC interning can still fail exceptionally after staging begins; the root import transaction must abort on every post-effect failure, with no per-item recovery.
@@ -96,10 +96,11 @@ It does not reuse a nullable branch inside the live operation and is not the fro
 | `delta` | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
 | `metadata` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Never emitted. | Omitted. | Included. |
 | `full` | All non-empty scalar metadata and explicit Credits sequence, including empty. | Complete map when non-empty. | Complete sequence when non-empty. | Reference sequence, including empty, plus the `library.resources` table. | Included, including zero values. | Included. |
-| `list-only` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references. |
+| `list-only` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references; a segment reference adds `ordinal`. |
 
 No mode carries a cover byte; `full` carries each cover's digest, length, picture type, and order, and names each distinct cover once.
 No mode is a copy of the files' tags either: a document carries only what the database holds, and a source field that the [source field mapping](../../reference/media/audio-file.md#source-field-mapping) does not import is never there.
+Every mode that emits track records also emits `segment` for a segment Track, including `delta` and `metadata`. Without it those records would be duplicate URIs, and those modes otherwise omit the technical facts a restore needs to derive duration. The field shape is the [segment format](../../reference/library/format/yaml.md#segment).
 A `full` export opens no audio file and needs none to succeed, because a descriptor is a database fact.
 `delta` and `metadata` omit covers entirely: a mode whose consumer reconstructs the file baseline would otherwise overwrite the art that baseline just read with a sequence the exporting database may no longer agree with.
 
@@ -124,14 +125,29 @@ Restore chooses a track baseline by payload mode:
 - `metadata` may retain file technical properties and the file's current cover references, but clears file-derived curated metadata, tags, and custom metadata before applying the payload;
 - when an optional file baseline cannot be opened or parsed, restore starts from an empty track.
 
+Restore preparation does not take file size, modification time, audio identity, or status from the target manifest it later clears. [Track overlays](#track-overlays) own that facts baseline.
+
 ### Merge
 
 Merge preserves target tracks and lists absent from the payload.
-An imported track whose canonical URI matches a target manifest row updates that track; an unmatched URI creates a track and manifest row.
+An imported whole-file record whose canonical URI matches a whole-file manifest row updates that track; an unmatched whole-file URI creates a track and manifest row.
+A whole-file record meeting a carrier, or a carrier record meeting a whole-file row, rejects the document. Merge never converts one form into the other.
 
 The existing target track is the merge baseline.
-For `delta` and `metadata`, a readable source file refreshes technical properties; delta also supplies the file's cover references when the baseline has none.
+For `delta` and `metadata`, a readable source file refreshes technical properties of a whole-file Track; delta also supplies the file's cover references when the baseline has none.
 Payload fields then overlay that baseline.
+A segment Track keeps its sample rate, range, and derived duration across that refresh.
+
+### Carrier tracks
+
+`full` restore opens no audio file, including when the payload already supplies the carrier extent, sample rate, and file facts needed to rebuild the rows. It validates each carrier's ranges against `total-frames`, takes the hot sample rate from `segment`, and leaves physical truth to the next scan and to playback. The restored carrier's audio identity stays pending, and its status stays the builder default `Available`. That default is not an observation that the file is present.
+`delta` and `metadata` read a present file for technical Track properties and omitted file size and modification time, not for an audio-identity fingerprint. A readable carrier whose exact extent or sample rate differs from `total-frames` or `segment.sample-rate` rejects the document. A missing or unreadable file does not invent those facts and does not by itself reject a structurally valid segment record.
+
+Merge validates the final carrier, not only the document, and fails the whole import if that carrier would be invalid.
+A payload carrier meeting a target carrier first requires the target's extent and sample rate, whether or not any ordinal matches.
+It then matches by `(uri, ordinal)`, requires equal ranges for a matched segment, and may add an unmatched ordinal only when the final ranges stay inside the extent and do not overlap.
+Merge never edits a stored range. File facts must agree across the payload records of one URI.
+The same check runs again inside the write transaction against the complete prepare-time member set, so a member deleted or added after preparation, including an ordinal the payload does not touch, makes the import stale rather than committing a partial carrier. The offline importer reports that membership change as `InvalidState`. A live `LibraryJobs` apply still rejects any target revision change as `Conflict` before applying.
 
 Merge does not match or update existing lists.
 Every payload list is created as a new target list, after which parent IDs are remapped.
@@ -148,9 +164,12 @@ Collections use replacement semantics:
 - present empty sequence or map: clear the complete collection.
 
 A recognized codec token replaces the baseline codec; any other token rejects the payload.
-Manifest facts start from an existing manifest row, otherwise current filesystem facts when the path exists, otherwise a zero file size and no stored modification time.
-A present `file-size` field overrides that fact.
-A present `mtime` value overrides the modification-time fact: the map form stores its instant, and an explicit YAML null clears the stored modification time to absent; an omitted `mtime` preserves the baseline.
+Manifest file facts follow the import mode, not a single old-target baseline.
+Merge starts from the existing target manifest row when the canonical URI matches. A carrier row keeps its audio identity and status. A whole-file row contributes its stored file size and modification time. The payload then overlays those facts.
+Restore does not consult the target row it clears. It starts from the no-row baseline: a present `file-size` or `mtime` wins; an omitted permitted fact is seeded from the filesystem when that path is present; absent media leaves an omitted fact as a zero file size and no stored modification time. An unmatched URI uses that same no-row baseline in either mode.
+Restore does not inherit audio identity or status from the old target, including a carrier, and it does not fingerprint the file. Identity stays pending: zero payload length and an all-zero signature. Status stays the builder default `Available`, which is not a claim that an absent file is physically available.
+A present `file-size` field overrides the selected baseline.
+A present `mtime` value overrides the modification-time fact: the map form stores its instant, and an explicit YAML null clears the stored modification time to absent; an omitted `mtime` preserves the selected baseline.
 
 The performance-information fields follow the same overlay shape with two narrow rules.
 A `recording-date` scalar holds its value. Empty scalar text is the clear form that stores the absence sentinel: a quoted empty scalar or a present empty plain scalar (`recording-date:`). The literal texts `null` and `~` are nonempty and are not that clear form. An omitted key preserves the baseline date. The [format reference](../../reference/library/format/yaml.md#recording-date) owns the scalar grammar.
@@ -184,6 +203,7 @@ No rescan is required between a `full` restore and a cover appearing.
 
 Lists are created in payload order, then parent relationships are applied in a second pass so a child may precede its parent.
 Saved order resolves payload IDs through tracks created or updated by this import and URI references through the target manifest.
+A `uri` reference without `ordinal` matches only a whole-file Track. With `ordinal`, it matches that segment of the URI. Either miss is a dangling reference, not a match against another member.
 
 An empty or omitted filter means the identity predicate.
 A nonempty filter is imported byte-exactly even when it does not parse or compile under the current query grammar, because the database can already hold such text and the exporter writes it unchanged; rejecting it would leave that library's backup unrestorable.
@@ -205,7 +225,7 @@ Every import, preview, and plan returns an `ImportReport`:
 | `payloadMode` | `delta`, `metadata`, `full`, or `list-only`. |
 | `targetScope` | `ImportTargetScope::Library` for track-bearing payloads or `ImportTargetScope::Lists` for `list-only`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
-| `tracksUpdated` | Imported records that match a target manifest URI. |
+| `tracksUpdated` | Imported records that match an existing target track: a whole-file URI, or a carrier `(uri, ordinal)`. |
 | `tracksDeleted` | Pre-restore tracks when scope clears tracks; otherwise `0`. |
 | `listsCreated` | Payload lists created by the import. |
 | `listsDeleted` | Pre-restore lists; otherwise `0`. |
@@ -308,6 +328,7 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 - [`LibraryExportImportCoverArtTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) proves the resource table, reference closure, export determinism, and each mode's cover terminal state.
 - [`LibraryExportImportListTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
 - [`LibraryYamlSchemaTest.cpp`](../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
+- [`CueYamlTest.cpp`](../../../test/unit/runtime/CueYamlTest.cpp) proves segment emission, offline restore, contradictory duration and sample rate, and atomic carrier merge.
 - [`LibraryExportImportErrorTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
 - [`LibraryYamlImporterTest.cpp`](../../../test/unit/runtime/library/LibraryYamlImporterTest.cpp) proves recording-date and credit preflight admission and whole-document rejection.
 - [`LibraryYamlExporterTest.cpp`](../../../test/unit/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.

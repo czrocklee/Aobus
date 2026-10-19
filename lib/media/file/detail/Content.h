@@ -84,6 +84,10 @@ namespace ao::media::file::detail
     AudioCodec codec = AudioCodec::Unknown;
     Channels channels{};
     BitDepth bitDepth{};
+    std::optional<std::uint64_t> optExactFrameCount{};
+    // Distinct nonempty embedded CUE sheets in source order. A repeated identical
+    // comment adds nothing; differing comments stay visible to binding.
+    std::vector<std::string_view> cueSheets{};
     std::vector<PictureView> pictures;
     // Source order; Orchestra candidates stay separate until whole-file precedence resolves.
     std::vector<CreditView> credits;
@@ -183,6 +187,7 @@ namespace ao::media::file::detail
       PropertyBuilder& codec(AudioCodec value);
       PropertyBuilder& channels(Channels value);
       PropertyBuilder& bitDepth(BitDepth value);
+      PropertyBuilder& exactFrameCount(std::uint64_t value);
 
       std::chrono::milliseconds duration() const { return _content.duration; }
       Bitrate bitrate() const { return _content.bitrate; }
@@ -232,11 +237,15 @@ namespace ao::media::file::detail
     CoverArtBuilder const& coverArt() const { return _coverArt; }
 
     std::string_view own(std::string value);
+    // Borrows source bytes through the Content lifetime, like the text setters.
+    void cueSheet(std::string_view value);
 
     Content finish() &&;
 
   private:
     Content _content;
+    // Build-only membership; cueSheets retains the first-seen visitation order.
+    std::unordered_set<std::string_view> _cueSheetValues;
     MetadataBuilder _metadata;
     PropertyBuilder _property;
     CoverArtBuilder _coverArt;

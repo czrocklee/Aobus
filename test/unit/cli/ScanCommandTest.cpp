@@ -11,9 +11,11 @@
 #include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -91,6 +93,141 @@ namespace ao::cli::test
     CHECK(contains(result.out, "1 missing file needs review"));
   }
 
+  TEST_CASE("CLI - scan reports missing CUE segments as actionable and restores deleted ordinals",
+            "[cli][integration][scan]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "image.flac");
+
+    {
+      auto sheet = std::ofstream{fixture.root() / "image.cue", std::ios::binary};
+      sheet << "FILE ignored.wav WAVE\nTRACK 03 AUDIO\nTITLE First\nINDEX 01 00:00:00\n"
+               "TRACK 09 AUDIO\nTITLE Second\nINDEX 01 00:00:01\n";
+      REQUIRE(sheet.good());
+    }
+
+    REQUIRE(fixture.run({"scan"}).status == 0);
+    auto const initial = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(initial.status == 0);
+    auto tree = parseYaml(initial.out);
+    auto const tracks = yaml::findChild(tree.rootref(), "tracks");
+    REQUIRE(tracks.num_children() == 2);
+    auto const removedId = std::string{yaml::scalarView(yaml::findChild(tracks[0], "id"))};
+    REQUIRE(fixture.run({"track", "delete", removedId}).status == 0);
+
+    auto const planned = fixture.run({"scan", "--dry-run"});
+    REQUIRE(planned.status == 0);
+    CHECK(contains(planned.out, "missing-segments 1"));
+    CHECK(contains(planned.out, "missing-segments image.flac"));
+    auto const jsonPlan = fixture.run({"-O", "json", "scan", "--dry-run"});
+    REQUIRE(jsonPlan.status == 0);
+    auto planTree = parseYaml(jsonPlan.out);
+    CHECK(yaml::scalarView(yaml::findChild(planTree.rootref(), "missingSegments")) == "1");
+    auto const items = yaml::findChild(planTree.rootref(), "items");
+    REQUIRE(items.num_children() == 1);
+    CHECK(yaml::scalarView(yaml::findChild(items[0], "type")) == "missing-segments");
+
+    REQUIRE(fixture.run({"scan"}).status == 0);
+    auto const restored = fixture.run({"track", "show"});
+    REQUIRE(restored.status == 0);
+    CHECK(contains(restored.out, "CUE Track Number: 3"));
+    CHECK(contains(restored.out, "CUE Track Number: 9"));
+  }
+
+  TEST_CASE("CLI - scan dry run lists accompanying CUE warnings while omitting healthy unchanged files",
+            "[cli][unit][scan]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "image.flac");
+    auto const writeSheet = [&](bool const hasChangedLayout)
+    {
+      auto sheet = std::ofstream{fixture.root() / "image.cue", std::ios::binary};
+      sheet << "FILE ignored.wav WAVE\nTRACK 03 AUDIO\nINDEX 01 00:00:00\nTRACK 09 AUDIO\n"
+            << (hasChangedLayout ? "INDEX 01 00:00:02\n" : "INDEX 01 00:00:01\n");
+      REQUIRE(sheet.good());
+    };
+    bool isCarrier = false;
+
+    SECTION("whole file gains a dividing sheet")
+    {
+      isCarrier = false;
+    }
+
+    SECTION("carrier sheet changes layout")
+    {
+      isCarrier = true;
+      writeSheet(false);
+    }
+
+    REQUIRE(fixture.run({"scan"}).status == 0);
+    auto const healthy = fixture.run({"-O", "json", "scan", "--dry-run"});
+    REQUIRE(healthy.status == 0);
+    auto healthyTree = parseYaml(healthy.out);
+    CHECK(yaml::scalarView(healthyTree.rootref()["unchanged"]) == "1");
+    CHECK(yaml::scalarView(healthyTree.rootref()["errors"]) == "0");
+    CHECK(yaml::scalarView(healthyTree.rootref()["warnings"]) == "0");
+    CHECK(healthyTree.rootref()["items"].num_children() == 0);
+    auto const healthyPlain = fixture.run({"scan", "--dry-run"});
+    REQUIRE(healthyPlain.status == 0);
+    CHECK_FALSE(contains(healthyPlain.out, "unchanged image.flac"));
+    writeSheet(isCarrier);
+    auto const* const expected =
+      isCarrier ? "CUE sheet differs from the imported segments: TRACK 3" : "Imported as a whole file";
+
+    auto const plain = fixture.run({"scan", "--dry-run"});
+    REQUIRE(plain.status == 0);
+    CHECK(contains(plain.out, "unchanged 1  errors 0  missing-segments 0  warnings 1"));
+    CHECK(contains(plain.out, std::string{"unchanged image.flac "} + expected));
+
+    for (auto const* const format : {"json", "yaml"})
+    {
+      auto const report = fixture.run({"-O", format, "scan", "--dry-run"});
+      REQUIRE(report.status == 0);
+      auto tree = parseYaml(report.out);
+      CHECK(yaml::scalarView(tree.rootref()["unchanged"]) == "1");
+      CHECK(yaml::scalarView(tree.rootref()["errors"]) == "0");
+      CHECK(yaml::scalarView(tree.rootref()["warnings"]) == "1");
+      auto const items = tree.rootref()["items"];
+      REQUIRE(items.num_children() == 1);
+      CHECK(yaml::scalarView(items[0]["type"]) == "unchanged");
+      CHECK(yaml::scalarView(items[0]["uri"]) == "image.flac");
+      CHECK(contains(yaml::scalarView(items[0]["message"]), expected));
+    }
+  }
+
+  TEST_CASE("CLI - scan and verify exit zero when only CUE warnings remain", "[cli][integration][scan]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "image.flac");
+    REQUIRE(fixture.run({"scan"}).status == 0);
+
+    for (auto const* const name : {"image.cue", "orphan.cue"})
+    {
+      auto sheet = std::ofstream{fixture.root() / name, std::ios::binary};
+      sheet << "FILE ignored.wav WAVE\nTRACK 03 AUDIO\nINDEX 01 00:00:00\nTRACK 09 AUDIO\nINDEX 01 00:00:01\n";
+      REQUIRE(sheet.good());
+    }
+
+    // A sheet beside a whole-file import and a sheet that names no audio file
+    // both ask for review; neither leaves an item unapplied.
+    for (std::int32_t pass = 0; pass < 2; ++pass)
+    {
+      CAPTURE(pass);
+      auto const scanned = fixture.run({"scan"});
+      CHECK(scanned.status == 0);
+      CHECK(contains(scanned.out, "errors 0  missing-segments 0  warnings 2"));
+      CHECK(contains(scanned.err, "warning: image.flac: Imported as a whole file"));
+      CHECK(contains(scanned.err, "warning: orphan.cue: No supported audio file has this CUE sheet's name"));
+      CHECK_FALSE(contains(scanned.err, "failed to"));
+      CHECK_FALSE(contains(scanned.err, "scan apply failed"));
+    }
+
+    auto const verified = fixture.run({"lib", "verify"});
+    CHECK(verified.status == 0);
+    CHECK(contains(verified.out, "image.flac"));
+    CHECK(contains(verified.out, "orphan.cue"));
+  }
+
   TEST_CASE("CLI - deferred scan fingerprints pending manifest rows on demand", "[cli][integration][scan]")
   {
     auto fixture = CliFixture{};
@@ -163,6 +300,54 @@ namespace ao::cli::test
     result = fixture.run({"scan", "--dry-run"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 0  unchanged 1  errors 0"));
+  }
+
+  TEST_CASE("CLI - scan reports one moved file for a two-member CUE carrier", "[cli][integration][scan]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "image.flac");
+
+    {
+      auto sheet = std::ofstream{fixture.root() / "image.cue", std::ios::binary};
+      sheet << "FILE ignored.wav WAVE\nTRACK 03 AUDIO\nTITLE First\nINDEX 01 00:00:00\n"
+               "TRACK 09 AUDIO\nTITLE Second\nINDEX 01 00:00:01\n";
+      REQUIRE(sheet.good());
+    }
+
+    REQUIRE(fixture.run({"scan"}).status == 0);
+    auto const before = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(before.status == 0);
+    auto beforeTree = parseYaml(before.out);
+    auto const beforeTracks = yaml::findChild(beforeTree.rootref(), "tracks");
+    REQUIRE(beforeTracks.num_children() == 2);
+    auto const firstId = std::string{yaml::scalarView(yaml::findChild(beforeTracks[0], "id"))};
+    auto const secondId = std::string{yaml::scalarView(yaml::findChild(beforeTracks[1], "id"))};
+    REQUIRE(firstId != secondId);
+
+    // Move the audio and its matching sidecar together so the plan is a pure
+    // carrier relink, not an orphan sheet or an unrelated diagnostic.
+    fs::rename(fixture.root() / "image.flac", fixture.root() / "renamed.flac");
+    fs::rename(fixture.root() / "image.cue", fixture.root() / "renamed.cue");
+
+    auto const applied = fixture.run({"scan"});
+    REQUIRE(applied.status == 0);
+    CHECK(applied.err.empty());
+    CHECK(contains(applied.out, "new 0  changed 0  moved 1  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(applied.out, "Relinked 1 moved file"));
+    CHECK_FALSE(contains(applied.out, "Relinked 2 moved files"));
+
+    auto const after = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(after.status == 0);
+    auto afterTree = parseYaml(after.out);
+    auto const afterTracks = yaml::findChild(afterTree.rootref(), "tracks");
+    REQUIRE(afterTracks.num_children() == 2);
+    auto const afterFirstId = std::string{yaml::scalarView(yaml::findChild(afterTracks[0], "id"))};
+    auto const afterSecondId = std::string{yaml::scalarView(yaml::findChild(afterTracks[1], "id"))};
+    CHECK(afterFirstId != afterSecondId);
+    CHECK(((afterFirstId == firstId && afterSecondId == secondId) ||
+           (afterFirstId == secondId && afterSecondId == firstId)));
+    CHECK(yaml::scalarView(yaml::findChild(afterTracks[0], "uri")) == "renamed.flac");
+    CHECK(yaml::scalarView(yaml::findChild(afterTracks[1], "uri")) == "renamed.flac");
   }
 
   TEST_CASE("CLI - scan and init report apply failures and exit non-zero", "[cli][integration][scan]")

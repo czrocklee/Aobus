@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -63,6 +64,12 @@ namespace ao::rt
           case media::file::NumberField::MovementTotal: metadata.movementTotal(value); break;
         }
       }
+
+      void exactFrameCount(std::uint64_t value) override { _optTotalFrames = value; }
+      void cueSheet(std::string_view value) override { _embeddedCueSheets.push_back(value); }
+
+      std::optional<std::uint64_t> optTotalFrames() const noexcept { return _optTotalFrames; }
+      std::vector<std::string_view> takeEmbeddedCueSheets() noexcept { return std::move(_embeddedCueSheets); }
 
       void codec(AudioCodec value) override { _builder.property().codec(value); }
       void duration(std::chrono::milliseconds duration) override { _builder.property().duration(duration); }
@@ -115,11 +122,19 @@ namespace ao::rt
       }
 
       library::TrackBuilder& _builder;
+      std::optional<std::uint64_t> _optTotalFrames;
+      std::vector<std::string_view> _embeddedCueSheets;
     };
   } // namespace
 
-  MediaTrack::MediaTrack(media::file::File file, library::TrackBuilder builder)
-    : _file{std::move(file)}, _builder{std::move(builder)}
+  MediaTrack::MediaTrack(media::file::File file,
+                         library::TrackBuilder builder,
+                         std::optional<std::uint64_t> optTotalFrames,
+                         std::vector<std::string_view> cueSheets)
+    : _file{std::move(file)}
+    , _builder{std::move(builder)}
+    , _optTotalFrames{optTotalFrames}
+    , _cueSheets{std::move(cueSheets)}
   {
   }
 
@@ -140,6 +155,7 @@ namespace ao::rt
       return std::unexpected{visitRes.error()};
     }
 
-    return MediaTrack{std::move(*fileRes), std::move(builder)};
+    return MediaTrack{
+      std::move(*fileRes), std::move(builder), visitor.optTotalFrames(), visitor.takeEmbeddedCueSheets()};
   }
 } // namespace ao::rt

@@ -147,18 +147,26 @@ They may report the mutation that would affect currently existing ids, but they 
 Track creation accepts an absolute path or a path relative to the configured music root.
 The resolved file must be a supported regular audio file inside that root and must not already have a manifest row.
 
-The command parses tags and technical properties, stages or reuses dictionary mappings, creates hot and cold track records and cover resources, writes an available manifest row, and commits these facts together.
+The command applies the same [CUE binding](scan-and-identity.md#cue-binding) as a scan. An undetermined sheet returns `InvalidInput` and imports nothing. A bound FLAC or WAV file creates one segment Track per CUE audio track through `createCarrier`; an unbound file creates one whole-file Track.
+The reply carries every created `TrackId`. The command parses tags and technical properties, stages or reuses dictionary mappings, creates hot and cold track records and cover resources, writes one available manifest row, and commits these facts together.
 Missing or out-of-root paths, unsupported or malformed media, filesystem failures, record limits, and duplicate manifest rows return a recoverable `Result` error.
 A path inside the root whose relative form exceeds the 1,976-byte URI limit returns `ValueTooLarge` with its byte count, even when the platform cannot resolve a path that long; such a path is measured by its spelling under either the configured or the resolved music root.
 A path whose URI fits but whose full path the platform cannot resolve returns `IoError`, and a name inside the root that forms no URI returns `InvalidInput` with the URI rule it breaks.
+
+After lane admission and before opening the write transaction, both creation and preview re-resolve the original input path and compare its canonical path and URI, file size and modification time, and both external CUE candidate sets including sheet-byte digests against preparation.
+Changed evidence returns `Conflict` and imports nothing; path-resolution and inspection failures retain their typed errors.
+A retry prepares the current binding rather than committing an obsolete whole-file form or immutable range.
+As with scan, this closes the preparation handoff; it is not an inode-level guarantee during file reads or after the final inspection.
 
 The preview validates and prepares the same import but does not expose a `TrackId`, because allocation is not durable before commit.
 
 ### Delete track
 
-Deleting an existing track removes its hot and cold records and manifest row and removes every occurrence from every saved List raw order in the same transaction.
+Deleting an existing whole-file track removes its hot and cold records and manifest row and removes every occurrence from every saved List raw order in the same transaction.
+Deleting a segment Track drops that member from the carrier list and from every saved List order. The manifest row, its extent, and the remaining members stay until the last member is deleted, which removes the row.
 The reply reports the deleted track and affected List ids.
 A missing track returns `NotFound`.
+A later scan of an unchanged carrier creates a deleted ordinal again. Removing every Track of a file and scanning again is how a user re-splits a file that was imported whole, or replaces a carrier after a sheet edit that the scan refused to apply.
 
 ## List commands
 
@@ -287,6 +295,8 @@ Exact records and identifier allocation belong to the [library database referenc
 - [`RuntimeFatalProbeTest.cpp`](../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) proves that `executeAsync()` after `apply()` and a pre-stamped operation changeset fail at the invariant boundary.
 
 ## Related documents
+
+- [CUE sheet](../../reference/media/cue-sheet.md)
 
 - [Decision 0015: sequence live-runtime library writes](../../decision/0015-sequence-live-runtime-library-writes.md)
 - [Library architecture](structure.md)

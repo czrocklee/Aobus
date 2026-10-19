@@ -13,6 +13,8 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/library/ScanApplyTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/FileTimestamp.h>
 #include <ao/async/OperationCancelled.h>
@@ -27,6 +29,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/media/file/File.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -638,5 +641,68 @@ namespace ao::rt::test
     CHECK(resumedRes->failureCount == 0);
     CHECK(hasManifestIdentity(ml, "a.flac"));
     CHECK(hasManifestIdentity(ml, "b.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - carrier backfill hashes one physical row and keeps all member IDs",
+            "[runtime][integration][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    std::filesystem::create_directories(musicRoot);
+    writeScanFlacMetadataFixture(musicRoot / "image.flac", {}, 88200);
+
+    {
+      auto output = std::ofstream{musicRoot / "image.cue", std::ios::binary};
+      output << "FILE \"image.wav\" WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00\n"
+                "TRACK 02 AUDIO\nINDEX 01 00:01:00\n";
+      REQUIRE(output.good());
+    }
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    auto importedRes =
+      ScanApplyOperation{
+        ml, std::move(plan), {}, {}, ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+        .run();
+    REQUIRE(importedRes);
+    REQUIRE(importedRes->insertedIds.size() == 2);
+    REQUIRE_FALSE(hasManifestIdentity(ml, "image.flac"));
+    auto hashCount = std::atomic<std::int32_t>{0};
+    auto options = AudioIdentityIndexer::Options{};
+    options.maxConcurrency = 2;
+    options.fingerprint = [&hashCount](std::filesystem::path const& path,
+                                       library::AudioIdentityProgressCallback progress,
+                                       std::stop_token token) -> Result<std::optional<library::AudioIdentity>>
+    {
+      ++hashCount;
+      auto fileRes = media::file::File::open(path);
+
+      if (!fileRes)
+      {
+        return std::unexpected{fileRes.error()};
+      }
+
+      auto payloadRes = fileRes->audioPayload();
+
+      if (!payloadRes)
+      {
+        return std::unexpected{payloadRes.error()};
+      }
+
+      return library::readAudioIdentity(payloadRes->bytes, std::move(progress), token);
+    };
+    auto res = runIndexPending(ml, std::move(options));
+    REQUIRE(res);
+    CHECK(res->completedCount == 1);
+    CHECK(res->failureCount == 0);
+    CHECK(hashCount.load() == 1);
+    auto transaction = ml.readTransaction();
+    auto optManifest = ml.manifest().reader(transaction).get("image.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->segmentCount() == 2);
+    CHECK(optManifest->totalFrames() == 88200);
+    CHECK(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
+    auto ids = std::vector<TrackId>{optManifest->segmentTrackIds().begin(), optManifest->segmentTrackIds().end()};
+    CHECK(ids == importedRes->insertedIds);
   }
 } // namespace ao::rt::test

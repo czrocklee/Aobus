@@ -24,12 +24,14 @@ namespace ao::cli::test
     auto result = fixture.run({"init"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 2  changed 0  moved 0  missing 0  unchanged 0  errors 0"));
+    CHECK(contains(
+      result.out, "new 2  changed 0  moved 0  missing 0  unchanged 0  errors 0  missing-segments 0  warnings 0"));
 
     result = fixture.run({"init"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 0  unchanged 2  errors 0"));
+    CHECK(contains(
+      result.out, "new 0  changed 0  moved 0  missing 0  unchanged 2  errors 0  missing-segments 0  warnings 0"));
 
     result = fixture.run({"-O", "json", "track", "show"});
     REQUIRE(result.status == 0);
@@ -121,6 +123,24 @@ namespace ao::cli::test
     auto initTree = parseYaml(result.out);
     CHECK(yaml::scalarView(initTree.rootref()["new"]) == "1");
     CHECK(yaml::scalarView(initTree.rootref()["dryRun"]) == "false");
+    CHECK(yaml::scalarView(initTree.rootref()["missingSegments"]) == "0");
+
+    fixture.copyAudio("hires.flac", "created.flac");
+    auto const createPath = (fixture.root() / "created.flac").string();
+    result = fixture.run({"-O", "json", "track", "create", createPath, "--dry-run"});
+    REQUIRE(result.status == 0);
+    auto const previewTree = parseYaml(result.out);
+    CHECK_FALSE(previewTree.rootref().has_child("trackId"));
+    REQUIRE(previewTree.rootref()["trackIds"].is_seq());
+    CHECK(previewTree.rootref()["trackIds"].num_children() == 0);
+
+    result = fixture.run({"-O", "json", "track", "create", createPath});
+    REQUIRE(result.status == 0);
+    auto const trackCreateTree = parseYaml(result.out);
+    REQUIRE(trackCreateTree.rootref()["trackIds"].is_seq());
+    REQUIRE(trackCreateTree.rootref()["trackIds"].num_children() == 1);
+    CHECK(yaml::scalarView(trackCreateTree.rootref()["trackIds"][0]) ==
+          yaml::scalarView(trackCreateTree.rootref()["trackId"]));
 
     result = fixture.run({"-O", "json", "list", "create", "--name", "Machine"});
     REQUIRE(result.status == 0);

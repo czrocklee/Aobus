@@ -94,6 +94,25 @@ stream has no Xing or VBRI seek table. Seek rejects negative offsets and offsets
 beyond a known exact duration; sequential decode and stable EOF behavior remain
 unchanged. The scan performs file-size-linear work during decoder preparation.
 
+## Segment playback
+
+A library segment carries a half-open PCM frame range, the carrier's exact total frame count, and its stored positive sample rate in `PlaybackInput`.
+Both the inspection and final decoder are wrapped by the segment adapter.
+Their source rate and exact extent must match the stored structure before any PCM is exposed; a mismatch is `FormatRejected`.
+A decoder without an authoritative extent or exact frame seeking is `NotSupported` for segments, even if it can play the whole file.
+FLAC supplies its nonzero STREAMINFO total sample count and absolute-sample seek; WAV supplies its data-frame count and frame-aligned seek.
+
+All adapter coordinates are segment-relative, including `firstFrameIndex`, duration, and frame seek.
+A millisecond seek computes the relative frame with integer arithmetic, adds the stored start in frames, and discards any decoder lead-in by its actual frame indices.
+It never rounds the segment start through milliseconds.
+The exclusive end truncates the crossing block and produces stable EOF until a seek back inside; the last frame remains playable.
+An inner EOF before the declared segment end is `DecodeFailed`, including a payload truncated behind an intact header.
+
+The displayed duration is floored milliseconds, not the adapter's end marker.
+For 588 frames at 44.1 kHz, a decoder-level seek to 13 ms still delivers the final 15 frames.
+A nonempty segment may display zero milliseconds and still plays its frames at offset zero.
+The application's explicit end-of-Track seek is a separate [transport policy](application-commit.md#quick-mutations-and-external-settlement), not a weakening of this frame-exact adapter contract.
+
 ## Codec and gapless observations
 
 `DecodedStreamInfo::codec` and `isLossy` are conservative.
@@ -142,6 +161,7 @@ The exact operation/code matrix and helper surface are in the [decoder error ref
 - [`DecoderOutputAdapter`](../../../lib/audio/detail/DecoderOutputAdapter.h) and codec implementations under [`lib/audio/`](../../../lib/audio) own the output matrix.
 - [`DecoderSessionBase.h`](../../../lib/audio/detail/DecoderSessionBase.h) and the concrete codec implementations own factory-only concrete construction, private initialization, and destruction of failed candidates.
 - [`DecoderFactory.h`](../../../lib/audio/DecoderFactory.h) and [`DecoderFactory.cpp`](../../../lib/audio/DecoderFactory.cpp) own extension and MP4 sample-entry routing plus successful concrete-to-`DecoderSession` conversion.
+- [`SegmentDecoderSession.cpp`](../../../lib/audio/SegmentDecoderSession.cpp) owns frame-exact range adaptation; [`TrackSession.cpp`](../../../lib/audio/detail/TrackSession.cpp) applies it to inspection and final decoding.
 
 ## Test map
 
@@ -149,6 +169,8 @@ Decoder session and malformed-input tests under [`test/unit/audio/`](../../../te
 [`DecoderErrorTest.cpp`](../../../test/unit/audio/DecoderErrorTest.cpp) mechanically rejects direct concrete construction and instance `close()` operations.
 [`DecoderFactoryTest.cpp`](../../../test/unit/audio/DecoderFactoryTest.cpp) locks ready construction, routing, and initialization failure.
 [`DecoderOutputAdapterTest.cpp`](../../../test/unit/audio/detail/DecoderOutputAdapterTest.cpp) directly locks rejection of precision loss, pass-through behavior, exact byte conversion, and reset.
+[`SegmentDecoderSessionTest.cpp`](../../../test/unit/audio/SegmentDecoderSessionTest.cpp) covers range PCM, exact and millisecond seeks, stable EOF, early EOF, structural mismatches, and both decoder openings.
+[`CarrierPlaybackTest.cpp`](../../../test/unit/runtime/CarrierPlaybackTest.cpp) verifies the stored second segment through final runtime PCM and a nonempty zero-millisecond segment.
 
 ## Related documents
 

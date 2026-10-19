@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -148,6 +149,8 @@ namespace ao::library
     {
     public:
       PropertyBuilder& duration(std::chrono::milliseconds duration);
+      PropertyBuilder& segment(std::optional<TrackSegment> optSegment);
+      std::optional<TrackSegment> segment() const { return _optSegment; }
       PropertyBuilder& bitrate(Bitrate bitrate);
       PropertyBuilder& sampleRate(SampleRate sampleRate);
       PropertyBuilder& codec(AudioCodec codec);
@@ -157,7 +160,7 @@ namespace ao::library
 
       // Accessors
       std::string_view uri() const { return _uri; }
-      std::chrono::milliseconds duration() const { return _duration; }
+      std::chrono::milliseconds duration() const;
       Bitrate bitrate() const { return _bitrate; }
       SampleRate sampleRate() const { return _sampleRate; }
       AudioCodec codec() const { return _codec; }
@@ -168,6 +171,7 @@ namespace ao::library
       friend class TrackBuilder;
 
       // Property numerics
+      std::optional<TrackSegment> _optSegment;
       std::chrono::milliseconds _duration{0};
       Bitrate _bitrate{};
       SampleRate _sampleRate{};
@@ -331,6 +335,7 @@ namespace ao::library
       static PreparedCold make(TrackBuilder const* builder,
                                WriteTransaction& transaction,
                                ResourceStore const& resources);
+      static PreparedCold relink(TrackView const& view, std::string_view uri);
       static std::vector<std::pair<DictionaryId, std::string>> resolveCustomMetadata(TrackBuilder const* builder,
                                                                                      WriteTransaction& transaction);
 
@@ -369,6 +374,7 @@ namespace ao::library
       std::size_t _size = 0;
 
       friend class TrackBuilder;
+      friend class TrackWriter;
     };
 
   private:

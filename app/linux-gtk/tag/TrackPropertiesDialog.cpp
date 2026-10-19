@@ -348,6 +348,23 @@ namespace ao::gtk
       applyRowView(row.widget, _formModel.rowView(row.field));
     }
 
+    if (!_formModel.segmentRows().empty())
+    {
+      auto* const list = Gtk::make_managed<FormBoxedList>();
+
+      for (auto const& row : _formModel.segmentRows())
+      {
+        auto* const label = Gtk::make_managed<Gtk::Label>(row.text);
+        label->set_selectable(true);
+        label->set_xalign(0.0F);
+        label->set_hexpand(true);
+        label->add_css_class("ao-property-value");
+        list->addRow(row.label, *label);
+      }
+
+      _propertiesBox.append(*list);
+    }
+
     updateEditorSensitivity();
     updateSaveEnabled();
   }

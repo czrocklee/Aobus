@@ -2653,6 +2653,7 @@ namespace ao::tui::test
     auto controller = fixture.makeEvents(library);
     auto& playback = fixture.runtimePtr->playback();
     auto& commands = playback.commands();
+    auto const before = playback.snapshot().transport;
 
     commands.setVolume(0.50F);
     commands.setMuted(true);
@@ -2661,7 +2662,10 @@ namespace ao::tui::test
     CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{0});
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("]")));
     auto transport = playback.snapshot().transport;
-    CHECK(transport.elapsed == transport.duration);
+    CHECK(transport.transport == audio::Transport::Playing);
+    CHECK(transport.occurrenceId != before.occurrenceId);
+    CHECK(transport.nowPlaying.trackId != before.nowPlaying.trackId);
+    CHECK(transport.elapsed == std::chrono::milliseconds{0});
 
     CHECK(controller.tryHandleEvent(ftxui::Event::Character("-")));
     transport = playback.snapshot().transport;
@@ -2731,7 +2735,8 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
     auto& playback = fixture.runtimePtr->playback();
-    auto const duration = playback.snapshot().transport.duration;
+    auto const before = playback.snapshot().transport;
+    auto const duration = before.duration;
 
     auto& hitRegions = fixture.hitRegions;
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
@@ -2755,7 +2760,13 @@ namespace ao::tui::test
     CHECK(seekPreviews[0] == std::chrono::milliseconds{0});
     CHECK(seekPreviews[1] == duration);
     REQUIRE(snapshots.size() == 1);
-    CHECK(snapshots[0].transport.elapsed == duration);
+    // Releasing at the clamped end completes the occurrence and advances the
+    // view, rather than parking its decoder at the floored duration.
+    CHECK(snapshots[0].transport.transport == audio::Transport::Playing);
+    CHECK(snapshots[0].transport.occurrenceId != before.occurrenceId);
+    CHECK(snapshots[0].transport.nowPlaying.trackId != before.nowPlaying.trackId);
+    CHECK(snapshots[0].transport.elapsed == std::chrono::milliseconds{0});
+    CHECK(snapshots[0].transport.duration == duration);
   }
 
   TEST_CASE("EventController - replacement makes a held seek inert until a fresh gesture",

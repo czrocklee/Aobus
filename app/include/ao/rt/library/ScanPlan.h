@@ -8,6 +8,7 @@
 #include <ao/FileTimestamp.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/utility/Hash128.h>
 
 #include <array>
@@ -29,19 +30,60 @@ namespace ao::rt
   {
     New,
     Changed,
+    MissingSegments,
     Moved,
     Missing,
     Unchanged,
-    Error
+    Error,
+    // A report-only entry, such as a CUE sheet that names no supported audio
+    // file. It names no library file and is never applied.
+    Notice,
+  };
+
+  enum class ScanCueDiagnostic : std::uint8_t
+  {
+    None,
+    InvalidEncoding,
+    SheetUnreadableOrMalformed,
+    AmbiguousSheets,
+    UnsupportedCarrier,
+    NoMatchingAudio,
+    WholeFileAlreadyImported,
+    SheetMissingForCarrier,
+    LayoutMismatch,
+    CarrierFactsMismatch,
+  };
+
+  // Structural membership, independent of curated Track metadata.
+  struct ScanCarrierMember final
+  {
+    TrackId trackId = kInvalidTrackId;
+    library::TrackSegment segment{};
+    bool operator==(ScanCarrierMember const&) const noexcept = default;
+  };
+
+  struct ScanSheetEvidence final
+  {
+    std::string name{};
+    std::uint64_t fileSize = 0;
+    std::optional<FileTimestamp> optMtime{};
+    utility::Hash128 digest{};
+    std::string errorMessage{};
+    ScanCueDiagnostic cueDiagnostic = ScanCueDiagnostic::None;
+    bool operator==(ScanSheetEvidence const&) const noexcept = default;
+  };
+
+  struct ScanCueEvidence final
+  {
+    std::vector<ScanSheetEvidence> general{};
+    std::vector<ScanSheetEvidence> extensionSpecific{};
+    bool operator==(ScanCueEvidence const&) const noexcept = default;
   };
 
   /**
-   * Persisted manifest facts observed by the planner for an existing Track.
-   *
-   * The owning ScanItem supplies the manifest key and TrackId. Keeping these
-   * facts separate from the item's destination-file facts matters for Moved
-   * items: their new path has current filesystem facts, while transaction-time
-   * admission must still validate the old manifest row.
+   * Persisted physical row and carrier structure observed by the planner.
+   * The ScanItem supplies the key and whole-file TrackId. Moved items keep
+   * source-row evidence separate from their destination filesystem facts.
    */
   struct ScanManifestEvidence final
   {
@@ -52,6 +94,9 @@ namespace ao::rt
     std::uint64_t audioPayloadLength = 0;
     utility::Hash128 audioSignature = {};
     library::FileStatus status = library::FileStatus::Available;
+    std::uint64_t totalFrames = 0;
+    std::uint32_t sampleRate = 0;
+    std::vector<ScanCarrierMember> members{};
   };
 
   struct ScanItem final
@@ -69,12 +114,37 @@ namespace ao::rt
     TrackId trackId = kInvalidTrackId;
     std::optional<ScanManifestEvidence> optManifestEvidence = std::nullopt;
     std::string errorMessage = {};
+    ScanCueDiagnostic cueDiagnostic = ScanCueDiagnostic::None;
+    std::string cueDetail{};
+    ScanCueEvidence cueEvidence{};
+    std::vector<library::TrackSegment> cueLayout{};
+    std::uint64_t totalFrames = 0;
+    std::uint32_t sampleRate = 0;
+    // True only when totalFrames and sampleRate hold inspected exact media facts.
+    bool hasExactMediaFacts = false;
   };
 
   inline bool hasAudioIdentity(ScanItem const& item) noexcept
   {
     return library::hasAudioIdentity(item.audioPayloadLength, item.audioSignature);
   }
+
+  // A failure leaves its item unapplied and fails the scan.
+  inline bool isScanFailure(ScanItem const& item) noexcept
+  {
+    return item.classification == ScanClassification::Error;
+  }
+
+  // A notice accompanies its item's classification: it reports state that a
+  // person should settle, but neither blocks the item nor fails the scan.
+  inline bool isScanNotice(ScanItem const& item) noexcept
+  {
+    return !isScanFailure(item) && !item.errorMessage.empty();
+  }
+
+  // Admission uses only owned planner evidence; final apply still proves live identity.
+  bool isRelinkDestination(ScanItem const& item) noexcept;
+  bool canRelinkItems(ScanItem const& source, ScanItem const& destination) noexcept;
 
   class ScanPlan final
   {
@@ -97,8 +167,8 @@ namespace ao::rt
      *
      * A successful derivation consumes the source plan so its library binding,
      * planner provenance, and source evidence stay with the derived operation.
-     * The destination must be New, the source must be Missing, and both
-     * planned audio identities must match.
+     * The destination must be New or a fingerprinted new file blocked by CUE
+     * binding, the source must be Missing, and both planned identities must match.
      */
     Result<ScanPlan> makeRelinkPlan(std::string_view oldUri, std::string_view newUri) &&;
 
@@ -171,5 +241,7 @@ namespace ao::rt
     std::int32_t missingCount = 0;
     std::int32_t staleCount = 0;
     std::int32_t failureCount = 0;
+    /// Physical files relinked; one carrier contributes every member id but counts once.
+    std::int32_t relinkedFileCount = 0;
   };
 } // namespace ao::rt

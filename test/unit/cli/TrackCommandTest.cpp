@@ -8,6 +8,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <fstream>
+#include <ios>
 #include <string>
 #include <string_view>
 
@@ -110,6 +112,66 @@ namespace ao::cli::test
     result = fixture.run({"track", "show"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Test Title"));
+  }
+
+  TEST_CASE("CLI - track create reports every CUE segment id and show retains sparse ordinals",
+            "[cli][integration][track][create]")
+  {
+    auto fixture = CliFixture{};
+    REQUIRE(fixture.run({"init"}).status == 0);
+    fixture.copyAudio("basic_metadata.flac", "image.flac");
+
+    {
+      auto sheet = std::ofstream{fixture.root() / "image.cue", std::ios::binary};
+      sheet << "FILE ignored.wav WAVE\nTRACK 03 AUDIO\nTITLE First\nINDEX 01 00:00:00\n"
+               "TRACK 09 AUDIO\nTITLE Second\nINDEX 01 00:00:01\n";
+      REQUIRE(sheet.good());
+    }
+
+    SECTION("plain output lists each id")
+    {
+      auto const created = fixture.run({"track", "create", (fixture.root() / "image.flac").string()});
+      REQUIRE(created.status == 0);
+      CHECK(countOccurrences(created.out, "added track:") == 2);
+    }
+
+    SECTION("JSON output retains the first compatibility id and all created ids")
+    {
+      auto const created = fixture.run({"-O", "json", "track", "create", (fixture.root() / "image.flac").string()});
+      REQUIRE(created.status == 0);
+      auto tree = parseYaml(created.out);
+      auto const ids = yaml::findChild(tree.rootref(), "trackIds");
+      REQUIRE(ids.is_seq());
+      REQUIRE(ids.num_children() == 2);
+      CHECK(yaml::scalarView(yaml::findChild(tree.rootref(), "trackId")) == yaml::scalarView(ids[0]));
+      CHECK(yaml::scalarView(ids[0]) != yaml::scalarView(ids[1]));
+    }
+
+    SECTION("YAML output lists all created ids")
+    {
+      auto const created = fixture.run({"-O", "yaml", "track", "create", (fixture.root() / "image.flac").string()});
+      REQUIRE(created.status == 0);
+      auto tree = parseYaml(created.out);
+      auto const ids = yaml::findChild(tree.rootref(), "trackIds");
+      REQUIRE(ids.is_seq());
+      CHECK(ids.num_children() == 2);
+    }
+
+    auto const shown = fixture.run({"track", "show"});
+    REQUIRE(shown.status == 0);
+    CHECK(contains(shown.out, "Carrier File: image.flac"));
+    CHECK(contains(shown.out, "CUE Track Number: 3"));
+    CHECK(contains(shown.out, "CUE Track Number: 9"));
+    CHECK(contains(shown.out, "Start Time: 0:00.013 (frame 588)"));
+    CHECK_FALSE(contains(shown.out, "9 of"));
+
+    auto const structured = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(structured.status == 0);
+    auto tree = parseYaml(structured.out);
+    auto const tracks = yaml::findChild(tree.rootref(), "tracks");
+    REQUIRE(tracks.num_children() == 2);
+    CHECK(yaml::scalarView(yaml::findChild(yaml::findChild(tracks[1], "segment"), "ordinal")) == "9");
+    CHECK(yaml::scalarView(yaml::findChild(yaml::findChild(tracks[1], "segment"), "startFrame")) == "588");
   }
 
   TEST_CASE("CLI - track delete removes the track from subsequent output", "[cli][integration][track]")

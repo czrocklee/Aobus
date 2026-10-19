@@ -12,11 +12,11 @@
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SegmentDecoderSession.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <chrono>
 #include <expected>
-#include <filesystem>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -32,11 +32,11 @@ namespace ao::audio::detail
     // from the production factory. Both paths use the same recoverable result
     // contract; a successful null result is still rejected as a broken factory.
     std::unique_ptr<DecoderSession> makeDecoder(TrackSession::DecoderFactoryFn const& decoderFactory,
-                                                std::filesystem::path const& path,
+                                                PlaybackInput const& input,
                                                 std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decoderRes =
-        decoderFactory ? decoderFactory(path, optOutputEncoding) : openDecoderSession(path, optOutputEncoding);
+      auto decoderRes = decoderFactory ? decoderFactory(input.filePath, optOutputEncoding)
+                                       : openDecoderSession(input.filePath, optOutputEncoding);
 
       if (!decoderRes)
       {
@@ -44,6 +44,16 @@ namespace ao::audio::detail
       }
 
       AO_INVARIANT(*decoderRes, "Decoder factory succeeded without a session");
+
+      if (input.optSegment)
+      {
+        decoderRes = makeSegmentDecoderSession(std::move(*decoderRes), *input.optSegment, input.sampleRateHint);
+
+        if (!decoderRes)
+        {
+          throwDecoderError(decoderRes.error());
+        }
+      }
 
       return std::move(*decoderRes);
     }
@@ -54,7 +64,7 @@ namespace ao::audio::detail
   {
     try
     {
-      auto decoderPtr = makeDecoder(decoderFactory, input.filePath, std::nullopt);
+      auto decoderPtr = makeDecoder(decoderFactory, input, std::nullopt);
 
       auto info = decoderPtr->streamInfo();
 
@@ -80,7 +90,7 @@ namespace ao::audio::detail
   {
     try
     {
-      auto decoderPtr = makeDecoder(decoderFactory, input.filePath, backendFormat.encoding);
+      auto decoderPtr = makeDecoder(decoderFactory, input, backendFormat.encoding);
 
       auto const info = decoderPtr->streamInfo();
 

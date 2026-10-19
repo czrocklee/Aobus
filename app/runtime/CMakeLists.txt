@@ -18,6 +18,7 @@ add_library(ao_app_runtime STATIC
     library/LibrarySnapshot.cpp
     library/LibraryChanges.cpp
     library/MediaTrack.cpp
+    library/CueBinding.cpp
     library/TrackBuilderSnapshot.cpp
     library/LibraryYamlImporter.cpp
     library/LibraryYamlExporter.cpp

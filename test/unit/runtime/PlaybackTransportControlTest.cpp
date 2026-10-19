@@ -146,6 +146,13 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const request = playbackRequest(TrackId{1}, fixturePath, "Seek Track", "Artist", std::chrono::minutes{2});
+    REQUIRE(fixture.playbackTransport.play(request, ListId{1}));
+    fixture.playbackTransport.pause();
+    REQUIRE(fixture.playbackTransport.state().duration > std::chrono::milliseconds{50});
+
     bool seekFired = false;
     auto observedElapsed = std::chrono::milliseconds{};
     auto observedMode = PlaybackTransport::SeekMode::Preview;
@@ -157,10 +164,11 @@ namespace ao::rt::test
         observedMode = ev.mode;
       });
 
-    fixture.playbackTransport.seek(std::chrono::seconds{1}, PlaybackTransport::SeekMode::Final);
+    fixture.playbackTransport.seek(std::chrono::milliseconds{50}, PlaybackTransport::SeekMode::Final);
     CHECK(seekFired);
-    CHECK(observedElapsed == std::chrono::seconds{1});
+    CHECK(observedElapsed == std::chrono::milliseconds{50});
     CHECK(observedMode == PlaybackTransport::SeekMode::Final);
+    CHECK(fixture.playbackTransport.state().elapsed == std::chrono::milliseconds{50});
   }
 
   TEST_CASE("PlaybackTransport control - volume and muted controls update state", "[runtime][unit][playback][control]")

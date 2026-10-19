@@ -4,9 +4,12 @@
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include "test/unit/runtime/library/ScanApplyTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Task.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -14,16 +17,24 @@
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/utility/Path.h>
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/use_future.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <future>
+#include <ios>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -41,6 +52,38 @@ namespace ao::rt::test
       std::filesystem::create_directories(destination.parent_path());
       std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing);
       return destination;
+    }
+
+    constexpr auto kCueLayout = "FILE \"image.flac\" WAVE\n"
+                                "TRACK 01 AUDIO\nINDEX 01 00:00:00\n"
+                                "TRACK 02 AUDIO\nINDEX 01 00:01:00\n";
+
+    void writeCueSheet(std::filesystem::path const& path, std::string_view text)
+    {
+      auto output = std::ofstream{path, std::ios::binary | std::ios::trunc};
+      output << text;
+      REQUIRE(output.good());
+    }
+
+    template<typename Reply, typename Handoff>
+    Result<Reply> runImportAcrossAdmission(ManualExecutor& executor, async::Task<Result<Reply>> task, Handoff handoff)
+    {
+      // The production Asio executor exposes the idle lane's mandatory grant
+      // post: preparation finishes on the first turn, admission on the next.
+      auto context = boost::asio::io_context{};
+      auto future = boost::asio::co_spawn(context, std::move(task), boost::asio::use_future);
+      REQUIRE(context.poll_one() == 1);
+      REQUIRE(executor.queuedCount() == 0);
+      handoff();
+
+      REQUIRE(executor.tryDrainUntil(
+        [&]
+        {
+          context.restart();
+          std::ignore = context.poll();
+          return future.wait_for(std::chrono::seconds{0}) == std::future_status::ready;
+        }));
+      return future.get();
     }
 
     std::filesystem::path createTextFile(MusicLibraryFixture const& libraryFixture, std::string const& name)
@@ -101,6 +144,205 @@ namespace ao::rt::test
     REQUIRE(!duplicateRes);
     CHECK(duplicateRes.error().code == Error::Code::Conflict);
     CHECK(duplicateRes.error().message.contains("already imported"));
+  }
+
+  TEST_CASE("LibraryCommands - add-file rejects a malformed sheet inserted during lane handoff",
+            "[runtime][integration][track-create][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& commands = commandsFixture.commands();
+    auto const audio = copyFixtureAudio(libraryFixture, "song.flac");
+    auto const revisionBefore = [&]
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      return libraryFixture.library().libraryRevision(transaction);
+    }();
+    std::size_t publicationCount = 0;
+    auto sub = changes.onChanged([&](LibraryChangeSet const&) noexcept { ++publicationCount; });
+    auto const insertSheet = [&] { writeCueSheet(libraryFixture.root() / "song.CuE", "not a CUE sheet"); };
+
+    SECTION("commit")
+    {
+      auto const res = runImportAcrossAdmission(executor, commands.createTrackFromFileAsync(audio), insertSheet);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::Conflict);
+      CHECK(res.error().message.contains("CUE sheets changed"));
+    }
+
+    SECTION("preview")
+    {
+      auto const res = runImportAcrossAdmission(executor, commands.previewCreateTrackFromFileAsync(audio), insertSheet);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::Conflict);
+      CHECK(res.error().message.contains("CUE sheets changed"));
+    }
+
+    CHECK(publicationCount == 0);
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
+    CHECK(libraryFixture.library().tracks().reader(transaction).entryCount() == 0);
+    CHECK_FALSE(libraryFixture.library().manifest().reader(transaction).get("song.flac"));
+  }
+
+  TEST_CASE("LibraryCommands - add-file rejects changed CUE ranges even with unchanged sheet size and time",
+            "[runtime][integration][track-create][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& commands = commandsFixture.commands();
+    auto const audio = libraryFixture.root() / "image.flac";
+    writeScanFlacMetadataFixture(audio, {"TITLE=Carrier"}, 88200);
+    auto const sheet = libraryFixture.root() / "image.cue";
+    writeCueSheet(sheet, kCueLayout);
+    auto const originalSize = std::filesystem::file_size(sheet);
+    auto const originalTime = std::filesystem::last_write_time(sheet);
+    auto const revisionBefore = [&]
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      return libraryFixture.library().libraryRevision(transaction);
+    }();
+    auto publications = std::vector<LibraryChangeSet>{};
+    auto sub = changes.onChanged([&](LibraryChangeSet const& change) noexcept { publications.push_back(change); });
+
+    auto const res = runImportAcrossAdmission(executor,
+                                              commands.createTrackFromFileAsync(audio),
+                                              [&]
+                                              {
+                                                writeCueSheet(sheet,
+                                                              "FILE \"image.flac\" WAVE\n"
+                                                              "TRACK 01 AUDIO\nINDEX 01 00:00:00\n"
+                                                              "TRACK 02 AUDIO\nINDEX 01 00:00:50\n");
+                                                std::filesystem::last_write_time(sheet, originalTime);
+                                                REQUIRE(std::filesystem::file_size(sheet) == originalSize);
+                                                REQUIRE(std::filesystem::last_write_time(sheet) == originalTime);
+                                              });
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::Conflict);
+    CHECK(res.error().message.contains("CUE sheets changed"));
+    CHECK(publications.empty());
+
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
+      CHECK(libraryFixture.library().tracks().reader(transaction).entryCount() == 0);
+      CHECK_FALSE(libraryFixture.library().manifest().reader(transaction).get("image.flac"));
+    }
+
+    // A fresh command can import the current layout, never the prepared ranges.
+    auto const retryRes = commandsFixture.runTask(commands.createTrackFromFileAsync(audio));
+    REQUIRE(retryRes);
+    REQUIRE(retryRes->trackIds.size() == 2);
+    REQUIRE(publications.size() == 1);
+    CHECK(publications.front().tracksInserted == retryRes->trackIds);
+    CHECK(publications.front().libraryRevision == revisionBefore + 1);
+    auto transaction = libraryFixture.library().readTransaction();
+    auto const reader = libraryFixture.library().tracks().reader(transaction);
+    auto const optFirst = reader.get(retryRes->trackIds[0]);
+    auto const optSecond = reader.get(retryRes->trackIds[1]);
+    REQUIRE(optFirst);
+    REQUIRE(optSecond);
+    REQUIRE(optFirst->property().segment());
+    REQUIRE(optSecond->property().segment());
+    CHECK(optFirst->property().segment()->startFrame == 0);
+    CHECK(optFirst->property().segment()->frameCount == 29400);
+    CHECK(optSecond->property().segment()->startFrame == 29400);
+    CHECK(optSecond->property().segment()->frameCount == 58800);
+    auto const optManifest = libraryFixture.library().manifest().reader(transaction).get("image.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->segmentCount() == 2);
+    CHECK(optManifest->totalFrames() == 88200);
+  }
+
+  TEST_CASE("LibraryCommands - add-file rejects path changes during lane handoff",
+            "[runtime][integration][track-create][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes, executor};
+    auto& commands = commandsFixture.commands();
+    auto const audio = copyFixtureAudio(libraryFixture, "song.flac");
+    auto const revisionBefore = [&]
+    {
+      auto transaction = libraryFixture.library().readTransaction();
+      return libraryFixture.library().libraryRevision(transaction);
+    }();
+    std::size_t publicationCount = 0;
+    auto sub = changes.onChanged([&](LibraryChangeSet const&) noexcept { ++publicationCount; });
+
+    SECTION("removed file")
+    {
+      auto const res = runImportAcrossAdmission(
+        executor, commands.createTrackFromFileAsync(audio), [&] { REQUIRE(std::filesystem::remove(audio)); });
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotFound);
+    }
+
+    SECTION("audio facts changed")
+    {
+      auto const res = runImportAcrossAdmission(executor,
+                                                commands.createTrackFromFileAsync(audio),
+                                                [&]
+                                                {
+                                                  auto output = std::ofstream{audio, std::ios::binary | std::ios::app};
+                                                  output << 'x';
+                                                  REQUIRE(output.good());
+                                                });
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::Conflict);
+      CHECK(res.error().message.contains("Track file changed"));
+    }
+
+    SECTION("input symlink retargeted inside the root")
+    {
+      auto const other = copyFixtureAudio(libraryFixture, "other.flac");
+      auto const alias = libraryFixture.root() / "alias.flac";
+      auto const symlink = ao::test::SymlinkFixture{audio, alias, ao::test::SymlinkType::File};
+      auto const res = runImportAcrossAdmission(executor,
+                                                commands.createTrackFromFileAsync(alias),
+                                                [&]
+                                                {
+                                                  REQUIRE(std::filesystem::remove(alias));
+                                                  std::filesystem::create_symlink(other, alias);
+                                                });
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::Conflict);
+      CHECK(res.error().message.contains("Track file path changed"));
+    }
+
+    SECTION("prepared path replaced with a symlink escaping the root")
+    {
+      auto const outside = ao::test::TempDir{};
+      auto const outsideFile = outside.path() / "outside.flac";
+      std::filesystem::copy_file(audio, outsideFile);
+      auto const linkProbe = libraryFixture.root() / "probe.flac";
+      auto const symlink = ao::test::SymlinkFixture{outsideFile, linkProbe, ao::test::SymlinkType::File};
+      auto const res = runImportAcrossAdmission(executor,
+                                                commands.createTrackFromFileAsync(audio),
+                                                [&]
+                                                {
+                                                  REQUIRE(std::filesystem::remove(audio));
+                                                  std::filesystem::create_symlink(outsideFile, audio);
+                                                });
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::InvalidInput);
+      CHECK(res.error().message.contains("outside music root"));
+    }
+
+    CHECK(publicationCount == 0);
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == revisionBefore);
+    CHECK(libraryFixture.library().tracks().reader(transaction).entryCount() == 0);
+    auto const manifest = libraryFixture.library().manifest().reader(transaction);
+    CHECK_FALSE(manifest.get("song.flac"));
+    CHECK_FALSE(manifest.get("other.flac"));
+    CHECK_FALSE(manifest.get("alias.flac"));
   }
 
   TEST_CASE("LibraryCommands - createTrackFromFile accepts root-relative paths",

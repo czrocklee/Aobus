@@ -47,6 +47,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -176,6 +177,7 @@ namespace ao::cli
     std::string action{};
     bool dryRun = false;
     std::optional<TrackId> optTrackId{};
+    std::vector<TrackId> trackIds{};
     std::string uri{};
     std::string title{};
     std::string artist{};
@@ -342,6 +344,7 @@ namespace ao::cli
     }
 
     void formatTrackCreate(std::optional<TrackId> optTrackId,
+                           std::span<TrackId const> const createdIds,
                            std::string const& uri,
                            std::string const& title,
                            std::string const& artist,
@@ -349,6 +352,13 @@ namespace ao::cli
                            OutputFormat format,
                            std::ostream& os)
     {
+      auto trackIds = std::vector<TrackId>{createdIds.begin(), createdIds.end()};
+
+      if (trackIds.empty() && optTrackId)
+      {
+        trackIds.push_back(*optTrackId);
+      }
+
       if (format != OutputFormat::Plain)
       {
         emitDocument(os,
@@ -356,15 +366,20 @@ namespace ao::cli
                      TrackCreateReportDto{.action = "create",
                                           .dryRun = dryRun,
                                           .optTrackId = optTrackId,
+                                          .trackIds = trackIds,
                                           .uri = uri,
                                           .title = title,
                                           .artist = artist});
         return;
       }
 
-      if (optTrackId)
+      if (!trackIds.empty())
       {
-        std::println(os, "added track: {}{}", *optTrackId, dryRun ? " (dry-run)" : "");
+        for (auto const trackId : trackIds)
+        {
+          std::println(os, "added track: {}{}", trackId, dryRun ? " (dry-run)" : "");
+        }
+
         return;
       }
 
@@ -505,6 +520,16 @@ namespace ao::cli
     }
   } // namespace
 
+  struct TrackSegmentRecordDto final
+  {
+    std::uint16_t ordinal = 0;
+    std::uint64_t startFrame = 0;
+    std::uint64_t frameCount = 0;
+    std::uint64_t endFrame = 0;
+    std::string startTime{};
+    std::string endTime{};
+  };
+
   struct TrackRecordDto final
   {
     TrackId id{};
@@ -528,6 +553,7 @@ namespace ao::cli
     std::optional<std::vector<std::string>> optTags{};
     std::optional<std::uint64_t> optDuration{};
     std::optional<std::uint32_t> optSampleRate{};
+    std::optional<TrackSegmentRecordDto> optSegment{};
     std::optional<std::string> optUri{};
     std::optional<std::map<std::string, std::string>> optCustom{};
   };
@@ -643,6 +669,11 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::TrackRecordDto>
       return "sampleRate";
     }
 
+    if (memberName == "optSegment")
+    {
+      return "segment";
+    }
+
     if (memberName == "optUri")
     {
       return "uri";
@@ -736,6 +767,34 @@ namespace ao::cli
       return value.raw();
     }
 
+    // Floored milliseconds; the frame coordinates printed beside it are exact.
+    std::string segmentPosition(std::uint64_t const frame, std::uint32_t const rate)
+    {
+      if (rate == 0)
+      {
+        return {};
+      }
+
+      constexpr std::uint64_t kMillisPerSecond = 1000;
+      auto const seconds = frame / rate;
+      // The remainder is below a 32-bit rate, so the product cannot overflow.
+      auto const millis = (frame % rate) * kMillisPerSecond / rate;
+      return std::format("{}:{:02}.{:03}", seconds / 60, seconds % 60, millis);
+    }
+
+    void printPlainSegment(library::TrackView const& view, std::ostream& os)
+    {
+      if (auto const optSegment = view.property().segment(); optSegment)
+      {
+        auto const rate = view.property().sampleRate().raw();
+        auto const endFrame = optSegment->startFrame + optSegment->frameCount;
+        std::println(os, "  CUE Track Number: {}", optSegment->ordinal);
+        std::println(
+          os, "  Start Time: {} (frame {})", segmentPosition(optSegment->startFrame, rate), optSegment->startFrame);
+        std::println(os, "  End Time (exclusive): {} (frame {})", segmentPosition(endFrame, rate), endFrame);
+      }
+    }
+
     TrackRecordDto toTrackRecordDto(TrackId id,
                                     library::TrackView const& view,
                                     library::DictionaryStore const& dictionary)
@@ -790,6 +849,20 @@ namespace ao::cli
         dto.optMovementTotal = nonZeroNumber(work.movementTotal());
         dto.optDuration = positiveDurationMillis(view.property().duration());
         dto.optUri = nonEmptyString(view.property().uri());
+
+        if (auto const optSegment = view.property().segment(); optSegment)
+        {
+          dto.optSegment = TrackSegmentRecordDto{
+            .ordinal = optSegment->ordinal,
+            .startFrame = optSegment->startFrame,
+            .frameCount = optSegment->frameCount,
+            .endFrame = optSegment->startFrame + optSegment->frameCount,
+            .startTime = segmentPosition(optSegment->startFrame, view.property().sampleRate().raw()),
+            .endTime =
+              segmentPosition(optSegment->startFrame + optSegment->frameCount, view.property().sampleRate().raw()),
+          };
+        }
+
         dto.optCustom = customMetadataByName(view, dictionary);
       }
 
@@ -875,11 +948,18 @@ namespace ao::cli
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const id = trackIds[i];
-        auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
+        // Only the cold record says whether a Track is a segment, and plain output prints its range.
+        auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
         if (optView && optView->isHotValid())
         {
           std::println(os, "{:>5} {}", id, optView->metadata().title());
+
+          if (optView->isColdValid() && optView->property().segment())
+          {
+            std::println(os, "  Carrier File: {}", optView->property().uri());
+            printPlainSegment(*optView, os);
+          }
         }
       }
 
@@ -1086,6 +1166,8 @@ namespace ao::cli
       std::println(os, "  Duration: {}ms", view.property().duration().count());
       std::println(os, "  URI: {}", view.property().uri());
 
+      printPlainSegment(view, os);
+
       for (auto const& [customId, val] : view.customMetadata())
       {
         std::println(os, "  Custom [{}]: {}", dictionaryText(dictionary, customId), val);
@@ -1193,8 +1275,14 @@ namespace ao::cli
               throwCommandError(error, "error adding track from: {}: {}", pathValue, error.message);
             }
 
-            formatTrackCreate(
-              std::nullopt, trackRes->uri, trackRes->title, trackRes->artist, true, cli.options().format, cli.io().out);
+            formatTrackCreate(std::nullopt,
+                              {},
+                              trackRes->uri,
+                              trackRes->title,
+                              trackRes->artist,
+                              true,
+                              cli.options().format,
+                              cli.io().out);
             return;
           }
 
@@ -1203,6 +1291,7 @@ namespace ao::cli
           if (trackRes)
           {
             formatTrackCreate(std::optional<TrackId>{trackRes->trackId},
+                              trackRes->trackIds,
                               trackRes->uri,
                               trackRes->title,
                               trackRes->artist,

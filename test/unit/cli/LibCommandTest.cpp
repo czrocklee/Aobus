@@ -40,6 +40,15 @@ namespace ao::cli::test
   namespace
   {
     namespace fs = std::filesystem;
+
+    void writeCueSheet(fs::path const& path, bool const isMalformed = false)
+    {
+      auto sheet = std::ofstream{path, std::ios::binary};
+      sheet << (isMalformed ? "FILE ignored.wav WAVE\nTRACK invalid AUDIO\n"
+                            : "FILE ignored.wav WAVE\nTRACK 03 AUDIO\nINDEX 01 00:00:00\n"
+                              "TRACK 09 AUDIO\nINDEX 01 00:00:01\n");
+      REQUIRE(sheet.good());
+    }
   } // namespace
 
   TEST_CASE("CLI - corrupt persisted manifest rejects the command before payload output", "[cli][unit][lib][integrity]")
@@ -346,6 +355,204 @@ library:
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     CHECK(contains(result.out, "moved renamed.flac"));
+  }
+
+  TEST_CASE("CLI - lib verify lists accompanying CUE warnings without failing or replacing classifications",
+            "[cli][unit][lib][verify]")
+  {
+    auto fixture = CliFixture{};
+    auto const path = fixture.root() / "track.flac";
+    fixture.copyAudio("basic_metadata.flac", "track.flac");
+    REQUIRE(fixture.run({"init"}).status == 0);
+    auto const healthy = fixture.run({"lib", "verify"});
+    REQUIRE(healthy.status == 0);
+    CHECK(healthy.out == "ok\n");
+    writeCueSheet(fixture.root() / "track.cue");
+
+    auto const unchanged = fixture.run({"lib", "verify"});
+    CHECK(unchanged.status == 0);
+    CHECK(contains(unchanged.out, "unchanged track.flac Imported as a whole file"));
+    CHECK(unchanged.err.empty());
+    auto const structured = fixture.run({"-O", "json", "lib", "verify"});
+    CHECK(structured.status == 0);
+    auto tree = parseYaml(structured.out);
+    CHECK(yaml::scalarView(tree.rootref()["ok"]) == "true");
+    auto const issues = tree.rootref()["issues"];
+    REQUIRE(issues.num_children() == 1);
+    CHECK(yaml::scalarView(issues[0]["type"]) == "unchanged");
+    CHECK(yaml::scalarView(issues[0]["uri"]) == "track.flac");
+    CHECK(contains(yaml::scalarView(issues[0]["message"]), "Imported as a whole file"));
+
+    fs::last_write_time(path, fs::last_write_time(path) + std::chrono::seconds{5});
+    auto const changed = fixture.run({"lib", "verify"});
+    CHECK(changed.status == 0);
+    CHECK(contains(changed.out, "changed track.flac Imported as a whole file"));
+
+    fs::rename(path, fixture.root() / "renamed.flac");
+    fs::rename(fixture.root() / "track.cue", fixture.root() / "renamed.cue");
+    auto const moved = fixture.run({"lib", "verify"});
+    CHECK(moved.status == 0);
+    CHECK(contains(moved.out, "moved renamed.flac Imported as a whole file"));
+  }
+
+  TEST_CASE("CLI - lib verify retains unchanged carrier diagnostics when its sheet is missing",
+            "[cli][unit][lib][verify]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "image.flac");
+    writeCueSheet(fixture.root() / "image.cue");
+    REQUIRE(fixture.run({"init"}).status == 0);
+    auto const healthy = fixture.run({"lib", "verify"});
+    REQUIRE(healthy.status == 0);
+    CHECK(healthy.out == "ok\n");
+    fs::remove(fixture.root() / "image.cue");
+
+    auto const report = fixture.run({"-O", "yaml", "lib", "verify"});
+    CHECK(report.status == 0);
+    CHECK(report.err.empty());
+    auto tree = parseYaml(report.out);
+    CHECK(yaml::scalarView(tree.rootref()["ok"]) == "true");
+    auto const issues = tree.rootref()["issues"];
+    REQUIRE(issues.num_children() == 1);
+    CHECK(yaml::scalarView(issues[0]["type"]) == "unchanged");
+    CHECK(yaml::scalarView(issues[0]["uri"]) == "image.flac");
+    CHECK(contains(yaml::scalarView(issues[0]["message"]), "No sheet divides this file"));
+    auto const shown = fixture.run({"track", "show"});
+    REQUIRE(shown.status == 0);
+    CHECK(contains(shown.out, "CUE Track Number: 3"));
+    CHECK(contains(shown.out, "CUE Track Number: 9"));
+  }
+
+  TEST_CASE("CLI - lib relink exposes fingerprinted malformed-sheet destinations and preserves explicit identity",
+            "[cli][integration][lib][relink]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "first.flac");
+    fixture.copyAudio("basic_metadata.flac", "second.flac");
+    REQUIRE(fixture.run({"init"}).status == 0);
+    auto const original = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(original.status == 0);
+    auto originalTree = parseYaml(original.out);
+    auto originalId = std::string{};
+
+    for (auto const track : originalTree.rootref()["tracks"].children())
+    {
+      if (yaml::scalarView(track["uri"]) == "first.flac")
+      {
+        originalId = yaml::scalarView(track["id"]);
+        break;
+      }
+    }
+
+    REQUIRE_FALSE(originalId.empty());
+    fs::rename(fixture.root() / "first.flac", fixture.root() / "moved-first.flac");
+    fs::rename(fixture.root() / "second.flac", fixture.root() / "moved-second.flac");
+    writeCueSheet(fixture.root() / "moved-first.cue", true);
+    writeCueSheet(fixture.root() / "orphan.cue");
+    writeCueSheet(fixture.root() / "broken.cue");
+
+    {
+      auto broken = std::ofstream{fixture.root() / "broken.flac", std::ios::binary};
+      broken << "not an audio file";
+      REQUIRE(broken.good());
+    }
+
+    auto const listed = fixture.run({"lib", "relink"});
+    REQUIRE(listed.status == 0);
+    CHECK(contains(listed.out, "new moved-first.flac"));
+    CHECK(contains(listed.out, "candidate first.flac -> moved-first.flac"));
+    CHECK_FALSE(contains(listed.out, "new orphan.cue"));
+    CHECK_FALSE(contains(listed.out, "new broken.flac"));
+    auto const structured = fixture.run({"-O", "json", "lib", "relink"});
+    REQUIRE(structured.status == 0);
+    auto listingTree = parseYaml(structured.out);
+    CHECK(listingTree.rootref()["newFiles"].num_children() == 2);
+    CHECK(listingTree.rootref()["candidates"].num_children() == 4);
+    checkDomainFailure(fixture.run({"lib", "relink", "--from", "first.flac", "--to", "broken.flac"}),
+                       "new file is not unresolved: broken.flac");
+    checkDomainFailure(fixture.run({"lib", "relink", "--from", "first.flac", "--to", "orphan.cue"}),
+                       "new file is not unresolved: orphan.cue");
+
+    auto const preview =
+      fixture.run({"lib", "relink", "--dry-run", "--from", "first.flac", "--to", "moved-first.flac"});
+    REQUIRE(preview.status == 0);
+    CHECK(contains(preview.out, "relinked first.flac -> moved-first.flac (dry-run)"));
+    auto const beforeApply = fixture.run({"-O", "yaml", "track", "show", originalId});
+    REQUIRE(beforeApply.status == 0);
+    auto beforeTree = parseYaml(beforeApply.out);
+    REQUIRE(beforeTree.rootref()["tracks"].num_children() == 1);
+    CHECK(yaml::scalarView(beforeTree.rootref()["tracks"][0]["id"]) == originalId);
+    CHECK(yaml::scalarView(beforeTree.rootref()["tracks"][0]["uri"]) == "first.flac");
+
+    auto const applied = fixture.run({"lib", "relink", "--from", "first.flac", "--to", "moved-first.flac"});
+    // The move commits, and the malformed sheet beside the whole file is a warning, not a failure.
+    CHECK(applied.status == 0);
+    CHECK(contains(applied.err, "warning: moved-first.flac: "));
+    CHECK_FALSE(contains(applied.err, "relink failed"));
+    auto const afterApply = fixture.run({"-O", "yaml", "track", "show", originalId});
+    REQUIRE(afterApply.status == 0);
+    auto afterTree = parseYaml(afterApply.out);
+    REQUIRE(afterTree.rootref()["tracks"].num_children() == 1);
+    CHECK(yaml::scalarView(afterTree.rootref()["tracks"][0]["id"]) == originalId);
+    CHECK(yaml::scalarView(afterTree.rootref()["tracks"][0]["uri"]) == "moved-first.flac");
+  }
+
+  TEST_CASE("CLI - lib relink applies an explicit two-member carrier when the sheet matches",
+            "[cli][integration][lib][relink]")
+  {
+    auto fixture = CliFixture{};
+    fixture.copyAudio("basic_metadata.flac", "first.flac");
+    fixture.copyAudio("basic_metadata.flac", "second.flac");
+    writeCueSheet(fixture.root() / "first.cue");
+    REQUIRE(fixture.run({"init"}).status == 0);
+
+    auto const original = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(original.status == 0);
+    auto originalTree = parseYaml(original.out);
+    auto memberIds = std::vector<std::string>{};
+
+    for (auto const track : originalTree.rootref()["tracks"].children())
+    {
+      if (yaml::scalarView(track["uri"]) == "first.flac")
+      {
+        memberIds.emplace_back(yaml::scalarView(track["id"]));
+      }
+    }
+
+    REQUIRE(memberIds.size() == 2);
+    REQUIRE(memberIds[0] != memberIds[1]);
+
+    // Two missing copies of the same audio leave the move ambiguous, so only
+    // the explicit source may be selected. The destination sheet is the stored one.
+    fs::remove(fixture.root() / "second.flac");
+    fs::rename(fixture.root() / "first.flac", fixture.root() / "moved-first.flac");
+    fs::rename(fixture.root() / "first.cue", fixture.root() / "moved-first.cue");
+
+    auto const applied = fixture.run({"lib", "relink", "--from", "first.flac", "--to", "moved-first.flac"});
+    REQUIRE(applied.status == 0);
+    CHECK(applied.err.empty());
+    CHECK(contains(applied.out, "relinked first.flac -> moved-first.flac"));
+
+    auto const after = fixture.run({"-O", "yaml", "track", "show"});
+    REQUIRE(after.status == 0);
+    auto afterTree = parseYaml(after.out);
+    auto preserved = std::vector<std::string>{};
+
+    for (auto const track : afterTree.rootref()["tracks"].children())
+    {
+      auto const id = std::string{yaml::scalarView(track["id"])};
+
+      if (id != memberIds[0] && id != memberIds[1])
+      {
+        continue;
+      }
+
+      preserved.push_back(id);
+      CHECK(yaml::scalarView(track["uri"]) == "moved-first.flac");
+    }
+
+    REQUIRE(preserved.size() == 2);
+    CHECK(preserved[0] != preserved[1]);
   }
 
   TEST_CASE("CLI - lib relink lists, previews, and applies explicit moved-file bindings",

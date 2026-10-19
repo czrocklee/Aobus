@@ -22,6 +22,10 @@ Earlier interchange files, including version 7, have no compatibility or convers
 A library from an earlier version can be rebuilt by explicitly scanning its music files, which loses curation such as lists and edited metadata unless you already have a version 8 backup.
 Opening an old library never converts, relabels, or deletes it automatically.
 
+A disc image that a CUE sheet splits is several tracks with one path. A backup records each track's CUE number and range, so a **Full** restore can rebuild that split without opening the audio file.
+**Merge** updates a split track only when the backup's path and CUE number match, and it never turns a whole file into a split file or the reverse. To change that form, remove the tracks and scan, as [Manage a music library](manage-library.md#disc-images-and-cue-sheets) describes.
+A **Lists only** backup names a split track by its path and CUE number.
+
 Track paths belong to the selected music root.
 Symlinks whose existing targets remain inside that root are supported, while dangling symlinks and symlinks into another tree are rejected during export, import baselining, scanning, and playback.
 

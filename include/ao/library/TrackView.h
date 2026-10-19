@@ -251,6 +251,8 @@ namespace ao::library
       BitDepth bitDepth() const noexcept { return _track.hotHeader().bitDepth; }
       SampleRate sampleRate() const noexcept { return _track.hotHeader().sampleRate; }
 
+      std::optional<TrackSegment> segment() const noexcept;
+
       // Technical properties (from cold)
       std::chrono::milliseconds duration() const noexcept { return _track.coldHeader().duration; }
       Bitrate bitrate() const noexcept { return _track.coldHeader().bitrate; }
@@ -344,6 +346,7 @@ namespace ao::library
       std::span<std::byte const> work{};
       std::span<std::byte const> custom{};
       std::span<std::byte const> performance{};
+      std::span<std::byte const> segment{};
       bool scanned = false;
     };
 

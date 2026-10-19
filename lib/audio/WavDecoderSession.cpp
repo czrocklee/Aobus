@@ -236,6 +236,7 @@ namespace ao::audio
       _implPtr->sourceBitsPerSample = parsed.format.bitsPerSample;
       _implPtr->sourceBlockAlign = parsed.format.blockAlign;
       _implPtr->totalFrames = parsed.data.size() / parsed.format.blockAlign;
+      _implPtr->info.optTotalFrames = _implPtr->totalFrames;
       _implPtr->nextFrameIndex = 0;
       _implPtr->eof = false;
 
@@ -262,7 +263,15 @@ namespace ao::audio
       return makeError(Error::Code::SeekFailed, "Seek offset out of bounds");
     }
 
-    auto const frameIndex = durationToSamples(offset, _implPtr->info.sourceFormat.sampleRate);
+    return seekFrame(durationToSamples(offset, _implPtr->info.sourceFormat.sampleRate));
+  }
+
+  Result<> WavDecoderSession::seekFrame(std::uint64_t frameIndex) noexcept
+  {
+    if (!_implPtr->file.isMapped())
+    {
+      return makeError(Error::Code::SeekFailed, "WAV decoder is not open");
+    }
 
     if (frameIndex > _implPtr->totalFrames)
     {

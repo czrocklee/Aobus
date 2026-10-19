@@ -67,6 +67,16 @@ namespace ao::media::file::detail
       visitor.bitDepth(bitDepth);
     }
 
+    if (optExactFrameCount)
+    {
+      visitor.exactFrameCount(*optExactFrameCount);
+    }
+
+    for (auto const sheet : cueSheets)
+    {
+      visitor.cueSheet(sheet);
+    }
+
     for (auto const& picture : pictures)
     {
       visitor.picture(picture.type, picture.bytes);
@@ -331,6 +341,12 @@ namespace ao::media::file::detail
     return *this;
   }
 
+  ContentBuilder::PropertyBuilder& ContentBuilder::PropertyBuilder::exactFrameCount(std::uint64_t value)
+  {
+    _content.optExactFrameCount = value;
+    return *this;
+  }
+
   ContentBuilder::PropertyBuilder::PropertyBuilder(Content& content)
     : _content{content}
   {
@@ -358,12 +374,17 @@ namespace ao::media::file::detail
   }
 
   ContentBuilder::ContentBuilder(ContentBuilder&& other) noexcept
-    : _content{std::move(other._content)}, _metadata{_content}, _property{_content}, _coverArt{_content}
+    : _content{std::move(other._content)}
+    , _cueSheetValues{std::move(other._cueSheetValues)}
+    , _metadata{_content}
+    , _property{_content}
+    , _coverArt{_content}
   {
   }
 
   ContentBuilder& ContentBuilder::operator=(ContentBuilder&& other) noexcept
   {
+    _cueSheetValues = std::move(other._cueSheetValues);
     _content = std::move(other._content);
     return *this;
   }
@@ -372,6 +393,15 @@ namespace ao::media::file::detail
   {
     _content.ownedStrings.push_back(std::move(value));
     return _content.ownedStrings.back();
+  }
+
+  void ContentBuilder::cueSheet(std::string_view value)
+  {
+    // An empty comment names no sheet, and a repeated copy is the same sheet.
+    if (!value.empty() && _cueSheetValues.insert(value).second)
+    {
+      _content.cueSheets.push_back(value);
+    }
   }
 
   Content ContentBuilder::finish() &&
@@ -402,6 +432,7 @@ namespace ao::media::file::detail
 
     _content.orchestraCandidates.clear();
     _content.joinedTexts = {};
+    _cueSheetValues.clear();
     return std::move(_content);
   }
 } // namespace ao::media::file::detail

@@ -83,6 +83,13 @@ namespace ao::media::file
     virtual void bitDepth(BitDepth value) = 0;
     virtual void picture(PictureType type, std::span<std::byte const> bytes) = 0;
 
+    // Exact PCM extent, when the stream header declares one. Zero FLAC
+    // STREAMINFO samples means unknown and does not emit this callback.
+    virtual void exactFrameCount(std::uint64_t /*frames*/) {}
+    // Each distinct nonempty embedded textual CUE sheet, in source order;
+    // borrows the visited content's storage.
+    virtual void cueSheet(std::string_view /*text*/) {}
+
     /**
      * Ordered whole-list credits, emitted synchronously at most once per visited
      * content, only when the list is nonempty, after every other callback.

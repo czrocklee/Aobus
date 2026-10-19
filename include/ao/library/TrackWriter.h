@@ -11,8 +11,11 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 
+#include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
+#include <vector>
 
 namespace ao::library
 {
@@ -50,8 +53,19 @@ namespace ao::library
      * or failed transaction's ids may be allocated again.
      */
     Result<TrackId> create(TrackBuilder const& track, FileManifestBuilder manifest);
+    /** Returns provisional ids in builder input order; manifest membership is in ordinal order. */
+    Result<std::vector<TrackId>> createCarrier(std::span<TrackBuilder const> tracks,
+                                               FileManifestBuilder manifest,
+                                               std::uint64_t totalFrames);
+    /** Returns new provisional ids in builder input order, not manifest ordinal order. */
+    Result<std::vector<TrackId>> addCarrierMembers(std::string_view uri, std::span<TrackBuilder const> tracks);
+    Result<> relinkCarrier(std::string_view oldUri, std::string_view newUri, FileManifestBuilder manifest);
+    Result<> updateManifest(std::string_view uri, FileManifestBuilder manifest);
     Result<> update(TrackId id, TrackBuilder const& track);
-    /** Updates only hot fields; cold fields, including URI, are not consumed. */
+    /**
+     * Updates only hot fields. A complete carrier builder must still preserve
+     * its URI, segment and duration; every carrier builder must preserve sample rate.
+     */
     Result<> updateHot(TrackId id, TrackBuilder const& track);
     Result<> updateCold(TrackId id, TrackBuilder const& track);
     Result<> replace(TrackId id, TrackBuilder const& track, FileManifestBuilder manifest);
@@ -65,6 +79,7 @@ namespace ao::library
     explicit TrackWriter(WriteTransaction& transaction);
     void requireActiveOperation() const;
     Result<> validateResourceReferences(TrackBuilder const& track) const;
+    Result<> validateStructure(TrackId id, TrackBuilder const& track, bool hotOnly = false) const;
 
     WriteTransaction* _transaction;
 

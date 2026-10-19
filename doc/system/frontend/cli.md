@@ -91,9 +91,10 @@ Cancellation propagates through the task cancellation channel and emits no succe
 Scan builds a runtime `ScanPlan`, emits summary/optional item output, then applies unless dry-run.
 `--defer-fingerprint` imports new metadata and leaves new manifest identity pending for later fingerprinting.
 Per-item apply failures are diagnostic rows and fail the command with exit `1`, because a partial apply is not a successful scan; plain output also counts them in the apply summary. A transaction-level failure rejects the command.
+A notice, such as a CUE sheet beside a whole-file import, is not a failure: scan writes it to stderr as a `warning:` line, counts it under `warnings`, and still exits `0`.
 
 Verify builds but does not apply a scan plan.
-Changed and moved rows are reported; missing or error rows make verification fail.
+Changed, moved, and notice rows are reported; missing or error rows make verification fail.
 
 ### Structured output
 

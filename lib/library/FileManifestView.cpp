@@ -6,11 +6,13 @@
 #include <ao/CoreIds.h>
 #include <ao/FileTimestamp.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
 #include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <span>
 
@@ -19,6 +21,36 @@ namespace ao::library
   FileManifestView::FileManifestView(std::span<std::byte const> data) noexcept
     : _header{utility::bytes::tryLayout<FileManifestHeader>(data)}, _payload{data}
   {
+    if (_header != nullptr &&
+        (_header->segmentCount > kMaxTrackSegmentOrdinal ||
+         data.size() != sizeof(FileManifestHeader) +
+                          (_header->segmentCount == 0 ? 0 : 8 + (_header->segmentCount * sizeof(TrackId)))))
+    {
+      _header = nullptr;
+    }
+  }
+
+  std::uint16_t FileManifestView::segmentCount() const noexcept
+  {
+    return header().segmentCount;
+  }
+
+  std::span<TrackId const> FileManifestView::segmentTrackIds() const noexcept
+  {
+    return segmentCount() == 0 ? std::span<TrackId const>{}
+                               : utility::layout::viewArray<TrackId>(_payload.subspan(sizeof(FileManifestHeader) + 8));
+  }
+
+  std::uint64_t FileManifestView::totalFrames() const noexcept
+  {
+    std::uint64_t frames = 0;
+
+    if (segmentCount() != 0)
+    {
+      std::memcpy(&frames, _payload.data() + sizeof(FileManifestHeader), sizeof(frames));
+    }
+
+    return frames;
   }
 
   TrackId FileManifestView::trackId() const noexcept

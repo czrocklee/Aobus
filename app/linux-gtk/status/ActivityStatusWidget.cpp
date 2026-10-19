@@ -30,6 +30,7 @@ namespace ao::gtk
   namespace
   {
     constexpr std::size_t kMaxNotificationDetailRows = 4;
+    constexpr std::int32_t kDetailMessageMaxWidthChars = 60;
 
     constexpr char const* activityStatusKindCssClass(uimodel::ActivityStatusKind const kind) noexcept
     {
@@ -260,6 +261,8 @@ namespace ao::gtk
     auto* const message = Gtk::make_managed<Gtk::Label>(task.message);
     message->set_xalign(0.0F);
     message->set_wrap(true);
+    message->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
+    message->set_max_width_chars(kDetailMessageMaxWidthChars);
     message->add_css_class("ao-activity-detail-message");
     row->append(*message);
 
@@ -284,6 +287,8 @@ namespace ao::gtk
     auto* const title = Gtk::make_managed<Gtk::Label>(item.message);
     title->set_xalign(0.0F);
     title->set_wrap(true);
+    title->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
+    title->set_max_width_chars(kDetailMessageMaxWidthChars);
     title->set_hexpand(true);
     title->add_css_class("ao-activity-detail-title");
     header->append(*title);

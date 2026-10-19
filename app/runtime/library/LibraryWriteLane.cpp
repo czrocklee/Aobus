@@ -954,10 +954,15 @@ namespace ao::rt
 
   async::Task<Result<LibraryWriteLane::Mutation>> LibraryWriteLane::beginInteractiveMutationAsync(
     Submission submission,
-    library::WriteTransaction::Options options)
+    library::WriteTransaction::Options options,
+    compat::MoveOnlyFunction<Result<>(std::stop_token)> preTransaction)
   {
-    return beginMutationAsync(
-      std::move(submission), CommandKind::Interactive, 0, std::move(options), "Library mutation");
+    return beginMutationAsync(std::move(submission),
+                              CommandKind::Interactive,
+                              0,
+                              std::move(options),
+                              "Library mutation",
+                              std::move(preTransaction));
   }
 
   async::Task<LibraryWriteLane::AuthoringStart> LibraryWriteLane::beginAuthoringMutationAsync(Submission submission,

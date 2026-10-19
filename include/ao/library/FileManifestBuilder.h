@@ -47,13 +47,14 @@ namespace ao::library
     {
     public:
       std::string_view uri() const noexcept { return _uri.value(); }
-      std::span<std::byte const> bytes() const noexcept { return std::as_bytes(std::span{&_header, std::size_t{1}}); }
+      std::span<std::byte const> bytes() const noexcept;
 
     private:
       Prepared(LibraryUri uri, FileManifestHeader header);
 
       LibraryUri _uri;
       FileManifestHeader _header;
+      std::vector<std::byte> _carrierBytes;
 
       friend class Unbound;
     };
@@ -79,12 +80,14 @@ namespace ao::library
       Prepared bind(TrackId id) && noexcept;
 
     private:
+      Prepared bindCarrier(std::span<TrackId const> ids, std::uint64_t totalFrames) &&;
       Unbound(LibraryUri uri, FileManifestHeader header);
 
       LibraryUri _uri;
       FileManifestHeader _header;
 
       friend class FileManifestBuilder;
+      friend class TrackWriter;
     };
 
     /**
@@ -101,5 +104,7 @@ namespace ao::library
 
   private:
     FileManifestHeader _header;
+    std::vector<TrackId> _segmentTrackIds;
+    std::uint64_t _totalFrames{};
   };
 } // namespace ao::library

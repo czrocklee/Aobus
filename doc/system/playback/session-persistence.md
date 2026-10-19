@@ -26,7 +26,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 ## Invariants
 
 - Restore validates the complete version 5 payload before resolving a source.
-- Restore never resumes a payload saved for another library, or whose current track's id no longer names the file it named when saved.
+- Restore never resumes a payload saved for another library, or whose current track's id no longer names the URI and segment ordinal it named when saved.
 - A candidate is prepared completely before it replaces live sequence or transport state.
 - Restore never autoplays, arms an output route, or creates a frontend view.
 - A restore failure before volume/mute application leaves prior public playback and restorable state unchanged.
@@ -70,7 +70,7 @@ The save debounce is one second.
 
 ### Validate
 
-Restore rejects a schema mismatch, invalid ids, a current-track URI that is not a canonical library URI, overflowing anchor/position, unsupported shuffle/repeat/volume, invalid or duplicate sort fields, excess sort terms, and a filter that cannot parse and compile.
+Restore rejects a schema mismatch, invalid ids, a current-track URI that is not a canonical library URI, an ordinal outside `0..99`, overflowing anchor/position, unsupported shuffle/repeat/volume, invalid or duplicate sort fields, excess sort terms, and a filter that cannot parse and compile.
 This occurs before source lookup, so source absence cannot hide malformed serialized state.
 
 ### Check identity
@@ -81,16 +81,17 @@ Restore drops the payload, reporting no restored session and leaving live state 
 | Finding | Why the payload is dropped |
 |---|---|
 | `libraryId` differs from the open library's id. | Its ids were issued by another library and may name unrelated objects here. |
-| `currentTrackId` names a track whose URI differs from `currentTrackUri`. | The id now names another file. A relink made while the app was closed moves the same audio, but a database rolled back to an older copy can reissue the id to an unrelated file, and the two look alike here. |
-| `currentTrackId` names no track, but some track has `currentTrackUri`. | The library replaced the saved track, as a restore does, so the saved anchor and position describe a record that is gone. |
+| `currentTrackId` names a track whose URI or ordinal differs from the saved pair. | The id now names another subject. A relink made while the app was closed moves the same audio, but a database rolled back to an older copy can reissue the id to an unrelated subject, and the two look alike here. |
+| `currentTrackId` names no track, but some track has the saved `(currentTrackUri, currentTrackOrdinal)`. | The library replaced the saved track, as a restore does, so the saved anchor and position describe a record that is gone. |
 
-When the id names a track with the saved URI, or neither the id nor the URI is present, restore continues to source resolution.
-The second case is an ordinary deletion and keeps anchor replacement.
+Ordinal zero identifies a whole-file Track; a carrier member has its immutable CUE ordinal, distinct from curated track number.
+When the id names a track with the saved URI/ordinal pair, or neither the id nor that pair is present, restore continues to source resolution.
+The second case is an ordinary deletion and keeps anchor replacement, even while other ordinals of the carrier remain.
 That includes restoring an older backup that lacks the saved Track: the Track is gone and no Track holds its file, so restore may select a replacement at the saved anchor and start it from the beginning.
 A library never reissues a track id while its database moves forward, so these checks compare the saved subject with the one record that id can name; only a rollback to an older database copy breaks that, and the URI check guards it for the current Track.
 It does not guard the source List, whose id the rolled-back copy can reissue, so the [database reference](../../reference/library/storage/database.md#metadata-records) requires removing saved application state with such a rollback.
-Save records the URI the library last confirmed for the subject, because a relink while the app runs keeps the id and changes the file; such a session resumes.
-That URI is the subject's current one while it is a live track, refreshed when the library publishes the subject as mutated; that refresh also requests a debounced save, so a relink reaches disk without another playback change.
+Save records the URI and ordinal the library last confirmed for the subject, because a relink while the app runs keeps the id and changes the file; such a session resumes.
+That pair is read under one library snapshot while the subject is live, refreshed when the library publishes the subject as mutated; that refresh also requests a debounced save, so a relink reaches disk without another playback change.
 A live library restore leaves the current subject playing under an id the library no longer has, so a later save records that id with its last confirmed URI, or with the URI it was opened with when the library never confirmed another, and the next restore drops the payload by the last rule when the restored library holds that file.
 
 ### Resolve current and source
@@ -114,7 +115,8 @@ A missing source plus missing current discards the candidate.
 When the source exists but its own or an ancestor's stored filter is invalid, restore returns the contextual `FormatRejected` error and installs no cursor candidate.
 
 Offset is clamped against resolved duration.
-An offset at or beyond end becomes zero.
+An offset at or beyond a positive duration becomes zero, including a position saved while an end request is held.
+A nonempty zero-millisecond segment restores at zero and still plays its frames; this normalization is separate from the live [end-seek policy](application-commit.md#quick-mutations-and-external-settlement).
 Fallback, replacement, anchor clamp, offset clamp, or any other normalization changes only the in-memory restored candidate.
 Restore does not immediately write the normalized value back; the next natural or lifecycle checkpoint captures it.
 

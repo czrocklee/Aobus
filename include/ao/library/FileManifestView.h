@@ -41,6 +41,9 @@ namespace ao::library
     std::span<std::byte const> rawData() const noexcept { return _payload; }
 
     TrackId trackId() const noexcept;
+    std::uint16_t segmentCount() const noexcept;
+    std::span<TrackId const> segmentTrackIds() const noexcept;
+    std::uint64_t totalFrames() const noexcept;
     std::uint64_t fileSize() const noexcept;
     std::optional<FileTimestamp> mtime() const noexcept;
     std::uint64_t audioPayloadLength() const noexcept;

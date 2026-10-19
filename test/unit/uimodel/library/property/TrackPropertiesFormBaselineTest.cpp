@@ -3,9 +3,15 @@
 
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
+#include <ao/library/TrackWriter.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibrarySnapshot.h>
@@ -20,6 +26,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ao::uimodel::test
 {
@@ -65,6 +72,53 @@ namespace ao::uimodel::test
     auto const album = form.rowView(rt::TrackField::Album);
     CHECK(album.mixed);
     CHECK(album.editable);
+  }
+
+  TEST_CASE("loadTrackPropertiesFormBaseline captures read-only segment rows and clears them on another selection",
+            "[uimodel][unit][property]")
+  {
+    auto storage = rt::test::MusicLibraryFixture{};
+    auto segment = library::TrackBuilder::makeEmpty();
+    segment.metadata().title("Segment").trackNumber(4);
+    segment.property()
+      .uri("carrier.flac")
+      .sampleRate(SampleRate{192000})
+      .segment(library::TrackSegment{.startFrame = 192, .frameCount = 192, .ordinal = 9});
+    auto const tracks = std::array{segment};
+    auto ids = std::vector<TrackId>{};
+
+    {
+      // Seed Core before runtime adoption claims the exclusive writer session.
+      auto transaction = library::test::writeTransaction(storage.library());
+      auto createdRes = transaction.apply(
+        [&](library::LibraryWrite& write)
+        { return write.tracks().createCarrier(tracks, library::FileManifestBuilder::makeEmpty(), 384); });
+      REQUIRE(createdRes);
+      ids = *createdRes;
+      REQUIRE(transaction.commit());
+    }
+
+    auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
+    auto commands = rt::test::LibraryCommandsFixture{storage.library(), changes};
+    auto const wholeId = commands.addTrack({.title = "Whole", .uri = "whole.flac"});
+    auto const spec = buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
+    auto form = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
+    auto snapshot = commands.library().snapshot();
+    REQUIRE(loadTrackPropertiesFormBaseline(snapshot, ids, spec, form));
+    REQUIRE(form.segmentRows().size() == 3);
+    CHECK(form.segmentRows()[0].text == "9");
+    CHECK(form.segmentRows()[1].text == "0:00.001");
+    CHECK(form.segmentRows()[2].text == "0:00.002");
+    CHECK(form.rowView(rt::TrackField::TrackNumber).text == "4");
+    CHECK_FALSE(form.canSave());
+    CHECK(form.buildPatch().customUpdates.empty());
+
+    auto const mixed = std::array{ids.front(), wholeId};
+    REQUIRE(loadTrackPropertiesFormBaseline(snapshot, mixed, spec, form));
+    CHECK(form.segmentRows().empty());
+    REQUIRE(loadTrackPropertiesFormBaseline(snapshot, std::array{wholeId}, spec, form));
+    CHECK(form.segmentRows().empty());
+    CHECK_FALSE(form.canSave());
   }
 
   TEST_CASE("loadTrackPropertiesFormBaseline preserves empty text and numeric zero values", "[uimodel][unit][property]")

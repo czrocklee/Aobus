@@ -32,11 +32,12 @@ A successful visit emits present values in this fixed order:
 
 1. `TextField`: `Title`, `Artist`, `Album`, `AlbumArtist`, `Composer`, `Genre`, `Work`, `Movement`.
 2. `NumberField`: `Year`, `TrackNumber`, `TrackTotal`, `DiscNumber`, `DiscTotal`, `MovementNumber`, `MovementTotal`.
-3. Technical callbacks: `codec`, `duration`, `bitrate`, `sampleRate`, `channels`, `bitDepth`.
+3. Technical callbacks: `codec`, `duration`, `bitrate`, `sampleRate`, `channels`, `bitDepth`, then `exactFrameCount` when the stream header declares an exact PCM frame count, then `cueSheet` when embedded sheet text was copied.
 4. `picture` callbacks in source order.
 5. One `visitCredits` callback containing the complete source-ordered name/kind/optional-role list, only when nonempty.
 
-Empty text, zero numeric and technical values, `AudioCodec::Unknown`, and rejected pictures produce no callback. A required failure produces no callback at all.
+Empty `TextField` text, zero numeric and technical values, `AudioCodec::Unknown`, an unknown exact extent, and rejected pictures produce no callback. A required failure produces no callback at all.
+`cueSheet` is not a `TextField` and is not a number field. An engaged comment is visited even when its text is empty.
 The Credits callback is synchronous, follows every scalar, technical, and picture callback, and is emitted at most once per visited content.
 Its span and entry strings borrow the content owner's storage for the backing `File` lifetime; the default visitor implementation ignores it.
 Consumers needing longer-lived facts must copy owning values before that backing expires.
@@ -182,11 +183,13 @@ Image bytes are borrowed views at this boundary. `readMediaTrack` passes them to
 
 | Format | Property sources |
 |---|---|
-| FLAC | `StreamInfo` sample rate, channels, bit depth, and total-sample duration; bitrate from mapped file bytes and duration. |
+| FLAC | `StreamInfo` sample rate, channels, bit depth, and total-sample duration; bitrate from mapped file bytes and duration. A nonzero `STREAMINFO` total-sample count is the exact PCM frame count; zero means the extent is unknown. |
 | MP3 | First confirmed MPEG frame; table bitrate or adjacent-frame-derived free-format bitrate; Xing frame/byte evidence when valid, otherwise frame bitrate and tag-trimmed payload extent. Bit depth is `16`. |
 | MP4 | Selected audio track `mdhd` timing and first `stsd` `alac`/`mp4a` sample entry. Malformed optional timing may leave duration absent. |
-| WAVE | Validated format and data chunks; duration from frames and sample rate, bitrate from mapped file bytes and duration. |
+| WAVE | Validated format and data chunks; duration from frames and sample rate, bitrate from mapped file bytes and duration. Exact frame count is the data length divided by block alignment. |
 | Opus | `OpusHead` channel count; sample rate is always the fixed 48 kHz decode rate, never the header's informational input rate. Duration is the final page granule position less the stream's playback start, which is the derived decode origin advanced past the header pre-skip; bitrate comes from mapped file bytes and duration. A stream that never reached a complete end of stream reports no duration and therefore no bitrate. No bit depth is emitted, because Opus defines none. |
+
+A Vorbis comment named `CUESHEET` is copied as text and visited through `cueSheet`, not as a `TextField`. FLAC and Opus share that extraction. The binary FLAC `CUESHEET` metadata block is not interpreted. Only a nonempty FLAC comment can divide a file, as the [CUE sheet reference](cue-sheet.md#embedded-text) defines.
 
 ## Encoded audio payload
 
@@ -242,5 +245,6 @@ Adding an extension requires the single dispatch entry plus parser, scan, payloa
 - [Library architecture](../../system/library/structure.md)
 - [Media file reading specification](../../system/media/file-reading.md)
 - [Track model](../library/model/track.md)
+- [CUE sheet](cue-sheet.md)
 - [Library scan and audio identity](../../system/library/scan-and-identity.md)
 - [Decoder session](../../system/playback/decoder-session.md)

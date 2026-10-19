@@ -8,6 +8,7 @@ add_library(ao_audio STATIC
     AlacDecoderSession.cpp
     Mp3DecoderSession.cpp
     OpusDecoderSession.cpp
+    SegmentDecoderSession.cpp
     NodeFormat.cpp
     NullBackend.cpp
     OpenedModeValidation.cpp

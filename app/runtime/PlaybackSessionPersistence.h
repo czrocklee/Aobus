@@ -93,6 +93,7 @@ namespace ao::rt
     // kept for a save after a library restore removes that track.
     TrackId _confirmedTrackId = kInvalidTrackId;
     std::string _confirmedTrackUri{};
+    std::uint16_t _confirmedTrackOrdinal = 0;
     PlaybackSnapshot _lastSnapshot{};
     async::TaskHandle _scheduledTask;
     bool _sessionDiscarded = false;

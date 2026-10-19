@@ -22,6 +22,7 @@ add_gperf_header(
 
 add_library(ao_media STATIC
     detail/MediaError.cpp
+    cue/Sheet.cpp
     file/File.cpp
     file/detail/Content.cpp
     file/detail/Decoder.cpp

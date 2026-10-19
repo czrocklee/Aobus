@@ -362,6 +362,12 @@ namespace ao::test
           access[1].grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT | INHERIT_ONLY_ACE;
           entryCount = 2;
         }
+        else if (inputAccess == DeniedDirectoryAccess::List)
+        {
+          // Entries stay readable by name, as traverse checking is bypassed by default.
+          access[0].grfAccessPermissions = FILE_LIST_DIRECTORY;
+          access[0].grfInheritance = NO_INHERITANCE;
+        }
         else
         {
           access[0].grfAccessPermissions = FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY;
@@ -389,8 +395,8 @@ namespace ao::test
         }
 
         applied = true;
-        restrictionEffective = inputAccess == DeniedDirectoryAccess::Read ? isReadRestrictionEffective(path)
-                                                                          : isWriteRestrictionEffective(path);
+        restrictionEffective = inputAccess == DeniedDirectoryAccess::Write ? isWriteRestrictionEffective(path)
+                                                                           : isReadRestrictionEffective(path);
       }
       catch (...)
       {

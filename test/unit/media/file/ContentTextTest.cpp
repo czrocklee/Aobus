@@ -12,9 +12,87 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::media::file::detail::test
 {
+  TEST_CASE("ContentBuilder - CUE sheets keep distinct nonempty source values in order", "[media][unit][content]")
+  {
+    auto builder = ContentBuilder::makeEmpty();
+    builder.cueSheet("");
+    builder.cueSheet(builder.own("first"));
+    builder.cueSheet(builder.own("second"));
+    // Equal bytes in separate storage are still the same sheet.
+    builder.cueSheet(builder.own("first"));
+    builder.cueSheet("FIRST");
+    builder.cueSheet(" first");
+    builder.cueSheet(" ");
+    builder.cueSheet("");
+
+    auto const content = std::move(builder).finish();
+
+    CHECK(content.cueSheets == std::vector<std::string_view>{"first", "second", "FIRST", " first", " "});
+  }
+
+  TEST_CASE("ContentBuilder - many distinct CUE sheets retain source order across repeats", "[media][unit][content]")
+  {
+    constexpr std::size_t kSheetCount = 80000;
+    auto expected = std::vector<std::string_view>{};
+    auto content = Content{};
+
+    {
+      auto builder = ContentBuilder::makeEmpty();
+
+      for (std::size_t index = 0; index < kSheetCount; ++index)
+      {
+        auto const sheet = builder.own(std::format("sheet {}", index));
+        expected.push_back(sheet);
+        builder.cueSheet(sheet);
+      }
+
+      for (std::size_t index = kSheetCount; index > 0; --index)
+      {
+        builder.cueSheet(builder.own(std::string{expected[index - 1]}));
+      }
+
+      content = std::move(builder).finish();
+    }
+
+    // Both the ordered sheets and their owned bytes survive builder teardown.
+    CHECK(content.cueSheets == expected);
+  }
+
+  TEST_CASE("ContentBuilder - moving preserves CUE membership while building continues", "[media][unit][content]")
+  {
+    auto content = Content{};
+
+    SECTION("move construction transfers membership")
+    {
+      auto source = ContentBuilder::makeEmpty();
+      source.cueSheet(source.own("first"));
+      source.cueSheet(source.own("second"));
+      auto moved = ContentBuilder{std::move(source)};
+      moved.cueSheet(moved.own("first"));
+      moved.cueSheet(moved.own("third"));
+      content = std::move(moved).finish();
+    }
+
+    SECTION("move assignment replaces earlier membership")
+    {
+      auto source = ContentBuilder::makeEmpty();
+      source.cueSheet(source.own("first"));
+      source.cueSheet(source.own("second"));
+      auto moved = ContentBuilder::makeEmpty();
+      moved.cueSheet(moved.own("third"));
+      moved = std::move(source);
+      moved.cueSheet(moved.own("first"));
+      moved.cueSheet(moved.own("third"));
+      content = std::move(moved).finish();
+    }
+
+    CHECK(content.cueSheets == std::vector<std::string_view>{"first", "second", "third"});
+  }
+
   TEST_CASE("MetadataBuilder - repeated multi-name descriptors join in source order",
             "[media][unit][content][descriptor]")
   {

@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -305,6 +306,27 @@ namespace ao::library::detail
     if (!hasValidPayloads(coverPayload, workPayload, customPayload, performancePayload))
     {
       return;
+    }
+
+    auto const segmentPayload = payloadForSlot(header, coldBytes, optLayout->uriOffset, TrackColdBlockSlot::Segment);
+
+    if (!segmentPayload.empty())
+    {
+      auto const* block = utility::bytes::tryLayout<TrackSegmentBlock>(segmentPayload);
+
+      if (segmentPayload.size() != sizeof(TrackSegmentBlock) || block == nullptr || block->reserved != 0 ||
+          block->ordinal == 0 || block->ordinal > kMaxTrackSegmentOrdinal)
+      {
+        return;
+      }
+
+      auto const start = (std::uint64_t{block->startFrameHi} << 32) | block->startFrameLo;
+      auto const count = (std::uint64_t{block->frameCountHi} << 32) | block->frameCountLo;
+
+      if (count == 0 || start > std::numeric_limits<std::uint64_t>::max() - count)
+      {
+        return;
+      }
     }
 
     _header = optLayout->header;

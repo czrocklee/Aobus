@@ -7,6 +7,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 
 #import <AppKit/AppKit.h>
 
@@ -30,6 +31,11 @@ using AobusInspectorAction = void (^)(void);
 - (void)renderSelectionCount:(std::size_t)count
                          row:(std::optional<ao::rt::TrackRow> const&)row
                      credits:(ao::uimodel::TrackCreditSections const&)credits
+                   canReveal:(BOOL)canReveal;
+- (void)renderSelectionCount:(std::size_t)count
+                         row:(std::optional<ao::rt::TrackRow> const&)row
+                     credits:(ao::uimodel::TrackCreditSections const&)credits
+                 segmentRows:(std::vector<ao::uimodel::TrackSegmentDisplayRow> const&)segmentRows
                    canReveal:(BOOL)canReveal;
 - (void)renderArtwork:(ao::rt::ResourceBytes const&)bytes;
 - (void)layoutForModern:(BOOL)modern;

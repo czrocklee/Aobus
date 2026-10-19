@@ -24,7 +24,7 @@ the injected catalog.
 | --- | --- | --- | --- |
 | `UpToDate` | Planning found nothing to apply. | Info | Transient |
 | `Complete` | A plan applied without missing or failed items. Stale evidence left for a later scan is not an error. | Info | Transient |
-| `NeedsReview` | The plan applied, but known tracks are missing. | Warning | History |
+| `NeedsReview` | The plan applied, but known tracks are missing; or the library is current or the plan applied without failures, but notices report state such as a CUE sheet beside a whole-file import. | Warning | History |
 | `CompletedWithErrors` | The plan applied and one or more items failed. | Warning | History |
 | `Unreadable` | Planning found errors only, so nothing was applied. | Error | History |
 | `Failed` | The workflow failed, or an actionable plan returned no apply result. | Error | History |
@@ -32,21 +32,31 @@ the injected catalog.
 Anything requiring attention remains in history; a clean confirmation is
 transient. Relinking moved files is informational rather than a warning.
 Application failures outrank missing files when choosing a verdict, while both
-missing and relinked counts remain available to the formatter. Every verdict
-must produce nonempty text. Exact English and translated sentences belong to
-the [catalog assets](../../../app/i18n/catalog/root.txt), not to a second table
-here.
+missing and relinked counts remain available to the formatter. A `NeedsReview`
+result that planned nothing to apply is worded as an up-to-date library, followed
+by its CUE issues. Every verdict must produce nonempty text. Exact English and
+translated sentences belong to the
+[catalog assets](../../../app/i18n/catalog/root.txt), not to a second table here.
 
 An unknown verdict follows conservative failure formatting without inventing an
 error reason. Paths and diagnostic reasons remain external values passed into
 a catalog pattern.
+
+The formatted scan result stays within the runtime's default notification text budget.
+It preserves the verdict and includes at most five CUE issues, followed by a localized count of omitted CUE issues when necessary.
+A separate UTF-8 byte budget may show fewer issues; a long path or diagnostic must not cause the notification service to reject the entire result.
+The outcome and diagnostic log retain all issues even when the notification shows only a summary.
+Malformed-sheet and layout issues retain their detail: the parser or range-resolver message, or the first imported range that the sheet no longer reproduces.
+Layout advice covers both a rejected first import and a mismatch with existing ranges; it does not claim that imported segments exist.
 
 ## Diagnostics ownership
 
 The decision pass logs the plan summary and workflow failure. When planning
 finds only unreadable items, it also logs those issues because no apply pass saw
 them. For an actionable plan, application already reports each failed item, so
-the outcome pass must not duplicate those entries.
+the outcome pass must not duplicate those entries. No apply pass reports a
+notice, so the decision pass logs every notice once as a warning, whatever the
+plan disposition.
 
 This is one ownership rule: a shell obtains scan diagnostics by invoking the
 shared workflow and must not recreate the same log decisions.

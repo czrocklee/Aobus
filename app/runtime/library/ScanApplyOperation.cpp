@@ -3,6 +3,7 @@
 
 #include "ScanApplyOperation.h"
 
+#include "CueBinding.h"
 #include "MediaTrack.h"
 #include "TrackBuilderSnapshot.h"
 #include <ao/Contract.h>
@@ -21,12 +22,15 @@
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWriter.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/Path.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -92,7 +96,7 @@ namespace ao::rt
                                   std::string_view const manifestUri,
                                   bool const requireAudioIdentity)
     {
-      if (item.trackId == kInvalidTrackId || !item.optManifestEvidence)
+      if (!item.optManifestEvidence)
       {
         return false;
       }
@@ -118,8 +122,38 @@ namespace ao::rt
         return false;
       }
 
+      if (optManifest->totalFrames() != expected.totalFrames ||
+          optManifest->segmentTrackIds().size() != expected.members.size())
+      {
+        return false;
+      }
+
+      for (std::size_t index = 0; index < expected.members.size(); ++index)
+      {
+        auto const& member = expected.members[index];
+
+        if (optManifest->segmentTrackIds()[index] != member.trackId)
+        {
+          return false;
+        }
+
+        auto const optTrack = trackWriter.get(member.trackId, library::TrackStore::Reader::LoadMode::Both);
+
+        if (!optTrack || optTrack->property().uri() != manifestUri ||
+            optTrack->property().segment() != member.segment ||
+            optTrack->property().sampleRate().raw() != expected.sampleRate)
+        {
+          return false;
+        }
+      }
+
+      if (!expected.members.empty())
+      {
+        return true;
+      }
+
       auto const optTrack = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
-      return optTrack && optTrack->property().uri() == manifestUri;
+      return optTrack && !optTrack->property().segment() && optTrack->property().uri() == manifestUri;
     }
   } // namespace
 
@@ -132,6 +166,7 @@ namespace ao::rt
 
     TrackBuilderSnapshot builder;
     std::optional<library::AudioIdentity> optIdentity;
+    std::vector<TrackBuilderSnapshot> segments;
   };
 
   ScanApplyOperation::ScanApplyOperation(library::MusicLibrary& ml,
@@ -235,6 +270,7 @@ namespace ao::rt
       res->insertedIds.clear();
       res->mutatedIds.clear();
       res->relinkedIds.clear();
+      res->relinkedFileCount = 0;
       res->missingCount = 0;
       return std::unexpected{commitRes.error()};
     }
@@ -253,6 +289,7 @@ namespace ao::rt
 
     _preparedItems.resize(_plan.size());
     _skippedItems.assign(_plan.size(), false);
+    auto directories = CueDirectorySheets{};
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
@@ -262,53 +299,15 @@ namespace ao::rt
         break;
       }
 
-      auto const& item = _plan.items()[i];
-      reportProgress(item, i, ScanApplyProgressStage::Updating, 0.0);
-
-      if (item.classification == ScanClassification::Error)
+      if (auto itemRes = prepareItem(i, directories, stopToken); !itemRes)
       {
-        reportFailure(item.uri, "scan", item.errorMessage);
-        continue;
+        return std::unexpected{itemRes.error()};
       }
 
-      if (item.classification == ScanClassification::Missing || item.classification == ScanClassification::Unchanged)
+      if (_cancelled || _abortTransaction)
       {
-        continue;
-      }
-
-      auto optMediaTrack = loadTrackBuilder(item);
-
-      if (!optMediaTrack)
-      {
-        continue;
-      }
-
-      auto optIdentity = cachedAudioIdentity(item);
-
-      if (!optIdentity && shouldFingerprintDuringPreparation(item))
-      {
-        optIdentity = fingerprintAudioPayload(item, optMediaTrack->file(), i, true, stopToken);
-      }
-
-      if (_cancelled || stopToken.stop_requested())
-      {
-        _cancelled = true;
         break;
       }
-
-      if (!optIdentity && isFingerprintRequiredForApply(item))
-      {
-        continue;
-      }
-
-      auto snapshotRes = TrackBuilderSnapshot::make(optMediaTrack->builder());
-
-      if (!snapshotRes)
-      {
-        return std::unexpected{snapshotRes.error()};
-      }
-
-      _preparedItems[i] = std::make_unique<PreparedScanItem>(std::move(*snapshotRes), std::move(optIdentity));
     }
 
     if (_cancelled)
@@ -323,6 +322,198 @@ namespace ao::rt
     }
 
     return _result;
+  }
+
+  Result<> ScanApplyOperation::prepareItem(std::size_t itemIndex,
+                                           CueDirectorySheets& directories,
+                                           std::stop_token stopToken)
+  {
+    auto const& item = _plan.items()[itemIndex];
+    reportProgress(item, itemIndex, ScanApplyProgressStage::Updating, 0.0);
+
+    // Only a failed item fails the apply. A notice was already reported with
+    // the plan and accompanies an item that may still apply.
+    if (isScanFailure(item))
+    {
+      if (!item.errorMessage.empty())
+      {
+        auto const* const stage = item.cueDiagnostic == ScanCueDiagnostic::None ? "scan" : "bind CUE sheet for";
+        reportFailure(item.uri, stage, item.errorMessage);
+      }
+
+      return {};
+    }
+
+    if (item.classification == ScanClassification::Missing || item.classification == ScanClassification::Unchanged ||
+        item.classification == ScanClassification::Notice)
+    {
+      return {};
+    }
+
+    auto const fullPathRes = resolveItemPath(item);
+
+    if (!fullPathRes)
+    {
+      reportFailure(item.uri, "resolve media file", fullPathRes.error().message);
+      return {};
+    }
+
+    if (!tryValidatePathProvenance(itemIndex, *fullPathRes))
+    {
+      return {};
+    }
+
+    auto optMediaTrack = loadTrackBuilder(item, *fullPathRes);
+
+    if (!optMediaTrack)
+    {
+      return {};
+    }
+
+    auto const directory = fullPathRes->parent_path();
+    auto found = directories.find(directory);
+
+    if (found == directories.end())
+    {
+      found = directories.emplace(directory, readCueDirectory(_ml.rootPath(), directory)).first;
+    }
+
+    auto const& sheetsRes = found->second;
+
+    if (!sheetsRes)
+    {
+      reportFailure(item.uri, "read CUE directory", sheetsRes.error().message);
+      return {};
+    }
+
+    auto binding =
+      bindCueSheet(utility::pathToGenericUtf8(utility::pathFromUtf8(item.uri).filename()), *optMediaTrack, *sheetsRes);
+
+    if (!tryValidatePreparedBinding(itemIndex, *optMediaTrack, binding))
+    {
+      return {};
+    }
+
+    auto optIdentity = cachedAudioIdentity(item);
+
+    if (!optIdentity && shouldFingerprintDuringPreparation(item))
+    {
+      optIdentity = fingerprintAudioPayload(item, optMediaTrack->file(), itemIndex, true, stopToken);
+    }
+
+    if (_cancelled || stopToken.stop_requested())
+    {
+      _cancelled = true;
+      return {};
+    }
+
+    if (!optIdentity && isFingerprintRequiredForApply(item))
+    {
+      return {};
+    }
+
+    auto snapshotRes = TrackBuilderSnapshot::make(optMediaTrack->builder());
+
+    if (!snapshotRes)
+    {
+      return std::unexpected{snapshotRes.error()};
+    }
+
+    auto preparedPtr = std::make_unique<PreparedScanItem>(std::move(*snapshotRes), std::move(optIdentity));
+
+    if (auto membersRes = prepareCarrierMembers(itemIndex, *optMediaTrack, binding, *preparedPtr); !membersRes)
+    {
+      return std::unexpected{membersRes.error()};
+    }
+
+    if (!_skippedItems[itemIndex])
+    {
+      _preparedItems[itemIndex] = std::move(preparedPtr);
+    }
+
+    return {};
+  }
+
+  bool ScanApplyOperation::tryValidatePreparedBinding(std::size_t itemIndex,
+                                                      MediaTrack const& media,
+                                                      CueBinding const& binding)
+  {
+    auto const& item = _plan.items()[itemIndex];
+
+    if (binding.evidence != item.cueEvidence)
+    {
+      if (item.classification == ScanClassification::Moved)
+      {
+        reportFailure(item.uri, "relink", "CUE sheets changed after planning");
+        _abortTransaction = true;
+        return false;
+      }
+
+      skipStaleItem(itemIndex);
+      return false;
+    }
+
+    if (item.optManifestEvidence && !item.optManifestEvidence->members.empty() &&
+        (media.optTotalFrames() != item.optManifestEvidence->totalFrames ||
+         media.builder().property().sampleRate().raw() != item.optManifestEvidence->sampleRate))
+    {
+      reportFailure(item.uri, "read carrier", "Carrier extent or sample rate changed");
+
+      if (item.classification == ScanClassification::Moved)
+      {
+        _abortTransaction = true;
+      }
+
+      return false;
+    }
+
+    return true;
+  }
+
+  Result<> ScanApplyOperation::prepareCarrierMembers(std::size_t itemIndex,
+                                                     MediaTrack const& media,
+                                                     CueBinding const& binding,
+                                                     PreparedScanItem& prepared)
+  {
+    auto const& item = _plan.items()[itemIndex];
+
+    if ((item.classification != ScanClassification::New || item.cueLayout.empty()) &&
+        item.classification != ScanClassification::MissingSegments)
+    {
+      return {};
+    }
+
+    if (binding.state != CueBindingState::Bound || binding.layout != item.cueLayout ||
+        media.optTotalFrames() != item.totalFrames || media.builder().property().sampleRate().raw() != item.sampleRate)
+    {
+      skipStaleItem(itemIndex);
+      return {};
+    }
+
+    for (auto const& segmentBuilder : makeCueTracks(media, binding))
+    {
+      auto const optSegment = segmentBuilder.property().segment();
+      AO_INVARIANT(optSegment, "Prepared CUE member lost its range");
+
+      if (auto const segment = *optSegment;
+          item.optManifestEvidence &&
+          std::ranges::any_of(item.optManifestEvidence->members,
+                              [&segment](auto const& member) { return member.segment.ordinal == segment.ordinal; }))
+      {
+        continue;
+      }
+
+      auto segmentRes = TrackBuilderSnapshot::make(segmentBuilder);
+
+      if (!segmentRes)
+      {
+        return std::unexpected{segmentRes.error()};
+      }
+
+      prepared.segments.push_back(std::move(*segmentRes));
+    }
+
+    return {};
   }
 
   Result<> ScanApplyOperation::validatePlan() const
@@ -351,9 +542,39 @@ namespace ao::rt
     return uriRes->resolveUnder(_ml.rootPath());
   }
 
+  bool ScanApplyOperation::tryValidatePathProvenance(std::size_t const itemIndex, std::filesystem::path const& fullPath)
+  {
+    auto const& item = _plan.items()[itemIndex];
+
+    if (fullPath == item.fullPath)
+    {
+      return true;
+    }
+
+    if (item.classification == ScanClassification::Moved)
+    {
+      reportFailure(item.uri, "relink", "Resolved media path changed after planning");
+      _abortTransaction = true;
+    }
+    else
+    {
+      skipStaleItem(itemIndex);
+    }
+
+    return false;
+  }
+
   Result<ScanApplyResult> ScanApplyOperation::revalidatePreparedFiles(std::stop_token stopToken)
   {
     AO_INVARIANT(_state == State::Prepared, "Scan apply operation must be prepared before file revalidation");
+
+    if (_abortTransaction)
+    {
+      _state = State::Terminal;
+      return _result;
+    }
+
+    auto directories = CueDirectorySheets{};
 
     for (std::size_t i = 0; i < _plan.size(); ++i)
     {
@@ -363,15 +584,12 @@ namespace ao::rt
         break;
       }
 
-      switch (_plan.items()[i].classification)
+      if (_skippedItems[i])
       {
-        case ScanClassification::New:
-        case ScanClassification::Changed: revalidatePreparedRegularFile(i); break;
-        case ScanClassification::Missing: revalidateMissingPath(i); break;
-        case ScanClassification::Moved: revalidateMovedFile(i, stopToken); break;
-        case ScanClassification::Unchanged:
-        case ScanClassification::Error: break;
+        continue;
       }
+
+      revalidatePreparedItem(i, directories, stopToken);
 
       if (_cancelled || _abortTransaction)
       {
@@ -384,6 +602,7 @@ namespace ao::rt
       _result.insertedIds.clear();
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
+      _result.relinkedFileCount = 0;
       _result.missingCount = 0;
       _result.staleCount = 0;
       _result.failureCount = 0;
@@ -401,24 +620,130 @@ namespace ao::rt
     return _result;
   }
 
-  void ScanApplyOperation::revalidatePreparedRegularFile(std::size_t const itemIndex)
+  void ScanApplyOperation::revalidatePreparedItem(std::size_t itemIndex,
+                                                  CueDirectorySheets& directories,
+                                                  std::stop_token stopToken)
   {
-    if (_preparedItems[itemIndex] == nullptr)
+    auto const& item = _plan.items()[itemIndex];
+
+    if (item.classification == ScanClassification::Missing)
+    {
+      revalidateMissingPath(itemIndex);
+      return;
+    }
+
+    if (item.classification == ScanClassification::Unchanged || item.classification == ScanClassification::Error ||
+        item.classification == ScanClassification::Notice)
     {
       return;
     }
 
-    auto const& item = _plan.items()[itemIndex];
-    auto fullPathRes = resolveItemPath(item);
+    auto const isMoved = item.classification == ScanClassification::Moved;
+
+    if (auto const* const preparedItem = _preparedItems[itemIndex].get();
+        preparedItem == nullptr || (isMoved && !preparedItem->optIdentity))
+    {
+      if (isMoved)
+      {
+        _abortTransaction = true;
+      }
+
+      return;
+    }
+
+    auto const fullPathRes = resolveItemPath(item);
 
     if (!fullPathRes)
     {
-      reportFailure(item.uri, "revalidate file", fullPathRes.error().message);
-      _skippedItems[itemIndex] = true;
+      auto const* const stage = isMoved ? "resolve moved destination for" : "revalidate file";
+      reportFailure(item.uri, stage, fullPathRes.error().message);
+
+      if (isMoved)
+      {
+        _abortTransaction = true;
+      }
+      else
+      {
+        _skippedItems[itemIndex] = true;
+      }
+
       return;
     }
 
-    auto factsRes = inspectRegularFile(*fullPathRes);
+    if (!tryValidatePathProvenance(itemIndex, *fullPathRes))
+    {
+      return;
+    }
+
+    // Keep physical and sheet proof on the same admitted path. Sheets use a
+    // fresh phase-local cache only after the file facts and moved identity.
+    if (isMoved)
+    {
+      revalidateMovedFile(itemIndex, *fullPathRes, stopToken);
+    }
+    else
+    {
+      revalidatePreparedRegularFile(itemIndex, *fullPathRes);
+    }
+
+    if (_cancelled || _abortTransaction || _skippedItems[itemIndex])
+    {
+      return;
+    }
+
+    revalidatePreparedCueSheets(itemIndex, *fullPathRes, directories);
+  }
+
+  void ScanApplyOperation::revalidatePreparedCueSheets(std::size_t itemIndex,
+                                                       std::filesystem::path const& fullPath,
+                                                       CueDirectorySheets& directories)
+  {
+    auto const& item = _plan.items()[itemIndex];
+    auto const directory = fullPath.parent_path();
+    auto found = directories.find(directory);
+
+    if (found == directories.end())
+    {
+      found = directories.emplace(directory, readCueDirectory(_ml.rootPath(), directory)).first;
+    }
+
+    auto const& sheetsRes = found->second;
+
+    if (!sheetsRes)
+    {
+      reportFailure(item.uri, "revalidate CUE directory", sheetsRes.error().message);
+
+      if (item.classification == ScanClassification::Moved)
+      {
+        _abortTransaction = true;
+      }
+      else
+      {
+        _skippedItems[itemIndex] = true;
+      }
+
+      return;
+    }
+
+    if (cueEvidenceFor(utility::pathToGenericUtf8(utility::pathFromUtf8(item.uri).filename()), *sheetsRes) !=
+        item.cueEvidence)
+    {
+      if (item.classification == ScanClassification::Moved)
+      {
+        reportFailure(item.uri, "relink", "CUE sheets changed after preparation");
+        _abortTransaction = true;
+        return;
+      }
+
+      skipStaleItem(itemIndex);
+    }
+  }
+
+  void ScanApplyOperation::revalidatePreparedRegularFile(std::size_t const itemIndex,
+                                                         std::filesystem::path const& fullPath)
+  {
+    auto const& item = _plan.items()[itemIndex];
+    auto factsRes = inspectRegularFile(fullPath);
 
     if (!factsRes)
     {
@@ -467,27 +792,20 @@ namespace ao::rt
     }
   }
 
-  void ScanApplyOperation::revalidateMovedFile(std::size_t const itemIndex, std::stop_token const stopToken)
+  void ScanApplyOperation::revalidateMovedFile(std::size_t const itemIndex,
+                                               std::filesystem::path const& fullPath,
+                                               std::stop_token const stopToken)
   {
     auto const& item = _plan.items()[itemIndex];
-    auto const* const preparedItem = _preparedItems[itemIndex].get();
+    auto const& preparedItem = *_preparedItems[itemIndex];
 
-    if (preparedItem == nullptr || !preparedItem->optIdentity)
+    if (!preparedItem.optIdentity)
     {
       _abortTransaction = true;
       return;
     }
 
-    auto fullPathRes = resolveItemPath(item);
-
-    if (!fullPathRes)
-    {
-      reportFailure(item.uri, "resolve moved destination for", fullPathRes.error().message);
-      _abortTransaction = true;
-      return;
-    }
-
-    auto factsRes = inspectRegularFile(*fullPathRes);
+    auto factsRes = inspectRegularFile(fullPath);
 
     if (!factsRes)
     {
@@ -504,7 +822,7 @@ namespace ao::rt
       return;
     }
 
-    auto fileRes = media::file::File::open(*fullPathRes);
+    auto fileRes = media::file::File::open(fullPath);
 
     if (!fileRes)
     {
@@ -520,7 +838,7 @@ namespace ao::rt
       return;
     }
 
-    if (auto const& preparedIdentity = *preparedItem->optIdentity;
+    if (auto const& preparedIdentity = *preparedItem.optIdentity;
         !optLiveIdentity || optLiveIdentity->payloadLength != preparedIdentity.payloadLength ||
         optLiveIdentity->signature != preparedIdentity.signature ||
         optLiveIdentity->payloadLength != item.audioPayloadLength || optLiveIdentity->signature != item.audioSignature)
@@ -591,6 +909,7 @@ namespace ao::rt
       _result.insertedIds.clear();
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
+      _result.relinkedFileCount = 0;
       _result.missingCount = 0;
       _result.staleCount = 0;
       _result.failureCount = 0;
@@ -603,6 +922,7 @@ namespace ao::rt
       _result.insertedIds.clear();
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
+      _result.relinkedFileCount = 0;
       _result.missingCount = 0;
       _manifestMutated = false;
       return _result;
@@ -640,6 +960,7 @@ namespace ao::rt
         }
 
         case ScanClassification::Changed:
+        case ScanClassification::MissingSegments:
         case ScanClassification::Missing:
         {
           if (!matchesPersistedEvidence(trackWriter, item, item.uri, false))
@@ -674,7 +995,8 @@ namespace ao::rt
         }
 
         case ScanClassification::Unchanged:
-        case ScanClassification::Error: break;
+        case ScanClassification::Error:
+        case ScanClassification::Notice: break;
       }
     }
   }
@@ -722,6 +1044,11 @@ namespace ao::rt
     if (preparedItem == nullptr)
     {
       return {};
+    }
+
+    if ((item.optManifestEvidence && !item.optManifestEvidence->members.empty()) || !preparedItem->segments.empty())
+    {
+      return applyCarrierItem(item, *preparedItem, trackWriter, dictionary);
     }
 
     auto builder = preparedItem->builder.makeBuilder();
@@ -786,12 +1113,8 @@ namespace ao::rt
       return true;
     }
 
-    if (item.classification == ScanClassification::Error)
-    {
-      return true;
-    }
-
-    return false;
+    // A failure was reported during preparation; a notice names no library file.
+    return item.classification == ScanClassification::Error || item.classification == ScanClassification::Notice;
   }
 
   void ScanApplyOperation::reportProgress(ScanItem const& item,
@@ -827,23 +1150,16 @@ namespace ao::rt
     auto builder = library::FileManifestBuilder::fromView(*optManifest);
     builder.status(library::FileStatus::Missing);
 
-    if (tryWriteManifest(trackWriter, optManifest->trackId(), item.uri, builder))
+    if (tryWriteManifest(trackWriter, item.uri, builder))
     {
       _manifestMutated = true;
     }
   }
 
-  std::optional<MediaTrack> ScanApplyOperation::loadTrackBuilder(ScanItem const& item)
+  std::optional<MediaTrack> ScanApplyOperation::loadTrackBuilder(ScanItem const& item,
+                                                                 std::filesystem::path const& fullPath)
   {
-    auto fullPathRes = resolveItemPath(item);
-
-    if (!fullPathRes)
-    {
-      reportFailure(item.uri, "resolve media file", fullPathRes.error().message);
-      return std::nullopt;
-    }
-
-    auto mediaTrackRes = readMediaTrack(*fullPathRes);
+    auto mediaTrackRes = readMediaTrack(fullPath);
 
     if (!mediaTrackRes)
     {
@@ -858,7 +1174,9 @@ namespace ao::rt
 
   std::optional<library::AudioIdentity> ScanApplyOperation::cachedAudioIdentity(ScanItem const& item) const noexcept
   {
-    if (item.classification != ScanClassification::New || !hasAudioIdentity(item))
+    if ((item.classification != ScanClassification::New &&
+         item.classification != ScanClassification::MissingSegments) ||
+        !hasAudioIdentity(item))
     {
       return std::nullopt;
     }
@@ -873,9 +1191,11 @@ namespace ao::rt
       case ScanClassification::Moved:
       case ScanClassification::Changed: return true;
       case ScanClassification::New: return _options.audioIdentityPolicy == AudioIdentityPolicy::Eager;
+      case ScanClassification::MissingSegments:
       case ScanClassification::Missing:
       case ScanClassification::Unchanged:
-      case ScanClassification::Error: return false;
+      case ScanClassification::Error:
+      case ScanClassification::Notice: return false;
     }
 
     return false;
@@ -883,17 +1203,7 @@ namespace ao::rt
 
   bool ScanApplyOperation::isFingerprintRequiredForApply(ScanItem const& item) const noexcept
   {
-    switch (item.classification)
-    {
-      case ScanClassification::Moved:
-      case ScanClassification::Changed: return true;
-      case ScanClassification::New: return _options.audioIdentityPolicy == AudioIdentityPolicy::Eager;
-      case ScanClassification::Missing:
-      case ScanClassification::Unchanged:
-      case ScanClassification::Error: return false;
-    }
-
-    return false;
+    return shouldFingerprintDuringPreparation(item);
   }
 
   std::optional<library::AudioIdentity> ScanApplyOperation::fingerprintAudioPayload(ScanItem const& item,
@@ -1030,7 +1340,139 @@ namespace ao::rt
     }
 
     _result.relinkedIds.push_back(item.trackId);
+    ++_result.relinkedFileCount;
     return true;
+  }
+
+  Result<> ScanApplyOperation::insertCarrierSegments(ScanItem const& item,
+                                                     PreparedScanItem const& prepared,
+                                                     library::TrackWriter& writer)
+  {
+    auto builders = std::vector<library::TrackBuilder>{};
+
+    for (auto const& snapshot : prepared.segments)
+    {
+      auto builder = snapshot.makeBuilder();
+      builder.property().uri(item.uri);
+
+      if (!tryValidateTrack(builder, writer, item.uri))
+      {
+        return {};
+      }
+
+      builders.push_back(std::move(builder));
+    }
+
+    if (builders.empty())
+    {
+      return {};
+    }
+
+    auto idsRes =
+      item.classification == ScanClassification::New
+        ? writer.createCarrier(builders, makeAvailableManifest(item, prepared.optIdentity), item.totalFrames)
+        : writer.addCarrierMembers(item.uri, builders);
+
+    if (!idsRes)
+    {
+      return std::unexpected{idsRes.error()};
+    }
+
+    _result.insertedIds.append_range(*idsRes);
+    return {};
+  }
+
+  Result<> ScanApplyOperation::applyCarrierItem(ScanItem const& item,
+                                                PreparedScanItem const& prepared,
+                                                library::TrackWriter& writer,
+                                                library::DictionaryStore const& dictionary)
+  {
+    if (item.classification == ScanClassification::New || item.classification == ScanClassification::MissingSegments)
+    {
+      return insertCarrierSegments(item, prepared, writer);
+    }
+
+    AO_INVARIANT(item.optManifestEvidence, "An existing carrier has no manifest evidence");
+    auto const& expected = *item.optManifestEvidence;
+    auto parsed = prepared.builder.makeBuilder();
+    auto manifest = makeAvailableManifest(item, prepared.optIdentity);
+    auto const isMoved = item.classification == ScanClassification::Moved;
+
+    // Rate, range and derived duration belong to the immutable carrier structure.
+    auto const mergeMember = [&](TrackId const trackId)
+    {
+      auto const optTrack = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      AO_INVARIANT(optTrack, "Admitted carrier lost its member inside the write transaction");
+      auto merged = library::TrackBuilder::fromCompleteView(*optTrack, dictionary);
+      merged.property()
+        .uri(item.uri)
+        .bitrate(parsed.property().bitrate())
+        .channels(parsed.property().channels())
+        .codec(parsed.property().codec())
+        .bitDepth(parsed.property().bitDepth());
+      applyFileCoverArt(merged, parsed);
+      return merged;
+    };
+
+    if (isMoved && (!prepared.optIdentity || prepared.optIdentity->payloadLength != item.audioPayloadLength ||
+                    prepared.optIdentity->signature != item.audioSignature))
+    {
+      reportFailure(item.uri, "relink carrier", "Audio identity changed before apply");
+      _abortTransaction = true;
+      return {};
+    }
+
+    // Validate every member before the first write, as a whole-file item is
+    // validated: a member the writer would reject skips this item, or aborts a
+    // relink, instead of failing the scan. Merged builders borrow the write
+    // transaction, so none is kept across the writes below.
+    for (auto const& member : expected.members)
+    {
+      if (!tryValidateTrack(mergeMember(member.trackId), writer, item.uri))
+      {
+        _abortTransaction = isMoved;
+        return {};
+      }
+    }
+
+    if (isMoved)
+    {
+      if (auto res = writer.relinkCarrier(item.oldUri, item.uri, manifest); !res)
+      {
+        reportFailure(item.uri, "relink carrier", res.error().message);
+        _abortTransaction = true;
+        return {};
+      }
+
+      ++_result.relinkedFileCount;
+    }
+
+    for (auto const& member : expected.members)
+    {
+      if (auto res = writer.update(member.trackId, mergeMember(member.trackId)); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+
+      if (isMoved)
+      {
+        _result.relinkedIds.push_back(member.trackId);
+      }
+      else
+      {
+        _result.mutatedIds.push_back(member.trackId);
+      }
+    }
+
+    if (!isMoved)
+    {
+      if (auto res = writer.updateManifest(item.uri, manifest); !res)
+      {
+        return std::unexpected{res.error()};
+      }
+    }
+
+    return {};
   }
 
   Result<> ScanApplyOperation::applyNewItem(ScanItem const& item,
@@ -1084,11 +1526,10 @@ namespace ao::rt
   }
 
   bool ScanApplyOperation::tryWriteManifest(library::TrackWriter& writer,
-                                            TrackId const trackId,
                                             std::string const& uri,
                                             library::FileManifestBuilder& builder)
   {
-    if (auto putRes = writer.updateManifest(trackId, builder); !putRes)
+    if (auto putRes = writer.updateManifest(uri, builder); !putRes)
     {
       reportFailure(uri, "update manifest for", putRes.error().message);
       return false;

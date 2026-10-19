@@ -18,6 +18,21 @@ Your library reflects the supported audio files beneath its root, and frequently
 A scan adds new supported files, refreshes technical properties for changed files, reconnects recognized moves when identity is available, and marks unmatched manifest rows as missing.
 Curated library metadata remains authoritative after initial import; rescanning a changed file does not replace those edits with file tags.
 
+### Disc images and CUE sheets
+
+A UTF-8 `.cue` file beside a FLAC or WAV of the same name splits that file into one track per CUE audio track.
+`Album.flac.cue` applies only to `Album.flac` and wins over `Album.cue`. The name inside the sheet is ignored.
+Save any other encoding as UTF-8 and scan again; Aobus does not guess a legacy encoding, and it does not import the new file until the sheet can be read.
+Only FLAC and WAV are split. For another format, remove or rename the sheet to import the file as one track.
+
+A scan never deletes a track, never changes a stored range, and never splits a file that is already one track.
+To split that file, or to apply a sheet whose ranges no longer match, remove its tracks and scan again.
+Deleting one track of a split file and scanning again creates that CUE track once more while the file itself is unchanged.
+Editing titles in the sheet after import does not replace curated metadata.
+Track properties show the audio file, the CUE track number, and the start and end time. They do not show "n of m".
+
+The [CUE sheet reference](../reference/media/cue-sheet.md) defines the accepted text. Scan classification belongs to [library scan and audio identity](../system/library/scan-and-identity.md#cue-binding).
+
 ### Reconcile files from the Windows desktop
 
 1. Open the intended root with **Open Library...**.
@@ -34,7 +49,7 @@ Windows runs the same transactional reconciliation as GTK. A failed scan keeps t
    aobus -C /music scan --dry-run --verbose
    ```
 
-2. Review the `new`, `changed`, `moved`, `missing`, and `errors` counts.
+2. Review the `new`, `changed`, `moved`, `missing`, `missing-segments`, and `errors` counts. `missing-segments` means a split file will regain a CUE track that is no longer in the library.
 3. Apply the scan only when the plan targets the intended root:
 
    ```bash
@@ -78,4 +93,5 @@ Kana suggestions use romanized Kana; Han-only values use a Mandarin-pinyin alias
 - [Track-filter specification](../system/presentation/track-filter.md)
 - [Predicate language reference](../reference/query/predicate-language.md)
 - [Library scan and audio identity](../system/library/scan-and-identity.md)
+- [CUE sheet](../reference/media/cue-sheet.md)
 - [Organize music with Lists and Playlists](organize-with-lists.md)

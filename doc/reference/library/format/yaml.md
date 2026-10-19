@@ -92,6 +92,7 @@ Each track is a closed map.
 | `recording-date` | No. | Canonical partial-date scalar, or empty scalar text that clears the value. | Mode-dependent; see [recording date](#recording-date). |
 | `credits` | No. | Sequence of closed `name`/`kind`/`role` maps. | Explicit sequence, including empty, in full/metadata; difference from the selected baseline in delta. See [Credits](#credits). |
 | `custom` | No. | Map of arbitrary scalar string keys to scalar string values. | Emitted only when non-empty. |
+| `segment` | No. | Closed map. | Emitted for every segment Track, in every mode that emits track records. |
 | `tags` | No. | Sequence of scalar strings. | Emitted only when non-empty. |
 | `covers` | No. | Sequence of closed cover maps. | Mode-dependent; an empty sequence is meaningful. |
 | Technical fields | No. | Scalars from the technical table. | Emitted in `full`. |
@@ -105,8 +106,10 @@ Transfer carries the full seconds-and-nanoseconds precision verbatim.
 
 Track `id` values need not match target-library IDs.
 Duplicate nonzero IDs reject the document; `0` and omitted IDs create no ID mapping for list references.
-Duplicate canonical track URIs also reject the document, including records whose input spellings normalize to the same URI.
+Several records may share one canonical URI only when every one of them has `segment`, the ordinals are distinct, and the file facts and extent agree.
+Any other duplicate canonical URI rejects the document, including records whose input spellings normalize to the same URI, and a mix of a whole-file record with a segment record.
 A track record must name a supported audio file from the [supported audio files reference](../../media/audio-file.md): a URI with any other extension rejects the document, matching the admission rule of manual track creation.
+`segment` is not a custom key. It reserves no custom-metadata key unless that spelling is also a runtime TrackField id.
 Keys in one `custom` map must be unique both as YAML keys and after NFC normalization.
 
 ### Text metadata
@@ -199,6 +202,25 @@ This is a core-storage representability check, not a change to the scalar gramma
 
 Any other codec token rejects the complete document.
 
+### Segment
+
+`segment` is a closed map. The producer emits it whenever the Track is a segment, including in `delta` and `metadata`, because those modes otherwise omit technical facts and a carrier's records would be duplicate URIs without it.
+Only a `.flac` or `.wav` URI can carry `segment`, matching the files CUE binding divides; the extension check is ASCII case-insensitive.
+
+| Field | Required | Type |
+|---|---|---|
+| `ordinal` | Yes. | Unsigned 16-bit CUE track number, 1 through 99. |
+| `start-frame` | Yes. | Unsigned 64-bit inclusive PCM start. |
+| `frame-count` | Yes. | Unsigned 64-bit nonzero length. |
+| `total-frames` | Yes. | Unsigned 64-bit carrier extent; equal on every record of that URI. |
+| `sample-rate` | Yes. | Unsigned 32-bit positive Hertz, the Track's hot sample rate; equal on every record of that URI. |
+
+`segment.sample-rate` is the hot sample rate. A record that also has the top-level `sample-rate` must give the same value.
+The producer emits `duration` as `floor(frame-count * 1000 / sample-rate)`. A present `duration` that is not that value rejects the document.
+`full` emits that duration with the other technical fields. `delta` and `metadata` still emit it on a segment record so a restore that never opens the audio file can derive the display duration.
+A range that is empty, overflows, starts past `total-frames`, or overlaps another segment of the same URI rejects the document.
+Transfer behavior for restore and merge belongs to the [YAML transfer specification](../../../system/library/yaml-transfer.md#carrier-tracks).
+
 ### Resource records
 
 `library.resources` is the document's table of cover content, emitted in `full` only.
@@ -264,12 +286,15 @@ order:
   - 42
   - id: 42
   - uri: music/example.flac
+  - uri: music/image.flac
+    ordinal: 9
 ```
 
-A scalar or `id` map refers to a track record's payload `id`.
+A scalar or `id` map refers to a track record's payload `id`. An `ordinal` beside `id` rejects the document.
 A `uri` map contains a Library URI and resolves through the target manifest.
+An optional `ordinal`, 1 through 99, selects the segment of that URI. Without it, a `uri` reference matches only a whole-file Track.
 A map must contain exactly one of `id` or `uri`; unknown fields and ambiguous maps reject the document.
-Normal exports use scalar IDs, while `list-only` exports use URI maps so ranks can attach to tracks with different target IDs.
+Normal exports use scalar IDs, while `list-only` exports use URI maps so ranks can attach to tracks with different target IDs. A segment reference in that form includes `ordinal`.
 
 Dangling parent, track-ID, and URI references are ignored and counted in the import report.
 Known parent relationships must not point to self or form a cycle.
@@ -293,7 +318,9 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - a `credits` node that is not a sequence of closed maps with required scalar `name` and `kind` and optional scalar `role`, an unknown kind token, or a name or role the shared Credits admission gate rejects;
 - a track record whose URI is not a supported audio file;
 - malformed UTF-8 in library text or a normalized text value beyond its core storage limit;
-- duplicate nonzero track IDs, duplicate canonical track URIs, raw or canonically equivalent duplicate custom keys, or missing, zero, or duplicate list IDs;
+- duplicate nonzero track IDs, a canonical URI shared by records that are not one carrier's distinct segments, raw or canonically equivalent duplicate custom keys, or missing, zero, or duplicate list IDs;
+- a `segment` map on a URI whose extension is not `.flac` or `.wav`, with an unknown field, an ordinal outside 1 through 99, an empty or out-of-extent range, disagreeing carrier extent or sample rate, or a `duration` or top-level `sample-rate` that contradicts the segment;
+- a list-order `ordinal` without `uri`, or an ordinal outside 1 through 99;
 - a known parent cycle or an ambiguous list-order reference map;
 - a URI or list representation exceeding its core storage limit;
 - a malformed digest, an out-of-range `length`, a cover naming no row, a row no track references, or two rows carrying one digest.
@@ -397,6 +424,7 @@ library:
 
 - [`LibraryExportImportTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportTest.cpp) covers modes, fields, URI normalization, overlays, reports, and previews.
 - [`LibraryExportImportListTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) covers list-only shape, references, parents, dangling references, and ordering.
+- [`CueYamlTest.cpp`](../../../../test/unit/runtime/CueYamlTest.cpp) covers segment fields in every track-bearing mode, offline restore, list-only ordinals, and atomic carrier merge rejection.
 - [`LibraryExportImportCoverArtTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) covers the resource table's shape, ordering, determinism, closure rules, digest and length rejection, and each mode's cover terminal state.
 - [`LibraryYamlSchemaTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) covers closed-schema, scope, enum, and URI rejection.
 - [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) covers scalar validation, duration boundary round trips, and transactional rollback for unrepresentable durations.

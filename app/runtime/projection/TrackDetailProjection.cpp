@@ -231,6 +231,7 @@ namespace ao::rt
         snapshot.singleCoverArtId = optPrimary->resourceId;
       }
 
+      snapshot.optSegment = view.property().segment();
       snapshot.commonTagIds.assign(view.tags().begin(), view.tags().end());
     }
   } // namespace

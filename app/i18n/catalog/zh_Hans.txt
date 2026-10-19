@@ -814,6 +814,20 @@ zh_Hans:table {
     track_multiple_values { "<多个值>" }
     track_metadata_heading { "元数据" }
     track_audio_properties_heading { "音频属性" }
+    library_scan_cue_invalid_encoding { "{uri}：请将 CUE 文件另存为 UTF-8 后重新扫描。" }
+    library_scan_cue_unreadable { "{uri}：无法读取 CUE 文件，或其格式有误。请修复后重新扫描。" }
+    library_scan_cue_ambiguous { "{uri}：有多个 CUE 文件与此文件匹配。请仅保留一个匹配的 CUE 文件。" }
+    library_scan_cue_unsupported { "{uri}：无法通过 CUE 分割此文件。请删除 CUE 文件或为其重命名，以导入整个音频文件。" }
+    library_scan_cue_no_matching_audio { "{uri}：没有受支持的音频文件与此 CUE 文件同名。" }
+    library_scan_cue_whole_file { "{uri}：已作为整个文件导入。请移除该音轨后重新扫描以分割文件。" }
+    library_scan_cue_missing { "{uri}：没有用于分割此文件的 CUE 文件。已保留导入的片段。" }
+    library_scan_cue_layout_mismatch { "{uri}：CUE 分段无效，或与已导入的范围不一致。请检查 CUE 文件后重新扫描。若要替换已有范围，请先移除已导入的音轨。" }
+    library_scan_cue_carrier_mismatch { "{uri}：文件的帧数或采样率与已导入的片段不一致。未更改已导入的音轨。" }
+    library_scan_cue_detail { " 详细信息：{detail}" }
+    library_scan_cue_additional_issues { "{count, plural, other {另有 # 个 CUE 问题；详情请查看日志。}}" }
+    track_cue_number { "CUE 音轨编号" }
+    track_segment_start { "开始时间" }
+    track_segment_end { "结束时间（不含）" }
     track_show_empty_fields { "显示空字段" }
     track_hide_empty_fields { "隐藏空字段" }
     track_missing_on_some { "在部分曲目中缺失" }

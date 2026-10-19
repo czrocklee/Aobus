@@ -269,6 +269,11 @@ namespace ao::appkit
     return _form.creditSections();
   }
 
+  std::vector<uimodel::TrackSegmentDisplayRow> const& LibraryEditorModel::segmentRows() const noexcept
+  {
+    return _form.segmentRows();
+  }
+
   uimodel::TrackCreditsEditorModel& LibraryEditorModel::creditsEditor() noexcept
   {
     return _form.creditsEditor();

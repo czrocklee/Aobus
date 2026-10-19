@@ -99,7 +99,7 @@ The logical Track writer preserves the format's hot/cold, manifest, dictionary, 
 - replaces Track data and its existing manifest facts together;
 - updates only file status or audio identity while retaining the existing URI-to-Track binding;
 - relinks by changing the cold URI, removing the old manifest key, and creating the new binding as one operation;
-- deletes one Track together with its manifest row; or
+- deletes one Track and both physical keys, rebinding a nonempty carrier manifest to the remaining members and the same extent, and removing the manifest row only with its final member; or
 - clears Tracks and the manifest together.
 
 The logical List writer accepts `ListBuilder`, prepares its physical row internally, and creates or updates it only after validating the live parent chain.
@@ -120,7 +120,7 @@ Filter bytes remain opaque throughout these storage operations.
 | `lists` | `ListId` integer | `ListHeader`, order-track-id array, name/description/filter bytes, zero padding. |
 | `resources` | Digest-derived `ResourceId` integer | 36-byte `ResourceDescriptor`. |
 | `dictionary` | `DictionaryId` integer | Scalar-valid UTF-8 NFC bytes without a terminator. |
-| `file_manifest` | Root-relative URI padded to a four-byte multiple | `FileManifestHeader`. |
+| `file_manifest` | Root-relative URI padded to a four-byte multiple | `FileManifestHeader`, plus an optional carrier tail: little-endian `totalFrames` and the member `TrackId` values. The URI is the key, not a value tail. See [Manifest records](#manifest-records). |
 
 One database slot remains spare.
 
@@ -196,7 +196,7 @@ Defined block slots are written in slot order:
 | `1` work | One 12-byte `TrackWorkBlock`: work and movement dictionary ids, then two unsigned 16-bit movement number/total values. |
 | `2` custom metadata | Eight-byte header, eight-byte entries, then value bytes. |
 | `3` performance | One four-byte `TrackPerformanceBlock` prefix, followed by 12-byte `TrackCreditEntry` values. |
-| `4` | Last unused cold slot; zero. The next per-Track block a later version adds, such as a sub-file segment, would use it; a block beyond it needs a new cold header. |
+| `4` segment | One 20-byte `TrackSegmentBlock` when the Track is one CUE segment of a carrier file; absent for a whole-file Track. |
 
 An absent payload has offset zero.
 Every present payload starts on a four-byte boundary, and URI bytes follow the block area.
@@ -289,7 +289,11 @@ A complete update checks the hot target before its first mutation and changes bo
 A later failure after any part of a logical multi-store mutation has been staged aborts the complete library root; no public runtime writer may continue or commit a failed root.
 The [LMDB operation specification](../../../system/persistence/lmdb-operation.md#writes) owns the private mutation-fault carrier and adapter failure channels, while the [library architecture](../../../system/library/structure.md#physical-storage-and-capabilities) owns whole-root rollback.
 
-The logical Track delete first proves the complete Track and matching manifest binding, then deletes the manifest and both physical Track keys.
+The logical Track delete first proves the complete Track and matching manifest binding.
+It deletes both physical Track keys and leaves saved List orders unchanged.
+The runtime delete command removes the id from List orders in the same transaction and publishes those List changes, as the [mutation specification](../../../system/library/mutation.md#delete-track) defines.
+It removes the manifest row only when the deleted Track is the row's final member, including a whole-file row.
+A carrier that still has members keeps the same URI and is rebound to the remaining member ids and the same `totalFrames`.
 An absent Track returns successful `false`; a present Track with missing or mismatched
 cross-Store evidence violates the admission-and-writer invariant and aborts rather than
 presenting the live database as recoverably corrupt.
@@ -383,7 +387,7 @@ Dictionary rows created for a referencing record are written in the same LMDB tr
 | `32` | Audio signature | 16-byte XXH128 canonical big-endian serialization. |
 | `48` | Status | `Available = 0`, `Missing = 1`, or `Error = 2`. |
 | `49` | `hasMtime` | `1` when a modification time is stored, `0` when it is absent. |
-| `50` | Padding | Two zero bytes. |
+| `50` | `segmentCount` | Unsigned 16-bit. Zero is a whole-file row. `1` through `99` is a carrier row. |
 
 The modification time is one 12-byte `FileTimestamp` instant: a signed 64-bit seconds count from the Unix/POSIX epoch `1970-01-01 00:00:00 UTC`, excluding leap seconds, plus a normalized nanoseconds fraction in `[0, 1000000000)`.
 The seconds value is stored in low/high 32-bit halves like the other 64-bit manifest fields, but it is a signed count, so instants before 1970 are representable.
@@ -393,24 +397,58 @@ The epoch instant `seconds = 0, nanoseconds = 0` with `hasMtime = 1` is therefor
 
 Zero payload length together with an all-zero signature means pending audio identity.
 
-One file is one Track.
-Every manifest key names a whole file, and admission requires a strict Track-to-manifest bijection, so version 10 has no Track for part of a file, such as a CUE sheet entry, a chapter, or a segment of a disc image.
-A key that has its URI's whole-file key as a proper prefix and a zero byte right after the URI is not a version-10 key; that form is reserved for a later version's sub-file Tracks.
-The zero byte is already the first padding byte unless the URI's length is a four-byte multiple, and it keeps a longer URI's key out of the form.
-A canonical URI contains no zero byte, so a file's reserved keys sort together directly after its whole-file key, with no other URI's key among them, and adding one rewrites no whole-file row.
-A 1,976-byte URI leaves no room for a four-byte continuation under the 1,978-byte LMDB key limit, so the later version either limits a sub-file Track's URI below the whole-file limit or stores its segments another way; the whole-file limit is unaffected.
+A manifest key is still one whole file. Several Tracks may share that key when a [CUE sheet](../../media/cue-sheet.md) divides the file; they do not extend the key.
+A key longer than the URI's minimal zero padding is not a version-10 key. The whole-file URI limit of 1,976 bytes is unchanged.
+
+A whole-file value is exactly 52 bytes: `segmentCount` is zero and the header `TrackId` is the one Track that names the URI.
+A carrier value has `segmentCount` from 1 through 99, a zero header `TrackId`, and bytes after the header: one little-endian unsigned 64-bit `totalFrames`, then `segmentCount` `TrackId` values ordered by increasing segment ordinal.
+Deleting a segment can leave one member. The list index is not the ordinal once a segment is gone.
+`totalFrames` is the carrier's exact PCM frame count. File size, modification time, audio identity, status, and that extent are per file, so a carrier's segments go missing, move, and receive identity together.
+The stored extent lets open bound every segment. It is not a substitute for the media reader's capability, extent, or sample rate during a carrier scan; [scan and identity](../../../system/library/scan-and-identity.md#cue-binding) owns that inspection. Playback treats an early end of the carrier as a decode failure; that rule belongs to the playback contracts.
+
+`TrackSegmentBlock` is 20 bytes, four-byte aligned, and has no padding:
+
+| Offset | Field | Representation |
+|---:|---|---|
+| `0` | `startFrameLo` | Low 32 bits of the inclusive PCM start. |
+| `4` | `startFrameHi` | High 32 bits of that start. |
+| `8` | `frameCountLo` | Low 32 bits of the nonzero frame count. |
+| `12` | `frameCountHi` | High 32 bits of that count. |
+| `16` | `ordinal` | Unsigned 16-bit CUE `TRACK` number, 1 through 99. |
+| `18` | `reserved` | Unsigned 16-bit zero. |
+
+A segment Track's cold duration is `floor(frameCount * 1000 / sampleRate)` milliseconds, using the hot sample rate.
+Admission requires that equality, so duration cannot contradict the range.
+That duration is a display value: the range itself is decided in frames. The sample rate is part of the carrier's structure and is protected like the range.
 
 Manifest point reads, lower-bound seeks, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
-Values must be exactly 52 bytes, carry a nonzero Track id, a declared status, two zero padding bytes, either both parts of an audio identity or neither, and a modification-time state consistent with its `hasMtime` flag: an absent flag requires zero seconds and nanoseconds words, and a present flag requires nanoseconds below `1000000000`.
-Preparation is split because a creating write only allocates the owning Track id once its Track record exists.
-`FileManifestBuilder::validate()` parses the URI, applies the canonical key validator and every record fact that does not depend on that binding, and snapshots a zero-id header without allocating a serialized payload.
-`FileManifestBuilder::Unbound::bind()` supplies the nonzero owning Track id, cannot fail, and reapplies the complete payload validator as its postcondition, so every stored value still passes one exact validator.
-It consumes its unbound value exactly once; rebinding a consumed value surrenders the validated key and is a caller call-order violation that fails through `AO_EXPECTS`.
+A whole-file value must be exactly 52 bytes and carry a nonzero Track id.
+A carrier value must be `52 + 8 + 4 * segmentCount` bytes, carry a zero header Track id, a nonzero `totalFrames`, and no zero member id.
+Either form must carry a declared status, `segmentCount` of at most 99, either both parts of an audio identity or neither, and a modification-time state consistent with its `hasMtime` flag: an absent flag requires zero seconds and nanoseconds words, and a present flag requires nanoseconds below `1000000000`.
+Preparation is split because a creating write only allocates Track ids once the Track records exist.
+`FileManifestBuilder::validate()` parses the URI, applies the canonical key validator and every record fact that does not depend on membership, and snapshots a zero-id, zero-count header without allocating a serialized payload.
+`FileManifestBuilder::Unbound::bind()` supplies the nonzero owning Track id of a whole-file row, cannot fail, and reapplies the complete payload validator as its postcondition.
+`FileManifestBuilder::Unbound::bindCarrier()` supplies the ordered member ids and `totalFrames` of a carrier row and reapplies that same validator.
+Either bind consumes its unbound value exactly once; rebinding a consumed value surrenders the validated key and is a caller call-order violation that fails through `AO_EXPECTS`.
 `FileManifestStore::Writer::put()` accepts only the bound prepared value and passes its owning encoded bytes through the ordinary copied-data database overload.
 `FileManifestStore::Reader::lowerBound(uri)` validates that canonical URI key and returns the first manifest whose URI is not less than it in LMDB byte order.
 Only a point-read `NotFound` may be interpreted as absence.
 Point reads and iterator dereference after a successful open assume the validated Store invariant; a malformed row fails through `AO_INVARIANT` rather than being skipped, returned as partial output, or exposed through a private library error carrier.
+
+### Carrier mutation
+
+Only `TrackWriter::createCarrier`, `addCarrierMembers`, and `relinkCarrier` create a carrier, add a member, or move a carrier's key.
+Those operations sort members by ordinal, reject a duplicate ordinal, and reject a range that is empty, overflows, ends past `totalFrames`, or overlaps the previous member.
+They also require one shared positive sample rate and a derived duration that fits the cold duration field.
+No writer entry changes a stored range, ordinal, or carrier extent.
+`update`, `updateHot`, `updateCold`, and `replace` preserve a segment Track's block, URI, and sample rate and refuse a builder that would change them.
+`replace` may refresh that file's manifest facts, but it keeps the member list and extent.
+A segment Track's `duration()` is derived from the range, so a caller cannot store a contradictory duration through the builder.
+Single-Track `relink` refuses a segment; the carrier operation relinks every member together and keeps each `TrackId`, ordinal, and range.
+`remove` of a segment drops that id from the carrier list, and deletes the manifest row only with its last member.
+A one-member carrier is valid. `updateManifest`, whether named by URI or by Track id, refreshes file facts and preserves the member list and extent.
+`create` refuses a segment builder.
 
 ## Validation rules
 
@@ -434,11 +472,15 @@ The current-schema gate then validates Resource keys as nonzero four-byte ids an
 A row whose key is not the first free slot at or above its digest's initial key is `CorruptData`, with the empty slot before it as the cause; a long collision cluster and a cluster spanning the wrap from the maximum key to `1` are both valid.
 Reachability is checked over the occupied key runs the same traversal already collects, so it stays linear in the number of rows.
 It validates dictionary key width, dense ids, scalar-valid UTF-8 NFC, and unique canonical text while building the in-memory index.
-It merge-checks the hot/cold Track key sets, validates canonical records including scalar-valid UTF-8 NFC inline text plus every dictionary and Resource reference, and proves a strict Track-to-manifest bijection.
+It merge-checks the hot/cold Track key sets, validates canonical records including scalar-valid UTF-8 NFC inline text plus every dictionary and Resource reference, and proves Track-to-manifest membership.
 For performance records it rejects a block shorter than its date prefix or with a partial credit entry, an unknown kind byte, nonzero entry reserved bytes, entries out of kind order, noncanonical empty blocks, invalid partial dates, zero or unresolved credit name ids, unresolved role ids, and empty or untrimmed referenced name/role text.
 Dictionary admission has already proved scalar UTF-8 and NFC, so checking the extra credit text rules requires no per-entry normalization or temporary string.
-The bijection first compares row counts, then performs one canonical manifest point read for each Track URI and requires the manifest's Track id to equal that Track id.
-Equal counts, unique Track ids, and the exact point matches prove that no extra manifest row exists without allocating a Track- or manifest-sized set; duplicate Track URIs and duplicate manifest bindings cannot pass.
+A segment block, when present, must be exactly 20 bytes with a zero reserved word, an ordinal from 1 through 99, and a nonzero frame count that does not overflow.
+Its cold duration must equal the duration derived from that count and the hot sample rate.
+The Track pass point-reads each Track's manifest row and requires the Track to be that row's header `TrackId`, or one of its at most 99 listed members.
+The manifest pass point-reads every listed Track and checks the segment block, URI, shared sample rate, strictly increasing ordinals, extent, and non-overlap, using two locals rather than a Track-sized set.
+The sum over rows of `max(1, segmentCount)` must equal the Track count, so a missing member, an extra row, or a duplicate listing cannot pass.
+Whole-file URIs remain unique. A carrier URI is unique as a key and is shared only by the Tracks that row lists.
 It validates every List key and local record, including scalar-valid UTF-8 NFC text, requires each non-root parent to exist, and rejects parent cycles using memory proportional to the List count.
 Every Track key must be at most the id space's `lastTrackId`, and every List key at most its `lastListId` and below `UINT32_MAX`.
 Saved-order Track ids must be nonzero, unique, and at most `lastTrackId`, but they may be stale or currently absent because saved rank is intentionally retained outside current membership.
@@ -503,6 +545,7 @@ The Track write sequencing, validation, and return-value contracts do not change
 Version `10` gates the id space record and its never-reused Track and List ids, the explicit zero reserved word in the metadata header, the non-nil library id, the `UINT32_MAX` List-key reservation, and the kind byte in each credit entry.
 Only the exact version-10 layout defined here is accepted; alternative layouts labeled version 10 are unsupported.
 Version 10 has not been released. Until the first public release, a development build may change its layout or widen one of its limits without incrementing it, and the result is an alternative layout to earlier development builds.
+The current unreleased layout includes the segment block and carrier rows; that addition did not increment `kLibraryVersion`. An earlier development build rejects the wider value or the occupied slot.
 An earlier build usually rejects such a database on open as `CorruptData`, and one that already has it open fails through the fatal facility when it reads an affected row; for example, a URI longer than 500 bytes is rejected by builds made before the limit became 1,976 bytes.
 Rejection is not guaranteed across a layout change: when each credit entry gained its kind byte, some Credits blocks remained valid under both layouts with different credits.
 A development library therefore moves between such builds only through YAML, exported by the build that wrote it and restored into a new library.
@@ -558,6 +601,7 @@ Transaction-local dictionary publication does not change the row shape or librar
 - [`RuntimeFatalProbeTest.cpp`](../../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) locks a runtime YAML consumer's post-open Resource-reference invariant to the same fatal diagnostics.
 - [`PerformanceBaselineTest.cpp`](../../../../test/perf/PerformanceBaselineTest.cpp) records the non-default 100,000-Track open-admission wall-time, sampled resident-memory, named-DBI-open, cursor-row, and manifest-point-read evidence.
 - [`TrackWriterTest.cpp`](../../../../test/unit/library/TrackWriterTest.cpp) locks the public/physical capability boundary and coherent Track, manifest, dictionary, Resource, update, relink, delete, and clear behavior, including a maximum-length URI across reopen.
+- [`CarrierTrackTest.cpp`](../../../../test/unit/library/CarrierTrackTest.cpp) locks carrier layout, ordinal order, one-member rows, last-member deletion, immutable ranges, and rejection of a structure change through an ordinary writer entry.
 - [`ListWriterTest.cpp`](../../../../test/unit/library/ListWriterTest.cpp) locks live parent validation, leaf-delete conflict, children-first subtree deletion, and coherent clear behavior.
 - [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, the complete Reader range and count surface, physical-side projections, retained point and batch load modes, and ordinary store behavior.
 - [`TrackStoreIntegrityTest.cpp`](../../../../test/unit/library/TrackStoreIntegrityTest.cpp) locks reserved-id rejection and the canonical sweep over persisted records.

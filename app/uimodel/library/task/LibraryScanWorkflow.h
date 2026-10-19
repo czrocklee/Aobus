@@ -12,7 +12,6 @@
 #include <expected>
 #include <optional>
 #include <stop_token>
-#include <string>
 #include <vector>
 
 namespace ao::rt
@@ -33,14 +32,6 @@ namespace ao::uimodel
   {
     Planning,
     Applying
-  };
-
-  struct LibraryScanIssue final
-  {
-    std::string uri{};
-    std::string message{};
-
-    friend bool operator==(LibraryScanIssue const&, LibraryScanIssue const&) = default;
   };
 
   struct LibraryScanWorkflowResult final

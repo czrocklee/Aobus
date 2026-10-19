@@ -815,6 +815,20 @@ root:table {
     track_multiple_values { "<Multiple Values>" }
     track_metadata_heading { "Metadata" }
     track_audio_properties_heading { "Audio Properties" }
+    library_scan_cue_invalid_encoding { "{uri}: Save the CUE sheet as UTF-8 and scan again." }
+    library_scan_cue_unreadable { "{uri}: The CUE sheet could not be read or is malformed. Fix the sheet and scan again." }
+    library_scan_cue_ambiguous { "{uri}: Several CUE sheets match this file. Keep only one matching sheet." }
+    library_scan_cue_unsupported { "{uri}: This file cannot be split by CUE. Remove or rename the sheet to import the whole file." }
+    library_scan_cue_no_matching_audio { "{uri}: No supported audio file has this CUE sheet''s name." }
+    library_scan_cue_whole_file { "{uri}: Already imported as a whole file. Remove the Track and scan again to split it." }
+    library_scan_cue_missing { "{uri}: No CUE sheet divides this file. Imported segments were kept." }
+    library_scan_cue_layout_mismatch { "{uri}: The CUE layout is invalid or differs from imported ranges. Check the sheet and scan again. To replace existing ranges, first remove the imported Tracks." }
+    library_scan_cue_carrier_mismatch { "{uri}: The file''s frame count or sample rate differs from the imported segments. The imported Tracks were not changed." }
+    library_scan_cue_detail { " Details: {detail}" }
+    library_scan_cue_additional_issues { "{count, plural, one {# additional CUE issue; see the log for details.} other {# additional CUE issues; see the log for details.}}" }
+    track_cue_number { "CUE Track Number" }
+    track_segment_start { "Start Time" }
+    track_segment_end { "End Time (exclusive)" }
     track_show_empty_fields { "Show empty fields" }
     track_hide_empty_fields { "Hide empty fields" }
     track_missing_on_some { "Missing on some tracks" }

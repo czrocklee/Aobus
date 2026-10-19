@@ -115,6 +115,17 @@ namespace ao::library
       return makeError(Error::Code::CorruptData, "Cold Track record contains a non-canonical library URI");
     }
 
+    auto const segmentOffset = reader.header().blockOffsets[trackColdBlockSlotIndex(TrackColdBlockSlot::Segment)];
+
+    // Segment duration is checked against its derived range once the hot sample
+    // rate is available. A whole file has no derived duration, so a negative
+    // stored value is its own canonical rejection. The shallow cold gate still
+    // admits the bytes so a view can report them.
+    if (segmentOffset == 0 && reader.header().duration < TrackDuration::zero())
+    {
+      return makeError(Error::Code::CorruptData, "Cold Track record contains a negative duration");
+    }
+
     for (auto const& [keyId, value] : reader.custom())
     {
       std::ignore = keyId;
@@ -149,6 +160,17 @@ namespace ao::library
              (id != kInvalidDictionaryId && static_cast<std::size_t>(id.raw()) <= dictionarySize);
     };
     auto const view = TrackView{hotBytes, coldBytes};
+
+    if (auto const optSegment = view.property().segment(); optSegment)
+    {
+      auto const optDuration = segmentDuration(optSegment->frameCount, view.property().sampleRate());
+
+      if (!optDuration || *optDuration != view.property().duration())
+      {
+        return makeError(Error::Code::CorruptData, "Segment duration disagrees with its range and hot sample rate");
+      }
+    }
+
     auto const metadata = view.metadata();
 
     for (auto const id :
