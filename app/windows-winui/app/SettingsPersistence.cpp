@@ -21,6 +21,6 @@ namespace ao::winui
 
     // The checked desktop save is the composite's result; it does not undo the
     // workspace checkpoint that already ran.
-    return settingsStore.save("desktop", settings, DesktopSettingsYamlSchema{});
+    return settingsStore.save(kDesktopSettingsConfigGroup, settings, DesktopSettingsYamlSchema{});
   }
 } // namespace ao::winui

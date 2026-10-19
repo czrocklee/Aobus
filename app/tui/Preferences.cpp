@@ -7,7 +7,13 @@
 #include "TerminalTitleFormat.h"
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/Log.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/uimodel/input/KeymapStore.h>
+#include <ao/uimodel/preference/NewerConfigNotice.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>
@@ -149,12 +155,49 @@ namespace ao::tui
   {
     auto preferences = Preferences{};
 
-    if (auto const res = store.load("preferences", preferences, PreferencesSchema{}); !res)
+    if (auto const res = store.load(kPreferencesConfigGroup, preferences, PreferencesSchema{}); !res)
     {
       return std::unexpected{res.error()};
     }
 
     return preferences;
+  }
+
+  void reportConfigLoadFailures(rt::NotificationService& notifications,
+                                i18n::MessageCatalog const& catalog,
+                                rt::ConfigStore const& store,
+                                Result<Preferences> const& preferencesRes)
+  {
+    if (store.hasNewerGroup(uimodel::kKeymapConfigGroup))
+    {
+      uimodel::reportNewerConfig(
+        notifications, catalog, uimodel::kKeymapConfigGroup, i18n::MessageId::ConfigNewerShortcuts);
+    }
+
+    if (store.hasNewerGroup(rt::kAppPrefsConfigGroup))
+    {
+      uimodel::reportNewerConfig(
+        notifications, catalog, rt::kAppPrefsConfigGroup, i18n::MessageId::TuiConfigNewerOutput);
+    }
+
+    if (preferencesRes)
+    {
+      return;
+    }
+
+    APP_LOG_WARN("TUI: failed to load preferences; using defaults: {}", preferencesRes.error().message);
+
+    if (store.hasNewerGroup(kPreferencesConfigGroup))
+    {
+      uimodel::reportNewerConfig(
+        notifications, catalog, kPreferencesConfigGroup, i18n::MessageId::TuiConfigNewerSettings);
+      return;
+    }
+
+    notifications.post(rt::NotificationSeverity::Warning,
+                       i18n::requiredFormat(
+                         catalog, i18n::MessageId::TuiSettingsLoadFailed, {{"detail", preferencesRes.error().message}}),
+                       rt::NotificationLifetime::history());
   }
 
   Result<> savePreferences(rt::ConfigStore& store, Preferences const& preferences)
@@ -164,6 +207,6 @@ namespace ao::tui
       return makeError(Error::Code::NotFound, "No persistent TUI configuration location");
     }
 
-    return store.save("preferences", preferences, PreferencesSchema{});
+    return store.save(kPreferencesConfigGroup, preferences, PreferencesSchema{});
   }
 } // namespace ao::tui

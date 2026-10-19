@@ -50,12 +50,14 @@
 #include <ao/rt/library/LibrarySnapshot.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
+#include <ao/uimodel/input/KeymapStore.h>
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/library/presentation/ListPresentations.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayouts.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/output/OutputSelection.h>
+#include <ao/uimodel/preference/NewerConfigNotice.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/utility/Path.h>
@@ -479,6 +481,21 @@ namespace ao::gtk
     _shellLayout.refreshExportedActions();
 
     _shellLayout.loadLayout();
+
+    // Construction read both groups, so each knows by now whether a newer
+    // version saved it.
+    if (_configStorePtr->hasNewerGroup(uimodel::kKeymapConfigGroup))
+    {
+      uimodel::reportNewerConfig(
+        _runtime.notifications(), _textCatalog, uimodel::kKeymapConfigGroup, i18n::MessageId::ConfigNewerShortcuts);
+    }
+
+    if (_configStorePtr->hasNewerGroup(rt::kAppPrefsConfigGroup))
+    {
+      uimodel::reportNewerConfig(
+        _runtime.notifications(), _textCatalog, rt::kAppPrefsConfigGroup, i18n::MessageId::GtkConfigNewerPreferences);
+    }
+
     _sessionPhase = SessionPhase::Prepared;
     return {};
   }

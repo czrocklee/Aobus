@@ -7,14 +7,23 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
+
+namespace ao::i18n
+{
+  class MessageCatalog;
+}
 
 namespace ao::rt
 {
   class ConfigStore;
+  class NotificationService;
 }
 
 namespace ao::tui
 {
+  inline constexpr auto kPreferencesConfigGroup = std::string_view{"preferences"};
+
   inline constexpr std::int32_t kMaximumSeekSeconds = 60;
   inline constexpr std::int32_t kMaximumWheelStep = 10;
   inline constexpr std::int32_t kMaximumVolumePercent = 10;
@@ -43,4 +52,16 @@ namespace ao::tui
 
   Result<Preferences> loadPreferences(rt::ConfigStore& store);
   Result<> savePreferences(rt::ConfigStore& store, Preferences const& preferences);
+
+  /**
+   * @brief Reports the configuration the startup loads could not use, once each of them has read its group.
+   *
+   * A newer `shortcuts`, `runtime`, or `preferences` group posts its own
+   * newer-version warning. Preferences that could not be read for any other
+   * reason post the load-failure warning with the reason.
+   */
+  void reportConfigLoadFailures(rt::NotificationService& notifications,
+                                i18n::MessageCatalog const& catalog,
+                                rt::ConfigStore const& store,
+                                Result<Preferences> const& preferencesRes);
 } // namespace ao::tui

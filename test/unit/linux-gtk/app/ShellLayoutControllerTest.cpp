@@ -22,7 +22,10 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Transport.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppState.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -42,12 +45,14 @@
 #include <glibmm/refptr.h>
 #include <gtkmm/application.h>
 #include <gtkmm/applicationwindow.h>
+#include <gtkmm/comboboxtext.h>
 #include <gtkmm/dialog.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -402,6 +407,74 @@ namespace ao::gtk::test
       CHECK(controller.activeLayout().root.type == "box");
       CHECK(ao::test::readFile(layoutPath) == original);
     }
+  }
+
+  TEST_CASE("ShellLayoutController - loadLayout falls back from a custom layout a newer version saved and reports it",
+            "[gtk][integration][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& controller = fixture.controller;
+
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "classic";
+    fixture.configStorePtr->saveAppPrefs(prefs);
+
+    auto const layoutsDir = fixture.tempDir / "layouts";
+    std::filesystem::create_directories(layoutsDir);
+    auto const layoutPath = layoutsDir / "classic.yaml";
+    auto const original = std::string{"layout:\n  version: 2\n  root: future-layout\n"};
+    std::ofstream{layoutPath, std::ios::binary} << original;
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+    auto const feed = fixture.runtimeFixture.runtime().notifications().feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == rt::NotificationSeverity::Warning);
+    CHECK(std::get<std::string>(feed.entries.front().message) ==
+          i18n::requiredText(ao::test::englishMessageCatalog(), i18n::MessageId::GtkConfigNewerLayout));
+    CHECK(ao::test::readFile(layoutPath) == original);
+  }
+
+  TEST_CASE("ShellLayoutController - the layout editor reports a preset a newer version saved",
+            "[gtk][integration][app][shell]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& controller = fixture.controller;
+    auto const layoutsDir = fixture.tempDir / "layouts";
+    std::filesystem::create_directories(layoutsDir);
+    auto const layoutPath = layoutsDir / "modern.yaml";
+    auto const original = std::string{"layout:\n  version: 2\n  root: future-layout\n"};
+    std::ofstream{layoutPath, std::ios::binary} << original;
+
+    controller.loadLayout();
+    REQUIRE(tryPumpGtkEventsUntil([&controller]
+                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+    auto& notifications = fixture.runtimeFixture.runtime().notifications();
+    REQUIRE(notifications.feed().entries.empty());
+
+    controller.openEditor(*configStorePtr);
+    drainGtkEvents();
+    auto* const dialog = controller.editorDialog();
+    REQUIRE(dialog != nullptr);
+    // The theme combo also starts on "classic", so the preset combo is found by its label.
+    auto combos = collectAll<Gtk::ComboBoxText>(*dialog);
+    auto const classicPresetLabel =
+      i18n::requiredText(ao::test::englishMessageCatalog(), i18n::MessageId::GtkLayoutClassicPreset);
+    auto const comboIter = std::ranges::find_if(
+      combos, [&](Gtk::ComboBoxText* combo) { return combo->get_active_text().raw() == classicPresetLabel; });
+    REQUIRE(comboIter != combos.end());
+
+    (*comboIter)->set_active_id("modern");
+    drainGtkEvents();
+
+    auto const feed = notifications.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(std::get<std::string>(feed.entries.front().message) ==
+          i18n::requiredText(ao::test::englishMessageCatalog(), i18n::MessageId::GtkConfigNewerLayout));
+    CHECK(ao::test::readFile(layoutPath) == original);
   }
 
   TEST_CASE("ShellLayoutController - over-budget editor preview preserves the active GTK tree",

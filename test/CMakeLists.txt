@@ -540,6 +540,7 @@ add_executable(ao_core_test
     unit/uimodel/input/KeymapModelTest.cpp
     unit/uimodel/input/KeyRepeatGuardTest.cpp
     unit/uimodel/input/KeymapStoreTest.cpp
+    unit/uimodel/preference/NewerConfigNoticeTest.cpp
     unit/uimodel/preference/PreferencesEditorModelTest.cpp
     unit/uimodel/preference/ThemePresetTest.cpp
     unit/uimodel/layout/component/LayoutSchemaTest.cpp
@@ -784,6 +785,7 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DispatcherQueueAdmission.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SelectedRootCommit.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/SettingsPersistence.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/StartupWarnings.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutSchema.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
@@ -809,6 +811,7 @@ add_executable(ao_core_test
     unit/winui/app/DispatcherQueueAdmissionTest.cpp
     unit/winui/app/SelectedRootCommitTest.cpp
     unit/winui/app/SettingsPersistenceTest.cpp
+    unit/winui/app/StartupWarningsTest.cpp
     unit/winui/input/KeyChordAcceleratorTest.cpp
     unit/winui/input/KeymapAcceleratorPlanTest.cpp
     unit/winui/library/LibraryTransferAdapterTest.cpp

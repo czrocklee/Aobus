@@ -135,6 +135,9 @@ namespace ao::gtk
     void applyPromotedPanelSizes(uimodel::LayoutDocument promotedLayout,
                                  uimodel::LayoutComponentStateDocument promotedState);
 
+    /// Tells the user that a custom layout this build cannot read was saved by a newer version.
+    /// Every preset shares one notice, which each such load replaces or, once dismissed, posts again.
+    void reportNewerLayout();
     void applyLoadedLayout(std::string presetId,
                            uimodel::LayoutDocument document,
                            uimodel::PreparedLayout preparedLayout,
@@ -145,9 +148,11 @@ namespace ao::gtk
       std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
       std::string lastLayoutPreset,
       uimodel::LayoutSchema schema,
-      std::function<
-        void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument)>
-        present,
+      std::function<void(std::string,
+                         uimodel::LayoutDocument,
+                         uimodel::PreparedLayout,
+                         uimodel::LayoutComponentStateDocument,
+                         bool)> present,
       std::stop_token stopToken);
     Result<> handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 

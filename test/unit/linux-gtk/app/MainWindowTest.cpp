@@ -72,6 +72,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::gtk::test
@@ -726,6 +727,44 @@ namespace ao::gtk::test
     auto loadedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(loadedSession);
     CHECK(loadedSession.lastLibraryPath == runtime.musicRoot().string());
+  }
+
+  TEST_CASE("MainWindow - preparation reports each group a newer version saved and keeps it",
+            "[gtk][integration][main-window][config]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
+    std::ofstream{configPath} << "shortcuts:\n  version: 99\n  futureShortcut: kept\n"
+                                 "runtime:\n  version: 99\n  futurePreference: kept\n";
+    auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
+
+    auto window = MainWindow{runtime, configStorePtr, nullptr, ao::test::englishMessageCatalog()};
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
+    window.saveSession();
+
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto messages = std::vector<std::string>{};
+
+    for (auto const& entry : runtime.notifications().feed().entries)
+    {
+      CHECK(entry.severity == rt::NotificationSeverity::Warning);
+      REQUIRE(std::holds_alternative<std::string>(entry.message));
+      messages.push_back(std::get<std::string>(entry.message));
+    }
+
+    auto expected = std::vector{std::string{i18n::requiredText(catalog, i18n::MessageId::ConfigNewerShortcuts)},
+                                std::string{i18n::requiredText(catalog, i18n::MessageId::GtkConfigNewerPreferences)}};
+    std::ranges::sort(messages);
+    std::ranges::sort(expected);
+    CHECK(messages == expected);
+
+    // The session checkpoint writes its own groups beside the newer ones.
+    auto const saved = ao::test::readFile(configPath);
+    CHECK(saved.contains("futureShortcut: kept"));
+    CHECK(saved.contains("futurePreference: kept"));
   }
 
   TEST_CASE("MainWindow - rejected workspace state is not overwritten during preparation",

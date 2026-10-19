@@ -567,23 +567,6 @@ namespace ao::tui
       dirty = false;
     }
 
-    void reportPreferenceLoadFailure(rt::NotificationService& notifications,
-                                     i18n::MessageCatalog const& catalog,
-                                     Result<Preferences> const& preferencesRes)
-    {
-      if (preferencesRes)
-      {
-        return;
-      }
-
-      APP_LOG_WARN("TUI: failed to load preferences; using defaults: {}", preferencesRes.error().message);
-      notifications.post(
-        rt::NotificationSeverity::Warning,
-        i18n::requiredFormat(
-          catalog, i18n::MessageId::TuiSettingsLoadFailed, {{"detail", preferencesRes.error().message}}),
-        rt::NotificationLifetime::history());
-    }
-
     Result<KeymapPlan> saveKeymapPlan(rt::ConfigStore& store, uimodel::KeymapModel const& candidate)
     {
       if (!store.hasLocation())
@@ -1407,7 +1390,6 @@ namespace ao::tui
 
     auto runtime = std::move(*runtimeRes);
     runtime.setTextOrderingPolicy(textOrderingPolicyPtr);
-    reportPreferenceLoadFailure(runtime.notifications(), textCatalog, preferencesRes);
 
     for (auto& providerPtr : audio::createPlatformBackendProviders())
     {
@@ -1415,6 +1397,7 @@ namespace ao::tui
     }
 
     restoreOutputDeviceSelection(*appConfigStorePtr, runtime.playback());
+    reportConfigLoadFailures(runtime.notifications(), textCatalog, *appConfigStorePtr, preferencesRes);
 
     if (auto const restoredRes = runtime.workspace().restoreSession(runtime.workspaceConfigStore()); !restoredRes)
     {

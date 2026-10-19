@@ -3,10 +3,16 @@
 
 #include "tui/Preferences.h"
 
+#include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/Error.h>
+#include <ao/async/Runtime.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/AppState.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
 
@@ -16,6 +22,9 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <tuple>
+#include <variant>
+#include <vector>
 
 namespace ao::tui::test
 {
@@ -200,5 +209,68 @@ namespace ao::tui::test
     REQUIRE_FALSE(savedRes);
     CHECK(savedRes.error().code == Error::Code::NotSupported);
     CHECK(ao::test::readFile(path) == document);
+  }
+
+  namespace
+  {
+    /// Loads the three groups as the TUI startup does, then reports what it could not use.
+    std::vector<std::string> reportedConfigLoadFailures(std::string const& document)
+    {
+      auto temp = ao::test::TempDir{};
+      auto const path = std::filesystem::path{temp.path()} / "tui.yaml";
+      std::ofstream{path} << document;
+      auto store = rt::ConfigStore{path};
+      std::ignore = uimodel::loadKeymap(store, uimodel::KeymapBindings{});
+      auto appPrefs = rt::AppPrefsState{};
+      rt::loadAppPrefs(store, appPrefs);
+      auto const preferencesRes = loadPreferences(store);
+
+      auto executor = rt::test::InlineExecutor{};
+      auto asyncRuntime = async::Runtime{executor, 1};
+      auto notifications = rt::NotificationService{asyncRuntime};
+      reportConfigLoadFailures(notifications, ao::test::englishMessageCatalog(), store, preferencesRes);
+
+      auto messages = std::vector<std::string>{};
+
+      for (auto const& entry : notifications.feed().entries)
+      {
+        CHECK(entry.severity == rt::NotificationSeverity::Warning);
+        REQUIRE(std::holds_alternative<std::string>(entry.message));
+        messages.push_back(std::get<std::string>(entry.message));
+      }
+
+      return messages;
+    }
+  } // namespace
+
+  TEST_CASE("Preferences - startup reports each newer group with its own warning", "[tui][integration][config]")
+  {
+    auto const& catalog = ao::test::englishMessageCatalog();
+    auto const messages = reportedConfigLoadFailures("shortcuts: {version: 99, future: true}\n"
+                                                     "runtime: {version: 99, future: true}\n"
+                                                     "preferences: {version: 99, future: true}\n");
+
+    CHECK(messages == std::vector{std::string{i18n::requiredText(catalog, i18n::MessageId::ConfigNewerShortcuts)},
+                                  std::string{i18n::requiredText(catalog, i18n::MessageId::TuiConfigNewerOutput)},
+                                  std::string{i18n::requiredText(catalog, i18n::MessageId::TuiConfigNewerSettings)}});
+  }
+
+  TEST_CASE("Preferences - startup reports unreadable preferences with the reason", "[tui][integration][config]")
+  {
+    SECTION("preferences this build rejects post the load-failure warning")
+    {
+      auto const messages = reportedConfigLoadFailures("preferences: {version: 1, wheelStep: 0}\n");
+      auto const prefix = i18n::requiredFormat(
+        ao::test::englishMessageCatalog(), i18n::MessageId::TuiSettingsLoadFailed, {{"detail", ""}});
+
+      REQUIRE(messages.size() == 1);
+      CHECK(messages.front().starts_with(prefix));
+      CHECK(messages.front().size() > prefix.size());
+    }
+
+    SECTION("readable configuration posts nothing")
+    {
+      CHECK(reportedConfigLoadFailures("preferences: {version: 1, wheelStep: 3}\n").empty());
+    }
   }
 } // namespace ao::tui::test

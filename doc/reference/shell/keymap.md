@@ -239,7 +239,7 @@ shortcuts:
 - A modifier segment must be recognized before the final key token.
 - Equivalent parsed chords compare equal and are deduplicated within one action.
 - The persistence schema requires `version` and `bindings`, and requires `bindings` to be a mapping with nonempty, nonduplicate action-id keys and sequence values whose every element is a non-null scalar string.
-- A group of a newer version is neither read nor rewritten: the defaults apply for the session, and saving a changed keymap fails without touching the file.
+- A group of a newer version is neither read nor rewritten: the defaults apply for the session, and saving a changed keymap fails without touching the file. GTK, TUI, and Windows post one warning at startup that says so.
 - A structurally valid action id need not be known to the current schema; it remains in the effective and persisted mapping but does not produce a schema-backed editor row.
 - A structurally valid but unparsable chord string is skipped by semantic keymap application without discarding valid siblings.
 - Shortcut-editor eligibility excludes actions with `RequiresAnchor` or `PresentsMenu`.

@@ -10,6 +10,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <string_view>
 
 namespace ao::rt
 {
@@ -61,6 +62,9 @@ namespace ao::gtk
     uimodel::KeymapModel loadKeymap(uimodel::KeymapBindings defaults) const;
     /// Persists the keymap's delta-from-defaults into the `shortcuts` group.
     Result<> saveKeymap(uimodel::KeymapModel const& keymap);
+
+    /// Whether a load or save has found @p group written by a newer version; see `rt::ConfigStore::hasNewerGroup`.
+    bool hasNewerGroup(std::string_view group) const;
 
   private:
     std::unique_ptr<rt::ConfigStore> _storePtr;

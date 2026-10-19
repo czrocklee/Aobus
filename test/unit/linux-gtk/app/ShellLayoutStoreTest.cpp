@@ -188,6 +188,54 @@ namespace ao::gtk::test
     REQUIRE(store.remove("classic"));
   }
 
+  TEST_CASE("ShellLayoutStore - isNewer reports only a preset a newer version saved", "[gtk][unit][app][layout]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
+    std::filesystem::create_directories(layoutsDir);
+    auto store = ShellLayoutStore{layoutsDir};
+
+    SECTION("a newer preset")
+    {
+      std::ofstream{layoutsDir / "classic.yaml", std::ios::binary} << "layout:\n  version: 2\n  root: future-layout\n";
+
+      CHECK_FALSE(store.load("classic"));
+      CHECK(store.isNewer("classic"));
+    }
+
+    SECTION("a preset of the current version")
+    {
+      auto doc = uimodel::LayoutDocument{};
+      doc.root.type = "box";
+      REQUIRE(store.save(doc, "classic"));
+
+      CHECK_FALSE(store.isNewer("classic"));
+    }
+
+    SECTION("a preset rejected for another reason")
+    {
+      std::ofstream{layoutsDir / "classic.yaml", std::ios::binary} << "layout:\n  version: 0\n  root: old-layout\n";
+
+      CHECK_FALSE(store.load("classic"));
+      CHECK_FALSE(store.isNewer("classic"));
+    }
+
+    SECTION("a preset too large to read far enough to tell")
+    {
+      std::ofstream{layoutsDir / "classic.yaml", std::ios::binary}
+        << "layout:\n  version: 2\n  root: future-layout\n# "
+        << std::string(uimodel::LayoutDocumentLimits::kDefaultMaxFileBytes, 'x') << "\n";
+
+      CHECK_FALSE(store.load("classic"));
+      CHECK_FALSE(store.isNewer("classic"));
+    }
+
+    SECTION("a missing preset")
+    {
+      CHECK_FALSE(store.isNewer("classic"));
+    }
+  }
+
   TEST_CASE("ShellLayoutStore - remove keeps a preset a newer version saved", "[gtk][unit][app][layout]")
   {
     auto const tempDir = ao::test::TempDir{};

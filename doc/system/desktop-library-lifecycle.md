@@ -76,7 +76,9 @@ desktop lifecycle.
   playback writes for that process and cannot associate target-library playback
   identities with the prior durable root.
 - A failed selected-root commit never blocks the usable successor, and every
-  frontend reports it to the user as the same retained warning.
+  frontend reports it to the user as the same retained warning. WinUI posts
+  its newer-settings warning instead when a newer version saved the settings
+  that hold the root, because no previous library opens at the next launch.
 - The detached launcher receives UTF-8 arguments. Its native default does not
   inherit unrelated handles; GTK opts into parent standard streams explicitly.
 
@@ -163,7 +165,8 @@ Each frontend then posts the shared unsaved-library-switch report,
 [`librarySwitchNotSavedNotification`](../../app/include/ao/uimodel/status/activity/ActivityPresentationText.h),
 to its runtime notification feed: a retained warning that carries the failure
 detail and says the previous library opens at the next launch. Its activity
-surface keeps the warning past the initial scan's progress. WinUI also puts the
+surface keeps the warning past the initial scan's progress. Newer WinUI desktop
+settings replace it, as the [invariants](#invariants) state. WinUI also puts the
 report on its status line, because the Classic preset has no activity surface;
 its [scan workflow](frontend/windows-library-workflows.md#scan) owns how that
 line is shared with the initial scan.

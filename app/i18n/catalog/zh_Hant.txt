@@ -70,6 +70,8 @@ zh_Hant:table {
 
     tui_settings_save_failed { "無法儲存設定。{detail}" }
     tui_settings_load_failed { "無法讀取已儲存的偏好設定，已使用預設值。{detail}" }
+    tui_config_newer_settings { "設定由較新版本的 Aobus 儲存。此版本使用預設設定，且不會儲存對其所做的變更。" }
+    tui_config_newer_output { "偏好的輸出裝置由較新版本的 Aobus 儲存。此版本會忽略它，且不會儲存新的偏好。" }
     tui_settings_title { "設定" }
     tui_settings_general { "一般" }
     tui_settings_appearance { "外觀" }
@@ -256,6 +258,7 @@ zh_Hant:table {
     library_scan_unreadable { "音樂庫掃描發現 {count, plural, one {# 個無法讀取的檔案} other {# 個無法讀取的檔案}}，沒有可套用的變更" }
     library_scan_failed { "{hasError, select, yes {掃描失敗：{error}} other {掃描失敗}}" }
     library_switch_not_saved { "無法記住切換後的音樂庫：{detail}。下次啟動時將開啟原本的音樂庫。" }
+    config_newer_shortcuts { "鍵盤快捷鍵由較新版本的 Aobus 儲存。此版本使用預設快捷鍵，且不會儲存對其所做的變更。" }
     library_all_tracks { "所有曲目" }
     library_unnamed_list { "<未命名列表>" }
     library_audio_identity_indexing_failed { "音訊識別索引建立失敗" }
@@ -477,6 +480,7 @@ zh_Hant:table {
     gtk_preferences_layout_preset_classic { "經典" }
     gtk_preferences_layout_preset_modern { "現代" }
     gtk_preferences_actions { "操作" }
+    gtk_config_newer_preferences { "輸出裝置、主題與版面配置預設的偏好設定由較新版本的 Aobus 儲存。此版本會忽略它們，且不會儲存對其所做的變更。" }
     gtk_shortcut_title { "自訂快捷鍵" }
     gtk_shortcut_reset_all { "全部重設" }
     gtk_shortcut_reset_all_tooltip { "將所有快捷鍵重設為預設值" }
@@ -783,12 +787,14 @@ zh_Hant:table {
     winui_more_menu { "更多" }
     winui_error { "錯誤：{detail}" }
     winui_save_settings_failed { "無法儲存設定：{detail}" }
+    winui_config_newer_settings { "設定由較新版本的 Aobus 儲存。此版本使用預設設定（包括啟動時開啟的音樂庫），且不會儲存對其所做的變更。" }
     winui_open_library_picker { "開啟音樂庫" }
     winui_folder_picker_failed { "資料夾選取器失敗：{detail}" }
     winui_library_switch_failed { "無法切換音樂庫：{detail}" }
     winui_theme_override_removed { "已移除主題覆蓋；遵循 Windows 外觀設定" }
     winui_theme_reload_failed { "重新載入主題失敗：{detail}" }
     winui_theme_reloaded { "已重新載入主題：{path}" }
+    winui_theme_rejected { "無法載入主題覆蓋；遵循 Windows 外觀設定。{detail}" }
     winui_smtc_unavailable { "SMTC 無法使用：{detail}" }
     winui_shell_layout_failed { "無法建立介面版面配置：{detail}" }
     winui_activity_details { "檢視活動詳情" }
@@ -807,7 +813,6 @@ zh_Hant:table {
     winui_sort_failed { "排序失敗：{detail}" }
     winui_unavailable_track { "無法使用曲目" }
     winui_theme_file_not_found { "未找到主題檔案：{path}" }
-    winui_theme_load_failed { "載入 Windows 主題失敗：{detail}" }
     winui_startup_failure { "Aobus 無法啟動：\n\n{detail}" }
     winui_column_sort_presentation { "欄排序" }
     track_multiple_values { "<多個值>" }
@@ -878,6 +883,7 @@ zh_Hant:table {
     gtk_layout_editor_title { "版面配置編輯器" }
     gtk_layout_apply { "套用" }
     gtk_layout_unable_to_save { "無法儲存版面配置" }
+    gtk_config_newer_layout { "自訂版面配置由較新版本的 Aobus 儲存。此版本將改為顯示內建版面配置，且不會儲存對自訂版面配置所做的變更。" }
     gtk_layout_tree_node { "節點" }
     gtk_layout_tree_type { "型別" }
     gtk_layout_classic_preset { "經典版面配置" }

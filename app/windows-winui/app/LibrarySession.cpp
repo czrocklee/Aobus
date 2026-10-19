@@ -42,6 +42,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/task/LibraryScanOutcome.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
+#include <ao/uimodel/preference/NewerConfigNotice.h>
 #include <ao/uimodel/status/activity/ActivityPresentationText.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/PlatformDirectories.h>
@@ -52,6 +53,7 @@
 #include <ao/winui/app/DesktopOutputSelection.h>
 #include <ao/winui/app/SelectedRootCommit.h>
 #include <ao/winui/app/SettingsPersistence.h>
+#include <ao/winui/app/StartupWarnings.h>
 
 #include <cstdint>
 #include <exception>
@@ -222,8 +224,7 @@ namespace ao::winui
     std::string_view operationStatusKey;
     bool operationActive = false;
     bool scanAfterOpen = false;
-    /// A failed root commit's status, which the settled startup scan may restore to the status line.
-    std::optional<std::string> optRootCommitFailureStatus;
+    StartupWarnings startupWarnings;
     bool shutdown = false;
     PlaybackPersistenceAdmission playbackPersistenceAdmission = PlaybackPersistenceAdmission::Ready;
   };
@@ -273,7 +274,7 @@ namespace ao::winui
     }
 
     if (auto loadedRes =
-          storage.settingsStorePtr->load("desktop", storage.settings, winui::DesktopSettingsYamlSchema{});
+          storage.settingsStorePtr->load(kDesktopSettingsConfigGroup, storage.settings, DesktopSettingsYamlSchema{});
         !loadedRes && loadedRes.error().code != Error::Code::NotFound)
     {
       APP_LOG_WARN("LibrarySession: failed to load Windows settings: {}", loadedRes.error().message);
@@ -335,6 +336,26 @@ namespace ao::winui
     }
 
     auto& runtime = storage.optRuntimeGraph->runtime;
+
+    // Both groups were read above; the notices wait for the runtime that owns the feed.
+    if (storage.settingsStorePtr->hasNewerGroup(kDesktopSettingsConfigGroup))
+    {
+      uimodel::reportNewerConfig(runtime.notifications(),
+                                 storage.textCatalog,
+                                 kDesktopSettingsConfigGroup,
+                                 i18n::MessageId::WinUiConfigNewerSettings);
+      reportStartupWarning(
+        std::string{i18n::requiredText(storage.textCatalog, i18n::MessageId::WinUiConfigNewerSettings)});
+    }
+
+    if (storage.settingsStorePtr->hasNewerGroup(uimodel::kKeymapConfigGroup))
+    {
+      uimodel::reportNewerConfig(runtime.notifications(),
+                                 storage.textCatalog,
+                                 uimodel::kKeymapConfigGroup,
+                                 i18n::MessageId::ConfigNewerShortcuts);
+      reportStartupWarning(std::string{i18n::requiredText(storage.textCatalog, i18n::MessageId::ConfigNewerShortcuts)});
+    }
 
     for (auto& providerPtr : audio::createPlatformBackendProviders())
     {
@@ -771,7 +792,6 @@ namespace ao::winui
 
     storage.operationStatusKey = {};
     storage.operationActive = false;
-    auto optRootCommitFailureStatus = std::exchange(storage.optRootCommitFailureStatus, std::nullopt);
 
     // What the scan amounts to, how loudly to say it, and the sentence itself
     // are decided in uimodel, so this window and the GTK one report the same
@@ -780,6 +800,8 @@ namespace ao::winui
     auto const severity = uimodel::libraryScanSeverity(outcome.verdict);
     auto message = formatLibraryScanMessage(storage.textCatalog, outcome);
     auto& appRuntime = storage.optRuntimeGraph->runtime;
+    auto optStartupStatus =
+      storage.startupWarnings.settle(storage.scanAfterOpen, severity == rt::NotificationSeverity::Error);
 
     appRuntime.notifications().post(severity, message, uimodel::libraryScanLifetime(outcome.verdict));
 
@@ -789,13 +811,13 @@ namespace ao::winui
       return;
     }
 
-    // This scan's status displaced a failed root commit's report. Only a scan
-    // error outranks that report: a scan warning describes the library on
-    // screen, while the failed commit concerns the next launch, which nothing
-    // else on screen reveals.
-    if (optRootCommitFailureStatus)
+    // Only a scan error outranks the startup warnings: a scan warning describes
+    // the library on screen, while they explain ignored configuration or a
+    // failed commit that concerns the next launch, which nothing else on screen
+    // reveals.
+    if (optStartupStatus)
     {
-      reportStatus(std::move(*optRootCommitFailureStatus));
+      reportStatus(std::move(*optStartupStatus));
       return;
     }
 
@@ -805,7 +827,7 @@ namespace ao::winui
       // `status.activity` component presents it, and the Classic preset does
       // not. Saying "library ready" while files are missing would leave those
       // users no indication at all, so the warning takes the status line, which
-      // every shipped preset shows.
+      // the Classic preset shows.
       reportStatus(std::move(message));
       return;
     }
@@ -842,22 +864,36 @@ namespace ao::winui
 
   void LibrarySession::reportRootCommitFailure(Error const& error)
   {
+    auto& storage = *_storagePtr;
+
+    // A newer version saved the settings that hold the startup root. Their
+    // startup warning already says this version keeps no startup library,
+    // while the shared report would promise the previous one.
+    if (storage.settingsStorePtr->hasNewerGroup(kDesktopSettingsConfigGroup))
+    {
+      return;
+    }
+
     // The activity feed retains the shared report past the startup scan's
     // progress. The Classic preset has no activity surface, so the report also
     // takes the status line.
-    auto& storage = *_storagePtr;
     auto request = uimodel::librarySwitchNotSavedNotification(storage.textCatalog, error);
     auto message = std::get<std::string>(request.message);
     storage.optRuntimeGraph->runtime.notifications().post(std::move(request));
 
-    // The single status line has no such memory: the startup scan's busy status
-    // replaces it at once, so finishActiveScan decides whether it returns.
-    if (storage.scanAfterOpen)
-    {
-      storage.optRootCommitFailureStatus = message;
-    }
+    reportStartupWarning(std::move(message));
+  }
 
-    reportStatus(std::move(message));
+  void LibrarySession::reportStartupWarning(std::string message)
+  {
+    // The single status line has no memory of its own: the startup scan's busy
+    // status replaces it at once, so finishActiveScan decides whether it returns.
+    reportStatus(_storagePtr->startupWarnings.add(std::move(message)));
+  }
+
+  std::string LibrarySession::startupStatus() const
+  {
+    return _storagePtr->startupWarnings.statusLine();
   }
 
   void LibrarySession::reportBusy()

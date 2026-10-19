@@ -85,7 +85,12 @@ every later save of such a group for the session, so it stays unchanged. The
 session runs on defaults, and a library it then selects opens but is not
 recorded as the startup root: that is a failed selected-root commit, as the
 [desktop library lifecycle](../../system/desktop-library-lifecycle.md#invariants)
-specifies. Version 0 is rejected as well,
+specifies. At startup the session posts one warning to the notification feed
+that says so, in place of the unsaved-library-switch report, and another when the `shortcuts` group in the same file is newer.
+The status line carries both as well, because the Classic shell has no activity
+surface; the [initial scan](../../system/frontend/windows-library-workflows.md#scan)
+gives it back to them.
+Version 0 is rejected as well,
 because no document was ever written that way; the value marks a missing or
 malformed marker, and reading it under current field semantics would dress a
 corrupt document up as an old one. Documents written by development builds
@@ -97,6 +102,7 @@ Each settings group is loaded independently, so rejection of `desktop` does not 
 The theme has no compatibility envelope: adding, removing, or renaming a token requires coordinated schema, reference, and test changes.
 As protected configuration, it gains a version before a release changes its tokens in a way that an earlier theme would fail, as the [versioning page](../../system/persistence/versioning.md#protected-configuration) states.
 Reload installs only a completely valid candidate.
+At startup, a theme document that exists but is rejected leaves Windows appearance in effect and posts a warning with the reason to the notification feed and the status line; Reload reports a rejection on the status line.
 
 Selecting an output row updates the in-memory exact requested backend, device,
 and profile tuple even when the engine cannot currently confirm that route.

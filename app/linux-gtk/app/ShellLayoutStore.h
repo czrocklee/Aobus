@@ -18,6 +18,9 @@ namespace ao::uimodel
 
 namespace ao::gtk
 {
+  /// The config group that holds the document in each preset file.
+  inline constexpr auto kShellLayoutConfigGroup = std::string_view{"layout"};
+
   /**
    * @brief Persistence for customized shell layouts.
    *
@@ -50,6 +53,8 @@ namespace ao::gtk
     ShellLayoutStore& operator=(ShellLayoutStore&&) noexcept;
 
     Result<std::optional<uimodel::LayoutDocument>> load(std::string_view presetId) const;
+    /// Whether a newer version of Aobus saved the preset, which `load` then rejects; false when it cannot tell.
+    bool isNewer(std::string_view presetId) const;
     /// Save and remove fail as `NotSupported`, changing nothing, for a preset a newer version saved.
     /// Remove also keeps a preset whose bytes it cannot read, and returns that failure.
     Result<> save(uimodel::LayoutDocument const& doc, std::string_view presetId);
@@ -59,6 +64,8 @@ namespace ao::gtk
 
   private:
     std::filesystem::path filePath(std::string_view presetId) const;
+    /// Fails when the file's bytes cannot be read.
+    Result<bool> isNewerFile(std::filesystem::path const& path) const;
 
     std::filesystem::path _layoutsDir;
     uimodel::LayoutDocumentLimits _limits;
