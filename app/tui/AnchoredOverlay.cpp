@@ -91,7 +91,7 @@ namespace ao::tui
     using namespace ftxui;
 
     auto const anchor = layerAnchor(rootAnchor, terminal, options);
-    auto const outerColumns = overlaySize.columns + 2;
+    auto const outerColumns = overlaySize.columns + kAnchoredOverlayHaloColumns;
     auto const outerRows = overlaySize.rows + 2;
     auto const maxLeft = std::max(0, terminal.columns - outerColumns);
     auto const left = std::clamp(anchor.x_min - 1, 0, maxLeft);

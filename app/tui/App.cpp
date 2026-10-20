@@ -317,7 +317,10 @@ namespace ao::tui
         return {};
       }
 
-      auto const panelColumns = notificationCenterPanelColumns(textCatalog, state, terminalColumns);
+      // A panel as wide as the terminal would be drawn narrower inside the
+      // overlay's halo than the width its messages were wrapped to.
+      auto const panelColumns =
+        notificationCenterPanelColumns(textCatalog, state, std::max(1, terminalColumns - kAnchoredOverlayHaloColumns));
 
       return followingAnchoredOverlay(
         mousePanel(notificationCenterPanel(textCatalog, state, &hitRegions.notificationDetailRows, panelColumns),

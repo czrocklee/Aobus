@@ -16,6 +16,9 @@ namespace ftxui
 
 namespace ao::tui
 {
+  /// The clear halo around an anchored overlay takes one column on each side.
+  inline constexpr std::int32_t kAnchoredOverlayHaloColumns = 2;
+
   enum class AnchoredOverlayPlacement : std::uint8_t
   {
     Below,

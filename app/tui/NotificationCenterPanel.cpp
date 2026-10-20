@@ -99,14 +99,25 @@ namespace ao::tui
       rows.push_back(separator());
     }
 
+    auto const bodyColumns = style::popupPanelBodyColumns(panelColumns);
+
     for (auto const& item : state.detail.items)
     {
       auto const itemKind = activityKindForSeverity(item.severity);
+      auto const label = activityKindLabel(itemKind);
+      auto const dismissColumns = item.dismissible ? cellWidth(" x") : 0;
+      // The compact status line truncates, so this is where a long message
+      // must be readable to its end.
+      auto const messageColumns = std::max(1, bodyColumns - cellWidth(label) - cellWidth(" ") - dismissColumns);
       auto bodyRows = Elements{};
-      bodyRows.push_back(text(item.message));
+
+      for (auto& line : wrapCellText(item.message, messageColumns))
+      {
+        bodyRows.push_back(text(std::move(line)));
+      }
 
       auto rowPtr = hbox({
-        text(std::string{activityKindLabel(itemKind)}) | activityKindColor(itemKind) | bold,
+        text(std::string{label}) | activityKindColor(itemKind) | bold,
         text(" "),
         vbox(std::move(bodyRows)) | flex,
         item.dismissible ? text(" x") | dim : emptyElement(),
