@@ -178,6 +178,11 @@ namespace ao::uimodel
         std::format_to(std::back_inserter(plainTextFallback), "\n{}", presentation.headline);
       }
 
+      if (!presentation.channelNote.empty())
+      {
+        std::format_to(std::back_inserter(plainTextFallback), "\n{}", presentation.channelNote);
+      }
+
       auto devicePresentation = resolveSelectedDevicePresentation(_textCatalog, state.output);
 
       view.audioPipeline = AudioPipelineViewState{.quality = state.quality,

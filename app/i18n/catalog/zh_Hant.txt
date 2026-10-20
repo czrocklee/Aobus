@@ -323,6 +323,7 @@ zh_Hant:table {
     audio_node_unknown { "[未知]" }
     audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} 聲道" }
+    audio_channels_identified { "{count} 聲道（{layout}）" }
     audio_finding_lossy_source { "有損音源" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {軟體音量衰減：{gain}} other {軟體音量衰減}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {軟體放大：增益 {gain}（有削波風險）} other {軟體放大（有削波風險）}}" }
@@ -331,12 +332,13 @@ zh_Hant:table {
     audio_finding_muted { "已靜音" }
     audio_finding_resampling { "{hasFormats, select, yes {重新取樣：{fromRate} Hz → {toRate} Hz} other {重新取樣}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {聲道對映：{fromChannels} 聲道 → {toChannels} 聲道} other {聲道對映}}" }
+    audio_finding_channel_layout { "聲道配置：{fromLayout} → {toLayout}" }
     audio_finding_lossless_padding { "無損整數擴位" }
     audio_finding_lossless_float { "無損浮點轉換" }
     audio_finding_lossless_round_trip { "無損往返轉換（浮點引擎）" }
     audio_finding_truncation { "{kind, select, floatToInteger {浮點 → 整數量化：{fromPrecision} → {toPrecision}} integerToFloat {整數 → 浮點量化：{fromPrecision} → {toPrecision}} precision {精度截斷：{fromPrecision} → {toPrecision}} other {精度截斷}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {與 {apps} 混音} other {混合音源}}" }
-    audio_quality_bit_perfect_playback { "Bit-Perfect 播放" }
+    audio_quality_bit_perfect_playback { "Bit-Perfect PCM（已觀測的軟體鏈路）" }
     audio_quality_signal_preserved { "訊號保持不變" }
     audio_quality_pipeline_intervention { "播放鏈路存在處理" }
     audio_quality_signal_clipping_detected { "偵測到訊號削波" }
@@ -345,6 +347,9 @@ zh_Hant:table {
     audio_quality_partially_verified_path { "播放鏈路僅部分驗證" }
     audio_quality_clean_lossy_delivery { "有損音源未經額外處理" }
     audio_quality_clean_delivery { "播放鏈路未經額外處理" }
+    audio_quality_unknown_channel_layout { "來源聲道配置未識別" }
+    audio_quality_unverified_channel_delivery { "聲道傳遞尚未證實" }
+    audio_quality_inferred_channel_layout { "來源聲道配置來自推斷" }
     playback_control_play { "播放" }
     playback_control_pause { "暫停" }
     playback_control_stop { "停止" }

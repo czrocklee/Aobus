@@ -30,6 +30,8 @@ namespace ao::uimodel
   {
     std::string headline{};
     AudioQualityCategory category = AudioQualityCategory::Unknown;
+    // Independent layout evidence; never upgrades channel confidence.
+    std::string channelNote{};
   };
 
   class AudioQualityFormatter final
@@ -51,6 +53,8 @@ namespace ao::uimodel
     AudioQualityPresentation presentation(rt::QualityState const& state) const;
 
   private:
+    AudioQualityPresentation numericalPresentation(rt::QualityState const& state) const;
+
     i18n::MessageCatalog _catalog;
   };
 

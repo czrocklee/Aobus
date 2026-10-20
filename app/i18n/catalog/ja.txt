@@ -323,6 +323,7 @@ ja:table {
     audio_node_unknown { "[不明]" }
     audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} ch" }
+    audio_channels_identified { "{count} ch（{layout}）" }
     audio_finding_lossy_source { "非可逆圧縮音源" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {ソフトウェア音量減衰: {gain}} other {ソフトウェア音量減衰}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {ソフトウェア増幅: ゲイン {gain}（クリッピングのリスク）} other {ソフトウェア増幅（クリッピングのリスク）}}" }
@@ -331,12 +332,13 @@ ja:table {
     audio_finding_muted { "ミュート" }
     audio_finding_resampling { "{hasFormats, select, yes {リサンプリング: {fromRate} Hz → {toRate} Hz} other {リサンプリング}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {チャンネルマッピング: {fromChannels} ch → {toChannels} ch} other {チャンネルマッピング}}" }
+    audio_finding_channel_layout { "チャンネルレイアウト: {fromLayout} → {toLayout}" }
     audio_finding_lossless_padding { "信号を保持する整数拡張" }
     audio_finding_lossless_float { "信号を保持する浮動小数点変換" }
     audio_finding_lossless_round_trip { "信号を保持する往復変換（浮動小数点エンジン）" }
     audio_finding_truncation { "{kind, select, floatToInteger {浮動小数点 → 整数の量子化: {fromPrecision} → {toPrecision}} integerToFloat {整数 → 浮動小数点の量子化: {fromPrecision} → {toPrecision}} precision {精度切り捨て: {fromPrecision} → {toPrecision}} other {精度切り捨て}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {{apps} とミキシング} other {複数音源の混合}}" }
-    audio_quality_bit_perfect_playback { "ビットパーフェクト再生" }
+    audio_quality_bit_perfect_playback { "ビットパーフェクト PCM（観測したソフトウェア経路）" }
     audio_quality_signal_preserved { "信号を保持" }
     audio_quality_pipeline_intervention { "オーディオ処理あり" }
     audio_quality_signal_clipping_detected { "信号クリッピングを検出" }
@@ -345,6 +347,9 @@ ja:table {
     audio_quality_partially_verified_path { "オーディオ経路を一部のみ検証" }
     audio_quality_clean_lossy_delivery { "非可逆圧縮音源を追加処理なしで出力" }
     audio_quality_clean_delivery { "追加処理なしで出力" }
+    audio_quality_unknown_channel_layout { "音源のチャンネル構成は不明" }
+    audio_quality_unverified_channel_delivery { "チャンネル伝送は未検証" }
+    audio_quality_inferred_channel_layout { "音源のチャンネル構成は推定" }
     playback_control_play { "再生" }
     playback_control_pause { "一時停止" }
     playback_control_stop { "停止" }

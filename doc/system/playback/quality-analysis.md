@@ -64,7 +64,8 @@ Missing evidence does not by itself downgrade the pipeline axis because Aobus ca
 
 Core `channelConfidence` is separate from numerical axes and `fullyVerified`: Unknown lacks a complete interpreted source or a Sink-reaching path; Unverified lacks complete identity or mapping at a required boundary; Inferred retains inferred source interpretation; Verified has complete identity and native mapping throughout the observed software path.
 Verified can coexist with a known alteration finding: confidence grades identity and mapping evidence, not path quality.
-It never proves physical wiring. Current runtime/frontend presentation remains unchanged and does not yet project this additional channel-confidence field.
+It never proves physical wiring. Runtime and frontends project `channelConfidence` as an independent channel note that never suppresses numerical positives: a known channel conversion stays a `ChannelMapping` finding that owns the intervention verdict, and equal channel counts alone prove nothing.
+The note and the numerical axes describe the observed software boundary, not verified speaker routing.
 
 Every assessment records node identity, type, name, optional format, its worst local severity, and ordered findings.
 A node with no property or incoming-transition finding receives an explicit BitPerfect finding; a missing format still makes the whole result partially verified.

@@ -246,6 +246,20 @@ fails the probe. It uses the control's normal presentation API and no library,
 audio endpoint, or saved application settings. The shipping executable has no
 probe switches.
 
+### Quality tooltip property probe
+
+`ao_winui_quality_tooltip_probe` is built by native checks but runs only from a
+logged-in desktop:
+`<reported-build-dir>\app\windows-winui\quality-tooltip-probe\Debug\ao_winui_quality_tooltip_probe.exe STATE_ROOT AUDIO_FIXTURE`.
+Both arguments must be absolute paths outside the checkout. The state directory
+must not exist and its parent must exist; use a read-only FLAC fixture.
+The probe uses a real application runtime with a discard backend, not an audio
+endpoint. It checks the shipping tooltip adapter's text, HelpText, availability,
+owner-window resize, and teardown against shared Now Playing presentation.
+These are native-property observations, not an opened tooltip's wrapping,
+clipping, pixels, or physical speaker-routing evidence. Keep the state directory
+as evidence and close the probe before another build or hygiene refresh.
+
 ### Track and navigation probes
 
 The WinUI build also executes `ao_winui_track_item_probe`, a console check of the
