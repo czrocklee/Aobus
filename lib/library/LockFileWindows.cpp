@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "WriterSessionLease.h"
+#include "LockFile.h"
 #include <ao/Error.h>
 #include <ao/utility/Path.h>
 
@@ -54,7 +54,7 @@ namespace ao::library::detail
     }
   } // namespace
 
-  struct WriterSessionLease::Impl final
+  struct LockFile::Impl final
   {
     explicit Impl(HANDLE handle) noexcept
       : handle{handle}
@@ -77,12 +77,15 @@ namespace ao::library::detail
     HANDLE handle = INVALID_HANDLE_VALUE;
   };
 
-  Result<WriterSessionLease> WriterSessionLease::acquire(std::filesystem::path const& databasePath)
+  Result<LockFile> LockFile::acquire(std::filesystem::path const& path, Mode const mode)
   {
-    auto const leasePath = databasePath / utility::pathFromUtf8(kFileName);
-    auto* const handle = ::CreateFileW(leasePath.c_str(),
+    auto const pathText = utility::pathToUtf8(path);
+    // Without delete sharing, Windows refuses to remove or rename the file
+    // while any process holds it, as it does for LMDB's own files. A removed
+    // file would let the next opener lock a new file that excludes nobody.
+    auto* const handle = ::CreateFileW(path.c_str(),
                                        GENERIC_READ | GENERIC_WRITE,
-                                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
                                        nullptr,
                                        OPEN_ALWAYS,
                                        FILE_ATTRIBUTE_NORMAL,
@@ -92,35 +95,39 @@ namespace ao::library::detail
     {
       auto const errorCode = ::GetLastError();
       return makeError(
-        Error::Code::IoError, std::format("Failed to open library writer lease: {}", systemMessage(errorCode)));
+        Error::Code::IoError, std::format("Failed to open lock file '{}': {}", pathText, systemMessage(errorCode)));
     }
 
     auto implPtr = std::make_unique<Impl>(handle);
+    DWORD flags = LOCKFILE_FAIL_IMMEDIATELY;
 
-    if (auto overlapped = OVERLAPPED{};
-        ::LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, MAXDWORD, MAXDWORD, &overlapped) ==
-        0)
+    if (mode == Mode::Exclusive)
+    {
+      flags |= LOCKFILE_EXCLUSIVE_LOCK;
+    }
+
+    if (auto overlapped = OVERLAPPED{}; ::LockFileEx(handle, flags, 0, MAXDWORD, MAXDWORD, &overlapped) == 0)
     {
       auto const errorCode = ::GetLastError();
 
       if (errorCode == ERROR_LOCK_VIOLATION || errorCode == ERROR_SHARING_VIOLATION)
       {
-        return makeError(Error::Code::Conflict, "Library already has a writable process");
+        return makeError(Error::Code::ResourceBusy, std::format("Lock file '{}' is held", pathText));
       }
 
       return makeError(
-        Error::Code::IoError, std::format("Failed to acquire library writer lease: {}", systemMessage(errorCode)));
+        Error::Code::IoError, std::format("Failed to lock '{}': {}", pathText, systemMessage(errorCode)));
     }
 
-    return WriterSessionLease{std::move(implPtr)};
+    return LockFile{std::move(implPtr)};
   }
 
-  WriterSessionLease::WriterSessionLease(std::unique_ptr<Impl> implPtr)
+  LockFile::LockFile(std::unique_ptr<Impl> implPtr)
     : _implPtr{std::move(implPtr)}
   {
   }
 
-  WriterSessionLease::~WriterSessionLease() = default;
-  WriterSessionLease::WriterSessionLease(WriterSessionLease&&) noexcept = default;
-  WriterSessionLease& WriterSessionLease::operator=(WriterSessionLease&&) noexcept = default;
+  LockFile::~LockFile() = default;
+  LockFile::LockFile(LockFile&&) noexcept = default;
+  LockFile& LockFile::operator=(LockFile&&) noexcept = default;
 } // namespace ao::library::detail

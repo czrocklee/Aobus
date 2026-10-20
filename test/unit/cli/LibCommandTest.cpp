@@ -287,15 +287,34 @@ library:
   {
     auto fixture = CliFixture{rt::LibraryDurability::Durable};
     REQUIRE(fixture.run({"init"}).status == 0);
+    auto const databasePath = rt::LibraryPaths{fixture.root()}.databasePath();
+    auto const lockPaths = std::array{databasePath / ".aobus-open.lock", databasePath / ".aobus-writer.lock"};
+    // The lock files hold no payload, so each gets bytes that the sum below
+    // can observe.
+    for (auto const& lockPath : lockPaths)
+    {
+      auto lock = std::ofstream{lockPath, std::ios::app};
+      lock << std::string(65536, 'l');
+      lock.close();
+      REQUIRE_FALSE(lock.fail());
+    }
+
     auto const before = fixture.run({"-O", "json", "lib", "stats"});
     REQUIRE(before.status == 0);
     auto const beforeTree = parseYaml(before.out);
     auto const expected = std::string{yaml::scalarView(beforeTree.rootref()["diskBytes"])};
     REQUIRE(std::stoull(expected) > 0);
-    auto const databasePath = rt::LibraryPaths{fixture.root()}.databasePath();
+
+    // Opening a lock file must not truncate it, or the sum would not observe it.
+    for (auto const& lockPath : lockPaths)
+    {
+      CHECK(utility::allocatedFileBytes(lockPath) > 0);
+    }
+
     CHECK(std::stoull(expected) == utility::allocatedFileBytes(databasePath / "data.mdb") +
                                      utility::allocatedFileBytes(databasePath / "lock.mdb") +
-                                     utility::allocatedFileBytes(databasePath / ".aobus-writer.lock"));
+                                     utility::allocatedFileBytes(databasePath / ".aobus-writer.lock") +
+                                     utility::allocatedFileBytes(databasePath / ".aobus-open.lock"));
     std::filesystem::create_directories(databasePath / "unrelated");
     {
       auto workspace = std::ofstream{databasePath / "workspace.yaml"};

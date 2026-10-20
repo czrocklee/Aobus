@@ -23,6 +23,11 @@ This surface belongs to the **core libraries** layer in the [system architecture
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
 Application composition keeps only one live environment for a database path in each process, as required by LMDB; `MusicLibrary` has no canonical-path registry or duplicate-open admission mechanism.
 Independent processes may open the same environment under LMDB's normal locking rules.
+Before the environment opens, every opener, reader and writer alike, takes a shared lock on `<database-path>/.aobus-open.lock` without waiting and holds it until the environment closes.
+While another holder has that lock exclusively, open returns `ResourceBusy` without opening the environment.
+Open creates the lock file when it is missing, so where the process cannot create a file in the database directory, a missing lock file makes open return `IoError`.
+Upgrade and rollback do not exist yet; [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) requires them to hold it exclusively, so that neither runs while any process has the library open.
+The lock covers the whole file, with `flock` on POSIX and a full-range `LockFileEx` on Windows, and a holder in the same process conflicts with it exactly as one in another process does.
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and configures the LMDB reader table through `MusicLibrary::Options::maxReaders`.
 That option is a requested table size, defaults to `512`, and skips `mdb_env_set_maxreaders` when zero.
 Every commit is flushed to stable storage unless `MusicLibrary::Options::flushCommits` is cleared.
@@ -34,7 +39,7 @@ Exhausting that table follows the existing fatal transaction-begin contract owne
 That map is the capacity this environment may grow into, not disk it occupies: as the [LMDB adapter](../../../system/persistence/lmdb-operation.md) specifies, the data file grows with the pages transactions use, never with the map, on every supported platform, and a full map remains the point at which mutation fails with `StorageFull`.
 A mutation that rolls back can leave the data file longer than its committed pages, and later mutations reuse that space; on a Windows volume without sparse files, such as exFAT, the whole extension stays allocated until then.
 `MusicLibrary::storageCapacity()` reports that capacity as `mapBytes` together with the `highWaterBytes` the database has needed; the high water is the peak page extent rather than live data, so deleting rows does not lower it.
-Its `diskBytes` reports the allocated bytes of `data.mdb`, `lock.mdb`, and `.aobus-writer.lock`, excluding frontend state and unrelated descendants.
+Its `diskBytes` reports the allocated bytes of `data.mdb`, `lock.mdb`, `.aobus-open.lock`, and `.aobus-writer.lock`, excluding frontend state and unrelated descendants.
 
 Capacity is either managed or pinned, and `MusicLibrary::Options` chooses which.
 
@@ -60,7 +65,7 @@ After the version gate accepts version 1, open requires exactly the seven named 
 The database is a native-format store rather than an interchange format.
 It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
 Its path must reside on a locally attached, writable filesystem with byte-range locking: each platform's native filesystem, and exFAT on macOS and Windows.
-Network filesystems and shares are unsupported because neither the writer lease nor LMDB's mapped-file locking provides cross-host safety for this database.
+Network filesystems and shares are unsupported because neither the open lock, the writer lease, nor LMDB's mapped-file locking provides cross-host safety for this database.
 FAT32 is unsupported because it limits a file to 4 GiB: the data file grows with the pages the library uses, so a library on FAT32 cannot grow past that size.
 Opening does not detect the filesystem, so a FAT32 location is not refused before it fills.
 Integer keys and record fields are little-endian in LMDB's native word order, and the format is defined only for 64-bit hosts: [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) refuses to compile for another byte order or word size, and every persisted struct asserts its size, field offsets, and absence of padding.
@@ -89,7 +94,9 @@ A failure to begin a snapshot is fatal for an already admitted live library beca
 A separately acquired `WritableMusicLibrary` is the only authority that can create a write transaction, and production mutation receives only callback-scoped logical Track and List ports through `LibraryWrite`.
 Physical Store writers, native transaction handles, and mutable LMDB reservations remain inaccessible to production callers except for the source-private Track encoder described below.
 An active transaction keeps the non-blocking `<database-path>/.aobus-writer.lock` lease alive even if the originating writable capability is destroyed.
-The lock file has no governed payload and is not part of format version `1`; it must not be removed while a writable process is active.
+Neither `.aobus-open.lock` nor `.aobus-writer.lock` has a governed payload or is part of format version `1`.
+No operation moves or removes either file, and neither may be removed while any process has the library open: an opener that recreated a removed file would lock a different file and exclude nobody.
+Windows enforces this by refusing to remove or rename either file while a process holds it; POSIX systems do not.
 
 The logical Track writer preserves the format's hot/cold, manifest, dictionary, and Resource relationships while it:
 
@@ -462,7 +469,7 @@ Track encoders validate the bytes they fill with the same canonical local valida
 Prepared List and manifest values already own their validated canonical bytes, so their writers use the copied-data overload without another serialization or allocating validation pass.
 
 After main-database admission, existing-schema open uses the source-private unvalidated `meta` token to read only the stable eight-byte metadata prefix needed for magic and version.
-A valid non-current version returns `NotSupported` before version-1 catalog closure, exact header size, named-database flags, or extra-database checks; no conversion is attempted, even when an existing named database's key flags differ from the current schema.
+A newer version returns `NotSupported`, and version `0` returns `CorruptData`, before version-1 catalog closure, exact header size, named-database flags, or extra-database checks; no conversion is attempted, even when an existing named database's key flags differ from the current schema.
 The main database's byte-key flags are admitted before safe catalog enumeration and therefore before the metadata version lookup.
 For version 1, the header is exactly 40 bytes with zero flags, a zero reserved word, and a non-nil library id, and the catalog is exactly the seven named databases above.
 Admission then requires exact `MDB_INTEGERKEY` flags before consuming the existing `meta` DBI as an `IntegerKeyDatabase`, opens the remaining integer-key databases as `IntegerKeyDatabase`, opens `file_manifest` as `ByteKeyDatabase` with no key flags, and permits no unvalidated token to escape initialization.
@@ -536,8 +543,9 @@ It cannot turn an underlying mapped-file fault into a recoverable record-validat
 
 ## Compatibility and versioning
 
-Opening a database with invalid metadata magic returns `CorruptData`; a valid non-current stored version returns `NotSupported` after only the stable prefix is read.
-There is no migration path today; the current reset-and-rescan recovery instruction loses database-only user-authored state and must be treated as an explicit destructive fallback rather than a reconstruction guarantee.
+Opening a database with invalid metadata magic returns `CorruptData`; a stored version newer than the current one returns `NotSupported` after only the stable prefix is read, and version `0`, which no build writes, returns `CorruptData`.
+The newer-version error tells the user to open the library with the build that created or upgraded it, states that this build has not changed it, and warns that rebuilding it from media files loses the tags, Lists, and custom fields held only in the database.
+There is no upgrade path today; rebuilding a library by rescanning loses database-only user-authored state and must be treated as an explicit destructive fallback rather than a reconstruction guarantee.
 Safely detected malformed catalog, metadata, dictionary, Resource, Track, List, or manifest state likewise rejects open as a unit.
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
@@ -556,14 +564,17 @@ Admission still never parses a filter, and stored text that does not parse or co
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
 After the first release, a version is incremented at most once per release and a released number is never reused; a later release brings every earlier released library forward through an explicit, confirmed upgrade, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
-No upgrade exists yet. Open accepts only version 1, and any other stored version returns `NotSupported`; opening it never relabels, rewrites, or deletes it automatically.
+No upgrade exists yet. Open accepts only version 1 and never relabels, rewrites, or deletes a library of another version automatically.
+`MusicLibrary.cpp` asserts at compile time that the current version is 1, so incrementing `kLibraryVersion` does not build until open gains the upgrade path for the older version.
+`kLastReleasedLibraryVersion` records the last released version and is `0` before the first release; the [library format change guide](../../../development/library-format-changes.md) describes how a change and a release use it.
 Explicit recreation by rescanning abandons database-only curation, lists, and other state not held in the media files; it is a destructive user choice, not a reconstruction guarantee.
 The current build cannot open an environment of another version to export its curation, and a backup in another format does not become a current-format import merely by changing its version number.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created index and adds no legacy-layout migration or validation path.
 
 ## Implementation authority
 
-- [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, version, metadata and id space records, and the byte-order and word-size guards.
+- [`MetadataLayout.h`](../../../../include/ao/library/MetadataLayout.h) owns magic, the current and last released versions, metadata and id space records, and the byte-order and word-size guards.
+- [`LockFile.h`](../../../../lib/library/LockFile.h) owns the source-private whole-file lock behind both lock files; [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) holds the open lock, and [`WriterSessionLease.cpp`](../../../../lib/library/WriterSessionLease.cpp) the writer lease.
 - [`WriteTransaction.cpp`](../../../../lib/library/WriteTransaction.cpp) owns reading the id space at begin and committing its marks; [`MusicLibrary.cpp`](../../../../lib/library/MusicLibrary.cpp) draws the library id when it creates the environment.
 - [`TrackLayout.h`](../../../../include/ao/library/TrackLayout.h), [`ListLayout.h`](../../../../include/ao/library/ListLayout.h), and [`FileManifestLayout.h`](../../../../include/ao/library/FileManifestLayout.h) own binary structs and static size checks.
 - [`FileTimestamp.h`](../../../../include/ao/FileTimestamp.h) owns the passive `ao::FileTimestamp` value type, while [`FileTimeConversion.h`](../../../../include/ao/library/FileTimeConversion.h) and [`FileTimeConversion.cpp`](../../../../lib/library/FileTimeConversion.cpp) own the native filesystem-clock conversion and last-write-time read.
@@ -581,10 +592,10 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, and same-library plus cross-process writer-session exclusion.
+- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers exact catalog/header/revision/id space admission, non-current-version precedence over current key flags, the newer-version and version-0 open errors, one-open-per-named-DBI behavior, dictionary/Resource/Track/List/manifest closure, accepted opaque and stale states, recoverable validation-read faults, deterministic `N`/`2N` operation counts, same-library plus cross-process writer-session exclusion, and same-process plus cross-process open-lock exclusion.
 - [`FileTimeConversionTest.cpp`](../../../../test/unit/library/FileTimeConversionTest.cpp) locks the native file-clock conversion behind the manifest modification-time record: Unix seconds with a nonnegative fraction, epoch zero, instants beyond the Unix nanosecond range, leap-second mapping, and `FileTimestamp` ordering and normalization.
 - [`LibraryFormatFixtureTest.cpp`](../../../../test/unit/runtime/library/LibraryFormatFixtureTest.cpp) opens a library created on each of Linux x86-64, Windows x64, and macOS arm64, checks its page size, that its Track and manifest trees have a branch level, and that a List record overflows, compares its full export with the [`v1.yaml`](../../../../test/data/library/v1.yaml) it was restored from, and writes a Track and a List to it. Each fixture holds a CUE carrier and has deleted its highest Track and List after the restore, so the write checks that neither id is reused.
-  It also restores `v1.yaml` into an empty library with none of its audio files and checks that the full export reproduces the document byte for byte.
+  It also restores `v1.yaml` into an empty library with none of its audio files and checks that the full export reproduces the document byte for byte, and it checks at compile time that the library and YAML versions each differ from their last released version by at most one.
 - [`IdSpaceTest.cpp`](../../../../test/unit/library/IdSpaceTest.cpp) covers never-reused Track and List ids across deletion, clear, and reopen, the library id across clear, failed-commit rollback, the saved-order mark, and the List id ceiling.
 - [`MetadataStoreTest.cpp`](../../../../test/unit/library/MetadataStoreTest.cpp) covers logical metadata snapshots, failed-commit rollback, and durable candidate-revision sequencing across a child-process commit.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.

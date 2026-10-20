@@ -66,12 +66,9 @@ namespace ao::rt::test
       CHECK(res.error().code == Error::Code::FormatRejected);
       CHECK_THAT(res.error().message, Catch::Matchers::ContainsSubstring(std::string{payload.error}));
 
-      if (payload.error.starts_with("Unsupported YAML version"))
+      if (payload.error.contains("a newer version of Aobus"))
       {
-        CHECK(res.error().message.contains("(current 1)"));
-        CHECK(res.error().message.contains("No automatic conversion"));
-        CHECK(res.error().message.contains("keep this document"));
-        CHECK(res.error().message.contains("build supporting its version"));
+        CHECK(res.error().message.contains("Import it with that version or a later one; nothing was imported"));
         CHECK(res.error().message.contains("does not recover the tags, lists, and custom fields"));
       }
     }
@@ -83,13 +80,13 @@ namespace ao::rt::test
     checkRejectedPayload({
       .label = "version zero",
       .yaml = "version: 0\nlibrary: malformed\n",
-      .error = "Unsupported YAML version 0",
+      .error = "Unsupported YAML version 0, which no Aobus build writes",
     });
 
     checkRejectedPayload({
       .label = "future version 2",
       .yaml = "version: 2\nlibrary: malformed\n",
-      .error = "Unsupported YAML version 2",
+      .error = "Unsupported YAML version 2 (current 1): a newer version of Aobus exported this document",
     });
   }
 

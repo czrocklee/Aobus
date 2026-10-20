@@ -152,6 +152,26 @@ namespace ao::library::test
       return writeObservation("writer-conflict");
     }
 
+    std::int32_t runOpenBusy(std::string_view const scratchName)
+    {
+      if (scratchName.empty())
+      {
+        return 3;
+      }
+
+      auto const scratchPath = std::filesystem::temp_directory_path() / std::string{scratchName};
+
+      if (auto const libraryRes = MusicLibrary::open(
+            scratchPath, scratchPath / "db", MusicLibrary::Options{.pinnedMapBytes = std::size_t{64} * 1024U * 1024U});
+          libraryRes || libraryRes.error().code != Error::Code::ResourceBusy)
+      {
+        std::fputs("Library probe did not observe the held open lock\n", stderr);
+        return 3;
+      }
+
+      return writeObservation("open-busy");
+    }
+
     std::int32_t runCommitRevision(std::string_view const scratchName, bool const withDictionary = false)
     {
       if (scratchName.empty())
@@ -1843,6 +1863,11 @@ namespace ao::library::test
     if (name == "writer-conflict")
     {
       return runWriterConflict(scratchName);
+    }
+
+    if (name == "open-busy")
+    {
+      return runOpenBusy(scratchName);
     }
 
     if (name == "commit-dictionary")

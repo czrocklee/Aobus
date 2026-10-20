@@ -1900,14 +1900,25 @@ namespace ao::rt
       return std::unexpected{versionRes.error()};
     }
 
+    // Version 1 is the first version any release writes, so a document of
+    // another version is newer or one no build writes. The first format change
+    // adds the tree steps for older versions here.
+    static_assert(kYamlFormatVersion == 1, "an older YAML version needs the tree steps of decision 0020");
+
+    if (*versionRes > kYamlFormatVersion)
+    {
+      return makeError(Error::Code::FormatRejected,
+                       std::format("Unsupported YAML version {} (current {}): a newer version of Aobus exported this "
+                                   "document. Import it with that version or a later one; nothing was imported. A "
+                                   "fresh media scan does not recover the tags, lists, and custom fields it holds.",
+                                   *versionRes,
+                                   kYamlFormatVersion));
+    }
+
     if (*versionRes != kYamlFormatVersion)
     {
       return makeError(Error::Code::FormatRejected,
-                       std::format("Unsupported YAML version {} (current {}). No automatic conversion is provided; "
-                                   "keep this document and use a build supporting its version. A fresh media scan "
-                                   "does not recover the tags, lists, and custom fields it holds.",
-                                   *versionRes,
-                                   kYamlFormatVersion));
+                       std::format("Unsupported YAML version {}, which no Aobus build writes", *versionRes));
     }
 
     validated.version = *versionRes;

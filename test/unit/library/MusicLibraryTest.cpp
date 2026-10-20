@@ -4,6 +4,7 @@
 #include <ao/library/MusicLibrary.h>
 
 #include "lib/library/FileManifestValidation.h"
+#include "lib/library/LockFile.h"
 #include "lib/library/OpenValidationMetrics.h"
 #include "lib/lmdb/detail/ReadFaultInjection.h"
 #include "test/fatal/ProbeProcess.h"
@@ -54,6 +55,9 @@
 #include <span>
 #include <string>
 #include <string_view>
+#ifdef _WIN32
+#include <system_error>
+#endif
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -487,7 +491,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("may take 1976 bytes"));
   }
 
-  TEST_CASE("MusicLibrary - reports unsupported library versions as NotSupported", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary - refuses a library version other than the current one", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -507,9 +511,9 @@ namespace ao::library::test
       CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
       CHECK(res.error().message.contains("version 2 (current 1)"));
-      CHECK(res.error().message.contains("No automatic migration"));
-      CHECK(res.error().message.contains("keep this library"));
-      CHECK(res.error().message.contains("build supporting its stored version"));
+      CHECK(res.error().message.contains("a newer version of Aobus created or upgraded this library"));
+      CHECK(res.error().message.contains("Open it with that version or a later one"));
+      CHECK(res.error().message.contains("this build has not changed it"));
       CHECK(res.error().message.contains("Rebuilding it from media files loses the tags, lists, and custom fields"));
       CHECK(readHeaderBytes() == before);
     }
@@ -525,6 +529,16 @@ namespace ao::library::test
       REQUIRE_FALSE(res);
       CHECK(res.error().code == Error::Code::NotSupported);
       CHECK(detail::openValidationMetrics().namedDatabaseOpens == 1);
+    }
+
+    SECTION("version zero is a corrupt header rather than an older library")
+    {
+      createLibraryMetadataHeader(temp.path(), 0);
+
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
+      CHECK(res.error().message.contains("records version 0, which no Aobus build writes"));
     }
   }
 
@@ -1226,7 +1240,8 @@ namespace ao::library::test
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<MusicLibrary&>().metadataHeader()), MetadataHeader>);
   }
 
-  TEST_CASE("WritableMusicLibrary - excludes another writer session until release", "[library][unit][music-library]")
+  TEST_CASE("WritableMusicLibrary - excludes another writer session until release",
+            "[library][unit][music-library][concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -1262,6 +1277,138 @@ namespace ao::library::test
 
     REQUIRE(result.hasSuccessfulExit());
     CHECK(result.standardOutput == "writer-conflict");
+    CHECK(result.standardError.empty());
+  }
+
+  TEST_CASE("MusicLibrary - an exclusive open lock refuses opening until it is released",
+            "[library][unit][music-library][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+    std::filesystem::create_directories(databasePath);
+
+    {
+      auto openLockRes =
+        detail::LockFile::acquire(databasePath / ".aobus-open.lock", detail::LockFile::Mode::Exclusive);
+      REQUIRE(openLockRes);
+
+      auto const res = openTestMusicLibrary(temp.path(), databasePath);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::ResourceBusy);
+      CHECK(res.error().message.contains("being upgraded or rolled back by another Aobus process"));
+      // The lock comes before the environment, so a refused open has not
+      // touched LMDB beneath the exclusive holder.
+      CHECK_FALSE(std::filesystem::exists(databasePath / "data.mdb"));
+      CHECK_FALSE(std::filesystem::exists(databasePath / "lock.mdb"));
+    }
+
+    CHECK(openTestMusicLibrary(temp.path(), databasePath));
+  }
+
+  TEST_CASE("MusicLibrary - an open library shares its open lock and refuses an exclusive holder",
+            "[library][unit][music-library][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const openLockPath = temp.path() / "db" / ".aobus-open.lock";
+    auto const checkSharedOnly = [&]
+    {
+      CHECK(detail::LockFile::acquire(openLockPath, detail::LockFile::Mode::Shared));
+
+      auto const exclusiveRes = detail::LockFile::acquire(openLockPath, detail::LockFile::Mode::Exclusive);
+      REQUIRE_FALSE(exclusiveRes);
+      CHECK(exclusiveRes.error().code == Error::Code::ResourceBusy);
+    };
+
+    {
+      auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+
+      SECTION("while it only reads")
+      {
+        checkSharedOnly();
+      }
+
+      SECTION("while it has a writer session")
+      {
+        auto writableRes = WritableMusicLibrary::acquire(library);
+        REQUIRE(writableRes);
+        checkSharedOnly();
+      }
+
+      SECTION("after its writer session ends")
+      {
+        REQUIRE(WritableMusicLibrary::acquire(library));
+        checkSharedOnly();
+      }
+    }
+
+    CHECK(detail::LockFile::acquire(openLockPath, detail::LockFile::Mode::Exclusive));
+  }
+
+#ifdef _WIN32
+  TEST_CASE("MusicLibrary - Windows refuses to remove the lock files of an open library",
+            "[library][unit][music-library][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+    auto library = makeTestMusicLibrary(temp.path(), databasePath);
+    auto writableRes = WritableMusicLibrary::acquire(library);
+    REQUIRE(writableRes);
+
+    for (auto const& lockPath : {databasePath / ".aobus-open.lock", databasePath / ".aobus-writer.lock"})
+    {
+      auto ec = std::error_code{};
+      CHECK_FALSE(std::filesystem::remove(lockPath, ec));
+      CHECK(ec);
+      CHECK(std::filesystem::exists(lockPath));
+    }
+  }
+#endif
+
+  TEST_CASE("MusicLibrary - a refused open releases its open lock", "[library][unit][music-library][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+
+    SECTION("a newer version is refused while the schema is admitted")
+    {
+      createLibraryMetadataHeader(temp.path(), kLibraryVersion + 1);
+
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("an invalid Track row is refused while the stores are validated")
+    {
+      initializeLibrary(temp.path());
+      createRawIntegerRow(temp.path(), "tracks_hot", 0, makeHotData());
+      createRawIntegerRow(temp.path(), "tracks_cold", 0, makeColdData());
+
+      auto const res = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::CorruptData);
+    }
+
+    // A leaked shared lock would not refuse a later open, only the exclusive
+    // lock that an upgrade or rollback takes.
+    CHECK(detail::LockFile::acquire(temp.path() / ".aobus-open.lock", detail::LockFile::Mode::Exclusive));
+  }
+
+  TEST_CASE("MusicLibrary - an exclusive open lock refuses opening in another process",
+            "[library][integration][music-library][concurrency]")
+  {
+    constexpr auto kTimeout = std::chrono::seconds{15};
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+    std::filesystem::create_directories(databasePath);
+    auto openLockRes = detail::LockFile::acquire(databasePath / ".aobus-open.lock", detail::LockFile::Mode::Exclusive);
+    REQUIRE(openLockRes);
+    auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
+    REQUIRE_FALSE(executablePath.empty());
+    auto const scenario = std::string{"open-busy:"} + temp.path().filename().string();
+    auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
+
+    REQUIRE(result.hasSuccessfulExit());
+    CHECK(result.standardOutput == "open-busy");
     CHECK(result.standardError.empty());
   }
 

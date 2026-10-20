@@ -5,6 +5,7 @@ add_library(ao_library STATIC
     OpenValidationMetrics.cpp
     MusicLibrary.cpp
     WritableMusicLibrary.cpp
+    WriterSessionLease.cpp
     ReadTransaction.cpp
     WriteTransaction.cpp
     LibraryWrite.cpp
@@ -38,9 +39,9 @@ add_library(ao_library STATIC
     AudioIdentity.cpp
 )
 if(WIN32)
-    target_sources(ao_library PRIVATE WriterSessionLeaseWindows.cpp)
+    target_sources(ao_library PRIVATE LockFileWindows.cpp)
 else()
-    target_sources(ao_library PRIVATE WriterSessionLeasePosix.cpp)
+    target_sources(ao_library PRIVATE LockFilePosix.cpp)
 endif()
 target_include_directories(ao_library
     PUBLIC ${AO_PUBLIC_INCLUDE_DIR}
