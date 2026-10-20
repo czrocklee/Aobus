@@ -95,6 +95,7 @@ APPKIT_SCENARIOS = (
     "media",
     "credits-controls",
     "credits-previews",
+    "quality-presentation",
 )
 APPKIT_SUCCESSOR_TIMEOUT_SECONDS = 60.0
 APPKIT_PARENT_TIMEOUT_SECONDS = 120.0

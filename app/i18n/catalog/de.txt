@@ -323,6 +323,7 @@ de:table {
     audio_node_unknown { "[Unbekannt]" }
     audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} Kan." }
+    audio_channels_identified { "{count} Kan. ({layout})" }
     audio_finding_lossy_source { "Verlustbehaftete Quelle" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Software-Lautstärkeabsenkung: {gain}} other {Software-Lautstärkeabsenkung}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {Software-Verstärkung: {gain} Verstärkung (Übersteuerungsgefahr)} other {Software-Verstärkung (Übersteuerungsgefahr)}}" }
@@ -331,12 +332,13 @@ de:table {
     audio_finding_muted { "Stummgeschaltet" }
     audio_finding_resampling { "{hasFormats, select, yes {Neuabtastung: {fromRate} Hz → {toRate} Hz} other {Neuabtastung}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Kanäle: {fromChannels} → {toChannels}} other {Kanalzuordnung}}" }
+    audio_finding_channel_layout { "Kanallayout: {fromLayout} → {toLayout}" }
     audio_finding_lossless_padding { "Verlustfreie Ganzzahlerweiterung" }
     audio_finding_lossless_float { "Verlustfreie Gleitkommakonvertierung" }
     audio_finding_lossless_round_trip { "Verlustfreie Hin- und Rückwandlung (Gleitkomma-Engine)" }
     audio_finding_truncation { "{kind, select, floatToInteger {Gleitkomma → Ganzzahl-Quantisierung: {fromPrecision} → {toPrecision}} integerToFloat {Ganzzahl → Gleitkomma-Quantisierung: {fromPrecision} → {toPrecision}} precision {Präzision gekürzt: {fromPrecision} → {toPrecision}} other {Präzision gekürzt}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {Gemischt mit {apps}} other {Gemischte Quellen}}" }
-    audio_quality_bit_perfect_playback { "Bitperfekte Wiedergabe" }
+    audio_quality_bit_perfect_playback { "Bitgenaues PCM (beobachteter Softwarepfad)" }
     audio_quality_signal_preserved { "Signal unverändert" }
     audio_quality_pipeline_intervention { "Signalverarbeitung in der Audiokette" }
     audio_quality_signal_clipping_detected { "Signalübersteuerung erkannt" }
@@ -345,6 +347,9 @@ de:table {
     audio_quality_partially_verified_path { "Signalweg nur teilweise geprüft" }
     audio_quality_clean_lossy_delivery { "Verlustbehaftete Quelle ohne weitere Verarbeitung" }
     audio_quality_clean_delivery { "Ausgabe ohne weitere Verarbeitung" }
+    audio_quality_unknown_channel_layout { "Kanallayout nicht identifiziert" }
+    audio_quality_unverified_channel_delivery { "Kanalausgabe nicht nachgewiesen" }
+    audio_quality_inferred_channel_layout { "Quellkanallayout abgeleitet" }
     playback_control_play { "Wiedergeben" }
     playback_control_pause { "Pausieren" }
     playback_control_stop { "Stoppen" }

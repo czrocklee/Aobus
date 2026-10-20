@@ -534,8 +534,15 @@ namespace ao::uimodel::test
       REQUIRE_FALSE(log.empty());
       CHECK(log.last().audioPipeline.quality == after.quality);
       CHECK(log.last().qualityCategory == AudioQualityCategory::Diagnostic);
-      CHECK(log.last().streamInfo == "44.1 kHz · 16-bit · Stereo");
+      auto const formatter = AudioQualityFormatter{ao::test::englishMessageCatalog()};
+      REQUIRE_FALSE(after.quality.assessments.empty());
+      REQUIRE(after.quality.assessments.front().optFormat);
+      // Backend resampling must not replace the source's displayed resolution or invent its channel identity.
+      CHECK(log.last().streamInfo == "44.1 kHz · 16-bit · 2 ch");
       CHECK(log.last().audioPipeline.plainTextFallback.contains("Pipeline intervention"));
+      auto const presentation = formatter.presentation(after.quality);
+      REQUIRE_FALSE(presentation.channelNote.empty());
+      CHECK(log.last().audioPipeline.plainTextFallback.ends_with("\n" + presentation.channelNote));
     }
   }
 

@@ -6,6 +6,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
 #include "test/unit/runtime/PlaybackUiTestSupport.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
@@ -21,6 +22,15 @@ namespace ao::uimodel::test
 {
   using namespace ao::rt::test;
   using namespace ao::rt;
+
+  namespace
+  {
+    rt::QualityState withChannelConfidence(rt::QualityState state, audio::ChannelConfidence const confidence)
+    {
+      state.channelConfidence = confidence;
+      return state;
+    }
+  } // namespace
 
   TEST_CASE("AobusSoulViewModel - view state generation", "[uimodel][unit][playback][soul]")
   {
@@ -46,19 +56,22 @@ namespace ao::uimodel::test
                           rt::QualityState{.overall = audio::Quality::BitwisePerfect}) == SoulAura::Veiled);
     CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
-                          rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                                           .pipelineQuality = audio::Quality::BitwisePerfect,
-                                           .overall = audio::Quality::BitwisePerfect}) == SoulAura::Radiant);
+                          withChannelConfidence(rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                                                 .pipelineQuality = audio::Quality::BitwisePerfect,
+                                                                 .overall = audio::Quality::BitwisePerfect},
+                                                audio::ChannelConfidence::Verified)) == SoulAura::Radiant);
     CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
-                          rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                                           .pipelineQuality = audio::Quality::LosslessPadded,
-                                           .overall = audio::Quality::LosslessPadded}) == SoulAura::Flowing);
+                          withChannelConfidence(rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                                                 .pipelineQuality = audio::Quality::LosslessPadded,
+                                                                 .overall = audio::Quality::LosslessPadded},
+                                                audio::ChannelConfidence::Verified)) == SoulAura::Flowing);
     CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
-                          rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                                           .pipelineQuality = audio::Quality::LosslessFloat,
-                                           .overall = audio::Quality::LosslessFloat}) == SoulAura::Flowing);
+                          withChannelConfidence(rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                                                 .pipelineQuality = audio::Quality::LosslessFloat,
+                                                                 .overall = audio::Quality::LosslessFloat},
+                                                audio::ChannelConfidence::Verified)) == SoulAura::Flowing);
     CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
@@ -77,6 +90,35 @@ namespace ao::uimodel::test
                                            .fullyVerified = false}) == SoulAura::Veiled);
     CHECK(resolveSoulAura(audio::Transport::Playing, true, rt::QualityState{.overall = audio::Quality::Clipped}) ==
           SoulAura::Burning);
+  }
+
+  TEST_CASE("resolveSoulAura keeps numerical positives independent of layout uncertainty",
+            "[uimodel][unit][playback][soul]")
+  {
+    for (auto const confidence : {audio::ChannelConfidence::Unknown,
+                                  audio::ChannelConfidence::Unverified,
+                                  audio::ChannelConfidence::Inferred,
+                                  audio::ChannelConfidence::Verified})
+    {
+      for (auto const transport : {audio::Transport::Playing, audio::Transport::Paused})
+      {
+        auto state = withChannelConfidence(rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                                            .pipelineQuality = audio::Quality::BitwisePerfect,
+                                                            .overall = audio::Quality::BitwisePerfect},
+                                           confidence);
+        CHECK(resolveSoulAura(transport, true, state) == SoulAura::Radiant);
+
+        for (auto const quality : {audio::Quality::LosslessPadded, audio::Quality::LosslessFloat})
+        {
+          state.pipelineQuality = quality;
+          state.overall = quality;
+          CHECK(resolveSoulAura(transport, true, state) == SoulAura::Flowing);
+        }
+
+        state.fullyVerified = false;
+        CHECK(resolveSoulAura(transport, true, state) == SoulAura::Veiled);
+      }
+    }
   }
 
   TEST_CASE("AobusSoulViewModel - paused playback freezes motion and keeps the live quality aura",
@@ -103,9 +145,10 @@ namespace ao::uimodel::test
   {
     CHECK(resolveSoulAura(audio::Transport::Paused,
                           true,
-                          rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
-                                           .pipelineQuality = audio::Quality::BitwisePerfect,
-                                           .overall = audio::Quality::BitwisePerfect}) == SoulAura::Radiant);
+                          withChannelConfidence(rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                                                 .pipelineQuality = audio::Quality::BitwisePerfect,
+                                                                 .overall = audio::Quality::BitwisePerfect},
+                                                audio::ChannelConfidence::Verified)) == SoulAura::Radiant);
     CHECK(resolveSoulAura(audio::Transport::Paused,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,

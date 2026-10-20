@@ -1,4 +1,4 @@
-"""Portal contracts for independently selectable native AppKit credits scenarios."""
+"""Portal contracts for independently selectable native AppKit component scenarios."""
 
 import argparse
 import contextlib
@@ -14,43 +14,52 @@ from ao.command import build as build_command
 from ao.command import test as test_command
 from ao.core import builddir
 
-_CREDITS_SCENARIOS = ("credits-controls", "credits-previews")
+_COMPONENT_SCENARIOS = ("credits-controls", "credits-previews", "quality-presentation")
 
 
 def _parse(arguments: list[str]) -> argparse.Namespace:
     return parse_arguments(make_parser(), arguments)
 
 
-class AppKitCreditsScenarioTest(unittest.TestCase):
-    def test_macos_parser_accepts_each_exact_credits_scenario_name(self):
+class AppKitComponentScenarioTest(unittest.TestCase):
+    def test_macos_parser_accepts_each_exact_component_scenario_name(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            for scenario in _CREDITS_SCENARIOS:
+            for scenario in _COMPONENT_SCENARIOS:
                 with self.subTest(scenario=scenario):
                     args = _parse(["test", "--appkit", "--scenario", scenario])
                     self.assertEqual(args.suite, "appkit")
                     self.assertEqual(args.scenario, scenario)
 
-    def test_macos_parser_rejects_unknown_or_inexact_credits_scenario_names(self):
+    def test_macos_parser_rejects_unknown_or_inexact_component_scenario_names(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.MACOS_PROFILE):
-            for scenario in ("unknown", "credits", "credits-control", "credits-preview", "CREDITS-CONTROLS"):
+            for scenario in (
+                "unknown",
+                "credits",
+                "credits-control",
+                "credits-preview",
+                "CREDITS-CONTROLS",
+                "quality",
+                "quality-presentations",
+                "QUALITY-PRESENTATION",
+            ):
                 with self.subTest(scenario=scenario):
                     with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
                         _parse(["test", "--appkit", "--scenario", scenario])
                     self.assertEqual(error.exception.code, 2)
 
-    def test_non_macos_profiles_do_not_offer_appkit_or_credits_scenarios(self):
+    def test_non_macos_profiles_do_not_offer_appkit_or_component_scenarios(self):
         for profile in (builddir.LINUX_PROFILE, builddir.WINDOWS_PROFILE):
             with self.subTest(profile=profile.name):
                 with mock.patch.object(builddir, "platform_profile", return_value=profile):
                     self.assertNotIn("appkit", test_command.selectable_suites())
-                    for scenario in _CREDITS_SCENARIOS:
+                    for scenario in _COMPONENT_SCENARIOS:
                         for selection in (["--appkit"], ["--suite", "appkit"]):
                             with self.subTest(scenario=scenario, selection=selection):
                                 with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
                                     _parse(["test", *selection, "--scenario", scenario])
                                 self.assertEqual(error.exception.code, 2)
 
-    def test_credits_dispatch_preserves_selected_tree_fixtures_and_asan_option(self):
+    def test_component_dispatch_preserves_selected_tree_fixtures_and_asan_option(self):
         with tempfile.TemporaryDirectory() as directory:
             build_dir = Path(directory)
             library = build_dir / "music"
@@ -63,7 +72,7 @@ class AppKitCreditsScenarioTest(unittest.TestCase):
                 ),
                 mock.patch.object(test_command, "run") as build_process,
             ):
-                for scenario in _CREDITS_SCENARIOS:
+                for scenario in _COMPONENT_SCENARIOS:
                     for asan in (False, True):
                         with self.subTest(scenario=scenario, asan=asan):
                             arguments = [
@@ -94,7 +103,7 @@ class AppKitCreditsScenarioTest(unittest.TestCase):
                             )
                 build_process.assert_not_called()
 
-    def test_credits_use_existing_parent_runner_with_120_second_timeout_and_no_desktop_markers(self):
+    def test_components_use_existing_parent_runner_with_120_second_timeout_and_no_desktop_markers(self):
         with tempfile.TemporaryDirectory() as directory:
             build_dir = Path(directory) / "build"
             binary = build_dir / "test" / "ao_appkit_smoke.app" / "Contents" / "MacOS" / "ao_appkit_smoke"
@@ -112,7 +121,7 @@ class AppKitCreditsScenarioTest(unittest.TestCase):
                 mock.patch.object(test_command.appkitprocess, "run_desktop") as desktop,
                 mock.patch.object(test_command, "_require_appkit_marker") as marker,
             ):
-                for scenario in _CREDITS_SCENARIOS:
+                for scenario in _COMPONENT_SCENARIOS:
                     for status in (0, 7):
                         with self.subTest(scenario=scenario, status=status):
                             parent = mock.Mock()

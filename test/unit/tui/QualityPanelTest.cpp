@@ -6,6 +6,8 @@
 #include "test/unit/MessageCatalogTestSupport.h"
 #include "test/unit/tui/KeymapTestSupport.h"
 #include "test/unit/tui/RenderTestSupport.h"
+#include "tui/TextCell.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Quality.h>
@@ -17,10 +19,16 @@
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/box.hpp>
+#include <ftxui/screen/screen.hpp>
+#include <ftxui/screen/string.hpp>
 
+#include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -43,6 +51,46 @@ namespace ao::tui::test
     {
       return audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
     }
+
+    std::optional<ftxui::Box> findParagraphCells(ftxui::Screen const& screen, std::string_view const text)
+    {
+      // Include wide-glyph continuation cells instead of treating UTF-8 bytes as terminal columns.
+      auto const glyphs = ftxui::Utf8ToGlyphs(text);
+
+      if (glyphs.empty() || glyphs.size() > static_cast<std::size_t>(screen.dimx()))
+      {
+        return std::nullopt;
+      }
+
+      auto const columns = static_cast<std::int32_t>(glyphs.size());
+
+      for (std::int32_t row = 0; row < screen.dimy(); ++row)
+      {
+        for (std::int32_t column = 0; column <= screen.dimx() - columns; ++column)
+        {
+          bool matches = true;
+
+          for (std::int32_t offset = 0; offset < columns; ++offset)
+          {
+            auto const& expected = glyphs[static_cast<std::size_t>(offset)];
+            auto const& actual = screen.PixelAt(column + offset, row).character;
+            // Paragraph word separators may be unpainted cells; each still occupies one column.
+            if (actual != expected && !(actual.empty() && expected == " "))
+            {
+              matches = false;
+              break;
+            }
+          }
+
+          if (matches)
+          {
+            return ftxui::Box{.x_min = column, .x_max = column + columns - 1, .y_min = row, .y_max = row};
+          }
+        }
+      }
+
+      return std::nullopt;
+    }
   } // namespace
 
   TEST_CASE("QualityPanel - renders empty pipeline state", "[tui][unit][playback][quality]")
@@ -57,6 +105,7 @@ namespace ao::tui::test
     CHECK_FALSE(text.contains("Quality"));
     CHECK_FALSE(text.contains("Audio Pipeline"));
     CHECK(text.contains("No audio pipeline yet"));
+    CHECK_FALSE(text.contains("Channel layout not identified"));
     CHECK_FALSE(text.contains("toggle"));
     CHECK(text.contains("Esc close"));
   }
@@ -188,6 +237,147 @@ namespace ao::tui::test
 
     CHECK(englishQualityPanelColumns(state, 120) > narrowColumns);
     CHECK(englishQualityPanelColumns(state, 32) == 32);
+  }
+
+  TEST_CASE("QualityPanel - renders layout uncertainty separately from the numerical headline",
+            "[tui][unit][playback][quality]")
+  {
+    auto state = rt::PlaybackTransportSnapshot{
+      .quality =
+        rt::QualityState{
+          .sourceQuality = audio::Quality::BitwisePerfect,
+          .pipelineQuality = audio::Quality::BitwisePerfect,
+          .overall = audio::Quality::BitwisePerfect,
+          .assessments = {{.nodeType = audio::flow::NodeType::Source, .optFormat = cdFormat()}},
+        },
+    };
+
+    auto const unknown = renderText(englishQualityPanel(state), 96);
+    CHECK(unknown.contains("Bit-perfect PCM (observed software path)"));
+    CHECK(unknown.contains("Channel layout not identified"));
+    CHECK(unknown.contains("2 ch"));
+    CHECK_FALSE(unknown.contains("Stereo"));
+
+    state.quality.channelConfidence = audio::ChannelConfidence::Unverified;
+    auto const unverified = renderText(englishQualityPanel(state), 96);
+    CHECK(unverified.contains("Bit-perfect PCM (observed software path)"));
+    CHECK(unverified.contains("Channel delivery not proved"));
+
+    state.quality.channelConfidence = audio::ChannelConfidence::Inferred;
+    CHECK(renderText(englishQualityPanel(state), 96).contains("Source channel layout inferred"));
+
+    state.quality.channelConfidence = audio::ChannelConfidence::Verified;
+    auto const verified = renderText(englishQualityPanel(state), 96);
+    CHECK(verified.contains("Bit-perfect PCM (observed software path)"));
+    CHECK_FALSE(verified.contains("Channel layout not identified"));
+    CHECK_FALSE(verified.contains("Source channel layout inferred"));
+    CHECK_FALSE(verified.contains("Channel delivery not proved"));
+  }
+
+  TEST_CASE("QualityPanel - narrow terminal cells retain wrapped headlines and independent notes",
+            "[tui][unit][playback][quality][localization]")
+  {
+    struct Case final
+    {
+      std::string_view locale;
+      audio::ChannelConfidence confidence;
+      std::vector<std::string_view> headlineChunks;
+      std::vector<std::string_view> noteChunks;
+      bool noteWraps = false;
+    };
+
+    auto const cases = std::vector<Case>{
+      {.locale = "en-US",
+       .confidence = audio::ChannelConfidence::Unknown,
+       .headlineChunks = {"Bit-perfect PCM", "(observed", "software", "path)"},
+       .noteChunks = {"Channel layout", "not", "identified"},
+       .noteWraps = true},
+      {.locale = "en-US",
+       .confidence = audio::ChannelConfidence::Unverified,
+       .headlineChunks = {"Bit-perfect PCM", "(observed", "software", "path)"},
+       .noteChunks = {"Channel delivery", "not", "proved"}},
+      {.locale = "zh-CN",
+       .confidence = audio::ChannelConfidence::Unknown,
+       .headlineChunks = {"Bit-Perfect", "PCM", "（已观测的软件链路）"},
+       .noteChunks = {"声道布局未识别"}},
+      {.locale = "zh-CN",
+       .confidence = audio::ChannelConfidence::Unverified,
+       .headlineChunks = {"Bit-Perfect", "PCM", "（已观测的软件链路）"},
+       .noteChunks = {"声道传递尚未证实"}},
+    };
+    // A 32-cell constrained popup has room for its border and body gutters.
+    // The English Unknown note must wrap; the shorter CJK notes fit in cells,
+    // not UTF-8 bytes. The longer numerical headline must wrap in both locales.
+    constexpr std::int32_t kNarrowColumns = 32;
+    constexpr std::int32_t kWideColumns = 96;
+
+    for (auto const& testCase : cases)
+    {
+      CAPTURE(testCase.locale, testCase.confidence);
+      auto const catalog = ao::test::messageCatalog(testCase.locale);
+      auto const state = rt::PlaybackTransportSnapshot{
+        .quality = {.sourceQuality = audio::Quality::BitwisePerfect,
+                    .pipelineQuality = audio::Quality::BitwisePerfect,
+                    .overall = audio::Quality::BitwisePerfect,
+                    .channelConfidence = testCase.confidence,
+                    .assessments = {{.nodeType = audio::flow::NodeType::Source}}},
+      };
+      auto const presentation = uimodel::AudioQualityFormatter{catalog}.presentation(state.quality);
+      auto const wide = renderElementFit(qualityPanel(catalog, state, defaultKeymapPlan(), kWideColumns), kWideColumns);
+      INFO(wide.text);
+      REQUIRE(findParagraphCells(wide.screen, presentation.headline));
+      REQUIRE(findParagraphCells(wide.screen, presentation.channelNote));
+      auto const wideRows = wide.screen.dimy();
+      auto const narrow =
+        renderElementFit(qualityPanel(catalog, state, defaultKeymapPlan(), kNarrowColumns), kNarrowColumns);
+      INFO(narrow.text);
+      CHECK(narrow.screen.dimx() == kNarrowColumns);
+      CHECK(narrow.screen.dimy() > wideRows);
+      CHECK_FALSE(findParagraphCells(narrow.screen, presentation.headline));
+      CHECK(findParagraphCells(narrow.screen, presentation.channelNote).has_value() == !testCase.noteWraps);
+      std::int32_t lastHeadlineRow = -1;
+
+      for (bool const isNote : {false, true})
+      {
+        auto const& chunks = isNote ? testCase.noteChunks : testCase.headlineChunks;
+        std::int32_t firstRow = -1;
+        std::int32_t previousRow = -1;
+        std::int32_t previousColumn = -1;
+
+        for (auto const chunk : chunks)
+        {
+          CAPTURE(chunk);
+          // Inspect actual screen glyphs, including CJK continuation cells,
+          // rather than joining or slicing flattened rendered lines.
+          auto const optCells = findParagraphCells(narrow.screen, chunk);
+          REQUIRE(optCells);
+          CHECK(optCells->x_min >= 2);
+          CHECK(optCells->x_min + cellWidth(chunk) <= kNarrowColumns - 2);
+          CHECK(
+            (optCells->y_min > previousRow || (optCells->y_min == previousRow && optCells->x_min > previousColumn)));
+          CHECK(narrow.screen.PixelAt(optCells->x_min, optCells->y_min).dim == isNote);
+
+          if (firstRow < 0)
+          {
+            firstRow = optCells->y_min;
+          }
+
+          previousRow = optCells->y_min;
+          previousColumn = optCells->x_min;
+        }
+
+        if (isNote)
+        {
+          CHECK(firstRow > lastHeadlineRow);
+          CHECK((previousRow > firstRow) == testCase.noteWraps);
+        }
+        else
+        {
+          CHECK(previousRow > firstRow);
+          lastHeadlineRow = previousRow;
+        }
+      }
+    }
   }
 
   TEST_CASE("QualityPanel - indicators use the Soul quality colors", "[tui][unit][playback][quality]")

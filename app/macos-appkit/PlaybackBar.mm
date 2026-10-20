@@ -494,11 +494,6 @@ namespace
       _soul.accessibilityLabel = outputDescription;
     }
 
-    _soul.toolTip = outputDescription;
-  }
-
-  if (modern == NO)
-  {
     auto const width = root.bounds.size.width;
     auto const classicTop = root.safeAreaInsets.top;
     auto const volumeLeft = width - kClassicVolumeTrailing;
@@ -532,10 +527,10 @@ namespace
   _artist.stringValue = nativeText(state.nowPlaying.artist);
   _title.toolTip = _title.stringValue;
   _soul.enabled = static_cast<BOOL>((modern == NO) || play.enabled);
-  _soul.toolTip =
-    (modern != NO) ? nativeText(play.tooltip) : nativeText(state.nowPlaying.audioPipeline.plainTextFallback);
   auto* const soulDescription =
     (modern != NO) ? nativeText(play.tooltip) : ao::appkit::catalogText(*_optCatalog, MessageId::AppKitOutputDevice);
+  auto const& qualityFallback = state.nowPlaying.audioPipeline.plainTextFallback;
+  _soul.toolTip = (modern != NO || qualityFallback.empty()) ? soulDescription : nativeText(qualityFallback);
 
   if ([_soul.accessibilityLabel isEqualToString:soulDescription] == NO)
   {
