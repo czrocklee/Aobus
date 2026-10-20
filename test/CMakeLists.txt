@@ -924,6 +924,7 @@ if(WIN32)
   add_dependencies(ao_core_test ao_detached_process_probe)
 
   target_sources(ao_core_test PRIVATE
+    unit/audio/backend/WasapiFormatTestSupport.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
   )
   target_compile_definitions(ao_core_test PRIVATE
@@ -933,7 +934,9 @@ endif()
 aobus_target_test_sources(ao_core_test "${WIN32}" "non-Windows host"
   unit/audio/backend/WasapiProviderTest.cpp
   unit/audio/backend/WasapiSharedBackendTest.cpp
+  unit/audio/backend/WasapiChannelObservationTest.cpp
   unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
+  unit/audio/backend/detail/WasapiMixFormatTest.cpp
   unit/audio/backend/detail/WasapiStringsTest.cpp
   unit/windows/platform/MemoryRandomAccessStreamTest.cpp
   unit/winui/FrameResourceTest.cpp

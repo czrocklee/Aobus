@@ -5,6 +5,7 @@
 
 #include "backend/detail/WasapiError.h"
 #include "backend/detail/WasapiFormat.h"
+#include "backend/detail/WasapiFormatObservation.h"
 #include "backend/detail/WasapiGraphRegistry.h"
 #include "backend/detail/WasapiRenderBuffer.h"
 #include "backend/detail/WasapiStrings.h"
@@ -13,6 +14,7 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmFormat.h>
@@ -39,6 +41,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -57,6 +60,21 @@
 
 namespace ao::audio::backend
 {
+  namespace detail
+  {
+    namespace
+    {
+      // Source admission only: zero remains unidentified; otherwise every
+      // channel must have one role in the currently supported WAVE speaker
+      // vocabulary. Native observations may retain partial sets and use a
+      // different contract.
+      constexpr bool hasSupportedSourceSpeakerSet(SignalFormat const& source) noexcept
+      {
+        return source.speakerMask == 0U || isCompleteWaveSpeakerMask(source.speakerMask, source.channels);
+      }
+    } // namespace
+  } // namespace detail
+
   namespace
   {
     using Microsoft::WRL::ComPtr;
@@ -66,40 +84,60 @@ namespace ao::audio::backend
     constexpr auto kPausedPollDelay = std::chrono::milliseconds{10};
     constexpr auto kDrainPollDelay = std::chrono::milliseconds{10};
 
+    bool hasRepresentableWaveGeometry(PcmFormat const& format) noexcept
+    {
+      auto const stride = frameBytes(format);
+      return format.sampleRate != 0U && stride != 0U && format.sampleRate <= std::numeric_limits<DWORD>::max() / stride;
+    }
+
+    SampleEncoding observedWavePcmEncoding(WORD const containerBits, WORD const validBits, bool const isFloat) noexcept
+    {
+      if (isFloat && containerBits == 32U && validBits == 32U)
+      {
+        return SampleEncoding::Float32Le;
+      }
+
+      if (!isFloat && containerBits == 16U && validBits == 16U)
+      {
+        return SampleEncoding::Signed16Le;
+      }
+
+      if (!isFloat && containerBits == 24U && validBits == 24U)
+      {
+        return SampleEncoding::Signed24PackedLe;
+      }
+
+      if (!isFloat && containerBits == 32U && validBits == 24U)
+      {
+        return SampleEncoding::Signed24In32Le;
+      }
+
+      if (!isFloat && containerBits == 32U && validBits == 32U)
+      {
+        return SampleEncoding::Signed32Le;
+      }
+
+      return SampleEncoding::Unknown;
+    }
+
+    bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
+    {
+      auto const optEncoding = ::ao::audio::detail::preferredLosslessPcmEncoding(sourceFormat);
+      return optEncoding && detail::hasSupportedSourceSpeakerSet(sourceFormat) &&
+             detail::waveFormatFromPcmFormat(pcmFormat(sourceFormat, *optEncoding)).has_value();
+    }
+
     std::string describeHresult(HRESULT const hr)
     {
       return std::format("HRESULT {:#010x}", static_cast<std::uint32_t>(hr));
     }
 
-    DWORD channelMaskFor(std::uint8_t const channels) noexcept
+    Result<detail::WaveFormatObservation> observeMixFormat(IAudioClient& client)
     {
-      switch (channels)
-      {
-        case 1: return SPEAKER_FRONT_CENTER;
-        case 2: return SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
-        // 0 lets the audio engine pick its default mapping for the count.
-        default: return 0;
-      }
-    }
+      WAVEFORMATEX* rawMixFormat = nullptr;
 
-    WAVEFORMATEXTENSIBLE toWaveFormat(PcmFormat const& format) noexcept
-    {
-      auto const containerBytes = bytesPerSample(format.encoding);
-
-      auto wave = WAVEFORMATEXTENSIBLE{};
-      wave.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
-      wave.Format.nChannels = format.channels;
-      wave.Format.nSamplesPerSec = format.sampleRate;
-      wave.Format.wBitsPerSample = static_cast<WORD>(containerBytes * 8U);
-      wave.Format.nBlockAlign = static_cast<WORD>(static_cast<std::uint32_t>(format.channels) * containerBytes);
-      wave.Format.nAvgBytesPerSec = format.sampleRate * wave.Format.nBlockAlign;
-      wave.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
-      // WAVEFORMATEXTENSIBLE exposes valid bits through its C ABI union.
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
-      wave.Samples.wValidBitsPerSample = encodingNominalBits(format.encoding);
-      wave.dwChannelMask = channelMaskFor(format.channels);
-      wave.SubFormat = isFloatEncoding(format.encoding) ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
-      return wave;
+      auto const status = client.GetMixFormat(&rawMixFormat);
+      return detail::observeMixFormat(status, detail::WaveFormatPtr{rawMixFormat, &::CoTaskMemFree});
     }
 
     /**
@@ -136,85 +174,185 @@ namespace ao::audio::backend
     };
   } // namespace
 
-  std::optional<PcmFormat> detail::formatFromWaveFormat(WAVEFORMATEX const& wave) noexcept
+  std::optional<WAVEFORMATEXTENSIBLE> detail::waveFormatFromPcmFormat(PcmFormat const& format) noexcept
   {
-    if (wave.nSamplesPerSec == 0 || wave.nChannels == 0 || wave.nChannels > std::numeric_limits<std::uint8_t>::max() ||
-        wave.wBitsPerSample == 0 || wave.wBitsPerSample > std::numeric_limits<std::uint8_t>::max())
+    auto const containerBytes = bytesPerSample(format.encoding);
+    auto const stride = frameBytes(format);
+
+    if (!hasRepresentableWaveGeometry(format) || !hasSupportedSourceSpeakerSet(signalFormat(format)))
     {
       return std::nullopt;
     }
 
-    bool isFloat = false;
-    auto validBits = wave.wBitsPerSample;
+    auto wave = WAVEFORMATEXTENSIBLE{};
+    wave.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    wave.Format.nChannels = format.channels;
+    wave.Format.nSamplesPerSec = format.sampleRate;
+    wave.Format.wBitsPerSample = static_cast<WORD>(containerBytes * 8U);
+    wave.Format.nBlockAlign = static_cast<WORD>(stride);
+    wave.Format.nAvgBytesPerSec = static_cast<DWORD>(format.sampleRate * stride);
+    wave.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+    // WAVEFORMATEXTENSIBLE exposes valid bits through its C ABI union.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
+    wave.Samples.wValidBitsPerSample = encodingNominalBits(format.encoding);
 
-    if (wave.wFormatTag == WAVE_FORMAT_IEEE_FLOAT)
+    // The canonical client format offers the exact source role set to
+    // Initialize at every channel count; the source and the WAVE descriptor
+    // both assign ascending speaker bits, so no byte permutation is needed.
+    // Only a zero-mask source keeps the legacy defaults: count-derived
+    // FC/FL-FR for one or two channels, and a direct-out (mask zero)
+    // descriptor for higher counts. Zero never becomes a source identity.
+    wave.dwChannelMask = format.speakerMask;
+
+    if (wave.dwChannelMask == 0U && format.channels <= 2U)
     {
-      isFloat = true;
+      wave.dwChannelMask = format.channels == 1U ? SPEAKER_FRONT_CENTER : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
     }
-    else if (wave.wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+
+    wave.SubFormat = isFloatEncoding(format.encoding) ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
+    return wave;
+  }
+
+  ChannelDeliveryEvidence detail::waveChannelDeliveryFromObservation(PcmFormat const& applicationFormat,
+                                                                     WAVEFORMATEXTENSIBLE const& acceptedClient,
+                                                                     WaveFormatObservation const& mix) noexcept
+  {
+    auto evidence = ChannelDeliveryEvidence{.nativeSpeakerMask = acceptedClient.dwChannelMask};
+
+    // An exact accepted descriptor (nonzero application mask, equal counts,
+    // equal role mask) marks the client boundary as mapped at every channel
+    // count. This is the configuration Initialize accepted, not a claim of
+    // endpoint physical wiring or initialized-client readback.
+    if (applicationFormat.speakerMask != 0U && acceptedClient.Format.nChannels == applicationFormat.channels &&
+        acceptedClient.dwChannelMask == applicationFormat.speakerMask)
     {
-      if (wave.cbSize < sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
+      evidence.isMapped = true;
+    }
+
+    if (mix.channels != 0U)
+    {
+      evidence.hasSharedConversion =
+        acceptedClient.Format.nChannels != mix.channels ||
+        (acceptedClient.dwChannelMask != 0U && mix.speakerMask != 0U &&
+         std::cmp_greater(std::popcount(acceptedClient.dwChannelMask | mix.speakerMask), mix.channels));
+    }
+
+    return evidence;
+  }
+
+  namespace detail
+  {
+    Result<WaveFormatObservation> observeMixFormat(HRESULT const status, WaveFormatPtr wavePtr)
+    {
+      if (FAILED(status))
       {
-        return std::nullopt;
+        // A failed optional query supplies no independent mix evidence.
+        return WaveFormatObservation{};
       }
 
-      // The wFormatTag/cbSize checks establish that the external object is WAVEFORMATEXTENSIBLE.
-      auto const& extensible =
-        reinterpret_cast<WAVEFORMATEXTENSIBLE const&>(wave); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+      if (!wavePtr)
+      {
+        return makeError(Error::Code::FormatRejected, "WASAPI GetMixFormat succeeded without a descriptor");
+      }
 
-      if (::IsEqualGUID(extensible.SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) != FALSE)
+      return observeWaveFormat(*wavePtr);
+    }
+
+    Result<WaveFormatObservation> observeWaveFormat(WAVEFORMATEX const& wave)
+    {
+      // Storage integrity owns the refusal: a successful descriptor that is
+      // too short to be WAVEFORMATEXTENSIBLE cannot be read past WAVEFORMATEX,
+      // and absent numerics must not hide that fault.
+      if (wave.wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+          wave.cbSize < sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
+      {
+        return makeError(Error::Code::FormatRejected, "WASAPI GetMixFormat returned a short extensible descriptor");
+      }
+
+      if (wave.nSamplesPerSec == 0U || wave.nChannels == 0U)
+      {
+        // An optional observation without a rate or count is unavailable; it
+        // guesses no geometry and does not veto the client descriptor.
+        return WaveFormatObservation{};
+      }
+
+      auto observation = WaveFormatObservation{.sampleRate = wave.nSamplesPerSec, .channels = wave.nChannels};
+      bool isFloat = false;
+      auto validBits = wave.wBitsPerSample;
+
+      if (wave.wFormatTag == WAVE_FORMAT_IEEE_FLOAT)
       {
         isFloat = true;
       }
-      else if (::IsEqualGUID(extensible.SubFormat, KSDATAFORMAT_SUBTYPE_PCM) == FALSE)
+      else if (wave.wFormatTag == WAVE_FORMAT_EXTENSIBLE)
       {
-        return std::nullopt;
+        // The wFormatTag/cbSize checks establish that the external object is WAVEFORMATEXTENSIBLE.
+        auto const& extensible =
+          reinterpret_cast<WAVEFORMATEXTENSIBLE const&>(wave); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+
+        if ((extensible.dwChannelMask & ~kWaveSpeakerMask) != 0U)
+        {
+          // Reserved or wildcard positions are never legal native roles. The
+          // whole role set is unusable, so only numerical facts survive.
+          observation.speakerMask = 0U;
+        }
+        else
+        {
+          observation.speakerMask = extensible.dwChannelMask;
+
+          // WAVEFORMATEXTENSIBLE ignores excess most-significant positions.
+          // Fewer positions than channels retain partial facts, not bad geometry.
+          while (std::cmp_greater(std::popcount(observation.speakerMask), wave.nChannels))
+          {
+            observation.speakerMask &= ~std::bit_floor(observation.speakerMask);
+          }
+        }
+
+        if (::IsEqualGUID(extensible.SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) != FALSE)
+        {
+          isFloat = true;
+        }
+        else if (::IsEqualGUID(extensible.SubFormat, KSDATAFORMAT_SUBTYPE_PCM) == FALSE)
+        {
+          // Unknown and non-PCM subtypes own their frame and block semantics;
+          // their independent facts never undergo PCM validation.
+          return observation;
+        }
+
+        // Samples is the Windows SDK union carrying the active valid-bits field.
+        validBits = extensible.Samples.wValidBitsPerSample; // NOLINT(cppcoreguidelines-pro-type-union-access)
+      }
+      else if (wave.wFormatTag != WAVE_FORMAT_PCM)
+      {
+        return observation;
       }
 
-      // Samples is the Windows SDK union carrying the active valid-bits field.
-      validBits = extensible.Samples.wValidBitsPerSample; // NOLINT(cppcoreguidelines-pro-type-union-access)
-    }
-    else if (wave.wFormatTag != WAVE_FORMAT_PCM)
-    {
-      return std::nullopt;
-    }
+      auto const expectedStride = static_cast<std::uint64_t>(wave.nChannels) * (wave.wBitsPerSample / 8U);
 
-    if (validBits > wave.wBitsPerSample || validBits > std::numeric_limits<std::uint8_t>::max())
-    {
-      return std::nullopt;
-    }
+      if (wave.wBitsPerSample == 0U || wave.wBitsPerSample % 8U != 0U || expectedStride != wave.nBlockAlign ||
+          static_cast<std::uint64_t>(wave.nSamplesPerSec) * expectedStride != wave.nAvgBytesPerSec ||
+          validBits > wave.wBitsPerSample)
+      {
+        // Contradictory optional arithmetic withholds the concrete format and
+        // precision claim while the independent rate, count and role facts stay.
+        return observation;
+      }
 
-    auto encoding = SampleEncoding::Unknown;
+      auto const encoding = observedWavePcmEncoding(wave.wBitsPerSample, validBits, isFloat);
 
-    if (isFloat && wave.wBitsPerSample == 32U && validBits == 32U)
-    {
-      encoding = SampleEncoding::Float32Le;
-    }
-    else if (!isFloat && wave.wBitsPerSample == 16U && validBits == 16U)
-    {
-      encoding = SampleEncoding::Signed16Le;
-    }
-    else if (!isFloat && wave.wBitsPerSample == 24U && validBits == 24U)
-    {
-      encoding = SampleEncoding::Signed24PackedLe;
-    }
-    else if (!isFloat && wave.wBitsPerSample == 32U && validBits == 24U)
-    {
-      encoding = SampleEncoding::Signed24In32Le;
-    }
-    else if (!isFloat && wave.wBitsPerSample == 32U && validBits == 32U)
-    {
-      encoding = SampleEncoding::Signed32Le;
-    }
+      if (encoding != SampleEncoding::Unknown && wave.nChannels <= std::numeric_limits<std::uint8_t>::max())
+      {
+        observation.optFormat = PcmFormat{
+          .sampleRate = wave.nSamplesPerSec,
+          .channels = static_cast<std::uint8_t>(wave.nChannels),
+          .encoding = encoding,
+          .speakerMask =
+            std::cmp_equal(std::popcount(observation.speakerMask), wave.nChannels) ? observation.speakerMask : 0U};
+      }
 
-    if (encoding == SampleEncoding::Unknown)
-    {
-      return std::nullopt;
+      return observation;
     }
-
-    return PcmFormat{
-      .sampleRate = wave.nSamplesPerSec, .channels = static_cast<std::uint8_t>(wave.nChannels), .encoding = encoding};
-  }
+  } // namespace detail
 
   struct WasapiSharedBackend::Impl final
   {
@@ -222,8 +360,9 @@ namespace ao::audio::backend
 
     std::string deviceId; // UTF-8 endpoint ID; empty selects the default endpoint
     std::string routeAnchor;
-    PcmFormat format;
-    std::optional<PcmFormat> optMixFormat;
+    PcmFormat nativeClientFormat;
+    ChannelDeliveryEvidence channelDelivery;
+    detail::WaveFormatObservation mixObservation;
     RenderTarget* renderTarget = nullptr;
 
     ComPtr<IAudioClient> audioClient;
@@ -505,8 +644,9 @@ namespace ao::audio::backend
 
     if (audioClient.Get() != nullptr)
     {
-      state.optInputFormat = format;
-      state.optMixFormat = optMixFormat;
+      state.optInputFormat = nativeClientFormat;
+      state.mixObservation = mixObservation;
+      state.channelDelivery = channelDelivery;
     }
 
     graphRegistryPtr->publish(std::move(state));
@@ -538,12 +678,7 @@ namespace ao::audio::backend
 
   std::optional<PcmFormat> WasapiSharedBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
-    if (sourceFormat.speakerMask != 0U)
-    {
-      return std::nullopt;
-    }
-
-    return Backend::prewarmFormatHint(sourceFormat);
+    return canAdmitSourceFormat(sourceFormat) ? Backend::prewarmFormatHint(sourceFormat) : std::nullopt;
   }
 
   BackendOpenResult WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)
@@ -566,17 +701,30 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
 
-    // Identified sources require native role admission, not a count-derived descriptor.
-    if (sourceFormat.speakerMask != 0U)
+    auto const format = pcmFormat(sourceFormat, encodings.front());
+
+    // The selected lossless container fixes byte geometry. Its representation
+    // fault remains terminal even when the source also has an unsupported set.
+    if (!hasRepresentableWaveGeometry(format))
     {
       return std::unexpected{BackendOpenFailure{
-        .error = makeError(Error::Code::FormatRejected, "WASAPI source speaker identity is not supported").error(),
+        .error = makeError(Error::Code::InvalidInput, "WASAPI PCM descriptor geometry is not representable").error(),
+        .cause = BackendOpenFailure::Cause::OutputFailure}};
+    }
+
+    // A complete supported set is the identified-source admission contract;
+    // partial or reserved sets never reach a native descriptor.
+    if (!detail::hasSupportedSourceSpeakerSet(sourceFormat))
+    {
+      return std::unexpected{BackendOpenFailure{
+        .error = makeError(Error::Code::NotSupported, "WASAPI requires a complete supported speaker set").error(),
         .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
     }
 
-    close();
+    auto const optWave = detail::waveFormatFromPcmFormat(format);
+    AO_INVARIANT(optWave, "Validated WASAPI PCM descriptor must be representable");
 
-    auto const format = pcmFormat(sourceFormat, encodings.front());
+    close();
     _implPtr->paused.store(false, std::memory_order_relaxed);
     _implPtr->fatalStreamError.store(false, std::memory_order_relaxed);
 
@@ -637,22 +785,19 @@ namespace ao::audio::backend
         .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    auto const wave = toWaveFormat(format);
+    auto const& wave = *optWave;
     constexpr DWORD kStreamFlags =
       AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
 
-    auto optMixFormat = std::optional<PcmFormat>{};
-    WAVEFORMATEX* rawMixFormat = nullptr;
+    auto const mixObservationRes = observeMixFormat(*audioClient.Get());
 
-    if (SUCCEEDED(audioClient->GetMixFormat(&rawMixFormat)) && rawMixFormat != nullptr)
+    if (!mixObservationRes)
     {
-      optMixFormat = detail::formatFromWaveFormat(*rawMixFormat);
+      return std::unexpected{
+        BackendOpenFailure{.error = mixObservationRes.error(), .cause = BackendOpenFailure::Cause::OutputFailure}};
     }
 
-    if (rawMixFormat != nullptr)
-    {
-      ::CoTaskMemFree(rawMixFormat);
-    }
+    auto const mixObservation = *mixObservationRes;
 
     // Shared event-driven streams require both duration arguments to be zero;
     // the audio engine selects a period compatible with the endpoint.
@@ -739,8 +884,12 @@ namespace ao::audio::backend
     }
 
     _implPtr->bytesPerFrame = frameBytes(format);
-    _implPtr->format = format;
-    _implPtr->optMixFormat = optMixFormat;
+    // Initialize accepted this actual descriptor; GetMixFormat is a separate
+    // engine observation, not initialized-client readback or physical proof.
+    _implPtr->nativeClientFormat = format;
+    _implPtr->nativeClientFormat.speakerMask = wave.dwChannelMask;
+    _implPtr->channelDelivery = detail::waveChannelDeliveryFromObservation(format, wave, mixObservation);
+    _implPtr->mixObservation = mixObservation;
     _implPtr->renderEvent = renderEvent;
     _implPtr->audioClient = std::move(audioClient);
     _implPtr->renderClient = std::move(renderClient);
@@ -755,17 +904,15 @@ namespace ao::audio::backend
         _implPtr->sessionVolume.Get() != nullptr ? std::optional<bool>{_implPtr->cachedMuted} : std::nullopt;
     }
 
-    // The input stays in the negotiated decoder-side format. The graph records
-    // the separately queried endpoint mix format when Windows exposes one.
+    // Capture the configured client boundary before outward notifications.
+    // Client -> mix conversion is retained privately for the receiving sink,
+    // not received by this client snapshot. No direct endpoint is confirmed.
+    auto openedMode = OpenedPcmMode{.clientFormat = format, .channelDelivery = _implPtr->channelDelivery};
+    openedMode.channelDelivery.hasSharedConversion = false;
+
     target.handleRouteReady(_implPtr->routeAnchor);
-
     _implPtr->publishGraphState();
-
-    // Shared mode runs behind the Windows mixer, which converts on our behalf.
-    // The mix format is endpoint evidence for the graph, not a confirmation of
-    // the direct hardware endpoint, so this result reports only the lossless
-    // client format configured above.
-    return OpenedPcmMode{.clientFormat = format};
+    return openedMode;
   }
 
   void WasapiSharedBackend::start()
@@ -876,7 +1023,9 @@ namespace ao::audio::backend
 
     _implPtr->renderClient.Reset();
     _implPtr->audioClient.Reset();
-    _implPtr->optMixFormat.reset();
+    _implPtr->mixObservation = {};
+    _implPtr->nativeClientFormat = {};
+    _implPtr->channelDelivery = {};
 
     if (_implPtr->renderEvent != nullptr)
     {

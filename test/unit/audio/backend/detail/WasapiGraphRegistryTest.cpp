@@ -3,12 +3,23 @@
 
 #include "lib/audio/backend/detail/WasapiGraphRegistry.h"
 
+#include "lib/audio/backend/detail/WasapiFormat.h"
+#include "test/unit/audio/backend/WasapiFormatTestSupport.h"
+#include <ao/audio/ChannelDeliveryEvidence.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
+#include <ao/audio/NodeFormat.h>
 #include <ao/audio/PcmFormat.h>
+#include <ao/audio/Quality.h>
+#include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <ks.h>
+#include <ksmedia.h>
 
 #include <algorithm>
 #include <atomic>
@@ -19,6 +30,20 @@
 
 namespace ao::audio::backend::detail::test
 {
+  namespace
+  {
+    flow::Graph withDeclaredSource(flow::Graph graph, SignalFormat const& source)
+    {
+      graph.nodes.insert(graph.nodes.begin(),
+                         flow::Node{.id = "ao-source",
+                                    .type = flow::NodeType::Source,
+                                    .optFormat = source,
+                                    .sourceChannelLayout = {.origin = ChannelLayoutOrigin::Identified}});
+      graph.connections.push_back({.sourceId = "ao-source", .destinationId = "wasapi-stream", .isActive = true});
+      return graph;
+    }
+  } // namespace
+
   TEST_CASE("WasapiGraphRegistry - initial subscription receives a neutral route graph", "[audio][unit][wasapi][graph]")
   {
     auto registry = WasapiGraphRegistry{};
@@ -62,7 +87,7 @@ namespace ao::audio::backend::detail::test
 
     registry.publish({.routeAnchor = "endpoint-a",
                       .optInputFormat = inputFormat,
-                      .optMixFormat = mixFormat,
+                      .mixObservation = {.sampleRate = 48000, .channels = 2, .optFormat = mixFormat},
                       .volume = 0.25F,
                       .muted = true});
 
@@ -340,5 +365,518 @@ namespace ao::audio::backend::detail::test
     CHECK(emptyCalls.load(std::memory_order_relaxed) == 0);
     CHECK(nonEmptyCalls.load(std::memory_order_relaxed) == 0);
     CHECK_FALSE(racedSub);
+  }
+
+  TEST_CASE("WasapiGraphRegistry - client to mix conversion belongs only to its sink", "[audio][unit][wasapi][graph]")
+  {
+    auto mix = WAVEFORMATEXTENSIBLE{};
+    mix.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    mix.Format.nChannels = 2;
+    mix.Format.nSamplesPerSec = 48000;
+    mix.Format.wBitsPerSample = 32;
+    mix.Format.nBlockAlign = 8;
+    mix.Format.nAvgBytesPerSec = 384000;
+    mix.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+    // WAVEFORMATEXTENSIBLE exposes valid precision through the Windows SDK union.
+    mix.Samples.wValidBitsPerSample = 32; // NOLINT(cppcoreguidelines-pro-type-union-access)
+    mix.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+    mix.dwChannelMask = 3;
+    auto const application =
+      PcmFormat{.sampleRate = 48000, .channels = 6, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3f};
+    auto const optClientWave = waveFormatFromPcmFormat(application);
+    REQUIRE(optClientWave);
+    auto const clientRes = observeWaveFormat(optClientWave->Format);
+    auto const mixRes = observeWaveFormat(mix.Format);
+    REQUIRE(clientRes);
+    REQUIRE(clientRes->optFormat);
+    REQUIRE(mixRes);
+    REQUIRE(mixRes->optFormat);
+    auto const evidence = waveChannelDeliveryFromObservation(application, *optClientWave, *mixRes);
+    CHECK(evidence.hasSharedConversion);
+    auto source = signalFormat(application);
+    bool hasUpstreamConversion = false;
+
+    SECTION("a six to two channel conversion produces only one sink finding")
+    {
+    }
+
+    SECTION("a distinct four to six channel transition still produces its own stream finding")
+    {
+      source.channels = 4;
+      source.speakerMask = 0x33;
+      hasUpstreamConversion = true;
+    }
+
+    auto registry = WasapiGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+    registry.publish({.routeAnchor = "endpoint-a",
+                      .optInputFormat = clientRes->optFormat,
+                      .mixObservation = *mixRes,
+                      .channelDelivery = evidence});
+    REQUIRE(received.size() == 2U);
+    REQUIRE(received.back().nodes.size() == 2U);
+    auto const& stream = received.back().nodes[0];
+    auto const& sink = received.back().nodes[1];
+    REQUIRE(stream.optFormat);
+    REQUIRE(sink.optFormat);
+    CHECK(signalFormat(*stream.optFormat).speakerMask ==
+          (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER | SPEAKER_LOW_FREQUENCY | SPEAKER_BACK_LEFT |
+           SPEAKER_BACK_RIGHT));
+    CHECK(signalFormat(*sink.optFormat).speakerMask == (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT));
+    CHECK(stream.channelDelivery.isMapped);
+    CHECK(stream.channelDelivery.nativeSpeakerMask == 0x3fU);
+    CHECK_FALSE(stream.channelDelivery.hasSharedConversion);
+    CHECK(sink.channelDelivery.isMapped);
+    CHECK(sink.channelDelivery.nativeSpeakerMask == 3U);
+    CHECK(sink.channelDelivery.hasSharedConversion);
+
+    auto const analysis = analyzeAudioQuality(withDeclaredSource(received.back(), source));
+    CHECK(analysis.channelConfidence == ChannelConfidence::Verified);
+    CHECK(analysis.sourceQuality == Quality::BitwisePerfect);
+    CHECK(analysis.pipelineQuality == Quality::LinearIntervention);
+    REQUIRE(analysis.assessments.size() == 3U);
+    auto const& streamAssessment = analysis.assessments[1];
+    auto const& sinkAssessment = analysis.assessments[2];
+    CHECK(streamAssessment.nodeId == "wasapi-stream");
+    CHECK(sinkAssessment.nodeId == "wasapi-sink");
+    CHECK(std::ranges::count(streamAssessment.findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) ==
+          (hasUpstreamConversion ? 1 : 0));
+    CHECK(std::ranges::count(sinkAssessment.findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 1);
+    auto const conversion =
+      std::ranges::find(sinkAssessment.findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind);
+    REQUIRE(conversion != sinkAssessment.findings.end());
+    REQUIRE(conversion->optFromFormat);
+    REQUIRE(conversion->optToFormat);
+    CHECK(signalFormat(*conversion->optFromFormat).channels == 6U);
+    CHECK(signalFormat(*conversion->optFromFormat).speakerMask == 0x3fU);
+    CHECK(signalFormat(*conversion->optToFormat).channels == 2U);
+    CHECK(signalFormat(*conversion->optToFormat).speakerMask == 3U);
+  }
+
+  TEST_CASE("WasapiGraphRegistry - a five-point-one side client into a seven-point-one mix converts only at the sink",
+            "[audio][unit][wasapi][graph]")
+  {
+    // Independent engine descriptor and accepted-client descriptor models;
+    // this test executes neither GetMixFormat nor Initialize.
+    auto mix = WAVEFORMATEXTENSIBLE{};
+    mix.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    mix.Format.nChannels = 8;
+    mix.Format.nSamplesPerSec = 48000;
+    mix.Format.wBitsPerSample = 32;
+    mix.Format.nBlockAlign = 32;
+    mix.Format.nAvgBytesPerSec = 1536000;
+    mix.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+    // WAVEFORMATEXTENSIBLE exposes valid precision through the Windows SDK union.
+    mix.Samples.wValidBitsPerSample = 32; // NOLINT(cppcoreguidelines-pro-type-union-access)
+    mix.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+    mix.dwChannelMask = 0x63f;
+    auto const application =
+      PcmFormat{.sampleRate = 48000, .channels = 6, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x60f};
+    auto const optClientWave = waveFormatFromPcmFormat(application);
+    REQUIRE(optClientWave);
+    CHECK(optClientWave->dwChannelMask == (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER |
+                                           SPEAKER_LOW_FREQUENCY | SPEAKER_SIDE_LEFT | SPEAKER_SIDE_RIGHT));
+    auto const clientRes = observeWaveFormat(optClientWave->Format);
+    auto const mixRes = observeWaveFormat(mix.Format);
+    REQUIRE(clientRes);
+    REQUIRE(clientRes->optFormat);
+    REQUIRE(mixRes);
+    REQUIRE(mixRes->optFormat);
+    auto const evidence = waveChannelDeliveryFromObservation(application, *optClientWave, *mixRes);
+    CHECK(evidence.isMapped);
+    CHECK(evidence.hasSharedConversion);
+
+    auto registry = WasapiGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+    registry.publish({.routeAnchor = "endpoint-a",
+                      .optInputFormat = clientRes->optFormat,
+                      .mixObservation = *mixRes,
+                      .channelDelivery = evidence});
+    REQUIRE(received.size() == 2U);
+    REQUIRE(received.back().nodes.size() == 2U);
+    auto const& stream = received.back().nodes[0];
+    auto const& sink = received.back().nodes[1];
+    REQUIRE(stream.optFormat);
+    REQUIRE(sink.optFormat);
+    CHECK(signalFormat(*stream.optFormat).speakerMask ==
+          (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER | SPEAKER_LOW_FREQUENCY | SPEAKER_SIDE_LEFT |
+           SPEAKER_SIDE_RIGHT));
+    CHECK(stream.channelDelivery.isMapped);
+    CHECK(stream.channelDelivery.nativeSpeakerMask == 0x60fU);
+    CHECK_FALSE(stream.channelDelivery.hasSharedConversion);
+    // The engine keeps its own literal seven-point-one role set; the client
+    // boundary never invents a zero or shared canonical native mask.
+    CHECK(signalFormat(*sink.optFormat).speakerMask ==
+          (SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_FRONT_CENTER | SPEAKER_LOW_FREQUENCY | SPEAKER_BACK_LEFT |
+           SPEAKER_BACK_RIGHT | SPEAKER_SIDE_LEFT | SPEAKER_SIDE_RIGHT));
+    CHECK(sink.channelDelivery.isMapped);
+    CHECK(sink.channelDelivery.nativeSpeakerMask == 0x63fU);
+    CHECK(sink.channelDelivery.hasSharedConversion);
+
+    auto const analysis = analyzeAudioQuality(withDeclaredSource(received.back(), signalFormat(application)));
+    CHECK(analysis.channelConfidence == ChannelConfidence::Verified);
+    CHECK(analysis.sourceQuality == Quality::BitwisePerfect);
+    CHECK(analysis.pipelineQuality == Quality::LinearIntervention);
+    REQUIRE(analysis.assessments.size() == 3U);
+    CHECK(std::ranges::count(
+            analysis.assessments[1].findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 0);
+    auto const& sinkFindings = analysis.assessments[2].findings;
+    CHECK(std::ranges::count(sinkFindings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 1);
+    auto const conversion = std::ranges::find(sinkFindings, QualityFindingKind::ChannelMapping, &QualityFinding::kind);
+    REQUIRE(conversion != sinkFindings.end());
+    REQUIRE(conversion->optFromFormat);
+    REQUIRE(conversion->optToFormat);
+    CHECK(signalFormat(*conversion->optFromFormat).channels == 6U);
+    CHECK(signalFormat(*conversion->optFromFormat).speakerMask == 0x60fU);
+    CHECK(signalFormat(*conversion->optToFormat).channels == 8U);
+    CHECK(signalFormat(*conversion->optToFormat).speakerMask == 0x63fU);
+  }
+
+  TEST_CASE("WasapiGraphRegistry - parsed engine positions establish only the software sink boundary",
+            "[audio][unit][wasapi][graph]")
+  {
+    // Independent engine descriptor and accepted-client descriptor models;
+    // this test executes neither GetMixFormat nor Initialize.
+    auto mix = WAVEFORMATEXTENSIBLE{};
+    mix.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    mix.Format.nChannels = 2;
+    mix.Format.nSamplesPerSec = 48000;
+    mix.Format.wBitsPerSample = 32;
+    mix.Format.nBlockAlign = 8;
+    mix.Format.nAvgBytesPerSec = 384000;
+    mix.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+    // WAVEFORMATEXTENSIBLE exposes valid precision through the Windows SDK union.
+    mix.Samples.wValidBitsPerSample = 32; // NOLINT(cppcoreguidelines-pro-type-union-access)
+    mix.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+    mix.dwChannelMask = 3;
+    auto const application =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 3};
+    auto const optClientWave = waveFormatFromPcmFormat(application);
+    REQUIRE(optClientWave);
+    auto const clientRes = observeWaveFormat(optClientWave->Format);
+    REQUIRE(clientRes);
+    REQUIRE(clientRes->optFormat);
+    bool expectedMapping = true;
+    std::uint32_t expectedMixMask = 3;
+    std::uint32_t expectedFormatMask = 3;
+    bool hasMixFormat = true;
+    bool hasSharedConversion = false;
+    auto expectedConfidence = ChannelConfidence::Verified;
+
+    SECTION("matching complete engine positions establish mapping without a conversion")
+    {
+      mix.dwChannelMask = 3;
+    }
+
+    SECTION("excess high assigned positions normalize two channel mask seven to FL FR")
+    {
+      mix.dwChannelMask = 0x7;
+    }
+
+    SECTION("partial FL is compatible uncertainty without a canonical complete format mask")
+    {
+      mix.dwChannelMask = 0x1;
+      expectedMixMask = 0x1;
+      expectedFormatMask = 0;
+      expectedMapping = false;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    SECTION("partial FC contradicts the FL FR client without being promoted to full mapping")
+    {
+      mix.dwChannelMask = 0x4;
+      expectedMixMask = 0x4;
+      expectedFormatMask = 0;
+      expectedMapping = false;
+      hasSharedConversion = true;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    SECTION("an independently observed alternate set is mapped and converted")
+    {
+      mix.dwChannelMask = 0x30;
+      expectedMixMask = 0x30;
+      expectedFormatMask = 0x30;
+      hasSharedConversion = true;
+    }
+
+    SECTION("an observed zero mask leaves sink mapping unverified")
+    {
+      mix.dwChannelMask = 0;
+      expectedMixMask = 0;
+      expectedFormatMask = 0;
+      expectedMapping = false;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    SECTION("a known count conversion coexists with unknown sink positions")
+    {
+      mix.dwChannelMask = 0;
+      mix.Format.nChannels = 4;
+      mix.Format.nBlockAlign = 16;
+      mix.Format.nAvgBytesPerSec = 768000;
+      expectedMixMask = 0;
+      expectedFormatMask = 0;
+      expectedMapping = false;
+      hasSharedConversion = true;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    SECTION("unsupported float width retains actual count and role observations")
+    {
+      mix.Format.wBitsPerSample = 64;
+      // WAVEFORMATEXTENSIBLE exposes valid precision through the Windows SDK union.
+      mix.Samples.wValidBitsPerSample = 64; // NOLINT(cppcoreguidelines-pro-type-union-access)
+      mix.Format.nBlockAlign = 16;
+      mix.Format.nAvgBytesPerSec = 768000;
+      mix.dwChannelMask = 0x30;
+      expectedMixMask = 0x30;
+      hasSharedConversion = true;
+      hasMixFormat = false;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    SECTION("unsupported subtype retains independent multichannel mix positions")
+    {
+      mix.SubFormat = {};
+      mix.Format.nChannels = 6;
+      mix.Format.nBlockAlign = 24;
+      mix.Format.nAvgBytesPerSec = 1152000;
+      mix.dwChannelMask = 0x3f;
+      expectedMixMask = 0x3f;
+      hasSharedConversion = true;
+      hasMixFormat = false;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    SECTION("unsupported float width still retains compatible partial roles")
+    {
+      mix.Format.wBitsPerSample = 64;
+      // WAVEFORMATEXTENSIBLE exposes valid precision through the Windows SDK union.
+      mix.Samples.wValidBitsPerSample = 64; // NOLINT(cppcoreguidelines-pro-type-union-access)
+      mix.Format.nBlockAlign = 16;
+      mix.Format.nAvgBytesPerSec = 768000;
+      mix.dwChannelMask = 0x1;
+      expectedMixMask = 0x1;
+      expectedMapping = false;
+      hasMixFormat = false;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    SECTION("unsupported subtype still retains a conflicting partial FC constraint")
+    {
+      mix.SubFormat = {};
+      mix.dwChannelMask = 0x4;
+      expectedMixMask = 0x4;
+      expectedMapping = false;
+      hasSharedConversion = true;
+      hasMixFormat = false;
+      expectedConfidence = ChannelConfidence::Unverified;
+    }
+
+    auto const observationRes = observeWaveFormat(mix.Format);
+    REQUIRE(observationRes);
+    REQUIRE(observationRes->optFormat.has_value() == hasMixFormat);
+    CHECK(observationRes->channels == mix.Format.nChannels);
+    CHECK(observationRes->speakerMask == expectedMixMask);
+    auto const evidence = waveChannelDeliveryFromObservation(application, *optClientWave, *observationRes);
+    CHECK(evidence.hasSharedConversion == hasSharedConversion);
+    auto registry = WasapiGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+    registry.publish({.routeAnchor = "endpoint-a",
+                      .optInputFormat = clientRes->optFormat,
+                      .mixObservation = *observationRes,
+                      .channelDelivery = evidence});
+
+    REQUIRE(received.size() == 2U);
+    REQUIRE(received.back().nodes.size() == 2U);
+    auto const& stream = received.back().nodes[0];
+    auto const& sink = received.back().nodes[1];
+    CHECK(stream.channelDelivery.isMapped);
+    CHECK(stream.channelDelivery.nativeSpeakerMask == 3U);
+    CHECK_FALSE(stream.channelDelivery.hasSharedConversion);
+    CHECK(sink.channelDelivery.isMapped == expectedMapping);
+    CHECK(sink.channelDelivery.nativeSpeakerMask == expectedMixMask);
+    CHECK(sink.channelDelivery.hasSharedConversion == hasSharedConversion);
+    REQUIRE(stream.optFormat);
+    CHECK(signalFormat(*stream.optFormat).speakerMask == 3U);
+    REQUIRE(sink.optFormat.has_value() == hasMixFormat);
+
+    if (sink.optFormat)
+    {
+      CHECK(signalFormat(*sink.optFormat).speakerMask == expectedFormatMask);
+    }
+
+    auto const analysis = analyzeAudioQuality(withDeclaredSource(received.back(), signalFormat(application)));
+    CHECK(analysis.channelConfidence == expectedConfidence);
+    CHECK(analysis.sourceQuality == Quality::BitwisePerfect);
+    CHECK(analysis.fullyVerified == hasMixFormat);
+    CHECK(analysis.pipelineQuality == (hasSharedConversion ? Quality::LinearIntervention
+                                       : hasMixFormat      ? Quality::LosslessFloat
+                                                           : Quality::BitwisePerfect));
+    REQUIRE(analysis.assessments.size() == 3U);
+    CHECK(std::ranges::count(
+            analysis.assessments[1].findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 0);
+    CHECK(std::ranges::count(analysis.assessments[2].findings,
+                             QualityFindingKind::ChannelMapping,
+                             &QualityFinding::kind) == (hasSharedConversion ? 1 : 0));
+
+    if (hasSharedConversion && hasMixFormat)
+    {
+      auto const& findings = analysis.assessments[2].findings;
+      auto const conversion = std::ranges::find(findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind);
+      REQUIRE(conversion != findings.end());
+      REQUIRE(conversion->optFromFormat);
+      REQUIRE(conversion->optToFormat);
+      CHECK(signalFormat(*conversion->optFromFormat).speakerMask == 0x3U);
+      CHECK(conversion->optFromSpeakerMask.value_or(signalFormat(*conversion->optFromFormat).speakerMask) == 0x3U);
+      // Complete sets may already be carried by the actual format mask.
+      CHECK(conversion->optToSpeakerMask.value_or(signalFormat(*conversion->optToFormat).speakerMask) ==
+            expectedMixMask);
+
+      if (expectedMixMask == 0x4U)
+      {
+        REQUIRE(conversion->optToSpeakerMask);
+        CHECK(*conversion->optToSpeakerMask == 0x4U);
+        CHECK(signalFormat(*conversion->optToFormat).speakerMask == 0U);
+      }
+    }
+  }
+
+  TEST_CASE("WasapiGraphRegistry - incomplete mix sets never promote sink mapping or erase conversion",
+            "[audio][unit][wasapi][graph]")
+  {
+    auto registry = WasapiGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+
+    for (auto const mask : {std::uint32_t{0}, std::uint32_t{1}})
+    {
+      CAPTURE(mask);
+      registry.publish(
+        {.routeAnchor = "endpoint-a",
+         .mixObservation = {.sampleRate = 48000,
+                            .channels = 2,
+                            .speakerMask = mask,
+                            .optFormat =
+                              PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Float32Le}},
+         .channelDelivery = {.hasSharedConversion = true}});
+      REQUIRE(received.back().nodes.size() == 2U);
+      auto const& sink = received.back().nodes[1];
+      CHECK_FALSE(sink.channelDelivery.isMapped);
+      CHECK(sink.channelDelivery.nativeSpeakerMask == mask);
+      CHECK(sink.channelDelivery.hasSharedConversion);
+    }
+  }
+
+  TEST_CASE("WasapiGraphRegistry - unusable mix evidence never fabricates a sink format, layout or conflict",
+            "[audio][unit][wasapi][graph]")
+  {
+    // Parser -> graph -> analyzer regression. The engine's optional mix
+    // observation contributes independently usable facts only: contradictory
+    // or absent numeric evidence must not become a fabricated sink PCM format
+    // or Verified delivery, and reserved positions must not become a layout
+    // or a false channel conflict.
+    auto mix = ::ao::audio::backend::test::extensibleFloatStereoWave();
+    auto application =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+    std::uint32_t expectedMixRate = 48000;
+    std::uint16_t expectedMixChannels = 2;
+    std::uint32_t expectedMixMask = 0;
+    bool mixHasFormat = false;
+    bool sinkHasFormat = false;
+    bool expectedSinkMapping = false;
+
+    SECTION("contradictory mix stride withholds the concrete sink format without erasing roles")
+    {
+      mix.Format.nBlockAlign = 4;
+      mix.Format.nAvgBytesPerSec = 192000;
+      expectedMixMask = 3;
+      expectedSinkMapping = true;
+    }
+
+    SECTION("an unavailable mix observation publishes no fabricated sink format")
+    {
+      mix.Format.nSamplesPerSec = 0;
+      expectedMixRate = 0;
+      expectedMixChannels = 0;
+    }
+
+    SECTION("reserved engine positions never become a sink layout")
+    {
+      mix.dwChannelMask = 0x40003;
+      mixHasFormat = true;
+      sinkHasFormat = true;
+    }
+
+    SECTION("wildcard engine positions never fabricate a conflicting role")
+    {
+      // A partial-keep regression would retain FL here and report a false
+      // conflict with the client's BL/BR set; full erasure stays unknown.
+      application.speakerMask = 0x30;
+      mix.dwChannelMask = 0x80000001;
+      mixHasFormat = true;
+      sinkHasFormat = true;
+    }
+
+    auto const optClientWave = waveFormatFromPcmFormat(application);
+    REQUIRE(optClientWave);
+    auto const clientRes = observeWaveFormat(optClientWave->Format);
+    REQUIRE(clientRes);
+    REQUIRE(clientRes->optFormat);
+    auto const mixRes = observeWaveFormat(mix.Format);
+    REQUIRE(mixRes);
+    CHECK(mixRes->sampleRate == expectedMixRate);
+    CHECK(mixRes->channels == expectedMixChannels);
+    CHECK(mixRes->speakerMask == expectedMixMask);
+    CHECK(mixRes->optFormat.has_value() == mixHasFormat);
+
+    if (mixRes->optFormat)
+    {
+      CHECK(mixRes->optFormat->speakerMask == 0U);
+    }
+
+    auto const evidence = waveChannelDeliveryFromObservation(application, *optClientWave, *mixRes);
+    CHECK(evidence.isMapped);
+    CHECK_FALSE(evidence.hasSharedConversion);
+
+    auto registry = WasapiGraphRegistry{};
+    auto received = std::vector<flow::Graph>{};
+    auto subscription = registry.subscribe("endpoint-a", [&](flow::Graph const& graph) { received.push_back(graph); });
+    registry.publish({.routeAnchor = "endpoint-a",
+                      .optInputFormat = clientRes->optFormat,
+                      .mixObservation = *mixRes,
+                      .channelDelivery = evidence});
+
+    REQUIRE(received.size() == 2U);
+    REQUIRE(received.back().nodes.size() == 2U);
+    auto const& stream = received.back().nodes[0];
+    auto const& sink = received.back().nodes[1];
+    CHECK(stream.channelDelivery.isMapped);
+    CHECK(stream.channelDelivery.nativeSpeakerMask == application.speakerMask);
+    CHECK_FALSE(stream.channelDelivery.hasSharedConversion);
+    CHECK(sink.optFormat.has_value() == sinkHasFormat);
+    CHECK(sink.channelDelivery.isMapped == expectedSinkMapping);
+    CHECK(sink.channelDelivery.nativeSpeakerMask == expectedMixMask);
+    CHECK_FALSE(sink.channelDelivery.hasSharedConversion);
+
+    if (sink.optFormat)
+    {
+      // A retained precision fact without roles is not a layout.
+      CHECK(signalFormat(*sink.optFormat).speakerMask == 0U);
+    }
+
+    auto const analysis = analyzeAudioQuality(withDeclaredSource(received.back(), signalFormat(application)));
+    CHECK(analysis.channelConfidence == ChannelConfidence::Unverified);
+    CHECK(analysis.fullyVerified == sinkHasFormat);
+    CHECK(analysis.sourceQuality == Quality::BitwisePerfect);
+    REQUIRE(analysis.assessments.size() == 3U);
+    CHECK(std::ranges::count(
+            analysis.assessments[1].findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 0);
+    CHECK(std::ranges::count(
+            analysis.assessments[2].findings, QualityFindingKind::ChannelMapping, &QualityFinding::kind) == 0);
   }
 } // namespace ao::audio::backend::detail::test

@@ -41,10 +41,18 @@ Compatible observed constraints may admit transport without proving every declar
 Only a complete, unambiguous observed WAVE speaker set establishes native mapping evidence, at any channel count and independently of source history.
 That evidence does not identify the source or assert canonical native byte order or physical wiring.
 The [PipeWire client channel contract](audio-execution.md#pipewire-client-channel-contract) owns readback, partial completion, refresh, and failure classification.
-WASAPI and Core Audio do not yet implement native admission for identified source roles: their backend open entry points explicitly refuse every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and their prewarm queries withhold such modes.
+WASAPI's local channel-identity check admits zero or a complete supported WAVE set; an otherwise valid mode with a partial or unsupported set is refused as `TrackRouteIncompatible` / `NotSupported` before native stream access, and prewarm predicts only admissible modes.
+The canonical opened client mode retains the source mask.
+At every channel count, the Initialize descriptor offers the declared complete role set when the source mask is nonzero; the source and the WAVE descriptor both assign ascending speaker bits, so no byte permutation is needed.
+Accepting that descriptor configuration marks the client software boundary as mapped, and is not a claim of endpoint physical wiring, initialized-client readback, or source identification.
+Only a zero-mask source keeps the legacy positions: the existing count-derived FC/FL-FR positions for one or two channels, and a zero-mask direct-out native descriptor for higher counts, without proving a speaker mapping.
+The WASAPI graph stream publishes this accepted native descriptor, including legacy fills, rather than changing the canonical opened client's source mask.
+Native roles can constrain downstream conversion analysis without identifying the source or proving its mapping.
+This also applies to independent native-only evidence: ALSA may clear a stream format mask for privately permuted slots while retaining a native speaker set as a downstream constraint.
+Core Audio does not yet implement native admission for identified source roles: its backend open entry point explicitly refuses every otherwise valid nonzero-mask source as `TrackRouteIncompatible` / `FormatRejected`, and its prewarm query withholds such modes.
 This availability boundary precedes native stream access and does not relax common opened-mode validation or reinterpret native faults.
-For WASAPI and Core Audio, zero-mask playback follows their existing path.
-Their existing byte-order conventions remain unchanged. The following legacy WAV/Microsoft orders are not a rule for filling a zero mask:
+For Core Audio, zero-mask playback follows its existing path.
+Existing byte-order conventions remain unchanged. The following legacy WAV/Microsoft orders are not a rule for filling a zero mask:
 
 | Channels | Order |
 |---:|---|
@@ -102,6 +110,22 @@ Such a node therefore uses `SignalFormat`.
 A backend owns any private lossless slot permutation; observed native speaker sets do not assert canonical native byte order.
 Current observations can supersede that snapshot; neither value is physical speaker wiring.
 PipeWire projection and refresh rules belong to the [client channel contract](audio-execution.md#pipewire-client-channel-contract).
+
+For WASAPI, the opened snapshot describes the configured client boundary, so its `hasSharedConversion` is false.
+Private retained evidence also records independently known client-to-engine-mix channel conversion; graph projection attributes that conversion only to the receiving sink, including when no concrete mix format is available.
+The client mapping comes from the descriptor whose `Initialize` succeeded; `GetMixFormat` independently observes the shared engine, not the initialized client's input format.
+Neither successful configuration nor this observation guarantees acceptance of every source role set on every endpoint or proves physical routing.
+
+The optional WASAPI mix observation keeps independent numerical and role facts separate from a concrete PCM claim:
+
+- Excess highest-position speaker bits are trimmed to the channel count; partial role sets remain useful constraints, but reserved or wildcard bits erase the entire role set.
+- Missing rate or count yields no concrete observation and guesses no geometry.
+- Contradictory PCM arithmetic withholds concrete format and precision claims while preserving independent rate, count, and usable role facts.
+- Successful but short extensible storage is a terminal storage-integrity fault, even when numerical fields are missing; a successful query without a descriptor is also a fault.
+- A failed optional query HRESULT supplies no mix evidence, not a reason to reject a separately valid client descriptor.
+
+These observation rules do not relax required native-operation faults or turn them into contextual route incompatibility.
+The private [WASAPI format helpers](../../../lib/audio/backend/detail/WasapiFormat.h) own descriptor and observation preconditions.
 
 An absent endpoint means the backend could not inspect a direct endpoint during that open.
 It does not mean the endpoint matches the client format.
