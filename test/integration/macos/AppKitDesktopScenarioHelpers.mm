@@ -17,6 +17,13 @@ namespace ao::appkit::test::desktop
 {
   namespace
   {
+    NSString* const kUnknownSettingKey = @"scenarioUnknownSetting";
+
+    NSDictionary* unknownSettingValue()
+    {
+      return @{@"kept": @YES, @"revision": @2};
+    }
+
     bool isVisible(NSView* view)
     {
       return view != nil && view.window != nil && view.hiddenOrHasHiddenAncestor == NO;
@@ -341,7 +348,23 @@ namespace ao::appkit::test::desktop
 
     settings[@"libraryRoot"] = nativePath(launch.optRequest->libraryRoot);
     settings[@"recentLibraries"] = @[nativePath(successorRoot)];
+    // desktop.plist carries no version. Each value below has a type this build
+    // never writes, as a damaged or hand-edited file can hold, so startup uses
+    // the default; the unknown key stands for one a later build adds.
+    settings[@"mode"] = @1;
+    settings[@"modernInspector"] = @[@YES];
+    settings[@"classicInspector"] = @{@"visible": @YES};
+    settings[@"appearance"] = @[@"Dark"];
+    settings[@"windowFrame"] = @1240;
+    settings[@"toolbarConfiguration"] = @{@"itemIdentifiers": @"search", @"displayMode": @"icon"};
+    settings[kUnknownSettingKey] = unknownSettingValue();
     auto const written = [settings writeToFile:nativePath(settingsPath) atomically:YES];
     AO_INVARIANT(written != 0, "The isolated desktop settings must be writable");
+  }
+
+  bool hasUnknownSetting(std::filesystem::path const& stateRoot)
+  {
+    auto* const settings = [NSDictionary dictionaryWithContentsOfFile:nativePath(stateRoot / "desktop.plist")];
+    return [settings[kUnknownSettingKey] isEqual:unknownSettingValue()] != NO;
   }
 } // namespace ao::appkit::test::desktop

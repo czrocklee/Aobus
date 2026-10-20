@@ -7,6 +7,7 @@ add_library(ao_appkit OBJECT
   DesktopShell.mm
   DesktopCommandSurface.mm
   DesktopControls.mm DesktopControls.h
+  DesktopWindowGeometry.h
   EntryCompletionAdapter.mm EntryCompletionAdapter.h
   LibraryBrowser.mm LibraryBrowser.h
   LibraryEditor.mm LibraryEditor.h
