@@ -171,6 +171,15 @@ namespace ao::test
       CHECK(bounded.size() == yaml::kMaximumErrorContextBytes);
       CHECK(bounded.ends_with("..."));
     }
+
+    SECTION("bounded diagnostic context ends between characters")
+    {
+      // The two bytes of U+00E9 straddle the cut that ASCII text would take.
+      auto const kept = yaml::kMaximumErrorContextBytes - std::string_view{"..."}.size() - 1;
+      auto const context = std::string(kept, 'x') + "\xC3\xA9" + std::string(500, 'x');
+
+      CHECK(yaml::boundedErrorContext(context) == std::string(kept, 'x') + "...");
+    }
   }
 
   TEST_CASE("RymlAdapter - arena parsing retains source bytes after input destruction", "[core][unit][yaml]")

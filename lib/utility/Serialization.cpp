@@ -22,42 +22,18 @@ namespace ao::yaml
 {
   std::string fieldContext(std::string_view context, std::string_view field)
   {
-    auto result = std::string{};
-    result.reserve(kMaximumErrorContextBytes);
-    bool truncated = false;
+    // One byte past the ceiling shows boundedErrorContext that the text is too
+    // long, so neither part is copied further.
+    constexpr auto kCopiedBytes = kMaximumErrorContextBytes + 1;
+    auto joined = std::string{context.substr(0, kCopiedBytes)};
 
-    auto const append = [&result, &truncated](std::string_view part)
+    if (!context.empty() && joined.size() < kCopiedBytes)
     {
-      auto const remaining = kMaximumErrorContextBytes - result.size();
-      auto const count = std::min(remaining, part.size());
-      result.append(part.substr(0, count));
-      truncated = truncated || count != part.size();
-    };
-
-    append(context);
-
-    if (!context.empty())
-    {
-      if (result.size() < kMaximumErrorContextBytes)
-      {
-        result.push_back('.');
-      }
-      else
-      {
-        truncated = true;
-      }
+      joined.push_back('.');
     }
 
-    append(field);
-
-    if (truncated)
-    {
-      constexpr auto kSuffix = std::string_view{"..."};
-      result.resize(kMaximumErrorContextBytes - kSuffix.size());
-      result.append(kSuffix);
-    }
-
-    return result;
+    joined.append(field.substr(0, kCopiedBytes - joined.size()));
+    return boundedErrorContext(joined);
   }
 
   Result<> requireMap(ryml::ConstNodeRef node, std::string_view context)
