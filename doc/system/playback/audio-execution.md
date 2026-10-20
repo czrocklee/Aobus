@@ -474,6 +474,89 @@ Shared backends may convert after accepting that client
 stream, but their returned input mode must still be a member of the track's
 lossless candidate set rather than an unconditional echo of source metadata.
 
+#### PipeWire client channel contract
+
+PipeWire channel admission uses the Format param actually read back from the negotiated client stream.
+The offer is not that observation, and retaining the request never establishes mapping evidence.
+Only the two-channel cohort offers positions.
+A known two-channel source offers its declared WAVE role set, in ascending assigned-bit order.
+Mask `0x30` therefore offers RL then RR, not FL/FR.
+A zero mask offers FL/FR.
+The returned client mask stays the source mask, so a zero client mask never becomes that offered identity.
+Mono and multichannel offers are unpositioned.
+An unpositioned offer imposes no role prediction; the negotiated observation may still report known positions.
+
+Required storage, shape, numeric, and precision faults are terminal `OutputFailure`.
+That includes an unrecognized or malformed position table, a position count that does not match the negotiated channel count, and a successful mode outside the lossless offer.
+These faults are never reclassified as an unknown layout or as `TrackRouteIncompatible`.
+A successful two-channel readback whose native role set is not exactly that offered set is the same terminal output failure, including unsupported, incomplete, or different positions.
+FL/FR is the fallback for a zero source mask; a known source is compared with its declared two-role set.
+A reordering of that same offered set, including FR then FL or RR then RL, matches the set and is accepted as a private permutation.
+
+`UNKNOWN`, `MONO`, and generic AUX positions leave WAVE identity unknown.
+SPA NA is an explicit silent slot, not `UNKNOWN` and not a speaker identity.
+CUSTOM ids and other non-WAVE spatial roles are unsupported role constraints, not malformed storage and not guessed WAVE speakers.
+Repeated `UNKNOWN` and repeated NA are permitted position-table shape, not duplicate identity.
+A silent NA remains unsupported whether it appears once or is repeated.
+Strict client parsing accepts that shape.
+It still rejects duplicate actual WAVE, AUX, or CUSTOM roles, reserved gaps, and invalid position ids as malformed storage.
+Monitor observations keep their separate best-effort rule: semantic unusable roles preserve numerics and known subsets, while a malformed or non-fixed position property invalidates the observation.
+Repeated NA remains an unsupported silent constraint there as well.
+
+An identified source must declare a complete supported WAVE speaker set before native negotiation.
+Observed WAVE roles must be a subset of that declaration, and the observation must not carry an unsupported role constraint.
+Slots that leave WAVE identity unknown may remain.
+Compatible evidence may therefore contain no WAVE roles or only a partial subset of the declared roles.
+Those admissions do not set `isMapped`.
+On first admission, a known contradiction on this mono or multichannel path is `TrackRouteIncompatible`.
+The cause is explicit; it is never inferred from the `Error` code.
+An identified mono or multichannel observation of silent NA, CUSTOM, or another unsupported constraint is that contradiction.
+The same constraint in a two-channel observation fails that exact offered set as `OutputFailure`, whether the offer is the zero-mask FL/FR pair or another declared pair.
+ALSA's rule that partial evidence cannot prove a permutation remains in the ALSA current-map contract above and does not govern this transport.
+
+A zero-mask non-stereo source is admitted when required storage is valid and the observation keeps the same rate, channel count, and encoding.
+Its transport is identity: samples are not permuted, and the source does not acquire the observed roles.
+Unsupported constraints on that path remain uncertainty rather than a refusal.
+Exact two-channel policy is unchanged, so unsupported NA in a two-channel observation still fails that exact offered set: FL/FR for a zero mask, and the declared two-role set for a known source.
+
+When admitted positions and a declared source mask both exist, PipeWire may install a private slot permutation.
+A partial permutation is a deterministic lossless bijection: every source slot is used once, and every destination receives one source slot.
+Each native destination with a known role receives that role's canonical source slot.
+Unused source indices complete the remaining destinations.
+That assignment does not put the native destination into canonical order.
+That completion does not assign identities to unknown native positions, does not prove a full role permutation, and does not set `isMapped`.
+The installed plan is what the render path applies before those frames are queued.
+The returned snapshot does not carry the slot table.
+
+`isMapped` is true only when the actual native observation is a complete unambiguous WAVE speaker set, with no unsupported constraint.
+It is independent of source interpretation history, so a zero-mask source can still be mapped when that native set is complete.
+A zero-mask source has no complete source identity, so channel confidence stays `Unknown` even when a native boundary has `isMapped` true.
+Native mapping evidence does not identify that source.
+The [quality analysis contract](quality-analysis.md#result-axes-and-confidence) owns those grades.
+The native mask is a position set.
+It does not assert canonical native byte order or physical wiring.
+Current route-graph evidence recomputes the flag from the monitor's current Format cache.
+A later observation that is no longer complete clears it; the flag is not a sticky lease.
+
+`OpenedPcmMode::channelDelivery` is the initial snapshot projected during `open()` from the latest accepted observation before `open()` returns.
+The installed render delivery is fixed at first admission and is never mutated by a later Format param.
+A later parsed zero-mask non-stereo observation with the same rate, channel count, and encoding may refresh only the control-side native cache.
+That cache is the comparison baseline for the next Format param.
+It does not change installed transport, and it does not mutate the mode already returned by `open()`.
+The open snapshot includes such a refresh only when that observation arrives before `open()` returns, and that projection may then differ from the first admitted render plan.
+After an observation has been accepted, any later observation that is not one of those permitted refreshes is `OutputFailure`, including a storage change and a role change on an exact two-channel or identified path.
+That later fault is not reclassified as a recoverable layout contradiction merely because the new roles would have been one in isolation.
+Current graph channel evidence comes from the monitor's independent Format cache when that graph is refreshed.
+It is not the open return value and not a delivery of the stream Format callback.
+Stream and monitor observations have no one-to-one arrival or scheduling guarantee.
+
+After admission, a terminal Format or stream fault revokes render admission and is reported to the target.
+`start()` must not restore that admission while the fault remains.
+Only a new `open()` clears it.
+The failure remains an output fault under the classification above.
+
+#### Activation, settlement, and controls
+
 Selecting or enumerating a device does not reserve it.
 Engine creates the render target immediately before `open()` and calls `close()` on every failed or abandoned open path, including failure of the final decoder after native activation.
 That interval can briefly acquire and then release an exclusive endpoint when
@@ -692,6 +775,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`Player.h`](../../../include/ao/audio/Player.h) and [`Player.cpp`](../../../lib/audio/Player.cpp) own provider composition, executor marshalling, graph epochs, and teardown gate.
 - [`BackendProvider.h`](../../../include/ao/audio/BackendProvider.h) owns the common provider facade, callback, subscription, backend-outlives-provider, and shared shutdown-completion contract.
 - [`Backend.h`](../../../include/ao/audio/Backend.h), the private [`DecoderOutput.h`](../../../lib/audio/detail/DecoderOutput.h), and concrete providers/backends under [`lib/audio/backend/`](../../../lib/audio/backend) own advisory prediction, narrow provider control/registry state, lossless candidate derivation, native selection, and lifetime. [`BackendDeviceRegistry`](../../../lib/audio/backend/detail/BackendDeviceRegistry.h), [`BackendGraphRegistry`](../../../lib/audio/backend/detail/BackendGraphRegistry.h), and the ALSA graph publisher provide provider-independent subscription/publication retirement.
+- [`PipeWireFormatParsing.cpp`](../../../lib/audio/backend/detail/PipeWireFormatParsing.cpp) and [`PipeWireBackend.cpp`](../../../lib/audio/backend/PipeWireBackend.cpp) own the PipeWire client offer, readback admission, immutable render delivery, and open snapshot. [`PipeWireMonitor.cpp`](../../../lib/audio/backend/PipeWireMonitor.cpp) owns the independent current Format cache used for route-graph channel evidence.
 - [`AlsaMixerSession.cpp`](../../../lib/audio/backend/detail/AlsaMixerSession.cpp) owns read-only mixer selection, event refresh and stable element identity, software mute, and safe volume-failure degradation.
 - [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) owns executor-affine transport adaptation and prepared metadata; [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) publishes the coherent application snapshot.
 
@@ -699,6 +783,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 
 - [`EngineConcurrencyTest.cpp`](../../../test/unit/audio/EngineConcurrencyTest.cpp) protects concurrent commands, status/seek serialization, render/reset exclusion, and teardown; Linux-only [`AlsaEnginePropertyTest.cpp`](../../../test/unit/audio/backend/AlsaEnginePropertyTest.cpp) protects reentrant state-only queries during initial graph subscription, ALSA property publication, read-triggered fallback, and volume/mute intent across stop after successful or rejected hardware writes.
 - [`BackendGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/BackendGraphRegistryTest.cpp) protects graph deduplication, non-nested ordinary and initial delivery, prepared commit/delivery separation, move-only ticket ownership, revision supersession, cancellation, and synchronous final-empty retirement.
+- Linux-only [`PipeWireBackendAdmissionTest.cpp`](../../../test/unit/audio/backend/PipeWireBackendAdmissionTest.cpp) drives the registered native callback table through a scoped external callback-source fake. It protects open-window evidence projection, literal render-byte delivery, terminal Format/ERROR revocation, and restart refusal before Engine settlement. Synchronous scripted dispatch does not prove native realtime affinity, daemon negotiation behavior, or asynchronous callback fences.
 - [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) protects native publication and initial-observer close, property-publication worker handoff with observer-driven close, open-origin notification settlement against external close, final render quiescence after notification-origin restart, current open notifications across run-only changes, and synchronous registry retirement during native publication.
   It also covers deferring a target-origin graph subscription until the open call returns while an observer on another thread holds the shared delivery gate and requests stop; request markers do not prove private mutex admission.
   The different-backend identity case uses an early-refused synthetic open and an inert close, not successful cross-backend shared-gate entry.
@@ -721,6 +806,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 ## Related documents
 
 - [Playback architecture](README.md)
+- [PCM representation and lossless output](pcm-format.md)
 - [Runtime execution architecture](../execution/README.md)
 - [Failure and reporting architecture](../failure/README.md)
 - [Playback succession cursor](cursor.md)
