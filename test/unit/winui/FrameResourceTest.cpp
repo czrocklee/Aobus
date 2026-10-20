@@ -332,6 +332,25 @@ namespace ao::winui::test
     }
   }
 
+  TEST_CASE("FrameResource - status information declares theme-bound normal foregrounds", "[winui][unit][layout]")
+  {
+    auto const resources = windowScopeResources();
+
+    for (auto const& [key, target] : {
+           std::pair<std::string_view, std::string_view>{"ActivityStatusTextStyle", "TextBlock"},
+           std::pair<std::string_view, std::string_view>{"ActivityStatusIconStyle", "FontIcon"},
+         })
+    {
+      INFO("style " << key);
+      auto const* const style = findResource(resources, key);
+      REQUIRE(style != nullptr);
+      CHECK(style->type == "Style");
+      CHECK(style->targetType == target);
+      REQUIRE(style->setters.contains("Foreground"));
+      CHECK(style->setters.at("Foreground") == "{ThemeResource ButtonForeground}");
+    }
+  }
+
   TEST_CASE("FrameResource - track column events bind their required field id", "[winui][unit][layout]")
   {
     auto const tags = xamlTags(readFile(std::filesystem::path{AOBUS_WINDOWS_FRAME_XAML}));

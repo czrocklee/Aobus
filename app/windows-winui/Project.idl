@@ -2,15 +2,16 @@ namespace Aobus
 {
     runtimeclass TrackCellItem
     {
-        TrackCellItem(String text, String fieldId, Double width, Boolean sortable);
+        TrackCellItem(String text, String fieldId, Double width, Boolean sortable, String resizeName);
         String Text{ get; };
         String FieldId{ get; };
         Double Width{ get; };
         Boolean Sortable{ get; };
+        String ResizeName{ get; };
         Microsoft.UI.Xaml.TextAlignment Alignment{ get; };
     }
 
-    runtimeclass TrackRowItem
+    runtimeclass TrackRowItem : Windows.Foundation.IStringable
     {
         TrackRowItem(UInt32 index, UInt32 trackId, UInt32 coverArtId, String title, String artist, String album, String duration);
         UInt32 DisplayIndex{ get; };

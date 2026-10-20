@@ -11,12 +11,13 @@ from typing import Literal
 @dataclass(frozen=True)
 class SuiteSpec:
     label: str
-    kind: Literal["appkit", "catch2", "tooling", "lint"]
+    kind: Literal["appkit", "catch2", "tooling", "lint", "winui"]
     target: str | None = None
 
 
 SUITES = {
     "appkit": SuiteSpec("AppKit Smoke", "appkit", "ao_appkit_smoke"),
+    "winui": SuiteSpec("WinUI Naming Audit", "winui", "aobus-winui"),
     "core": SuiteSpec("Core", "catch2", "ao_core_test"),
     "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),
     "cli": SuiteSpec("CLI", "catch2", "ao_cli_test"),

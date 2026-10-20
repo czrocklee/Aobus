@@ -14,8 +14,11 @@ _WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
 _AUXILIARY_SOURCE_PROJECTS = {
     "test/helper/WinUiLocalizationProbe.cpp": "app/windows-winui/ao_winui_localization_probe.vcxproj",
     "test/helper/WinUiTrackItemProbe.cpp": "app/windows-winui/ao_winui_track_item_probe.vcxproj",
+    "test/integration/windows/WinUiActivityStatusProbe.cpp": "app/windows-winui/ao_winui_activity_status_probe.vcxproj",
+    "test/integration/windows/WinUiAutomationProbe.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
     "test/integration/windows/WinUiCreditsProbe.cpp": "app/windows-winui/ao_winui_credits_probe.vcxproj",
     "test/integration/windows/WinUiQualityToolTipProbe.cpp": "app/windows-winui/ao_winui_quality_tooltip_probe.vcxproj",
+    "test/integration/windows/WinUiSilentAudio.cpp": "app/windows-winui/ao_winui_automation_probe.vcxproj",
     "test/integration/windows/WinUiSoulProbe.cpp": "app/windows-winui/ao_winui_soul_probe.vcxproj",
     "test/integration/windows/WinUiTrackTableProbe.cpp": "app/windows-winui/ao_winui_track_table_probe.vcxproj",
 }
@@ -41,7 +44,11 @@ def requires_winui_compile_context(path: Path) -> bool:
         relative = resolved.relative_to(absolute_path(PROJECT_ROOT)).as_posix()
     except ValueError:
         return False
-    return relative in _AUXILIARY_SOURCE_PROJECTS
+    return relative in _AUXILIARY_SOURCE_PROJECTS or (
+        resolved.suffix.lower() == ".h"
+        and resolved.with_suffix(".cpp").relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+        in _AUXILIARY_SOURCE_PROJECTS
+    )
 
 
 def _resolve_include(
@@ -300,7 +307,8 @@ def find_header_companions(
         try:
             source.relative_to(source_root)
         except ValueError:
-            continue
+            if not requires_winui_compile_context(source):
+                continue
         if source.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES and source.is_file():
             sources.add(source)
 

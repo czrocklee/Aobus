@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <format>
 #include <iostream>
 #include <limits>
@@ -453,6 +454,38 @@ namespace
     }
   }
 
+  void scenarioAutomationNames(ScenarioReport& report)
+  {
+    report.beginScenario("rows name themselves after the text they display");
+    auto catalogRes = ao::i18n::MessageCatalog::create("en");
+
+    if (!catalogRes)
+    {
+      report.record(catalogRes.error().message);
+      return;
+    }
+
+    auto const columns = std::array{ao::winui::TrackColumnCellSpec{.field = ao::rt::TrackField::Title, .width = 320.0}};
+    auto const row = ao::rt::TrackRow{.id = ao::TrackId{9}, .optUriPath = std::filesystem::path{"untitled.flac"}};
+    auto const item = winrt::make<winrt::Aobus::implementation::TrackRowItem>(0U, 0U, row, *catalogRes, columns);
+    report.check(item.as<winrt::Windows::Foundation::IStringable>().ToString() == L"untitled.flac",
+                 "an untitled track row is named by the file name its title cell shows");
+
+    auto const cells = item.Cells();
+    report.check(cells.Size() == 1, "the title-only row exposes exactly one body cell");
+
+    if (cells.Size() == 1)
+    {
+      report.check(cells.GetAt(0).as<winrt::Aobus::TrackCellItem>().ResizeName().empty(),
+                   "a body cell has no resize gripper to name");
+    }
+
+    auto const heading = winrt::make<winrt::Aobus::implementation::TrackRowItem>(
+      1U, 1U, 0U, "2 tracks", "Credit Kinds", "Fixture Orchestra", "2026", "CK");
+    report.check(heading.as<winrt::Windows::Foundation::IStringable>().ToString() == L"Credit Kinds",
+                 "a group heading is named by its first line");
+  }
+
   std::int32_t run()
   {
     auto report = ScenarioReport{};
@@ -465,6 +498,7 @@ namespace
     scenarioIterator(report);
     scenarioOversizedSizeRejected(report);
     scenarioCompactCreditCounts(report);
+    scenarioAutomationNames(report);
 
     if (report.failureCount() == 0)
     {

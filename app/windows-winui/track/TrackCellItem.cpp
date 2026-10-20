@@ -16,8 +16,16 @@
 
 namespace winrt::Aobus::implementation
 {
-  TrackCellItem::TrackCellItem(hstring text, hstring fieldId, double const width, bool const sortable)
-    : _text{std::move(text)}, _fieldId{std::move(fieldId)}, _width{width}, _sortable{sortable}
+  TrackCellItem::TrackCellItem(hstring text,
+                               hstring fieldId,
+                               double const width,
+                               bool const sortable,
+                               hstring resizeName)
+    : _text{std::move(text)}
+    , _fieldId{std::move(fieldId)}
+    , _width{width}
+    , _sortable{sortable}
+    , _resizeName{std::move(resizeName)}
   {
     if (auto const optField = ao::rt::trackFieldFromId(to_string(_fieldId));
         optField && ao::uimodel::trackColumnDefaults(*optField).alignment == ao::uimodel::TrackColumnAlignment::End)

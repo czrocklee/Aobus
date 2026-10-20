@@ -8,6 +8,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/UiSubscription.h"
 #include "pch.h"
+#include "platform/StringResources.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
@@ -101,7 +102,10 @@ namespace ao::winui::layout
         : _overlayFill{std::move(overlayFill)}
         , _settings{std::move(settings)}
         , _gatePtr{ctx.gatePtr}
-        , _splitter{PaneEdge::Leading, [this](double const change) { resizeBy(change); }, [this] { commitWidth(); }}
+        , _splitter{PaneEdge::Leading,
+                    resourceHstring(L"winui_shell_track_details_resize"),
+                    [this](double const change) { resizeBy(change); },
+                    [this] { commitWidth(); }}
         , _shellState{ctx.shellState}
       {
         auto const splitter = _splitter.element();

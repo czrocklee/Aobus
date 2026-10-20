@@ -13,7 +13,7 @@ namespace winrt::Aobus::implementation
   // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct TrackCellItem : TrackCellItemT<TrackCellItem>
   {
-    TrackCellItem(hstring text, hstring fieldId, double width, bool sortable);
+    TrackCellItem(hstring text, hstring fieldId, double width, bool sortable, hstring resizeName);
 
     // Project.idl fixes these property names for the generated TrackCellItem projection.
     // NOLINTNEXTLINE(readability-identifier-naming)
@@ -24,6 +24,9 @@ namespace winrt::Aobus::implementation
     double Width() const noexcept { return _width; }
     // NOLINTNEXTLINE(aobus-readability-bool-function-naming,readability-identifier-naming)
     bool Sortable() const noexcept { return _sortable; }
+    /// The accessible name of a header cell's resize gripper; body cells have none.
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    hstring ResizeName() const noexcept { return _resizeName; }
     // NOLINTNEXTLINE(readability-identifier-naming)
     Microsoft::UI::Xaml::TextAlignment Alignment() const noexcept { return _alignment; }
 
@@ -32,6 +35,7 @@ namespace winrt::Aobus::implementation
     hstring _fieldId;
     double _width = 0.0;
     bool _sortable = false;
+    hstring _resizeName;
     Microsoft::UI::Xaml::TextAlignment _alignment = Microsoft::UI::Xaml::TextAlignment::Left;
   };
 } // namespace winrt::Aobus::implementation

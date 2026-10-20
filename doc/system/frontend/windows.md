@@ -245,6 +245,26 @@ Exact paths, fields, defaults, validation, and versioning are defined by the [Wi
 
 Modern uses an integrated title bar, navigation, primary table, optional inspector, and persistent Now Playing surface. Classic uses a system title bar and dense desktop chrome. Neither visual treatment changes the runtime meaning of playback, output, selection, quality, or Soul aura.
 Classic has no activity surface, so its status bar is the only presentation of a status message. The message takes the width the track count leaves; a longer message ends in an ellipsis, and its tooltip shows the full text.
+Controls without text of their own still carry a UI Automation name. Glyph buttons take their tooltip, including each control that hides a notification; the activity strip's detail button instead carries its “View activity details” tooltip only while a real detail action exists. Its accessible name still takes the words the strip shows, or “Notifications” when nothing is active. A Soul takes the Play/Pause label when its primary click drives transport; when a layout action owns that click, it retains the “Aobus Soul” name. The shipped Modern and Classic layouts select those respective behaviors. Inspector section headers and navigation entries take the title they show. Track rows use the logical track title (or filename/id fallback), even when the Title column is hidden; group rows use their primary heading. The seek slider, pane boundaries, and column-resize grippers name what they adjust.
+The activity detail button is enabled, hit-testable, and keyboard-focusable only
+when there is detail content to open; otherwise it is disabled and its flyout is
+detached, so UI Automation Invoke rejects the empty action instead of silently
+doing nothing for an ordinary Info message. The strip's informational label and
+status glyph take the window's `ButtonForeground` theme-resource styles, keeping
+the message and idle icon at normal theme-aware contrast independent of the
+disabled button chrome. The reserved idle notification entry remains visible;
+retained details can still be opened from it after their compact notification is
+hidden.
+
+For explicit names known at construction, `platform/NamedControl.h` supplies
+`makeNamed<T>(localizedName)`, returning the native WinUI type without a wrapper
+or IDL boundary. Empty names violate its construction contract. It sets no content,
+tooltip, style, or enablement. Text content and `LabeledBy` remain valid native
+name sources; dynamic adapters own subsequent name updates. The layout registry
+supplies an authored node id as AutomationId for diagnostics, never as a name fallback.
+The explicit Windows naming gate checks resolved native names, including controls
+created without the factory; it does not prove that a nonempty name is semantically correct.
+
 WinUI packages the shared `note`, `vinyl`, and `equalizer` SVG sources plus the Soul brand mark and its license, even though the fixed Windows slot mapping currently selects only `monogram`, `vinyl`, and `equalizer`.
 UIModel supplies style, monogram, and deterministic monogram foreground-color values; WinUI owns transparent XAML foreground rendering, responsive vinyl geometry, its current-theme-accent outer ring and one-third-diameter muted center label, and asset decoding.
 
@@ -290,6 +310,8 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   protects Windows startup resolution and the deferred-checkpoint preference update.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
 - [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects control-kind projection, mixed-state preservation, edit parsing, command eligibility, commit outcomes, and vocabulary suggestions on every host.
+- [`WinUiActivityStatusProbe.cpp`](../../../test/integration/windows/WinUiActivityStatusProbe.cpp) builds the registered `status.activity` component — real chrome, adapter, and runtime — with the actual `MainWindow` compiled style resources and invokes its native automation providers, protecting empty-action rejection, null inactive tooltips, Light/Dark foreground updates, retained-detail access, live enablement, and popup teardown. These are native-property regressions, not shipping screenshot or assistive-technology acceptance.
+- [`WinUiAutomationProbe.cpp`](../../../test/integration/windows/WinUiAutomationProbe.cpp) audits loaded Modern/Classic shells and visited popups through native automation peers. Role-and-scope landmarks require critical controls and two synthetic track rows with an album heading to reach that same audit, with effective-width expectations for responsive panes. Naming, removal, Raw-view, role, and scope canaries guard the auditor itself. The Windows CI naming gate runs this explicit desktop suite; unvisited dialogs and rows beyond this small materialized fixture remain outside its coverage.
 - [`WinUiCreditsProbe.cpp`](../../../test/integration/windows/WinUiCreditsProbe.cpp) exercises native Credits controls, including automation-driven kind dropdown choice and row command names, parent staging, and guarded submission; the shared scoped editor/form tests own replacement and overlay semantics.
 - [Library workflow tests](windows-library-workflows.md#test-map) cover scan decisions, transfer reports, committed List refresh, and native saved-order accelerators.
 - Tests under [`test/unit/desktop/`](../../../test/unit/desktop) protect shared

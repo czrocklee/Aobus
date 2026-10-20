@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ResourceLookup.h"
 #include "pch.h"
+#include "platform/NamedControl.h"
 #include "platform/StringResources.h"
 #include "playback/OutputDeviceControl.h"
 #include "playback/PlaybackTimeControl.h"
@@ -22,6 +23,7 @@
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -39,6 +41,7 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::FrameworkElement;
     using winrt::Microsoft::UI::Xaml::ResourceDictionary;
     using winrt::Microsoft::UI::Xaml::Style;
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
     using winrt::Microsoft::UI::Xaml::Controls::Button;
     using winrt::Microsoft::UI::Xaml::Controls::ControlTemplate;
     using winrt::Microsoft::UI::Xaml::Controls::Flyout;
@@ -129,6 +132,7 @@ namespace ao::winui::layout
                 },
                 playback}
       {
+        AutomationProperties::SetName(_slider, resourceHstring(L"winui_playback_position"));
       }
 
       FrameworkElement element() const override { return _slider; }
@@ -226,10 +230,11 @@ namespace ao::winui::layout
           popup.Placement(FlyoutPlacementMode::Top);
           popup.Content(content);
 
-          _button = Button{};
+          auto const label = resourceHstring(L"winui_playback_volume");
+          _button = makeNamed<Button>(label);
           _button.Content(SymbolIcon{Symbol::Volume});
           _button.Flyout(popup);
-          ToolTipService::SetToolTip(_button, winrt::box_value(resourceHstring(L"winui_playback_volume")));
+          ToolTipService::SetToolTip(_button, winrt::box_value(label));
         }
       }
 

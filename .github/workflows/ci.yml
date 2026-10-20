@@ -780,6 +780,10 @@ jobs:
         shell: pwsh
         run: .\ao.bat check
 
+      - name: WinUI naming gate
+        shell: pwsh
+        run: .\ao.bat test --winui --no-build
+
       - name: Show build compiler cache statistics
         if: ${{ !cancelled() && steps.compiler-cache.outcome == 'success' && steps.build.outcome != 'skipped' }}
         continue-on-error: true

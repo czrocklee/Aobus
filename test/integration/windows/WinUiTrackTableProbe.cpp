@@ -12,6 +12,7 @@
 // reported and aggregated with a nonzero exit status; one global 90-second
 // dispatcher timeout bounds the run, and no expected failure aborts.
 
+#include "WinUiSilentAudio.h"
 #include "XamlMetaDataProvider.h"
 #include "app/DispatcherQueueExecutor.h"
 #include "layout/runtime/ActionRegistry.h"
@@ -22,7 +23,6 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/ResourceLookup.h"
-#include "lib/audio/NullBackend.h"
 #include "platform/StringResources.h"
 #include "theme/SurfaceBrushes.h"
 #include "theme/ThemeCoordinator.h"
@@ -32,9 +32,7 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
-#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -67,7 +65,6 @@
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/utility/ScopedRegistration.h>
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellState.h>
 
@@ -134,16 +131,12 @@ namespace
   using ao::winui::layout::kAccentTextBrushKey;
   constexpr auto kNavigationProbeWidths = std::to_array<double>({719.0, 720.0, 1119.0, 1120.0, 1119.0, 720.0, 719.0});
 
-  // One fixed-height row per display item; the classic Binding path resolves
-  // through the generated metadata provider, so real header and row text
-  // materializes while selection and scroll stay the assertions' subject.
+  // Fixed-height body rows keep selection and scroll assertions independent
+  // of the shipping row geometry. Headers use the compiled shipping template
+  // so its automation binding is exercised rather than duplicated here.
   constexpr auto kRowTemplateMarkup =
     std::string_view{R"(<DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">)"
                      R"(<Grid Height="32"><TextBlock Text="{Binding Title}" VerticalAlignment="Center" /></Grid>)"
-                     R"(</DataTemplate>)"};
-  constexpr auto kHeaderTemplateMarkup =
-    std::string_view{R"(<DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">)"
-                     R"(<Grid Height="32"><TextBlock Text="{Binding Text}" VerticalAlignment="Center" /></Grid>)"
                      R"(</DataTemplate>)"};
 
   /// Scenario-scoped failure collection: expected contract violations are
@@ -211,62 +204,6 @@ namespace
     std::ranges::sort(ids, [](TrackId const& lhs, TrackId const& rhs) { return lhs.raw() < rhs.raw(); });
     return ids;
   }
-
-  /// A silent endpoint supplies readiness through the normal Player/provider
-  /// boundary, without opening a physical audio endpoint or playing media.
-  class TransportProbeBackend final : public ao::audio::NullBackend
-  {
-  public:
-    ao::audio::BackendId backendId() const override { return ao::audio::BackendId{"winui-transport-probe"}; }
-    ao::audio::ProfileId profileId() const override { return ao::audio::ProfileId{ao::audio::kProfileShared}; }
-  };
-
-  class TransportProbeProvider final : public ao::audio::BackendProvider
-  {
-  public:
-    void shutdown() noexcept override { _closed = true; }
-
-    Status status() const override
-    {
-      return {.descriptor = {.id = ao::audio::BackendId{"winui-transport-probe"},
-                             .supportedProfiles = {{.id = ao::audio::ProfileId{ao::audio::kProfileShared}}}},
-              .devices = _closed ? std::vector<ao::audio::Device>{} : std::vector{device()}};
-    }
-
-    ao::utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
-    {
-      if (!_closed)
-      {
-        auto const devices = status().devices;
-        callback(devices);
-      }
-
-      return {};
-    }
-
-    std::unique_ptr<ao::audio::Backend> createBackend(ao::audio::Device const& /*device*/,
-                                                      ao::audio::ProfileId const& /*profile*/) override
-    {
-      return std::make_unique<TransportProbeBackend>();
-    }
-
-    ao::utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
-                                                   OnGraphChangedCallback /*callback*/) override
-    {
-      return {};
-    }
-
-    static ao::audio::Device device()
-    {
-      return {.id = ao::audio::DeviceId{"silent"},
-              .displayName = "Silent transport probe",
-              .isDefault = true,
-              .backendId = ao::audio::BackendId{"winui-transport-probe"}};
-    }
-
-  private:
-    bool _closed = false;
-  };
 
   class WinUiTrackTableProbeApplication
     : public ApplicationT<WinUiTrackTableProbeApplication, Markup::IXamlMetadataProvider>
@@ -711,11 +648,25 @@ namespace
         std::move(*registrationCatalogRes),
         [this](std::string message) { _statusMessages.push_back(std::move(message)); });
 
+      // A constructed-only frame owns the compiled header template and its
+      // resources. It never binds a session or reads/writes application state;
+      // retain it until the table has retired its template bindings. Its header
+      // handlers therefore do not route gestures to this probe's controller:
+      // these checks observe names; column changes use the controller API.
+      _templateWindow = appProvider()->GetXamlType(L"Aobus.MainWindow").ActivateInstance().as<Window>();
+      auto const frameResources = _templateWindow.Content().as<FrameworkElement>().Resources();
+      // ResourceDictionary has one owner; share the compiled values, not the
+      // frame's dictionary. The template resolves its styles from this host.
       _resources = ResourceDictionary{};
+      auto const headerTemplateKey = winrt::box_value(L"TrackHeaderCellTemplate");
+      auto const chromeStyleKey = winrt::box_value(L"ChromeLessButtonStyle");
+      auto const headerStyleKey = winrt::box_value(L"ColumnHeaderButtonStyle");
+      _resources.Insert(headerTemplateKey, frameResources.Lookup(headerTemplateKey));
+      _resources.Insert(chromeStyleKey, frameResources.Lookup(chromeStyleKey));
+      _resources.Insert(headerStyleKey, frameResources.Lookup(headerStyleKey));
+      _root.Resources(_resources);
       _resources.Insert(winrt::box_value(L"TrackRowTemplate"),
                         Markup::XamlReader::Load(winrt::to_hstring(kRowTemplateMarkup)).as<DataTemplate>());
-      _resources.Insert(winrt::box_value(L"TrackHeaderCellTemplate"),
-                        Markup::XamlReader::Load(winrt::to_hstring(kHeaderTemplateMarkup)).as<DataTemplate>());
 
       enqueueStep(&WinUiTrackTableProbeApplication::buildAndPublishStep);
     }
@@ -836,6 +787,7 @@ namespace
       _report.check(headerSeen, "the grouped projection exposes group headers");
       _report.check(trackRowSeen, "the grouped projection exposes track rows");
       _report.check(_rowsPanel.FirstVisibleIndex() >= 0, "the loaded viewport realizes rows");
+      verifyHeaderResizeNames();
 
       clearSelectionPublications();
       enqueueStep(&WinUiTrackTableProbeApplication::nativeSelectionStep);
@@ -884,6 +836,7 @@ namespace
     {
       _report.beginScenario("stable track-id selection restoration without runtime publication (sort)");
       verifyRestoration({_firstTrack});
+      verifyHeaderResizeNames();
 
       clearSelectionPublications();
 
@@ -902,6 +855,7 @@ namespace
     {
       _report.beginScenario("stable track-id selection restoration without runtime publication (width)");
       verifyRestoration({_firstTrack});
+      verifyHeaderResizeNames();
 
       _report.beginScenario("mixed native selection publishes only valid track ids");
 
@@ -1741,10 +1695,7 @@ namespace
                     "the temporary presentation-history view is closed");
       _report.check(_listPresentationsPtr->snapshot() == _presentationsBefore,
                     "the history replay changed no per-list presentation preference");
-      _runtimePtr->addAudioProvider(std::make_unique<TransportProbeProvider>());
-      auto const device = TransportProbeProvider::device();
-      _runtimePtr->playback().commands().setOutputDevice(
-        device.backendId, device.id, ao::audio::ProfileId{ao::audio::kProfileShared});
+      ao::winui::test::addSilentAudioOutput(*_runtimePtr);
       afterPostedNotifications(&WinUiTrackTableProbeApplication::b9TransportStep);
     }
 
@@ -1891,7 +1842,6 @@ namespace
     void b9LoadedThemeStep()
     {
       _report.beginScenario("loaded engaged transport follows native theme variants and visual states");
-      _root.Resources(_resources);
       _root.RequestedTheme(ElementTheme::Dark);
       _themeReference =
         Markup::XamlReader::Load(
@@ -2003,7 +1953,7 @@ namespace
     {
       _report.check(_root.ActualTheme() == ElementTheme::Dark, "the retained root returns to Dark");
       checkLoadedTransportColor();
-      _runtimePtr->playback().commands().setOutputDevice(TransportProbeProvider::device().backendId,
+      _runtimePtr->playback().commands().setOutputDevice(ao::winui::test::silentAudioDevice().backendId,
                                                          ao::audio::DeviceId{"unavailable-probe-device"},
                                                          ao::audio::ProfileId{ao::audio::kProfileShared});
       afterPostedNotifications(&WinUiTrackTableProbeApplication::b9UnavailableFrameStep);
@@ -2401,6 +2351,60 @@ namespace
       return nullptr;
     }
 
+    static Controls::Primitives::Thumb findHeaderThumb(DependencyObject const& node, winrt::hstring const& fieldId)
+    {
+      if (auto const thumb = node.try_as<Controls::Primitives::Thumb>();
+          thumb && winrt::unbox_value_or<winrt::hstring>(thumb.Tag(), {}) == fieldId)
+      {
+        return thumb;
+      }
+
+      auto const childCount = Media::VisualTreeHelper::GetChildrenCount(node);
+
+      for (std::int32_t index = 0; index < childCount; ++index)
+      {
+        if (auto const thumb = findHeaderThumb(Media::VisualTreeHelper::GetChild(node, index), fieldId); thumb)
+        {
+          return thumb;
+        }
+      }
+
+      return nullptr;
+    }
+
+    void verifyHeaderResizeName(winrt::hstring const& fieldId, winrt::hstring const& expectedName)
+    {
+      bool foundHeader = false;
+
+      for (auto const& item : _trackListPtr->headers())
+      {
+        if (auto const header = item.as<winrt::Aobus::TrackCellItem>(); header.FieldId() == fieldId)
+        {
+          foundHeader = true;
+          _report.check(header.ResizeName() == expectedName,
+                        std::format("the {} header has its localized resize name without a sort suffix",
+                                    winrt::to_string(fieldId)));
+        }
+      }
+
+      _report.check(foundHeader, std::format("the controller exposes the {} header", winrt::to_string(fieldId)));
+      auto const thumb = findHeaderThumb(_hostBorder, fieldId);
+      _report.check(static_cast<bool>(thumb),
+                    std::format("the shipping template realizes the {} resize thumb", winrt::to_string(fieldId)));
+
+      if (thumb)
+      {
+        _report.check(Automation::AutomationProperties::GetName(thumb) == expectedName,
+                      std::format("the shipping {} thumb binds its accessible name", winrt::to_string(fieldId)));
+      }
+    }
+
+    void verifyHeaderResizeNames()
+    {
+      verifyHeaderResizeName(L"title", L"Resize Title column");
+      verifyHeaderResizeName(L"artist", L"Resize Artist column");
+    }
+
     // --- Teardown ------------------------------------------------------------
 
     void finish()
@@ -2442,6 +2446,13 @@ namespace
         _schemaPtr.reset();
         _trackListPtr.reset();
         _columnLayoutsPtr.reset();
+        _resources = nullptr;
+
+        if (_templateWindow)
+        {
+          _templateWindow.Close();
+          _templateWindow = nullptr;
+        }
 
         if (_executor != nullptr)
         {
@@ -2503,6 +2514,7 @@ namespace
 
     winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> _appProviderPtr{nullptr};
     Window _window{nullptr};
+    Window _templateWindow{nullptr};
     Grid _root{nullptr};
     Border _hostBorder{nullptr};
     FrameworkElement _titleBarSlot{nullptr};

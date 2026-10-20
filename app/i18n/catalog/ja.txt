@@ -775,19 +775,23 @@ ja:table {
     winui_list_presentation { "表示" }
     winui_list_preview { "プレビュー" }
     winui_shell_track_details { "曲詳細" }
+    winui_shell_track_details_resize { "曲詳細パネルの幅を調整" }
     winui_shell_classic_mode { "クラシックモード" }
     winui_playback_output_device { "出力デバイス" }
     winui_playback_volume { "音量" }
+    winui_playback_position { "再生位置" }
     winui_playback_no_output_devices { "出力デバイスなし" }
     winui_library_open_label { "開く" }
     winui_library_rescan_label { "再スキャン" }
     winui_library_navigation_pane_title { "ライブラリ" }
+    winui_library_navigation_pane_resize { "ナビゲーションパネルの幅を調整" }
     winui_library_quick_filter_placeholder { "曲をフィルター" }
     winui_library_ready { "準備完了" }
     winui_library_rescanning { "ライブラリを再スキャン中..." }
     winui_library_no_selection { "選択なし" }
     winui_track_move_column_left { "左へ移動" }
     winui_track_move_column_right { "右へ移動" }
+    winui_track_resize_column { "列 {column} の幅を調整" }
     winui_playback_options { "再生オプション" }
     winui_more_menu { "その他" }
     winui_error { "エラー: {detail}" }

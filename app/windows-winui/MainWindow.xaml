@@ -24,6 +24,13 @@
                 <Setter Property="MinHeight" Value="36" />
                 <Setter Property="Padding" Value="8" />
             </Style>
+            <!-- The strip's text remains informative when no detail action is available. -->
+            <Style x:Key="ActivityStatusTextStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
+            </Style>
+            <Style x:Key="ActivityStatusIconStyle" TargetType="FontIcon">
+                <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
+            </Style>
             <Style x:Key="ColumnHeaderButtonStyle" TargetType="Button" BasedOn="{StaticResource ChromeLessButtonStyle}">
                 <Setter Property="CornerRadius" Value="4" />
                 <Setter Property="FontSize" Value="12" />
@@ -251,6 +258,7 @@
                         Width="7"
                         HorizontalAlignment="Right"
                         Background="Transparent"
+                        AutomationProperties.Name="{x:Bind ResizeName}"
                         Tag="{x:Bind FieldId}"
                         DragCompleted="handleColumnResizeCompleted" />
                 </Grid>
