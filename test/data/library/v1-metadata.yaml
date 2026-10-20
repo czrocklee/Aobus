@@ -1,0 +1,89 @@
+version: 1
+export-mode: metadata
+library:
+  tracks:
+    - id: 1
+      uri: Classical/Bach/Cello Suite No. 1/01 Prélude.flac
+      title: Prélude
+      artist: Pablo Casals
+      album: Cello Suites
+      album-artist: Pablo Casals
+      composer: Johann Sebastian Bach
+      genre: Classical
+      work: Cello Suite No. 1 in G major, BWV 1007
+      movement: Prélude
+      year: 1939
+      track-number: 1
+      track-total: 6
+      disc-number: 1
+      disc-total: 2
+      movement-number: 1
+      movement-total: 6
+      recording-date: 1938-06-02
+      credits:
+        - name: Pablo Casals
+          kind: soloist
+          role: cello
+      custom:
+        label: EMI
+      tags:
+        - baroque
+        - favorite
+    - id: 2
+      uri: Pop/Example Artist/Single/01 Example Song.mp3
+      title: Example Song
+      artist: Example Artist
+      year: 2021
+      recording-date: 2020-11
+      credits: []
+      tags:
+        - favorite
+    - id: 3
+      uri: Live/The Carrier Band/Live at the Hall.flac
+      segment:
+        ordinal: 1
+        start-frame: 0
+        frame-count: 441000
+        total-frames: 882000
+        sample-rate: 44100
+      duration: 10000
+      title: Opening
+      artist: The Carrier Band
+      album: Live at the Hall
+      track-number: 1
+      track-total: 2
+      credits: []
+    - id: 4
+      uri: Live/The Carrier Band/Live at the Hall.flac
+      segment:
+        ordinal: 2
+        start-frame: 441000
+        frame-count: 441000
+        total-frames: 882000
+        sample-rate: 44100
+      duration: 10000
+      title: Encore
+      artist: The Carrier Band
+      album: Live at the Hall
+      track-number: 2
+      track-total: 2
+      credits: []
+  lists:
+    - id: 1
+      parent-id: 0
+      name: Favorites
+      filter: '#favorite'
+      order:
+        - 2
+        - 1
+    - id: 2
+      parent-id: 1
+      name: Baroque favorites
+      description: Favorites that are also tagged baroque
+      filter: '#baroque'
+    - id: 3
+      parent-id: 0
+      name: Concert
+      order:
+        - 4
+        - 3

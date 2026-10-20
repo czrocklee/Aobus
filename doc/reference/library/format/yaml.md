@@ -75,6 +75,11 @@ List filter source remains byte-exact after UTF-8 validation because its URI lit
 Malformed sequences reject the document and are never repaired with U+FFFD.
 Size limits apply to the normalized NFC bytes of admitted display text and to the original bytes of a List filter.
 
+Each of these text fields holds its scalar's text: YAML implicit typing does not apply, and quoting only delimits the text.
+A plain `null`, `~`, `yes`, `on`, `007`, `0x1F`, or `1e3` is that text, not a null, a boolean, or a number.
+Only a field that defines a null or empty form, such as a credit `role` or `recording-date`, gives that form a separate meaning.
+The exporter quotes text only where YAML syntax requires it, so a consumer must read these fields as text rather than through implicit typing.
+
 Custom-metadata keys must remain unique after NFC normalization.
 For example, precomposed `é` and an `e` followed by a combining acute accent are the same key for this rule.
 Tags are set members, so canonically equivalent tag spellings collapse to one member through dictionary identity.
@@ -114,7 +119,7 @@ Keys in one `custom` map must be unique both as YAML keys and after NFC normaliz
 
 ### Text metadata
 
-The following fields are scalar strings:
+The following fields are scalar strings, read as [library text scalars](#library-text-scalars):
 
 | Field | Field | Field |
 |---|---|---|
@@ -430,7 +435,13 @@ library:
 - [`LibraryYamlImporterTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlImporterTest.cpp) covers recording-date and credit-entry admission, whole-document preflight rejection, and version gating before field interpretation.
 - [`LibraryYamlExporterTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlExporterTest.cpp) covers recording-date and credits emission, omission, and delta baselines.
 - [`LibraryYamlPerformanceMetadataTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) covers same-version round trips of date precision, list order and roles, clear forms, and merge overlay preservation.
+- [`LibraryYamlModeFixtureTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlModeFixtureTest.cpp) restores committed version-1 documents: [`v1-delta.yaml`](../../../../test/data/library/v1-delta.yaml) and [`v1-metadata.yaml`](../../../../test/data/library/v1-metadata.yaml) export back byte for byte, [`v1-list-only.yaml`](../../../../test/data/library/v1-list-only.yaml) replaces the Lists and ranks Tracks and segments by URI, and [`v1-scalars.yaml`](../../../../test/data/library/v1-scalars.yaml) checks that each field takes its meaning from this schema rather than from YAML implicit typing, both after the restore and after a restore of its export.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) covers canonicalization, the byte length limit after normalization, literal percent text, control-character rejection, absent roots, in-root resolution, and escaping or dangling symlinks.
+
+The version-1 documents named above and the full [`v1.yaml`](../../../../test/data/library/v1.yaml) freeze at the first release, and a later format version adds documents of its own instead of editing them.
+A frozen document pins what import reads, not what export writes.
+When a later exporter writes other bytes for one, by a new version or a narrower spelling within this one, the document remains the import input and its export comparison moves to a separate expected file.
+That file is reviewed against the frozen document rather than regenerated from the changed exporter, and the test gains a check of the restored values, as the scalar case has, so an exporter that drops a value cannot pass by reproducing its own output.
 
 ## Related documents
 

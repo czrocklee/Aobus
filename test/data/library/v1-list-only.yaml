@@ -1,0 +1,23 @@
+version: 1
+export-mode: list-only
+library:
+  lists:
+    - id: 1
+      parent-id: 0
+      name: Evening
+      description: Ranked by hand
+      order:
+        - uri: Pop/Example Artist/Single/01 Example Song.mp3
+        - uri: Classical/Bach/Cello Suite No. 1/01 Prélude.flac
+    - id: 2
+      parent-id: 1
+      name: Evening classical
+      filter: $genre = Classical
+    - id: 3
+      parent-id: 0
+      name: Encore first
+      order:
+        - uri: Live/The Carrier Band/Live at the Hall.flac
+          ordinal: 2
+        - uri: Live/The Carrier Band/Live at the Hall.flac
+          ordinal: 1

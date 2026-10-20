@@ -1,0 +1,55 @@
+version: 1
+export-mode: full
+library:
+  resources: []
+  tracks:
+    - id: 1
+      uri: Edge/01 Text.flac
+      title: 007
+      artist: yes
+      album: null
+      album-artist: ~
+      composer: 1e3
+      genre: 0x1F
+      work: "true"
+      movement: 'It''s: #1'
+      recording-date: ''
+      credits:
+        - name: NO
+          kind: conductor
+          role: ~
+        - name: off
+          kind: performer
+          role: null
+      custom:
+        "no": "off"
+        3.14: 2.50
+      codec: flac
+      file-size: 0
+      mtime: null
+      covers: []
+      tags: [on, 12, "Café", "Café"]
+    - id: 2
+      uri: Edge/%2e%2e/02 Numbers.flac
+      title: "Café au lait"
+      year: 65535
+      track-number: 65535
+      recording-date:
+      credits: []
+      duration: 2147483647
+      bitrate: 4294967295
+      sample-rate: 4294967295
+      codec: UNKNOWN
+      channels: 255
+      bit-depth: 255
+      file-size: 18446744073709551615
+      mtime: {seconds: -9223372036854775808, nanoseconds: 999999999}
+      covers: []
+  lists:
+    - id: 1
+      name: 2024
+      description: |
+        First line
+        second line
+      filter: '$genre = "0x1F"'
+      order: [1, {id: 2}]
