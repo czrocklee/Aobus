@@ -80,7 +80,12 @@ seed, a document of an older version is read in full and the fields it predates
 keep their seeded values; the group is stamped with the current version and the
 next checkpoint writes it back upgraded. A version above 1 is rejected instead
 of read: this build cannot preserve fields it does not know, so reading such a
-document would discard them at the next save. Version 0 is rejected as well,
+document would discard them at the next save. The settings store also refuses
+every later save of such a group for the session, so it stays unchanged. The
+session runs on defaults, and a library it then selects opens but is not
+recorded as the startup root: that is a failed selected-root commit, as the
+[desktop library lifecycle](../../system/desktop-library-lifecycle.md#invariants)
+specifies. Version 0 is rejected as well,
 because no document was ever written that way; the value marks a missing or
 malformed marker, and reading it under current field semantics would dress a
 corrupt document up as an old one. Documents written by development builds
@@ -90,6 +95,7 @@ version 1.
 A rejected group leaves typed defaults in effect.
 Each settings group is loaded independently, so rejection of `desktop` does not reject a valid sibling group and vice versa.
 The theme has no compatibility envelope: adding, removing, or renaming a token requires coordinated schema, reference, and test changes.
+As protected configuration, it gains a version before a release changes its tokens in a way that an earlier theme would fail, as the [versioning page](../../system/persistence/versioning.md#protected-configuration) states.
 Reload installs only a completely valid candidate.
 
 Selecting an output row updates the in-memory exact requested backend, device,

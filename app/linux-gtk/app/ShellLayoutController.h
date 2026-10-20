@@ -143,7 +143,7 @@ namespace ao::gtk
       async::Runtime* asyncRuntime,
       std::shared_ptr<ShellLayoutStore> layoutStorePtr,
       std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-      std::shared_ptr<AppConfigStore> configStorePtr,
+      std::string lastLayoutPreset,
       uimodel::LayoutSchema schema,
       std::function<
         void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument)>

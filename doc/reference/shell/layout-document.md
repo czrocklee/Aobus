@@ -10,6 +10,9 @@ Template expansion, build, editor, and fallback behavior belong to the [shell la
 
 The `version` field is required, emitted as `1`, and only version `1` is accepted.
 An unsupported version returns `NotSupported` before the root or templates are interpreted.
+A preset of a newer version is kept: `ShellLayoutStore` refuses to save over it or remove it, also as `NotSupported`, so Reset in the layout editor reports the failure instead of deleting the file.
+Reset also keeps a preset whose bytes the store cannot read, such as one it cannot open or one above its size ceiling, and reports that failure.
+A preset it reads but rejects for any other reason is removed, including a newer one that this build cannot parse.
 
 ## Code boundary
 

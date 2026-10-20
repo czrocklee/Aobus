@@ -61,8 +61,11 @@ namespace ao::winui
    */
   void rememberDesktopWindowPlacement(DesktopSettings& settings, WindowPlacement placement) noexcept;
 
+  /// Protected configuration (decision 0020): an older build never overwrites a newer group.
   struct DesktopSettingsYamlSchema final
   {
+    static constexpr std::uint32_t kVersion = kDesktopSettingsVersion;
+
     Result<> serialize(ryml::NodeRef node, DesktopSettings const& state) const;
     Result<DesktopSettings> deserialize(ryml::ConstNodeRef node, DesktopSettings const& seed) const;
   };

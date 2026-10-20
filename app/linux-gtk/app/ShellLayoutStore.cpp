@@ -151,6 +151,43 @@ namespace ao::gtk
     auto const path = filePath(presetId);
     auto ec = std::error_code{};
 
+    // An older build never removes a preset a newer version saved (decision
+    // 0020), nor one whose bytes it cannot read. A preset it reads but rejects
+    // for any other reason, including one it cannot parse, stays removable.
+    if (std::filesystem::exists(path, ec) && !ec)
+    {
+      auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly, _limits.maxFileBytes};
+      auto previous = uimodel::LayoutDocument{};
+
+      if (auto const loadedRes = uimodel::loadLayout(store, "layout", previous); !loadedRes)
+      {
+        if (store.hasNewerGroup("layout"))
+        {
+          return makeError(Error::Code::NotSupported,
+                           std::format("Shell layout file '{}' was saved by a newer version of Aobus; it is kept",
+                                       utility::pathToUtf8(path)));
+        }
+
+        // Only rejected content carries these codes. Any other failure, such as
+        // a file this build cannot open or one above its size ceiling, leaves
+        // the version unread. A file this build cannot parse counts as rejected
+        // content, so a newer preset is kept only while it stays YAML this
+        // build parses.
+        if (auto const code = loadedRes.error().code;
+            code != Error::Code::FormatRejected && code != Error::Code::NotSupported)
+        {
+          return std::unexpected{loadedRes.error()};
+        }
+      }
+    }
+
+    if (ec)
+    {
+      return makeError(
+        Error::Code::IoError,
+        std::format("Failed to inspect shell layout file '{}': {}", utility::pathToUtf8(path), ec.message()));
+    }
+
     std::filesystem::remove(path, ec);
 
     if (ec)

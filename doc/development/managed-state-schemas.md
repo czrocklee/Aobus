@@ -52,9 +52,10 @@ Work from the repository root.
 4. Serialize every stable key explicitly. Use `MapWriter` scalar/value/sequence operations, `writeStringMap()` for an owner-selected dynamic string-keyed map, or the lower-level node helpers so the destination tree owns dynamic key and string bytes.
 5. Deserialize into local values. Use `MapReader` required/optional scalar, nested-value, and sequence operations, `readStringMap()` for an owner-selected dynamic map, or the lower-level structural helpers, then perform owner-specific enum, identifier, range, and cross-field validation.
 6. Read a version field before version-specific siblings and return `NotSupported` for an unsupported future version unless the owning specification defines another outcome.
-7. Return one complete candidate. Never mutate the caller's live state during partial deserialization.
-8. Pass the schema explicitly to `ConfigStore::load()` or `save()`. Use `saveTogether(configWrite(...), configWrite(...))` when sibling groups must be replaced atomically.
-9. Update the managed-state registry and the affected topic/format documentation. A proposal is not current behavior until code, tests, guardrails, and the current contract agree.
+7. When the group is protected configuration, one of the closed list on the [versioning page](../system/persistence/versioning.md#protected-configuration), declare `static constexpr std::uint32_t kVersion` on the schema and write it as the group's `version`, so that `ConfigStore` refuses to read or overwrite a newer group. Every change to such a schema increments `kVersion`, an additive one included, at most once per release, and the schema keeps reading every older version. Until that first increment, the schema asserts at compile time that `kVersion` is 1, and the increment replaces the assertion with a reader for the older version.
+8. Return one complete candidate. Never mutate the caller's live state during partial deserialization.
+9. Pass the schema explicitly to `ConfigStore::load()` or `save()`. Use `saveTogether(configWrite(...), configWrite(...))` when sibling groups must be replaced atomically.
+10. Update the managed-state registry and the affected topic/format documentation. A proposal is not current behavior until code, tests, guardrails, and the current contract agree.
 
 `ConfigStore::load()` returns `Result<bool>`: `false` means the group is absent and the seeded value is unchanged; `true` means the schema accepted a candidate and the store installed it.
 Schema failures preserve their error code with group context.
@@ -71,6 +72,7 @@ Where applicable, cover:
 - duplicate and unknown keys under the selected policy;
 - every closed enum/token mapping and rejection of an unknown value;
 - current, unsupported future, and intentionally supported older versions;
+- for a protected group, a newer version that load, save, and a batch save including it each refuse, with the file left byte-identical;
 - invalid identifiers, ranges, and cross-field semantics;
 - representative checked-in or inline documents used by the application;
 - no live-state mutation after deserialize failure;

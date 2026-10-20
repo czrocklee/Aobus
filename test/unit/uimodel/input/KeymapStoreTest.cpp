@@ -13,6 +13,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <string>
 #include <vector>
 
@@ -119,10 +120,12 @@ namespace ao::uimodel::test
     auto output = std::ofstream{configPath};
     REQUIRE(output.is_open());
     output << "shortcuts:\n"
-              "  playback.playPause:\n"
-              "    - Ctrl+Shift+P\n"
-              "  playback.next:\n"
-              "    - nested: invalid\n";
+              "  version: 1\n"
+              "  bindings:\n"
+              "    playback.playPause:\n"
+              "      - Ctrl+Shift+P\n"
+              "    playback.next:\n"
+              "      - nested: invalid\n";
     output.close();
     REQUIRE(output.good());
 
@@ -141,9 +144,11 @@ namespace ao::uimodel::test
     auto output = std::ofstream{configPath};
     REQUIRE(output.is_open());
     output << "shortcuts:\n"
-              "  plugin.futureAction:\n"
-              "    - Ctrl+F\n"
-              "    - Ctrl+\n";
+              "  version: 1\n"
+              "  bindings:\n"
+              "    plugin.futureAction:\n"
+              "      - Ctrl+F\n"
+              "      - Ctrl+\n";
     output.close();
     REQUIRE(output.good());
 
@@ -152,5 +157,72 @@ namespace ao::uimodel::test
 
     CHECK(keymap.chordsFor("plugin.futureAction") == std::vector<KeyChord>{chord("Ctrl+F")});
     CHECK(keymap.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
+  }
+
+  TEST_CASE("saveKeymap writes the bindings under a version", "[uimodel][unit][input][keymap-store]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto store = rt::ConfigStore{configPath};
+    auto keymap = KeymapModel{sampleDefaults()};
+    keymap.applyOverrides(KeymapOverrides{{"playback.next", {"Ctrl+N"}}});
+    REQUIRE(saveKeymap(store, keymap));
+
+    CHECK(ao::test::readFile(configPath) == "shortcuts:\n"
+                                            "  version: 1\n"
+                                            "  bindings:\n"
+                                            "    playback.next:\n"
+                                            "      - \"Ctrl+N\"\n");
+  }
+
+  TEST_CASE("a shortcuts group of a newer version is kept and never overwritten",
+            "[uimodel][unit][input][keymap-store]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto const document = std::string{"shortcuts:\n"
+                                      "  version: 2\n"
+                                      "  bindings:\n"
+                                      "    playback.next:\n"
+                                      "      - Ctrl+N\n"
+                                      "  layers: {}\n"};
+    {
+      auto output = std::ofstream{configPath, std::ios::binary};
+      output << document;
+    }
+
+    auto store = rt::ConfigStore{configPath};
+    auto keymap = loadKeymap(store, sampleDefaults());
+    CHECK(keymap.bindings() == sampleDefaults());
+    CHECK(store.hasNewerGroup(kKeymapConfigGroup));
+
+    REQUIRE(keymap.tryBind("playback.next", chord("Ctrl+M")));
+    auto const savedRes = saveKeymap(store, keymap);
+    REQUIRE_FALSE(savedRes);
+    CHECK(savedRes.error().code == Error::Code::NotSupported);
+    CHECK(ao::test::readFile(configPath) == document);
+  }
+
+  TEST_CASE("an unversioned shortcuts map is malformed rather than newer", "[uimodel][unit][input][keymap-store]")
+  {
+    // The flat shape that development builds wrote before version 1.
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    {
+      auto output = std::ofstream{configPath, std::ios::binary};
+      output << "shortcuts:\n"
+                "  playback.next:\n"
+                "    - Ctrl+M\n";
+    }
+
+    auto store = rt::ConfigStore{configPath};
+    auto keymap = loadKeymap(store, sampleDefaults());
+    CHECK(keymap.bindings() == sampleDefaults());
+    CHECK_FALSE(store.hasNewerGroup(kKeymapConfigGroup));
+
+    REQUIRE(saveKeymap(store, keymap));
+    CHECK(ao::test::readFile(configPath) == "shortcuts:\n"
+                                            "  version: 1\n"
+                                            "  bindings: {}\n");
   }
 } // namespace ao::uimodel::test

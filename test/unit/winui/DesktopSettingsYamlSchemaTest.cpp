@@ -18,6 +18,8 @@
 
 #include <cstdint>
 #include <format>
+#include <fstream>
+#include <ios>
 #include <string>
 #include <utility>
 
@@ -229,6 +231,30 @@ shellMode: modern
 
     REQUIRE_FALSE(res);
     CHECK(res.error().code == Error::Code::NotSupported);
+  }
+
+  TEST_CASE("DesktopSettingsYamlSchema - the store keeps a newer desktop group unchanged", "[winui][unit][layout]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const path = tempDir.path() / "windows.yaml";
+    auto const document =
+      std::format("desktop:\n  version: {}\n  shellMode: modern\n  fromTheFuture: 1\n", kDesktopSettingsVersion + 1);
+    {
+      auto output = std::ofstream{path, std::ios::binary};
+      output << document;
+    }
+
+    auto store = rt::ConfigStore{path};
+    auto settings = DesktopSettings{};
+    auto const loadedRes = store.load("desktop", settings, DesktopSettingsYamlSchema{});
+    REQUIRE_FALSE(loadedRes);
+    CHECK(loadedRes.error().code == Error::Code::NotSupported);
+    CHECK(store.hasNewerGroup("desktop"));
+
+    auto const savedRes = store.save("desktop", DesktopSettings{}, DesktopSettingsYamlSchema{});
+    REQUIRE_FALSE(savedRes);
+    CHECK(savedRes.error().code == Error::Code::NotSupported);
+    CHECK(ao::test::readFile(path) == document);
   }
 
   TEST_CASE("DesktopSettingsYamlSchema - accepts exactly the versions that were written", "[winui][unit][layout]")

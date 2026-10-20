@@ -4,6 +4,7 @@
 #include <ao/rt/AppState.h>
 
 #include "test/unit/TestFixtureSupport.h"
+#include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
@@ -13,6 +14,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <string>
 
 namespace ao::rt::test
@@ -30,7 +32,7 @@ namespace ao::rt::test
 
     void writeConfig(std::filesystem::path const& path, std::string const& contents)
     {
-      auto stream = std::ofstream{path};
+      auto stream = std::ofstream{path, std::ios::binary};
       stream << contents;
     }
   } // namespace
@@ -110,8 +112,9 @@ namespace ao::rt::test
 
     SECTION("fields the document predates keep the seeded value")
     {
-      // The group as an older build wrote it: no theme or layout preset yet.
+      // A version-1 group that omits the optional presets.
       writeConfig(configPath, R"(runtime:
+  version: 1
   lastOutputBackendId: pipewire
   lastOutputProfileId: exclusive
   lastOutputDeviceId: studio-dac
@@ -144,6 +147,7 @@ namespace ao::rt::test
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
     writeConfig(configPath, R"(runtime:
+  version: 1
   lastOutputBackendId: [not, a, scalar]
 session:
   lastLibraryPath: /music
@@ -169,5 +173,46 @@ session:
     loadAppSession(store, session);
     CHECK(session.lastLibraryPath == "/music");
     CHECK(session.lastOutputSelection == sessionOutputBefore);
+  }
+
+  TEST_CASE("AppState - a preferences group of a newer version is kept and never overwritten",
+            "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto const document = std::string{R"(runtime:
+  version: 2
+  lastOutputDeviceId: studio-dac
+  fromTheFuture: 12
+)"};
+    writeConfig(configPath, document);
+    auto store = ConfigStore{configPath};
+
+    auto prefs = AppPrefsState{.lastLayoutPreset = "", .lastThemePreset = "seeded-theme"};
+    loadAppPrefs(store, prefs);
+    CHECK(prefs.preferredOutputSelection == audio::OutputDeviceSelection{});
+    CHECK(prefs.lastThemePreset == "seeded-theme");
+    CHECK(store.hasNewerGroup(kAppPrefsConfigGroup));
+
+    auto const savedRes = saveAppPrefs(store, prefs);
+    REQUIRE_FALSE(savedRes);
+    CHECK(savedRes.error().code == Error::Code::NotSupported);
+    CHECK(ao::test::readFile(configPath) == document);
+
+    REQUIRE(saveAppSession(store, AppSessionState{.lastLibraryPath = "/music"}));
+    CHECK(ao::test::readFile(configPath).contains(document));
+  }
+
+  TEST_CASE("AppState - a preferences group without a version keeps the seeded state", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    writeConfig(configPath, "runtime:\n  lastThemePreset: midnight\n");
+    auto store = ConfigStore{configPath};
+
+    auto prefs = AppPrefsState{.lastLayoutPreset = "", .lastThemePreset = "seeded-theme"};
+    loadAppPrefs(store, prefs);
+    CHECK(prefs.lastThemePreset == "seeded-theme");
+    CHECK_FALSE(store.hasNewerGroup(kAppPrefsConfigGroup));
   }
 } // namespace ao::rt::test

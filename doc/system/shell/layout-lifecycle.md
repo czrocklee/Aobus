@@ -59,8 +59,8 @@ These are orchestration phases rather than a published enum.
 
 ### Load
 
-`loadLayout()` starts a lifetime-bound asynchronous workflow.
-On the worker it loads application preferences and selects a supported preset.
+`loadLayout()` reads the preferred layout preset from application preferences on the calling thread, because the configuration store has no internal synchronization, and then starts a lifetime-bound asynchronous workflow.
+On the worker it selects a supported preset from that name.
 A missing custom file selects the matching built-in document; a rejected custom file logs its bounded error, remains untouched, and also selects the matching built-in document.
 The selected authored document is prepared before the worker returns, and matching component state is loaded or replaced by an empty state document.
 

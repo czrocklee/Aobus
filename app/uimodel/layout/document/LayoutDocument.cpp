@@ -240,6 +240,14 @@ namespace ao::uimodel
       return std::unexpected{versionRes.error()};
     }
 
+    // Version 1 is the first version any release writes, and the store refuses a
+    // newer one first. Every older version stays readable (decision 0020), so the
+    // first increment replaces this check with a reader for each older version.
+    // That reader sets the document's version to kLayoutDocumentVersion, because
+    // serialize writes the document's own version and refuses any other.
+    static_assert(
+      kLayoutDocumentVersion == 1, "an older protected config version needs its own reader under decision 0020");
+
     if (*versionRes != kLayoutDocumentVersion)
     {
       return makeError(Error::Code::NotSupported, std::format("Unsupported layout document version {}", *versionRes));

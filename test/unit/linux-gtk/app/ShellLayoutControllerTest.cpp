@@ -332,6 +332,28 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("ShellLayoutController - a layout load keeps the preset preferred when it started",
+            "[gtk][unit][app][shell][concurrency]")
+  {
+    auto fixture = ShellLayoutControllerFixture{};
+    auto& configStorePtr = fixture.configStorePtr;
+    auto& controller = fixture.controller;
+    auto prefs = rt::AppPrefsState{};
+    prefs.lastLayoutPreset = "modern";
+    configStorePtr->saveAppPrefs(prefs);
+
+    controller.loadLayout();
+
+    // Nothing orders this save against the worker's preset selection. In a plain
+    // build, a worker that reads the store fails here only when it reads after
+    // the save; under TSan, its read is reported in either order.
+    prefs.lastLayoutPreset = "classic";
+    configStorePtr->saveAppPrefs(prefs);
+
+    REQUIRE(tryPumpGtkEventsUntil([&controller] { return controller.layoutSession().presetId() == "modern"; }));
+    CHECK(findNodeById(controller.activeLayout().root, "modern-bar") != nullptr);
+  }
+
   TEST_CASE("ShellLayoutController - custom layout rejection falls back without changing the file",
             "[gtk][unit][app][shell]")
   {

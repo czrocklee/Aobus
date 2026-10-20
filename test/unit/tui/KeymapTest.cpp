@@ -380,8 +380,10 @@ namespace ao::tui::test
     auto const configPath = tempDir.path() / "tui.yaml";
     auto output = std::ofstream{configPath};
     output << "shortcuts:\n"
-              "  tui.shell.toggleListChooser:\n"
-              "    - F2\n";
+              "  version: 1\n"
+              "  bindings:\n"
+              "    tui.shell.toggleListChooser:\n"
+              "      - F2\n";
     output.close();
 
     auto store = rt::ConfigStore{configPath};
@@ -413,10 +415,12 @@ namespace ao::tui::test
     auto const configPath = tempDir.path() / "tui.yaml";
     auto output = std::ofstream{configPath};
     output << "shortcuts:\n"
-              "  tui.shell.toggleListChooser:\n"
-              "    - F2\n"
-              "  plugin.futureAction:\n"
-              "    - Ctrl+\n";
+              "  version: 1\n"
+              "  bindings:\n"
+              "    tui.shell.toggleListChooser:\n"
+              "      - F2\n"
+              "    plugin.futureAction:\n"
+              "      - Ctrl+\n";
     output.close();
 
     auto store = rt::ConfigStore{configPath};
