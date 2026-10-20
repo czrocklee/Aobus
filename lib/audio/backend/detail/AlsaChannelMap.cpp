@@ -17,6 +17,8 @@ extern "C"
 #include <alsa/pcm.h>
 }
 
+#include <algorithm>
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -96,12 +98,29 @@ namespace ao::audio::backend::detail
       }
     }
 
-    bool hasValidShape(std::span<std::uint32_t const> positions) noexcept
+    enum class ChannelMapKind : std::uint8_t
+    {
+      Malformed,
+      Ordinary,
+      LegacyAmbiguous,
+    };
+
+    struct ChannelMapClassification final
+    {
+      ChannelMapKind kind = ChannelMapKind::Malformed;
+      std::array<std::uint32_t, kAlsaChannelCapacity> admissionPositions{};
+    };
+
+    ChannelMapClassification classifyChannelPositions(std::span<std::uint32_t const> positions) noexcept
     {
       if (positions.empty() || positions.size() > kAlsaChannelCapacity)
       {
-        return false;
+        return {};
       }
+
+      auto classification = ChannelMapClassification{};
+      std::ranges::copy(positions, classification.admissionPositions.begin());
+      bool hasRepeatedSurround = false;
 
       for (std::size_t i = 0; i < positions.size(); ++i)
       {
@@ -111,29 +130,111 @@ namespace ao::audio::backend::detail
             (position & ~(SND_CHMAP_POSITION_MASK | SND_CHMAP_PHASE_INVERSE | SND_CHMAP_DRIVER_SPEC)) != 0U ||
             ((position & SND_CHMAP_DRIVER_SPEC) == 0U && role > SND_CHMAP_LAST))
         {
-          return false;
+          return {};
         }
 
-        // Duplicate identity is the standard position plus the driver
-        // namespace bit, ignoring the polarity flag. Only standard UNKNOWN
-        // and NA are exempt as repeated unassigned slots; a driver role is
-        // unique per slot whatever its low ID, as is every actual standard
-        // role (including MONO).
+        // Namespace and polarity retain their ordinary validation. Repeated
+        // unassigned slots are allowed; other duplicates need the bounded
+        // legacy analysis below, never a general duplicate-erasure rule.
         auto const identity = position & (SND_CHMAP_POSITION_MASK | SND_CHMAP_DRIVER_SPEC);
 
-        if (identity != SND_CHMAP_UNKNOWN && identity != SND_CHMAP_NA)
+        if (identity == SND_CHMAP_UNKNOWN || identity == SND_CHMAP_NA)
         {
-          for (std::size_t j = 0; j < i; ++j)
-          {
-            if ((positions[j] & (SND_CHMAP_POSITION_MASK | SND_CHMAP_DRIVER_SPEC)) == identity)
-            {
-              return false;
-            }
-          }
+          continue;
         }
+
+        if (auto const preceding = positions.first(i);
+            std::ranges::find(preceding,
+                              identity,
+                              [](std::uint32_t previous)
+                              { return previous & (SND_CHMAP_POSITION_MASK | SND_CHMAP_DRIVER_SPEC); }) ==
+            preceding.end())
+        {
+          continue;
+        }
+
+        // Fast rejection only: the ordered legacy table would also reject
+        // duplicates of every other assigned role.
+        if (position != SND_CHMAP_SL && position != SND_CHMAP_SR)
+        {
+          return {};
+        }
+
+        hasRepeatedSurround = true;
       }
 
-      return true;
+      if (!hasRepeatedSurround)
+      {
+        classification.kind = ChannelMapKind::Ordinary;
+        return classification;
+      }
+
+      // The old UAC1 conversion emitted an ordered subset of this table,
+      // or its prefix when configuration bits were absent, then UNKNOWN
+      // padding. Its kernel storage held at most fifteen slots. A matching
+      // signature proves neither device provenance nor actual rear roles.
+      constexpr std::size_t kLegacyChannelCapacity = 15;
+      constexpr std::size_t kAmbiguousLeftIndex = 4;
+      constexpr std::size_t kAmbiguousRightIndex = 5;
+      constexpr auto kLegacyPositions = std::to_array<std::uint32_t>({SND_CHMAP_FL,
+                                                                      SND_CHMAP_FR,
+                                                                      SND_CHMAP_FC,
+                                                                      SND_CHMAP_LFE,
+                                                                      SND_CHMAP_SL,
+                                                                      SND_CHMAP_SR,
+                                                                      SND_CHMAP_FLC,
+                                                                      SND_CHMAP_FRC,
+                                                                      SND_CHMAP_RC,
+                                                                      SND_CHMAP_SL,
+                                                                      SND_CHMAP_SR,
+                                                                      SND_CHMAP_TC});
+
+      if (positions.size() > kLegacyChannelCapacity)
+      {
+        return {};
+      }
+
+      std::size_t tableIndex = 0;
+      bool hasPadding = false;
+
+      for (std::size_t slot = 0; slot < positions.size(); ++slot)
+      {
+        auto const position = positions[slot];
+
+        if (position == SND_CHMAP_UNKNOWN)
+        {
+          hasPadding = true;
+          continue;
+        }
+
+        if (hasPadding)
+        {
+          return {};
+        }
+
+        while (tableIndex < kLegacyPositions.size() && kLegacyPositions[tableIndex] != position)
+        {
+          ++tableIndex;
+        }
+
+        if (tableIndex == kLegacyPositions.size())
+        {
+          return {};
+        }
+
+        // Earliest ordered matching withholds any occurrence that could be
+        // the old table's mistaken rear pair. Later side occurrences stay
+        // known, so uncertainty cannot hide their source-slot conflicts.
+        if (tableIndex == kAmbiguousLeftIndex || tableIndex == kAmbiguousRightIndex)
+        {
+          classification.admissionPositions[slot] = SND_CHMAP_UNKNOWN;
+        }
+
+        ++tableIndex;
+      }
+
+      classification.kind = ChannelMapKind::LegacyAmbiguous;
+      return classification;
     }
 
     std::expected<void, BackendOpenFailure> classifySupportedMaps(AlsaChannelMap& map)
@@ -161,7 +262,8 @@ namespace ao::audio::backend::detail
           continue;
         }
 
-        if (!hasValidShape(supported))
+        if (auto const classification = classifyChannelPositions(supported);
+            classification.kind == ChannelMapKind::Malformed)
         {
           return malformedMap("ALSA capability query returned a malformed channel map");
         }
@@ -272,10 +374,20 @@ namespace ao::audio::backend::detail
       return std::unexpected{supportedRes.error()};
     }
 
+    auto currentClassification = ChannelMapClassification{};
+
     if (map.observations.optCurrentPositions)
     {
-      if (auto const& observed = *map.observations.optCurrentPositions;
-          observed.size() != map.channels || !hasValidShape(observed))
+      auto const& observed = *map.observations.optCurrentPositions;
+
+      if (observed.size() != map.channels)
+      {
+        return malformedMap("ALSA current readback returned a malformed channel map");
+      }
+
+      currentClassification = classifyChannelPositions(observed);
+
+      if (currentClassification.kind == ChannelMapKind::Malformed)
       {
         return malformedMap("ALSA current readback returned a malformed channel map");
       }
@@ -298,7 +410,9 @@ namespace ao::audio::backend::detail
       return map;
     }
 
-    auto const& positions = *map.observations.optCurrentPositions;
+    // Preserve the raw observations; only this admission view withholds
+    // recognized ambiguous roles before ordinary partial-position checks.
+    auto const positions = std::span<std::uint32_t const>{currentClassification.admissionPositions}.first(map.channels);
 
     std::uint32_t knownMask = 0;
     bool complete = true;
