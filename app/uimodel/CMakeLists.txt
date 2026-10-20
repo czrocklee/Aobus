@@ -23,6 +23,7 @@ add_library(ao_app_uimodel STATIC
     input/KeymapModel.cpp
     input/KeyRepeatGuard.cpp
     input/KeymapStore.cpp
+    preference/NewerConfigNotice.cpp
     preference/PreferencesEditorModel.cpp
     field/TrackFieldFormatter.cpp
     library/detail/TrackCustomMetadata.cpp

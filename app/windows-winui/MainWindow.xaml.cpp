@@ -25,7 +25,10 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackEvents.h>
@@ -216,6 +219,16 @@ namespace winrt::Aobus::implementation
     {
       applyTheme(*themeRes);
     }
+    else if (themeRes.error().code != ao::Error::Code::NotFound)
+    {
+      // The window keeps following Windows appearance, which is what the
+      // user sees; the feed and the status line say why their theme is not in force.
+      auto message = ao::i18n::requiredFormat(
+        session.textCatalog(), ao::i18n::MessageId::WinUiThemeRejected, {{"detail", themeRes.error().message}});
+      runtime.notifications().post(
+        ao::rt::NotificationSeverity::Warning, message, ao::rt::NotificationLifetime::history());
+      session.reportStartupWarning(std::move(message));
+    }
 
     // Built before the first resolved policy, which is what asks it for a shell.
     createShellBuilder();
@@ -223,7 +236,11 @@ namespace winrt::Aobus::implementation
     reconcileLibrary();
     restoreWindowPlacement();
     applyShellState(RootGrid().ActualWidth());
-    updateStatus(ao::winui::resourceString("winui_library_ready"));
+
+    // The shell built above is the first to show a status, so the startup
+    // warnings reach the status line only here.
+    auto startupStatus = session.startupStatus();
+    updateStatus(startupStatus.empty() ? ao::winui::resourceString("winui_library_ready") : std::move(startupStatus));
     _sessionPhase = SessionPhase::Prepared;
   }
 

@@ -24,7 +24,7 @@ The [system architecture](../overview.md) defines the runtime-to-UIModel-to-fron
 
 - One process owns at most one `LibrarySession`, one unique runtime, and one main window; opening a different root replaces the process rather than adding another graph.
 - A different-root restart prepares the still-live graph by checkpointing state and terminally retiring playback persistence. Retirement failure leaves that graph usable and launches no successor.
-- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot, permanently seals playback writes, and posts the shared [unsaved-library-switch report](../desktop-library-lifecycle.md#launch-and-activate-the-successor), which also takes the status line it shares with the [initial scan](windows-library-workflows.md#scan); the successor continues with its in-memory root, so the previous library opens on the next launch.
+- The successor does not restore playback or admit playback writes until its selected root is durable. A failed root commit preserves the prior live settings snapshot, permanently seals playback writes, and posts the shared [unsaved-library-switch report](../desktop-library-lifecycle.md#launch-and-activate-the-successor), which also takes the status line it shares with the [initial scan](windows-library-workflows.md#scan); the successor continues with its in-memory root, so the previous library opens on the next launch. When a newer version saved the desktop settings, no previous library opens on the next launch either; the settings' startup warning already says that this version keeps no startup library, so the session posts no unsaved-library-switch report.
 - Switching shells changes presentation only; it neither scans the library nor interrupts playback or an admitted library task.
 - The current output route remains Runtime state. Both shells select it through
   the same UIModel output-device model used by GTK and TUI.
@@ -299,13 +299,15 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
   and [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
   protect preparation failure, release-before-launch ordering, and fail-closed
   root candidate mutation.
+- [`StartupWarningsTest.cpp`](../../../test/unit/winui/app/StartupWarningsTest.cpp) protects the startup warnings' status line: their order, and that only an initial scan that did not fail gives the line back to them, once.
 - [`CallbackAdmissionGateTest.cpp`](../../../test/unit/winui/app/CallbackAdmissionGateTest.cpp) protects idempotent retirement and proves that renewing a workflow cannot make an old generation token admissible again.
 - [`WinUiErrorBoundaryTest.cpp`](../../../test/unit/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
 - WinUI-owned tests under [`test/unit/winui/`](../../../test/unit/winui) that
   need a native host are compiled only by the native Windows profile. Windows
   shell policy carrying no WinRT dependency - settings compatibility,
-  output-preference resolution, root-commit sequencing, the component schema,
-  and the keyboard-accelerator plan - compiles into `ao_core_test` on every
+  output-preference resolution, root-commit sequencing, the startup warnings'
+  status line, the component schema, and the keyboard-accelerator plan -
+  compiles into `ao_core_test` on every
   host, as do the shared desktop rule tests.
 - Native Debug and Release `winui` builds protect `aobus-winui-lib`, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.
 

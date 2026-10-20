@@ -204,6 +204,14 @@ namespace ao::test
     auto const field = yaml::fieldContext(std::string(500, 'x'), std::string(500, 'y'));
     CHECK(field.size() == yaml::kMaximumErrorContextBytes);
     CHECK(field.ends_with("..."));
+
+    // The two bytes of U+00E9 straddle the cut that ASCII text would take.
+    auto const kept = yaml::kMaximumErrorContextBytes - std::string_view{"..."}.size() - 1;
+    auto const context = std::string(kept - 1, 'x');
+    CHECK(yaml::fieldContext(context, "\xC3\xA9" + std::string(500, 'y')) == context + "....");
+
+    auto const exact = std::string(yaml::kMaximumErrorContextBytes - 2, 'x');
+    CHECK(yaml::fieldContext(exact, "y") == exact + ".y");
   }
 
   TEST_CASE("YamlSerialization - scalar writers own and quote text", "[core][unit][yaml]")

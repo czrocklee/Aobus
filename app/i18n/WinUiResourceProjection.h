@@ -37,7 +37,6 @@ namespace ao::i18n::detail
     {.messageId = "winui_sort_failed", .argumentName = "detail"},
     {.messageId = "track_fallback", .argumentName = "id"},
     {.messageId = "winui_theme_file_not_found", .argumentName = "path"},
-    {.messageId = "winui_theme_load_failed", .argumentName = "detail"},
     {.messageId = "winui_startup_failure", .argumentName = "detail"},
   });
 

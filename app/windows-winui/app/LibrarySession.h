@@ -89,6 +89,12 @@ namespace ao::winui
     void setPreferredOutputSelection(audio::OutputDeviceSelection const& selection) noexcept;
     /// Apply and save an explicit startup root only after native activation.
     Result<> commitSelectedRoot();
+    /// Put a warning raised while the library opens on the status line, the
+    /// only report surface of the Classic preset. The startup scan's settled
+    /// status keeps it, unless that scan failed.
+    void reportStartupWarning(std::string message);
+    /// The startup warnings as one status line; empty when there are none.
+    std::string startupStatus() const;
     /// Remove playback intent and seal persistence before a destructive restart.
     Result<> retirePlaybackSessionForLibrarySwitch();
 

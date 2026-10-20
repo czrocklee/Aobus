@@ -45,6 +45,9 @@ These hold deliberate configuration whose loss costs the user real work:
 
 The versioned members are [`ConfigStore` protected groups](config-store.md#protected-groups).
 A build never reads or overwrites such a group of a newer version: it keeps its defaults for that group for the session, and every save of the group fails without touching the file.
+When GTK, TUI, or Windows loads such a member, it posts a warning to the notification feed that names the member and says that this version ignores it and does not save changes to it.
+The member keys the warning, so the feed holds at most one per member: a later load replaces it, and posts it again after the user dismissed it.
+A save of the member that fails for this reason adds no further report, unless the command that saved reports its own failure, as a shortcut edit does.
 `ConfigStore` refuses to remove a group that a load or save has found newer, and `ShellLayoutStore` refuses to remove a preset file that a newer version saved or whose bytes it cannot read.
 Every change to one of these schemas increments its version, an additive one included, and every older version stays readable.
 A build recognizes a newer group only as a mapping whose `version` is an unsigned 32-bit integer, so every version of a group keeps that shape.
@@ -56,6 +59,7 @@ The AppKit `desktop.plist` is a Foundation dictionary that every save rewrites w
 Its rule is that every existing top-level key keeps its value schema, including whole subtrees, and new content uses new top-level keys.
 
 The Windows theme document is authored by the user, and Aobus only reads it.
+A document that fails to load at startup leaves Windows appearance in effect and posts a warning with the reason.
 It gains a version before a release changes its tokens in a way that an earlier theme would fail.
 
 ### Losable state and caches

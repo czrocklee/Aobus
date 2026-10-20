@@ -39,8 +39,10 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   app/LibrarySession.h
   app/SelectedRootCommit.cpp
   app/SettingsPersistence.cpp
+  app/StartupWarnings.cpp
   include/ao/winui/app/DesktopOutputSelection.h
   include/ao/winui/app/SettingsPersistence.h
+  include/ao/winui/app/StartupWarnings.h
   image/CoverArtPresenter.cpp
   image/CoverArtPresenter.h
   image/CoverArtPlaceholderRenderer.cpp

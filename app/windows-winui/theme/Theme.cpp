@@ -4,6 +4,7 @@
 #include <ao/winui/Theme.h>
 
 #include <ao/Error.h>
+#include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>
@@ -94,7 +95,8 @@ namespace ao::winui
         return ClassicChrome::Retro;
       }
 
-      return makeError(Error::Code::FormatRejected, std::format("Unknown classic.chrome value '{}'", id));
+      return makeError(
+        Error::Code::FormatRejected, std::format("Unknown classic.chrome value '{}'", yaml::boundedErrorContext(id)));
     }
 
     Result<> writeShared(ryml::NodeRef node, SharedThemeTokens const& value)

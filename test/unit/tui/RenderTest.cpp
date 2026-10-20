@@ -40,6 +40,7 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/box.hpp>
@@ -53,6 +54,7 @@
 #include <cstdlib>
 #include <format>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -1463,6 +1465,36 @@ namespace ao::tui::test
     CHECK(rowHitRegions.front().id == rt::NotificationId{9});
     CHECK(rowHitRegions.front().dismissible);
     CHECK(rowHitRegions.front().box.y_min > 0);
+  }
+
+  TEST_CASE("Render - notification center wraps a long message beside its row chrome", "[tui][unit][render]")
+  {
+    auto const& textCatalog = ao::test::englishMessageCatalog();
+    auto const message = std::string{i18n::requiredText(textCatalog, i18n::MessageId::TuiConfigNewerSettings)};
+    auto const state = uimodel::ActivityStatusViewState{
+      .detail = uimodel::ActivityDetailState{
+        .items = {uimodel::ActivityDetailItem{.id = rt::NotificationId{3},
+                                              .severity = rt::NotificationSeverity::Warning,
+                                              .message = message,
+                                              .dismissible = true}},
+      }};
+    auto rowHitRegions = std::vector<NotificationDetailRowHitRegion>{};
+    auto const columns = GENERATE(std::int32_t{80}, std::int32_t{40});
+
+    auto const rendered = renderElement(
+      notificationCenterPanel(state, &rowHitRegions, notificationCenterPanelColumns(textCatalog, state, columns)),
+      columns,
+      24);
+
+    INFO(rendered.text);
+
+    for (auto const word : std::views::split(std::string_view{message}, ' '))
+    {
+      CHECK(rendered.text.contains(std::string_view{word.begin(), word.end()}));
+    }
+
+    REQUIRE(rowHitRegions.size() == 1);
+    CHECK(rowHitRegions.front().box.y_max > rowHitRegions.front().box.y_min);
   }
 
   TEST_CASE("Render - notification center width includes complete row chrome", "[tui][unit][render]")

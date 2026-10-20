@@ -11,9 +11,11 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace ao::winui
 {
+  inline constexpr auto kDesktopSettingsConfigGroup = std::string_view{"desktop"};
   inline constexpr std::uint32_t kDesktopSettingsVersion = 1;
   inline constexpr std::int32_t kDefaultWindowX = 80;
   inline constexpr std::int32_t kDefaultWindowY = 80;

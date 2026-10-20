@@ -136,6 +136,11 @@ namespace ao::gtk
     return uimodel::saveKeymap(*_storePtr, keymap);
   }
 
+  bool AppConfigStore::hasNewerGroup(std::string_view const group) const
+  {
+    return _storePtr->hasNewerGroup(group);
+  }
+
   uimodel::OutputDeviceIntent preferredOutputDeviceRecorder(std::shared_ptr<AppConfigStore> configStorePtr)
   {
     return uimodel::OutputDeviceIntent::recordedBy(

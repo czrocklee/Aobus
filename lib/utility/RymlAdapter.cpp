@@ -235,9 +235,20 @@ namespace ao::yaml
     }
 
     constexpr auto kSuffix = std::string_view{"..."};
+    constexpr std::uint8_t kUtf8ContinuationMask = 0xC0;
+    constexpr std::uint8_t kUtf8ContinuationTag = 0x80;
+    auto length = kMaximumErrorContextBytes - kSuffix.size();
+
+    // Back off to the start of a UTF-8 sequence, so the bounded text never ends
+    // inside a character.
+    while (length > 0 && (static_cast<unsigned char>(context[length]) & kUtf8ContinuationMask) == kUtf8ContinuationTag)
+    {
+      --length;
+    }
+
     auto result = std::string{};
     result.reserve(kMaximumErrorContextBytes);
-    result.append(context.substr(0, kMaximumErrorContextBytes - kSuffix.size()));
+    result.append(context.substr(0, length));
     result.append(kSuffix);
     return result;
   }

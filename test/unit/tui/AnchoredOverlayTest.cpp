@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace ao::tui::test
@@ -194,6 +195,24 @@ namespace ao::tui::test
     REQUIRE(regions.box.x_max == 18);
     CHECK(screen.PixelAt(19, regions.box.y_min).character == " ");
     CHECK(screen.PixelAt(18, regions.box.y_min).character == "╮");
+  }
+
+  TEST_CASE("AnchoredOverlay - a panel that leaves room for the halo keeps its full width", "[tui][unit][overlay]")
+  {
+    using namespace ftxui;
+    constexpr std::int32_t kTerminalColumns = 20;
+    constexpr auto kPanelColumns = kTerminalColumns - kAnchoredOverlayHaloColumns;
+    auto regions = PanelMouseRegions{};
+    std::ignore =
+      renderElement(anchoredOverlay(mousePanel(text("Body") | border | size(WIDTH, EQUAL, kPanelColumns), regions),
+                                    anchor(0, 0, 0),
+                                    AnchoredOverlayPlacement::Below,
+                                    {.columns = kPanelColumns, .rows = 3},
+                                    {.columns = kTerminalColumns, .rows = 10}),
+                    kTerminalColumns,
+                    10);
+
+    CHECK(regions.box.x_max - regions.box.x_min + 1 == kPanelColumns);
   }
 
   TEST_CASE("AnchoredOverlay - above placement opens over its trigger", "[tui][unit][overlay]")

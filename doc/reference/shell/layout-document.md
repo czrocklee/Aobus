@@ -11,6 +11,8 @@ Template expansion, build, editor, and fallback behavior belong to the [shell la
 The `version` field is required, emitted as `1`, and only version `1` is accepted.
 An unsupported version returns `NotSupported` before the root or templates are interpreted.
 A preset of a newer version is kept: `ShellLayoutStore` refuses to save over it or remove it, also as `NotSupported`, so Reset in the layout editor reports the failure instead of deleting the file.
+When GTK loads such a preset, at startup or in the layout editor, it uses the built-in layout and posts the newer-layout warning.
+Every preset shares that one notice, which names no preset; each such load replaces it, or posts it again after the user dismissed it.
 Reset also keeps a preset whose bytes the store cannot read, such as one it cannot open or one above its size ceiling, and reports that failure.
 A preset it reads but rejects for any other reason is removed, including a newer one that this build cannot parse.
 

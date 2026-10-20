@@ -8,6 +8,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
+
 namespace ao::winui::test
 {
   namespace
@@ -113,6 +115,23 @@ classic: {chrome: arbitrary, toolbarBackground: '#F3F4F6', treeBackground: '#FFF
     }
 
     CHECK(model.theme() == previous);
+  }
+
+  TEST_CASE("Theme - a rejected chrome selector quotes a bounded value", "[winui][unit][theme]")
+  {
+    // The startup warning quotes this reason, and a notification above its
+    // byte ceiling is dropped whole.
+    auto const source = std::string{R"(
+shared: {fontFamily: Segoe UI, accent: '#06B6D4', windowBackground: '#111827', surface: '#1F2937', textPrimary: '#F9FAFB', textSecondary: '#9CA3AF', divider: '#374151', selection: '#334155'}
+modern: {navigationBackground: '#0F172A', inspectorBackground: '#172033', nowPlayingBackground: '#0B1220'}
+classic: {chrome: )"} + std::string(5000, 'x') +
+                        ", toolbarBackground: '#F3F4F6', treeBackground: '#FFFFFF', statusBackground: '#E5E7EB'}\n";
+    auto tree = themeTree(source.c_str());
+    auto res = ThemeYamlSchema{}.deserialize(tree.rootref(), Theme{});
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().message.contains("classic.chrome"));
+    CHECK(res.error().message.size() < 512);
   }
 
   TEST_CASE("Theme - retro chrome is a closed built-in choice", "[winui][unit][theme]")

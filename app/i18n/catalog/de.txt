@@ -70,6 +70,8 @@ de:table {
 
     tui_settings_save_failed { "Einstellungen konnten nicht gespeichert werden. {detail}" }
     tui_settings_load_failed { "Gespeicherte Einstellungen konnten nicht geladen werden; Standardwerte werden verwendet. {detail}" }
+    tui_config_newer_settings { "Die Einstellungen wurden von einer neueren Version von Aobus gespeichert. Diese Version verwendet die Standardeinstellungen und speichert keine Änderungen daran." }
+    tui_config_newer_output { "Das bevorzugte Ausgabegerät wurde von einer neueren Version von Aobus gespeichert. Diese Version ignoriert es und speichert keine neue Auswahl." }
     tui_settings_title { "Einstellungen" }
     tui_settings_general { "Allgemein" }
     tui_settings_appearance { "Darstellung" }
@@ -256,6 +258,7 @@ de:table {
     library_scan_unreadable { "Der Bibliotheksscan fand {count, plural, one {# unlesbare Datei} other {# unlesbare Dateien}} und keine verwendbaren Änderungen" }
     library_scan_failed { "{hasError, select, yes {Scan fehlgeschlagen: {error}} other {Scan fehlgeschlagen}}" }
     library_switch_not_saved { "Der Bibliothekswechsel konnte nicht gespeichert werden: {detail}. Beim nächsten Start wird die vorherige Bibliothek geöffnet." }
+    config_newer_shortcuts { "Die Tastaturkürzel wurden von einer neueren Version von Aobus gespeichert. Diese Version verwendet die Standardkürzel und speichert keine Änderungen daran." }
     library_all_tracks { "Alle Titel" }
     library_unnamed_list { "<Unbenannte Liste>" }
     library_audio_identity_indexing_failed { "Indizierung der Audioidentität fehlgeschlagen" }
@@ -477,6 +480,7 @@ de:table {
     gtk_preferences_layout_preset_classic { "Klassisch" }
     gtk_preferences_layout_preset_modern { "Modern" }
     gtk_preferences_actions { "Aktionen" }
+    gtk_config_newer_preferences { "Die Einstellungen für Ausgabegerät, Design und Layoutvorgabe wurden von einer neueren Version von Aobus gespeichert. Diese Version ignoriert sie und speichert keine Änderungen daran." }
     gtk_shortcut_title { "Tastaturkürzel anpassen" }
     gtk_shortcut_reset_all { "Alle zurücksetzen" }
     gtk_shortcut_reset_all_tooltip { "Alle Tastaturkürzel auf ihre Standardwerte zurücksetzen" }
@@ -783,12 +787,14 @@ de:table {
     winui_more_menu { "Mehr" }
     winui_error { "Fehler: {detail}" }
     winui_save_settings_failed { "Einstellungen konnten nicht gespeichert werden: {detail}" }
+    winui_config_newer_settings { "Die Einstellungen wurden von einer neueren Version von Aobus gespeichert. Diese Version verwendet die Standardeinstellungen, auch für die Startbibliothek, und speichert keine Änderungen daran." }
     winui_open_library_picker { "Bibliothek öffnen" }
     winui_folder_picker_failed { "Ordnerauswahl fehlgeschlagen: {detail}" }
     winui_library_switch_failed { "Bibliothek konnte nicht gewechselt werden: {detail}" }
     winui_theme_override_removed { "Designüberschreibung entfernt; Windows-Darstellung wird verwendet" }
     winui_theme_reload_failed { "Design konnte nicht neu geladen werden: {detail}" }
     winui_theme_reloaded { "Design neu geladen: {path}" }
+    winui_theme_rejected { "Die Designüberschreibung konnte nicht geladen werden; Windows-Darstellung wird verwendet. {detail}" }
     winui_smtc_unavailable { "SMTC nicht verfügbar: {detail}" }
     winui_shell_layout_failed { "Das Shell-Layout konnte nicht erstellt werden: {detail}" }
     winui_activity_details { "Aktivitätsdetails anzeigen" }
@@ -807,7 +813,6 @@ de:table {
     winui_sort_failed { "Sortierung fehlgeschlagen: {detail}" }
     winui_unavailable_track { "Nicht verfügbarer Titel" }
     winui_theme_file_not_found { "Designdatei nicht gefunden: {path}" }
-    winui_theme_load_failed { "Windows-Design konnte nicht geladen werden: {detail}" }
     winui_startup_failure { "Aobus konnte nicht gestartet werden:\n\n{detail}" }
     winui_column_sort_presentation { "Spaltensortierung" }
     track_multiple_values { "<Mehrere Werte>" }
@@ -878,6 +883,7 @@ de:table {
     gtk_layout_editor_title { "Layout-Editor" }
     gtk_layout_apply { "Anwenden" }
     gtk_layout_unable_to_save { "Layout kann nicht gespeichert werden" }
+    gtk_config_newer_layout { "Ein benutzerdefiniertes Layout wurde von einer neueren Version von Aobus gespeichert. Diese Version zeigt stattdessen das integrierte Layout an und speichert keine Änderungen am benutzerdefinierten Layout." }
     gtk_layout_tree_node { "Knoten" }
     gtk_layout_tree_type { "Typ" }
     gtk_layout_classic_preset { "Klassisches Layout" }

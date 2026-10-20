@@ -157,7 +157,7 @@ The `preferences` mapping in `<config>/tui.yaml` is owned by `Preferences` and i
 | `seekSeconds` | `5` | Integer 1–60 seconds |
 | `volumePercent` | `5` | Integer 1–10 percentage points |
 
-If saved TUI preferences cannot be read or validated, startup uses defaults and posts a warning without resetting the store or rewriting that group. A malformed document remains protected by `ConfigStore` write rejection; a later explicit Settings save can replace a schema-invalid preference group in an otherwise valid document, but never a group of a newer version.
+If saved TUI preferences cannot be read or validated, startup uses defaults and posts a warning without resetting the store or rewriting that group; a group of a newer version posts the newer-version warning instead. A malformed document remains protected by `ConfigStore` write rejection; a later explicit Settings save can replace a schema-invalid preference group in an otherwise valid document, but never a group of a newer version.
 
 Settings persists the complete candidate before publishing live behavior. A missing persistent location is a save failure. The one global store preserves `runtime`, `shortcuts`, and unknown sibling groups.
 
@@ -263,6 +263,7 @@ The composition root logs the degraded application-preference session once, wher
 | Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |
 
 A protected group of a newer version is neither read nor written: the store refuses every load and save of it, and every removal once a load or save has found it newer, as the [grouped configuration store](../../system/persistence/config-store.md#protected-groups) specifies. The build keeps its defaults for that group for the session.
+The frontend posts one warning when it loads such a group, as the [versioning page](../../system/persistence/versioning.md#protected-configuration) states.
 
 No file-level envelope declares which groups are present or which application version wrote them.
 Moving a group to another logical document changes composition and lifecycle ownership even when its payload bytes are unchanged; a path override alone does not.
@@ -312,6 +313,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) owns the layout-preset group and file boundary.
 - [`LayoutComponentState.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentState.h), [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp), and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own the standalone component-state envelope and markers.
 - [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp), [`AppRuntime.cpp`](../../../app/runtime/AppRuntime.cpp), and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own store selection and sharing.
+- [`NewerConfigNotice.h`](../../../app/include/ao/uimodel/preference/NewerConfigNotice.h) owns the warning for a protected group of a newer version; each frontend picks the member's message.
 - [`DesktopSettingsYamlSchema`](../../../app/windows-winui/include/ao/winui/DesktopSettingsYamlSchema.h)
   owns the Windows `desktop` payload, while WinUI `LibrarySession` owns its
   checkpoint and restore lifecycle.
@@ -323,6 +325,7 @@ The example intentionally omits the domain-owned `playback-session` payload.
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the `window`, `runtime`, and `session` group round trips, missing-file behavior, and the no-location session.
 - [`WindowStateTest.cpp`](../../../test/unit/linux-gtk/app/WindowStateTest.cpp) protects current-session normal geometry across a maximized checkpoint.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects what a store with no location reads, writes, and leaves out of the working directory, and the protected-group refusals.
+- [`NewerConfigNoticeTest.cpp`](../../../test/unit/uimodel/preference/NewerConfigNoticeTest.cpp) protects the warning for a protected group of a newer version: one retained warning per member; [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects it for a newer layout preset at startup and in the layout editor.
 - [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects the versioned `shortcuts` group, a newer group kept unchanged, merge, and delta-only persistence; [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects the shared-plus-terminal default seed and executable projection.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects the exact `playback-session` field set, schema version, store use, and repeated frozen checkpoints.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protect the `workspace` group and frontend-neutral round trip; [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects TUI attachment to the exact restored active view.

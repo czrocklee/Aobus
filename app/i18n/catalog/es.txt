@@ -70,6 +70,8 @@ es:table {
 
     tui_settings_save_failed { "No se pudo guardar la configuración. {detail}" }
     tui_settings_load_failed { "No se pudieron cargar las preferencias guardadas; se usan los valores predeterminados. {detail}" }
+    tui_config_newer_settings { "Una versión más reciente de Aobus guardó los ajustes. Esta versión usa los ajustes predeterminados y no guarda cambios en ellos." }
+    tui_config_newer_output { "Una versión más reciente de Aobus guardó el dispositivo de salida preferido. Esta versión lo ignora y no guarda una nueva preferencia." }
     tui_settings_title { "Ajustes" }
     tui_settings_general { "General" }
     tui_settings_appearance { "Apariencia" }
@@ -256,6 +258,7 @@ es:table {
     library_scan_unreadable { "El escaneo encontró {count, plural, one {# archivo ilegible} other {# archivos ilegibles}} y ningún cambio utilizable" }
     library_scan_failed { "{hasError, select, yes {Error de escaneo: {error}} other {Error de escaneo}}" }
     library_switch_not_saved { "No se pudo recordar el cambio de biblioteca: {detail}. La biblioteca anterior se abrirá en el próximo inicio." }
+    config_newer_shortcuts { "Una versión más reciente de Aobus guardó los atajos de teclado. Esta versión usa los atajos predeterminados y no guarda cambios en ellos." }
     library_all_tracks { "Todas las pistas" }
     library_unnamed_list { "<Lista sin nombre>" }
     library_audio_identity_indexing_failed { "Error al indexar la identidad de audio" }
@@ -477,6 +480,7 @@ es:table {
     gtk_preferences_layout_preset_classic { "Clásico" }
     gtk_preferences_layout_preset_modern { "Moderno" }
     gtk_preferences_actions { "Acciones" }
+    gtk_config_newer_preferences { "Una versión más reciente de Aobus guardó las preferencias de dispositivo de salida, tema y ajuste de diseño. Esta versión las ignora y no guarda cambios en ellas." }
     gtk_shortcut_title { "Personalizar atajos de teclado" }
     gtk_shortcut_reset_all { "Restablecer todo" }
     gtk_shortcut_reset_all_tooltip { "Restablecer todos los atajos a sus valores predeterminados" }
@@ -783,12 +787,14 @@ es:table {
     winui_more_menu { "Más" }
     winui_error { "Error: {detail}" }
     winui_save_settings_failed { "No se pudieron guardar los ajustes: {detail}" }
+    winui_config_newer_settings { "Una versión más reciente de Aobus guardó los ajustes. Esta versión usa los ajustes predeterminados, incluida la biblioteca de inicio, y no guarda cambios en ellos." }
     winui_open_library_picker { "Abrir biblioteca" }
     winui_folder_picker_failed { "Error en el selector de carpetas: {detail}" }
     winui_library_switch_failed { "No se pudo cambiar de biblioteca: {detail}" }
     winui_theme_override_removed { "Anulación de tema eliminada; siguiendo la apariencia de Windows" }
     winui_theme_reload_failed { "Error al recargar el tema: {detail}" }
     winui_theme_reloaded { "Tema recargado: {path}" }
+    winui_theme_rejected { "No se pudo cargar la anulación de tema; siguiendo la apariencia de Windows. {detail}" }
     winui_smtc_unavailable { "SMTC no disponible: {detail}" }
     winui_shell_layout_failed { "No se pudo generar el diseño de la interfaz: {detail}" }
     winui_activity_details { "Ver detalles de la actividad" }
@@ -807,7 +813,6 @@ es:table {
     winui_sort_failed { "Error al ordenar: {detail}" }
     winui_unavailable_track { "Pista no disponible" }
     winui_theme_file_not_found { "Archivo de tema no encontrado: {path}" }
-    winui_theme_load_failed { "Error al cargar el tema de Windows: {detail}" }
     winui_startup_failure { "Aobus no pudo iniciarse:\n\n{detail}" }
     winui_column_sort_presentation { "Orden por columna" }
     track_multiple_values { "<Varios valores>" }
@@ -878,6 +883,7 @@ es:table {
     gtk_layout_editor_title { "Editor de diseño" }
     gtk_layout_apply { "Aplicar" }
     gtk_layout_unable_to_save { "No se puede guardar el diseño" }
+    gtk_config_newer_layout { "Una versión más reciente de Aobus guardó un diseño personalizado. Esta versión muestra en su lugar el diseño integrado y no guarda cambios en el diseño personalizado." }
     gtk_layout_tree_node { "Nodo" }
     gtk_layout_tree_type { "Tipo" }
     gtk_layout_classic_preset { "Diseño clásico" }

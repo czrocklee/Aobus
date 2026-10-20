@@ -51,6 +51,7 @@
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandText.h>
+#include <ao/uimodel/preference/NewerConfigNotice.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <glibmm/main.h>
@@ -84,6 +85,7 @@ namespace ao::gtk
       uimodel::LayoutDocument document;
       uimodel::PreparedLayout preparedLayout;
       uimodel::LayoutComponentStateDocument componentState;
+      bool newerCustomLayout = false;
     };
 
     Result<uimodel::PreparedLayout> prepareValidatedLayout(uimodel::LayoutDocument const& document,
@@ -141,6 +143,7 @@ namespace ao::gtk
       auto const presetId = layout::presetIdFromString(selection.presetId);
       auto loadedRes = store.load(selection.presetId);
       bool usingCustomLayout = false;
+      bool newerCustomLayout = false;
       auto doc = uimodel::LayoutDocument{};
 
       if (!loadedRes)
@@ -148,6 +151,7 @@ namespace ao::gtk
         APP_LOG_WARN("ShellLayoutController: Rejected custom layout for preset '{}': {}",
                      selection.presetId,
                      loadedRes.error().message);
+        newerCustomLayout = store.isNewer(selection.presetId);
         doc = layout::makeBuiltInLayout(presetId);
       }
       else if (*loadedRes)
@@ -181,7 +185,8 @@ namespace ao::gtk
       return {.presetId = selection.presetId,
               .document = std::move(doc),
               .preparedLayout = std::move(*preparedRes),
-              .componentState = std::move(stateDoc)};
+              .componentState = std::move(stateDoc),
+              .newerCustomLayout = newerCustomLayout};
     }
 
     uimodel::PlaybackActions& requirePlaybackActions(ShellLayoutCollaborators const& collaborators)
@@ -693,8 +698,14 @@ namespace ao::gtk
       [this](std::string presetId,
              uimodel::LayoutDocument document,
              uimodel::PreparedLayout preparedLayout,
-             uimodel::LayoutComponentStateDocument componentState)
+             uimodel::LayoutComponentStateDocument componentState,
+             bool const newerCustomLayout)
       {
+        if (newerCustomLayout)
+        {
+          reportNewerLayout();
+        }
+
         applyLoadedLayout(
           std::move(presetId), std::move(document), std::move(preparedLayout), std::move(componentState));
       });
@@ -726,7 +737,7 @@ namespace ao::gtk
     std::string lastLayoutPreset,
     uimodel::LayoutSchema schema,
     std::function<
-      void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument)>
+      void(std::string, uimodel::LayoutDocument, uimodel::PreparedLayout, uimodel::LayoutComponentStateDocument, bool)>
       present,
     std::stop_token const stopToken)
   {
@@ -752,7 +763,14 @@ namespace ao::gtk
     present(std::move(optRes->presetId),
             std::move(optRes->document),
             std::move(optRes->preparedLayout),
-            std::move(optRes->componentState));
+            std::move(optRes->componentState),
+            optRes->newerCustomLayout);
+  }
+
+  void ShellLayoutController::reportNewerLayout()
+  {
+    uimodel::reportNewerConfig(
+      _runtime.notifications(), _textCatalog, kShellLayoutConfigGroup, i18n::MessageId::GtkConfigNewerLayout);
   }
 
   void ShellLayoutController::applyLoadedLayout(std::string presetId,
@@ -809,7 +827,9 @@ namespace ao::gtk
     auto const initialPresetId = uimodel::LayoutSession::activeOrDefaultPresetId(_session.presetId());
     auto const initialThemeId = std::string{uimodel::themePresetId(_themeCoordinator.activeTheme())};
 
-    auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> uimodel::LayoutDocument
+    auto loader = [storePtr = _layoutStorePtr,
+                   reportNewerLayout = _callbackScope.guard([this] { reportNewerLayout(); })](
+                    std::string_view id) mutable -> uimodel::LayoutDocument
     {
       if (storePtr)
       {
@@ -824,6 +844,11 @@ namespace ao::gtk
         {
           APP_LOG_WARN(
             "ShellLayoutController: Editor rejected custom layout for preset '{}': {}", id, loadedRes.error().message);
+
+          if (storePtr->isNewer(id))
+          {
+            reportNewerLayout();
+          }
         }
       }
 

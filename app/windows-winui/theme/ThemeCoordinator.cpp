@@ -44,10 +44,10 @@ namespace ao::winui
     auto errorState = yaml::ErrorCallbackState{utility::pathToUtf8(_themePath)};
     auto tree = ryml::Tree{yaml::callbacks()};
 
+    // The parse error already names the file; each caller says what failed.
     if (auto const parsedRes = yaml::parseInPlace(tree, *bufferRes, errorState); !parsedRes)
     {
-      return makeError(
-        Error::Code::FormatRejected, formatResource("winui_theme_load_failed", parsedRes.error().message));
+      return std::unexpected{parsedRes.error()};
     }
 
     if (auto const reloadedRes = _session.reload(tree.rootref()); !reloadedRes)

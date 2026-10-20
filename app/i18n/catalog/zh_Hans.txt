@@ -70,6 +70,8 @@ zh_Hans:table {
 
     tui_settings_save_failed { "无法保存设置。{detail}" }
     tui_settings_load_failed { "无法读取已保存的偏好设置，已使用默认值。{detail}" }
+    tui_config_newer_settings { "设置由较新版本的 Aobus 保存。此版本使用默认设置，且不会保存对其所做的更改。" }
+    tui_config_newer_output { "首选输出设备由较新版本的 Aobus 保存。此版本会忽略它，且不会保存新的偏好。" }
     tui_settings_title { "设置" }
     tui_settings_general { "常规" }
     tui_settings_appearance { "外观" }
@@ -257,6 +259,7 @@ zh_Hans:table {
     library_scan_unreadable { "音乐库扫描发现 {count, plural, one {# 个无法读取的文件} other {# 个无法读取的文件}}，无可用更改" }
     library_scan_failed { "{hasError, select, yes {扫描失败：{error}} other {扫描失败}}" }
     library_switch_not_saved { "无法记住切换后的音乐库：{detail}。下次启动时将打开原来的音乐库。" }
+    config_newer_shortcuts { "键盘快捷键由较新版本的 Aobus 保存。此版本使用默认快捷键，且不会保存对其所做的更改。" }
     library_all_tracks { "所有曲目" }
     library_unnamed_list { "<未命名列表>" }
     library_audio_identity_indexing_failed { "音频标识索引建立失败" }
@@ -478,6 +481,7 @@ zh_Hans:table {
     gtk_preferences_layout_preset_classic { "经典" }
     gtk_preferences_layout_preset_modern { "现代" }
     gtk_preferences_actions { "操作" }
+    gtk_config_newer_preferences { "输出设备、主题和布局预设的偏好设置由较新版本的 Aobus 保存。此版本会忽略它们，且不会保存对其所做的更改。" }
     gtk_shortcut_title { "自定义快捷键" }
     gtk_shortcut_reset_all { "全部重置" }
     gtk_shortcut_reset_all_tooltip { "将所有快捷键重置为默认值" }
@@ -784,12 +788,14 @@ zh_Hans:table {
     winui_more_menu { "更多" }
     winui_error { "错误：{detail}" }
     winui_save_settings_failed { "无法保存设置：{detail}" }
+    winui_config_newer_settings { "设置由较新版本的 Aobus 保存。此版本使用默认设置（包括启动时打开的音乐库），且不会保存对其所做的更改。" }
     winui_open_library_picker { "打开音乐库" }
     winui_folder_picker_failed { "文件夹选择器失败：{detail}" }
     winui_library_switch_failed { "无法切换音乐库：{detail}" }
     winui_theme_override_removed { "已移除主题覆盖；遵循 Windows 外观设置" }
     winui_theme_reload_failed { "主题重新加载失败：{detail}" }
     winui_theme_reloaded { "已重新加载主题：{path}" }
+    winui_theme_rejected { "无法加载主题覆盖；遵循 Windows 外观设置。{detail}" }
     winui_smtc_unavailable { "SMTC 不可用：{detail}" }
     winui_shell_layout_failed { "无法构建界面布局：{detail}" }
     winui_activity_details { "查看活动详情" }
@@ -808,7 +814,6 @@ zh_Hans:table {
     winui_sort_failed { "排序失败：{detail}" }
     winui_unavailable_track { "不可用曲目" }
     winui_theme_file_not_found { "未找到主题文件：{path}" }
-    winui_theme_load_failed { "加载 Windows 主题失败：{detail}" }
     winui_startup_failure { "Aobus 无法启动：\n\n{detail}" }
     winui_column_sort_presentation { "列排序" }
     track_multiple_values { "<多个值>" }
@@ -879,6 +884,7 @@ zh_Hans:table {
     gtk_layout_editor_title { "布局编辑器" }
     gtk_layout_apply { "应用" }
     gtk_layout_unable_to_save { "无法保存布局" }
+    gtk_config_newer_layout { "自定义布局由较新版本的 Aobus 保存。此版本将改为显示内置布局，且不会保存对自定义布局所做的更改。" }
     gtk_layout_tree_node { "节点" }
     gtk_layout_tree_type { "类型" }
     gtk_layout_classic_preset { "经典布局" }

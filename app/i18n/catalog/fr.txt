@@ -70,6 +70,8 @@ fr:table {
 
     tui_settings_save_failed { "Impossible d’enregistrer les paramètres. {detail}" }
     tui_settings_load_failed { "Impossible de charger les préférences enregistrées ; les valeurs par défaut sont utilisées. {detail}" }
+    tui_config_newer_settings { "Les paramètres ont été enregistrés par une version plus récente d''Aobus. Cette version utilise les paramètres par défaut et n''y enregistre aucune modification." }
+    tui_config_newer_output { "Le périphérique de sortie préféré a été enregistré par une version plus récente d''Aobus. Cette version l''ignore et n''enregistre pas de nouvelle préférence." }
     tui_settings_title { "Paramètres" }
     tui_settings_general { "Général" }
     tui_settings_appearance { "Apparence" }
@@ -256,6 +258,7 @@ fr:table {
     library_scan_unreadable { "L''analyse a trouvé {count, plural, one {# fichier illisible} other {# fichiers illisibles}} et aucun changement utilisable" }
     library_scan_failed { "{hasError, select, yes {Échec de l''analyse : {error}} other {Échec de l''analyse}}" }
     library_switch_not_saved { "Impossible de mémoriser le changement de bibliothèque : {detail}. La bibliothèque précédente s''ouvrira au prochain lancement." }
+    config_newer_shortcuts { "Les raccourcis clavier ont été enregistrés par une version plus récente d''Aobus. Cette version utilise les raccourcis par défaut et n''y enregistre aucune modification." }
     library_all_tracks { "Tous les morceaux" }
     library_unnamed_list { "<Liste sans nom>" }
     library_audio_identity_indexing_failed { "Échec de l''indexation de l''identité audio" }
@@ -477,6 +480,7 @@ fr:table {
     gtk_preferences_layout_preset_classic { "Classique" }
     gtk_preferences_layout_preset_modern { "Moderne" }
     gtk_preferences_actions { "Actions" }
+    gtk_config_newer_preferences { "Les préférences de périphérique de sortie, de thème et de préréglage de disposition ont été enregistrées par une version plus récente d''Aobus. Cette version les ignore et n''y enregistre aucune modification." }
     gtk_shortcut_title { "Personnaliser les raccourcis clavier" }
     gtk_shortcut_reset_all { "Tout réinitialiser" }
     gtk_shortcut_reset_all_tooltip { "Réinitialiser tous les raccourcis aux valeurs par défaut" }
@@ -783,12 +787,14 @@ fr:table {
     winui_more_menu { "Plus" }
     winui_error { "Erreur : {detail}" }
     winui_save_settings_failed { "Impossible d''enregistrer les paramètres : {detail}" }
+    winui_config_newer_settings { "Les paramètres ont été enregistrés par une version plus récente d''Aobus. Cette version utilise les paramètres par défaut, y compris la bibliothèque de démarrage, et n''y enregistre aucune modification." }
     winui_open_library_picker { "Ouvrir la bibliothèque" }
     winui_folder_picker_failed { "Échec du sélecteur de dossier : {detail}" }
     winui_library_switch_failed { "Impossible de changer de bibliothèque : {detail}" }
     winui_theme_override_removed { "Remplacement de thème supprimé ; respect de l''apparence Windows" }
     winui_theme_reload_failed { "Échec du rechargement du thème : {detail}" }
     winui_theme_reloaded { "Thème rechargé : {path}" }
+    winui_theme_rejected { "Impossible de charger le remplacement de thème ; respect de l''apparence Windows. {detail}" }
     winui_smtc_unavailable { "SMTC indisponible : {detail}" }
     winui_shell_layout_failed { "Impossible de construire la disposition de l''interface : {detail}" }
     winui_activity_details { "Afficher les détails de l''activité" }
@@ -807,7 +813,6 @@ fr:table {
     winui_sort_failed { "Échec du tri : {detail}" }
     winui_unavailable_track { "Morceau indisponible" }
     winui_theme_file_not_found { "Fichier de thème introuvable : {path}" }
-    winui_theme_load_failed { "Échec du chargement du thème Windows : {detail}" }
     winui_startup_failure { "Aobus n''a pas pu démarrer :\n\n{detail}" }
     winui_column_sort_presentation { "Tri par colonne" }
     track_multiple_values { "<Valeurs multiples>" }
@@ -878,6 +883,7 @@ fr:table {
     gtk_layout_editor_title { "Éditeur de disposition" }
     gtk_layout_apply { "Appliquer" }
     gtk_layout_unable_to_save { "Impossible d''enregistrer la disposition" }
+    gtk_config_newer_layout { "Une disposition personnalisée a été enregistrée par une version plus récente d''Aobus. Cette version affiche à la place la disposition intégrée et n''enregistre aucune modification apportée à la disposition personnalisée." }
     gtk_layout_tree_node { "Nœud" }
     gtk_layout_tree_type { "Type" }
     gtk_layout_classic_preset { "Disposition classique" }

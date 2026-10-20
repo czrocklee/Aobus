@@ -42,6 +42,33 @@ namespace ao::gtk
     return _layoutsDir / utility::pathFromUtf8(std::format("{}.yaml", presetId));
   }
 
+  Result<bool> ShellLayoutStore::isNewerFile(std::filesystem::path const& path) const
+  {
+    auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly, _limits.maxFileBytes};
+    auto doc = uimodel::LayoutDocument{};
+
+    if (auto const loadedRes = uimodel::loadLayout(store, kShellLayoutConfigGroup, doc); !loadedRes)
+    {
+      if (store.hasNewerGroup(kShellLayoutConfigGroup))
+      {
+        return true;
+      }
+
+      // Only rejected content carries these codes. Any other failure, such as
+      // a file this build cannot open or one above its size ceiling, leaves
+      // the version unread. A file this build cannot parse counts as rejected
+      // content, so a newer preset is kept only while it stays YAML this
+      // build parses.
+      if (auto const code = loadedRes.error().code;
+          code != Error::Code::FormatRejected && code != Error::Code::NotSupported)
+      {
+        return std::unexpected{loadedRes.error()};
+      }
+    }
+
+    return false;
+  }
+
   Result<std::optional<uimodel::LayoutDocument>> ShellLayoutStore::load(std::string_view presetId) const
   {
     if (!_hasLocation)
@@ -68,7 +95,7 @@ namespace ao::gtk
     auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly, _limits.maxFileBytes};
     auto doc = uimodel::LayoutDocument{};
 
-    auto const loadedRes = uimodel::loadLayout(store, "layout", doc);
+    auto const loadedRes = uimodel::loadLayout(store, kShellLayoutConfigGroup, doc);
 
     if (!loadedRes)
     {
@@ -87,6 +114,18 @@ namespace ao::gtk
     }
 
     return std::optional<uimodel::LayoutDocument>{std::move(doc)};
+  }
+
+  bool ShellLayoutStore::isNewer(std::string_view const presetId) const
+  {
+    if (!_hasLocation)
+    {
+      return false;
+    }
+
+    auto const path = filePath(presetId);
+    auto ec = std::error_code{};
+    return std::filesystem::exists(path, ec) && !ec && isNewerFile(path).value_or(false);
   }
 
   Result<> ShellLayoutStore::save(uimodel::LayoutDocument const& doc, std::string_view presetId)
@@ -119,7 +158,7 @@ namespace ao::gtk
     if (existed)
     {
       auto previous = uimodel::LayoutDocument{};
-      auto const loadedRes = uimodel::loadLayout(store, "layout", previous);
+      auto const loadedRes = uimodel::loadLayout(store, kShellLayoutConfigGroup, previous);
 
       if (!loadedRes)
       {
@@ -138,7 +177,7 @@ namespace ao::gtk
       }
     }
 
-    return uimodel::saveLayout(store, "layout", doc);
+    return uimodel::saveLayout(store, kShellLayoutConfigGroup, doc);
   }
 
   Result<> ShellLayoutStore::remove(std::string_view presetId)
@@ -156,28 +195,18 @@ namespace ao::gtk
     // for any other reason, including one it cannot parse, stays removable.
     if (std::filesystem::exists(path, ec) && !ec)
     {
-      auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly, _limits.maxFileBytes};
-      auto previous = uimodel::LayoutDocument{};
+      auto const newerRes = isNewerFile(path);
 
-      if (auto const loadedRes = uimodel::loadLayout(store, "layout", previous); !loadedRes)
+      if (!newerRes)
       {
-        if (store.hasNewerGroup("layout"))
-        {
-          return makeError(Error::Code::NotSupported,
-                           std::format("Shell layout file '{}' was saved by a newer version of Aobus; it is kept",
-                                       utility::pathToUtf8(path)));
-        }
+        return std::unexpected{newerRes.error()};
+      }
 
-        // Only rejected content carries these codes. Any other failure, such as
-        // a file this build cannot open or one above its size ceiling, leaves
-        // the version unread. A file this build cannot parse counts as rejected
-        // content, so a newer preset is kept only while it stays YAML this
-        // build parses.
-        if (auto const code = loadedRes.error().code;
-            code != Error::Code::FormatRejected && code != Error::Code::NotSupported)
-        {
-          return std::unexpected{loadedRes.error()};
-        }
+      if (*newerRes)
+      {
+        return makeError(Error::Code::NotSupported,
+                         std::format("Shell layout file '{}' was saved by a newer version of Aobus; it is kept",
+                                     utility::pathToUtf8(path)));
       }
     }
 

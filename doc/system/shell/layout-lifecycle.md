@@ -62,6 +62,7 @@ These are orchestration phases rather than a published enum.
 `loadLayout()` reads the preferred layout preset from application preferences on the calling thread, because the configuration store has no internal synchronization, and then starts a lifetime-bound asynchronous workflow.
 On the worker it selects a supported preset from that name.
 A missing custom file selects the matching built-in document; a rejected custom file logs its bounded error, remains untouched, and also selects the matching built-in document.
+When a newer version saved the rejected file, the workflow posts the newer-layout warning after it resumes on the callback executor; the editor's preset loader does the same.
 The selected authored document is prepared before the worker returns, and matching component state is loaded or replaced by an empty state document.
 
 The workflow resumes on the callback executor, prepares a detached GTK tree against the candidate preset and component state, and only then installs the session/state and commits the tree.

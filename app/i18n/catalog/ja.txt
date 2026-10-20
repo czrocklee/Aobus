@@ -70,6 +70,8 @@ ja:table {
 
     tui_settings_save_failed { "設定を保存できませんでした。{detail}" }
     tui_settings_load_failed { "保存済みの設定を読み込めないため、既定値を使用します。{detail}" }
+    tui_config_newer_settings { "設定は新しいバージョンの Aobus で保存されています。このバージョンでは既定の設定を使用し、変更は保存しません。" }
+    tui_config_newer_output { "優先する出力デバイスは新しいバージョンの Aobus で保存されています。このバージョンではこれを無視し、新たに選んだ出力デバイスも保存しません。" }
     tui_settings_title { "設定" }
     tui_settings_general { "一般" }
     tui_settings_appearance { "表示" }
@@ -256,6 +258,7 @@ ja:table {
     library_scan_unreadable { "ライブラリスキャンで {count, plural, one {# 件の読み取れないファイル} other {# 件の読み取れないファイル}} が見つかり、利用可能な変更はありませんでした" }
     library_scan_failed { "{hasError, select, yes {スキャン失敗: {error}} other {スキャン失敗}}" }
     library_switch_not_saved { "切り替えたライブラリを記憶できませんでした: {detail}。次回起動時には前のライブラリが開かれます。" }
+    config_newer_shortcuts { "キーボードショートカットは新しいバージョンの Aobus で保存されています。このバージョンでは既定のショートカットを使用し、変更は保存しません。" }
     library_all_tracks { "すべての曲" }
     library_unnamed_list { "<無名のリスト>" }
     library_audio_identity_indexing_failed { "オーディオ識別インデックスの作成に失敗しました" }
@@ -477,6 +480,7 @@ ja:table {
     gtk_preferences_layout_preset_classic { "クラシック" }
     gtk_preferences_layout_preset_modern { "モダン" }
     gtk_preferences_actions { "アクション" }
+    gtk_config_newer_preferences { "出力デバイス、テーマ、レイアウトプリセットの設定は新しいバージョンの Aobus で保存されています。このバージョンではこれらを無視し、変更も保存しません。" }
     gtk_shortcut_title { "キーボードショートカットのカスタマイズ" }
     gtk_shortcut_reset_all { "すべてリセット" }
     gtk_shortcut_reset_all_tooltip { "すべてのショートカットをデフォルトにリセット" }
@@ -783,12 +787,14 @@ ja:table {
     winui_more_menu { "その他" }
     winui_error { "エラー: {detail}" }
     winui_save_settings_failed { "設定を保存できませんでした: {detail}" }
+    winui_config_newer_settings { "設定は新しいバージョンの Aobus で保存されています。このバージョンでは起動時のライブラリを含めて既定の設定を使用し、変更は保存しません。" }
     winui_open_library_picker { "ライブラリを開く" }
     winui_folder_picker_failed { "フォルダーの選択に失敗しました：{detail}" }
     winui_library_switch_failed { "ライブラリを切り替えられませんでした: {detail}" }
     winui_theme_override_removed { "テーマの上書きを削除しました。Windows の外観に従います" }
     winui_theme_reload_failed { "テーマの再読み込みに失敗しました: {detail}" }
     winui_theme_reloaded { "テーマを再読み込みしました: {path}" }
+    winui_theme_rejected { "テーマの上書きを読み込めませんでした。Windows の外観に従います。{detail}" }
     winui_smtc_unavailable { "SMTC を利用できません: {detail}" }
     winui_shell_layout_failed { "シェルレイアウトを構築できませんでした: {detail}" }
     winui_activity_details { "アクティビティの詳細を表示" }
@@ -807,7 +813,6 @@ ja:table {
     winui_sort_failed { "並べ替えに失敗しました: {detail}" }
     winui_unavailable_track { "利用できない曲" }
     winui_theme_file_not_found { "テーマファイルが見つかりません: {path}" }
-    winui_theme_load_failed { "Windows テーマの読み込みに失敗しました: {detail}" }
     winui_startup_failure { "Aobus を起動できませんでした:\n\n{detail}" }
     winui_column_sort_presentation { "列で並べ替え" }
     track_multiple_values { "<複数の値>" }
@@ -878,6 +883,7 @@ ja:table {
     gtk_layout_editor_title { "レイアウトエディター" }
     gtk_layout_apply { "適用" }
     gtk_layout_unable_to_save { "レイアウトを保存できません" }
+    gtk_config_newer_layout { "カスタムレイアウトは新しいバージョンの Aobus で保存されています。このバージョンでは代わりに組み込みのレイアウトを表示し、カスタムレイアウトへの変更は保存しません。" }
     gtk_layout_tree_node { "ノード" }
     gtk_layout_tree_type { "タイプ" }
     gtk_layout_classic_preset { "クラシックレイアウト" }

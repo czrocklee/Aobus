@@ -70,6 +70,8 @@ root:table {
 
     tui_settings_save_failed { "Could not save settings. {detail}" }
     tui_settings_load_failed { "Could not load saved preferences; using defaults. {detail}" }
+    tui_config_newer_settings { "Settings were saved by a newer version of Aobus. This version uses the default settings and does not save changes to them." }
+    tui_config_newer_output { "The preferred output device was saved by a newer version of Aobus. This version ignores it and does not save a new preference." }
     tui_settings_title { "Settings" }
     tui_settings_general { "General" }
     tui_settings_appearance { "Appearance" }
@@ -258,6 +260,7 @@ root:table {
     library_scan_unreadable { "Library scan found {count, plural, one {# unreadable file} other {# unreadable files}} and no usable changes" }
     library_scan_failed { "{hasError, select, yes {Scan failed: {error}} other {Scan failed}}" }
     library_switch_not_saved { "Could not remember the library switch: {detail}. The previous library will open next launch." }
+    config_newer_shortcuts { "Keyboard shortcuts were saved by a newer version of Aobus. This version uses the default shortcuts and does not save changes to them." }
     library_all_tracks { "All Tracks" }
     library_unnamed_list { "<Unnamed List>" }
     library_audio_identity_indexing_failed { "Audio identity indexing failed" }
@@ -479,6 +482,7 @@ root:table {
     gtk_preferences_layout_preset_classic { "Classic" }
     gtk_preferences_layout_preset_modern { "Modern" }
     gtk_preferences_actions { "Actions" }
+    gtk_config_newer_preferences { "The output device, theme, and layout preset preferences were saved by a newer version of Aobus. This version ignores them and does not save changes to them." }
     gtk_shortcut_title { "Customize keyboard shortcuts" }
     gtk_shortcut_reset_all { "Reset All" }
     gtk_shortcut_reset_all_tooltip { "Reset every shortcut to its default" }
@@ -785,12 +789,14 @@ root:table {
     winui_more_menu { "More" }
     winui_error { "Error: {detail}" }
     winui_save_settings_failed { "Could not save settings: {detail}" }
+    winui_config_newer_settings { "Settings were saved by a newer version of Aobus. This version uses the default settings, including the startup library, and does not save changes to them." }
     winui_open_library_picker { "Open library" }
     winui_folder_picker_failed { "Folder picker failed: {detail}" }
     winui_library_switch_failed { "Could not switch libraries: {detail}" }
     winui_theme_override_removed { "Theme override removed; following Windows appearance" }
     winui_theme_reload_failed { "Theme reload failed: {detail}" }
     winui_theme_reloaded { "Theme reloaded: {path}" }
+    winui_theme_rejected { "Could not load the theme override; following Windows appearance. {detail}" }
     winui_smtc_unavailable { "SMTC unavailable: {detail}" }
     winui_shell_layout_failed { "The shell layout could not be built: {detail}" }
     winui_activity_details { "View activity details" }
@@ -809,7 +815,6 @@ root:table {
     winui_sort_failed { "Sort failed: {detail}" }
     winui_unavailable_track { "Unavailable track" }
     winui_theme_file_not_found { "Theme file not found: {path}" }
-    winui_theme_load_failed { "Failed to load Windows theme: {detail}" }
     winui_startup_failure { "Aobus could not start:\n\n{detail}" }
     winui_column_sort_presentation { "Column sort" }
     track_multiple_values { "<Multiple Values>" }
@@ -880,6 +885,7 @@ root:table {
     gtk_layout_editor_title { "Layout Editor" }
     gtk_layout_apply { "Apply" }
     gtk_layout_unable_to_save { "Unable to Save Layout" }
+    gtk_config_newer_layout { "A custom layout was saved by a newer version of Aobus. This version shows the built-in layout instead and does not save changes to the custom one." }
     gtk_layout_tree_node { "Node" }
     gtk_layout_tree_type { "Type" }
     gtk_layout_classic_preset { "Classic Layout" }
