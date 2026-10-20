@@ -766,19 +766,23 @@ zh_Hant:table {
     winui_list_presentation { "檢視" }
     winui_list_preview { "預覽" }
     winui_shell_track_details { "曲目詳情" }
+    winui_shell_track_details_resize { "調整曲目詳情面板寬度" }
     winui_shell_classic_mode { "經典模式" }
     winui_playback_output_device { "輸出裝置" }
     winui_playback_volume { "音量" }
+    winui_playback_position { "播放位置" }
     winui_playback_no_output_devices { "無輸出裝置" }
     winui_library_open_label { "開啟" }
     winui_library_rescan_label { "重新掃描" }
     winui_library_navigation_pane_title { "音樂庫" }
+    winui_library_navigation_pane_resize { "調整導航面板寬度" }
     winui_library_quick_filter_placeholder { "篩選曲目" }
     winui_library_ready { "就緒" }
     winui_library_rescanning { "正在重新掃描音樂庫..." }
     winui_library_no_selection { "無選取項" }
     winui_track_move_column_left { "左移" }
     winui_track_move_column_right { "右移" }
+    winui_track_resize_column { "調整欄 {column} 的寬度" }
     winui_playback_options { "播放選項" }
     winui_more_menu { "更多" }
     winui_error { "錯誤：{detail}" }

@@ -251,6 +251,7 @@
                         Width="7"
                         HorizontalAlignment="Right"
                         Background="Transparent"
+                        AutomationProperties.Name="{x:Bind ResizeName}"
                         Tag="{x:Bind FieldId}"
                         DragCompleted="OnColumnResizeCompleted" />
                 </Grid>

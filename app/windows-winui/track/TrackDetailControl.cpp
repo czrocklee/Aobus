@@ -17,6 +17,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
@@ -37,6 +38,8 @@ namespace ao::winui
     using winrt::Microsoft::UI::Xaml::TextTrimming;
     using winrt::Microsoft::UI::Xaml::VerticalAlignment;
     using winrt::Microsoft::UI::Xaml::Visibility;
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
+    using winrt::Microsoft::UI::Xaml::Controls::Button;
     using winrt::Microsoft::UI::Xaml::Controls::ColumnDefinition;
     using winrt::Microsoft::UI::Xaml::Controls::FontIcon;
     using winrt::Microsoft::UI::Xaml::Controls::Grid;
@@ -115,6 +118,15 @@ namespace ao::winui
       return codec.empty() && sampleRate.empty() && bitDepth.empty()
                ? technicalHeading(textCatalog)
                : uimodel::formatTechnicalHeader(codec, sampleRate, bitDepth);
+    }
+
+    /// The header button's content is a panel, from which UI Automation derives no name.
+    void nameHeaderButton(Button const& button, TextBlock const& header)
+    {
+      if (button)
+      {
+        AutomationProperties::SetName(button, header.Text());
+      }
     }
 
     GridLength pixels(double const value) noexcept
@@ -550,6 +562,7 @@ namespace ao::winui
     if (_metadataHeader)
     {
       _metadataHeader.Text(winrt::to_hstring(metadataHeaderText(_textCatalog, _metadataExpanded, _snapshot)));
+      nameHeaderButton(_metadataHeaderButton, _metadataHeader);
     }
 
     if (_technicalHeaderButton)
@@ -571,6 +584,7 @@ namespace ao::winui
     if (_technicalHeader)
     {
       _technicalHeader.Text(winrt::to_hstring(technicalHeaderText(_textCatalog, _technicalExpanded, _snapshot)));
+      nameHeaderButton(_technicalHeaderButton, _technicalHeader);
     }
   }
 

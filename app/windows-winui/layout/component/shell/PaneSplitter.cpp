@@ -5,6 +5,7 @@
 
 #include "pch.h"
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.h>
 
@@ -16,16 +17,21 @@ namespace ao::winui::layout
   namespace
   {
     using winrt::Microsoft::UI::Xaml::Visibility;
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
     using winrt::Microsoft::UI::Xaml::Media::SolidColorBrush;
 
     /// Wide enough to grab at every supported scale, narrow enough to read as a boundary.
     constexpr double kSplitterWidth = 6.0;
   } // namespace
 
-  PaneSplitter::PaneSplitter(PaneEdge const edge, std::function<void(double)> onResize, std::function<void()> onCommit)
+  PaneSplitter::PaneSplitter(PaneEdge const edge,
+                             winrt::hstring const& name,
+                             std::function<void(double)> onResize,
+                             std::function<void()> onCommit)
     : _edge{edge}, _onResize{std::move(onResize)}, _onCommit{std::move(onCommit)}
   {
     _thumb.Width(kSplitterWidth);
+    AutomationProperties::SetName(_thumb, name);
     // A transparent brush keeps the boundary hit-testable while the pane edges
     // on either side of it carry the visible chrome.
     _thumb.Background(SolidColorBrush{winrt::Windows::UI::Colors::Transparent()});

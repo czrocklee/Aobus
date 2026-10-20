@@ -20,6 +20,7 @@
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellState.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
@@ -41,6 +42,7 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Thickness;
     using winrt::Microsoft::UI::Xaml::VerticalAlignment;
     using winrt::Microsoft::UI::Xaml::Visibility;
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
     using winrt::Microsoft::UI::Xaml::Controls::Button;
     using winrt::Microsoft::UI::Xaml::Controls::ColumnDefinition;
     using winrt::Microsoft::UI::Xaml::Controls::FontIcon;
@@ -134,8 +136,9 @@ namespace ao::winui::layout
         dismissGlyph.Glyph(winrt::hstring{kDismissGlyph});
         dismissGlyph.FontSize(kDismissGlyphFontSize);
         _dismissButton.Content(dismissGlyph);
-        ToolTipService::SetToolTip(
-          _dismissButton, winrt::box_value(resourceHstring(L"winui_activity_hide_notification")));
+        auto const hideLabel = resourceHstring(L"winui_activity_hide_notification");
+        ToolTipService::SetToolTip(_dismissButton, winrt::box_value(hideLabel));
+        AutomationProperties::SetName(_dismissButton, hideLabel);
         Grid::SetColumn(_dismissButton, 1);
 
         _root.Children().Append(_detailButton);

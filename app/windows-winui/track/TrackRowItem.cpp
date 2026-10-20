@@ -107,7 +107,7 @@ namespace winrt::Aobus::implementation
                     double const width,
                     bool const sortable)
     {
-      cells.Append(make<TrackCellItem>(std::move(text), to_hstring(std::string{fieldId}), width, sortable));
+      cells.Append(make<TrackCellItem>(std::move(text), to_hstring(std::string{fieldId}), width, sortable, hstring{}));
     }
   } // namespace
 

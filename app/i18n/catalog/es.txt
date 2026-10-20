@@ -766,19 +766,23 @@ es:table {
     winui_list_presentation { "Vista" }
     winui_list_preview { "Vista previa" }
     winui_shell_track_details { "Detalles de la pista" }
+    winui_shell_track_details_resize { "Ajustar el ancho del panel de detalles de la pista" }
     winui_shell_classic_mode { "Modo clásico" }
     winui_playback_output_device { "Dispositivo de salida" }
     winui_playback_volume { "Volumen" }
+    winui_playback_position { "Posición de reproducción" }
     winui_playback_no_output_devices { "Sin dispositivos de salida" }
     winui_library_open_label { "Abrir" }
     winui_library_rescan_label { "Reescanear" }
     winui_library_navigation_pane_title { "Biblioteca" }
+    winui_library_navigation_pane_resize { "Ajustar el ancho del panel de navegación" }
     winui_library_quick_filter_placeholder { "Filtrar pistas" }
     winui_library_ready { "Listo" }
     winui_library_rescanning { "Reescaneando biblioteca..." }
     winui_library_no_selection { "Sin selección" }
     winui_track_move_column_left { "Mover a la izquierda" }
     winui_track_move_column_right { "Mover a la derecha" }
+    winui_track_resize_column { "Ajustar el ancho de la columna {column}" }
     winui_playback_options { "Opciones de reproducción" }
     winui_more_menu { "Más" }
     winui_error { "Error: {detail}" }
