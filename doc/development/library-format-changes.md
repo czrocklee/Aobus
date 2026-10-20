@@ -21,8 +21,7 @@ Each format keeps its current version beside the last released one:
 | Library database | `kLibraryVersion` in [`MetadataLayout.h`](../../include/ao/library/MetadataLayout.h) | `kLastReleasedLibraryVersion` |
 | Library YAML | `kYamlFormatVersion` in [`LibraryTransfer.h`](../../app/include/ao/rt/library/LibraryTransfer.h) | `kLastReleasedYamlFormatVersion` |
 
-A last released version of `0` means that no release has shipped the format, and the current version is then 1.
-After a release, the current version equals the last released one until the first incompatible change of the next cycle increments it by one.
+The current version equals the last released one until the first incompatible change of the next cycle increments it by one.
 Every later change in that cycle amends the unreleased version and keeps its number.
 A [format-fixture test](../../test/unit/runtime/library/LibraryFormatFixtureTest.cpp) enforces both rules at compile time.
 
@@ -30,8 +29,8 @@ A predicate-language change that alters the outcome of filter text the current l
 
 ## Amend an unreleased version
 
+A version is unreleased while it is one past its last released version.
 An unreleased version has no data that a release must bring forward, so amending it needs no upgrade step.
-Version 1 is unreleased until the first release, and every change amends it.
 
 1. Change the layout or schema together with its validation.
 2. Update the owning reference so that it still describes exactly what the build reads and writes.
@@ -59,9 +58,6 @@ No change moves the database directory or either of the [lock files beside it](.
 The release commit sets each last released version to its current version, so that the next incompatible change increments it again.
 A format that did not change in the cycle already has equal versions.
 From that commit, the fixtures of every released version are frozen.
-
-The first release also updates the references.
-The [database reference](../reference/library/storage/database.md#compatibility-and-versioning) and the [YAML reference](../reference/library/format/yaml.md#compatibility-and-versioning) each say that version 1 has not been released and that a development build may still change it; the release commit replaces those sentences with the released version's contract.
 
 ## Validation
 

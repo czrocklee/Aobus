@@ -44,9 +44,9 @@
 // and copying <root>/.aobus/library/data.mdb. The created and deleted Track
 // and List give the library an identity history: its highest ids are gone, and
 // a later write must not reuse them. v1.yaml is the full export of the result,
-// so exporting any of the fixtures reproduces it byte for byte. The fixtures
-// are frozen at the first release; a later format change adds fixtures of its
-// own version instead of regenerating these.
+// so exporting any of the fixtures reproduces it byte for byte. Version 1 is
+// released, so the fixtures are frozen: a later format change adds fixtures of
+// its own version instead of regenerating these.
 
 namespace ao::rt::test
 {
@@ -142,12 +142,11 @@ namespace ao::rt::test
       return count;
     }
 
-    // Before the first release a format is at version 1. After it, the current
-    // version is the last released one or exactly one past it, because a format
-    // changes version at most once per release.
+    // A format changes version at most once per release, so the current version
+    // is the last released one or exactly one past it.
     consteval bool matchesReleaseRule(std::uint32_t const current, std::uint32_t const lastReleased)
     {
-      return lastReleased == 0 ? current == 1 : current == lastReleased || current == lastReleased + 1;
+      return current == lastReleased || current == lastReleased + 1;
     }
   } // namespace
 
