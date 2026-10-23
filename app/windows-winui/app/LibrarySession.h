@@ -6,7 +6,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
-#include <ao/desktop/LibraryStartupPlanner.h>
 #include <ao/desktop/LibrarySwitch.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewIds.h>
@@ -19,14 +18,11 @@
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Foundation.h>
 
-#include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 
 namespace ao::rt
 {
@@ -34,6 +30,7 @@ namespace ao::rt
   class CompletionAliasPolicy;
   class ConfigStore;
   class TextOrderingPolicy;
+  struct TrackPresentationSpec;
 }
 
 namespace ao::uimodel

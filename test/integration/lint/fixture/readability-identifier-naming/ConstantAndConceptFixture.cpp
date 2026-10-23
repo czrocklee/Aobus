@@ -59,3 +59,25 @@ void useLocalConstants()
   (void)localConstant;
   (void)kLocalConstant;
 }
+
+class MetadataNames final
+{
+public:
+  // Repeated C++/WinRT metadata interface names share a narrow spelling exception.
+  // NEGATIVE
+  void GetXamlType();
+  // NEGATIVE
+  void GetXmlnsDefinitions();
+
+  // Single-class IDL properties do not become global naming exceptions.
+  // POSITIVE
+  void Text();
+  // POSITIVE
+  void FieldId();
+  // POSITIVE
+  void Width();
+  // POSITIVE
+  void Sortable();
+  // POSITIVE
+  void Alignment();
+};

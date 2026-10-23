@@ -11,6 +11,7 @@
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 
 #include <array>
@@ -32,13 +33,13 @@ namespace
     {.aura = SoulAura::Radiant, .motionMode = AobusSoulMotionMode::Frozen},
     {.aura = SoulAura::Dormant, .motionMode = AobusSoulMotionMode::Dormant},
   });
-  bool completed = false;
 
   // C++/WinRT derives its allocation wrapper from the application implementation.
   class AobusSoulProbeApplication : public ApplicationT<AobusSoulProbeApplication, Markup::IXamlMetadataProvider>
   {
   public:
-    AobusSoulProbeApplication()
+    explicit AobusSoulProbeApplication(bool& completed)
+      : _completed{completed}
     {
       UnhandledException(
         [](auto const&, UnhandledExceptionEventArgs const& arguments)
@@ -47,7 +48,7 @@ namespace
                    static_cast<std::uint32_t>(arguments.Exception().value),
                    winrt::to_string(arguments.Message()));
         });
-      InitializeComponent();
+      initializeComponent();
     }
 
     void OnLaunched(LaunchActivatedEventArgs const& /*arguments*/)
@@ -70,35 +71,38 @@ namespace
       _window.Activate();
     }
 
+    // The IXamlMetadataProvider boundary requires these exact names for C++/WinRT consume/produce dispatch.
     Markup::IXamlType GetXamlType(winrt::Windows::UI::Xaml::Interop::TypeName const& type)
     {
-      return AppProvider()->GetXamlType(type);
+      return appProvider()->GetXamlType(type);
     }
 
-    Markup::IXamlType GetXamlType(winrt::hstring const& fullName) { return AppProvider()->GetXamlType(fullName); }
+    Markup::IXamlType GetXamlType(winrt::hstring const& fullName) { return appProvider()->GetXamlType(fullName); }
 
-    winrt::com_array<Markup::XmlnsDefinition> GetXmlnsDefinitions() { return AppProvider()->GetXmlnsDefinitions(); }
+    winrt::com_array<Markup::XmlnsDefinition> GetXmlnsDefinitions() { return appProvider()->GetXmlnsDefinitions(); }
 
   private:
-    void InitializeComponent()
+    void initializeComponent()
     {
       if (_contentLoaded)
       {
         return;
       }
+
       _contentLoaded = true;
 
-      winrt::Windows::Foundation::Uri resourceLocator{L"ms-appx:///App.xaml"};
+      auto const resourceLocator = winrt::Windows::Foundation::Uri{L"ms-appx:///App.xaml"};
       Application::LoadComponent(*this, resourceLocator);
     }
 
-    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> AppProvider()
+    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> appProvider()
     {
-      if (!_appProvider)
+      if (!_appProviderPtr)
       {
-        _appProvider = winrt::make_self<winrt::Aobus::implementation::XamlMetaDataProvider>();
+        _appProviderPtr = winrt::make_self<winrt::Aobus::implementation::XamlMetaDataProvider>();
       }
-      return _appProvider;
+
+      return _appProviderPtr;
     }
 
     template<typename Callback>
@@ -121,7 +125,7 @@ namespace
 
         if (_caseIndex == kTargets.size())
         {
-          completed = true;
+          _completed = true;
           _timeout.Stop();
           _window.Close();
           Exit();
@@ -141,7 +145,7 @@ namespace
 
     void handleUnloaded()
     {
-      if (completed)
+      if (_completed)
       {
         return;
       }
@@ -157,8 +161,10 @@ namespace
       enqueue([this] { _root.Children().Append(_soulPtr.as<UIElement>()); });
     }
 
+    // main owns the result until Application::Start returns after native shutdown.
+    bool& _completed;
     bool _contentLoaded = false;
-    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> _appProvider{nullptr};
+    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> _appProviderPtr{nullptr};
     Window _window{nullptr};
     Controls::Grid _root{nullptr};
     winrt::com_ptr<winrt::Aobus::implementation::AobusSoulControl> _soulPtr;
@@ -174,7 +180,8 @@ int main()
   try
   {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
-    Application::Start([](auto const&) { std::ignore = winrt::make<AobusSoulProbeApplication>(); });
+    bool completed = false;
+    Application::Start([&completed](auto const&) { std::ignore = winrt::make<AobusSoulProbeApplication>(completed); });
     return completed ? 0 : 1;
   }
   catch (winrt::hresult_error const& error)

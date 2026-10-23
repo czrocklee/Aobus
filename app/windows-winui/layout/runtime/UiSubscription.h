@@ -9,7 +9,6 @@
 
 #include <winrt/base.h>
 
-#include <exception>
 #include <functional>
 #include <string>
 #include <string_view>

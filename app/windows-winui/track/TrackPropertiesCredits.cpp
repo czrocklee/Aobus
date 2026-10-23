@@ -3,10 +3,13 @@
 
 #include "track/TrackCreditsEditorControl.h"
 #include "track/TrackPropertiesCoordinator.h"
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 
+#include <bitset>
 #include <cstddef>
+#include <memory>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -30,12 +33,13 @@ namespace ao::winui
       button.HorizontalAlignment(HorizontalAlignment::Stretch);
       return button;
     }
-  }
+  } // namespace
 
   void TrackPropertiesCoordinator::buildCreditsSection(StackPanel const& content)
   {
+    constexpr double kCreditsSectionSpacing = 8.0;
     _creditsPreview = StackPanel{};
-    _creditsPreview.Spacing(8.0);
+    _creditsPreview.Spacing(kCreditsSectionSpacing);
     _creditsHost = StackPanel{};
     content.Children().Append(_creditsPreview);
     content.Children().Append(_creditsHost);
@@ -48,7 +52,7 @@ namespace ao::winui
       winrt::auto_revoke, [this](IInspectable const&, RoutedEventArgs const&) { requestDiscard(true); }));
     content.Children().Append(_reloadButton);
     _discardPrompt = StackPanel{};
-    _discardPrompt.Spacing(8.0);
+    _discardPrompt.Spacing(kCreditsSectionSpacing);
     _discardPrompt.Visibility(Visibility::Collapsed);
     auto question = TextBlock{};
     question.Text(winrt::to_hstring(i18n::requiredText(_textCatalog, MessageId::WinUiTrackPropertiesDiscardQuestion)));
@@ -208,9 +212,8 @@ namespace ao::winui
     // Only confirmed reload replaces the old binding and the complete parent draft.
     _creditsControlPtr.reset();
     _formModel.cancelCreditsEdit();
-    auto preparedRes = prepareSession();
 
-    if (!preparedRes)
+    if (auto preparedRes = prepareSession(); !preparedRes)
     {
       _sessionInvalid = true;
       setError(preparedRes.error().message);
@@ -223,7 +226,8 @@ namespace ao::winui
     _fieldEditors.clear();
     _customEditors.clear();
     auto content = StackPanel{};
-    content.Spacing(12.0);
+    constexpr double kReloadedDialogSectionSpacing = 12.0;
+    content.Spacing(kReloadedDialogSectionSpacing);
     _errorText = TextBlock{};
     _errorText.TextWrapping(TextWrapping::Wrap);
     _errorText.Visibility(Visibility::Collapsed);
@@ -234,7 +238,8 @@ namespace ao::winui
     buildCustomMetadataSection(content);
     buildTechnicalSection(content);
     auto scroll = ScrollViewer{};
-    scroll.MaxHeight(640.0);
+    constexpr double kReloadedDialogMaxHeight = 640.0;
+    scroll.MaxHeight(kReloadedDialogMaxHeight);
     scroll.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
     scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
     scroll.Content(content);

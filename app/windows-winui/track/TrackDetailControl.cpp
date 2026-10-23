@@ -21,7 +21,9 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <bitset>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>

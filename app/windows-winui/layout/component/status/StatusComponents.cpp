@@ -14,7 +14,6 @@
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/ViewService.h>
-#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/track/TrackSelectionSummary.h>
 #include <ao/winui/layout/LayoutSchema.h>
@@ -29,6 +28,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::winui::layout
 {
@@ -143,7 +143,7 @@ namespace ao::winui::layout
 
         // Construct the observer only after the elements are configured: it
         // renders the current state synchronously.
-        _control.emplace(
+        _optControl.emplace(
           ActivityStatusControlConfig{
             .root = _root,
             .detailButton = _detailButton,
@@ -171,7 +171,7 @@ namespace ao::winui::layout
       TextBlock _label{};
       ProgressBar _progress{};
       Button _dismissButton{chromeLessButton()};
-      std::optional<ActivityStatusControl> _control;
+      std::optional<ActivityStatusControl> _optControl;
     };
 
     /**

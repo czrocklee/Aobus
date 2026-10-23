@@ -19,7 +19,6 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.UI.h>
 
-#include <format>
 #include <memory>
 
 namespace ao::winui::layout

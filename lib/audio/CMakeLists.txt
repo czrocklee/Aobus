@@ -54,6 +54,7 @@ if(WIN32)
         backend/WasapiProvider.cpp
         backend/WasapiSharedBackend.cpp
         backend/detail/WasapiGraphRegistry.cpp
+        backend/detail/WasapiRenderBuffer.cpp
         backend/detail/WasapiStrings.cpp
     )
     target_link_libraries(ao_audio PRIVATE avrt ole32)

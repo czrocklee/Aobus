@@ -6,7 +6,6 @@
 #include <ao/Error.h>
 #include <ao/desktop/LibrarySwitch.h>
 
-#include <filesystem>
 #include <optional>
 
 namespace ao::winui

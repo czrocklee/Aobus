@@ -4,12 +4,15 @@
 #pragma once
 
 #include <chrono>
-#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
+
+#ifndef _WIN32
+#include <csignal>
+#endif
 
 namespace ao::test
 {

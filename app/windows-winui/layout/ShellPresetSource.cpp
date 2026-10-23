@@ -59,7 +59,7 @@ namespace ao::winui::layout
       return std::unexpected{folderRes.error()};
     }
 
-    auto const path = *folderRes / kShellPresetFolder / resource;
+    auto const path = *folderRes / utility::pathFromUtf8(kShellPresetFolder) / utility::pathFromUtf8(resource);
     auto stream = std::ifstream{path, std::ios::binary};
 
     if (!stream)

@@ -4,6 +4,7 @@
 #include "lib/audio/backend/detail/WasapiGraphRegistry.h"
 
 #include "lib/audio/backend/detail/WasapiFormat.h"
+#include "lib/audio/backend/detail/WasapiFormatObservation.h"
 #include "test/unit/audio/backend/WasapiFormatTestSupport.h"
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/ChannelLayoutEvidence.h>

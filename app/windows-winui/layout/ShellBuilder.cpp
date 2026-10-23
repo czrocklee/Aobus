@@ -25,7 +25,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibrarySnapshot.h>
-#include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -42,6 +41,7 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.Collections.h>
 
+#include <algorithm>
 #include <expected>
 #include <functional>
 #include <memory>

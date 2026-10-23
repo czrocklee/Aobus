@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <stop_token>
 
 namespace ao::winui
 {

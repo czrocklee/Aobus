@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "WasapiFormatObservation.h"
 #include <ao/Error.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
@@ -26,6 +25,8 @@
 
 namespace ao::audio::backend::detail
 {
+  struct WaveFormatObservation;
+
   // Builds a client descriptor, rejecting invalid/unrepresentable geometry or
   // an unsupported source speaker set. Complete declared masks are copied;
   // zero retains legacy FC/FL-FR or multichannel direct-out without identifying

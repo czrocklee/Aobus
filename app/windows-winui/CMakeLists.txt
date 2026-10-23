@@ -112,6 +112,7 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   layout/ShellBuilder.h
   layout/ShellPresetSource.cpp
   layout/ShellPresetSource.h
+  platform/ScopedBooleanFlag.cpp
   platform/ScopedBooleanFlag.h
   platform/ProcessLauncher.cpp
   platform/ProcessLauncher.h

@@ -5,7 +5,6 @@
 
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -16,6 +15,13 @@ namespace ao::rt
 {
   class PlaybackService;
 } // namespace ao::rt
+
+namespace ao::uimodel
+{
+  class PlaybackActions;
+  class TransportViewModel;
+  struct TransportViewState;
+} // namespace ao::uimodel
 
 namespace ao::winui
 {

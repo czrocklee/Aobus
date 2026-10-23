@@ -9,6 +9,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
@@ -23,6 +24,7 @@
 #include <winrt/Windows.Foundation.h>
 
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>

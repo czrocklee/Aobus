@@ -35,7 +35,7 @@ CONFIG_BASE = """
   {key: 'readability-identifier-naming.ConceptCase', value: 'CamelCase'},
   {key: 'readability-identifier-naming.FunctionCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.MethodCase', value: 'camelBack'},
-  {key: 'readability-identifier-naming.MethodIgnoredRegexp', value: '^(property_.*|signal_.*|vfunc_.*|on_.*|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext)$'},
+  {key: 'readability-identifier-naming.MethodIgnoredRegexp', value: '^(property_.*|signal_.*|vfunc_.*|on_.*|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext|GetXamlType|GetXmlnsDefinitions)$'},
   {key: 'readability-identifier-naming.PublicMemberCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.ProtectedMemberCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.ProtectedMemberPrefix', value: '_'},

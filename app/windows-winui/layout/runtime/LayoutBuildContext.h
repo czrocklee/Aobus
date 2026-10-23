@@ -4,8 +4,6 @@
 #pragma once
 
 #include "layout/runtime/CommonLayoutProps.h"
-#include "layout/runtime/FocusedDetail.h"
-#include "layout/runtime/LayoutComponent.h"
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/winui/layout/ShellState.h>
 
@@ -24,6 +22,8 @@ namespace ao::uimodel
 
 namespace ao::winui::layout
 {
+  class FocusedDetail;
+
   /// Whether the native window currently permits UI work such as animation.
   struct WindowActivityState final
   {

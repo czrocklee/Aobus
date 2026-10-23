@@ -349,19 +349,19 @@ namespace ao::winui::test
       return *it;
     };
 
-    auto const optHeader = tagForHandler("Click", "OnColumnHeaderClicked");
+    auto const optHeader = tagForHandler("Click", "handleColumnHeaderClicked");
     REQUIRE(optHeader);
     CHECK(attribute(*optHeader, "Tag") == "{x:Bind FieldId}");
 
-    auto const optResize = tagForHandler("DragCompleted", "OnColumnResizeCompleted");
+    auto const optResize = tagForHandler("DragCompleted", "handleColumnResizeCompleted");
     REQUIRE(optResize);
     CHECK(attribute(*optResize, "Tag") == "{x:Bind FieldId}");
 
-    auto const optMoveLeft = tagForHandler("Click", "OnColumnMoveLeftClicked");
+    auto const optMoveLeft = tagForHandler("Click", "handleColumnMoveLeftClicked");
     REQUIRE(optMoveLeft);
     CHECK(attribute(*optMoveLeft, "Tag") == "{x:Bind FieldId}");
 
-    auto const optMoveRight = tagForHandler("Click", "OnColumnMoveRightClicked");
+    auto const optMoveRight = tagForHandler("Click", "handleColumnMoveRightClicked");
     REQUIRE(optMoveRight);
     CHECK(attribute(*optMoveRight, "Tag") == "{x:Bind FieldId}");
   }

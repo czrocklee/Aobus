@@ -6,7 +6,6 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SignalFormat.h>
@@ -17,6 +16,7 @@
 namespace ao::audio
 {
   class RenderTarget;
+  struct Device;
 }
 
 namespace ao::audio::backend::detail

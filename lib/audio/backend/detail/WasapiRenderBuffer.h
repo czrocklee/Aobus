@@ -3,11 +3,14 @@
 
 #pragma once
 
-#include "AudioBackendRenderBuffer.h"
-
 #include <cstddef>
 #include <cstdint>
 #include <span>
+
+namespace ao::audio
+{
+  struct RenderPcmResult;
+}
 
 namespace ao::audio::backend::detail
 {
@@ -28,20 +31,7 @@ namespace ao::audio::backend::detail
    * any unrendered suffix is zero-filled so only real frames advance playback
    * position. A drained zero-frame result releases the packet without commit.
    */
-  inline WasapiRenderPacket prepareWasapiRenderPacket(std::span<std::byte> buffer,
-                                                      std::size_t const bytesPerFrame,
-                                                      RenderPcmResult const& result) noexcept
-  {
-    if (bytesPerFrame == 0 || (result.drained && result.bytesWritten < bytesPerFrame))
-    {
-      return {.drained = result.drained};
-    }
-
-    auto const prepared = prepareAudioBackendRenderBuffer(buffer, bytesPerFrame, result);
-    return {.renderedFrames = prepared.renderedFrames,
-            .framesToRelease = prepared.framesProvided,
-            .positionFrames = prepared.positionFrames,
-            .underrun = prepared.underrun,
-            .drained = prepared.drained};
-  }
+  WasapiRenderPacket prepareWasapiRenderPacket(std::span<std::byte> buffer,
+                                               std::size_t bytesPerFrame,
+                                               RenderPcmResult const& result) noexcept;
 } // namespace ao::audio::backend::detail

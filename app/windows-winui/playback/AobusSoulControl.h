@@ -22,10 +22,17 @@ namespace ao::rt
 
 namespace winrt::Aobus::implementation
 {
+  // Generated C++/WinRT virtuals implement the platform ABI and are validated by the native MSVC build.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct AobusSoulControl : AobusSoulControlT<AobusSoulControl>
   {
     AobusSoulControl();
-    ~AobusSoulControl();
+    ~AobusSoulControl() override;
+
+    AobusSoulControl(AobusSoulControl const&) = delete;
+    AobusSoulControl& operator=(AobusSoulControl const&) = delete;
+    AobusSoulControl(AobusSoulControl&&) = delete;
+    AobusSoulControl& operator=(AobusSoulControl&&) = delete;
 
     void bind(ao::rt::PlaybackService& playback);
     void unbind() noexcept;
@@ -75,6 +82,8 @@ namespace winrt::Aobus::implementation
 
 namespace winrt::Aobus::factory_implementation
 {
+  // Generated C++/WinRT factory virtuals implement the ABI and are validated by the native MSVC build.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct AobusSoulControl : AobusSoulControlT<AobusSoulControl, implementation::AobusSoulControl>
   {};
 } // namespace winrt::Aobus::factory_implementation
