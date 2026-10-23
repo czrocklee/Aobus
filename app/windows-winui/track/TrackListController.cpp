@@ -419,6 +419,9 @@ namespace ao::winui
       auto const* definition = rt::trackFieldDefinition(field);
       auto const fieldId = rt::trackFieldId(field);
       auto label = stableResourceString("track_field_", fieldId, uimodel::trackFieldLabel(_textCatalog, field));
+      // The gripper names the column it widens, without the header's sort mark.
+      auto const resizeName =
+        i18n::requiredFormat(_textCatalog, i18n::MessageId::WinUiTrackResizeColumn, {{"column", label}});
 
       if (definition != nullptr && definition->optSortField && !state.presentation.sortBy.empty() &&
           state.presentation.sortBy.front().field == *definition->optSortField)
@@ -431,7 +434,8 @@ namespace ao::winui
         winrt::make<winrt::Aobus::implementation::TrackCellItem>(winrt::to_hstring(label),
                                                                  winrt::to_hstring(std::string{fieldId}),
                                                                  width,
-                                                                 definition != nullptr && definition->optSortField));
+                                                                 definition != nullptr && definition->optSortField,
+                                                                 winrt::to_hstring(resizeName)));
     }
 
     _contentWidth = 0.0;

@@ -11,7 +11,7 @@ namespace winrt::Aobus::implementation
 {
   struct TrackCellItem : TrackCellItemT<TrackCellItem>
   {
-    TrackCellItem(hstring text, hstring fieldId, double width, bool sortable);
+    TrackCellItem(hstring text, hstring fieldId, double width, bool sortable, hstring resizeName);
 
     hstring Text() const noexcept { return _text; }
     hstring FieldId() const noexcept { return _fieldId; }
@@ -19,6 +19,8 @@ namespace winrt::Aobus::implementation
     // Project.idl fixes this property name for the generated TrackCellItem projection.
     // NOLINTNEXTLINE(aobus-readability-bool-function-naming)
     bool Sortable() const noexcept { return _sortable; }
+    /// The accessible name of a header cell's resize gripper; body cells have none.
+    hstring ResizeName() const noexcept { return _resizeName; }
     Microsoft::UI::Xaml::TextAlignment Alignment() const noexcept { return _alignment; }
 
   private:
@@ -26,6 +28,7 @@ namespace winrt::Aobus::implementation
     hstring _fieldId;
     double _width = 0.0;
     bool _sortable = false;
+    hstring _resizeName;
     Microsoft::UI::Xaml::TextAlignment _alignment = Microsoft::UI::Xaml::TextAlignment::Left;
   };
 } // namespace winrt::Aobus::implementation

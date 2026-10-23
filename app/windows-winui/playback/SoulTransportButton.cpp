@@ -8,6 +8,8 @@
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
+
 #include <memory>
 #include <utility>
 
@@ -81,11 +83,14 @@ namespace ao::winui
     if (_activatesOnClick)
     {
       _button.IsEnabled(state.enabled);
+      auto const label = winrt::to_hstring(state.tooltip);
+      // The transport names the button it drives even when the pipeline
+      // explanation holds the tooltip, so UI Automation reads the action.
+      winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(_button, label);
 
       if (!_hasComplexTooltip)
       {
-        winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-          _button, winrt::box_value(winrt::to_hstring(state.tooltip)));
+        winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_button, winrt::box_value(label));
       }
     }
 

@@ -770,19 +770,23 @@ fr:table {
     winui_list_presentation { "Vue" }
     winui_list_preview { "Aperçu" }
     winui_shell_track_details { "Détails du morceau" }
+    winui_shell_track_details_resize { "Ajuster la largeur du volet des détails du morceau" }
     winui_shell_classic_mode { "Mode classique" }
     winui_playback_output_device { "Périphérique de sortie" }
     winui_playback_volume { "Volume" }
+    winui_playback_position { "Position de lecture" }
     winui_playback_no_output_devices { "Aucun périphérique de sortie" }
     winui_library_open_label { "Ouvrir" }
     winui_library_rescan_label { "Réanalyser" }
     winui_library_navigation_pane_title { "Bibliothèque" }
+    winui_library_navigation_pane_resize { "Ajuster la largeur du volet de navigation" }
     winui_library_quick_filter_placeholder { "Filtrer les morceaux" }
     winui_library_ready { "Prêt" }
     winui_library_rescanning { "Réanalyse de la bibliothèque..." }
     winui_library_no_selection { "Aucune sélection" }
     winui_track_move_column_left { "Déplacer vers la gauche" }
     winui_track_move_column_right { "Déplacer vers la droite" }
+    winui_track_resize_column { "Ajuster la largeur de la colonne {column}" }
     winui_playback_options { "Options de lecture" }
     winui_more_menu { "Plus" }
     winui_error { "Erreur : {detail}" }

@@ -7,6 +7,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/UiSubscription.h"
 #include "pch.h"
+#include "platform/StringResources.h"
 #include "playback/AobusSoulControl.h"
 #include "playback/AudioPipelineToolTip.h"
 #include "playback/SoulTransportButton.h"
@@ -14,6 +15,7 @@
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
@@ -30,6 +32,7 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::HorizontalAlignment;
     using winrt::Microsoft::UI::Xaml::Thickness;
     using winrt::Microsoft::UI::Xaml::VerticalAlignment;
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
     using winrt::Microsoft::UI::Xaml::Controls::Button;
     using winrt::Microsoft::UI::Xaml::Media::SolidColorBrush;
 
@@ -60,6 +63,10 @@ namespace ao::winui::layout
         _button.HorizontalContentAlignment(HorizontalAlignment::Stretch);
         _button.VerticalContentAlignment(VerticalAlignment::Stretch);
         _button.Content(_soul);
+        // The disc's own name, which the soul window also carries, stands while
+        // a shell action holds the click; a soul that runs the transport takes
+        // the transport's label instead.
+        AutomationProperties::SetName(_button, resourceHstring(L"SoulWindowTitle"));
 
         auto* const soul = winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(_soul);
 

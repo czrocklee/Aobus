@@ -772,19 +772,23 @@ root:table {
     winui_list_presentation { "Presentation" }
     winui_list_preview { "Preview" }
     winui_shell_track_details { "Track Details" }
+    winui_shell_track_details_resize { "Resize track details pane" }
     winui_shell_classic_mode { "Classic Mode" }
     winui_playback_output_device { "Output device" }
     winui_playback_volume { "Volume" }
+    winui_playback_position { "Playback position" }
     winui_playback_no_output_devices { "No output devices" }
     winui_library_open_label { "Open" }
     winui_library_rescan_label { "Rescan" }
     winui_library_navigation_pane_title { "Library" }
+    winui_library_navigation_pane_resize { "Resize navigation pane" }
     winui_library_quick_filter_placeholder { "Filter tracks" }
     winui_library_ready { "Ready" }
     winui_library_rescanning { "Rescanning library..." }
     winui_library_no_selection { "No selection" }
     winui_track_move_column_left { "Move left" }
     winui_track_move_column_right { "Move right" }
+    winui_track_resize_column { "Resize {column} column" }
     winui_playback_options { "Playback options" }
     winui_more_menu { "More" }
     winui_error { "Error: {detail}" }

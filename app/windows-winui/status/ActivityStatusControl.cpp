@@ -139,7 +139,9 @@ namespace ao::winui
       icon.Glyph(winrt::hstring{kDismissGlyph});
       icon.FontSize(kDetailDismissIconSize);
       button.Content(icon);
-      ToolTipService::SetToolTip(button, winrt::box_value(resourceHstring(L"winui_activity_hide_notification")));
+      auto const hideLabel = resourceHstring(L"winui_activity_hide_notification");
+      ToolTipService::SetToolTip(button, winrt::box_value(hideLabel));
+      AutomationProperties::SetName(button, hideLabel);
       return button;
     }
   } // namespace
@@ -239,7 +241,11 @@ namespace ao::winui
     _statusIcon.Glyph(winrt::hstring{glyph});
     _statusIcon.Visibility(glyph.empty() ? Visibility::Collapsed : Visibility::Visible);
     _label.Text(idle ? winrt::hstring{} : winrt::to_hstring(compact.text));
-    AutomationProperties::SetName(_root, idle ? winrt::to_hstring(idleLabel) : _label.Text());
+    // The detail button's content is a panel, from which UI Automation derives
+    // no name; it takes the words the strip shows, as the strip itself does.
+    auto const accessibleName = idle ? winrt::to_hstring(idleLabel) : _label.Text();
+    AutomationProperties::SetName(_root, accessibleName);
+    AutomationProperties::SetName(_detailButton, accessibleName);
 
     if (compact.optProgressFraction)
     {

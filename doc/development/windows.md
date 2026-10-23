@@ -249,10 +249,10 @@ probe switches.
 ### Track and navigation probes
 
 The WinUI build also executes `ao_winui_track_item_probe`, a console check of the
-real generated TrackRowItem projection and lazy item view. Its eight scenarios
+real generated TrackRowItem projection and lazy item view. Its nine scenarios
 cover bounded materialization, null retry, cache identity and eviction, IndexOf,
-GetMany, iterator lifetime, oversized-count rejection, and duplicate-inclusive
-compact Credits counts. Failure stops the
+GetMany, iterator lifetime, oversized-count rejection, duplicate-inclusive
+compact Credits counts, and the row names UI Automation reads. Failure stops the
 build; no interactive desktop or audio endpoint is required.
 
 `ao_winui_track_table_probe` is built by native checks but runs only from a
