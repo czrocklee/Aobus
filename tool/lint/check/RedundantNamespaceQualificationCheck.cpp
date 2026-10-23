@@ -628,11 +628,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    if (isShadowedByIntermediateNamespace(lastRedundant, chain, currentContext))
-    {
-      return;
-    }
-
     // Removing q:: from q::Outer::Inner changes lookup of Outer, not Inner.
     // Require the source declaration in q and no uncertain or closer lookup.
     auto const* firstDeclaration = firstSurvivingDeclaration(result, lastRedundant, chain);
@@ -640,6 +635,14 @@ namespace clang::tidy::readability
     if (!hasSameNamespaceLookup(firstDeclaration, lastRedundant) ||
         isShadowedByCloserDeclaration(
           firstDeclaration->getDeclName(), lastRedundant, enclosingDeclaration, currentContext))
+    {
+      return;
+    }
+
+    // Reject unknown source lookup and unconditional closer shadowing before
+    // scanning intermediate namespace members. Every diagnostic still passes
+    // the same guards; no lookup result is cached across AST queries.
+    if (isShadowedByIntermediateNamespace(lastRedundant, chain, currentContext))
     {
       return;
     }
