@@ -124,7 +124,8 @@ with a supervising process or retire source views while the application runs.
 
 These measurements attribute existing work. They do not skip configuration,
 change compiler-cache tracking, reduce suites or lint rules, or establish a
-speedup.
+speedup. For private Windows incremental-build evidence, use the
+[MSBuild capture procedure](windows.md#capture-msbuild-incrementality).
 
 ## Dependencies and optional setup
 

@@ -295,6 +295,83 @@ claims. The shipping executable has no probe switches; probe application
 metadata stays outside its WinMD/PRI dependency closure. Close the application
 and probes before another portal build or hygiene refresh can relink them.
 
+### Capture MSBuild incrementality
+
+Use the build-only `--msbuild-capture <directory>` option for private diagnosis
+of a native WinUI build:
+
+```powershell
+.\ao.bat build --target winui --msbuild-capture "$env:LOCALAPPDATA\Aobus\diagnostics\first"
+.\ao.bat build --target winui --msbuild-capture "$env:LOCALAPPDATA\Aobus\diagnostics\second"
+```
+
+Prepare the private parent directory first. Each capture destination must be a
+new absolute guest-local directory, separate from the source and selected build
+trees. Existing destinations, remote storage, whitespace, quotes, and
+logger-delimiter characters are rejected; use a plain directory spelling for
+the initial capture interface. The option is unavailable for Ninja targets, other platforms, and
+`check`; it does not expose arbitrary native build arguments.
+
+The normal portal still configures and builds the real WinUI target under its
+build-tree lock. Capture adds a binary log with `ProjectImports=None`, private
+tracking/state snapshots around configuration/build, and selected identity
+metadata. It never forces tracking on, substitutes a cache provider, cleans a tree, or skips
+an ordinary target build. Keep the source, generated inputs, configuration,
+launcher and backend unchanged when comparing consecutive invocations. A local
+managed-ccache or uncached result is not evidence for CI's sccache fallback.
+The captured tracking policy flag is not the evaluated `TrackFileAccess`
+property: for example, an uncached tree has no compiler-cache props import even
+when the policy flag is `0`. Check the selected wrapper and evaluated MSBuild
+evidence before drawing a tracking conclusion.
+
+**Keep the whole capture private.** Binary logs and tlogs can contain compiler
+arguments, paths and environment-derived properties. `ProjectImports=None`
+omits imported project contents; it does not redact secrets. Choose a parent
+with suitable native filesystem permissions, do not blindly upload captures as
+CI artifacts, and publish only reviewed derived facts. Public
+[phase summaries](build.md#measure-native-validation) never include this raw
+capture. No diagnostic-verbosity console or full-environment dump is enabled.
+
+Snapshots privately preserve tree-relative raw `.tlog` and `.lastbuildstate`
+files, the bare `unsuccessfulbuild` marker, and suffix-shaped
+`*.unsuccessfulbuild` project markers; basename matching is case-insensitive.
+The per-stage `project_state` list and `project-state` copies distinguish a
+zero-byte marker from absence; compare lists across stages to identify removal.
+These are selected diagnostic files, not a complete incremental filesystem or
+replayable build state. Selected `.exe`, `.dll`, and `.lib` outputs have
+size/mtime/SHA-256 identities only; their payloads and object files are not
+copied, and object files are not hashed. Each stage independently hashes its
+selected files. Only the build-tree-root `vcpkg_installed` and `third-party_deps`
+subtrees (including nested dependencies/tools) are pruned from traversal;
+identically named directories deeper in first-party output/tool trees remain
+eligible. Native project tracking files, nested WinUI outputs and other selected
+output identities outside those dependency roots remain eligible. Selected
+compiler/wrapper tools are hashed separately even if located in a pruned tree.
+This selection does not bound file count, bytes read, or elapsed time; other
+configurations and unexcluded nested output/tool trees can still add work.
+
+The private `capture.json` lifecycle receipt is separate from each snapshot's
+`complete` flag, which describes only that snapshot. Its fixed fields are
+`stage` (`setup`, `before-configure`, `configure`, `before-build`, `build`, or
+`after-build`), `outcome` (`aborted`, `failed`, or `ok`), and `build_status`
+(`not-run`, `failed`, or `ok`, describing the native build only). The initial
+receipt is `setup`/`aborted`/`not-run`; finalization records the original failing
+stage, or `after-build` for final evidence and success. Setup failures do not fabricate
+pre-build snapshots. Missing/empty binlog evidence after native success fails
+capture even though the receipt's native `build_status` is `ok`. Receipt updates
+replace atomically, retaining the initial classification if a later write
+fails; persistent storage errors can prevent even the initial receipt. Evidence
+I/O failures never replace an existing build/setup exception. Leaves are never
+deleted or reused, including failed attempts. These fields/lists are a private
+diagnostic contract, not additions to the public phase schema or a replay API;
+they contain no exception text, argv, or environment dump.
+
+Capture itself adds logging, copying and hashing work. Use it to explain dirty
+compile/generate/link tasks, not as a matched end-to-end speed benchmark; run
+performance comparisons separately without diagnostic capture. No native
+performance improvement follows from the narrowed selection alone. Preserve
+failed attempts and their trees rather than cleaning away the evidence.
+
 ## Compiler cache
 
 Run `ao.bat setup compiler-cache` to install and verify governed ccache and
