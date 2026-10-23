@@ -33,6 +33,25 @@ Common AST traps include:
 - C++20 rewritten comparisons contain synthesized operators. Use `aobus::isWithinRewrittenOperator` or match the source comparison to avoid duplicate or inverted diagnostics.
 - Initializer-list constructor detection uses the first parameter's type; parent traversal requires `clang/AST/ParentMapContext.h`.
 
+For namespace-qualification fixes, lookup safety concerns the first component
+left after removal, not just the final referenced member. Preserve source names
+from aliases and using-declarations, and inspect template heads on concepts and
+requires-clauses as well as outer template parameter lists on source definitions
+when instantiated nodes omit them. Removing the complete qualifier from a
+function call can enable argument-dependent lookup even when ordinary lookup
+finds the same declaration. The bounded proof accepts only fundamental-typed
+source arguments (before implicit conversions), ignoring default arguments.
+Newly unqualified direct calls with explicit template arguments, dependent or
+instantiated source contexts, and unfamiliar function-use forms are left
+qualified. A surviving qualifier, parenthesized callee, or explicit address-taking
+does not activate ADL through this removal.
+
+The checker also abstains when inherited, using-directive, inline-namespace, or
+dependent lookup cannot be proved from its AST context. Fixtures record those
+conservative boundaries alongside unshadowed positives and type/callable
+identity assertions; successful compilation alone does not establish that a
+FixIt preserves binding.
+
 ### Fixture contract
 
 Place fixtures under `test/integration/lint/fixture/<check-alias>/`; the directory selects the check.
