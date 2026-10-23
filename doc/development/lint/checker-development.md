@@ -201,6 +201,17 @@ It also removes the CMake-generated forced PCH to avoid redeclaring the headers 
 For WinUI it suppresses only the nonportable-include-path compiler diagnostic because generated C++/WinRT headers preserve schema casing while Windows resolves paths case-insensitively.
 Intentional header-only WinUI support has audited implementation companions.
 
+Selected headers, include fragments, and WinUI-context files also receive an
+exact full-path line filter. Include fragments run through their consumer, so
+this filter must exclude unrelated diagnostics in the consumer main file and
+other headers. LLVM filters diagnostic groups: a template warning in another
+file can remain visible when an instantiation note is in the selected file.
+Windows entries retain both native and forward-slash spellings
+for each validated source root; header regex separator handling alone does not
+make LLVM's line-filter names interchangeable. Keep selected-file positive
+controls alongside excluded-file controls: a successful process with no
+warnings cannot distinguish clean input from a mismatched filter.
+
 A platform-incompatible header without a safe pair, real Ninja consumer, or audited WinUI companion is deferred in a batch scan.
 A compatible header without that evidence fails closed and asks for a normal build or check to refresh dependency data.
 An explicitly selected uncovered file fails.

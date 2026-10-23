@@ -6,10 +6,12 @@ are de-duplicated across translation units before being printed or written to a 
 
 import argparse
 import contextlib
+import ctypes
 import fnmatch
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -215,12 +217,106 @@ def exact_header_filter(headers: list[Path], *, source_roots: tuple[Path, ...] |
 def path_line_filter(paths: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Limit diagnostics and exported fixes to the explicitly selected paths."""
     roots = source_roots or (absolute_path(PROJECT_ROOT),)
-    entries = [
-        {"name": spelling.as_posix(), "lines": [[1, 2_147_483_647]]}
+    # LLVM matches these names literally, unlike the separator-aware header regex.
+    names = dict.fromkeys(
+        name
         for path in paths
         for spelling in _source_spellings(path, roots)
-    ]
+        for name in (str(spelling), spelling.as_posix())
+    )
+    entries = [{"name": name, "lines": [[1, 2_147_483_647]]} for name in names]
     return json.dumps(entries, separators=(",", ":"))
+
+
+def write_selected_file_overlay(destination: Path, selected: Path, *, source_roots: tuple[Path, ...]) -> Path:
+    """Keep LLVM's file identity stable without replacing any selected bytes."""
+    spellings = _source_spellings(selected, source_roots)
+    if not selected.is_file() or not spellings:
+        raise ValueError(f"selected file is unavailable: {selected}")
+    for spelling in spellings:
+        if not spelling.is_absolute() or not spelling.is_file() or not spelling.samefile(selected):
+            raise ValueError(f"selected-file alias does not identify {selected}: {spelling}")
+    # LLVM's Windows VFS lookup handles mixed separators, including nested
+    # includes. External names make FileEntryRef and replacement paths use this
+    # validated full name, rather than inventing include-spelling permutations.
+    payload = {
+        "version": 0,
+        "case-sensitive": False,
+        "use-external-names": True,
+        "roots": [
+            {"type": "file", "name": spelling.as_posix(), "external-contents": str(spellings[0])}
+            for spelling in dict.fromkeys(spellings)
+        ],
+    }
+    destination.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return destination
+
+
+def _validate_selected_vfs_inputs(database_dir: Path, translation_units: set[Path], tidy_arguments: list[str]) -> None:
+    """Fail closed instead of shadowing caller-owned virtual file contents."""
+
+    def key(path: Path) -> str:
+        return os.path.normcase(str(workspace_cache.canonical_portal_path(path)))
+
+    def command_arguments(command: str) -> list[str]:
+        if os.name != "nt":
+            return shlex.split(command, posix=False)
+        count = ctypes.c_int()
+        shell: ctypes.CDLL = vars(ctypes)["WinDLL"]("shell32", use_last_error=True)
+        split = shell.CommandLineToArgvW
+        split.argtypes = (ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_int))
+        split.restype = ctypes.POINTER(ctypes.c_wchar_p)
+        arguments = split(command, ctypes.byref(count))
+        if not arguments:
+            raise OSError("cannot inspect Windows compile-command arguments")
+        try:
+            return list(arguments[: count.value])
+        finally:
+            kernel: ctypes.CDLL = vars(ctypes)["WinDLL"]("kernel32", use_last_error=True)
+            free = kernel.LocalFree
+            free.argtypes = (ctypes.c_void_p,)
+            free.restype = ctypes.c_void_p
+            free(arguments)
+
+    required = {key(path) for path in translation_units}
+    found: set[str] = set()
+    arguments_to_check = list(tidy_arguments)
+    for variable in ("CL", "_CL_"):
+        arguments_to_check.extend(command_arguments("clang-cl " + os.environ.get(variable, ""))[1:])
+    for entry in json.loads((database_dir / "compile_commands.json").read_text(encoding="utf-8")):
+        path = Path(entry["file"])
+        if not path.is_absolute():
+            path = Path(entry["directory"]) / path
+        identity = key(path)
+        if identity not in required:
+            continue
+        found.add(identity)
+        arguments = entry.get("arguments")
+        arguments_to_check.extend(arguments if isinstance(arguments, list) else command_arguments(entry["command"]))
+    if found != required:
+        raise ValueError("selected fragment compile commands could not be inspected for VFS overrides")
+    # Caller VFS overlays, response files, and config files cannot compose
+    # with the selected-file overlay: their hidden contents cannot be inspected
+    # or merged here. Do not reinterpret or replace those contexts until
+    # composition can preserve their virtual contents. The slash overlay
+    # spellings are also rejected as defense in depth.
+    wrappers = ("--extra-arg-before=", "-extra-arg-before=", "--extra-arg=", "-extra-arg=", "/clang:")
+    for argument in arguments_to_check:
+        token = argument.strip("\"'").casefold()
+        while wrapper := next((prefix for prefix in wrappers if token.startswith(prefix)), None):
+            token = token.removeprefix(wrapper).strip("\"'")
+        if token.startswith(("-ivfsoverlay", "-vfsoverlay", "--vfsoverlay", "/ivfsoverlay", "/vfsoverlay")):
+            raise ValueError(
+                "selected Windows fragments cannot compose caller VFS overlays with the selected-file overlay"
+            )
+        # The governed clang-tidy invocation passes its own -config, and a
+        # hidden compiler response or config file may carry overlays.
+        if token.startswith(("@", "--config=", "-config=")) or token in ("--config", "-config"):
+            raise ValueError(
+                "selected Windows fragments cannot compose response/config files: their hidden contents "
+                "may shadow the selected-file overlay, and a caller config cannot override the governed "
+                "clang-tidy -config"
+            )
 
 
 @dataclass(frozen=True)
@@ -549,7 +645,11 @@ def limits_diagnostics_to_selected_path(invocation: TidyInvocation) -> bool:
     source duplicates unrelated diagnostics; changed headers already receive an
     exact header-as-main invocation of their own.
     """
-    return invocation.is_header or requires_winui_compile_context(invocation.compile_command_source)
+    return (
+        invocation.is_header
+        or invocation.is_include_fragment
+        or requires_winui_compile_context(invocation.compile_command_source)
+    )
 
 
 def winui_build_directory(tidy_build_dir: Path, *, path_was_explicit: bool) -> Path:
@@ -965,6 +1065,27 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             )
             return 1
 
+        selected_overlays: dict[Path, Path] = {}
+        fragments = [
+            invocation for batch in invocations.values() for invocation in batch if invocation.is_include_fragment
+        ]
+        if os.name == "nt" and fragments:
+            try:
+                _validate_selected_vfs_inputs(
+                    native_database_dir,
+                    {invocation.compile_command_source for invocation in fragments},
+                    args.tidy_arg,
+                )
+                overlay_dir = tidyengine.make_tmpdir("tidy-selected-vfs-")
+                stack.callback(shutil.rmtree, overlay_dir, ignore_errors=True)
+                for index, invocation in enumerate(fragments):
+                    selected_overlays[invocation.selected] = write_selected_file_overlay(
+                        overlay_dir / f"{index}.json", invocation.selected, source_roots=source_roots
+                    )
+            except (OSError, ValueError) as error:
+                print(f"ERROR: cannot preserve selected fragment identity: {error}", file=sys.stderr)
+                return 1
+
         mapped_headers = [target for target in coverage_plan.targets if target.is_header]
         header_database_dir: Path | None = None
         if mapped_headers:
@@ -1027,6 +1148,8 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                     extra.append("--extra-arg-before=-Wno-nonportable-include-path")
             if limits_diagnostics_to_selected_path(invocation):
                 extra.append(f"-line-filter={path_line_filter([invocation.selected], source_roots=source_roots)}")
+            if overlay := selected_overlays.get(invocation.selected):
+                extra.append(f"--vfsoverlay={overlay}")
             if invocation.is_header and invocation.compile_command_source.suffix.lower() != ".mm":
                 extra.append("--extra-arg-before=-x")
                 extra.append("--extra-arg-before=c++-header")

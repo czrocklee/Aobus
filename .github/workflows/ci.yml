@@ -674,6 +674,12 @@ jobs:
           path: C:\aobus-state\cache\vcpkg-binary
           key: ${{ steps.vcpkg-cache-ready.outputs.key }}
 
+      # Tooling tests need real LLVM diagnostic delivery. Seal the dependency
+      # cache above before cold SDK provisioning can fail. No checker build.
+      - name: Prepare native lint filter controls
+        shell: pwsh
+        run: .\ao.bat format --check tool/lint/AobusClangTidyMain.cpp
+
       - name: Reset build compiler cache statistics
         if: ${{ steps.compiler-cache.outcome == 'success' }}
         continue-on-error: true
