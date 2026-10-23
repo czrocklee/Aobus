@@ -34,43 +34,43 @@ class TidyClassifyTest(unittest.TestCase):
 
 class TidyChecksTest(unittest.TestCase):
     def test_no_selection_uses_full_mode_checks(self):
-        self.assertEqual(tidy.checks_for("STRICT", None), tidy.STRICT_CHECKS)
-        self.assertEqual(tidy.checks_for("RELAXED", None), tidy.RELAXED_CHECKS)
+        self.assertEqual(tidyconfig.checks_for("STRICT", None), tidyconfig.STRICT_CHECKS)
+        self.assertEqual(tidyconfig.checks_for("RELAXED", None), tidyconfig.RELAXED_CHECKS)
 
     def test_selected_check_keeps_mode_disables(self):
         # A check disabled only for tests must stay off in RELAXED even when selected.
-        relaxed = tidy.checks_for("RELAXED", "readability-magic-numbers")
+        relaxed = tidyconfig.checks_for("RELAXED", "readability-magic-numbers")
         self.assertEqual(relaxed.split(",")[:2], ["-*", "readability-magic-numbers"])
         self.assertEqual(relaxed.split(",").count("-readability-magic-numbers"), 1)
         self.assertTrue(relaxed.endswith("-readability-magic-numbers") or ",-readability-magic-numbers," in relaxed)
 
     def test_selected_check_active_in_strict(self):
         # STRICT does not disable magic-numbers, so it stays enabled.
-        strict = tidy.checks_for("STRICT", "readability-magic-numbers")
+        strict = tidyconfig.checks_for("STRICT", "readability-magic-numbers")
         self.assertIn("readability-magic-numbers", strict)
         self.assertNotIn("-readability-magic-numbers", strict)
 
     def test_cocoa_checks_supplement_cpp_rules_in_production(self):
-        checks = tidy.checks_for("STRICT", None).split(",")
+        checks = tidyconfig.checks_for("STRICT", None).split(",")
         self.assertIn("objc-super-self", checks)
         self.assertIn("objc-property-declaration", checks)
         self.assertIn("cppcoreguidelines-*", checks)
         self.assertIn("clang-analyzer-osx.*", analyze.analyzer_checks(alpha=False, only=None).split(","))
 
     def test_mode_disabled_checks_excludes_star(self):
-        disables = tidy.mode_disabled_checks("STRICT")
+        disables = tidyconfig.mode_disabled_checks("STRICT")
         self.assertNotIn("-*", disables)
         self.assertTrue(all(token.startswith("-") for token in disables))
 
     def test_clang_22_policy_exclusions_are_mode_specific(self):
-        self.assertIn("-misc-multiple-inheritance", tidy.STRICT_CHECKS.split(","))
-        self.assertIn("-bugprone-derived-method-shadowing-base-method", tidy.STRICT_CHECKS.split(","))
-        self.assertIn("-bugprone-exception-escape", tidy.STRICT_CHECKS.split(","))
-        self.assertIn("-bugprone-throwing-static-initialization", tidy.STRICT_CHECKS.split(","))
-        self.assertNotIn("-modernize-use-designated-initializers", tidy.STRICT_CHECKS.split(","))
-        self.assertIn("-modernize-use-designated-initializers", tidy.RELAXED_CHECKS.split(","))
-        self.assertIn("-bugprone-exception-escape", tidy.RELAXED_CHECKS.split(","))
-        self.assertIn("-bugprone-throwing-static-initialization", tidy.RELAXED_CHECKS.split(","))
+        self.assertIn("-misc-multiple-inheritance", tidyconfig.STRICT_CHECKS.split(","))
+        self.assertIn("-bugprone-derived-method-shadowing-base-method", tidyconfig.STRICT_CHECKS.split(","))
+        self.assertIn("-bugprone-exception-escape", tidyconfig.STRICT_CHECKS.split(","))
+        self.assertIn("-bugprone-throwing-static-initialization", tidyconfig.STRICT_CHECKS.split(","))
+        self.assertNotIn("-modernize-use-designated-initializers", tidyconfig.STRICT_CHECKS.split(","))
+        self.assertIn("-modernize-use-designated-initializers", tidyconfig.RELAXED_CHECKS.split(","))
+        self.assertIn("-bugprone-exception-escape", tidyconfig.RELAXED_CHECKS.split(","))
+        self.assertIn("-bugprone-throwing-static-initialization", tidyconfig.RELAXED_CHECKS.split(","))
 
     def test_cognitive_complexity_ignores_macro_expansions(self):
         self.assertIn(
@@ -108,7 +108,10 @@ class TidyChecksTest(unittest.TestCase):
         self.assertNotIn("readability-identifier-naming.LocalConstant", tidyconfig.CONFIG_BASE)
 
     def test_winrt_framework_shapes_are_narrowly_allowlisted(self):
-        self.assertIn("|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext)", tidyconfig.CONFIG_BASE)
+        self.assertIn(
+            "|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext|GetXamlType|GetXmlnsDefinitions)",
+            tidyconfig.CONFIG_BASE,
+        )
         self.assertIn(
             r"{key: 'bugprone-suspicious-include.IgnoredRegex', value: '.*\.g\.cpp$'}",
             tidyconfig.CONFIG_BASE,

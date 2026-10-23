@@ -208,9 +208,16 @@ other headers. LLVM filters diagnostic groups: a template warning in another
 file can remain visible when an instantiation note is in the selected file.
 Windows entries retain both native and forward-slash spellings
 for each validated source root; header regex separator handling alone does not
-make LLVM's line-filter names interchangeable. Keep selected-file positive
-controls alongside excluded-file controls: a successful process with no
-warnings cannot distinguish clean input from a mismatched filter.
+make LLVM's line-filter names interchangeable. An included fragment can acquire
+a mixed name from a native include directory and a forward-slash include token.
+Windows fragment replay therefore uses a file-only VFS overlay whose aliases
+must identify the same selected physical file. Its canonical external name
+stabilizes LLVM's file identity without changing the selected bytes, consumer
+command or full-path filtering boundary. Caller VFS and response/config-file
+contexts fail closed when their virtual contents cannot be safely composed.
+Keep selected-file positive controls alongside excluded-file controls: a
+successful process with no warnings cannot distinguish clean input from a
+mismatched filter.
 
 A platform-incompatible header without a safe pair, real Ninja consumer, or audited WinUI companion is deferred in a batch scan.
 A compatible header without that evidence fails closed and asks for a normal build or check to refresh dependency data.

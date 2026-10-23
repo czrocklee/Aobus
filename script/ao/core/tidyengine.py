@@ -298,6 +298,40 @@ def clang_tool(build_dir: Path, name: str, *, os_name: str | None = None) -> str
     return str(tool)
 
 
+@dataclass(frozen=True)
+class TidyToolchain:
+    """The verified native clang-tidy host and its platform resources.
+
+    Prepared once by the tidy command's toolchain preflight and consumed by
+    every clang-tidy caller (tidy analysis, the lint fixture runner); the field
+    order is kept stable for existing positional uses. ``sdk_root`` is the
+    verified LLVM SDK root behind the Windows tools, filled once by the
+    preflight so downstream capability checks resolve from the verified SDK
+    instead of re-reading the build cache.
+    """
+
+    clang_tidy: str
+    plugin: Path | None
+    resource_dir: Path | None
+    expected_llvm_version: str | None = None
+    sdk_root: Path | None = None
+
+
+def windows_analysis_arguments(resource_dir: Path, *, driver_mode: bool = False) -> tuple[str, ...]:
+    """Return the Windows analysis arguments shared by tidy and lint fixtures.
+
+    The VS 18 STL lets Clang classify three-byte records as SIMD-find
+    candidates, but its vectorized helper supports only 1/2/4/8-byte elements.
+    clang-tidy does not link or execute the TU, so disabling that optional STL
+    implementation path preserves the analyzed API. Tidy passes the arguments
+    as extra-args-before; ``driver_mode`` returns the same two arguments with
+    the clang-cl ``/clang:`` and ``/D`` spellings the fixture runner needs.
+    """
+    if driver_mode:
+        return (f"/clang:-resource-dir={resource_dir}", "/D_USE_STD_VECTOR_ALGORITHMS=0")
+    return (f"-resource-dir={resource_dir}", "-D_USE_STD_VECTOR_ALGORITHMS=0")
+
+
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx", ".mm"))
 _SELF_CONTAINED_HEADER_SUFFIXES = frozenset((".h", ".hh", ".hpp", ".hxx"))
 _INCLUDE_FRAGMENT_SUFFIXES = frozenset((".def",))

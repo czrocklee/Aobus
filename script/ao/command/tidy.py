@@ -22,7 +22,8 @@ from ..core import builddir, buildlock, gitfiles, pythoncheck, tidyengine, winui
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
-from ..core.tidyconfig import CONFIG_BASE
+from ..core.tidyconfig import checks_for, config_for, mode_disabled_checks
+from ..core.tidyengine import TidyToolchain as TidyToolchain
 from . import build
 
 HELP = "Run C++ clang-tidy and Python Ruff/mypy checks"
@@ -58,76 +59,6 @@ WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = (
     "/experimental:deterministic",
 )
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
-
-# Check groups: start from nothing, enable curated groups, then disable known false
-# positives or project-preference conflicts.
-STRICT_CHECKS = ",".join(
-    [
-        "-*",
-        # === enabled check groups ===
-        "aobus-*",  # Aobus custom checks (naming, spacing, etc.)
-        "bugprone-*",  # bug-prone pattern detection
-        "performance-*",  # performance issues
-        "cppcoreguidelines-*",  # C++ Core Guidelines
-        "misc-*",  # miscellaneous useful checks
-        "modernize-*",  # modern C++ usage
-        "readability-*",  # readability improvements
-        "portability-*",  # portability concerns
-        "objc-avoid-nserror-init",
-        "objc-dealloc-in-category",
-        "objc-forbidden-subclassing",
-        "objc-missing-hash",
-        "objc-nsinvocation-argument-lifetime",
-        "objc-property-declaration",
-        "objc-super-self",
-        "google-objc-avoid-throwing-exception",
-        "google-build-namespaces",
-        "google-readability-casting",
-        "google-readability-namespace-comments",
-        # === disabled: false positives or project preference ===
-        "-bugprone-easily-swappable-parameters",  # frequent false positives
-        # CRTP customization deliberately refines non-virtual fallback methods
-        # (RecursiveASTVisitor and std::ranges::view_interface).
-        "-bugprone-derived-method-shadowing-base-method",
-        "-bugprone-exception-escape",  # dominated by allocation paths and MSVC container moves
-        "-bugprone-throwing-static-initialization",  # dominated by STL startup-allocation details
-        "-cppcoreguidelines-avoid-magic-numbers",  # handled by aobus readability check
-        "-cppcoreguidelines-avoid-const-or-ref-data-members",  # common pattern for views
-        "-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access",  # .at() is not a universal hot-path policy
-        "-cppcoreguidelines-pro-bounds-constant-array-index",  # table dispatch is fine
-        "-cppcoreguidelines-pro-bounds-pointer-arithmetic",  # common in layout/audio code
-        "-misc-no-recursion",  # recursion is idiomatic in some modules
-        "-misc-multiple-inheritance",  # renamed Fuchsia policy conflicts with GTK/framework composition
-        "-misc-non-private-member-variables-in-classes",  # impl structs use this pattern
-        "-modernize-use-trailing-return-type",  # style choice: prefer leading type
-        "-modernize-use-nodiscard",  # not enforced globally
-        "-modernize-use-auto",  # handled by aobus custom check
-        "-performance-unnecessary-value-param",  # too noisy for interface types
-        "-performance-move-const-arg",  # conflicts with const-correctness
-        "-readability-redundant-member-init",  # explicit init is intentional
-        "-readability-convert-member-functions-to-static",  # prefers explicit design intent
-        "-portability-avoid-pragma-once",  # project standard is #pragma once
-        "-clang-diagnostic-*",  # compiler diagnostics not our domain
-    ]
-)
-
-RELAXED_CHECKS = ",".join(
-    [
-        STRICT_CHECKS,
-        # === additionally disabled for test code ===
-        "-bugprone-unchecked-optional-access",  # test code uses .value() liberally
-        "-bugprone-unused-return-value",  # tests often discard return values
-        "-cppcoreguidelines-avoid-c-arrays",  # Catch2 API and test data arrays
-        "-cppcoreguidelines-avoid-magic-numbers",  # not enforced in tests
-        "-cppcoreguidelines-pro-type-reinterpret-cast",  # common pattern in test mocks
-        "-cppcoreguidelines-pro-type-vararg",  # debug helpers use printf-style
-        "-portability-template-virtual-member-function",  # test fixtures use vfunc_* pattern
-        "-modernize-use-designated-initializers",  # positional expected-data tables are clearer in tests
-        "-readability-function-cognitive-complexity",  # test bodies are inherently complex
-        "-readability-identifier-length",  # test locals (id, v, it) are fine
-        "-readability-magic-numbers",  # not enforced in tests
-    ]
-)
 
 EXPECTED_AOBUS_CHECKS = frozenset(
     {
@@ -353,23 +284,6 @@ def build_invocations(
     return invocations
 
 
-def mode_disabled_checks(mode: str) -> list[str]:
-    """The explicit disable directives a mode applies, e.g. ['-bugprone-...', ...]."""
-    source = RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
-    return [token for token in source.split(",") if token.startswith("-") and token != "-*"]
-
-
-def checks_for(mode: str, selected: str | None) -> str:
-    """Resolve the clang-tidy check list for a mode.
-
-    With --check, run only the selected check(s) but still honour the mode's disable
-    list, so a check disabled for tests (e.g. readability-magic-numbers) stays off there.
-    """
-    if selected:
-        return ",".join(["-*", selected, *mode_disabled_checks(mode)])
-    return RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
-
-
 _NOLINT_OPEN_RE = re.compile(r"\bNOLINT(?:NEXTLINE|BEGIN)?\(([^)]*)\)")
 
 
@@ -439,14 +353,6 @@ def classify(path: Path, explicit: bool) -> str:
     if "/test/" in rel_slash:
         return "RELAXED"
     return "STRICT"
-
-
-@dataclass(frozen=True)
-class TidyToolchain:
-    clang_tidy: str
-    plugin: Path | None
-    resource_dir: Path | None
-    expected_llvm_version: str | None = None
 
 
 def expected_lint_artifact_path(build_dir: Path, *, os_name: str | None = None) -> Path:
@@ -561,6 +467,7 @@ def prepare_toolchain(
         plugin=None if profile.name == "windows" else artifact,
         resource_dir=tidyengine.clang_resource_dir(build_dir) if profile.name == "windows" else None,
         expected_llvm_version=(tidyengine.llvm_sdk_version(build_dir) if profile.name == "windows" else None),
+        sdk_root=tidyengine.llvm_sdk_root(build_dir) if profile.name == "windows" else None,
     )
     verify_tidy_toolchain(toolchain)
     return toolchain
@@ -1136,12 +1043,10 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             )
             extra: list[str] = list(isystem)
             if toolchain.resource_dir is not None:
-                extra.append(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}")
-                # VS 18's STL lets Clang classify three-byte records as SIMD-find
-                # candidates, but its vectorized helper supports only 1/2/4/8-byte
-                # elements. clang-tidy does not link or execute the TU, so disabling
-                # that optional STL implementation path preserves the analyzed API.
-                extra.append("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0")
+                extra.extend(
+                    f"--extra-arg-before={argument}"
+                    for argument in tidyengine.windows_analysis_arguments(toolchain.resource_dir)
+                )
                 if requires_winui_compile_context(invocation.compile_command_source):
                     # Generated C++/WinRT headers preserve schema spelling while
                     # Windows resolves include paths case-insensitively.
@@ -1161,7 +1066,7 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                 extra.append(f"-load={toolchain.plugin}")
             if args.fix:
                 extra.append(f"-export-fixes={log.with_suffix('.yaml')}")
-            config = " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
+            config = config_for(checks)
             compile_database = header_database_dir if invocation.is_header else native_database_dir
             if compile_database is None:
                 raise die(f"synthetic compile database was not created for {invocation.selected}")

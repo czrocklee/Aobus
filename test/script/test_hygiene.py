@@ -16,6 +16,7 @@ from unittest import mock
 
 from ao.command import format as format_command
 from ao.command import hygiene, tidy
+from ao.core import tidyconfig
 
 
 class FormatCommandTest(unittest.TestCase):
@@ -1072,6 +1073,37 @@ Diagnostics:
                     self.assertTrue(tidy.apply_fixes(tmpdir, tool))
 
             call.assert_called_once_with([tool, "--ignore-insert-conflict", str(tmpdir)])
+
+
+class TidyNamingPolicyTest(unittest.TestCase):
+    """The identifier-naming method exemption is an exact-anchored policy."""
+
+    def ignored_regexp(self) -> re.Pattern[str]:
+        match = re.search(
+            r"readability-identifier-naming\.MethodIgnoredRegexp', value: '([^']+)'", tidyconfig.CONFIG_BASE
+        )
+        assert match is not None
+        return re.compile(match.group(1))
+
+    def test_winrt_metadata_abi_accessors_are_exempt(self):
+        # Every projected winrt::_Class_base type repeats these two metadata ABI
+        # accessors; they are generated surface, not project naming style.
+        pattern = self.ignored_regexp()
+        for name in ("GetXamlType", "GetXmlnsDefinitions"):
+            self.assertTrue(pattern.fullmatch(name), name)
+
+    def test_exemptions_stay_exact_and_anchored(self):
+        pattern = self.ignored_regexp()
+        for name in ("GetXamlTypeExtra", "MyGetXamlType", "getxamltype", "GetTemplate"):
+            self.assertIsNone(pattern.fullmatch(name), name)
+        # Existing external-method entries keep matching.
+        for name in ("GetAt", "MoveNext", "property_foo"):
+            self.assertTrue(pattern.fullmatch(name), name)
+
+    def test_idl_property_names_are_not_globally_exempt(self):
+        pattern = self.ignored_regexp()
+        for name in ("Text", "Width"):
+            self.assertIsNone(pattern.fullmatch(name), name)
 
 
 if __name__ == "__main__":

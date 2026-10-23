@@ -239,7 +239,7 @@ WINDOWS_PROFILE = PlatformProfile(
     executable_suffix=".exe",
     apps=("cli", "tui", "winui"),
     default_suites=("core", "tui"),
-    all_suites=("core", "tui", "cli", "integration", "tooling"),
+    all_suites=("core", "tui", "cli", "integration", "tooling", "lint"),
     tsan_suites=(),
     compiler="msvc",
 )
@@ -310,6 +310,25 @@ def winui_companion_build_dir(
     if primary_path_was_explicit or os.environ.get("BUILD_DIR"):
         return primary_build_dir.with_name(f"{primary_build_dir.name}-winui")
     return winui_build_dir(os_name)
+
+
+def windows_lint_build_dir(primary: Path) -> Path:
+    """Return the dedicated Windows checker host for a primary product tree.
+
+    Default product trees share the portal's ``windows-tidy`` host; any other
+    primary (an explicit path or a ``BUILD_DIR`` override) gets a ``-tidy``
+    sibling so the product configuration is never reconfigured in place. The
+    ``ao test`` lint route and ``setup llvm-sdk`` derive their host this way,
+    while ``tidy_dir()`` keeps its generic ``ao tidy``/``format`` meaning of
+    naming the override tree itself.
+    """
+    profile = platform_profile()
+    default_trees = {
+        profile.build_root / f"{preset}{suffix}" for preset in profile.presets.values() for suffix in ("", "-asan")
+    }
+    if primary in default_trees and not os.environ.get("BUILD_DIR"):
+        return profile.build_root / "windows-tidy"
+    return primary.with_name(f"{primary.name}-tidy")
 
 
 def preset(flavor: str, *, os_name: str | None = None) -> str:

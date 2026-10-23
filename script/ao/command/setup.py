@@ -3,7 +3,7 @@
 import argparse
 import os
 
-from ..core import compiler_cache, gitfiles, winui
+from ..core import builddir, compiler_cache, gitfiles, tidyengine, winui
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -12,11 +12,16 @@ NAME = "setup"
 REQUIRES_BUILD_ENV = False
 
 
+def requires_build_environment(args: argparse.Namespace) -> bool:
+    """The SDK configure needs Visual Studio; other components need no build environment."""
+    return args.component == "llvm-sdk" and builddir.platform_profile().name == "windows"
+
+
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
     parser.add_argument(
         "component",
-        choices=("compiler-cache", "git-hooks", "winui-runtime"),
+        choices=("compiler-cache", "git-hooks", "llvm-sdk", "winui-runtime"),
         help="host component to install",
     )
     shared_workspaces = parser.add_mutually_exclusive_group()
@@ -33,6 +38,23 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         help="disable compiler-cache reuse across workspaces",
     )
     parser.set_defaults(func=run_command)
+
+
+def _setup_llvm_sdk() -> int:
+    """Provision the pinned Windows LLVM SDK through the governed tidy configure.
+
+    The SDK download, SHA-256 verification, and completion marker stay owned by
+    the CMake provider that format/tidy use; this route only configures the
+    derived lint host and never builds the checker.
+    """
+    if builddir.platform_profile().name != "windows":
+        raise die("setup llvm-sdk provisions the pinned Windows LLVM SDK; it is defined only on native Windows hosts.")
+    # BUILD_DIR names the primary product tree: derive the owned lint host
+    # instead of reconfiguring the product root.
+    sdk_tree = builddir.windows_lint_build_dir(builddir.build_dir("debug"))
+    tidyengine.ensure_windows_llvm_sdk(sdk_tree)
+    print(f"Pinned LLVM SDK {tidyengine.llvm_sdk_version(sdk_tree)} ready at {tidyengine.llvm_sdk_root(sdk_tree)}.")
+    return 0
 
 
 def run_command(args: argparse.Namespace) -> int:
@@ -62,6 +84,8 @@ def run_command(args: argparse.Namespace) -> int:
         for key in overrides:
             print(f"Notice: using {key} override from environment")
         return 0
+    if args.component == "llvm-sdk":
+        return _setup_llvm_sdk()
     try:
         installed = winui.setup_runtime()
     except RuntimeError as exc:
