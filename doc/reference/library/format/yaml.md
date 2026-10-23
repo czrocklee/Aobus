@@ -347,8 +347,9 @@ There is no reader for an earlier schema, permissive unknown-field path, restore
 
 Changing a released field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within the accepted surface.
 Version 1 accepts only the schema defined here; alternative layouts are unsupported even when labeled version 1. There is no dual reader or layout autodetection.
-Version 1 has not been released. Until the first public release, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change.
-After the first release, a version is incremented at most once per release, and every later release imports every released version without losing curation, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
+Version 1 is the schema of the first release, and no later build changes what a version-1 document means.
+A version above the last released one is unreleased: until a release ships it, a development build may change its schema or widen one of its limits without incrementing it, and an earlier development build then rejects a document that relies on the change.
+A version is incremented at most once per release, and every later release imports every released version without losing curation, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
 Payload versioning is independent of the database's `kLibraryVersion`, except that a predicate-language change that alters accepted filter text increments both.
 
 ## Examples
@@ -438,7 +439,7 @@ library:
 - [`LibraryYamlModeFixtureTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlModeFixtureTest.cpp) restores committed version-1 documents: [`v1-delta.yaml`](../../../../test/data/library/v1-delta.yaml) and [`v1-metadata.yaml`](../../../../test/data/library/v1-metadata.yaml) export back byte for byte, [`v1-list-only.yaml`](../../../../test/data/library/v1-list-only.yaml) replaces the Lists and ranks Tracks and segments by URI, and [`v1-scalars.yaml`](../../../../test/data/library/v1-scalars.yaml) checks that each field takes its meaning from this schema rather than from YAML implicit typing, both after the restore and after a restore of its export.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) covers canonicalization, the byte length limit after normalization, literal percent text, control-character rejection, absent roots, in-root resolution, and escaping or dangling symlinks.
 
-The version-1 documents named above and the full [`v1.yaml`](../../../../test/data/library/v1.yaml) freeze at the first release, and a later format version adds documents of its own instead of editing them.
+The version-1 documents named above and the full [`v1.yaml`](../../../../test/data/library/v1.yaml) are frozen with the release of version 1, and a later format version adds documents of its own instead of editing them.
 A frozen document pins what import reads, not what export writes.
 When a later exporter writes other bytes for one, by a new version or a narrower spelling within this one, the document remains the import input and its export comparison moves to a separate expected file.
 That file is reviewed against the frozen document rather than regenerated from the changed exporter, and the test gains a check of the restored values, as the scalar case has, so an exporter that drops a value cannot pass by reproducing its own output.

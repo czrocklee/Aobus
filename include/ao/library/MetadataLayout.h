@@ -19,10 +19,10 @@ namespace ao::library
 
   constexpr std::uint32_t kMetadataMagic = 0x42534C52U;
   constexpr std::uint32_t kLibraryVersion = 1;
-  // The library version the latest release wrote, or 0 before the first release.
-  // Each release sets it to kLibraryVersion, which may then advance once before
-  // the next release (decision 0020).
-  constexpr std::uint32_t kLastReleasedLibraryVersion = 0;
+  // The library version the latest release wrote. Each release sets it to
+  // kLibraryVersion, which may then advance once before the next release
+  // (decision 0020).
+  constexpr std::uint32_t kLastReleasedLibraryVersion = 1;
   constexpr std::size_t kMetadataHeaderSize = 40;
   constexpr std::size_t kIdSpaceSize = 8;
   constexpr std::uint32_t kMetadataHeaderRecordId = 1;
