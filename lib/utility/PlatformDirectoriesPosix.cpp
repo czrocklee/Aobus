@@ -19,7 +19,7 @@ namespace ao::utility
 {
   namespace
   {
-    constexpr auto kPasswdBufferLength = std::size_t{1024};
+    constexpr std::size_t kPasswdBufferLength = 1024;
     constexpr auto kApplicationDirectoryName = std::string_view{"aobus"};
 
     std::optional<std::filesystem::path> environmentPath(char const* name)

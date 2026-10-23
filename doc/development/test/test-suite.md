@@ -101,8 +101,10 @@ log and shown in full on failure.
 The lint suite is implemented by `script/ao/core/linttest.py`; `test/integration/lint/` contains only
 checker fixtures. The runner invokes the existing `ao tidy` implementation without rebuilding, verifies
 diagnostics against `POSITIVE` and `NEGATIVE` markers, and derives auto-fix expectations directly from
-`FIX-TO` markers. Only fixtures that declare `FIX-TO` expectations enter the auto-fix stage. This keeps
-checker execution policy in `ao tidy` and avoids a second shell-based test orchestration layer.
+`FIX-TO` markers. Only fixtures that declare `FIX-TO` expectations enter the auto-fix stage; a fixture whose main file carries a
+standalone `// NO-FIX` marker stays in the diagnostic stage and additionally asserts that the exported fix report contains
+zero replacement records. This keeps checker execution policy in `ao tidy` and avoids a second shell-based test
+orchestration layer.
 
 For fixture placement, marker semantics, context-header constraints, Objective-C++ handling, and FixIt authoring, use [checker development](../lint/checker-development.md#fixture-contract). Those are fixture-authoring rules rather than suite-selection rules.
 

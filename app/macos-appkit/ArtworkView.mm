@@ -7,9 +7,9 @@
 
 namespace
 {
-  constexpr auto kCornerRadius = 8;
-  constexpr auto kSymbolScale = 0.3;
-  constexpr auto kMaximumSymbolSize = 48;
+  constexpr CGFloat kCornerRadius = 8;
+  constexpr CGFloat kSymbolScale = 0.3;
+  constexpr CGFloat kMaximumSymbolSize = 48;
 } // namespace
 
 @implementation AobusArtworkView
@@ -29,7 +29,7 @@ namespace
   }
   else
   {
-    auto const size = std::min(static_cast<CGFloat>(kMaximumSymbolSize), self.bounds.size.width * kSymbolScale);
+    auto const size = std::min(kMaximumSymbolSize, self.bounds.size.width * kSymbolScale);
     auto* symbol = [NSImage imageWithSystemSymbolName:@"music.note" accessibilityDescription:nil];
     symbol = [symbol imageWithSymbolConfiguration:[NSImageSymbolConfiguration
                                                     configurationWithHierarchicalColor:NSColor.secondaryLabelColor]];

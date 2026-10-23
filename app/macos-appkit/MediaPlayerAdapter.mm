@@ -37,7 +37,7 @@ namespace ao::appkit
 {
   namespace
   {
-    constexpr auto kCommandCount = std::size_t{7};
+    constexpr std::size_t kCommandCount = 7;
 
     constexpr std::size_t commandIndex(MediaRemoteCommand const command) noexcept
     {

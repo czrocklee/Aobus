@@ -25,8 +25,8 @@ namespace ao::winui
     using winrt::Microsoft::UI::Xaml::Media::Brush;
     using winrt::Microsoft::UI::Xaml::Media::SolidColorBrush;
 
-    constexpr auto kArgbTokenLength = std::size_t{9};
-    constexpr auto kOpaqueAlpha = std::uint8_t{0xFF};
+    constexpr std::size_t kArgbTokenLength = 9;
+    constexpr std::uint8_t kOpaqueAlpha = 0xFF;
 
     constexpr auto kCardBackgroundKey = std::wstring_view{L"CardBackgroundFillColorDefaultBrush"};
     constexpr auto kPageBackgroundKey = std::wstring_view{L"ApplicationPageBackgroundThemeBrush"};

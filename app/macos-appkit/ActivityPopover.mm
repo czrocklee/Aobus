@@ -15,12 +15,12 @@
 
 namespace
 {
-  constexpr auto kContentInset = 16;
-  constexpr auto kBodyFontSize = 13;
-  constexpr auto kSmallButtonWidth = 26;
-  constexpr auto kActivityTextWidth = 320;
-  constexpr auto kActivityMinimumHeight = 72.0;
-  constexpr auto kScrollAnchorTolerance = 1.0;
+  constexpr CGFloat kContentInset = 16;
+  constexpr CGFloat kBodyFontSize = 13;
+  constexpr CGFloat kSmallButtonWidth = 26;
+  constexpr CGFloat kActivityTextWidth = 320;
+  constexpr CGFloat kActivityMinimumHeight = 72.0;
+  constexpr CGFloat kScrollAnchorTolerance = 1.0;
 
   using ao::appkit::nativeText;
   using ao::appkit::symbolButton;

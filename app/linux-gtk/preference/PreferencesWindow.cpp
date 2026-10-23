@@ -54,10 +54,10 @@ namespace ao::gtk
   {
     using i18n::MessageId;
 
-    constexpr auto kDefaultWindowWidth = 760;
-    constexpr auto kDefaultWindowHeight = 560;
-    constexpr auto kPageMargin = 16;
-    constexpr auto kSidebarWidth = 180;
+    constexpr int kDefaultWindowWidth = 760;
+    constexpr int kDefaultWindowHeight = 560;
+    constexpr int kPageMargin = 16;
+    constexpr int kSidebarWidth = 180;
     Gtk::Label& placeholderLabel(std::string_view const text)
     {
       auto* const label = Gtk::make_managed<Gtk::Label>(std::string{text});

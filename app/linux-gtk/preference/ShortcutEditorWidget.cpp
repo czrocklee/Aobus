@@ -45,9 +45,9 @@ namespace ao::gtk
     using i18n::MessageId;
     using uimodel::ActionCapability;
 
-    constexpr auto kContentMargin = 12;
-    constexpr auto kWarningMarginBottom = 6;
-    constexpr auto kCategoryMarginTop = 12;
+    constexpr int kContentMargin = 12;
+    constexpr int kWarningMarginBottom = 6;
+    constexpr int kCategoryMarginTop = 12;
 
     bool isShortcutEligible(uimodel::ActionSchema const& actionSchema)
     {

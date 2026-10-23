@@ -21,7 +21,14 @@ DIAGNOSTIC_RE = re.compile(r"^(.+):(\d+):(\d+): warning: (.*) \[(.*)\]$")
 POSITIVE_RE = re.compile(r"//\s*POSITIVE(?::\s*([a-zA-Z0-9_-]+))?")
 NEGATIVE_RE = re.compile(r"//\s*NEGATIVE(?::\s*([a-zA-Z0-9_-]+))?")
 FIX_TO_RE = re.compile(r"//\s*(?:POSITIVE:\s*)?FIX-TO:\s*(.*)")
+# A per-fixture contract, so the marker must be a standalone comment line.
+NO_FIX_RE = re.compile(r"^[ \t]*//[ \t]*NO-FIX\b", re.MULTILINE)
 LOCAL_INCLUDE_RE = re.compile(r'^\s*#\s*(?:include|import)\s*"([^"]+)"', re.MULTILINE)
+# Keys of the pinned machine-generated clang-tidy export format. The portal's
+# FIX_REPLACEMENT_RE uses the same record shape; this module cannot import it.
+EXPORT_REPLACEMENTS_FIELD_RE = re.compile(r"^\s*Replacements\s*:\s*(.*)$")
+EXPORT_REPLACEMENT_ENTRY_RE = re.compile(r"^\s*-\s*FilePath\s*:")
+EXPORT_REPLACEMENT_TEXT_RE = re.compile(r"^\s*ReplacementText\s*:")
 
 
 @dataclass(frozen=True)
@@ -117,6 +124,16 @@ def verify_diagnostics(sources: dict[Path, str], output: str, check: str) -> lis
     return errors
 
 
+def no_fix_asserted(source: str) -> bool:
+    """Return whether the main fixture file declares the fixture-wide NO-FIX contract."""
+    return bool(NO_FIX_RE.search(source))
+
+
+def expects_diagnostics(source: str, check: str) -> bool:
+    """Return whether the source expects a diagnostic from its own check."""
+    return any(check in checks for checks in parse_expectations(source, check).expected.values())
+
+
 def expected_fixes(source: str) -> list[tuple[str, str]]:
     return [
         (match.group(0).strip(), match.group(1).replace("\\n", "\n"))
@@ -159,6 +176,78 @@ def verify_fixes(source: str, fixed: str) -> list[str]:
             if actual_line.strip() != expected_line.strip():
                 errors.append(f"expected '{expected_line.strip()}' at line {index + 1}, got '{actual_line.strip()}'")
 
+    return errors
+
+
+def verify_no_fix_export(text: str) -> list[str]:
+    """Assert a clang-tidy fixes export contains no replacement records.
+
+    This is bounded inspection of the known machine-generated LLVM report
+    format, not a YAML parser: the required envelope, an exactly empty
+    `Replacements` field per diagnostic message, at least one diagnostic
+    message (a NO-FIX fixture declares POSITIVE expectations, so its report
+    cannot be empty), and replacement record keys anywhere in the document are
+    checked, and any other shape fails closed.
+    """
+    lines = text.splitlines()
+    errors: list[str] = []
+    if not lines or lines[0].strip() != "---":
+        errors.append("fixes export does not start with the pinned '---' document header")
+    if not lines or lines[-1].strip() != "...":
+        errors.append("fixes export does not end with the pinned '...' document terminator")
+    if not any(line.startswith("MainSourceFile:") for line in lines):
+        errors.append("fixes export does not name its MainSourceFile")
+    if not any(line.startswith("Diagnostics:") for line in lines):
+        errors.append("fixes export does not declare its Diagnostics section")
+
+    for number, line in enumerate(lines, 1):
+        if line.startswith("Diagnostics:") and line.split(":", 1)[1].strip() not in ("", "[]"):
+            errors.append(f"fixes export declares an unexpected Diagnostics section on line {number}")
+        if EXPORT_REPLACEMENT_ENTRY_RE.match(line):
+            errors.append(f"replacement record exported on line {number}: {line.strip()}")
+        elif EXPORT_REPLACEMENT_TEXT_RE.match(line):
+            errors.append(f"replacement record exported on line {number}: {line.strip()}")
+
+    errors.extend(_verify_empty_replacements_fields(lines))
+    return errors
+
+
+def _verify_empty_replacements_fields(lines: list[str]) -> list[str]:
+    """Require an exactly empty Replacements field per diagnostic message.
+
+    Note entries reuse the field shape without their own DiagnosticMessage, so
+    an exactly empty field is accepted wherever it appears. A non-empty value,
+    a diagnostic message without its field, or a report without any diagnostic
+    message fails closed.
+    """
+    errors: list[str] = []
+    message_line: int | None = None
+    messages = 0
+    for number, line in enumerate(lines, 1):
+        if line.lstrip().startswith("DiagnosticMessage:"):
+            messages += 1
+            if message_line is not None:
+                errors.append(f"diagnostic message on line {message_line} has no Replacements field")
+            message_line = number
+        elif line.lstrip().startswith("Level:"):
+            # The pinned format serializes the message's Replacements field
+            # before Level; note entries only follow it.
+            if message_line is not None:
+                errors.append(f"diagnostic message on line {message_line} has no Replacements field")
+            message_line = None
+        elif match := EXPORT_REPLACEMENTS_FIELD_RE.match(line):
+            if match.group(1).strip() != "[]":
+                if message_line is not None:
+                    errors.append(f"diagnostic message on line {message_line} exports replacements on line {number}")
+                else:
+                    errors.append(f"Replacements field on line {number} exports replacements")
+            message_line = None
+    if message_line is not None:
+        errors.append(f"diagnostic message on line {message_line} has no Replacements field")
+    if messages == 0:
+        errors.append(
+            "fixes export contains no diagnostic message; a NO-FIX fixture with expected diagnostics must export one"
+        )
     return errors
 
 
@@ -233,8 +322,12 @@ def _diagnostic_errors(
         for checks in parse_expectations(source, fixture.check).expected.values()
     )
     for path, source in sources.items():
-        if path != fixture.path.resolve() and expected_fixes(source):
+        if path == fixture.path.resolve():
+            continue
+        if expected_fixes(source):
             errors.append(f"context header FIX-TO markers require a standalone fixture: {path}")
+        if no_fix_asserted(source):
+            errors.append(f"context header NO-FIX markers require a standalone fixture: {path}")
     if "[clang-diagnostic-error]" in result.stdout:
         errors.append("clang-tidy reported a fatal compiler diagnostic")
     if result.returncode != 0 and (errors or not has_expected_diagnostics):
@@ -246,11 +339,17 @@ def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[b
     case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.diag.", dir=run_dir))
     log = case_dir / "run.log"
     sources = _fixture_sources(fixture)
+    export: Path | None = None
+    export_arg: tuple[str, ...] = ()
+    if no_fix_asserted(sources[fixture.path.resolve()]):
+        export = case_dir / "fixes.yaml"
+        export_arg = (f"--tidy-arg=-export-fixes={export}",)
     result = subprocess.run(
         _tidy_command(
             fixture,
             build_dir,
             *_fixture_tidy_args(fixture.path.parent, "objective-c++" if fixture.path.suffix == ".mm" else "c++"),
+            *export_arg,
         ),
         cwd=PROJECT_ROOT,
         stdout=subprocess.PIPE,
@@ -258,8 +357,22 @@ def _run_diagnostic(fixture: Fixture, build_dir: Path, run_dir: Path) -> tuple[b
         text=True,
     )
     errors = _diagnostic_errors(fixture, sources, result)
+    export_errors: list[str] = []
+    export_text: str | None = None
+    if export is not None:
+        try:
+            export_text = export.read_text(encoding="utf-8")
+        except OSError:
+            export_errors = [
+                "clang-tidy created no fixes export; a NO-FIX fixture with expected diagnostics must produce one"
+            ]
+        else:
+            export_errors = verify_no_fix_export(export_text)
+    errors.extend(export_errors)
     with log.open("w", encoding="utf-8") as sink:
         sink.write(result.stdout)
+        if export_errors and export_text is not None:
+            sink.write(f"=== Exported fixes report ({export}) ===\n{export_text}\n")
         for error in errors:
             sink.write(f"ERROR: {error}\n")
     return not errors, log
@@ -446,6 +559,23 @@ def _run_compiler_error_smoke(build_dir: Path, run_dir: Path) -> tuple[bool, Pat
     return not errors, log
 
 
+def _marker_contract_errors(fixtures: list[Fixture]) -> list[str]:
+    """Reject unrunnable marker combinations before any stage applies fixes."""
+    errors: list[str] = []
+    for fixture in fixtures:
+        source = fixture.path.read_text(encoding="utf-8")
+        if not no_fix_asserted(source):
+            continue
+        label = f"{fixture.check}/{fixture.path.name}"
+        if expected_fixes(source):
+            errors.append(f"fixture cannot combine NO-FIX and FIX-TO markers: {label}")
+        elif not expects_diagnostics(source, fixture.check):
+            # clang-tidy creates the export only when it emits a diagnostic, so
+            # a clean fixture cannot assert on a report that never exists.
+            errors.append(f"NO-FIX fixture must declare a POSITIVE expectation of {fixture.check}: {label}")
+    return errors
+
+
 def _report_results(
     label: str,
     fixtures: list[Fixture],
@@ -484,6 +614,11 @@ def run(build_dir: Path, *, log: Path | None = None, jobs: int | None = None) ->
     fixtures = discover_fixtures()
     if not fixtures:
         reporter.write(f"ERROR: no lint fixtures found in {FIXTURE_DIR}")
+        return 1
+    marker_errors = _marker_contract_errors(fixtures)
+    if marker_errors:
+        for error in marker_errors:
+            reporter.write(f"ERROR: {error}")
         return 1
     run_dir = Path(tempfile.mkdtemp(prefix="aobus-lint-integration-"))
     failed = True

@@ -19,31 +19,31 @@
 
 namespace
 {
-  constexpr auto kCellInset = 6;
-  constexpr auto kContentGap = 12;
-  constexpr auto kContentInset = 16;
-  constexpr auto kCaptionFontSize = 10;
-  constexpr auto kSecondaryFontSize = 11;
-  constexpr auto kBodyFontSize = 13;
-  constexpr auto kSmallButtonWidth = 26;
-  constexpr auto kControlHeight = 28;
-  constexpr auto kPlayerArtworkSize = 44;
-  constexpr auto kTimeLabelWidth = 42;
-  constexpr auto kModernPlayerHeight = 80.0;
-  constexpr auto kPlayerProgressHeight = 16.0;
-  constexpr auto kMinimumPlayerTitleWidth = 100.0;
-  constexpr auto kVolumePopoverWidth = 180.0;
-  constexpr auto kVolumePopoverHeight = 44.0;
-  constexpr auto kVolumeIconTrailingOffset = 24;
-  constexpr auto kClassicPlayerHeight = 48.0;
-  constexpr auto kClassicTransportTop = 10;
-  constexpr auto kClassicPlayLeading = 56;
-  constexpr auto kClassicStopLeading = 92;
-  constexpr auto kClassicSeekAndVolumeTop = 14;
-  constexpr auto kClassicSeekLeading = 136;
-  constexpr auto kClassicTimeWidth = 110;
-  constexpr auto kClassicVolumeWidth = 108;
-  constexpr auto kClassicVolumeTrailing = 124;
+  constexpr CGFloat kCellInset = 6;
+  constexpr CGFloat kContentGap = 12;
+  constexpr CGFloat kContentInset = 16;
+  constexpr CGFloat kCaptionFontSize = 10;
+  constexpr CGFloat kSecondaryFontSize = 11;
+  constexpr CGFloat kBodyFontSize = 13;
+  constexpr CGFloat kSmallButtonWidth = 26;
+  constexpr CGFloat kControlHeight = 28;
+  constexpr CGFloat kPlayerArtworkSize = 44;
+  constexpr CGFloat kTimeLabelWidth = 42;
+  constexpr CGFloat kModernPlayerHeight = 80.0;
+  constexpr CGFloat kPlayerProgressHeight = 16.0;
+  constexpr CGFloat kMinimumPlayerTitleWidth = 100.0;
+  constexpr CGFloat kVolumePopoverWidth = 180.0;
+  constexpr CGFloat kVolumePopoverHeight = 44.0;
+  constexpr CGFloat kVolumeIconTrailingOffset = 24;
+  constexpr CGFloat kClassicPlayerHeight = 48.0;
+  constexpr CGFloat kClassicTransportTop = 10;
+  constexpr CGFloat kClassicPlayLeading = 56;
+  constexpr CGFloat kClassicStopLeading = 92;
+  constexpr CGFloat kClassicSeekAndVolumeTop = 14;
+  constexpr CGFloat kClassicSeekLeading = 136;
+  constexpr CGFloat kClassicTimeWidth = 110;
+  constexpr CGFloat kClassicVolumeWidth = 108;
+  constexpr CGFloat kClassicVolumeTrailing = 124;
 
   using ao::appkit::nativeText;
   using ao::appkit::symbolButton;

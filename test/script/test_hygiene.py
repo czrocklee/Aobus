@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import tempfile
@@ -22,6 +23,21 @@ class FormatCommandTest(unittest.TestCase):
         configuration = (format_command.PROJECT_ROOT / ".clang-format").read_text(encoding="utf-8")
 
         self.assertRegex(configuration, r"(?m)^MainIncludeChar:\s+Any\s*$")
+
+    def test_clang_format_groups_posix_headers_with_platform_headers(self):
+        configuration = (format_command.PROJECT_ROOT / ".clang-format").read_text(encoding="utf-8")
+        categories = re.findall(r"- Regex:\s+'([^']+)'\s+Priority:\s+(\d+)", configuration)
+
+        for header, expected in (
+            ("<sys/types.h>", 3),
+            ("<sys/file.h>", 3),
+            ("<fcntl.h>", 3),
+            ("<unistd.h>", 3),
+            ("<cstdint>", 4),
+        ):
+            with self.subTest(header=header):
+                priority = next(int(value) for pattern, value in categories if re.search(pattern, header))
+                self.assertEqual(priority, expected)
 
     def test_dispatches_cpp_and_python_files_to_their_formatters(self):
         args = Namespace(files=["lib/Foo.cpp", "script/foo.py"], all=False, commit=None, check=True)

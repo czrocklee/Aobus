@@ -15,16 +15,16 @@
 
 namespace
 {
-  constexpr auto kMaximumAnimationStepSeconds = 0.1;
-  constexpr auto kChannelMaximum = 255.0;
-  constexpr auto kPlayLeadingFraction = 0.22;
-  constexpr auto kPlayHalfHeightFraction = 0.36;
-  constexpr auto kPlayTipFraction = 0.40;
-  constexpr auto kPauseLeadingFraction = 0.26;
-  constexpr auto kPauseHalfHeightFraction = 0.34;
-  constexpr auto kPauseBarWidthFraction = 0.14;
-  constexpr auto kPauseBarHeightFraction = 0.68;
-  constexpr auto kPauseTrailingFraction = 0.12;
+  constexpr double kMaximumAnimationStepSeconds = 0.1;
+  constexpr double kChannelMaximum = 255.0;
+  constexpr CGFloat kPlayLeadingFraction = 0.22;
+  constexpr CGFloat kPlayHalfHeightFraction = 0.36;
+  constexpr CGFloat kPlayTipFraction = 0.40;
+  constexpr CGFloat kPauseLeadingFraction = 0.26;
+  constexpr CGFloat kPauseHalfHeightFraction = 0.34;
+  constexpr CGFloat kPauseBarWidthFraction = 0.14;
+  constexpr CGFloat kPauseBarHeightFraction = 0.68;
+  constexpr CGFloat kPauseTrailingFraction = 0.12;
 } // namespace
 
 @implementation AobusSoulButton {

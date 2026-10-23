@@ -14,11 +14,11 @@ namespace ao::winui
   namespace
   {
     /// Takes one byte out of the word `VkKeyScanExW` packs its answer into.
-    constexpr auto kScanByteMask = std::uint32_t{0xFF};
+    constexpr std::uint32_t kScanByteMask = 0xFF;
     /// The shift-state bits `VkKeyScanExW` reports in its high byte.
-    constexpr auto kScanShift = std::uint32_t{1};
-    constexpr auto kScanControl = std::uint32_t{2};
-    constexpr auto kScanAlt = std::uint32_t{4};
+    constexpr std::uint32_t kScanShift = 1;
+    constexpr std::uint32_t kScanControl = 2;
+    constexpr std::uint32_t kScanAlt = 4;
   } // namespace
 
   CharacterKeyResolver systemCharacterKeyResolver()

@@ -39,6 +39,8 @@
 #import <AppKit/AppKit.h>
 #include <CoreFoundation/CFRunLoop.h>
 #include <fcntl.h>
+#include <sys/file.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -49,12 +51,11 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <sys/file.h>
 #include <system_error>
 #include <utility>
 #include <vector>
 
-constexpr auto kCpp23Version = 202302L;
+constexpr std::int64_t kCpp23Version = 202302;
 static_assert(__cplusplus > kCpp23Version, "The AppKit bridge must compile as Objective-C++26");
 
 namespace
@@ -66,10 +67,10 @@ namespace
   using ao::appkit::nativeText;
   using ao::appkit::utf8;
   using ao::i18n::MessageId;
-  constexpr auto kPrivateStateFileMode = 0600;
-  constexpr auto kMaximumRecentLibraries = std::size_t{8};
-  constexpr auto kFrameRefreshIntervalSeconds = 0.05;
-  constexpr auto kActivityMaximumHeight = 420.0;
+  constexpr ::mode_t kPrivateStateFileMode = 0600;
+  constexpr std::size_t kMaximumRecentLibraries = 8;
+  constexpr double kFrameRefreshIntervalSeconds = 0.05;
+  constexpr CGFloat kActivityMaximumHeight = 420.0;
 
   void showError(NSWindow* window, NSString* title, NSString* message)
   {
@@ -1151,7 +1152,7 @@ namespace ao::appkit
     return;
   }
 
-  auto maximumHeight = static_cast<CGFloat>(kActivityMaximumHeight);
+  auto maximumHeight = kActivityMaximumHeight;
 
   if (auto* const screen = _window.screen; screen != nil)
   {

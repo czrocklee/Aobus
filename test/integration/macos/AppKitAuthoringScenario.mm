@@ -68,8 +68,8 @@ namespace ao::appkit::test
 {
   namespace
   {
-    constexpr auto kWindowWidth = 960.0;
-    constexpr auto kWindowHeight = 760.0;
+    constexpr CGFloat kWindowWidth = 960.0;
+    constexpr CGFloat kWindowHeight = 760.0;
 
     template<typename Admission>
     void requireAdmission(Admission const& admission, char const* obligation)

@@ -35,8 +35,8 @@ namespace ao::lmdb::test
     // small enough that a build that did so wastes only this much before failing.
     constexpr auto kLargeMapSize = std::size_t{256} * 1024 * 1024;
     constexpr auto kAllocationCeiling = kLargeMapSize / 8;
-    constexpr auto kRecordSize = std::size_t{4096};
-    constexpr auto kRecordCount = std::uint32_t{256};
+    constexpr std::size_t kRecordSize = 4096;
+    constexpr std::uint32_t kRecordCount = 256;
 
     // For tests that bound allocation only from above, or not at all: skipping
     // the flush keeps the record appends cheap on Windows and macOS.

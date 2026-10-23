@@ -30,7 +30,7 @@ namespace
   using ao::appkit::nativeCallback;
   using ao::appkit::nativeText;
   using ao::i18n::MessageId;
-  constexpr auto kToolbarSearchWidth = 240;
+  constexpr CGFloat kToolbarSearchWidth = 240;
 
   NSButton* symbolButton(NSString* symbol, NSString* title, id target, SEL action)
   {

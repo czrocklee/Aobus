@@ -34,11 +34,11 @@ namespace ao::winui
    * The values of `winrt::Windows::System::VirtualKeyModifiers`.
    * @{
    */
-  inline constexpr auto kAcceleratorModifierNone = std::uint32_t{0};
-  inline constexpr auto kAcceleratorModifierControl = std::uint32_t{1};
-  inline constexpr auto kAcceleratorModifierMenu = std::uint32_t{2};
-  inline constexpr auto kAcceleratorModifierShift = std::uint32_t{4};
-  inline constexpr auto kAcceleratorModifierWindows = std::uint32_t{8};
+  inline constexpr std::uint32_t kAcceleratorModifierNone = 0;
+  inline constexpr std::uint32_t kAcceleratorModifierControl = 1;
+  inline constexpr std::uint32_t kAcceleratorModifierMenu = 2;
+  inline constexpr std::uint32_t kAcceleratorModifierShift = 4;
+  inline constexpr std::uint32_t kAcceleratorModifierWindows = 8;
   /// @}
 
   /// A character's key on some keyboard layout, and whether reaching it needs Shift.

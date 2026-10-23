@@ -42,36 +42,36 @@ namespace
   using ao::appkit::nativeText;
   using ao::appkit::utf8;
   using ao::i18n::MessageId;
-  constexpr auto kInspectorSheetWidth = 420;
-  constexpr auto kClassicStatusAreaHeight = 24;
-  constexpr auto kMinimumEmptyActionWidth = 152.0;
-  constexpr auto kEmptyActionOffset = 76;
-  constexpr auto kPresentationWidth = 116;
-  constexpr auto kClassicPresentationTrailing = 132;
-  constexpr auto kClassicSearchTrailing = 152;
-  constexpr auto kClassicSearchLeading = 10;
-  constexpr auto kClassicBrowserControlTop = 13;
-  constexpr auto kClassicBrowserHeaderHeight = 50;
-  constexpr auto kClassicSidebarVerticalInsets = 110;
-  constexpr auto kClassicSidebarTop = 42;
-  constexpr auto kSidebarArtworkHeight = 50;
-  constexpr auto kSidebarRowHeight = 34;
-  constexpr auto kSidebarLabelHeight = 18;
-  constexpr auto kSidebarLabelLeading = 18;
-  constexpr auto kPreferredInspectorFraction = 0.22;
-  constexpr auto kMinimumInspectorWidth = 230;
-  constexpr auto kMaximumSidebarWidth = 300.0;
-  constexpr auto kInitialSidebarWidth = 210;
-  constexpr auto kMinimumSidebarWidth = 160.0;
-  constexpr auto kMinimumBrowserWidth = 430.0;
-  constexpr auto kInitialBrowserWidth = 740;
-  constexpr auto kInitialPaneHeight = 600;
-  constexpr auto kControlHeight = 28;
-  constexpr auto kLargeTitleFontSize = 20;
-  constexpr auto kSecondaryFontSize = 11;
-  constexpr auto kOuterInset = 20;
-  constexpr auto kContentGap = 12;
-  constexpr auto kCellInset = 6;
+  constexpr CGFloat kInspectorSheetWidth = 420;
+  constexpr CGFloat kClassicStatusAreaHeight = 24;
+  constexpr CGFloat kMinimumEmptyActionWidth = 152.0;
+  constexpr CGFloat kEmptyActionOffset = 76;
+  constexpr CGFloat kPresentationWidth = 116;
+  constexpr CGFloat kClassicPresentationTrailing = 132;
+  constexpr CGFloat kClassicSearchTrailing = 152;
+  constexpr CGFloat kClassicSearchLeading = 10;
+  constexpr CGFloat kClassicBrowserControlTop = 13;
+  constexpr CGFloat kClassicBrowserHeaderHeight = 50;
+  constexpr CGFloat kClassicSidebarVerticalInsets = 110;
+  constexpr CGFloat kClassicSidebarTop = 42;
+  constexpr CGFloat kSidebarArtworkHeight = 50;
+  constexpr CGFloat kSidebarRowHeight = 34;
+  constexpr CGFloat kSidebarLabelHeight = 18;
+  constexpr CGFloat kSidebarLabelLeading = 18;
+  constexpr CGFloat kPreferredInspectorFraction = 0.22;
+  constexpr CGFloat kMinimumInspectorWidth = 230;
+  constexpr CGFloat kMaximumSidebarWidth = 300.0;
+  constexpr CGFloat kInitialSidebarWidth = 210;
+  constexpr CGFloat kMinimumSidebarWidth = 160.0;
+  constexpr CGFloat kMinimumBrowserWidth = 430.0;
+  constexpr CGFloat kInitialBrowserWidth = 740;
+  constexpr CGFloat kInitialPaneHeight = 600;
+  constexpr CGFloat kControlHeight = 28;
+  constexpr CGFloat kLargeTitleFontSize = 20;
+  constexpr CGFloat kSecondaryFontSize = 11;
+  constexpr CGFloat kOuterInset = 20;
+  constexpr CGFloat kContentGap = 12;
+  constexpr CGFloat kCellInset = 6;
 
   NSViewController* viewController(NSView* view)
   {
@@ -131,10 +131,8 @@ namespace
     }
 
     auto const visible = target.visibleFrame;
-    frame.size.width =
-      std::min(std::max(frame.size.width, static_cast<CGFloat>(kMinimumWindowWidth)), visible.size.width);
-    frame.size.height =
-      std::min(std::max(frame.size.height, static_cast<CGFloat>(kMinimumWindowHeight)), visible.size.height);
+    frame.size.width = std::min(std::max(frame.size.width, kMinimumWindowWidth), visible.size.width);
+    frame.size.height = std::min(std::max(frame.size.height, kMinimumWindowHeight), visible.size.height);
     frame.origin.x = std::clamp(frame.origin.x, NSMinX(visible), NSMaxX(visible) - frame.size.width);
     frame.origin.y = std::clamp(frame.origin.y, NSMinY(visible), NSMaxY(visible) - frame.size.height);
     return frame;

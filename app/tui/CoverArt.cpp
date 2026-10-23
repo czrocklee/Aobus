@@ -58,7 +58,7 @@ namespace ao::tui
   namespace
   {
     constexpr int kDecodedChannels = 4; // stb decodes to RGBA below
-    constexpr auto kKittyPayloadChunkSize = std::size_t{4096};
+    constexpr std::size_t kKittyPayloadChunkSize = 4096;
 
     struct Pixel final
     {

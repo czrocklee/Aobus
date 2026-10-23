@@ -209,7 +209,7 @@ Changing the message runtime, fallback model, or ICU family is an architectural/
 - [`CatalogPattern.cpp`](../../../app/i18n/CatalogPattern.cpp) owns signature validation, pseudo transformation, and generated projection rules.
 - [`CatalogCompiler.cpp`](../../../tool/catalog/CatalogCompiler.cpp) validates the root inventory and sparse overrides and generates pseudo and WinUI resources.
 - [`app/i18n/CMakeLists.txt`](../../../app/i18n/CMakeLists.txt) derives resources and selectable locales from `package.lst`, compiles and embeds catalogs, and keeps ICU in the interactive leaf.
-- [`SystemLocaleWindows.cpp`](../../../app/i18n/SystemLocaleWindows.cpp), [`SystemLocaleMacos.cpp`](../../../app/i18n/SystemLocaleMacos.cpp), and [`SystemLocalePosix.cpp`](../../../app/i18n/SystemLocalePosix.cpp) read the operating-system locale.
+- [`SystemLocaleWindows.cpp`](../../../app/i18n/SystemLocaleWindows.cpp), [`SystemLocaleMacos.cpp`](../../../app/i18n/SystemLocaleMacos.cpp), and [`SystemLocaleLinux.cpp`](../../../app/i18n/SystemLocaleLinux.cpp) read the operating-system locale.
 - [`StringResources.cpp`](../../../app/windows-winui/platform/StringResources.cpp) owns the explicit MRT context.
 
 [`MessageCatalogTest.cpp`](../../../test/unit/i18n/MessageCatalogTest.cpp) protects locale admission, fallback, arguments, ownership, pseudo behavior, and concurrent formatting.

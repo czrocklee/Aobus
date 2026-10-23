@@ -21,10 +21,10 @@ namespace ao::winui
     using uimodel::KeyChord;
     using uimodel::KeyModifier;
 
-    constexpr auto kVirtualKeyA = std::uint32_t{0x41};
-    constexpr auto kVirtualKeyZero = std::uint32_t{0x30};
-    constexpr auto kVirtualKeyF1 = std::uint32_t{0x70};
-    constexpr auto kHighestFunctionKey = std::uint32_t{24};
+    constexpr std::uint32_t kVirtualKeyA = 0x41;
+    constexpr std::uint32_t kVirtualKeyZero = 0x30;
+    constexpr std::uint32_t kVirtualKeyF1 = 0x70;
+    constexpr std::uint32_t kHighestFunctionKey = 24;
 
     /**
      * @brief Tokens whose Windows key is not derived from the token's own text.

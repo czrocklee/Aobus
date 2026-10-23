@@ -24,8 +24,8 @@ namespace ao::winui
 {
   namespace
   {
-    constexpr auto kRegularMonogramScale = 0.58;
-    constexpr auto kCompactMonogramScale = 0.46;
+    constexpr double kRegularMonogramScale = 0.58;
+    constexpr double kCompactMonogramScale = 0.46;
     constexpr std::uint8_t kOpaqueAlpha = 255;
     constexpr std::uint8_t kVinylLabelAlpha = 245;
     constexpr std::uint8_t kFallbackAccentRed = 0x06;
