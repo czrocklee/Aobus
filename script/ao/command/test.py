@@ -15,12 +15,27 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Literal
+from typing import IO
 from urllib.parse import quote
 
-from ..core import appkitprocess, builddir, buildlock, compiler_cache, linttest, proc, tooltest, workspace_cache
+from ..core import (
+    appkitprocess,
+    builddir,
+    buildlock,
+    compiler_cache,
+    linttest,
+    phases,
+    proc,
+    tooltest,
+    workspace_cache,
+)
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
+
+# The suite registry is dependency-light metadata shared with the core; the
+# explicit re-export preserves the public ``ao.command.test`` API and identity.
+from ..core.test_suites import SUITES as SUITES
+from ..core.test_suites import SuiteSpec as SuiteSpec
 from . import build, tidy
 
 HELP = "Build incrementally and run C++ and tooling test suites with optional Catch2 filters"
@@ -72,25 +87,6 @@ examples:
 APPKIT_EPILOG = """\
   ./ao test --appkit --scenario desktop --library /tmp/music --state-root /tmp/aobus-appkit-state
 """
-
-
-@dataclass(frozen=True)
-class SuiteSpec:
-    label: str
-    kind: Literal["appkit", "catch2", "tooling", "lint"]
-    target: str | None = None
-
-
-SUITES = {
-    "appkit": SuiteSpec("AppKit Smoke", "appkit", "ao_appkit_smoke"),
-    "core": SuiteSpec("Core", "catch2", "ao_core_test"),
-    "tui": SuiteSpec("TUI", "catch2", "ao_tui_test"),
-    "cli": SuiteSpec("CLI", "catch2", "ao_cli_test"),
-    "gtk": SuiteSpec("GTK", "catch2", "ao_gtk_test"),
-    "integration": SuiteSpec("Integration", "catch2", "ao_integration_test"),
-    "tooling": SuiteSpec("Tooling Tests", "tooling"),
-    "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
-}
 
 APPKIT_SCENARIOS = (
     "desktop",
@@ -1038,18 +1034,23 @@ def run_suites(
 
             spec = SUITES[name]
             if spec.kind == "catch2":
-                outcome = _run_catch2_suite(
-                    name,
-                    build_dir,
-                    test_filter=test_filter,
-                    list_only=list_only,
-                    allow_no_tests=allow_no_tests or bool(test_filter),
-                    asan=asan,
-                    tsan=tsan,
-                    log=log,
-                    shards=shards,
-                    report_matches=bool(test_filter),
-                )
+                # One suite record per invocation: jobs is the known shard
+                # width and count stays 1 because matched case counts are
+                # unstable across filters and repeats.
+                with phases.measure("suite", tree="native", jobs=shards, count=1, suite=name) as phase:
+                    outcome = _run_catch2_suite(
+                        name,
+                        build_dir,
+                        test_filter=test_filter,
+                        list_only=list_only,
+                        allow_no_tests=allow_no_tests or bool(test_filter),
+                        asan=asan,
+                        tsan=tsan,
+                        log=log,
+                        shards=shards,
+                        report_matches=bool(test_filter),
+                    )
+                    phase.status = outcome.status
                 if outcome.status != 0:
                     return outcome.status
                 if test_filter:
@@ -1059,15 +1060,29 @@ def run_suites(
             else:
                 # no_build and the lint host context matter only to the Windows
                 # lint runner; every other suite ignores them.
-                status = run_non_catch2_suite(
-                    name,
-                    build_dir,
-                    list_only=list_only,
-                    log=log,
-                    no_build=no_build,
-                    lint_build_dir=lint_build_dir,
-                    lint_build_dir_explicit=lint_build_dir_explicit,
-                )
+                #
+                # Summary consumer disclaimer: the lint suite record encloses
+                # its Windows checker-build/checker-verify children and the
+                # lint-diagnostics/lint-fixes/lint-replacements/
+                # lint-compiler-errors children, so a summary must not add a
+                # suite record and its children to the same total. The tooling
+                # suite owns no native tree, so it records none.
+                with phases.measure(
+                    "suite",
+                    tree="tidy" if spec.kind == "lint" else None,
+                    count=1,
+                    suite=name,
+                ) as phase:
+                    status = run_non_catch2_suite(
+                        name,
+                        build_dir,
+                        list_only=list_only,
+                        log=log,
+                        no_build=no_build,
+                        lint_build_dir=lint_build_dir,
+                        lint_build_dir_explicit=lint_build_dir_explicit,
+                    )
+                    phase.status = status
                 if status != 0:
                     return status
 
@@ -1141,13 +1156,20 @@ def run_command(args: argparse.Namespace) -> int:
             print(f"Building {', '.join(targets)} in {build_dir}...")
             print("=====================================")
             cmake_build_dir = workspace_cache.compiler_build_dir(build_dir)
-            build_cmd = ["cmake", "--build", str(cmake_build_dir)]
-            build_cmd += build.parallel_build_arguments()
-            build_cmd += ["--target", *targets]
+            jobs = build.parallel_build_jobs()
+            build_cmd = ["cmake", "--build", str(cmake_build_dir), "--parallel", str(jobs), "--target", *targets]
             with buildlock.build_tree_lock(build_dir):
                 sanitizer = "sanitizer builds" if args.asan or args.tsan else None
                 build.sync_compiler_cache(build_dir, unsupported_reason=sanitizer)
-                if run(build_cmd, cwd=cmake_build_dir if cmake_build_dir != build_dir else PROJECT_ROOT) != 0:
+                # The standalone target build is portal work this command owns;
+                # measure it in place rather than replacing the incremental
+                # invocation with do_build. The actual native exit code is
+                # assigned before the failure handling so a failed build keeps
+                # its code in its own record even though die normalizes the
+                # command exit to 1.
+                with phases.measure("build", tree="native", jobs=jobs) as phase:
+                    phase.status = run(build_cmd, cwd=cmake_build_dir if cmake_build_dir != build_dir else PROJECT_ROOT)
+                if phase.status != 0:
                     raise die("test build failed.")
 
     if appkit_options is not None:

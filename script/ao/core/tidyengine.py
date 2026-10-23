@@ -16,11 +16,12 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Iterator
+from contextvars import copy_context
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from . import builddir, buildlock, compiler_cache, gitfiles, workspace_cache
+from . import builddir, buildlock, compiler_cache, gitfiles, phases, workspace_cache
 from .dedup import DIAGNOSTIC_RE
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
@@ -166,24 +167,29 @@ def _ensure_compile_db(
         ]
     configure += configure_args or []
     configure += cache_args
-    _run_tail(configure, "configure")
+    # The logical analysis tree owns this configure cost even when this helper
+    # provisions a normal debug tree's compile database; the record claims no
+    # actual preset name. A configure failure ends the phase through die().
+    with phases.measure("configure", tree="tidy"):
+        _run_tail(configure, "configure")
     print("Configure done.")
     if not database.is_file():
         raise die(f"configure did not generate {database}")
 
     print("Generating required headers (gperf)...")
-    _run_tail(
-        [
-            "cmake",
-            "--build",
-            str(cmake_build_dir),
-            "--target",
-            "aobus_generated_headers",
-            "--parallel",
-            str(os.cpu_count() or 1),
-        ],
-        "header generation build",
-    )
+    with phases.measure("generated-headers", tree="tidy"):
+        _run_tail(
+            [
+                "cmake",
+                "--build",
+                str(cmake_build_dir),
+                "--target",
+                "aobus_generated_headers",
+                "--parallel",
+                str(os.cpu_count() or 1),
+            ],
+            "header generation build",
+        )
     print("Generated headers are ready.")
 
 
@@ -1173,7 +1179,12 @@ def run_parallel[WorkItem](
         for index, file in enumerate(files):
             log = tmpdir / f"{index:06d}.log"
             result.logs.append(log)
-            futures[pool.submit(runner, file, log)] = (file, log)
+            # A fresh submitting-thread context per work item: pool workers
+            # do not inherit the submitter's ContextVars, so a runner's nested
+            # phase records keep the enclosing command and parent phase. Each
+            # item gets its own snapshot; one shared Context must never run
+            # concurrently in several tasks.
+            futures[pool.submit(copy_context().run, runner, file, log)] = (file, log)
         for future in concurrent.futures.as_completed(futures):
             file, log = futures[future]
             try:

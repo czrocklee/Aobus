@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from phase_support import PhaseRecorder as _PhaseRecorder
+
 from ao.command import format as format_command
 from ao.command import tidy as tidy_command
 from ao.core import gitfiles, tidyengine
@@ -328,6 +330,52 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
                     "header generation build",
                 ),
             )
+
+
+class CompileDatabasePhaseInstrumentationTest(unittest.TestCase):
+    def test_configure_and_generated_headers_are_recorded_in_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            recorder = _PhaseRecorder()
+
+            def run_tail(_command, what):
+                if what == "configure":
+                    (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
+
+            with (
+                mock.patch.object(tidyengine, "_run_tail", side_effect=run_tail),
+                mock.patch.object(tidyengine, "phases", recorder),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
+
+            self.assertEqual(
+                recorder.records,
+                [
+                    {"name": "configure", "tree": "tidy", "status": 0},
+                    {"name": "generated-headers", "tree": "tidy", "status": 0},
+                ],
+            )
+
+    def test_configure_failure_reraises_without_a_generated_headers_record(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            recorder = _PhaseRecorder()
+
+            def fail(_command, what):
+                raise tidyengine.die(f"{what} failed")
+
+            with (
+                mock.patch.object(tidyengine, "_run_tail", side_effect=fail),
+                mock.patch.object(tidyengine, "phases", recorder),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                with self.assertRaises(SystemExit):
+                    tidyengine.ensure_compile_db(build_dir, preset="windows-tidy")
+
+            # The configure record stays, and the generated-headers phase is
+            # never entered after the failure propagates.
+            self.assertEqual(recorder.records, [{"name": "configure", "tree": "tidy", "status": 0}])
 
 
 class CompileCommandCoverageTest(unittest.TestCase):

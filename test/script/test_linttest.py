@@ -9,6 +9,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
+from phase_support import PhaseRecorder as _PhaseRecorder
+
 from ao.core import builddir, linttest, tidyconfig, tidyengine
 
 
@@ -1285,6 +1287,84 @@ class LintTestRunnerTest(unittest.TestCase):
             )
             run_diagnostic.assert_not_called()
             run_fix.assert_not_called()
+
+
+class StagePhaseInstrumentationTest(unittest.TestCase):
+    def test_stages_record_counts_and_failure_statuses_in_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").touch()
+            plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+            plugin.parent.mkdir(parents=True)
+            plugin.touch()
+            fixture_path = root / "BasicFixture.cpp"
+            fixture_path.write_text("int original;\n", encoding="utf-8")
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+            case_log = root / "case.log"
+            case_log.touch()
+            recorder = _PhaseRecorder()
+
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                mock.patch.object(linttest, "phases", recorder),
+                mock.patch.object(linttest, "discover_fixtures", return_value=[fixture]),
+                mock.patch.object(linttest, "_run_diagnostic", return_value=(True, case_log)),
+                mock.patch.object(linttest, "_run_replacement_smoke", return_value=(False, case_log)),
+                mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, case_log)),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(linttest.run(build_dir, jobs=1), 1)
+
+            self.assertEqual(
+                recorder.records,
+                [
+                    {"name": "lint-diagnostics", "tree": "tidy", "jobs": 1, "count": 1, "status": 0},
+                    {"name": "lint-fixes", "tree": "tidy", "jobs": 1, "count": 0, "status": 0},
+                    {"name": "lint-replacements", "tree": "tidy", "count": 1, "status": 1},
+                    {"name": "lint-compiler-errors", "tree": "tidy", "count": 4, "status": 0},
+                ],
+            )
+
+    def test_fix_stage_records_the_native_syntax_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            fixture_path = root / "fixture" / "BasicFixture.cpp"
+            fixture_path.parent.mkdir()
+            fixture_path.write_text(
+                "// POSITIVE: FIX-TO: int replacement;\nint original;\n",
+                encoding="utf-8",
+            )
+            fixture = linttest.Fixture(fixture_path, "aobus-example")
+            recorder = _PhaseRecorder()
+
+            def run_fix_or_syntax(command, **_kwargs):
+                if "-fsyntax-only" in command:
+                    return linttest.subprocess.CompletedProcess(command, 2, stdout="")
+                fixed = Path(command[-1])
+                fixed.write_text(
+                    "// POSITIVE: FIX-TO: int replacement;\nint replacement;\n",
+                    encoding="utf-8",
+                )
+                return linttest.subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout=f"{fixed}:2:1: warning: expected [aobus-example]\n",
+                )
+
+            with (
+                mock.patch.object(linttest, "phases", recorder),
+                mock.patch.object(linttest, "_syntax_command", return_value=["test-compiler", "-fsyntax-only"]),
+                mock.patch.object(linttest.subprocess, "run", side_effect=run_fix_or_syntax),
+            ):
+                success, _log = linttest._run_fix(fixture, root, root)
+
+            self.assertFalse(success)
+            self.assertEqual(
+                recorder.records,
+                [{"name": "lint-syntax", "tree": "tidy", "count": 1, "status": 2}],
+            )
 
 
 class WindowsLintFixtureTest(unittest.TestCase):

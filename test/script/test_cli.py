@@ -1,5 +1,6 @@
 """CLI smoke tests: every command registers and parses its documented invocations."""
 
+import argparse
 import contextlib
 import io
 import json
@@ -16,6 +17,8 @@ import xml.etree.ElementTree as ElementTree
 from concurrent.futures import Future
 from pathlib import Path
 from unittest import mock
+
+from phase_support import PhaseRecorder as _PhaseRecorder
 
 from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import build as build_command
@@ -1320,6 +1323,52 @@ class CliParseTest(unittest.TestCase):
         )
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
 
+    def test_suite_invocations_record_one_phase_each_in_order(self):
+        build_dir = Path("/tmp/aobus-test-build")
+        recorder = _PhaseRecorder()
+
+        with (
+            mock.patch.dict(os.environ, {test_command.SHARD_ENV: "1"}),
+            mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0)),
+            mock.patch.object(test_command, "run_non_catch2_suite", return_value=0),
+            mock.patch.object(test_command, "phases", recorder),
+        ):
+            self.assertEqual(test_command.run_suites(builddir.LINUX_PROFILE.all_suites, build_dir), 0)
+
+        # jobs mirrors the shard width each Catch2 suite actually received; a
+        # suite record is one invocation, so count stays 1 and the suite name
+        # is fixed enum metadata.
+        self.assertEqual(
+            recorder.records,
+            [
+                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "core", "status": 0},
+                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "tui", "status": 0},
+                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "cli", "status": 0},
+                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "gtk", "status": 0},
+                {"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "integration", "status": 0},
+                {"name": "suite", "tree": None, "count": 1, "suite": "tooling", "status": 0},
+                {"name": "suite", "tree": "tidy", "count": 1, "suite": "lint", "status": 0},
+            ],
+        )
+
+    def test_suite_phase_records_the_first_failure_status_and_stops(self):
+        build_dir = Path("/tmp/aobus-test-build")
+        recorder = _PhaseRecorder()
+
+        with (
+            mock.patch.dict(os.environ, {test_command.SHARD_ENV: "1"}),
+            mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(3)),
+            mock.patch.object(test_command, "run_non_catch2_suite") as run_non_catch2,
+            mock.patch.object(test_command, "phases", recorder),
+        ):
+            self.assertEqual(test_command.run_suites(("core", "tooling"), build_dir), 3)
+
+        self.assertEqual(
+            recorder.records,
+            [{"name": "suite", "tree": "native", "jobs": 1, "count": 1, "suite": "core", "status": 3}],
+        )
+        run_non_catch2.assert_not_called()
+
     def test_gtk_suite_runs_inside_virtual_x11_display(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             build_dir = Path(temp_dir)
@@ -1539,8 +1588,8 @@ class CliParseTest(unittest.TestCase):
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
                 with mock.patch.object(
                     test_command.build,
-                    "parallel_build_arguments",
-                    return_value=["--parallel", "8"],
+                    "parallel_build_jobs",
+                    return_value=8,
                 ):
                     with mock.patch.object(test_command.build, "sync_compiler_cache") as sync_cache:
                         with mock.patch.object(test_command, "run", return_value=0) as run:
@@ -2516,6 +2565,183 @@ class CliParseTest(unittest.TestCase):
             self.assertEqual(toolchain.clang_tidy, "clang-tidy")
             self.assertEqual(toolchain.plugin, artifact)
             self.assertIsNone(toolchain.resource_dir)
+
+    def test_tidy_toolchain_records_checker_build_and_verify(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            sdk_root = build_dir / "llvm-sdk"
+            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
+            (build_dir / "CMakeCache.txt").write_text(
+                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
+                encoding="utf-8",
+            )
+            artifact = tidy_command.expected_lint_artifact_path(build_dir)
+            artifact.parent.mkdir(parents=True)
+            artifact.touch()
+            recorder = _PhaseRecorder()
+
+            with (
+                mock.patch.object(tidy_command.tidyengine, "ensure_compile_db"),
+                mock.patch.object(tidy_command, "verify_tidy_toolchain"),
+                mock.patch.object(tidy_command, "phases", recorder),
+                mock.patch.object(tidy_command, "subprocess", autospec=True) as process,
+            ):
+                process.run.return_value = subprocess.CompletedProcess([], 0)
+                tidy_command.prepare_toolchain(build_dir, no_build=False)
+
+            self.assertEqual(
+                recorder.records,
+                [
+                    {"name": "checker-build", "tree": "tidy", "status": 0},
+                    {"name": "checker-verify", "tree": "tidy", "status": 0},
+                ],
+            )
+
+    def test_tidy_checker_build_records_the_native_failure_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            sdk_root = build_dir / "llvm-sdk"
+            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
+            (build_dir / "CMakeCache.txt").write_text(
+                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
+                encoding="utf-8",
+            )
+            artifact = tidy_command.expected_lint_artifact_path(build_dir)
+            artifact.parent.mkdir(parents=True)
+            artifact.touch()
+            recorder = _PhaseRecorder()
+
+            with (
+                mock.patch.object(tidy_command.tidyengine, "ensure_compile_db"),
+                mock.patch.object(tidy_command, "verify_tidy_toolchain") as verify,
+                mock.patch.object(tidy_command, "phases", recorder),
+                mock.patch.object(tidy_command, "subprocess", autospec=True) as process,
+            ):
+                process.run.return_value = subprocess.CompletedProcess([], 2)
+                with self.assertRaises(SystemExit):
+                    tidy_command.prepare_toolchain(build_dir, no_build=False)
+
+            self.assertEqual(recorder.records, [{"name": "checker-build", "tree": "tidy", "status": 2}])
+            verify.assert_not_called()
+
+    def test_tidy_no_build_records_no_checker_build_phase(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            (build_dir / "compile_commands.json").touch()
+            sdk_root = build_dir / "llvm-sdk"
+            (sdk_root / "lib" / "clang" / "22").mkdir(parents=True)
+            (build_dir / "CMakeCache.txt").write_text(
+                f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk_root}\nAOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL=22.1.8\n",
+                encoding="utf-8",
+            )
+            artifact = tidy_command.expected_lint_artifact_path(build_dir)
+            artifact.parent.mkdir(parents=True)
+            artifact.touch()
+            recorder = _PhaseRecorder()
+
+            with (
+                mock.patch.object(tidy_command.tidyengine, "ensure_compile_db"),
+                mock.patch.object(tidy_command, "verify_tidy_toolchain"),
+                mock.patch.object(tidy_command, "phases", recorder),
+            ):
+                tidy_command.prepare_toolchain(build_dir, no_build=True)
+
+            # --no-build does not execute the checker build, so it records no
+            # checker-build phase at all.
+            self.assertEqual(recorder.records, [{"name": "checker-verify", "tree": "tidy", "status": 0}])
+
+    def test_analysis_source_id_digests_the_repository_relative_path(self):
+        digest = tidy_command._analysis_source_id(tidy_command.PROJECT_ROOT / "lib" / "audio" / "Foo.cpp")
+        self.assertEqual(digest, "5fedbf6102ef0323fa175cf9ec77811b520d278ef91a787037d45967a34ce386")
+        self.assertEqual(len(digest), 64)
+        self.assertEqual(digest, digest.lower())
+
+    def test_analysis_source_id_is_none_outside_the_repository_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            # A leading slash is drive-relative on Windows; use its actual
+            # native temp directory, outside the mapped checkout's root.
+            self.assertIsNone(tidy_command._analysis_source_id(Path(temporary) / "Fixture.cpp"))
+
+    def test_tidy_analysis_records_clamped_jobs_and_native_invocation_phases(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "checkout"
+            build = root / "build"
+            source.mkdir()
+            build.mkdir()
+            selected = source / "lib" / "audio" / "Selected.cpp"
+            selected.parent.mkdir(parents=True)
+            selected.write_text("int original;\n", encoding="utf-8")
+            entry = {
+                "directory": str(build),
+                "file": str(selected),
+                "arguments": ["clang++", "-std=c++26", "-c", str(selected)],
+            }
+            (build / "compile_commands.json").write_text(json.dumps([entry]), encoding="utf-8")
+            recorder = _PhaseRecorder()
+            args = argparse.Namespace(
+                files=[str(selected)],
+                all=False,
+                folder=[],
+                commit=None,
+                check=None,
+                debug=False,
+                output=None,
+                jobs=1,
+                path=str(build),
+                fix=False,
+                no_build=True,
+                tidy_arg=[],
+                header_filter=None,
+            )
+            # The existing runner accepts zero and clamps it to one worker;
+            # profiling must record that effective limit, not reject the command.
+            args.jobs = 0
+            planner = tidy_command.tidyengine.compile_command_plan
+
+            def plan_context(*arguments, **keywords):
+                return planner(*arguments, **keywords, project_root=source)
+
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(
+                    mock.patch.object(
+                        tidy_command,
+                        "prepare_toolchain",
+                        return_value=tidy_command.TidyToolchain("clang-tidy", build / "plugin.so", None),
+                    )
+                )
+                stack.enter_context(
+                    mock.patch.object(tidy_command.tidyengine, "compile_command_plan", side_effect=plan_context)
+                )
+                stack.enter_context(
+                    mock.patch.object(tidy_command.workspace_cache, "validated_source_roots", return_value=(source,))
+                )
+                stack.enter_context(mock.patch.object(tidy_command.tidyengine, "system_include_args", return_value=[]))
+                stack.enter_context(mock.patch.object(tidy_command, "phases", recorder))
+                stack.enter_context(mock.patch.object(tidy_command.subprocess, "call", return_value=3))
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+                status = tidy_command.run_command(args)
+
+            self.assertEqual(status, 1)
+            # The batch record encloses the per-native-invocation record; the
+            # item status is the actual native exit status and the batch status
+            # the failed-batch bool. Out-of-root fixture data keeps source_id
+            # None while its timing still lands in the item record.
+            self.assertEqual(
+                recorder.records,
+                [
+                    {"name": "analysis", "tree": "tidy", "mode": "STRICT", "jobs": 1, "count": 1, "status": 1},
+                    {
+                        "name": "analysis-item",
+                        "tree": "tidy",
+                        "mode": "STRICT",
+                        "count": 1,
+                        "source_id": None,
+                        "status": 3,
+                    },
+                ],
+            )
 
     def test_tidy_artifact_path_is_native(self):
         build_dir = Path("build")

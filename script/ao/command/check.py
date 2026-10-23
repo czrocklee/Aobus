@@ -4,7 +4,7 @@ import argparse
 import copy
 from pathlib import Path
 
-from ..core import builddir, compiler_cache, dependency_policy
+from ..core import builddir, compiler_cache, dependency_policy, phases
 from ..core.proc import die
 from . import build, perf, test
 
@@ -76,7 +76,8 @@ def run_command(args: argparse.Namespace) -> int:
 
     print("Verifying dependency resolution...")
     try:
-        dependency_policy.verified_report(result.build_dir)
+        with phases.measure("dependency", tree="native"):
+            dependency_policy.verified_report(result.build_dir)
     except dependency_policy.DependencyPolicyError as exc:
         raise die(str(exc)) from exc
 
@@ -92,7 +93,8 @@ def run_command(args: argparse.Namespace) -> int:
         winui_result = build.do_build(winui_args, targets=["winui"])
         print("Verifying WinUI dependency resolution...")
         try:
-            dependency_policy.verified_report(winui_result.build_dir)
+            with phases.measure("dependency", tree="winui"):
+                dependency_policy.verified_report(winui_result.build_dir)
         except dependency_policy.DependencyPolicyError as exc:
             raise die(str(exc)) from exc
         print(f"WinUI {args.flavor} build: {winui_result.build_dir}")

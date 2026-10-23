@@ -12,7 +12,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ..core import builddir, buildlock, compiler_cache, workspace_cache
+from ..core import builddir, buildlock, compiler_cache, phases, workspace_cache
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import capture, die, run
 from . import build
@@ -282,7 +282,11 @@ def run_coverage_tests(suites: tuple[str, ...], build_dir: Path, test_filter: st
     for suite in suites:
         # Deliberately unsharded (run_suite defaults to one shard): parallel
         # processes would interleave writes to the same gcov counter files.
-        status = run_suite(suite, build_dir, test_filter=test_filter)
+        # One suite record per invocation keeps every suite's own status, so
+        # the run-all/first-failure policy below stays attribution-friendly.
+        with phases.measure("suite", tree="native", jobs=1, count=1, suite=suite) as phase:
+            status = run_suite(suite, build_dir, test_filter=test_filter)
+            phase.status = status
         if status != 0:
             if first_failure == 0:
                 first_failure = status
@@ -320,7 +324,13 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
             *compiler_cache.cmake_launcher_arguments(build_dir=build_dir),
             *workspace.cmake_arguments,
         ]
-        if run(configure) != 0:
+        # The cold configure is portal work this command owns; measure it in
+        # place. The actual native exit code is assigned before the failure
+        # handling so a failed configure keeps its code in its own record even
+        # though die normalizes the command exit to 1.
+        with phases.measure("configure", tree="native") as phase:
+            phase.status = run(configure)
+        if phase.status != 0:
             raise die("coverage configure failed.")
     else:
         build.sync_compiler_cache(build_dir, unsupported_reason="coverage builds")
@@ -328,7 +338,12 @@ def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
     print("Building tests...")
     suites = ("core", "tui", "cli", "gtk") if args.suite == "all" else (args.suite,)
     targets = [target for suite in suites for target in SUITE_TARGETS[suite]]
-    if run(["cmake", "--build", str(build_dir), f"-j{args.jobs}", "--target", *targets]) != 0:
+    # Keep zero/unbounded and invalid CLI values under the native build's
+    # existing policy; they do not identify a known positive worker limit.
+    jobs = args.jobs if isinstance(args.jobs, int) and not isinstance(args.jobs, bool) and args.jobs > 0 else None
+    with phases.measure("build", tree="native", jobs=jobs) as phase:
+        phase.status = run(["cmake", "--build", str(build_dir), f"-j{args.jobs}", "--target", *targets])
+    if phase.status != 0:
         raise die("coverage build failed.")
 
     print("Clearing old .gcda files...")

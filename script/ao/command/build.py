@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, buildlock, compiler_cache, winui, workspace_cache
+from ..core import builddir, buildlock, compiler_cache, phases, winui, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -183,13 +183,12 @@ def sync_compiler_cache(build_dir: Path, *, unsupported_reason: str | None = Non
         return
     print(f"Updating compiler-cache settings in {build_dir}...")
     cmake_build_dir = workspace.compiler_build_dir or build_dir
-    if (
-        run(
+    with phases.measure("configure", tree="native") as phase:
+        phase.status = run(
             ["cmake", "-S", str(workspace.source_dir), "-B", str(cmake_build_dir), *arguments],
             cwd=workspace.compiler_build_dir or PROJECT_ROOT,
         )
-        != 0
-    ):
+    if phase.status != 0:
         raise die("compiler-cache configure failed.")
 
 
@@ -333,7 +332,9 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
             print("TSan enabled for this build.")
 
         print(f"Configuring Aobus with preset '{preset}' in '{build_dir}'...")
-        if run(configure, cwd=workspace.compiler_build_dir or PROJECT_ROOT, env=env, log=log) != 0:
+        with phases.measure("configure", tree="winui" if requested_winui else "native") as phase:
+            phase.status = run(configure, cwd=workspace.compiler_build_dir or PROJECT_ROOT, env=env, log=log)
+        if phase.status != 0:
             raise die("configure failed.")
         compiler = validate_build_tree(args, build_dir)
 
@@ -358,7 +359,9 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
                     build_dir, compiler_source_dir=workspace.source_dir, compiler_build_dir=cmake_build_dir
                 ),
             }
-        if run(build, cwd=workspace.compiler_build_dir or PROJECT_ROOT, env=build_env, log=log, append=True) != 0:
+        with phases.measure("build", tree="winui" if requested_winui else "native", jobs=parallel_jobs) as phase:
+            phase.status = run(build, cwd=workspace.compiler_build_dir or PROJECT_ROOT, env=build_env, log=log, append=True)
+        if phase.status != 0:
             raise die("build failed.")
 
         return BuildResult(build_dir=build_dir, log=log, compiler=compiler, preset=preset)

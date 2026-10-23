@@ -56,6 +56,7 @@ jobs:
     timeout-minutes: 90
     env:
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+      AOBUS_PHASE_LOG_DIR: /tmp/aobus-phases-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Require successful scope and documentation validation
@@ -201,6 +202,16 @@ jobs:
         continue-on-error: true
         run: '"$SCCACHE_PATH" --show-stats'
 
+      - name: Summarize native phases
+        if: ${{ always() && steps.build.outcome != 'skipped' }}
+        continue-on-error: true
+        env:
+          PYTHONPATH: script
+        run: |
+          NIX_BUILD_SHELL="$(nix-build shell.nix -A portalShell --no-out-link)/bin/bash"
+          export NIX_BUILD_SHELL
+          nix-shell --run '"$AO_NIX_PORTAL_PYTHON" -m ao.core.phases "$AOBUS_PHASE_LOG_DIR" --github-summary "$GITHUB_STEP_SUMMARY"'
+
       - name: Show final disk usage
         if: ${{ always() }}
         run: df -h
@@ -229,6 +240,7 @@ jobs:
       AOBUS_CHECKOUT_ID: github-actions-macos-${{ matrix.cache_arch }}
       HOMEBREW_NO_AUTO_UPDATE: "1"
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+      AOBUS_PHASE_LOG_DIR: /tmp/aobus-phases-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Require successful scope and documentation validation
@@ -467,6 +479,16 @@ jobs:
         continue-on-error: true
         run: '"$SCCACHE_PATH" --show-stats'
 
+      - name: Summarize native phases
+        if: ${{ always() && steps.build.outcome != 'skipped' }}
+        continue-on-error: true
+        env:
+          PYTHONPATH: script
+        run: |
+          source script/ao/macos-vcpkg-bootstrap.sh
+          aobus_macos_prepare_python "$PWD"
+          "$AOBUS_PYTHON" -m ao.core.phases "$AOBUS_PHASE_LOG_DIR" --github-summary "$GITHUB_STEP_SUMMARY"
+
       - name: Show final disk usage
         if: ${{ always() }}
         run: df -h
@@ -485,6 +507,7 @@ jobs:
       AOBUS_STATE_ROOT: C:\aobus-state
       AOBUS_CHECKOUT_ID: github-actions-windows-x64
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+      AOBUS_PHASE_LOG_DIR: C:\aobus-state\phase-records\${{ github.run_id }}-${{ github.run_attempt }}
       # vcpkg 2026 removed x-gha. Keep its ABI-addressed archives in a local
       # files backend and let actions/cache move that directory between VMs.
       VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,readwrite
@@ -755,6 +778,18 @@ jobs:
             C:\aobus-state\cache\pip
             C:\aobus-state\cache\windows-app-sdk
           key: ${{ steps.windows-state.outputs.cache-primary-key }}
+
+      - name: Summarize native phases
+        if: ${{ always() && steps.build.outcome != 'skipped' }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          PYTHONPATH: script
+        run: |
+          $contract = Get-Content script/ao/toolchain.json -Raw | ConvertFrom-Json
+          $python = Join-Path $env:AOBUS_STATE_ROOT "tools\python\$($contract.python)\python.exe"
+          if ($env:AOBUS_PYTHON) { $python = $env:AOBUS_PYTHON }
+          & $python -m ao.core.phases $env:AOBUS_PHASE_LOG_DIR --github-summary $env:GITHUB_STEP_SUMMARY
 
       - name: Show final disk usage
         if: ${{ always() }}

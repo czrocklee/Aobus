@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import ctypes
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -18,9 +19,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, buildlock, gitfiles, pythoncheck, tidyengine, winuitidy, workspace_cache
+from ..core import builddir, buildlock, gitfiles, phases, pythoncheck, tidyengine, winuitidy, workspace_cache
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
+from ..core.phases import LOG_DIR_ENV
 from ..core.proc import die
 from ..core.tidyconfig import checks_for, config_for, mode_disabled_checks
 from ..core.tidyengine import TidyToolchain as TidyToolchain
@@ -445,17 +447,21 @@ def prepare_toolchain(
             )
             target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
             print(f"Building {target} (incremental)...")
-            tool_build = subprocess.run(
-                [
-                    "cmake",
-                    "--build",
-                    str(workspace_cache.compiler_build_dir(build_dir)),
-                    "--target",
-                    target,
-                    *build.parallel_build_arguments(),
-                ],
-                cwd=PROJECT_ROOT,
-            )
+            # The --no-build route never executes this work, so it emits no
+            # checker-build record at all.
+            with phases.measure("checker-build", tree="tidy") as phase:
+                tool_build = subprocess.run(
+                    [
+                        "cmake",
+                        "--build",
+                        str(workspace_cache.compiler_build_dir(build_dir)),
+                        "--target",
+                        target,
+                        *build.parallel_build_arguments(),
+                    ],
+                    cwd=PROJECT_ROOT,
+                )
+                phase.status = tool_build.returncode
         if tool_build.returncode != 0:
             raise die(f"failed to build {target}.")
 
@@ -469,7 +475,9 @@ def prepare_toolchain(
         expected_llvm_version=(tidyengine.llvm_sdk_version(build_dir) if profile.name == "windows" else None),
         sdk_root=tidyengine.llvm_sdk_root(build_dir) if profile.name == "windows" else None,
     )
-    verify_tidy_toolchain(toolchain)
+    # A verify failure ends the phase through the same die() the caller sees.
+    with phases.measure("checker-verify", tree="tidy"):
+        verify_tidy_toolchain(toolchain)
     return toolchain
 
 
@@ -802,6 +810,22 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
     return buildenv.requires_source_build_env(args, files)
 
 
+def _analysis_source_id(path: Path) -> str | None:
+    """Return the stable phase identifier for one analyzed source.
+
+    The digest is over the repository-relative resolved POSIX path, so it stays
+    stable across CI checkout locations while no raw host path is published.
+    Sources outside the repository root deliberately keep ``None``: their
+    timing still lands in the record, but no identifier is claimed for fixture
+    data whose relative spelling is not meaningful.
+    """
+    try:
+        relative = absolute_path(path).relative_to(absolute_path(PROJECT_ROOT)).as_posix()
+    except ValueError:
+        return None
+    return hashlib.sha256(relative.encode("utf-8")).hexdigest()
+
+
 def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bool] | None = None) -> int:
     build_dir = Path(args.path) if args.path else builddir.tidy_dir()
     files, explicit = (
@@ -1084,12 +1108,22 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                 *extra,
                 str(tidy_file),
             ]
-            with open(log, "w", encoding="utf-8") as sink:
-                if args.debug:
-                    sink.write(f"DEBUG CONFIG: {config}\n")
-                status = subprocess.call(command, cwd=PROJECT_ROOT, stdout=sink, stderr=subprocess.STDOUT)
-            if tidyengine.log_has_compile_command_error(log):
-                return status or 1
+            # Per-native-invocation record: the caller computes the identifier
+            # once per invocation, and only while phase logging is enabled, so
+            # a disabled run skips the digest entirely; the status is the
+            # actual native exit status (including the normalized
+            # database-failure marker below). The log-variable name is bound
+            # at import time: tests replace the ``phases`` attribute with a
+            # call recorder, and the gate must not depend on that seam.
+            source_id = _analysis_source_id(invocation.selected) if os.environ.get(LOG_DIR_ENV) else None
+            with phases.measure("analysis-item", tree="tidy", count=1, mode=mode, source_id=source_id) as item:
+                with open(log, "w", encoding="utf-8") as sink:
+                    if args.debug:
+                        sink.write(f"DEBUG CONFIG: {config}\n")
+                    status = subprocess.call(command, cwd=PROJECT_ROOT, stdout=sink, stderr=subprocess.STDOUT)
+                if tidyengine.log_has_compile_command_error(log):
+                    status = status or 1
+                item.status = status
             return status
 
         for mode in ("STRICT", "RELAXED"):
@@ -1103,7 +1137,17 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                 return run_one(current_mode, invocation, log)
 
             try:
-                result = tidyengine.run_parallel(batch, args.jobs, tmpdir, run_file)
+                # One record per strict/relaxed batch: count is the number of
+                # native invocations and status the actual failed-batch bool;
+                # findings are reported separately below, and deferred files
+                # plus header input scope stay outside this record. The
+                # per-invocation analysis-item children carry the heavy-tail
+                # detail.
+                with phases.measure(
+                    "analysis", tree="tidy", mode=mode, jobs=max(args.jobs, 1), count=len(batch)
+                ) as phase:
+                    result = tidyengine.run_parallel(batch, args.jobs, tmpdir, run_file)
+                    phase.status = 1 if result.failed else 0
                 if result.failed:
                     overall_failed = True
                     print("=== Failed logs ===", file=sys.stderr)

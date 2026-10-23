@@ -7,7 +7,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import compiler_cache, pythoncheck, workspace_cache
+from . import compiler_cache, phases, pythoncheck, workspace_cache
 from .paths import PROJECT_ROOT
 
 TEST_DIR = PROJECT_ROOT / "test" / "script"
@@ -49,7 +49,10 @@ def run(*, log: Path | None = None) -> int:
     # Ruff and mypy are read-only, so they can gate the tooling suite without touching files.
     static_status = pythoncheck.run_paths([], log=log)
     env = dict(os.environ)
+    # Unit modules invoke mocked portal operations. Keep their synthetic phases
+    # out of the real command trace; profiling tests opt into private temp logs.
     for key in (
+        phases.LOG_DIR_ENV,
         compiler_cache.SHARED_WORKSPACES_EFFECTIVE,
         compiler_cache.SHARED_WORKSPACES_CCACHE,
         compiler_cache.SHARED_WORKSPACES_NAMESPACE_PREFIX,
