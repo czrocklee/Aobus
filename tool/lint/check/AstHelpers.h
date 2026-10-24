@@ -24,8 +24,9 @@ namespace clang::tidy::aobus
 {
   std::string getExprSourceText(Expr const& expr, SourceManager const& sm, LangOptions const& langOpts);
 
-  // True when any end of the range sits inside a macro expansion; a FixIt
-  // anchored there would edit the macro definition, not the use site.
+  // True when any end of the range sits inside a macro expansion; a location
+  // anchored there points into the macro definition, not the use site, so
+  // covered checks skip such ranges before diagnosing.
   bool isInMacro(SourceRange range);
 
   // True for production project sources and lint fixtures. Ordinary tests and

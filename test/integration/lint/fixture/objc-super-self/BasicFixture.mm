@@ -13,7 +13,7 @@ __attribute__((objc_root_class))
 @implementation AobusInitializerFixture
 - (instancetype)init
 {
-  // POSITIVE: FIX-TO: self = [super init];
+  // POSITIVE
   self = [super self];
   return self;
 }

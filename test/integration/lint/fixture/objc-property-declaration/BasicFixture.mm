@@ -3,7 +3,7 @@
 
 __attribute__((objc_root_class))
 @interface AobusPropertyFixture
-// POSITIVE: FIX-TO: @property (nonatomic) int itemCount;
+// POSITIVE
 @property (nonatomic) int ItemCount;
 @property (nonatomic) int rowCount; // NEGATIVE
 @end

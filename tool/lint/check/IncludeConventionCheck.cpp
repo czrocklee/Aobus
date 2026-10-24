@@ -145,9 +145,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    // Inline buffer for the angle-bracket-wrapped filename in the fix-it replacement.
-    constexpr unsigned kFilenameBufferSize = 128;
-
     if (isAngled)
     {
       return;
@@ -155,23 +152,11 @@ namespace clang::tidy::readability
 
     if (fileType == SrcMgr::C_System || fileType == SrcMgr::C_ExternCSystem)
     {
-      auto buf = SmallString<kFilenameBufferSize>{};
-      buf.push_back('<');
-      buf.append(fileName);
-      buf.push_back('>');
-
-      diag(loc, "system include '%0' should use angle brackets")
-        << fileName << FixItHint::CreateReplacement(filenameRange, buf.str());
+      diag(loc, "system include '%0' should use angle brackets") << fileName;
     }
     else if (fileName.starts_with("ao/"))
     {
-      auto buf = SmallString<kFilenameBufferSize>{};
-      buf.push_back('<');
-      buf.append(fileName);
-      buf.push_back('>');
-
-      diag(loc, "project include '%0' should use angle brackets")
-        << fileName << FixItHint::CreateReplacement(filenameRange, buf.str());
+      diag(loc, "project include '%0' should use angle brackets") << fileName;
     }
   }
 } // namespace clang::tidy::readability

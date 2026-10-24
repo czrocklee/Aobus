@@ -6,17 +6,17 @@
 #include <memory>
 #include <optional>
 
-// POSITIVE: FIX-TO: std::int32_t getForbiddenVal()
+// POSITIVE
 [[nodiscard]] std::int32_t getForbiddenVal()
 {
   return 42;
 }
 
-// POSITIVE: FIX-TO: struct ForbiddenStruct
+// POSITIVE
 struct [[nodiscard]] ForbiddenStruct
 {};
 
-// POSITIVE: FIX-TO: class ForbiddenClass
+// POSITIVE
 class [[nodiscard]] ForbiddenClass
 {};
 
@@ -32,7 +32,7 @@ struct ConformingStruct
 
 // --- RAII Tests ---
 
-// POSITIVE: FIX-TO: class [[nodiscard]] MissingNodiscardRaii
+// POSITIVE
 class MissingNodiscardRaii
 {
 public:
@@ -48,7 +48,7 @@ public:
   GoodRaii(GoodRaii const&) = delete;
 };
 
-// POSITIVE: FIX-TO: class [[nodiscard]] ScopedRegistration
+// POSITIVE
 class ScopedRegistration
 {
 public:
@@ -77,7 +77,7 @@ public:
   ComposedGuard(ComposedGuard const&) = delete;
 };
 
-// NEGATIVE: a defaulted destructor still owns cleanup through an RAII member.
+// NEGATIVE - a defaulted destructor still owns cleanup through an RAII member.
 class [[nodiscard]] ComposedTempFile
 {
 public:
@@ -98,21 +98,21 @@ private:
   ComposedGuard _guard;
 };
 
-// NEGATIVE: an inherited RAII base still owns cleanup for the derived value.
+// NEGATIVE - an inherited RAII base still owns cleanup for the derived value.
 class [[nodiscard]] AnnotatedWriteTransaction : public ReadTransaction
 {
 public:
   AnnotatedWriteTransaction(AnnotatedWriteTransaction const&) = delete;
 };
 
-// POSITIVE: FIX-TO: class [[nodiscard]] DerivedWriteTransaction : public ReadTransaction
+// POSITIVE
 class DerivedWriteTransaction : public ReadTransaction
 {
 public:
   DerivedWriteTransaction(DerivedWriteTransaction const&) = delete;
 };
 
-// NEGATIVE: an abstract lifecycle interface cannot itself be constructed as a discarded value.
+// NEGATIVE - an abstract lifecycle interface cannot itself be constructed as a discarded value.
 class DecoderSession
 {
 public:
@@ -120,14 +120,14 @@ public:
   DecoderSession(DecoderSession const&) = delete;
 };
 
-// POSITIVE: FIX-TO: class [[nodiscard]] TestDecoderSession : public DecoderSession
+// POSITIVE
 class TestDecoderSession : public DecoderSession
 {
 public:
   TestDecoderSession(TestDecoderSession const&) = delete;
 };
 
-// NEGATIVE: a raw pointer observes an RAII object but does not own its cleanup.
+// NEGATIVE - a raw pointer observes an RAII object but does not own its cleanup.
 class BorrowedPointerGuard
 {
 public:
@@ -141,7 +141,7 @@ private:
 class OwnedPayload
 {};
 
-// POSITIVE: FIX-TO: class [[nodiscard]] UniqueOwnerSession
+// POSITIVE
 class UniqueOwnerSession
 {
 public:
@@ -153,7 +153,7 @@ private:
 };
 
 template<typename T>
-// POSITIVE: FIX-TO: class [[nodiscard]] TaskFuture
+// POSITIVE
 class TaskFuture
 {
 public:
@@ -163,7 +163,7 @@ private:
   std::future<std::optional<T>> _future;
 };
 
-// POSITIVE: FIX-TO: class [[nodiscard]] ExplicitlyDefaultedTransaction
+// POSITIVE
 class ExplicitlyDefaultedTransaction
 {
 public:
@@ -213,7 +213,7 @@ public:
   MainWindow(MainWindow const&) = delete;
 };
 
-// POSITIVE: FIX-TO: class [[nodiscard]] SomeResourceToken
+// POSITIVE
 class SomeResourceToken
 {
 public:
@@ -223,7 +223,7 @@ public:
 
 namespace ao::media::file
 {
-  // POSITIVE: FIX-TO: class [[nodiscard]] File
+  // POSITIVE
   class File
   {
   public:
@@ -240,7 +240,7 @@ namespace ao
   {};
 } // namespace ao
 
-// POSITIVE: FIX-TO: class [[nodiscard]] WriteTransaction
+// POSITIVE
 class WriteTransaction
 {
 public:
@@ -248,13 +248,13 @@ public:
   WriteTransaction(WriteTransaction const&) = delete;
 };
 
-// POSITIVE: FIX-TO: [[deprecated]] std::int32_t testMultiAttr1()
+// POSITIVE
 [[nodiscard, deprecated]] std::int32_t testMultiAttr1()
 {
   return 1;
 }
 
-// POSITIVE: FIX-TO: [[deprecated]] std::int32_t testMultiAttr2()
+// POSITIVE
 [[deprecated, nodiscard]] std::int32_t testMultiAttr2()
 {
   return 2;

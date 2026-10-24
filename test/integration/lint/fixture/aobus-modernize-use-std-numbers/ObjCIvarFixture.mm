@@ -28,7 +28,7 @@ __attribute__((objc_root_class))
 @private
   // POSITIVE
   long unrelatedLong;
-  // POSITIVE: FIX-TO: std::int32_t count;
+  // POSITIVE
   int count;
   long long externalValue; // NEGATIVE
   long long categoryValue; // NEGATIVE
@@ -43,7 +43,7 @@ __attribute__((objc_root_class))
 @implementation AobusObjCIvarFixture
 - (void)setRow:(long long)row // NEGATIVE
 {
-  // POSITIVE: FIX-TO: std::int32_t localRow = 0;
+  // POSITIVE
   int localRow = 0;
 }
 - (void)consumeRow:(long long)row // NEGATIVE
@@ -59,7 +59,7 @@ __attribute__((objc_root_class))
   consume_integer(reinterpret_cast<long long*>(&castValue));
   long long localValue = 0; // NEGATIVE
   consume_integer(&localValue);
-  // POSITIVE: FIX-TO: std::int32_t localCount = 0;
+  // POSITIVE
   int localCount = 0;
 }
 @end
@@ -92,9 +92,9 @@ void inspectBlockParameters()
     long long localValue = 0; // NEGATIVE
     consume_integer(&localValue);
   };
-  // POSITIVE: FIX-TO: auto ordinaryBlock = ^(std::int32_t value) {
+  // POSITIVE
   auto ordinaryBlock = ^(int value) {
-    // POSITIVE: FIX-TO: std::int32_t localCount = 0;
+    // POSITIVE
     int localCount = 0;
   };
   auto externalLambda = [](long long value) { // NEGATIVE
@@ -115,7 +115,7 @@ void inspectExplicitBoundaryCasts()
   long long wrappedAddress = 0; // NEGATIVE
   consume_address(static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(&wrappedAddress)));
   long long convertedValue = 0; // NEGATIVE
-  // POSITIVE: FIX-TO: consume_integer_value(static_cast<std::int64_t>(convertedValue));
+  // POSITIVE
   consume_integer_value(static_cast<long long>(convertedValue));
 }
 

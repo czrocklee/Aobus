@@ -13,7 +13,7 @@ from unittest import mock
 
 from ao.__main__ import main, make_parser
 from ao.command import COMMAND_MODULES
-from ao.core import builddir, buildenv, compiler_cache, gitfiles, tidyengine
+from ao.core import builddir, buildenv, compiler_cache, gitfiles, tidyengine, workspace_cache
 
 
 class BuildEnvTest(unittest.TestCase):
@@ -39,6 +39,8 @@ class BuildEnvTest(unittest.TestCase):
         self.assertTrue(buildenv.requires_build_env("build"))
         self.assertFalse(buildenv.requires_build_env("no-such-command"))
         self.assertFalse(buildenv.requires_build_env(""))
+        self.assertFalse(buildenv.requires_build_env("no-such-command", ["--tidy-arg=-fix"]))
+        self.assertFalse(buildenv.requires_build_env("", ["--tidy-arg=-fix"]))
 
     def test_run_no_build_skips_the_native_build_environment(self):
         self.assertFalse(buildenv.requires_build_env("run", ["cli", "-n"]))
@@ -48,7 +50,8 @@ class BuildEnvTest(unittest.TestCase):
 
     def test_test_no_build_skips_the_native_build_environment(self):
         self.assertFalse(buildenv.requires_build_env("test", ["--core", "-n"]))
-        self.assertFalse(buildenv.requires_build_env("test", ["--no-build", "--tooling"]))
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.platform_profile("linux")):
+            self.assertFalse(buildenv.requires_build_env("test", ["--no-build", "--tooling"]))
         self.assertTrue(buildenv.requires_build_env("test", ["--core"]))
         self.assertTrue(buildenv.requires_build_env("test", ["--", "-n"]))
 
@@ -77,15 +80,33 @@ class BuildEnvTest(unittest.TestCase):
 
     def test_invalid_arguments_have_the_real_portal_diagnostic(self):
         root = Path(__file__).resolve().parents[2]
-        env = {**os.environ, "PYTHONPATH": str(root / "script")}
-        for arguments in (["test", "--bogus"], ["tidy", "--jobs", "invalid"], ["hygiene", "--folder"]):
-            expected = subprocess.run([sys.executable, "-m", "ao", *arguments], env=env, capture_output=True, text=True)
-            for mode in ([], ["--python-tools"]):
+        env = {**os.environ, "PYTHONPATH": str(root / "script"), "PYTHONDONTWRITEBYTECODE": "1"}
+        for arguments in (
+            ["test", "--bogus"],
+            ["tidy", "--jobs", "invalid"],
+            ["hygiene", "--folder"],
+            ["analyze", "--tidy-arg=-fix"],
+            ["tidy", "--tidy-arg=-export-fixes=fixes.yaml"],
+            ["deps"],
+            ["docs"],
+            ["doctor"],
+            ["run"],
+            ["setup"],
+        ):
+            expected = subprocess.run(
+                [sys.executable, "-m", "ao", *arguments],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            for mode in ([], ["--python-tools"], ["--exit-code"]):
                 actual = subprocess.run(
                     [sys.executable, "-m", "ao.core.buildenv", *mode, *arguments],
                     env=env,
                     capture_output=True,
                     text=True,
+                    timeout=30,
                 )
                 self.assertEqual(actual.returncode, 2, actual.stderr)
                 self.assertEqual(actual.stderr, expected.stderr)
@@ -185,6 +206,232 @@ class BuildEnvTest(unittest.TestCase):
         self.assertEqual(required_status, buildenv.BUILD_ENV_REQUIRED_EXIT_CODE)
         self.assertEqual(skipped_status, 0)
         self.assertEqual(stdout.getvalue(), "")
+
+    def test_known_commands_parse_before_the_static_or_dynamic_answer(self):
+        # Missing required arguments are parser errors for static commands too.
+        # Valid arguments come from each parser's own choices, not a second command list.
+        for command in ("deps", "docs", "doctor", "run", "setup"):
+            with self.subTest(command=command, arguments=()):
+                with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as failure:
+                    buildenv.requires_build_env(command)
+                self.assertEqual(failure.exception.code, 2)
+
+        with (
+            mock.patch.dict(os.environ, {"AOBUS_PREFLIGHT_SCOPE": ""}),
+            mock.patch.object(gitfiles, "changed_files", return_value=[]),
+            mock.patch.object(gitfiles, "diff_base", return_value="HEAD"),
+            mock.patch.object(gitfiles, "find_sources", return_value=[]),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            for module in COMMAND_MODULES:
+                arguments = _choice_backed_arguments(module.NAME)
+                parsed = buildenv.parse_command_arguments(module.NAME, arguments)
+                policy = getattr(module, "requires_build_environment", None)
+                expected = bool(policy(parsed) if policy else module.REQUIRES_BUILD_ENV)
+                with self.subTest(command=module.NAME, arguments=arguments):
+                    self.assertEqual(buildenv.requires_build_env(module.NAME, arguments), expected)
+
+    def test_invalid_tidy_arg_preflight_exits_before_scope_or_native_env_selection(self):
+        # python -m ao.core.buildenv rejects before scope write or native env selection.
+        # Nix or the Windows Python bootstrap may already have run; this is the parser boundary.
+        calls: list[str] = []
+
+        def record(name: str, real):
+            def wrapped(*args, **kwargs):
+                calls.append(name)
+                return real(*args, **kwargs)
+
+            return wrapped
+
+        with tempfile.TemporaryDirectory() as temporary:
+            scope = Path(temporary) / "scope.json"
+            source = Path(temporary) / "Selected.cpp"
+            source.write_text("int original;\n", encoding="utf-8")
+            rejected = (
+                "--tidy-arg=-fix",
+                "--tidy-arg=--export-fixes=/tmp/secret-fixes.yaml",
+                "--tidy-arg=@/tmp/secret-responses.rsp",
+                "--tidy-arg=---fix",
+            )
+            resolve_scope = tidyengine.resolve_scope
+            activate_local = compiler_cache.activate_local
+            command_context = workspace_cache.command_context
+            source_build_env = buildenv.requires_source_build_env
+            with mock.patch.dict(os.environ, {"AOBUS_PREFLIGHT_SCOPE": str(scope)}):
+                for command in ("tidy", "analyze"):
+                    for option in rejected:
+                        with self.subTest(command=command, option=option, boundary="in-process"):
+                            calls.clear()
+                            with (
+                                mock.patch.object(
+                                    tidyengine,
+                                    "resolve_scope",
+                                    side_effect=record("resolve_scope", resolve_scope),
+                                ),
+                                mock.patch.object(
+                                    compiler_cache,
+                                    "activate_local",
+                                    side_effect=record("activate_local", activate_local),
+                                ),
+                                mock.patch.object(
+                                    workspace_cache,
+                                    "command_context",
+                                    side_effect=record("command_context", command_context),
+                                ),
+                                mock.patch.object(
+                                    buildenv,
+                                    "requires_source_build_env",
+                                    side_effect=record("requires_source_build_env", source_build_env),
+                                ),
+                                contextlib.redirect_stderr(io.StringIO()),
+                            ):
+                                with self.assertRaises(SystemExit) as failure:
+                                    buildenv.requires_build_env(command, [option, str(source)])
+                            self.assertEqual(failure.exception.code, 2)
+                            self.assertEqual(calls, [])
+                            self.assertFalse(scope.exists())
+
+            root = Path(__file__).resolve().parents[2]
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(root / "script"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "AOBUS_PREFLIGHT_SCOPE": str(scope),
+                "AOBUS_PHASE_LOG_DIR": "",
+            }
+            for command in ("tidy", "analyze"):
+                portal = subprocess.run(
+                    [sys.executable, "-m", "ao", command, "--tidy-arg=-fix", str(source)],
+                    env=env,
+                    cwd=temporary,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                self.assertEqual(portal.returncode, 2, portal.stderr)
+                self.assertNotIn("No files specified", portal.stderr)
+                for mode in ([], ["--exit-code"], ["--python-tools"]):
+                    actual = subprocess.run(
+                        [
+                            sys.executable,
+                            "-m",
+                            "ao.core.buildenv",
+                            *mode,
+                            command,
+                            "--tidy-arg=-fix",
+                            str(source),
+                        ],
+                        env=env,
+                        cwd=temporary,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    self.assertEqual(actual.returncode, 2, actual.stderr)
+                    self.assertNotEqual(actual.returncode, buildenv.BUILD_ENV_REQUIRED_EXIT_CODE)
+                    self.assertEqual(actual.stderr, portal.stderr)
+                    self.assertEqual(actual.stdout, "")
+                    self.assertFalse(scope.exists())
+                    self.assertNotIn("No files specified", actual.stderr)
+                extra_options = (
+                    "--tidy-arg=@/tmp/secret-responses.rsp",
+                    "--tidy-arg=-export-fixes=/tmp/secret-fixes.yaml",
+                )
+                for option in extra_options:
+                    actual = subprocess.run(
+                        [sys.executable, "-m", "ao.core.buildenv", "--exit-code", command, option, str(source)],
+                        env=env,
+                        cwd=temporary,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    self.assertEqual(actual.returncode, 2, actual.stderr)
+                    self.assertFalse(scope.exists())
+
+    def test_accepted_compiler_response_keeps_native_build_env_policy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "Selected.cpp"
+            source.write_text("int value;\n", encoding="utf-8")
+            scope = Path(temporary) / "scope.json"
+            accepted = ["--tidy-arg=--extra-arg=@compiler.rsp", str(source)]
+            with mock.patch.dict(os.environ, {"AOBUS_PREFLIGHT_SCOPE": str(scope)}):
+                self.assertTrue(buildenv.requires_build_env("tidy", accepted))
+                self.assertTrue(scope.is_file())
+                self.assertGreater(scope.stat().st_size, 0)
+                scope.unlink()
+                self.assertFalse(buildenv.requires_build_env("tidy", ["--no-build", *accepted]))
+                self.assertFalse(scope.exists())
+                self.assertTrue(buildenv.requires_build_env("analyze", accepted))
+                self.assertFalse(scope.exists())
+            for profile in (builddir.LINUX_PROFILE, builddir.WINDOWS_PROFILE):
+                with self.subTest(profile=profile.name):
+                    with mock.patch.object(builddir, "platform_profile", return_value=profile):
+                        self.assertFalse(
+                            buildenv.requires_build_env(
+                                "tidy", ["--no-build", "--tidy-arg=--extra-arg=@compiler.rsp", str(source)]
+                            )
+                        )
+                        self.assertTrue(
+                            buildenv.requires_build_env(
+                                "analyze", ["--tidy-arg=--extra-arg=@compiler.rsp", str(source)]
+                            )
+                        )
+
+            root = Path(__file__).resolve().parents[2]
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(root / "script"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "AOBUS_PREFLIGHT_SCOPE": str(scope),
+                "AOBUS_PHASE_LOG_DIR": "",
+            }
+            required = subprocess.run(
+                [sys.executable, "-m", "ao.core.buildenv", "--exit-code", "tidy", *accepted],
+                env=env,
+                cwd=temporary,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(required.returncode, buildenv.BUILD_ENV_REQUIRED_EXIT_CODE, required.stderr)
+            self.assertTrue(scope.is_file())
+            scope.unlink()
+            skipped = subprocess.run(
+                [sys.executable, "-m", "ao.core.buildenv", "--exit-code", "tidy", "--no-build", *accepted],
+                env=env,
+                cwd=temporary,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(skipped.returncode, 0, skipped.stderr)
+            self.assertFalse(scope.exists())
+            analyzed = subprocess.run(
+                [sys.executable, "-m", "ao.core.buildenv", "--exit-code", "analyze", *accepted],
+                env=env,
+                cwd=temporary,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(analyzed.returncode, buildenv.BUILD_ENV_REQUIRED_EXIT_CODE, analyzed.stderr)
+            self.assertFalse(scope.exists())
+
+
+def _choice_backed_arguments(command: str) -> list[str]:
+    """Minimal required arguments taken from the command parser's own choices."""
+    parser = make_parser()
+    subparsers = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    command_parser = subparsers.choices[command]
+    arguments: list[str] = []
+    for action in command_parser._actions:
+        if action.option_strings or action.required is not True:
+            continue
+        if not action.choices:
+            raise AssertionError(f"{command} required argument {action.dest} has no choices")
+        arguments.append(next(iter(action.choices)))
+    return arguments
 
 
 if __name__ == "__main__":

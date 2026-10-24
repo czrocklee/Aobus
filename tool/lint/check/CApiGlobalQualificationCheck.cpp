@@ -49,7 +49,8 @@ namespace clang::tidy::readability
 
     // Skip calls routed through a non-type template parameter (e.g. `Fn(ptr)`
     // where a C function is passed as a template argument). The call site spells
-    // the parameter name, not the function, so `::` cannot be inserted there.
+    // the parameter name, not the function, so it is not an external C API
+    // callee spelling.
     // Walk the cast/paren chain explicitly because IgnoreParenCasts() strips the
     // SubstNonTypeTemplateParmExpr node and would unwrap past the marker.
     for (Expr const* callee = call->getCallee(); callee != nullptr;)
@@ -98,7 +99,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    diag(optCallee->loc, "external C library function '%0' must use global qualification '::%0'")
-      << func->getName() << FixItHint::CreateInsertion(optCallee->loc, "::");
+    diag(optCallee->loc, "external C library function '%0' must use global qualification '::%0'") << func->getName();
   }
 } // namespace clang::tidy::readability

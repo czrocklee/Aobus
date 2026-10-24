@@ -5,6 +5,6 @@
 
 class TestAliasProviderBorrowOnly
 {
-  // POSITIVE: FIX-TO: void consume(/* forward declare */ CoResidentAliasOwner const& owner);
+  // POSITIVE
   void consume(CoResidentAliasOwner const& owner);
 };

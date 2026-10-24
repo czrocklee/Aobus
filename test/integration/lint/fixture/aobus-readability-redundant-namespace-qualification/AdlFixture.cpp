@@ -197,27 +197,27 @@ namespace ao::adl::implementation
 
   static_assert(dependentTemplateArgument<associated::Arg>() == 11);
 
-  // POSITIVE: FIX-TO: static_assert(zero() == 11);
+  // POSITIVE
   static_assert(adl::zero() == 11);
-  // POSITIVE: FIX-TO: static_assert(basic(1, 2.0, nullptr) == 11);
+  // POSITIVE
   static_assert(adl::basic(1, 2.0, nullptr) == 11);
-  // POSITIVE: FIX-TO: static_assert(pick(1, 1) == 11);
+  // POSITIVE
   static_assert(adl::pick(1, 1) == 11);
-  // POSITIVE: FIX-TO: static_assert(pointer(nullptr, 1) == 11);
+  // POSITIVE
   static_assert(adl::pointer(nullptr, 1) == 11);
-  // POSITIVE: FIX-TO: static_assert(pick(static_cast<int>(associated::Convertible{}), 1) == 11);
+  // POSITIVE
   static_assert(adl::pick(static_cast<int>(associated::Convertible{}), 1) == 11);
-  // POSITIVE: FIX-TO: static_assert(defaulted() == 11);
+  // POSITIVE
   static_assert(adl::defaulted() == 11);
-  // POSITIVE: FIX-TO: static_assert(defaulted(1) == 11);
+  // POSITIVE
   static_assert(adl::defaulted(1) == 11);
   // NEGATIVE - an explicitly supplied class argument is not a default argument.
   static_assert(adl::defaulted(1, associated::Arg{}) == 11);
-  // POSITIVE: FIX-TO: static_assert(detail::pick(associated::Arg{}, 1) == 11);
+  // POSITIVE
   static_assert(adl::detail::pick(associated::Arg{}, 1) == 11);
-  // POSITIVE: FIX-TO: static_assert((pick)(associated::Arg{}, 1) == 11);
+  // POSITIVE
   static_assert((adl::pick)(associated::Arg{}, 1) == 11);
-  // POSITIVE: FIX-TO: static_assert((&reference)(associated::kArgs[0], 1) == 11);
+  // POSITIVE
   static_assert((&adl::reference)(associated::kArgs[0], 1) == 11);
 
   // NEGATIVE - an unrecognized non-call parent is conservatively unsupported.

@@ -1,6 +1,7 @@
 // RUN: %check_clang_tidy %s aobus-implicit-bool-conversion-in-init %t
 
 int scalar();
+double fractional();
 void* raw();
 
 struct WithMember
@@ -12,22 +13,28 @@ struct WithMember
 
 void test()
 {
-  // POSITIVE: FIX-TO: if (auto ptr = raw(); ptr != nullptr)
+  // POSITIVE | use an explicit '!= nullptr' comparison instead
   if (auto ptr = raw(); ptr)
   {
   }
 
-  // POSITIVE: FIX-TO: if (auto value = scalar(); value != 0)
+  // POSITIVE | use an explicit '!= 0' comparison instead
   if (auto value = scalar(); value)
   {
   }
 
-  // POSITIVE: FIX-TO: if (auto memberPtr = &WithMember::member; memberPtr != nullptr)
+  // POSITIVE | use an explicit '!= nullptr' comparison instead
   if (auto memberPtr = &WithMember::member; memberPtr)
   {
   }
 
-  // POSITIVE - diagnostic fires; no FixIt because the variable is spelled inside a macro
+  // POSITIVE | use an explicit '!= 0' comparison instead
+  if (auto fraction = fractional(); fraction)
+  {
+  }
+
+  // The variable is spelled inside a macro, but the conversion is still diagnosed.
+  // POSITIVE | use an explicit '!= 0' comparison instead
   if (auto flag = scalar(); AOBUS_TRUTHY(flag))
   {
   }
@@ -39,6 +46,11 @@ void test()
 
   // NEGATIVE
   if (auto value = scalar(); value != 0)
+  {
+  }
+
+  // NEGATIVE
+  if (auto fraction = fractional(); fraction != 0)
   {
   }
 

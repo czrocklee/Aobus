@@ -11,6 +11,6 @@ class TestAliasTemplateCoResident
   // NEGATIVE The alias template requires the co-resident owner's provider.
   void consume(CoResidentAliasOwner const& owner);
 
-  // POSITIVE: FIX-TO: void consumeIsolated(/* forward declare */ TargetBadRawPtr const& target);
+  // POSITIVE
   void consumeIsolated(TargetBadRawPtr const& target);
 };

@@ -4,7 +4,7 @@
 #include <mutex>
 #include <thread>
 
-// NEGATIVE: a parameter carries an established lock lifetime across a call boundary.
+// NEGATIVE - a parameter carries an established lock lifetime across a call boundary.
 void consumeLock(std::unique_lock<std::mutex> /*lock*/)
 {
 }

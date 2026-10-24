@@ -10,7 +10,6 @@
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
-#include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/Type.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
@@ -79,9 +78,6 @@ namespace clang::tidy::readability
     auto const* singleLambda = result.Nodes.getNodeAs<LambdaExpr>("single_lambda");
     auto const* doubleLambda = result.Nodes.getNodeAs<LambdaExpr>("double_lambda");
 
-    auto policy = PrintingPolicy{result.Context->getPrintingPolicy()};
-    policy.SuppressTagKeyword = true;
-
     if (singleLambda != nullptr)
     {
       auto const* parameter1 = result.Nodes.getNodeAs<ParmVarDecl>("parameter1");
@@ -93,16 +89,12 @@ namespace clang::tidy::readability
         return;
       }
 
-      // A dependent parameter type (generic lambda) cannot be spelled in a
-      // &Type::member projection.
+      // A dependent parameter type (generic lambda) is not covered.
       if (parameter1->getType().getNonReferenceType()->isDependentType() ||
           aobus::isInMacro(singleLambda->getSourceRange()))
       {
         return;
       }
-
-      auto const typeName = parameter1->getType().getNonReferenceType().getUnqualifiedType().getAsString(policy);
-      auto memberName = std::string{};
 
       if (methodCall != nullptr)
       {
@@ -112,22 +104,13 @@ namespace clang::tidy::readability
         {
           return;
         }
-
-        memberName = method->getNameAsString();
       }
-      else if (memberAccess != nullptr)
-      {
-        memberName = memberAccess->getMemberDecl()->getNameAsString();
-      }
-      else
+      else if (memberAccess == nullptr)
       {
         return;
       }
 
-      auto const replacement = "&" + typeName + "::" + memberName;
-
-      diag(singleLambda->getBeginLoc(), "use a projection instead of a single-argument lambda")
-        << FixItHint::CreateReplacement(singleLambda->getSourceRange(), replacement);
+      diag(singleLambda->getBeginLoc(), "use a projection instead of a single-argument lambda");
     }
     else if (doubleLambda != nullptr)
     {
@@ -146,7 +129,6 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto const typeName = parameterA->getType().getNonReferenceType().getUnqualifiedType().getAsString(policy);
       auto const memAName = memA->getMemberDecl()->getNameAsString();
       auto const memBName = memB->getMemberDecl()->getNameAsString();
 
@@ -155,10 +137,7 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto const replacement = "{}, &" + typeName + "::" + memAName;
-
-      diag(doubleLambda->getBeginLoc(), "use std::ranges::less with a projection instead of a double-argument lambda")
-        << FixItHint::CreateReplacement(doubleLambda->getSourceRange(), replacement);
+      diag(doubleLambda->getBeginLoc(), "use std::ranges::less with a projection instead of a double-argument lambda");
     }
   }
 } // namespace clang::tidy::readability

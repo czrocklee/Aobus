@@ -176,7 +176,7 @@ void testFunctionEmptyParam(std::shared_ptr<MyClass>)
 template<typename Callback>
 auto guardGenericCallback(Callback callback)
 {
-  // NEGATIVE: a dependent generic parameter can be instantiated as either a value or a pointer.
+  // NEGATIVE - a dependent generic parameter can be instantiated as either a value or a pointer.
   return [callback](auto&&... arguments) { callback(static_cast<decltype(arguments)>(arguments)...); };
 }
 
@@ -193,7 +193,7 @@ void instantiateGenericCallback()
 template<typename T>
 struct GenericHolder
 {
-  // NEGATIVE: a dependent member can be instantiated as either a value or a pointer.
+  // NEGATIVE - a dependent member can be instantiated as either a value or a pointer.
   T value;
 };
 

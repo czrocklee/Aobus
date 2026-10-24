@@ -5,14 +5,14 @@
 
 namespace
 {
-  // POSITIVE: FIX-TO: class UnmarkedConcrete\nfinal {
+  // POSITIVE
   class UnmarkedConcrete
   {
   public:
     void doWork() {}
   };
 
-  // POSITIVE: FIX-TO: struct UnmarkedStruct\nfinal {
+  // POSITIVE
   struct UnmarkedStruct
   {
     std::int32_t val;
@@ -71,11 +71,11 @@ namespace
     ~ProtectedDtorClass() = default;
   };
 
-  // POSITIVE: FIX-TO: class OuterClass\nfinal {
+  // POSITIVE
   class OuterClass
   {
   private:
-    // POSITIVE: FIX-TO: class PrivateNested\nfinal {
+    // POSITIVE
     class PrivateNested
     {
     public:

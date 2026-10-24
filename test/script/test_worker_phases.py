@@ -1,14 +1,14 @@
-"""Worker-thread phase attribution for the tidy runner and the lint fix stage.
+"""Worker-thread phase attribution for the tidy runner and the lint stage.
 
 Pool workers do not inherit the submitting thread's ``ContextVar`` state, so
 the tidy runner and the lint fixture map take a fresh ``copy_context()``
 snapshot per submitted work item. These tests run the real phase writer and
 real thread pools through the actual ``tidy`` runner and the actual
-``linttest.run`` fix route, assert the worker records keep the root command
-and their exact parent phase ids, and run the strict consumer over the
-produced logs. They also pin the two boundaries that propagation must not
-cross: a reused worker thread never leaks one task's context into the next,
-and a bare pool worker started outside any phase stays unparented.
+``linttest.run`` diagnostic route, assert the worker records keep the root
+command and their exact parent phase ids, and run the strict consumer over
+the produced logs. They also pin the two boundaries that propagation must
+not cross: a reused worker thread never leaks one task's context into the
+next, and a bare pool worker started outside any phase stays unparented.
 """
 
 import argparse
@@ -31,9 +31,7 @@ from ao.core import builddir, linttest, phases, tidyengine
 
 ROOT = Path(__file__).resolve().parents[2]
 
-ORIGINAL_FIXTURE = "// POSITIVE: FIX-TO: int replacement;\nint original;\n"
-FIXED_FIXTURE = "// POSITIVE: FIX-TO: int replacement;\nint replacement;\n"
-SYNTAX_COMMAND = ["unused-compiler", "-fsyntax-only"]
+ORIGINAL_FIXTURE = "// POSITIVE\nint original;\n"
 
 
 def make_tidy_workspace(root: Path) -> tuple[argparse.Namespace, Path]:
@@ -61,7 +59,6 @@ def make_tidy_workspace(root: Path) -> tuple[argparse.Namespace, Path]:
         output=None,
         jobs=2,
         path=str(database),
-        fix=False,
         no_build=True,
         tidy_arg=[],
         header_filter=None,
@@ -246,8 +243,8 @@ class TidyRunnerWorkerContextTest(PhaseLogFixture):
                 self.assertEqual(list(log_dir.glob("*.jsonl")), [])
 
 
-class LintFixWorkerContextTest(PhaseLogFixture):
-    def test_lint_fix_workers_inherit_the_test_command_and_stage_parent(self):
+class LintFixtureWorkerContextTest(PhaseLogFixture):
+    def test_lint_workers_inherit_the_test_command_and_stage_parents(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             fixture_root = root / "lint-fixture"
@@ -266,23 +263,22 @@ class LintFixWorkerContextTest(PhaseLogFixture):
                 source.parent.mkdir()
                 source.write_text(ORIGINAL_FIXTURE, encoding="utf-8")
                 fixtures.append(linttest.Fixture(source, "aobus-example"))
+            # The diagnostic route must leave the checked-in sources byte-identical.
+            original_bytes = {fixture.path: fixture.path.read_bytes() for fixture in fixtures}
             smoke_log = fixture_root / "smoke.log"
             smoke_log.touch()
             log_dir = root / "phases"
             self.enable_phase_logging(log_dir)
 
-            syntax_contexts = []
+            worker_contexts = []
 
             def native_run(command, **_keywords):
-                if command == SYNTAX_COMMAND:
-                    syntax_contexts.append(
-                        (threading.get_ident(), phases._command_context.get(), phases._parent_phase.get())
-                    )
-                    return subprocess.CompletedProcess(command, 0, stdout="")
-                copied = Path(command[-1])
-                copied.write_text(FIXED_FIXTURE, encoding="utf-8")
+                worker_contexts.append(
+                    (threading.get_ident(), phases._command_context.get(), phases._parent_phase.get())
+                )
+                fixture_path = Path(command[-1])
                 return subprocess.CompletedProcess(
-                    command, 1, stdout=f"{copied}:2:1: warning: expected [aobus-example]\n"
+                    command, 1, stdout=f"{fixture_path}:2:1: warning: expected [aobus-example]\n"
                 )
 
             with contextlib.ExitStack() as stack:
@@ -291,11 +287,7 @@ class LintFixWorkerContextTest(PhaseLogFixture):
                 )
                 stack.enter_context(mock.patch.object(linttest, "FIXTURE_DIR", helper_dir))
                 stack.enter_context(mock.patch.object(linttest, "discover_fixtures", return_value=fixtures))
-                stack.enter_context(mock.patch.object(linttest, "_syntax_command", return_value=SYNTAX_COMMAND))
                 stack.enter_context(mock.patch.object(linttest.subprocess, "run", side_effect=native_run))
-                stack.enter_context(
-                    mock.patch.object(linttest, "_run_replacement_smoke", return_value=(True, smoke_log))
-                )
                 stack.enter_context(
                     mock.patch.object(linttest, "_run_compiler_error_smoke", return_value=(True, smoke_log))
                 )
@@ -305,37 +297,41 @@ class LintFixWorkerContextTest(PhaseLogFixture):
                         status = linttest.run(database, jobs=2)
 
             self.assertEqual(status, 0)
+            self.assertEqual({fixture.path: fixture.path.read_bytes() for fixture in fixtures}, original_bytes)
             rows = self.phase_rows(log_dir)
             begins = [row for row in rows if row["kind"] == "BEGIN"]
             ends = [row for row in rows if row["kind"] == "END"]
             command_begin = next(row for row in begins if row["phase"] == "command")
             suite_begin = next(row for row in begins if row["phase"] == "suite")
-            fixes_begin = next(row for row in begins if row["phase"] == "lint-fixes")
-            syntax_begins = [row for row in begins if row["phase"] == "lint-syntax"]
+            diagnostics_begin = next(row for row in begins if row["phase"] == "lint-diagnostics")
+            compiler_begin = next(row for row in begins if row["phase"] == "lint-compiler-errors")
             self.assertEqual(suite_begin["parent_id"], command_begin["phase_id"])
-            self.assertEqual(fixes_begin["parent_id"], suite_begin["phase_id"])
-            self.assertEqual(fixes_begin["command"], "test")
-            self.assertEqual(len(syntax_begins), 2)
-            for syntax in syntax_begins:
-                self.assertEqual(syntax["command"], "test")
-                self.assertEqual(syntax["parent_id"], fixes_begin["phase_id"])
-                self.assertEqual(syntax["tree"], "tidy")
-                self.assertEqual(syntax["count"], 1)
+            self.assertEqual(diagnostics_begin["parent_id"], suite_begin["phase_id"])
+            self.assertEqual(diagnostics_begin["command"], "test")
+            self.assertEqual(diagnostics_begin["tree"], "tidy")
+            self.assertEqual(diagnostics_begin["jobs"], 2)
+            self.assertEqual(diagnostics_begin["count"], 2)
+            self.assertNotIn("lint-syntax", {row["phase"] for row in begins})
 
-            # Both syntax compiles ran on pool workers inside the open
-            # lint-fixes stage, and the executor joins before that stage ends.
+            # Diagnostic workers run off the main thread inside the open stage,
+            # inheriting the root command and the exact stage parent.
             main_thread = threading.get_ident()
-            self.assertEqual(len(syntax_contexts), 2)
-            self.assertTrue(all(thread != main_thread for thread, _, _ in syntax_contexts))
-            self.assertTrue(all(command == "test" for _, command, _ in syntax_contexts))
-            self.assertEqual({parent for _, _, parent in syntax_contexts}, {s["phase_id"] for s in syntax_begins})
-            fixes_end = next(row for row in ends if row["phase"] == "lint-fixes")
-            syntax_ends = [row for row in ends if row["phase"] == "lint-syntax"]
-            self.assertTrue(all(rows.index(end) < rows.index(fixes_end) for end in syntax_ends))
+            self.assertEqual(len(worker_contexts), 2)
+            self.assertTrue(all(thread != main_thread for thread, _, _ in worker_contexts))
+            self.assertTrue(all(command == "test" for _, command, _ in worker_contexts))
+            self.assertEqual({parent for _, _, parent in worker_contexts}, {diagnostics_begin["phase_id"]})
+
+            # The diagnostic pool joins before the canary phase opens, and that
+            # phase finishes before the suite ends.
+            diagnostics_end = next(row for row in ends if row["phase"] == "lint-diagnostics")
+            compiler_end = next(row for row in ends if row["phase"] == "lint-compiler-errors")
+            suite_end = next(row for row in ends if row["phase"] == "suite")
+            self.assertLess(rows.index(diagnostics_end), rows.index(compiler_begin))
+            self.assertLess(rows.index(compiler_end), rows.index(suite_end))
 
             consumer = self.strict_consumer(log_dir)
             self.assertEqual(consumer.returncode, 0, consumer.stderr)
-            self.assertIn("8 phase record(s) measured.", consumer.stdout)
+            self.assertIn("4 phase record(s) measured.", consumer.stdout)
 
 
 class RunParallelTaskReuseTest(PhaseLogFixture):
