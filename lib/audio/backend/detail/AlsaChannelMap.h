@@ -45,8 +45,8 @@ namespace ao::audio::backend::detail
     };
 
     Query query = Query::Unavailable;
-    std::vector<std::vector<unsigned int>> supportedMaps;
-    std::optional<std::vector<unsigned int>> optCurrentPositions;
+    std::vector<std::vector<unsigned int>> supportedMaps{};
+    std::optional<std::vector<unsigned int>> optCurrentPositions{};
   };
 
   struct AlsaChannelMap final

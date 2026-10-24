@@ -888,6 +888,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/detail/PipeWireFormatParsingTest.cpp
   unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
   unit/audio/backend/detail/AlsaChannelMapTest.cpp
+  unit/audio/backend/detail/AlsaLegacyChannelMapTest.cpp
   unit/audio/backend/detail/AlsaPrewarmCacheTest.cpp
   unit/audio/backend/detail/AlsaMixerSessionTest.cpp
   unit/audio/backend/detail/AlsaModeSelectorTest.cpp

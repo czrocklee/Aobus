@@ -17,6 +17,8 @@ extern "C"
 #include <alsa/pcm.h>
 }
 
+#include <algorithm>
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -96,11 +98,35 @@ namespace ao::audio::backend::detail
       }
     }
 
+    bool isLegacyUac1SurroundMap(std::span<std::uint32_t const> positions) noexcept
+    {
+      // Older Linux UAC1 conversion tables used SL/SR for both surround
+      // pairs. Recognize only that exact bare signature, never its provenance
+      // or a guessed rear/side assignment.
+      constexpr auto kLegacyPositions = std::to_array<std::uint32_t>({SND_CHMAP_FL,
+                                                                      SND_CHMAP_FR,
+                                                                      SND_CHMAP_FC,
+                                                                      SND_CHMAP_LFE,
+                                                                      SND_CHMAP_SL,
+                                                                      SND_CHMAP_SR,
+                                                                      SND_CHMAP_SL,
+                                                                      SND_CHMAP_SR});
+      return std::ranges::equal(positions, kLegacyPositions);
+    }
+
     bool hasValidShape(std::span<std::uint32_t const> positions) noexcept
     {
       if (positions.empty() || positions.size() > kAlsaChannelCapacity)
       {
         return false;
+      }
+
+      // This one bounded signature is ambiguous role metadata rather than
+      // malformed storage. The current-map path handles it before any role
+      // accumulation, so duplicate roles can never establish mapping proof.
+      if (isLegacyUac1SurroundMap(positions))
+      {
+        return true;
       }
 
       for (std::size_t i = 0; i < positions.size(); ++i)
@@ -299,6 +325,18 @@ namespace ao::audio::backend::detail
     }
 
     auto const& positions = *map.observations.optCurrentPositions;
+
+    if (isLegacyUac1SurroundMap(positions))
+    {
+      if (sourceIdentified)
+      {
+        return incompatibleMap("ALSA legacy UAC1 channel map has ambiguous surround positions");
+      }
+
+      // Legacy unidentified playback keeps its identity transport. Neither
+      // pair is relabelled or used as complete endpoint-role evidence.
+      return map;
+    }
 
     std::uint32_t knownMask = 0;
     bool complete = true;
