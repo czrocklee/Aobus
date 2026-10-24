@@ -2,7 +2,11 @@
 
 Each command module declares REQUIRES_BUILD_ENV next to its NAME; ao.bat
 and the macOS branch of ./ao query this module after their Python bootstrap
-instead of keeping their own copies of the command list.
+instead of keeping their own copies of the command list. Known commands are
+parsed before that answer, so invalid options fail before scope resolution or
+native environment selection. Help flags are answered without parsing. The
+Unix launcher may still enter Nix, and ao.bat may still bootstrap Python,
+before this module runs.
 """
 
 import argparse
@@ -66,16 +70,19 @@ def load_source_scope(args: argparse.Namespace, path: str | None) -> None:
 
 
 def requires_build_env(command: str, arguments: Sequence[str] = ()) -> bool:
-    """Return True when `command` needs the native compiler and dependencies."""
+    """Return True when `command` needs the native compiler and dependencies.
+
+    Every known command is parsed first, including commands whose need is a
+    static flag. Invalid or incomplete arguments fail at that parser instead of
+    selecting a native environment. Unknown commands stay false and are not parsed.
+    """
     from ..command import COMMAND_MODULES
 
     if _help_requested(arguments):
         return False
     for module in COMMAND_MODULES:
         if module.NAME == command:
-            if hasattr(module, "requires_build_environment"):
-                return requires_parsed_build_env(parse_command_arguments(command, arguments))
-            return bool(module.REQUIRES_BUILD_ENV)
+            return requires_parsed_build_env(parse_command_arguments(command, arguments))
     return False
 
 

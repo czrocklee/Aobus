@@ -48,32 +48,32 @@ class TestSharedHeader : public SharedHeaderBase
 
 class BadUniquePtr
 {
-  // POSITIVE: FIX-TO: /* forward declare */ std::unique_ptr<TargetBadUniquePtr> _ptr;
+  // POSITIVE
   std::unique_ptr<TargetBadUniquePtr> _ptr;
   ~BadUniquePtr();
 };
 
 class BadSharedPtr
 {
-  // POSITIVE: FIX-TO: /* forward declare */ std::shared_ptr<TargetBadSharedPtr> _ptr;
+  // POSITIVE
   std::shared_ptr<TargetBadSharedPtr> _ptr;
 };
 
 class BadRefPtr
 {
-  // POSITIVE: FIX-TO: /* forward declare */ Glib::RefPtr<TargetBadRefPtr> _ptr;
+  // POSITIVE
   Glib::RefPtr<TargetBadRefPtr> _ptr;
 };
 
 class BadRawPtr
 {
-  // POSITIVE: FIX-TO: /* forward declare */ TargetBadRawPtr* _ptr;
+  // POSITIVE
   TargetBadRawPtr* _ptr;
 };
 
 class BadReference
 {
-  // POSITIVE: FIX-TO: void setTarget(/* forward declare */ TargetBadRef& target);
+  // POSITIVE
   void setTarget(TargetBadRef& target);
 };
 
@@ -81,7 +81,7 @@ class BadReference
 
 class BadMacroDeclaredPtr
 {
-  // POSITIVE - diagnostic fires; no FixIt because the member is spelled by a macro
+  // POSITIVE - diagnostic fires even though the member is spelled by a macro
   AOBUS_WEAK_MEMBER(TargetBadMacroPtr, _ptr);
 };
 

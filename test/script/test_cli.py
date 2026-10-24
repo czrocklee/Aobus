@@ -21,6 +21,7 @@ from unittest import mock
 from phase_support import PhaseRecorder as _PhaseRecorder
 
 from ao.__main__ import main, make_parser, parse_arguments
+from ao.command import analyze as analyze_command
 from ao.command import build as build_command
 from ao.command import check as check_command
 from ao.command import coverage as coverage_command
@@ -31,6 +32,52 @@ from ao.command import test as test_command
 from ao.command import tidy as tidy_command
 from ao.command.build import BuildResult
 from ao.core import builddir, buildenv
+
+# Raw clang-tidy forms rejected by the option type and the programmatic guard.
+# A bare word such as "fix" is intentionally absent: it is not an option.
+_MUTATING_RAW_TIDY_ARGUMENTS = (
+    "-fix",
+    "--fix",
+    "-fix-errors",
+    "--fix-errors",
+    "-fix-notes",
+    "--fix-notes",
+    "-export-fixes",
+    "--export-fixes",
+    "-fix=true",
+    "--fix=true",
+    "-fix-errors=true",
+    "--fix-errors=true",
+    "-fix-notes=true",
+    "--fix-notes=true",
+    "-export-fixes=fixes.yaml",
+    "--export-fixes=fixes.yaml",
+    "---fix",
+    "----export-fixes=fixes.yaml",
+    '"--fix"',
+    "'--export-fixes=fixes.yaml'",
+    "@responses.rsp",
+    "@nested/path/responses.rsp",
+    '"@quoted responses.rsp"',
+    "'@single-quoted responses.rsp'",
+    "@",
+    "-export-fixes=/tmp/secret-fixes.yaml",
+    "--export-fixes=/tmp/secret-fixes.yaml",
+    "@/tmp/secret-responses.rsp",
+)
+
+# Generic validator text. Flag-shaped options and raw response files are different
+# classes. Neither message echoes the raw token or a path.
+_FIX_OPTION_REJECTION = "clang-tidy fix and export options are unsupported; portal analysis is diagnostic-only"
+_RESPONSE_FILE_REJECTION = "raw clang-tidy response files are unsupported; pass diagnostic arguments explicitly"
+_REMOVED_TIDY_FIX = "--fix was removed; ao tidy is diagnostic-only and does not apply replacements"
+
+
+def _diagnostic_rejection(argument: str) -> str:
+    if argument.strip("'\"").startswith("@"):
+        return _RESPONSE_FILE_REJECTION
+    return _FIX_OPTION_REJECTION
+
 
 # Tests that stub native builds use this cache to represent an enabled graph.
 _ENABLED_SUITE_CACHE = {
@@ -161,6 +208,23 @@ class NativePortalTest(unittest.TestCase):
         self.assertIn('-m ao.core.buildenv "$@"', content)
         self.assertIn('-m ao.core.buildenv --python-tools "$@"', content)
         self.assertNotIn("darwin-nix-bootstrap.sh", content)
+        # Source order only: macOS asks buildenv before native environment selection.
+        # This does not execute the macOS launcher.
+        macos_branch = content[darwin_offset:nix_offset]
+        self.assertLess(
+            macos_branch.index('-m ao.core.buildenv "$@"'),
+            macos_branch.index("aobus_macos_prepare_build_environment"),
+        )
+
+    def test_linux_launcher_may_enter_nix_before_python_parsing(self):
+        # Source order only. A stale shell still execs nix-shell before Python
+        # parses arguments, so rejection does not promise a bootstrap-free ./ao.
+        portal = Path(__file__).resolve().parents[2] / "ao"
+        content = portal.read_text(encoding="utf-8")
+        nix_portal = content.index('if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]')
+        linux_dispatch = content[nix_portal:]
+        self.assertLess(linux_dispatch.index("exec nix-shell"), linux_dispatch.index('-m ao "$@"'))
+        self.assertNotIn("ao.core.buildenv", linux_dispatch)
 
     @unittest.skipUnless(os.name == "posix" and os.uname().sysname == "Linux", "Linux portal fixture")
     def test_portal_help_preserves_existing_hook_configuration(self):
@@ -301,6 +365,19 @@ class WindowsBatchPortalTest(unittest.TestCase):
         self.assertIn("goto finished", content)
         self.assertNotIn('for /f "usebackq delims="', content)
         self.assertNotIn('if /i "%~1"=="build" set "needs_build_env=1"', content)
+        # Source order only: Python bootstrap, then buildenv, then VS only for status 10.
+        # Exit code 2 is not 10, so the batch file finishes before VSDEVCMD. This does
+        # not execute ao.bat or prove a native Windows process.
+        python_bootstrap = content.index("call :ensure_python_environment")
+        preflight = content.index("-m ao.core.buildenv --exit-code")
+        non_build_env = content.index('if not "%buildenv_status%"=="10"')
+        finished = content.index("goto finished")
+        visual_studio = content.index("call :ensure_build_environment")
+        self.assertLess(python_bootstrap, preflight)
+        self.assertLess(preflight, non_build_env)
+        self.assertLess(non_build_env, finished)
+        self.assertLess(finished, visual_studio)
+        self.assertLess(visual_studio, content.index('call "%vsdevcmd%"'))
 
     def test_visual_studio_discovery_does_not_trust_an_ambient_installation_root(self):
         helper = Path(__file__).resolve().parents[2] / "script" / "ao" / "windows-vsenv.bat"
@@ -2637,6 +2714,317 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.tidy_arg, ["--extra-arg=-std=c++26"])
         self.assertEqual(args.output, "/tmp/report.txt")
         self.assertEqual(args.jobs, 4)
+        # The automatic-fix flow is gone; no invocation carries a fix flag.
+        self.assertFalse(hasattr(args, "fix"))
+
+    def _rejected_portal_and_preflight_stderr(self, argv: list[str]) -> str:
+        """Status 2 from the portal and both preflight modes, with matching stderr."""
+        calls: list[str] = []
+
+        def reject(name: str):
+            def wrapped(*_args, **_kwargs):
+                calls.append(name)
+                raise AssertionError(f"{name} entered before parser rejection")
+
+            return wrapped
+
+        with tempfile.TemporaryDirectory() as temporary:
+            scope = Path(temporary) / "scope.json"
+            portal_stderr = io.StringIO()
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {"AOBUS_PREFLIGHT_SCOPE": str(scope), "AOBUS_PHASE_LOG_DIR": ""},
+                ),
+                mock.patch("ao.__main__.buildenv.load_source_scope", side_effect=reject("load_source_scope")),
+                mock.patch("ao.__main__.compiler_cache.activate_local", side_effect=reject("activate_local")),
+                mock.patch("ao.__main__.workspace_cache.command_context", side_effect=reject("command_context")),
+                mock.patch.object(tidy_command.tidyengine, "resolve_scope", side_effect=reject("resolve_scope")),
+                mock.patch.object(tidy_command, "prepare_toolchain", side_effect=reject("prepare_toolchain")),
+                mock.patch.object(
+                    analyze_command.tidyengine,
+                    "ensure_compile_db",
+                    side_effect=reject("ensure_compile_db"),
+                ),
+                mock.patch.object(tidy_command, "run_command", side_effect=reject("tidy_run")),
+                mock.patch.object(analyze_command, "run_command", side_effect=reject("analyze_run")),
+            ):
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(portal_stderr):
+                    with self.assertRaises(SystemExit) as failure:
+                        main(argv)
+                self.assertEqual(failure.exception.code, 2)
+                portal_text = portal_stderr.getvalue()
+                for mode in ("--exit-code", "--python-tools"):
+                    preflight_stderr = io.StringIO()
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(preflight_stderr):
+                        with self.assertRaises(SystemExit) as preflight:
+                            buildenv.main([mode, *argv])
+                    self.assertEqual(preflight.exception.code, 2)
+                    self.assertEqual(preflight_stderr.getvalue(), portal_text)
+            self.assertEqual(calls, [])
+            self.assertFalse(scope.exists())
+        return portal_text
+
+    def test_tidy_rejects_the_removed_fix_flag(self):
+        # Hidden tidy --fix is refused during parse on every host profile. A bare
+        # flag has no following token, so it cannot consume a file or later option.
+        # Preflight stderr matches. Help does not advertise the flag or its note.
+        invocations = (
+            ["tidy", "--fix", "lib/audio/Foo.cpp"],
+            ["tidy", "--fix"],
+            ["tidy", "--fix", "--no-build", "lib/audio/Foo.cpp"],
+            ["tidy", "--no-build", "--fix", "lib/audio/Foo.cpp"],
+        )
+        for profile in (builddir.LINUX_PROFILE, builddir.WINDOWS_PROFILE):
+            for argv in invocations:
+                with (
+                    self.subTest(profile=profile.name, argv=argv),
+                    mock.patch.object(builddir, "platform_profile", return_value=profile),
+                ):
+                    stderr = self._rejected_portal_and_preflight_stderr(argv)
+                    self.assertIn(_REMOVED_TIDY_FIX, stderr)
+                    self.assertNotIn("unrecognized arguments", stderr)
+                    self.assertNotIn("expected one argument", stderr)
+                    self.assertNotIn(_FIX_OPTION_REJECTION, stderr)
+                    self.assertNotIn("invalid diagnostic_argument value", stderr)
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as failure:
+                main(["tidy", "--help"])
+        self.assertEqual(failure.exception.code, 0)
+        help_text = stdout.getvalue()
+        self.assertNotIn("--fix", help_text)
+        self.assertNotIn(_REMOVED_TIDY_FIX, help_text)
+        self.assertIn("--no-build", help_text)
+        self.assertIn("--tidy-arg", help_text)
+
+    def test_analyze_fix_stays_an_unknown_argument(self):
+        # analyze never owned --fix, so it stays unrecognized rather than the tidy note.
+        stderr = self._rejected_portal_and_preflight_stderr(["analyze", "--fix", "lib/Selected.cpp"])
+        self.assertIn("unrecognized arguments: --fix", stderr)
+        self.assertNotIn(_REMOVED_TIDY_FIX, stderr)
+        self.assertNotIn(_FIX_OPTION_REJECTION, stderr)
+
+    def test_tidy_programmatic_namespace_rejects_mutating_arguments_before_toolchain(self):
+        # A Namespace that bypassed argparse still returns 1 before toolchain
+        # work. Process entry rejects earlier, at the option type, with status 2.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "Selected.cpp"
+            source.write_text("int original;\n", encoding="utf-8")
+            for argument in _MUTATING_RAW_TIDY_ARGUMENTS:
+                with self.subTest(argument=argument):
+                    args = argparse.Namespace(
+                        files=[str(source)],
+                        all=False,
+                        folder=[],
+                        commit=None,
+                        check=None,
+                        debug=False,
+                        output=None,
+                        jobs=1,
+                        path=None,
+                        no_build=True,
+                        tidy_arg=[argument],
+                        header_filter=None,
+                    )
+                    stderr = io.StringIO()
+                    with (
+                        mock.patch.object(
+                            tidy_command, "prepare_toolchain", side_effect=AssertionError("no work may start")
+                        ) as prepare,
+                        mock.patch.object(
+                            tidy_command.subprocess, "call", side_effect=AssertionError("no child may spawn")
+                        ) as native_call,
+                        contextlib.redirect_stdout(io.StringIO()),
+                        contextlib.redirect_stderr(stderr),
+                    ):
+                        self.assertEqual(tidy_command.run_command(args), 1)
+                    prepare.assert_not_called()
+                    native_call.assert_not_called()
+                    self.assertIn("ERROR:", stderr.getvalue())
+
+    def test_analyze_programmatic_namespace_rejects_mutating_arguments_before_compile_db(self):
+        # A Namespace that bypassed argparse still returns 1 before compile-database
+        # preparation. Process entry rejects earlier, at the option type, with status 2.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "Selected.cpp"
+            source.write_text("int original;\n", encoding="utf-8")
+            for argument in _MUTATING_RAW_TIDY_ARGUMENTS:
+                with self.subTest(argument=argument):
+                    args = argparse.Namespace(
+                        files=[str(source)],
+                        all=False,
+                        folder=[],
+                        commit=None,
+                        check=None,
+                        debug=False,
+                        output=None,
+                        jobs=1,
+                        path=None,
+                        fail_on_diagnostics=False,
+                        include_external_diagnostics=False,
+                        alpha=False,
+                        tidy_arg=[argument],
+                    )
+                    stderr = io.StringIO()
+                    with (
+                        mock.patch.object(
+                            analyze_command.tidyengine, "ensure_compile_db", side_effect=AssertionError("no work")
+                        ) as ensure,
+                        mock.patch.object(
+                            analyze_command.tidyengine, "run_parallel", side_effect=AssertionError("no child")
+                        ) as parallel,
+                        contextlib.redirect_stdout(io.StringIO()),
+                        contextlib.redirect_stderr(stderr),
+                    ):
+                        self.assertEqual(analyze_command.run_command(args), 1)
+                    ensure.assert_not_called()
+                    parallel.assert_not_called()
+                    self.assertIn("ERROR:", stderr.getvalue())
+
+    def test_tidy_and_analyze_accept_diagnostic_only_raw_arguments(self):
+        # A compiler response file behind --extra-arg is a compiler-input
+        # contract, not a raw clang-tidy response file, so it passes the
+        # shared validator and the commands proceed to their real work.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "Selected.cpp"
+            source.write_text("int original;\n", encoding="utf-8")
+
+            class ReachedWork(Exception):
+                pass
+
+            tidy_args = argparse.Namespace(
+                files=[str(source)],
+                all=False,
+                folder=[],
+                commit=None,
+                check=None,
+                debug=False,
+                output=None,
+                jobs=1,
+                path=None,
+                no_build=True,
+                tidy_arg=["--extra-arg=@compiler.rsp"],
+                header_filter=None,
+            )
+            with (
+                mock.patch.object(tidy_command, "prepare_toolchain", side_effect=ReachedWork),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                with self.assertRaises(ReachedWork):
+                    tidy_command.run_command(tidy_args)
+
+            analyze_args = argparse.Namespace(
+                files=[str(source)],
+                all=False,
+                folder=[],
+                commit=None,
+                check=None,
+                debug=False,
+                output=None,
+                jobs=1,
+                path=None,
+                fail_on_diagnostics=False,
+                include_external_diagnostics=False,
+                alpha=False,
+                tidy_arg=["--extra-arg=@compiler.rsp"],
+            )
+            with (
+                mock.patch.object(analyze_command.tidyengine, "ensure_compile_db", side_effect=ReachedWork),
+                contextlib.redirect_stdout(io.StringIO()),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                with self.assertRaises(ReachedWork):
+                    analyze_command.run_command(analyze_args)
+
+    def test_bare_fix_word_is_not_a_diagnostic_option(self):
+        for command in ("tidy", "analyze"):
+            with self.subTest(command=command):
+                positional = self.parse([command, "fix"])
+                self.assertEqual(positional.files, ["fix"])
+                self.assertEqual(positional.tidy_arg, [])
+                accepted = self.parse([command, "--tidy-arg=fix", "--tidy-arg=export-fixes=out.yaml"])
+                self.assertEqual(accepted.tidy_arg, ["fix", "export-fixes=out.yaml"])
+
+    def test_parser_rejects_mutating_tidy_args_before_scope_cache_workspace_or_native_env(self):
+        # Portal parse and both buildenv preflight modes exit 2 before scope, cache,
+        # workspace, or native environment selection. Nix or Python bootstrap may
+        # already have run; this does not claim a bootstrap-free shell. Raw token
+        # echo is not required. Flag options and response files keep separate generic
+        # explanations, and those explanations do not include a path.
+        for command in ("tidy", "analyze"):
+            for argument in _MUTATING_RAW_TIDY_ARGUMENTS:
+                with self.subTest(command=command, argument=argument):
+                    stderr = self._rejected_portal_and_preflight_stderr(
+                        [command, f"--tidy-arg={argument}", "lib/Selected.cpp"]
+                    )
+                    message = _diagnostic_rejection(argument)
+                    other = _RESPONSE_FILE_REJECTION if message == _FIX_OPTION_REJECTION else _FIX_OPTION_REJECTION
+                    self.assertIn(message, stderr)
+                    self.assertNotIn(other, stderr)
+                    self.assertNotIn("invalid diagnostic_argument value", stderr)
+                    self.assertNotIn(_REMOVED_TIDY_FIX, stderr)
+                    self.assertNotIn("ERROR:", stderr)
+                    self.assertNotIn("No files specified", stderr)
+                    if "secret" in argument:
+                        self.assertNotIn("secret", stderr)
+                        self.assertNotIn(argument, stderr)
+
+    def test_accepted_compiler_response_reaches_dispatch_after_scope_load(self):
+        # After a successful parse, dispatch follows scope load. Native ensure stays
+        # uncalled. On Windows, tidy still uses workspace context, so cache activation
+        # may be entered between those two calls; --no-build does not request a build.
+        order: list[str] = []
+        real_load = buildenv.load_source_scope
+
+        def load_scope(args, path):
+            order.append("load_source_scope")
+            return real_load(args, path)
+
+        def activate_local(*_args, **_kwargs):
+            order.append("activate_local")
+            return False
+
+        @contextlib.contextmanager
+        def command_context(_args):
+            order.append("command_context")
+            yield
+
+        def run_command(_args):
+            order.append("run_command")
+            return 0
+
+        def reject(name: str):
+            def wrapped(*_args, **_kwargs):
+                order.append(name)
+                raise AssertionError(name)
+
+            return wrapped
+
+        with (
+            mock.patch.dict(os.environ, {"AOBUS_PHASE_LOG_DIR": "", "AOBUS_PREFLIGHT_SCOPE": ""}),
+            mock.patch("ao.__main__.buildenv.load_source_scope", side_effect=load_scope),
+            mock.patch("ao.__main__.compiler_cache.activate_local", side_effect=activate_local),
+            mock.patch("ao.__main__.workspace_cache.command_context", side_effect=command_context),
+            mock.patch.object(tidy_command, "run_command", side_effect=run_command),
+            mock.patch.object(tidy_command, "prepare_toolchain", side_effect=reject("prepare_toolchain")),
+            mock.patch.object(tidy_command.tidyengine, "ensure_compile_db", side_effect=reject("ensure_compile_db")),
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            status = main(["tidy", "--no-build", "--tidy-arg=--extra-arg=@compiler.rsp", "Selected.cpp"])
+        self.assertEqual(status, 0)
+        self.assertEqual(order[0], "load_source_scope")
+        self.assertLess(order.index("load_source_scope"), order.index("command_context"))
+        self.assertLess(order.index("command_context"), order.index("run_command"))
+        self.assertNotIn("prepare_toolchain", order)
+        self.assertNotIn("ensure_compile_db", order)
+        if os.name != "nt":
+            self.assertNotIn("activate_local", order)
+        elif "activate_local" in order:
+            self.assertLess(order.index("load_source_scope"), order.index("activate_local"))
+            self.assertLess(order.index("activate_local"), order.index("command_context"))
 
     def test_tidy_no_build_uses_existing_artifact_and_compile_database(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2835,7 +3223,6 @@ class CliParseTest(unittest.TestCase):
                 output=None,
                 jobs=1,
                 path=str(build),
-                fix=False,
                 no_build=True,
                 tidy_arg=[],
                 header_filter=None,

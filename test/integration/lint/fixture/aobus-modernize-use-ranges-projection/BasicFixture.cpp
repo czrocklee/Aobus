@@ -16,14 +16,14 @@ struct Item
 
 void testProjections(std::vector<Item>& v)
 {
-  // POSITIVE: FIX-TO: bool const anyValid = std::ranges::any_of(v, &Item::isValid);
+  // POSITIVE
   bool const anyValid = std::ranges::any_of(v, [](Item const& item) { return item.isValid(); });
 
   auto ids = std::vector<int>{};
-  // POSITIVE: FIX-TO: std::ranges::transform(v, std::back_inserter(ids), &Item::id);
+  // POSITIVE
   std::ranges::transform(v, std::back_inserter(ids), [](Item const& item) { return item.id; });
 
-  // POSITIVE: FIX-TO: std::ranges::sort(v, {}, &Item::id);
+  // POSITIVE
   std::ranges::sort(v, [](Item const& a, Item const& b) { return a.id < b.id; });
 
   // NEGATIVE

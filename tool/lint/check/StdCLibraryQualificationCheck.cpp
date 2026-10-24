@@ -93,17 +93,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto diagBuilder = diag(optCallee->loc, "C standard library function '%0' should use 'std::%0' via <c...> header")
-                       << func->getName();
-
-    if (optCallee->text.starts_with("::"))
-    {
-      diagBuilder << FixItHint::CreateReplacement(
-        CharSourceRange::getCharRange(optCallee->loc, optCallee->loc.getLocWithOffset(2)), "std::");
-    }
-    else
-    {
-      diagBuilder << FixItHint::CreateInsertion(optCallee->loc, "std::");
-    }
+    diag(optCallee->loc, "C standard library function '%0' should use 'std::%0' via <c...> header") << func->getName();
   }
 } // namespace clang::tidy::readability

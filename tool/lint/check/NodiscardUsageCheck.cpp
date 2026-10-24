@@ -15,95 +15,11 @@
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Lex/Lexer.h>
-#include <llvm/Support/Casting.h>
-
-#include <cstdint>
 
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::modernize
 {
-  namespace
-  {
-    CharSourceRange getAttributeRemovalRange(Attr const* attr, SourceManager const& sm, LangOptions const& langOpts)
-    {
-      SourceRange const range = attr->getRange();
-      SourceLocation const beginLoc = range.getBegin();
-      SourceLocation const endLoc = range.getEnd();
-      SourceLocation const tokenEndLoc = Lexer::getLocForEndOfToken(endLoc, 0, sm, langOpts);
-
-      bool invalid = false;
-      char const* beginData = sm.getCharacterData(beginLoc, &invalid);
-
-      if (invalid || beginData == nullptr)
-      {
-        return CharSourceRange::getTokenRange(range);
-      }
-
-      char const* endData = sm.getCharacterData(tokenEndLoc, &invalid);
-
-      if (invalid || endData == nullptr)
-      {
-        return CharSourceRange::getTokenRange(range);
-      }
-
-      // 1. Check if the attribute is the only one in double brackets: [[nodiscard]]
-      if (unsigned const offset = sm.getFileOffset(beginLoc);
-          offset >= 2 && beginData[-1] == '[' && beginData[-2] == '[' && endData[0] == ']' && endData[1] == ']')
-      {
-        SourceLocation const fullBegin = beginLoc.getLocWithOffset(-2);
-        SourceLocation const fullEnd = tokenEndLoc.getLocWithOffset(2);
-
-        return CharSourceRange::getCharRange(fullBegin, fullEnd);
-      }
-
-      // 2. Check if followed by a comma (e.g. [[nodiscard, deprecated]])
-      if (endData[0] == ',')
-      {
-        char const* cursor = endData + 1;
-
-        while (*cursor == ' ' || *cursor == '\t')
-        {
-          cursor++;
-        }
-
-        // Reaching the NUL terminator means the attribute list is truncated at
-        // EOF; fall back to removing just the attribute token.
-        if (*cursor == '\0')
-        {
-          return CharSourceRange::getTokenRange(range);
-        }
-
-        SourceLocation const fullEnd = tokenEndLoc.getLocWithOffset(static_cast<std::int32_t>(cursor - endData));
-
-        return CharSourceRange::getCharRange(beginLoc, fullEnd);
-      }
-
-      // 3. Check if preceded by a comma (e.g. [[deprecated, nodiscard]])
-      char const* fileStartData = sm.getCharacterData(sm.getLocForStartOfFile(sm.getFileID(beginLoc)), &invalid);
-
-      if (!invalid && fileStartData != nullptr && beginData > fileStartData)
-      {
-        char const* cursor = beginData - 1;
-
-        while (cursor > fileStartData && (*cursor == ' ' || *cursor == '\t'))
-        {
-          cursor--;
-        }
-
-        if (cursor >= fileStartData && *cursor == ',')
-        {
-          SourceLocation const fullBegin = beginLoc.getLocWithOffset(static_cast<std::int32_t>(cursor - beginData));
-
-          return CharSourceRange::getCharRange(fullBegin, tokenEndLoc);
-        }
-      }
-
-      return CharSourceRange::getTokenRange(range);
-    }
-  } // namespace
-
   void NodiscardUsageCheck::registerMatchers(MatchFinder* finder)
   {
     // Match functions with [[nodiscard]]
@@ -141,15 +57,7 @@ namespace clang::tidy::modernize
         return;
       }
 
-      auto diagnostic = diag(loc, "remove [[nodiscard]] from '%0'; Aobus forbids nodiscard on functions") << func;
-
-      for (auto const* attr : func->attrs())
-      {
-        if (auto const* nd = llvm::dyn_cast<WarnUnusedResultAttr>(attr); nd != nullptr)
-        {
-          diagnostic << FixItHint::CreateRemoval(getAttributeRemovalRange(nd, sm, result.Context->getLangOpts()));
-        }
-      }
+      diag(loc, "remove [[nodiscard]] from '%0'; Aobus forbids nodiscard on functions") << func;
     }
 
     // 2. Require [[nodiscard]] on RAII classes
@@ -164,8 +72,7 @@ namespace clang::tidy::modernize
           return;
         }
 
-        diag(loc, "add [[nodiscard]] to RAII class '%0'")
-          << raii << FixItHint::CreateInsertion(raii->getLocation(), "[[nodiscard]] ");
+        diag(loc, "add [[nodiscard]] to RAII class '%0'") << raii;
       }
     }
 
@@ -179,15 +86,7 @@ namespace clang::tidy::modernize
         return;
       }
 
-      auto diagnostic = diag(loc, "remove [[nodiscard]] from non-RAII class '%0'") << nonRaii;
-
-      for (auto const* attr : nonRaii->attrs())
-      {
-        if (auto const* nd = llvm::dyn_cast<WarnUnusedResultAttr>(attr); nd != nullptr)
-        {
-          diagnostic << FixItHint::CreateRemoval(getAttributeRemovalRange(nd, sm, result.Context->getLangOpts()));
-        }
-      }
+      diag(loc, "remove [[nodiscard]] from non-RAII class '%0'") << nonRaii;
     }
   }
 } // namespace clang::tidy::modernize

@@ -20,17 +20,21 @@ namespace mylib
 
 #define AOBUS_PURGE(c, pred) c.erase(std::remove_if(c.begin(), c.end(), pred), c.end())
 
+// Argument-list macro: the value covers part of the expansion while the erase
+// call stays file-spelled. erase mutates, so the container cannot be const.
+#define AOBUS_REMOVE_ARGS v.begin(), v.end(), 6
+
 void positiveRemoveIf()
 {
   auto v = std::vector<int>{1, 2, 3};
-  // POSITIVE: FIX-TO: std::erase_if(v, isNegative);
+  // POSITIVE
   v.erase(std::remove_if(v.begin(), v.end(), isNegative), v.end());
 }
 
 void positiveRemove()
 {
   auto v = std::vector<int>{1, 2, 3};
-  // POSITIVE: FIX-TO: std::erase(v, 5);
+  // POSITIVE
   v.erase(std::remove(v.begin(), v.end(), 5), v.end());
 }
 
@@ -60,4 +64,11 @@ void negativeMacroSpelled()
   auto v = std::vector<int>{1, 2, 3};
   // NEGATIVE - the erase-remove idiom is spelled inside a macro expansion
   AOBUS_PURGE(v, isNegative);
+}
+
+void positiveRemovePartialMacroArgs()
+{
+  auto v = std::vector<int>{1, 2, 3, 6};
+  // POSITIVE
+  v.erase(std::remove(AOBUS_REMOVE_ARGS), v.end());
 }

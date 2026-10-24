@@ -19,7 +19,17 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, buildlock, gitfiles, phases, pythoncheck, tidyengine, winuitidy, workspace_cache
+from ..core import (
+    builddir,
+    buildlock,
+    gitfiles,
+    phases,
+    pythoncheck,
+    tidyconfig,
+    tidyengine,
+    winuitidy,
+    workspace_cache,
+)
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.phases import LOG_DIR_ENV
@@ -45,7 +55,6 @@ examples:
   ./ao tidy --folder lib --folder script     # selected folders
   ./ao tidy --commit HEAD~3 -o report.txt    # changes since a commit, to a file
   ./ao tidy --check readability-implicit-bool-conversion
-  ./ao tidy --fix lib/audio/Foo.cpp          # apply exported fixes (use with caution)
 """
 
 ALL_FOLDERS = ["lib", "app", "include", "script", "test", "tool"]
@@ -148,7 +157,7 @@ def exact_header_filter(headers: list[Path], *, source_roots: tuple[Path, ...] |
 
 
 def path_line_filter(paths: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
-    """Limit diagnostics and exported fixes to the explicitly selected paths."""
+    """Limit diagnostics to the explicitly selected paths."""
     roots = source_roots or (absolute_path(PROJECT_ROOT),)
     # LLVM matches these names literally, unlike the separator-aware header regex.
     names = dict.fromkeys(
@@ -170,7 +179,7 @@ def write_selected_file_overlay(destination: Path, selected: Path, *, source_roo
         if not spelling.is_absolute() or not spelling.is_file() or not spelling.samefile(selected):
             raise ValueError(f"selected-file alias does not identify {selected}: {spelling}")
     # LLVM's Windows VFS lookup handles mixed separators, including nested
-    # includes. External names make FileEntryRef and replacement paths use this
+    # includes. External names make FileEntryRef and diagnostic paths use this
     # validated full name, rather than inventing include-spelling permutations.
     payload = {
         "version": 0,
@@ -315,7 +324,17 @@ def find_stale_nolint_suppressions(buckets: dict[str, list[Path]]) -> list[Stale
     return issues
 
 
-FIX_REPLACEMENT_RE = re.compile(r"^\s+- FilePath:")
+class _RemovedFixFlag(argparse.Action):
+    """Reject the removed tidy --fix flag during parse. Not advertised in help."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: object,
+        option_string: str | None = None,
+    ) -> None:
+        parser.error("--fix was removed; ao tidy is diagnostic-only and does not apply replacements")
 
 
 def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -323,14 +342,16 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     tidyengine.add_scope_arguments(parser, verb="check")
-    parser.add_argument("--fix", action="store_true", help="apply exported fixes automatically (use with caution)")
     parser.add_argument("-n", "--no-build", action="store_true", help="use an existing plugin and compile database")
+    # One removed portal flag. nargs=0 so it cannot consume a file or a later option.
+    parser.add_argument("--fix", nargs=0, action=_RemovedFixFlag, dest=argparse.SUPPRESS, help=argparse.SUPPRESS)
     parser.add_argument(
         "--tidy-arg",
         action="append",
         default=[],
+        type=tidyconfig.diagnostic_argument,
         metavar="<arg>",
-        help="extra argument passed to clang-tidy verbatim (repeatable)",
+        help="extra diagnostic-only argument passed to clang-tidy (repeatable)",
     )
     parser.add_argument("--header-filter", metavar="<regex>", help="override the per-mode header filter")
     parser.set_defaults(func=run_command)
@@ -639,168 +660,6 @@ def write_windows_header_preamble(destination: Path) -> Path:
     return preamble
 
 
-def filter_fixes_yaml(text: str) -> str:
-    """Drop identifier-naming diagnostics from exported fixes; renames are never auto-applied."""
-    output: list[str] = []
-    skip = False
-    for line in text.splitlines(keepends=True):
-        if line.startswith("  - DiagnosticName:"):
-            skip = "readability-identifier-naming" in line
-            if not skip:
-                output.append(line)
-        elif line.startswith("    "):
-            if not skip:
-                output.append(line)
-        else:
-            skip = False
-            output.append(line)
-    return "".join(output)
-
-
-def parse_diagnostics_from_yaml(text: str) -> list[str]:
-    blocks: list[str] = []
-    current_block: list[str] = []
-    in_diagnostics = False
-
-    for line in text.splitlines(keepends=True):
-        if line.startswith("Diagnostics:"):
-            in_diagnostics = True
-            continue
-        if not in_diagnostics:
-            continue
-
-        if line.startswith("  - DiagnosticName:"):
-            if current_block:
-                blocks.append("".join(current_block))
-            current_block = [line]
-        elif line.startswith("    ") or line.strip() == "":
-            if current_block:
-                current_block.append(line)
-        else:
-            if current_block:
-                blocks.append("".join(current_block))
-                current_block = []
-            in_diagnostics = False
-
-    if current_block:
-        blocks.append("".join(current_block))
-
-    return blocks
-
-
-def normalize_block_paths(block: str) -> str:
-    lines = []
-    for line in block.splitlines(keepends=True):
-        stripped = line.strip()
-        if stripped.startswith("FilePath:"):
-            indent_len = line.find("FilePath:")
-            indent = line[:indent_len]
-            path_str = stripped.split(":", 1)[1].strip().strip("'\"")
-            canonical_path = absolute_path(Path(path_str)).as_posix()
-            lines.append(f"{indent}FilePath:        '{canonical_path}'\n")
-        else:
-            lines.append(line)
-    return "".join(lines)
-
-
-def extract_replacement_key(block: str) -> str:
-    key_parts = []
-    for line in block.splitlines():
-        line_stripped = line.strip()
-        if (
-            line_stripped.startswith("FilePath:")
-            or line_stripped.startswith("Offset:")
-            or line_stripped.startswith("Length:")
-            or line_stripped.startswith("ReplacementText:")
-        ):
-            key_parts.append(line_stripped)
-    return "\n".join(key_parts)
-
-
-def deduplicate_fixes(tmpdir: Path) -> None:
-    yaml_files = list(tmpdir.glob("*.yaml"))
-    if not yaml_files:
-        return
-
-    unique_diagnostics: list[str] = []
-    seen: set[str] = set()
-
-    for yaml_file in yaml_files:
-        content = yaml_file.read_text(encoding="utf-8")
-        blocks = parse_diagnostics_from_yaml(content)
-        for block in blocks:
-            normalized_block = normalize_block_paths(block)
-            rep_key = extract_replacement_key(normalized_block)
-            key = rep_key if rep_key else normalized_block.strip()
-            if key not in seen:
-                seen.add(key)
-                unique_diagnostics.append(normalized_block)
-
-    # Use MainSourceFile from the first file found
-    main_source = "PROJECT_ROOT"
-    for yaml_file in yaml_files:
-        content = yaml_file.read_text(encoding="utf-8")
-        for line in content.splitlines():
-            if line.startswith("MainSourceFile:"):
-                main_source = line.split(":", 1)[1].strip().strip("'\"")
-                break
-        if main_source != "PROJECT_ROOT":
-            break
-
-    # Unlink all original yaml files
-    for yaml_file in yaml_files:
-        yaml_file.unlink()
-
-    # Write a single consolidated fixes file
-    consolidated_file = tmpdir / "consolidated_fixes.yaml"
-    output = []
-    output.append("---")
-    output.append(f"MainSourceFile:  '{main_source}'")
-    if unique_diagnostics:
-        output.append("Diagnostics:")
-        for diag in unique_diagnostics:
-            output.append(diag.rstrip("\n"))
-    else:
-        output.append("Diagnostics:     []")
-    output.append("...")
-
-    consolidated_file.write_text("\n".join(output) + "\n", encoding="utf-8")
-
-
-def apply_fixes(tmpdir: Path, clang_apply_replacements: str = "clang-apply-replacements") -> bool:
-    deduplicate_fixes(tmpdir)
-    yaml_files = sorted(tmpdir.glob("*.yaml"))
-    for yaml_file in yaml_files:
-        yaml_file.write_text(filter_fixes_yaml(yaml_file.read_text(encoding="utf-8")), encoding="utf-8")
-
-    replacements = sum(
-        1
-        for yaml_file in yaml_files
-        for line in yaml_file.read_text(encoding="utf-8").splitlines()
-        if FIX_REPLACEMENT_RE.match(line)
-    )
-    if replacements == 0:
-        if not yaml_files:
-            print("  No automatic fixes were exported.")
-        else:
-            print(
-                f"  No automatic replacements were exported ({len(yaml_files)} diagnostic fix file(s) "
-                "contained no replacements)."
-            )
-        return True
-
-    print(f"  Applying {replacements} replacement(s) from {len(yaml_files)} fix file(s) safely...")
-    try:
-        status = subprocess.call([clang_apply_replacements, "--ignore-insert-conflict", str(tmpdir)])
-    except FileNotFoundError:
-        print(f"ERROR: clang-apply-replacements not found: {clang_apply_replacements}", file=sys.stderr)
-        return False
-    if status != 0:
-        print("ERROR: clang-apply-replacements failed.", file=sys.stderr)
-        return False
-    return True
-
-
 def requires_build_environment(args: argparse.Namespace) -> bool:
     from ..core import buildenv
 
@@ -827,6 +686,13 @@ def _analysis_source_id(path: Path) -> str | None:
 
 
 def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bool] | None = None) -> int:
+    # Argparse rejects these during parsing. This remains the guard for a
+    # programmatic Namespace that did not pass through the option type.
+    try:
+        tidyconfig.validate_diagnostic_arguments(args.tidy_arg)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
     build_dir = Path(args.path) if args.path else builddir.tidy_dir()
     files, explicit = (
         resolved_scope
@@ -852,8 +718,6 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
         if python_files:
             if args.check:
                 print("Skipping Python checks because --check selects a clang-tidy check.", file=sys.stderr)
-            elif args.fix:
-                print("Skipping Python checks because --fix only applies clang-tidy fixes.", file=sys.stderr)
             else:
                 print(f"=== Python hygiene — {len(python_files)} file(s) ===")
                 if pythoncheck.run_paths(python_files, sink=out if args.output else None) != 0:
@@ -1048,9 +912,6 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             )
 
         clang_tidy = toolchain.clang_tidy
-        clang_apply_replacements = (
-            tidyengine.clang_tool(build_dir, "clang-apply-replacements") if args.fix else "clang-apply-replacements"
-        )
         isystem = tidyengine.system_include_args()
         if args.debug:
             print(f"DEBUG ISYSTEM_ARGS: {isystem}", file=sys.stderr)
@@ -1088,8 +949,6 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                 extra.append("--extra-arg=-Wno-format-nonliteral")
             if toolchain.plugin is not None:
                 extra.append(f"-load={toolchain.plugin}")
-            if args.fix:
-                extra.append(f"-export-fixes={log.with_suffix('.yaml')}")
             config = config_for(checks)
             compile_database = header_database_dir if invocation.is_header else native_database_dir
             if compile_database is None:
@@ -1169,12 +1028,6 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                         print(f"  Output appended to {args.output}")
                 else:
                     print("  No warnings found.")
-
-                if args.fix:
-                    if result.failed:
-                        print("  Skipping automatic fixes because clang-tidy failed for at least one file.")
-                    elif not apply_fixes(tmpdir, clang_apply_replacements):
-                        overall_failed = True
             finally:
                 shutil.rmtree(tmpdir, ignore_errors=True)
 

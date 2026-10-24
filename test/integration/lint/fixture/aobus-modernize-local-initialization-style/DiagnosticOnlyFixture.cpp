@@ -4,17 +4,16 @@
 #include <cstdint>
 #include <type_traits>
 
-// These valid sources require advice only: exported diagnostics must contain
-// no replacements, including for the ordinary local literal initializer.
-// NO-FIX
+// These valid sources require advice only, including the ordinary local
+// literal initializer.
 void testCvAliasDeductions(std::int32_t input)
 {
   using ConstInteger = std::int32_t const;
   using VolatileInteger = std::int32_t volatile;
   using ConstVolatileInteger = std::int32_t const volatile;
 
-  // Direct-list bindings share the InitListExpr wrapper and must also export
-  // diagnostics without replacement records.
+  // Direct-list bindings share the InitListExpr wrapper and must also fire
+  // a diagnostic.
   // POSITIVE
   auto directListLiteral{3};
 

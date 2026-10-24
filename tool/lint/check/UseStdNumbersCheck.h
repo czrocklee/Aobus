@@ -3,23 +3,12 @@
 
 #pragma once
 #include <clang-tidy/ClangTidyCheck.h>
-#include <clang-tidy/ClangTidyOptions.h>
-#include <clang-tidy/utils/IncludeInserter.h>
 #include <clang/Basic/LLVM.h>
-#include <clang/Basic/SourceLocation.h>
-#include <llvm/ADT/DenseMap.h>
-#include <llvm/ADT/StringSet.h>
 
-namespace clang
+namespace clang::ast_matchers
 {
-  class FileID;
-  class Preprocessor;
-  class SourceManager;
-  namespace ast_matchers
-  {
-    class MatchFinder;
-  }
-} // namespace clang
+  class MatchFinder;
+} // namespace clang::ast_matchers
 
 namespace clang::tidy
 {
@@ -35,13 +24,7 @@ namespace clang::tidy::readability
   public:
     UseStdNumbersCheck(StringRef name, ClangTidyContext* context);
 
-    void registerPPCallbacks(SourceManager const& sm, Preprocessor* pp, Preprocessor* moduleExpanderPP) override;
     void registerMatchers(ast_matchers::MatchFinder* finder) override;
     void check(ast_matchers::MatchFinder::MatchResult const& result) override;
-    void storeOptions(ClangTidyOptions::OptionMap& opts) override;
-
-  private:
-    utils::IncludeInserter _includeInserter;
-    llvm::DenseMap<FileID, llvm::StringSet<>> _insertedHeaders;
   };
 } // namespace clang::tidy::readability

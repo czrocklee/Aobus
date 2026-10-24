@@ -25,10 +25,10 @@ namespace clang::tidy::aobus
     llvm::StringRef text;
   };
 
-  // Unwraps parens/casts around a call's callee and yields the location where a
-  // namespace qualifier can be inserted plus the callee's source text. Returns
-  // nullopt when the callee sits inside a macro expansion (a FixIt there would
-  // edit the macro definition, not the call site).
+  // Unwraps parens/casts around a call's callee and yields the callee's
+  // location plus its source text. Returns nullopt when the callee sits inside
+  // a macro expansion (a location there would point into the macro definition,
+  // not the call site).
   std::optional<UnqualifiedCallee> getCalleeForQualification(CallExpr const& call,
                                                              SourceManager const& sm,
                                                              LangOptions const& langOpts);

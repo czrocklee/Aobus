@@ -148,18 +148,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto diagBuilder = diag(loc, "concrete %0 '%1' should be marked 'final'")
-                       << (record->isClass() ? "class" : "struct") << record;
-
-    // Provide fix-it: insert 'final' before the opening brace or class body
-    if (auto const* classDef = record->getDefinition(); classDef != nullptr)
-    {
-      SourceLocation const braceLoc = classDef->getBraceRange().getBegin();
-
-      if (braceLoc.isValid())
-      {
-        diagBuilder << FixItHint::CreateInsertion(braceLoc, "final ");
-      }
-    }
+    diag(loc, "concrete %0 '%1' should be marked 'final'") << (record->isClass() ? "class" : "struct") << record;
   }
 } // namespace clang::tidy::readability

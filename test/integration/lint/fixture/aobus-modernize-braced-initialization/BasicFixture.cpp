@@ -28,13 +28,13 @@ public:
   }
 
   BracedDemo(double /*val*/)
-    // POSITIVE: FIX-TO: : BracedDemoBase{kInitVal1}
+    // POSITIVE
     : BracedDemoBase(kInitVal1)
     ,
-    // POSITIVE: FIX-TO: _data{kInitVal1}
+    // POSITIVE
     _data(kInitVal1)
     ,
-    // POSITIVE: FIX-TO: _intData{kInitVal2}
+    // POSITIVE
     _intData(kInitVal2)
   {
   }
@@ -44,25 +44,25 @@ public:
     // NEGATIVE
     [[maybe_unused]] auto const s1 = std::string{"foo"};
 
-    // POSITIVE: FIX-TO: [[maybe_unused]] auto const s2 = std::string{"bar"};
+    // POSITIVE
     [[maybe_unused]] auto const s2 = std::string("bar");
 
     // NEGATIVE
     auto* const s3 = new std::string{"baz"};
 
-    // POSITIVE: FIX-TO: auto* const s4 = new std::string{"qux"};
+    // POSITIVE
     auto* const s4 = new std::string("qux");
 
     // NEGATIVE
     [[maybe_unused]] Foo const s5{10};
 
-    // POSITIVE: FIX-TO: [[maybe_unused]] Foo const s6{10};
+    // POSITIVE
     [[maybe_unused]] Foo const s6(10);
 
-    // POSITIVE: FIX-TO: [[maybe_unused]] auto const s7 = std::string{s1};
+    // POSITIVE
     [[maybe_unused]] auto const s7 = std::string(s1);
 
-    // POSITIVE: FIX-TO: [[maybe_unused]] auto const p1 = std::filesystem::path{s1};
+    // POSITIVE
     [[maybe_unused]] auto const p1 = std::filesystem::path(s1);
 
     // NEGATIVE - DANGEROUS cases (Should be IGNORED)

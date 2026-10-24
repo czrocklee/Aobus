@@ -59,7 +59,7 @@ def requires_build_environment(args: argparse.Namespace) -> bool:
     """Return whether this invocation can build before running tests."""
     suites = suites_for(args.suite, tsan=args.tsan)
     if builddir.platform_profile().name == "windows" and "lint" in suites and not args.filter and not args.list:
-        # Even --no-build syntax checks need the exact VS INCLUDE environment.
+        # Even --no-build diagnostics need the exact VS INCLUDE environment.
         return True
     return not args.no_build and any(SUITES[suite].kind != "tooling" for suite in suites)
 
@@ -1063,9 +1063,8 @@ def run_suites(
                 #
                 # Summary consumer disclaimer: the lint suite record encloses
                 # its Windows checker-build/checker-verify children and the
-                # lint-diagnostics/lint-fixes/lint-replacements/
-                # lint-compiler-errors children, so a summary must not add a
-                # suite record and its children to the same total. The tooling
+                # lint-diagnostics/lint-compiler-errors children, so a summary
+                # must not add a suite record and its children to one total. The tooling
                 # suite owns no native tree, so it records none.
                 with phases.measure(
                     "suite",

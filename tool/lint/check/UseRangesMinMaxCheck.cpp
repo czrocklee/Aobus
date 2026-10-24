@@ -5,26 +5,17 @@
 
 #include "check/AstHelpers.h"
 
-#include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
-#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
-
-#include <string>
 
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::readability
 {
-  namespace
-  {
-    constexpr unsigned kComparatorArgIndex = 3;
-  } // namespace
-
   void UseRangesMinMaxCheck::registerMatchers(MatchFinder* finder)
   {
     finder->addMatcher(
@@ -114,30 +105,9 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const& sm = *result.SourceManager;
-    auto const& langOpts = result.Context->getLangOpts();
-    auto const containerStr = container->getName().str();
     auto const* const funcName = isMin ? "std::ranges::min" : "std::ranges::max";
 
-    auto replacement = std::string{};
-
-    if (call->getNumArgs() >= kComparatorArgIndex)
-    {
-      auto const comparatorText = aobus::getExprSourceText(*call->getArg(2), sm, langOpts);
-
-      if (comparatorText.empty())
-      {
-        return;
-      }
-
-      replacement = std::string{funcName} + "(" + containerStr + ", " + comparatorText + ")";
-    }
-    else
-    {
-      replacement = std::string{funcName} + "(" + containerStr + ")";
-    }
-
     diag(root->getBeginLoc(), "use %0 instead of dereferencing %select{min|max}1_element")
-      << funcName << (isMin ? 0 : 1) << FixItHint::CreateReplacement(root->getSourceRange(), replacement);
+      << funcName << (isMin ? 0 : 1);
   }
 } // namespace clang::tidy::readability

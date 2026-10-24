@@ -668,6 +668,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    diag(loc, "redundant namespace qualification '%0'") << redundantText << FixItHint::CreateRemoval(range);
+    diag(loc, "redundant namespace qualification '%0'") << redundantText;
   }
 } // namespace clang::tidy::readability
