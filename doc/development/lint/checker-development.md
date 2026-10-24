@@ -37,9 +37,14 @@ For redundant namespace-qualification diagnostics, lookup safety concerns the fi
 left after removal, not just the final referenced member. Preserve source names
 from aliases and using-declarations, and inspect template heads on concepts and
 requires-clauses as well as outer template parameter lists on source definitions
-when instantiated nodes omit them. Removing the complete qualifier from a
-function call can enable argument-dependent lookup even when ordinary lookup
-finds the same declaration. The bounded proof accepts only fundamental-typed
+when instantiated nodes omit them. Template-scope proof must follow source AST
+owners as well as semantic declaration contexts: requires-local parameter types
+and variable/alias-template heads can otherwise lose their owning parameter list.
+Cover shadowed negatives, corresponding unshadowed positives, self-defaults, and
+later-parameter declaration-order controls. A template parameter is not visible
+inside its own default; do not suppress all template-head diagnostics.
+Removing the complete qualifier from a function call can enable argument-dependent
+lookup even when ordinary lookup finds the same declaration. The bounded proof accepts only fundamental-typed
 source arguments (before implicit conversions), ignoring default arguments.
 Newly unqualified direct calls with explicit template arguments, dependent or
 instantiated source contexts, and unfamiliar function-use forms are left

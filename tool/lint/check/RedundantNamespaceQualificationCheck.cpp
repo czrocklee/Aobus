@@ -5,6 +5,7 @@
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
+#include <clang/AST/Attr.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/DeclCXX.h>
@@ -14,6 +15,8 @@
 #include <clang/AST/NestedNameSpecifier.h> // NOLINT(misc-include-cleaner) -- inline location accessors
 #include <clang/AST/NestedNameSpecifierBase.h>
 #include <clang/AST/OperationKinds.h>
+#include <clang/AST/ParentMapContext.h>
+#include <clang/AST/Stmt.h>
 #include <clang/AST/TemplateName.h>
 #include <clang/AST/Type.h>
 #include <clang/AST/TypeLoc.h>
@@ -28,6 +31,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 
 using clang::ast_matchers::MatchFinder;
 
@@ -35,29 +39,104 @@ namespace clang::tidy::readability
 {
   namespace
   {
-    Decl const* getEnclosingDeclaration(ASTContext& context, DynTypedNode const& node)
+    struct SourceScopes final
     {
-      auto parents = context.getParents(node);
+      SmallVector<Decl const*, 4> enclosingDeclarations;
+      SmallVector<Decl const*, 8> owners;
+    };
 
-      if (parents.empty())
+    std::optional<SourceScopes> getSourceScopes(ASTContext& context, DynTypedNode const& node)
+    {
+      struct Frame
       {
-        return nullptr;
-      }
+        DynTypedNode node;
+        bool hasEnclosingDeclaration = false;
+        bool leaving = false;
+      };
 
-      for (auto const& parent : parents)
+      auto scopes = SourceScopes{};
+      auto pending = SmallVector<Frame, 16>{{.node = node}};
+      auto active = SmallVector<DynTypedNode, 16>{};
+      auto completed = SmallVector<Frame, 16>{};
+
+      while (!pending.empty())
       {
-        if (auto const* decl = parent.get<Decl>(); decl != nullptr)
+        auto frame = pending.pop_back_val();
+
+        if (frame.leaving)
         {
-          return decl;
+          active.pop_back();
+          completed.push_back(frame);
+          continue;
         }
 
-        if (auto const* declaration = getEnclosingDeclaration(context, parent); declaration != nullptr)
+        auto const* declaration = frame.node.get<Decl>();
+
+        // Only source-bearing parent nodes participate in this proof. In
+        // particular, canonical Type and QualType nodes do not identify scope.
+        if (declaration == nullptr && frame.node.get<Stmt>() == nullptr && frame.node.get<TypeLoc>() == nullptr &&
+            frame.node.get<NestedNameSpecifierLoc>() == nullptr && frame.node.get<CXXCtorInitializer>() == nullptr &&
+            frame.node.get<Attr>() == nullptr)
         {
-          return declaration;
+          return std::nullopt;
+        }
+
+        if (std::ranges::contains(active, frame.node))
+        {
+          return std::nullopt;
+        }
+
+        if (std::ranges::any_of(
+              completed,
+              [&frame](auto const& prior)
+              { return prior.node == frame.node && prior.hasEnclosingDeclaration == frame.hasEnclosingDeclaration; }))
+        {
+          continue;
+        }
+
+        if (declaration != nullptr)
+        {
+          if (!frame.hasEnclosingDeclaration && !std::ranges::contains(scopes.enclosingDeclarations, declaration))
+          {
+            scopes.enclosingDeclarations.push_back(declaration);
+          }
+
+          // No template can enclose a namespace or the translation unit.
+          if (isa<NamespaceDecl>(declaration) || isa<TranslationUnitDecl>(declaration))
+          {
+            continue;
+          }
+
+          if (!std::ranges::contains(scopes.owners, declaration))
+          {
+            scopes.owners.push_back(declaration);
+          }
+        }
+
+        auto const parents = context.getParents(frame.node);
+
+        if (parents.empty())
+        {
+          return std::nullopt;
+        }
+
+        active.push_back(frame.node);
+        frame.leaving = true;
+        pending.push_back(frame);
+
+        for (auto const& parent : parents)
+        {
+          pending.push_back(
+            {.node = parent, .hasEnclosingDeclaration = frame.hasEnclosingDeclaration || declaration != nullptr});
         }
       }
 
-      return nullptr;
+      if (scopes.enclosingDeclarations.empty())
+      {
+        return std::nullopt;
+      }
+
+      return scopes;
     }
 
     bool isAncestor(DeclContext const* ancestor, DeclContext const* descendant)
@@ -246,6 +325,57 @@ namespace clang::tidy::readability
              hasPatternParameter(dyn_cast<CXXRecordDecl>(declaration)) ||
              hasPatternParameter(dyn_cast<VarDecl>(declaration)) ||
              hasPatternParameter(dyn_cast<EnumDecl>(declaration));
+    }
+
+    bool hasVisibleSourceTemplateParameter(TemplateDecl const& owner,
+                                           DeclarationName name,
+                                           SourceLocation useLocation,
+                                           SourceManager const& sourceManager)
+    {
+      auto const* parameters = owner.getTemplateParameters();
+
+      if (parameters == nullptr)
+      {
+        return true;
+      }
+
+      return std::ranges::any_of(*parameters,
+                                 [name, useLocation, &sourceManager](auto const* parameter)
+                                 {
+                                   if (parameter->getDeclName() != name)
+                                   {
+                                     return false;
+                                   }
+
+                                   auto const location = parameter->getSourceRange().getEnd();
+
+                                   // A parameter enters scope after the complete parameter,
+                                   // including its default argument. Uncertain source ordering
+                                   // is not proof that a same-named parameter can be ignored.
+                                   return location.isInvalid() || location.isMacroID() ||
+                                          !sourceManager.isWrittenInSameFile(location, useLocation) ||
+                                          sourceManager.isBeforeInTranslationUnit(location, useLocation);
+                                 });
+    }
+
+    bool hasShadowingSourceTemplateParameter(SourceScopes const& scopes,
+                                             DeclarationName name,
+                                             SourceLocation useLocation,
+                                             SourceManager const& sourceManager)
+    {
+      return std::ranges::any_of(
+        scopes.owners,
+        [name, useLocation, &sourceManager](auto const* owner)
+        {
+          if (auto const* templateOwner = dyn_cast<TemplateDecl>(owner); templateOwner != nullptr)
+          {
+            return hasVisibleSourceTemplateParameter(*templateOwner, name, useLocation, sourceManager);
+          }
+
+          // Keep definition-pattern and outer-list handling for source
+          // function, record, variable, and enumeration declarations.
+          return hasShadowingTemplateParameter(owner, name);
+        });
     }
 
     bool isShadowedByCloserDeclaration(DeclarationName name,
@@ -574,23 +704,36 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const* enclosingDeclaration = getEnclosingDeclaration(*result.Context, node);
+    auto const optSourceScopes = getSourceScopes(*result.Context, node);
 
-    if (enclosingDeclaration == nullptr)
+    if (!optSourceScopes)
     {
       return;
     }
 
-    auto const* currentContext = dyn_cast<DeclContext>(enclosingDeclaration);
-
-    if (currentContext == nullptr)
+    struct EnclosingScope
     {
-      currentContext = enclosingDeclaration->getDeclContext();
-    }
+      Decl const* declaration;
+      DeclContext const* context;
+    };
 
-    if (currentContext == nullptr)
+    auto enclosingScopes = SmallVector<EnclosingScope, 4>{};
+
+    for (auto const* declaration : optSourceScopes->enclosingDeclarations)
     {
-      return;
+      auto const* context = dyn_cast<DeclContext>(declaration);
+
+      if (context == nullptr)
+      {
+        context = declaration->getDeclContext();
+      }
+
+      if (context == nullptr)
+      {
+        return;
+      }
+
+      enclosingScopes.push_back({.declaration = declaration, .context = context});
     }
 
     auto chain = SmallVector<NestedNameSpecifierLoc, 4>{};
@@ -615,7 +758,9 @@ namespace clang::tidy::readability
 
     for (auto const& specLocItem : chain)
     {
-      if (!isNamespaceRedundant(specLocItem, currentContext))
+      if (!std::ranges::all_of(enclosingScopes,
+                               [&specLocItem](auto const& scope)
+                               { return isNamespaceRedundant(specLocItem, scope.context); }))
       {
         break;
       }
@@ -633,8 +778,12 @@ namespace clang::tidy::readability
     auto const* firstDeclaration = firstSurvivingDeclaration(result, lastRedundant, chain);
 
     if (!hasSameNamespaceLookup(firstDeclaration, lastRedundant) ||
-        isShadowedByCloserDeclaration(
-          firstDeclaration->getDeclName(), lastRedundant, enclosingDeclaration, currentContext))
+        std::ranges::any_of(enclosingScopes,
+                            [firstDeclaration, &lastRedundant](auto const& scope)
+                            {
+                              return isShadowedByCloserDeclaration(
+                                firstDeclaration->getDeclName(), lastRedundant, scope.declaration, scope.context);
+                            }))
     {
       return;
     }
@@ -642,7 +791,16 @@ namespace clang::tidy::readability
     // Reject unknown source lookup and unconditional closer shadowing before
     // scanning intermediate namespace members. Every diagnostic still passes
     // the same guards; no lookup result is cached across AST queries.
-    if (isShadowedByIntermediateNamespace(lastRedundant, chain, currentContext))
+    if (std::ranges::any_of(enclosingScopes,
+                            [&lastRedundant, &chain](auto const& scope)
+                            { return isShadowedByIntermediateNamespace(lastRedundant, chain, scope.context); }))
+    {
+      return;
+    }
+
+    // Requires-local declarations and variable/alias template parameters can
+    // have namespace semantic contexts. Check every source-parent path too.
+    if (hasShadowingSourceTemplateParameter(*optSourceScopes, firstDeclaration->getDeclName(), loc, sm))
     {
       return;
     }
@@ -653,7 +811,10 @@ namespace clang::tidy::readability
     if (auto const* reference = result.Nodes.getNodeAs<DeclRefExpr>("declRef");
         reference != nullptr && isa<FunctionDecl>(reference->getDecl()) &&
         lastRedundant.getNestedNameSpecifier() == specLoc.getNestedNameSpecifier() &&
-        !hasSafeUnqualifiedFunctionUse(*result.Context, reference, enclosingDeclaration, currentContext))
+        std::ranges::any_of(
+          enclosingScopes,
+          [&result, reference](auto const& scope)
+          { return !hasSafeUnqualifiedFunctionUse(*result.Context, reference, scope.declaration, scope.context); }))
     {
       return;
     }
