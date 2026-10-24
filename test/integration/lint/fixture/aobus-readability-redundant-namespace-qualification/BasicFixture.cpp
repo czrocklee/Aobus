@@ -357,8 +357,9 @@ namespace ao::retained::localShadow
 
   void preserveParameterQualifier(int Outer)
   {
-    // NEGATIVE - do not infer type-only lookup past a same-named parameter.
+    // POSITIVE - a value parameter does not hide the type before ::.
     using SelectedInner = retained::Outer::Inner;
+    static_assert(SelectedInner::kIdentity == 11);
   }
 
   template<typename Outer>
