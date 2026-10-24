@@ -38,9 +38,11 @@ examples:
   ao.bat build --target aobus        # build only the CLI target
   ao.bat build --target winui        # build WinUI through the dedicated MSBuild tree
   ao.bat build release --target winui  # build Release WinUI with IPO/LTCG
+  ao.bat build --target aobus-winui-lint-context  # generate WinUI headers without compiling the app
 """
 
 WINUI_TARGETS = frozenset({"winui", "aobus-winui"})
+WINUI_LINT_CONTEXT_TARGET = "aobus-winui-lint-context"
 
 # Private WinUI MSBuild capture (`--msbuild-capture`): one fixed binary-logger
 # tail plus tlog snapshots under an exclusive user-local directory. Raw logs
@@ -525,8 +527,11 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     """Shared by `ao build` and `ao check`. Raises SystemExit on failure."""
     profile = validate_build_options(args)
 
-    requested_winui = any(target in WINUI_TARGETS for target in targets)
-    if requested_winui and any(target not in WINUI_TARGETS for target in targets):
+    lint_context = WINUI_LINT_CONTEXT_TARGET in targets
+    if lint_context and targets != [WINUI_LINT_CONTEXT_TARGET]:
+        raise die("The WinUI lint-context target must be built alone.")
+    requested_winui = lint_context or any(target in WINUI_TARGETS for target in targets)
+    if requested_winui and not lint_context and any(target not in WINUI_TARGETS for target in targets):
         raise die("WinUI cannot be combined with Ninja targets in one build invocation.")
     if requested_winui:
         if profile.name != "windows":
@@ -543,8 +548,8 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
 
     capture_request = getattr(args, "msbuild_capture", None)
     if capture_request is not None:
-        if profile.name != "windows" or not requested_winui:
-            raise die("--msbuild-capture is available only for native Windows WinUI builds.")
+        if profile.name != "windows" or not requested_winui or lint_context:
+            raise die("--msbuild-capture is available only for full native Windows WinUI builds.")
         if (reason := _capture_syntax_error(capture_request)) is not None:
             raise die(reason)
     phase_tree = "winui" if requested_winui else "native"
@@ -629,7 +634,7 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
                 build += ["--config", "Debug" if args.flavor == "debug" else "Release"]
             parallel_jobs = parallel_build_jobs()
             build += ["--parallel", str(parallel_jobs)]
-            canonical_targets = ["aobus-winui"] if requested_winui else targets
+            canonical_targets = ["aobus-winui"] if requested_winui and not lint_context else targets
             for target in canonical_targets:
                 build += ["--target", target]
             if args.verbose:
@@ -638,7 +643,7 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
                 # One fixed native logger tail; console verbosity is never changed.
                 build += ["--", f"/bl:{capture_dir / 'build.binlog'};ProjectImports=None"]
 
-            print("Building Aobus...")
+            print("Generating WinUI lint context..." if lint_context else "Building Aobus...")
             if requested_winui:
                 build_env = {
                     **(env or {}),
@@ -655,8 +660,9 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
                     cmake_build_dir,
                     metadata=_capture_build_metadata(build_env or {}, _capture_cache_identity(cmake_build_dir)),
                 )
+            build_phase_name = "generated-headers" if lint_context else "build"
             capture_stage = "build"
-            with phases.measure("build", tree=phase_tree, jobs=parallel_jobs) as build_phase:
+            with phases.measure(build_phase_name, tree=phase_tree, jobs=parallel_jobs) as build_phase:
                 native_started = True
                 build_phase.status = run(
                     build, cwd=workspace.compiler_build_dir or PROJECT_ROOT, env=build_env, log=log, append=True

@@ -600,7 +600,7 @@ def prepare_winui_compile_commands(
     toolchain: TidyToolchain,
     selected: list[Path],
 ) -> list[dict[str, object]]:
-    """Build/query the native WinUI project only when the selected scope needs it."""
+    """Generate/query native WinUI compile context only when the selected scope needs it."""
     if toolchain.resource_dir is None or not any(requires_winui_compile_context(path) for path in selected):
         return []
 
@@ -623,7 +623,7 @@ def prepare_winui_compile_commands(
                     verbose=False,
                     path=str(winui_dir),
                 ),
-                ["winui"],
+                [build.WINUI_LINT_CONTEXT_TARGET],
             )
         return winuitidy.compile_commands(winui_dir, clang_cl, required_translation_units=required)
 

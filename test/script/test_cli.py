@@ -902,6 +902,152 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("Release", build)
         self.assertEqual(result.preset, "windows-winui")
 
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_lint_context_builds_only_the_context_target(self, _validate_build_tree):
+        # The lint-context target name is a fixed portal contract.
+        self.assertEqual(build_command.WINUI_LINT_CONTEXT_TARGET, "aobus-winui-lint-context")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir])
+            recorder = _PhaseRecorder()
+            with (
+                mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}),
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command, "phases", recorder),
+                mock.patch.object(build_command, "run", return_value=0) as run,
+            ):
+                result = build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
+
+        configure = run.call_args_list[0].args[0]
+        build = run.call_args_list[1].args[0]
+        build_env = run.call_args_list[1].kwargs["env"]
+        targets = [build[index + 1] for index, argument in enumerate(build) if argument == "--target"]
+        self.assertIn("windows-winui", configure)
+        # The context build requests exactly the generated-headers target; the
+        # full aobus-winui product is never built from this invocation.
+        self.assertEqual(targets, [build_command.WINUI_LINT_CONTEXT_TARGET])
+        self.assertIn("--config", build)
+        self.assertIn("Debug", build)
+        self.assertIn("--parallel", build)
+        self.assertIn("8", build)
+        self.assertEqual(build_env["UseMultiToolTask"], "true")
+        self.assertEqual(build_env["MultiProcMaxCount"], "8")
+        self.assertEqual(build_env["CL_MPCount"], "8")
+        # The context build is measured as its own winui-tree phase, never as
+        # a full "build" phase.
+        self.assertEqual(
+            [(record["name"], record["tree"]) for record in recorder.records],
+            [("configure", "winui"), ("generated-headers", "winui")],
+        )
+        self.assertEqual(result.preset, "windows-winui")
+        self.assertEqual(result.build_dir, Path(temp_dir))
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_lint_context_release_honors_the_requested_flavor(self, _validate_build_tree):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "release", "-p", temp_dir])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command, "run", return_value=0) as run,
+            ):
+                build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
+
+        build = run.call_args_list[1].args[0]
+        self.assertIn("--config", build)
+        self.assertIn("Release", build)
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_lint_context_records_the_generation_failure_status(self, _validate_build_tree):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir])
+            recorder = _PhaseRecorder()
+            with (
+                mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}),
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command, "phases", recorder),
+                # Mocked subprocess outcomes only: configure succeeds, the
+                # generated-headers build fails with its own exit status.
+                mock.patch.object(build_command, "run", side_effect=(0, 7)) as run,
+            ):
+                with self.assertRaises(SystemExit):
+                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
+
+        self.assertEqual(len(run.call_args_list), 2)
+        self.assertEqual(
+            [(record["name"], record["tree"], record["status"]) for record in recorder.records],
+            [("configure", "winui", 0), ("generated-headers", "winui", 7)],
+        )
+
+    @mock.patch.object(build_command, "validate_build_tree", return_value="msvc")
+    def test_windows_winui_lint_context_configure_failure_skips_generation(self, _validate_build_tree):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir])
+            recorder = _PhaseRecorder()
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command, "phases", recorder),
+                # Mocked subprocess outcome only: configure fails before any generation step.
+                mock.patch.object(build_command, "run", return_value=1) as run,
+            ):
+                with self.assertRaises(SystemExit):
+                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
+
+        # Only the configure invocation ran; no generated-headers phase exists.
+        self.assertEqual(len(run.call_args_list), 1)
+        self.assertEqual(
+            [(record["name"], record["tree"], record["status"]) for record in recorder.records],
+            [("configure", "winui", 1)],
+        )
+
+    def test_windows_winui_lint_context_rejects_mixed_targets_before_configure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command, "run") as run,
+            ):
+                for other in ("winui", "aobus-winui", "ao_core_test"):
+                    with self.subTest(other=other):
+                        with self.assertRaises(SystemExit):
+                            build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET, other])
+
+        run.assert_not_called()
+
+    def test_windows_winui_lint_context_rejects_msbuild_capture_before_configure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            capture = str(Path(temp_dir) / "capture")
+            args = self.parse(["build", "-p", temp_dir, "--msbuild-capture", capture])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(build_command.winui, "require_build_host"),
+                mock.patch.object(build_command, "_prepare_capture") as prepare_capture,
+                mock.patch.object(build_command, "run") as run,
+            ):
+                with self.assertRaises(SystemExit):
+                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
+
+                run.assert_not_called()
+                prepare_capture.assert_not_called()
+                # Checked inside the live temp directory: the rejection happens
+                # before any capture directory is created.
+                self.assertFalse(Path(capture).exists())
+
+    def test_winui_lint_context_is_unavailable_off_windows(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir])
+            with (
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+                mock.patch.object(build_command, "run") as run,
+            ):
+                with self.assertRaises(SystemExit):
+                    build_command.do_build(args, [build_command.WINUI_LINT_CONTEXT_TARGET])
+
+        run.assert_not_called()
+
     def test_windows_clean_uses_extended_length_path(self):
         build_path = mock.MagicMock(spec=Path)
         build_path.resolve.return_value = Path(r"C:\local\aobus-build")
@@ -2810,12 +2956,77 @@ class CliParseTest(unittest.TestCase):
                                 [],
                             )
 
-        self.assertEqual(do_build.call_args.args[0].flavor, "debug")
+        build_args, build_targets = do_build.call_args.args
+        self.assertEqual(build_args.flavor, "debug")
+        self.assertEqual(Path(build_args.path), winui_dir)
+        self.assertEqual(build_targets, [build_command.WINUI_LINT_CONTEXT_TARGET])
         compile_commands.assert_called_once_with(
             winui_dir,
             Path("C:/llvm/bin/clang-cl.exe"),
             required_translation_units=(selected[0],),
         )
+
+    def test_winui_tidy_no_build_skips_the_context_build_but_still_queries(self):
+        args = mock.Mock(path=None, no_build=True)
+        toolchain = tidy_command.TidyToolchain(
+            "AobusClangTidy.exe",
+            None,
+            Path("C:/llvm/lib/clang/22"),
+        )
+        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
+        winui_dir = Path("C:/aobus/windows-winui")
+
+        with (
+            mock.patch.object(tidy_command, "winui_build_directory", return_value=winui_dir),
+            mock.patch.object(tidy_command.buildlock, "build_tree_lock", return_value=contextlib.nullcontext()),
+            mock.patch.object(tidy_command.build, "do_build") as do_build,
+            mock.patch.object(tidy_command.tidyengine, "clang_tool", return_value="C:/llvm/bin/clang-cl.exe"),
+            mock.patch.object(tidy_command.winuitidy, "compile_commands", return_value=[]) as compile_commands,
+        ):
+            self.assertEqual(
+                tidy_command.prepare_winui_compile_commands(
+                    args,
+                    Path("C:/aobus/windows-tidy"),
+                    toolchain,
+                    selected,
+                ),
+                [],
+            )
+
+        do_build.assert_not_called()
+        compile_commands.assert_called_once_with(
+            winui_dir,
+            Path("C:/llvm/bin/clang-cl.exe"),
+            required_translation_units=(selected[0],),
+        )
+
+    def test_winui_tidy_does_not_query_compile_commands_after_a_failed_context_build(self):
+        args = mock.Mock(path=None, no_build=False)
+        toolchain = tidy_command.TidyToolchain(
+            "AobusClangTidy.exe",
+            None,
+            Path("C:/llvm/lib/clang/22"),
+        )
+        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
+        winui_dir = Path("C:/aobus/windows-winui")
+
+        with (
+            mock.patch.object(tidy_command, "winui_build_directory", return_value=winui_dir),
+            mock.patch.object(tidy_command.buildlock, "build_tree_lock", return_value=contextlib.nullcontext()),
+            mock.patch.object(tidy_command.build, "do_build", side_effect=SystemExit(1)),
+            mock.patch.object(tidy_command.tidyengine, "clang_tool", return_value="C:/llvm/bin/clang-cl.exe"),
+            mock.patch.object(tidy_command.winuitidy, "compile_commands") as compile_commands,
+        ):
+            with self.assertRaises(SystemExit):
+                tidy_command.prepare_winui_compile_commands(
+                    args,
+                    Path("C:/aobus/windows-tidy"),
+                    toolchain,
+                    selected,
+                )
+
+        # A failed context build must never reach the compile-commands query.
+        compile_commands.assert_not_called()
 
     def test_tidy_toolchain_validation_requires_registered_aobus_checks(self):
         toolchain = tidy_command.TidyToolchain("clang-tidy", Path("plugin.so"), None)

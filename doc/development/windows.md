@@ -465,7 +465,14 @@ and never falls back to Visual Studio or `PATH`. `--no-build` requires the
 executable, compile database, and configured SDK to exist already.
 
 Windows tidy replays exact Windows compile commands, including a companion WinUI
-command database when needed. It reports and defers platform-incompatible files
+command database when needed. WinUI lint preparation configures that tree and
+runs only `aobus-winui-lint-context`: native IDL/C++/WinRT and XAML generation,
+not application compilation, linking, probe execution, or resource deployment.
+`ao.bat check` still owns the full product build and tests. To diagnose generation
+separately, run `ao.bat build --target aobus-winui-lint-context`; tidy consumes the
+Debug context, even after a Release product build. Private `--msbuild-capture`
+remains restricted to full WinUI builds, not this nested generation target.
+Tidy reports and defers platform-incompatible files
 for batch scopes; an explicitly named uncovered file fails. Complete shared C++
 coverage still requires the affected Linux, macOS, and Windows native tidy
 passes. See [checker development](lint/checker-development.md#native-replay-and-header-diagnostics)

@@ -340,6 +340,36 @@ set_target_properties(ao_winui_credits_probe PROPERTIES
   WindowsTargetPlatformVersion 10.0.26100.0)
 aobus_enable_windows_app_sdk(ao_winui_credits_probe APPLICATION)
 
+# Generate the library context first: probe projections consume its WinMD and
+# generated headers, but must not build the library or execute product probes.
+# This aggregate covers every auxiliary project queried by winuitidy.py; the
+# query still selects only the projects needed by the lint source scope.
+if(NOT CMAKE_VS_MSBUILD_COMMAND)
+  message(FATAL_ERROR "WinUI lint context requires the configured MSBuild executable")
+endif()
+set(_aobus_winui_lint_commands)
+foreach(_project IN ITEMS
+    aobus-winui-lib
+    ao_winui_localization_probe
+    ao_winui_track_item_probe
+    ao_winui_track_table_probe
+    ao_winui_soul_probe
+    ao_winui_credits_probe)
+  list(APPEND _aobus_winui_lint_commands
+    COMMAND "${CMAKE_VS_MSBUILD_COMMAND}"
+      "${CMAKE_CURRENT_BINARY_DIR}/${_project}.vcxproj"
+      /nologo /v:minimal /m:1 /nr:false
+      "/p:Configuration=$<CONFIG>"
+      "/p:Platform=${CMAKE_VS_PLATFORM_NAME}"
+      /p:BuildProjectReferences=false
+      /t:AobusPrepareLintContext)
+endforeach()
+add_custom_target(aobus-winui-lint-context
+  ${_aobus_winui_lint_commands}
+  COMMENT "Generating native WinUI lint context"
+  VERBATIM)
+unset(_aobus_winui_lint_commands)
+
 aobus_verify_windows_utf8_manifest(aobus-winui)
 target_include_directories(aobus-winui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-winui PRIVATE
