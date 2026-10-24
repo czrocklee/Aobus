@@ -26,10 +26,10 @@ namespace ao::audio::backend::test
     // existing probe oracle bounds each child: the diagnostic fires inside
     // the triggered callback, and a missing diagnostic can only surface as a
     // nonfatal child exit or the intrinsic probe timeout, never as a false
-    // success here. Nested-graph
-    // scenarios deliberately violate the gate-deferral precondition to reach
-    // the lifecycle diagnostic; they do not promise safe synchronous graph
-    // composition from a target callback.
+    // success here.
+    // Nested-graph scenarios deliberately violate the gate-deferral
+    // precondition to reach the lifecycle diagnostic; they do not promise
+    // safe synchronous graph composition from a target callback.
     constexpr auto kProbeTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_audio_fatal_probe");
     REQUIRE_FALSE(executablePath.empty());
@@ -49,6 +49,35 @@ namespace ao::audio::backend::test
       CHECK(result.standardError.contains(expectation.context));
       CHECK(result.standardError.contains("source="));
       CHECK(result.standardError.contains("CoreAudioBackend.cpp"));
+    }
+  }
+
+  TEST_CASE("CoreAudioRenderAdmission - open preconditions abort the fatal probe child",
+            "[audio][integration][coreaudio]")
+  {
+    // These two children call production CoreAudioRenderAdmission::open() in
+    // the fatal probe process. They do not open a Core Audio device, resolve
+    // a device UID, or look up a native component. Each child uses the same
+    // intrinsic 15s probe oracle as the RenderTarget cases.
+    constexpr auto kProbeTimeout = std::chrono::seconds{15};
+    auto const executablePath = ao::test::siblingProbeExecutablePath("ao_audio_fatal_probe");
+    REQUIRE_FALSE(executablePath.empty());
+
+    for (auto const& expectation : audio::test::coreAudioRenderAdmissionFatalProbeExpectations())
+    {
+      INFO("probe: " << expectation.scenario);
+      auto const result = ao::test::runProbeProcess(executablePath, expectation.scenario, kProbeTimeout);
+
+      REQUIRE(result.started);
+      CHECK(result.launchError.empty());
+      CHECK_FALSE(result.timedOut);
+      CHECK(result.hasFatalTermination());
+      CHECK(result.hasPlatformAbort());
+      CHECK(result.standardError.contains("AOBUS_FATAL"));
+      CHECK(result.standardError.contains(expectation.category));
+      CHECK(result.standardError.contains(expectation.context));
+      CHECK(result.standardError.contains("source="));
+      CHECK(result.standardError.contains("CoreAudioRenderAdmission.cpp:"));
     }
   }
 } // namespace ao::audio::backend::test

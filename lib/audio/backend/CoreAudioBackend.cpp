@@ -17,6 +17,7 @@
 #include "detail/CoreAudioRenderAdmission.h"
 #include "detail/CoreAudioRenderBuffer.h"
 #include "detail/CoreAudioRunControl.h"
+#include "detail/CoreAudioUnitRun.h"
 #include "detail/DecoderOutput.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
@@ -52,6 +53,7 @@
 #include <cstring>
 #include <exception>
 #include <expected>
+#include <format>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -413,7 +415,7 @@ namespace ao::audio::backend
       mutable std::mutex nativeMutex{};
       ::AudioUnit unit = nullptr;
       ::AudioObjectID deviceId = ::kAudioObjectUnknown;
-      bool started = false;
+      detail::CoreAudioUnitRun unitRun{};
       std::array<bool, kDevicePropertyAddresses.size()> registeredDeviceListeners{};
       std::array<bool, kUnitChannelProperties.size()> registeredUnitListeners{};
 
@@ -588,6 +590,7 @@ namespace ao::audio::backend
 
     void CoreAudioRuntimeState::handleDrain(std::uint64_t const drainGeneration)
     {
+      ::OSStatus stopStatus = ::noErr;
       {
         auto const optRunScope = runControl.tryCurrent(drainGeneration);
 
@@ -599,16 +602,18 @@ namespace ao::audio::backend
         renderFence.closeAndWait();
         auto const lock = std::scoped_lock{nativeMutex};
 
-        if (unit != nullptr && started)
+        if (unit != nullptr)
         {
-          if (::AudioOutputUnitStop(unit) != ::noErr)
-          {
-            signalFault(CoreAudioFault::DeviceLost, drainGeneration);
-            return;
-          }
-
-          started = false;
+          stopStatus = unitRun.hasUnconfirmedStop() ? unitRun.lastStopStatus() : unitRun.stop(unit);
         }
+      }
+
+      if (stopStatus != ::noErr)
+      {
+        auto const error =
+          detail::makeCoreAudioError(stopStatus, "stop Core Audio output after drain", Error::Code::IoError).error();
+        reportError(drainGeneration, error.message);
+        return;
       }
 
       auto const callbackLock = std::scoped_lock{targetCallbackMutex};
@@ -773,6 +778,7 @@ namespace ao::audio::backend
     {
       auto const faultGeneration = packet.generation;
       auto const fault = packet.kind;
+      ::OSStatus stopStatus = ::noErr;
       {
         auto const optRunScope = runControl.tryCurrent(faultGeneration);
 
@@ -786,11 +792,19 @@ namespace ao::audio::backend
         renderFence.closeAndWait();
         auto const lock = std::scoped_lock{nativeMutex};
 
-        if (unit != nullptr && started)
+        if (unit != nullptr)
         {
-          ::AudioOutputUnitStop(unit);
-          started = false;
+          // Reporting an existing failure never retries an unconfirmed native stop.
+          stopStatus = unitRun.hasUnconfirmedStop() ? unitRun.lastStopStatus() : unitRun.stop(unit);
         }
+      }
+
+      if (stopStatus != ::noErr)
+      {
+        auto const error =
+          detail::makeCoreAudioError(stopStatus, "stop Core Audio output after fault", Error::Code::IoError).error();
+        reportError(faultGeneration, std::format("{}; {}", faultMessage(fault), error.message));
+        return;
       }
 
       reportError(faultGeneration, faultMessage(fault));
@@ -1343,7 +1357,7 @@ namespace ao::audio::backend
       auto const lock = std::scoped_lock{statePtr->nativeMutex};
       statePtr->unit = unitOwner.release();
       statePtr->deviceId = deviceId;
-      statePtr->started = false;
+      statePtr->unitRun.detach();
       statePtr->bytesPerFrame = bytesPerFrame;
       statePtr->maximumFramesPerSlice = maximumFrames;
       statePtr->presentationTailFrameCount.store(*tailFramesRes, std::memory_order_release);
@@ -1430,6 +1444,7 @@ namespace ao::audio::backend
                "Cannot start Core Audio backend from its render-domain callback");
     std::uint64_t runGeneration = 0U;
     ::OSStatus status = ::noErr;
+    bool hasUnconfirmedStop = false;
     bool publicationDeferred = false;
     bool shouldRefreshObservation = false;
     {
@@ -1445,10 +1460,20 @@ namespace ao::audio::backend
       runGeneration = runScope.generation();
       statePtr->pendingDrainGeneration.store(0U, std::memory_order_release);
       statePtr->drainTail.reset();
+      {
+        auto const lock = std::scoped_lock{statePtr->nativeMutex};
+        hasUnconfirmedStop = statePtr->unitRun.hasUnconfirmedStop();
+
+        if (hasUnconfirmedStop)
+        {
+          status = statePtr->unitRun.lastStopStatus();
+        }
+      }
+
       // Advancing retires run-scoped work, not the open-time target attachment.
-      // Prove current execution before admitting render callbacks.
-      if (statePtr->tryRefreshDevice(
-            runGeneration, detail::CoreAudioChannelRefreshMode::Execution, &publicationDeferred))
+      // Never admit callbacks until a previously failed native stop is confirmed.
+      if (!hasUnconfirmedStop && statePtr->tryRefreshDevice(
+                                   runGeneration, detail::CoreAudioChannelRefreshMode::Execution, &publicationDeferred))
       {
         shouldRefreshObservation = true;
         statePtr->renderAllowed.store(true, std::memory_order_release);
@@ -1461,8 +1486,7 @@ namespace ao::audio::backend
 
           if (hasUnit)
           {
-            status = ::AudioOutputUnitStart(statePtr->unit);
-            statePtr->started = status == ::noErr;
+            status = statePtr->unitRun.start(statePtr->unit);
           }
         }
 
@@ -1489,7 +1513,9 @@ namespace ao::audio::backend
 
     if (status != ::noErr)
     {
-      auto const error = detail::makeCoreAudioError(status, "start Core Audio output", Error::Code::IoError).error();
+      auto const* const operation =
+        hasUnconfirmedStop ? "start Core Audio output withheld: native stop is unconfirmed" : "start Core Audio output";
+      auto const error = detail::makeCoreAudioError(status, operation, Error::Code::IoError).error();
       statePtr->reportError(runGeneration, error.message);
     }
   }
@@ -1499,19 +1525,31 @@ namespace ao::audio::backend
     auto const statePtr = _implPtr->statePtr;
     AO_EXPECTS(!utility::CallbackStackScope::containsIdentity(&statePtr->renderFence),
                "Cannot pause Core Audio backend from its render-domain callback");
-    auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
-    auto const runScope = statePtr->runControl.lock();
-    statePtr->renderFence.closeAndWait();
-    auto const lock = std::scoped_lock{statePtr->nativeMutex};
-
-    if (statePtr->unit != nullptr && statePtr->started)
+    std::uint64_t runGeneration = 0U;
+    ::OSStatus status = ::noErr;
     {
-      if (auto const status = ::AudioOutputUnitStop(statePtr->unit); status != ::noErr)
-      {
-        statePtr->signalFault(CoreAudioFault::DeviceLost, runScope.generation());
-      }
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+      auto const runScope = statePtr->runControl.lock();
+      runGeneration = runScope.generation();
+      statePtr->renderFence.closeAndWait();
+      auto const lock = std::scoped_lock{statePtr->nativeMutex};
 
-      statePtr->started = false;
+      if (statePtr->unit != nullptr)
+      {
+        status = statePtr->unitRun.stop(statePtr->unit);
+
+        if (status != ::noErr)
+        {
+          statePtr->runActive.store(false, std::memory_order_release);
+          statePtr->renderAllowed.store(false, std::memory_order_release);
+        }
+      }
+    }
+
+    if (status != ::noErr)
+    {
+      auto const error = detail::makeCoreAudioError(status, "pause Core Audio output", Error::Code::IoError).error();
+      statePtr->reportError(runGeneration, error.message);
     }
   }
 
@@ -1521,14 +1559,25 @@ namespace ao::audio::backend
     AO_EXPECTS(!utility::CallbackStackScope::containsIdentity(&statePtr->renderFence),
                "Cannot resume Core Audio backend from its render-domain callback");
     std::uint64_t runGeneration = 0U;
+    ::OSStatus status = ::noErr;
+    bool hasUnconfirmedStop = false;
     bool publicationDeferred = false;
     bool shouldRefreshObservation = false;
     {
       auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
       auto const runScope = statePtr->runControl.lock();
       runGeneration = runScope.generation();
+      {
+        auto const lock = std::scoped_lock{statePtr->nativeMutex};
+        hasUnconfirmedStop = statePtr->unitRun.hasUnconfirmedStop();
 
-      if (statePtr->runActive.load(std::memory_order_acquire) &&
+        if (hasUnconfirmedStop)
+        {
+          status = statePtr->unitRun.lastStopStatus();
+        }
+      }
+
+      if (!hasUnconfirmedStop && statePtr->runActive.load(std::memory_order_acquire) &&
           statePtr->tryRefreshDevice(
             runGeneration, detail::CoreAudioChannelRefreshMode::Execution, &publicationDeferred))
       {
@@ -1542,17 +1591,10 @@ namespace ao::audio::backend
           {
             startFailed = true;
           }
-          else if (!statePtr->started)
+          else if (!statePtr->unitRun.isStarted())
           {
-            if (auto const status = ::AudioOutputUnitStart(statePtr->unit); status != ::noErr)
-            {
-              startFailed = true;
-              statePtr->signalFault(CoreAudioFault::DeviceLost, runGeneration);
-            }
-            else
-            {
-              statePtr->started = true;
-            }
+            status = statePtr->unitRun.start(statePtr->unit);
+            startFailed = status != ::noErr;
           }
         }
 
@@ -1560,6 +1602,7 @@ namespace ao::audio::backend
         {
           statePtr->renderFence.closeAndWait();
           statePtr->runActive.store(false, std::memory_order_release);
+          statePtr->renderAllowed.store(false, std::memory_order_release);
         }
       }
     }
@@ -1573,6 +1616,14 @@ namespace ao::audio::backend
     {
       statePtr->requestGraphPublication();
     }
+
+    if (status != ::noErr)
+    {
+      auto const* const operation = hasUnconfirmedStop ? "resume Core Audio output withheld: native stop is unconfirmed"
+                                                       : "resume Core Audio output";
+      auto const error = detail::makeCoreAudioError(status, operation, Error::Code::IoError).error();
+      statePtr->reportError(runGeneration, error.message);
+    }
   }
 
   void CoreAudioBackend::flush()
@@ -1585,6 +1636,7 @@ namespace ao::audio::backend
 
     std::uint64_t runGeneration = 0U;
     ::OSStatus status = ::noErr;
+    bool isResetWithheld = false;
     {
       // stop() has released its nonrecursive run scope before reset acquires one.
       auto const runScope = statePtr->runControl.lock();
@@ -1593,13 +1645,17 @@ namespace ao::audio::backend
 
       if (statePtr->unit != nullptr)
       {
-        status = ::AudioUnitReset(statePtr->unit, ::kAudioUnitScope_Global, 0U);
+        isResetWithheld = !statePtr->unitRun.canReset();
+        status = isResetWithheld ? statePtr->unitRun.lastStopStatus()
+                                 : ::AudioUnitReset(statePtr->unit, ::kAudioUnitScope_Global, 0U);
       }
     }
 
     if (status != ::noErr)
     {
-      auto const error = detail::makeCoreAudioError(status, "reset Core Audio output", Error::Code::IoError).error();
+      auto const* const operation =
+        isResetWithheld ? "reset Core Audio output withheld: native stop is unconfirmed" : "reset Core Audio output";
+      auto const error = detail::makeCoreAudioError(status, operation, Error::Code::IoError).error();
       statePtr->reportError(runGeneration, error.message);
     }
   }
@@ -1609,18 +1665,28 @@ namespace ao::audio::backend
     auto const statePtr = _implPtr->statePtr;
     AO_EXPECTS(!utility::CallbackStackScope::containsIdentity(&statePtr->renderFence),
                "Cannot stop Core Audio backend from its render-domain callback");
-    auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
-    auto const runScope = statePtr->runControl.advance();
-    statePtr->runActive.store(false, std::memory_order_release);
-    statePtr->renderAllowed.store(false, std::memory_order_release);
-    statePtr->renderFence.closeAndWait();
-    statePtr->drainTail.reset();
-    auto const lock = std::scoped_lock{statePtr->nativeMutex};
-
-    if (statePtr->unit != nullptr && statePtr->started)
+    std::uint64_t runGeneration = 0U;
+    ::OSStatus status = ::noErr;
     {
-      ::AudioOutputUnitStop(statePtr->unit);
-      statePtr->started = false;
+      auto const callbackLock = std::scoped_lock{statePtr->targetCallbackMutex};
+      auto const runScope = statePtr->runControl.advance();
+      runGeneration = runScope.generation();
+      statePtr->runActive.store(false, std::memory_order_release);
+      statePtr->renderAllowed.store(false, std::memory_order_release);
+      statePtr->renderFence.closeAndWait();
+      statePtr->drainTail.reset();
+      auto const lock = std::scoped_lock{statePtr->nativeMutex};
+
+      if (statePtr->unit != nullptr)
+      {
+        status = statePtr->unitRun.stop(statePtr->unit);
+      }
+    }
+
+    if (status != ::noErr)
+    {
+      auto const error = detail::makeCoreAudioError(status, "stop Core Audio output", Error::Code::IoError).error();
+      statePtr->reportError(runGeneration, error.message);
     }
   }
 
@@ -1653,7 +1719,7 @@ namespace ao::audio::backend
         registeredUnitListeners = std::exchange(statePtr->registeredUnitListeners, {});
         statePtr->unit = nullptr;
         statePtr->deviceId = ::kAudioObjectUnknown;
-        statePtr->started = false;
+        statePtr->unitRun.detach();
         statePtr->stagingBuffer.clear();
         statePtr->nativeBuffer.clear();
         statePtr->channelPlan = {};

@@ -136,5 +136,18 @@ namespace ao::audio::test
 
     return kExpectations;
   }
+
+  std::span<AudioFatalProbeExpectation const> coreAudioRenderAdmissionFatalProbeExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      AudioFatalProbeExpectation{
+        "coreaudio-admission-zero-generation", "category=expects", "A render admission generation must be nonzero"},
+      AudioFatalProbeExpectation{"coreaudio-admission-active-interval",
+                                 "category=expects",
+                                 "Cannot open render admission while a previous interval is still active"},
+    };
+
+    return kExpectations;
+  }
 #endif
 } // namespace ao::audio::test

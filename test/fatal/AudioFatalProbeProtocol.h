@@ -23,5 +23,9 @@ namespace ao::audio::test
   // executable's CoreAudioBackendFatalProbeTest drives this span through the
   // same ao_audio_fatal_probe child entry.
   std::span<AudioFatalProbeExpectation const> coreAudioFatalProbeExpectations() noexcept;
+
+  // Separate from the thirty native reentry expectations. These children call
+  // CoreAudioRenderAdmission::open() only and do not open a device.
+  std::span<AudioFatalProbeExpectation const> coreAudioRenderAdmissionFatalProbeExpectations() noexcept;
 #endif
 } // namespace ao::audio::test

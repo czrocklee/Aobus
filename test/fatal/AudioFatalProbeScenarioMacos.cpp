@@ -1,20 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-// Native Core Audio fatal-probe scenarios. Each scenario opens the exact
-// Core Audio output device named by AOBUS_TEST_COREAUDIO_DEVICE_UID when one
-// is configured, or the first existing real Core Audio output when the
-// boundary is unset, through a real backend and reenters open(), close(), or
-// a run control from one of the backend's own RenderTarget callback stacks;
-// the production CallbackStackScope diagnostic must abort the child process. A
-// missing diagnostic may only surface as an orderly nonfatal failure exit or
-// through the intrinsic ProbeProcess timeout; these scenarios never sleep,
-// never fabricate callback-stack membership, and never invoke private or
-// manually constructed backend hooks.
+// Native Core Audio fatal-probe scenarios. The thirty RenderTarget reentry
+// scenarios open the exact Core Audio output device named by
+// AOBUS_TEST_COREAUDIO_DEVICE_UID when one is configured, or the first
+// existing real Core Audio output when the boundary is unset, through a real
+// backend and reenter open(), close(), or a run control from one of the
+// backend's own RenderTarget callback stacks. Two admission precondition
+// children call production CoreAudioRenderAdmission::open() only and do not
+// open a device or look up a native component. The production diagnostic must
+// abort the child process. A missing diagnostic may only surface as an
+// orderly nonfatal failure exit or through the intrinsic ProbeProcess
+// timeout; these scenarios never sleep, never fabricate callback-stack
+// membership, and never invoke private or manually constructed backend hooks.
 
 #include "lib/audio/backend/CoreAudioBackend.h"
 #include "lib/audio/backend/detail/BackendGraphRegistry.h"
 #include "lib/audio/backend/detail/CoreAudioDeviceDiscovery.h"
+#include "lib/audio/backend/detail/CoreAudioRenderAdmission.h"
 #include "test/fatal/AudioFatalProbeScenario.h"
 #include "test/unit/audio/backend/CoreAudioTestSupport.h"
 #include <ao/Error.h>
@@ -392,10 +395,37 @@ namespace ao::audio::test
     {
       std::println(stderr, "coreaudio fatal probe '{}': {}", scenario, reason);
     }
+
+    std::int32_t runRenderAdmissionFatalProbe(std::string_view const scenario)
+    {
+      // Production open() preconditions only. No device, no component lookup,
+      // and no withheld callback scope: an open fence is the active interval,
+      // and the second open() aborts before any token write.
+      if (auto admission = backend::detail::CoreAudioRenderAdmission{};
+          scenario == "coreaudio-admission-zero-generation")
+      {
+        admission.open(std::uint64_t{0});
+      }
+      else if (scenario == "coreaudio-admission-active-interval")
+      {
+        admission.open(std::uint64_t{7});
+        admission.open(std::uint64_t{8});
+      }
+
+      reportProbeFailure(scenario, "admission open returned without the expected abort");
+      return 3;
+    }
   } // namespace
 
   std::int32_t runCoreAudioFatalProbeScenario(std::string_view const scenario)
   {
+    // Admission preconditions abort before device or component lookup. These
+    // children do not open a Core Audio device.
+    if (scenario == "coreaudio-admission-zero-generation" || scenario == "coreaudio-admission-active-interval")
+    {
+      return runRenderAdmissionFatalProbe(scenario);
+    }
+
     auto const* const spec = findProbeScenarioSpec(scenario);
 
     if (spec == nullptr)
