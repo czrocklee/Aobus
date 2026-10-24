@@ -621,8 +621,14 @@ Core Audio stops calling `renderPcm` as soon as the AUHAL callback observes
 drain, fills the remainder and later callbacks with silence, and counts a
 conservative presentation tail from the device I/O buffer, safety offset,
 device and stream latency, plus AudioUnit latency. A non-realtime control worker
-closes callback admission, fences the last callback, stops AUHAL, and emits the
-single ordered drain completion after that silent tail.
+closes callback admission, fences the last callback, and stops AUHAL before
+emitting the single ordered drain completion after that silent tail.
+A native stop failure withholds drain completion and is reported after releasing native and run-control locks.
+Core Audio records a successful native start until a native stop succeeds or the unit is detached; a failed stop does not fabricate a stopped unit or independently prove that the unit is still running.
+While that stop remains unconfirmed, project render admission stays closed, start/resume cannot reopen it, and flush cannot reset the unit.
+Each later explicit stop request, including flush's stop phase, may make one native stop attempt; error reporting does not retry automatically.
+A successful later stop permits activation again, but does not retract an error already delivered to Engine.
+Unit detachment ends the run-status record for that unit; native cleanup and target revocation remain owned by close.
 The target remains open, permitting stop/flush/start seek flows, while non-render route, property, and error callbacks remain protected by generation checks and the `close()` lifetime boundary.
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
@@ -659,6 +665,8 @@ Core Audio prepares publications and clears under its owner publication lock, th
 Run controls, drain and fault transitions, and non-render target notifications share callback serialization.
 Core Audio render admission binds each admitted cycle to an immutable run generation before its geometry checks, rendering, or drain work.
 The admission generation is published before opening the fence and replaced only while admission is closed and all admitted cycles have settled; capturing it requires no realtime lock or allocation.
+The shared callback fence increments its in-flight count only when an open-state compare/exchange admits the callback; rejection from a closed fence never changes the count.
+Thus continuing rejected native callbacks cannot manufacture an in-flight borrow between quiescence and reopening, including after an unsuccessful native stop.
 All render-origin faults and drain signals carry that captured generation rather than sampling the current control generation when they publish.
 A callback admitted between stop's generation advance and fence closure therefore still belongs to the retiring render interval and cannot rebrand its fault as the stopped generation's current error.
 Pause does not advance the generation, so resume preserves the same run identity and genuine same-run faults remain eligible.

@@ -4,12 +4,16 @@
 #include "lib/audio/backend/detail/CallbackFence.h"
 
 #include <ao/utility/ScopedRegistration.h>
+#include <ao/utility/ThreadName.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <semaphore>
+#include <stop_token>
 #include <thread>
 
 namespace ao::audio::backend::detail::test
@@ -110,5 +114,161 @@ namespace ao::audio::backend::detail::test
     fence.leave();
     fence.wait();
     CHECK_FALSE(fence.tryEnter());
+  }
+
+  TEST_CASE("CallbackFence - closed rejection leaves the interval reusable for publication",
+            "[audio][unit][callback-fence]")
+  {
+    auto fence = CallbackFence{};
+    std::uint32_t payload = 0U;
+
+    // A native callback equivalent can arrive while admission is still closed.
+    CHECK_FALSE(fence.isOpen());
+    CHECK_FALSE(fence.tryEnter());
+    CHECK_FALSE(fence.tryEnter());
+    CHECK_FALSE(fence.isOpen());
+
+    // Those rejections do not borrow a slot, so the quiescent interval can publish and reopen.
+    payload = 1U;
+    fence.open();
+    REQUIRE(fence.isOpen());
+    REQUIRE(fence.tryEnter());
+    CHECK(payload == 1U);
+    fence.leave();
+
+    fence.closeAndWait();
+    CHECK_FALSE(fence.isOpen());
+    CHECK_FALSE(fence.tryEnter());
+
+    payload = 2U;
+    fence.open();
+    REQUIRE(fence.tryEnter());
+    CHECK(payload == 2U);
+    fence.leave();
+    fence.closeAndWait();
+    CHECK_FALSE(fence.tryEnter());
+  }
+
+  TEST_CASE("CallbackFence - concurrent reopen races continuous closed native attempts",
+            "[audio][unit][callback-fence][concurrency][stress]")
+  {
+    constexpr std::uint32_t kNativeAttemptThreads = 4U;
+    constexpr std::uint32_t kReopenCount = 10000U;
+
+    // A closed tryEnter returns only after that attempt finishes, so the public API cannot park
+    // the historical fetch_add/undo window inside the call. This case exercises the real reopen
+    // race and does not deterministically fail that older window. tryEnter's CAS increments only
+    // while the fence is open, and that is what closes the window.
+    auto fence = CallbackFence{};
+    std::uint32_t payload = 0U;
+    auto admittedCount = std::atomic<std::uint64_t>{0};
+    auto rejectedCount = std::atomic<std::uint64_t>{0};
+    auto invalidPayloadCount = std::atomic<std::uint64_t>{0};
+    auto invalidPayloadValue = std::atomic<std::uint32_t>{0};
+
+    // Declared after the shared state so unwind joins workers before that state is destroyed.
+    // Stop then join settles admitted slots: a worker never waits while it still holds a borrow.
+    auto workers = std::array<std::jthread, kNativeAttemptThreads>{};
+    auto stopWorkers = utility::ScopedRegistration{[&workers]
+                                                   {
+                                                     for (auto& worker : workers)
+                                                     {
+                                                       if (worker.joinable())
+                                                       {
+                                                         worker.request_stop();
+                                                       }
+                                                     }
+
+                                                     for (auto& worker : workers)
+                                                     {
+                                                       if (worker.joinable())
+                                                       {
+                                                         worker.join();
+                                                       }
+                                                     }
+                                                   }};
+
+    for (auto& worker : workers)
+    {
+      worker = std::jthread{[&](std::stop_token stopToken)
+                            {
+                              setCurrentThreadName("ao-fence-native");
+
+                              while (!stopToken.stop_requested())
+                              {
+                                if (fence.tryEnter())
+                                {
+                                  std::uint32_t const observed = payload;
+                                  fence.leave();
+
+                                  if (observed == 0U || observed > kReopenCount)
+                                  {
+                                    invalidPayloadCount.fetch_add(1, std::memory_order_relaxed);
+                                    invalidPayloadValue.store(observed, std::memory_order_relaxed);
+                                  }
+
+                                  admittedCount.fetch_add(1, std::memory_order_release);
+                                }
+                                else
+                                {
+                                  rejectedCount.fetch_add(1, std::memory_order_release);
+                                }
+                              }
+                            }};
+    }
+
+    // Counter change is the proof. The deadline only stops a hang and is not race evidence.
+    auto const waitForCountChange = [](std::atomic<std::uint64_t> const& count, std::uint64_t const baseline)
+    {
+      auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+      while (count.load(std::memory_order_acquire) == baseline && std::chrono::steady_clock::now() < deadline)
+      {
+        std::this_thread::yield();
+      }
+    };
+
+    bool observedClosedActivity = true;
+    std::uint32_t completedReopens = 0U;
+
+    // Close, wait, and open stay on this thread and stay serialized.
+    for (std::uint32_t round = 0U; round < kReopenCount; ++round)
+    {
+      fence.closeAndWait();
+      std::uint64_t const rejectionBaseline = rejectedCount.load(std::memory_order_acquire);
+      waitForCountChange(rejectedCount, rejectionBaseline);
+
+      if (rejectedCount.load(std::memory_order_acquire) == rejectionBaseline)
+      {
+        observedClosedActivity = false;
+        break;
+      }
+
+      payload = round + 1U;
+      fence.open();
+      ++completedReopens;
+    }
+
+    bool observedAdmission = admittedCount.load(std::memory_order_acquire) > 0U;
+
+    if (!observedAdmission && observedClosedActivity && completedReopens == kReopenCount)
+    {
+      // The last open is still current, so one admitted read is an observation rather than a sleep.
+      waitForCountChange(admittedCount, 0U);
+      observedAdmission = admittedCount.load(std::memory_order_acquire) > 0U;
+    }
+
+    fence.closeAndWait();
+    payload = 0U;
+    stopWorkers.reset();
+
+    REQUIRE(observedClosedActivity);
+    CHECK(completedReopens == kReopenCount);
+    CHECK(observedAdmission);
+    CHECK(admittedCount.load(std::memory_order_acquire) > 0U);
+    CHECK(rejectedCount.load(std::memory_order_acquire) > 0U);
+    CHECK(invalidPayloadCount.load(std::memory_order_acquire) == 0U);
+    CHECK(invalidPayloadValue.load(std::memory_order_acquire) == 0U);
+    CHECK_FALSE(fence.isOpen());
   }
 } // namespace ao::audio::backend::detail::test

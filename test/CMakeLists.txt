@@ -912,6 +912,7 @@ aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/detail/CoreAudioRenderAdmissionTest.cpp
   unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
   unit/audio/backend/detail/CoreAudioRunControlTest.cpp
+  unit/audio/backend/detail/CoreAudioUnitRunTest.cpp
   unit/audio/backend/detail/CoreFoundationStringTest.cpp
 )
 if(APPLE)
