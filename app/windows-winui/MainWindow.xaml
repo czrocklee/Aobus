@@ -8,12 +8,12 @@
     mc:Ignorable="d">
     <Grid
         x:Name="RootGrid"
-        PointerPressed="OnRootPointerPressed"
-        SizeChanged="OnRootSizeChanged">
+        PointerPressed="handleRootPointerPressed"
+        SizeChanged="handleRootSizeChanged">
         <Grid.KeyboardAccelerators>
-            <KeyboardAccelerator Key="Left" Modifiers="Menu" Invoked="OnNavigateBackInvoked" />
-            <KeyboardAccelerator Key="Right" Modifiers="Menu" Invoked="OnNavigateForwardInvoked" />
-            <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnTrackPropertiesInvoked" />
+            <KeyboardAccelerator Key="Left" Modifiers="Menu" Invoked="handleNavigateBackInvoked" />
+            <KeyboardAccelerator Key="Right" Modifiers="Menu" Invoked="handleNavigateForwardInvoked" />
+            <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="handleTrackPropertiesInvoked" />
         </Grid.KeyboardAccelerators>
         <Grid.Resources>
             <Style x:Key="ChromeLessButtonStyle" TargetType="Button">
@@ -225,7 +225,7 @@
                     <Button
                         Width="{x:Bind Width}"
                         Tag="{x:Bind FieldId}"
-                        Click="OnColumnHeaderClicked"
+                        Click="handleColumnHeaderClicked"
                         HorizontalContentAlignment="Stretch"
                         Style="{StaticResource ColumnHeaderButtonStyle}">
                         <Button.ContextFlyout>
@@ -233,11 +233,11 @@
                                 <MenuFlyoutItem
                                     x:Uid="winui_track_move_column_left_button"
                                     Tag="{x:Bind FieldId}"
-                                    Click="OnColumnMoveLeftClicked" />
+                                    Click="handleColumnMoveLeftClicked" />
                                 <MenuFlyoutItem
                                     x:Uid="winui_track_move_column_right_button"
                                     Tag="{x:Bind FieldId}"
-                                    Click="OnColumnMoveRightClicked" />
+                                    Click="handleColumnMoveRightClicked" />
                             </MenuFlyout>
                         </Button.ContextFlyout>
                         <TextBlock
@@ -252,7 +252,7 @@
                         HorizontalAlignment="Right"
                         Background="Transparent"
                         Tag="{x:Bind FieldId}"
-                        DragCompleted="OnColumnResizeCompleted" />
+                        DragCompleted="handleColumnResizeCompleted" />
                 </Grid>
             </DataTemplate>
             <DataTemplate x:Key="TrackRowTemplate" x:DataType="local:TrackRowItem">
@@ -275,9 +275,9 @@
                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                             BorderThickness="1">
                             <Grid
-                                DataContextChanged="OnGroupCoverDataContextChanged"
-                                Loaded="OnGroupCoverLoaded"
-                                Unloaded="OnGroupCoverUnloaded">
+                                DataContextChanged="handleGroupCoverDataContextChanged"
+                                Loaded="handleGroupCoverLoaded"
+                                Unloaded="handleGroupCoverUnloaded">
                                 <Grid />
                                 <Image Stretch="UniformToFill" Visibility="Collapsed" />
                             </Grid>

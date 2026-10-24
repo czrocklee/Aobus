@@ -11,6 +11,7 @@
 #include "track/TrackPropertiesCoordinator.h"
 #include <ao/Contract.h>
 #include <ao/CoreIds.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
@@ -24,13 +25,16 @@
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <bitset>
 #include <cmath>
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace winrt::Aobus::implementation
 {
@@ -84,8 +88,9 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnTrackPropertiesInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
-                                            Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
+  void MainWindow::handleTrackPropertiesInvoked(
+    Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
+    Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
   {
     args.Handled(_shellBuilderPtr && _shellBuilderPtr->tryInvokeAction("track.presentProperties"));
   }
@@ -152,14 +157,14 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
-                                      Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::handleGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
+                                          Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     refreshGroupCoverPresenter(sender);
   }
 
-  void MainWindow::OnGroupCoverDataContextChanged(Microsoft::UI::Xaml::FrameworkElement const& sender,
-                                                  Microsoft::UI::Xaml::DataContextChangedEventArgs const& /*args*/)
+  void MainWindow::handleGroupCoverDataContextChanged(Microsoft::UI::Xaml::FrameworkElement const& sender,
+                                                      Microsoft::UI::Xaml::DataContextChangedEventArgs const& /*args*/)
   {
     refreshGroupCoverPresenter(sender);
   }
@@ -243,8 +248,8 @@ namespace winrt::Aobus::implementation
     presenterIt->second.presenterPtr->select(ao::ResourceId{row.CoverArtId()}, std::move(identity), true);
   }
 
-  void MainWindow::OnGroupCoverUnloaded(Windows::Foundation::IInspectable const& sender,
-                                        Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::handleGroupCoverUnloaded(Windows::Foundation::IInspectable const& sender,
+                                            Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     if (auto const tile = sender.try_as<Microsoft::UI::Xaml::Controls::Grid>(); tile)
     {
@@ -270,16 +275,16 @@ namespace winrt::Aobus::implementation
 
     auto const width = RootGrid().ActualWidth();
     _optInspectorRequest = !_shellBuilderPtr->shellState().inspectorRevealed;
-    applyShellState(width);
+    tryApplyShellState(width);
   }
 
-  void MainWindow::OnColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
-                                         Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::handleColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
+                                             Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     executeSort(requiredColumnFieldId(sender));
   }
 
-  void MainWindow::OnColumnResizeCompleted(
+  void MainWindow::handleColumnResizeCompleted(
     Windows::Foundation::IInspectable const& sender,
     Microsoft::UI::Xaml::Controls::Primitives::DragCompletedEventArgs const& args)
   {
@@ -298,14 +303,14 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnColumnMoveLeftClicked(Windows::Foundation::IInspectable const& sender,
-                                           Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::handleColumnMoveLeftClicked(Windows::Foundation::IInspectable const& sender,
+                                               Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     moveColumn(sender, -1);
   }
 
-  void MainWindow::OnColumnMoveRightClicked(Windows::Foundation::IInspectable const& sender,
-                                            Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::handleColumnMoveRightClicked(Windows::Foundation::IInspectable const& sender,
+                                                Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     moveColumn(sender, 1);
   }

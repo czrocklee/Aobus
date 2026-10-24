@@ -36,6 +36,8 @@ namespace ao::winui
     ~TrackCreditsEditorControl();
     TrackCreditsEditorControl(TrackCreditsEditorControl const&) = delete;
     TrackCreditsEditorControl& operator=(TrackCreditsEditorControl const&) = delete;
+    TrackCreditsEditorControl(TrackCreditsEditorControl&&) = delete;
+    TrackCreditsEditorControl& operator=(TrackCreditsEditorControl&&) = delete;
     winrt::Microsoft::UI::Xaml::Controls::StackPanel element() const { return _root; }
     void refresh();
     void setEnabled(bool enabled);

@@ -7,6 +7,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/library/Credits.h>

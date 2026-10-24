@@ -26,7 +26,6 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/color.hpp>
-#include <ftxui/screen/pixel.hpp>
 #include <ftxui/screen/screen.hpp>
 
 #include <cstdint>

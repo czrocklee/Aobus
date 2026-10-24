@@ -5,6 +5,7 @@
 
 #include <winrt/Windows.Storage.Streams.h>
 
+#include <cstddef>
 #include <span>
 
 namespace ao::winui

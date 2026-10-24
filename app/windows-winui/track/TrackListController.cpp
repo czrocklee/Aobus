@@ -68,7 +68,7 @@ namespace ao::winui
                             uimodel::TrackDisplayIndex displayIndex,
                             std::vector<TrackColumnCellSpec> columns,
                             std::weak_ptr<void> lifetimePtr)
-        : _libraryPtr{&inputLibrary}
+        : _library{&inputLibrary}
         , _projection{&inputProjection}
         , _textCatalog{std::move(textCatalog)}
         , _displayIndex{std::move(displayIndex)}
@@ -76,17 +76,17 @@ namespace ao::winui
         , _lifetimePtr{std::move(lifetimePtr)}
       {
         auto const* const projection = _projection;
-        auto const* const libraryPtr = _libraryPtr;
+        auto const* const library = _library;
         auto const bindingPtr = _lifetimePtr;
         _rows.reset(projection->size(),
-                    [projection, libraryPtr, bindingPtr](std::size_t const index) -> std::optional<rt::TrackRow>
+                    [projection, library, bindingPtr](std::size_t const index) -> std::optional<rt::TrackRow>
                     {
                       if (bindingPtr.expired() || index >= projection->size())
                       {
                         return std::nullopt;
                       }
 
-                      return libraryPtr->snapshot().trackRow(projection->trackIdAt(index));
+                      return library->snapshot().trackRow(projection->trackIdAt(index));
                     });
       }
 
@@ -138,7 +138,7 @@ namespace ao::winui
       }
 
     private:
-      rt::Library const* _libraryPtr = nullptr;
+      rt::Library const* _library = nullptr;
       rt::TrackListProjection const* _projection = nullptr;
       i18n::MessageCatalog _textCatalog;
       uimodel::TrackDisplayIndex _displayIndex;
@@ -249,9 +249,7 @@ namespace ao::winui
 
   void TrackListController::reload()
   {
-    auto const restoredView = _workspace.snapshot().activeViewId;
-
-    if (restoredView != rt::kInvalidViewId)
+    if (auto const restoredView = _workspace.snapshot().activeViewId; restoredView != rt::kInvalidViewId)
     {
       adoptWorkspaceView(restoredView);
       return;

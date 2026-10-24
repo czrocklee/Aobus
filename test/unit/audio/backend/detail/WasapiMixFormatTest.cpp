@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "lib/audio/backend/detail/WasapiFormat.h"
+#include "lib/audio/backend/detail/WasapiFormatObservation.h"
 #include "test/unit/audio/backend/WasapiFormatTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/PcmFormat.h>

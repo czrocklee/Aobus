@@ -4,13 +4,11 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/rt/NotificationIds.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
-#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>

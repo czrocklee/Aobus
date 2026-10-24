@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>

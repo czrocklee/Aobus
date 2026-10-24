@@ -310,9 +310,12 @@ isolated Windows SSH logons.
 ## Native tests and sanitizers
 
 The default test group is core and TUI. Windows `all` and `ao.bat check` add
-CLI, integration, and tooling. The `--lint` suite is Linux and macOS only;
-Windows runs native lint verification via `ao.bat tidy` and `ao.bat format --check`.
-The managed environment owns Ruff and mypy; ambient tools are not used.
+CLI, integration, tooling, and lint. `ao.bat test --lint` prepares the separate
+`windows-tidy` host and runs the custom-check fixtures, replacement assertions,
+and native syntax checks with the governed LLVM SDK and Visual Studio includes.
+Objective-C++ fixtures are explicitly deferred, not counted as Windows coverage.
+Use `ao.bat tidy` for native source findings and `ao.bat format --check` for
+formatting. The managed environment owns Ruff and mypy; ambient tools are not used.
 
 `ao.bat check --asan` runs the native suite group with MSVC AddressSanitizer.
 Third-party vcpkg libraries are not instrumented, so cross-boundary STL
@@ -343,6 +346,18 @@ downloads it, verifies SHA-256, and extracts it below
 `%LOCALAPPDATA%\Aobus\cache\llvm` by default. Later trees reuse the verified
 cache. Concurrent provisioning is locked, and incomplete or stale SDKs are not
 accepted.
+
+Prepare the same governed SDK explicitly before native tooling controls with
+`ao.bat setup llvm-sdk`. This initializes the required Visual Studio environment
+and provisions the SDK in its dedicated lint-host context, without formatting
+an unrelated source file or building the custom checker. For SDK setup and
+product-test groups, `BUILD_DIR` names a primary product tree and the checker
+host is its `<primary>-tidy` sibling. In contrast, direct `tidy` and `format`
+commands treat `BUILD_DIR` as the exact tool tree. To reuse the host prepared
+by setup, pass that sibling explicitly, for example
+`ao.bat tidy -p C:\build\primary-tidy <source>`. Prefer `AOBUS_BUILD_ROOT` when
+you only want to relocate the base while retaining separate product and tool
+trees.
 
 `AOBUS_LLVM_SDK_CACHE_ROOT` relocates the managed cache. For an existing CMake
 tree, reconfigure with the corresponding CMake option or create a new tree.

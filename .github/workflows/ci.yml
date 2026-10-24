@@ -674,6 +674,14 @@ jobs:
           path: C:\aobus-state\cache\vcpkg-binary
           key: ${{ steps.vcpkg-cache-ready.outputs.key }}
 
+      # Tooling tests need real LLVM diagnostic delivery. Seal the dependency
+      # cache above before cold SDK provisioning can fail. The explicit setup
+      # route configures the SDK through the governed provider without a
+      # checker build.
+      - name: Provision the pinned Windows LLVM SDK
+        shell: pwsh
+        run: .\ao.bat setup llvm-sdk
+
       - name: Reset build compiler cache statistics
         if: ${{ steps.compiler-cache.outcome == 'success' }}
         continue-on-error: true

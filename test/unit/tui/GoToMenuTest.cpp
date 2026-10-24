@@ -25,7 +25,6 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/screen/box.hpp>
-#include <ftxui/screen/pixel.hpp>
 #include <ftxui/screen/screen.hpp>
 
 #include <algorithm>

@@ -6,11 +6,15 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
-#include <ao/audio/Device.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <memory>
 #include <string_view>
+
+namespace ao::audio
+{
+  struct Device;
+}
 
 namespace ao::audio::backend::detail
 {

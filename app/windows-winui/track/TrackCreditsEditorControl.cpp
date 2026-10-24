@@ -3,8 +3,10 @@
 
 #include "track/TrackCreditsEditorControl.h"
 
+#include <ao/i18n/MessageCatalog.h>
 #include <ao/library/Credits.h>
 #include <ao/rt/completion/CompletionService.h>
+#include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/winui/track/TrackPropertiesAdapter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Automation.Peers.h>
@@ -18,7 +20,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <initializer_list>
+#include <functional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -78,7 +80,7 @@ namespace ao::winui
         input.Items().Append(winrt::box_value(winrt::to_hstring(uimodel::trackCreditKindLabel(catalog, kind))));
       }
     }
-  }
+  } // namespace
 
   TrackCreditsEditorControl::TrackCreditsEditorControl(uimodel::TrackCreditsEditorModel& model,
                                                        rt::CompletionService& completion,
@@ -132,7 +134,7 @@ namespace ao::winui
                         {
                           auto const selected = _addKind.SelectedIndex();
 
-                          if (selected < 0 || selected >= static_cast<std::int32_t>(kKinds.size()))
+                          if (selected < 0 || std::cmp_greater_equal(selected, kKinds.size()))
                           {
                             return;
                           }
@@ -347,19 +349,21 @@ namespace ao::winui
     role.UpdateTextOnSelect(true);
     _roles.push_back(role);
 
-    for (auto const& input : {name, role})
+    auto const bindRowLoaded = [this, index](AutoSuggestBox const& input)
     {
       _rowLoadedRevokers.push_back(input.Loaded(winrt::auto_revoke,
                                                 [this, index](IInspectable const& sender, RoutedEventArgs const&)
                                                 {
                                                   if (!_building && index < _names.size() &&
-                                                      (sender == _names[index] || sender == _roles[index]) &&
-                                                      _model.focusedRow() == index)
+                                                      _model.focusedRow() == index &&
+                                                      (sender == _names[index] || sender == _roles[index]))
                                                   {
                                                     focusDraftRow();
                                                   }
                                                 }));
-    }
+    };
+    bindRowLoaded(name);
+    bindRowLoaded(role);
 
     panel.Children().Append(role);
     _textRevokers.push_back(
@@ -372,11 +376,9 @@ namespace ao::winui
                            return;
                          }
 
-                         auto text = winrt::to_string(sender.Text());
-
                          // Deferred hydration must not claim a row merely by replaying its current value.
                          // Genuine property and suggestion edits still update the draft, not only UserInput.
-                         if (text != _model.entries()[index].name)
+                         if (auto text = winrt::to_string(sender.Text()); text != _model.entries()[index].name)
                          {
                            _model.updateName(index, std::move(text));
                            updateValidation();
@@ -398,9 +400,7 @@ namespace ao::winui
                            return;
                          }
 
-                         auto text = winrt::to_string(sender.Text());
-
-                         if (text != _model.entries()[index].role)
+                         if (auto text = winrt::to_string(sender.Text()); text != _model.entries()[index].role)
                          {
                            _model.updateRole(index, std::move(text));
                            updateValidation();
@@ -426,25 +426,26 @@ namespace ao::winui
         winrt::auto_revoke,
         [this, index](IInspectable const& sender, SelectionChangedEventArgs const&)
         {
-          if (!_building && _enabled && _model.canEdit() && index < _rowControls.size() &&
-              index < _model.entries().size() && sender == _rowControls[index].kind)
+          if (_building || !_enabled || !_model.canEdit() || index >= _rowControls.size() ||
+              index >= _model.entries().size() || sender != _rowControls[index].kind)
           {
-            auto const selected = sender.as<ComboBox>().SelectedIndex();
+            return;
+          }
 
-            if (selected >= 0 && selected < static_cast<std::int32_t>(kKinds.size()) &&
-                kKinds[static_cast<std::size_t>(selected)] != _model.entries()[index].kind)
+          if (auto const selected = sender.as<ComboBox>().SelectedIndex();
+              selected >= 0 && std::cmp_less(selected, kKinds.size()) &&
+              kKinds[static_cast<std::size_t>(selected)] != _model.entries()[index].kind)
+          {
+            // Rebuilding the rows revokes this delegate, as a structural button
+            // action does. Run the action from a retained callable instead of
+            // reading this closure's captures after refresh().
+            auto retainedAction = [owner = this, index, selectedKind = kKinds[static_cast<std::size_t>(selected)]]
             {
-              // Rebuilding the rows revokes this delegate, as a structural button
-              // action does. Run the action from a retained callable instead of
-              // reading this closure's captures after refresh().
-              auto retainedAction = [owner = this, index, selectedKind = kKinds[static_cast<std::size_t>(selected)]]
-              {
-                owner->_model.changeKind(index, selectedKind);
-                owner->refresh();
-                owner->focusDraftRow();
-              };
-              retainedAction();
-            }
+              owner->_model.changeKind(index, selectedKind);
+              owner->refresh();
+              owner->focusDraftRow();
+            };
+            retainedAction();
           }
         }));
     }
@@ -503,9 +504,7 @@ namespace ao::winui
       return;
     }
 
-    auto const optIndex = _model.focusedRow();
-
-    if (optIndex && *optIndex < _names.size())
+    if (auto const optIndex = _model.focusedRow(); optIndex && *optIndex < _names.size())
     {
       for (auto const& error : _model.validationErrors())
       {

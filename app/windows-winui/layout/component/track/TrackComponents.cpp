@@ -14,8 +14,8 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/ViewService.h>
-#include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
 #include <ao/uimodel/library/list/ListActions.h>
@@ -28,12 +28,14 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <algorithm>
+#include <bitset>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::winui::layout
@@ -114,7 +116,7 @@ namespace ao::winui::layout
 
         // Construction publishes the current filter state synchronously, so
         // all native chrome must be in place first.
-        _control.emplace(
+        _optControl.emplace(
           TrackQuickFilterControlConfig{
             .input = _input,
             .onError = std::move(reportStatus),
@@ -144,7 +146,7 @@ namespace ao::winui::layout
       std::string _resolvedExpression;
       Button::Click_revoker _createClickRevoker{};
       /// Declared last so it stops before the box it drives is released.
-      std::optional<TrackQuickFilterControl> _control;
+      std::optional<TrackQuickFilterControl> _optControl;
     };
 
     /**

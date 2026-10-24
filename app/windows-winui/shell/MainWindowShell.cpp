@@ -35,6 +35,7 @@
 #include <exception>
 #include <filesystem>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -102,13 +103,13 @@ namespace winrt::Aobus::implementation
     }
   } // namespace
 
-  void MainWindow::OnRootSizeChanged(Windows::Foundation::IInspectable const& /*sender*/,
-                                     Microsoft::UI::Xaml::SizeChangedEventArgs const& args)
+  void MainWindow::handleRootSizeChanged(Windows::Foundation::IInspectable const& /*sender*/,
+                                         Microsoft::UI::Xaml::SizeChangedEventArgs const& args)
   {
-    applyShellState(args.NewSize().Width);
+    tryApplyShellState(args.NewSize().Width);
   }
 
-  bool MainWindow::applyShellState(double const width, std::optional<ao::winui::ShellMode> const optCandidateMode)
+  bool MainWindow::tryApplyShellState(double const width, std::optional<ao::winui::ShellMode> const optCandidateMode)
   {
     // The window is sized before it has a session to build a shell from, so the
     // first resolved policy is the one `initialize` asks for.
@@ -290,7 +291,7 @@ namespace winrt::Aobus::implementation
     auto const candidateMode =
       settings.shellMode == ao::winui::ShellMode::Modern ? ao::winui::ShellMode::Classic : ao::winui::ShellMode::Modern;
 
-    if (applyShellState(RootGrid().ActualWidth(), candidateMode))
+    if (tryApplyShellState(RootGrid().ActualWidth(), candidateMode))
     {
       settings.shellMode = candidateMode;
       saveWindowState();
@@ -346,7 +347,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::applyTheme(ao::winui::Theme const& theme)
   {
-    _themeOverride = theme;
+    _optThemeOverride = theme;
     auto const resources = RootGrid().Resources();
     clearThemeResources(resources);
     auto const primary = colorBrush(theme.shared.textPrimary);
@@ -382,7 +383,7 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::applySystemTheme()
   {
-    _themeOverride.reset();
+    _optThemeOverride.reset();
     auto const resources = RootGrid().Resources();
     clearThemeResources(resources);
     RootGrid().Background(nullptr);

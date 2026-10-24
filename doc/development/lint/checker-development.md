@@ -33,6 +33,25 @@ Common AST traps include:
 - C++20 rewritten comparisons contain synthesized operators. Use `aobus::isWithinRewrittenOperator` or match the source comparison to avoid duplicate or inverted diagnostics.
 - Initializer-list constructor detection uses the first parameter's type; parent traversal requires `clang/AST/ParentMapContext.h`.
 
+For namespace-qualification fixes, lookup safety concerns the first component
+left after removal, not just the final referenced member. Preserve source names
+from aliases and using-declarations, and inspect template heads on concepts and
+requires-clauses as well as outer template parameter lists on source definitions
+when instantiated nodes omit them. Removing the complete qualifier from a
+function call can enable argument-dependent lookup even when ordinary lookup
+finds the same declaration. The bounded proof accepts only fundamental-typed
+source arguments (before implicit conversions), ignoring default arguments.
+Newly unqualified direct calls with explicit template arguments, dependent or
+instantiated source contexts, and unfamiliar function-use forms are left
+qualified. A surviving qualifier, parenthesized callee, or explicit address-taking
+does not activate ADL through this removal.
+
+The checker also abstains when inherited, using-directive, inline-namespace, or
+dependent lookup cannot be proved from its AST context. Fixtures record those
+conservative boundaries alongside unshadowed positives and type/callable
+identity assertions; successful compilation alone does not establish that a
+FixIt preserves binding.
+
 ### Fixture contract
 
 Place fixtures under `test/integration/lint/fixture/<check-alias>/`; the directory selects the check.
@@ -200,6 +219,24 @@ On Windows it removes the translation unit's `/TP` after replacing the input bec
 It also removes the CMake-generated forced PCH to avoid redeclaring the headers that PCH aggregates, while retaining other forced includes.
 For WinUI it suppresses only the nonportable-include-path compiler diagnostic because generated C++/WinRT headers preserve schema casing while Windows resolves paths case-insensitively.
 Intentional header-only WinUI support has audited implementation companions.
+
+Selected headers, include fragments, and WinUI-context files also receive an
+exact full-path line filter. Include fragments run through their consumer, so
+this filter must exclude unrelated diagnostics in the consumer main file and
+other headers. LLVM filters diagnostic groups: a template warning in another
+file can remain visible when an instantiation note is in the selected file.
+Windows entries retain both native and forward-slash spellings
+for each validated source root; header regex separator handling alone does not
+make LLVM's line-filter names interchangeable. An included fragment can acquire
+a mixed name from a native include directory and a forward-slash include token.
+Windows fragment replay therefore uses a file-only VFS overlay whose aliases
+must identify the same selected physical file. Its canonical external name
+stabilizes LLVM's file identity without changing the selected bytes, consumer
+command or full-path filtering boundary. Caller VFS and response/config-file
+contexts fail closed when their virtual contents cannot be safely composed.
+Keep selected-file positive controls alongside excluded-file controls: a
+successful process with no warnings cannot distinguish clean input from a
+mismatched filter.
 
 A platform-incompatible header without a safe pair, real Ninja consumer, or audited WinUI companion is deferred in a batch scan.
 A compatible header without that evidence fails closed and asks for a normal build or check to refresh dependency data.

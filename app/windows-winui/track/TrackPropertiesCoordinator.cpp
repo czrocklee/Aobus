@@ -5,6 +5,7 @@
 
 #include "pch.h"
 #include "track/TrackCreditsEditorControl.h"
+#include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -18,6 +19,7 @@
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
+#include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 #include <ao/uimodel/library/track/TrackAuthoringSessions.h>
 #include <ao/utility/String.h>
@@ -39,7 +41,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 #include <vector>
 
 namespace ao::winui
@@ -176,7 +177,7 @@ namespace ao::winui
 
     auto baseline = uimodel::TrackPropertiesFormModel{_textCatalog};
     auto tags = std::vector<std::string>{};
-    auto sessionRes = [&]() -> Result<uimodel::TrackAuthoringSession>
+    auto sessionRes = [&] -> Result<uimodel::TrackAuthoringSession>
     {
       auto snapshot = _library.snapshot();
       auto boundRes = uimodel::TrackAuthoringSession::begin(_library, _trackIds, snapshot);
@@ -304,6 +305,7 @@ namespace ao::winui
   {
     content.Children().Append(
       makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::TrackMetadataHeading)));
+
     for (auto const& row : _formSpec.metadataRows)
     {
       appendFieldEditor(content, row);
@@ -314,6 +316,7 @@ namespace ao::winui
   {
     content.Children().Append(
       makeSectionHeading(i18n::requiredText(_textCatalog, i18n::MessageId::TrackAudioPropertiesHeading)));
+
     for (auto const& row : _formSpec.propertyRows)
     {
       appendFieldEditor(content, row);
@@ -950,7 +953,7 @@ namespace ao::winui
     {
       for (auto const& child : _creditsPreview.Children())
       {
-        if (auto control = child.try_as<Control>())
+        if (auto control = child.try_as<Control>(); control)
         {
           control.IsEnabled(canEdit && !_formModel.creditsEditor().isEditing());
         }
@@ -1085,8 +1088,10 @@ namespace ao::winui
 
     clearError();
     setInteractionState(InteractionState::Submitting);
+    AO_INVARIANT(_optSession, "A submitting Properties dialog must retain its authoring session");
+    auto& session = *_optSession;
 
-    auto submission = submitChangesAsync(_optSession->submitPropertiesAsync(rt::TrackPropertiesPatch{
+    auto submission = submitChangesAsync(session.submitPropertiesAsync(rt::TrackPropertiesPatch{
       .metadata = std::move(metadataPatch),
       .tagsToAdd = std::move(addTags),
       .tagsToRemove = std::move(removeTags),

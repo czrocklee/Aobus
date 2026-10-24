@@ -5,6 +5,7 @@
 
 #include "lib/audio/backend/detail/WasapiError.h"
 #include "lib/audio/backend/detail/WasapiFormat.h"
+#include "lib/audio/backend/detail/WasapiFormatObservation.h"
 #include "lib/audio/backend/detail/WasapiGraphRegistry.h"
 #include "lib/audio/backend/detail/WasapiRenderBuffer.h"
 #include "test/unit/audio/BackendTestSupport.h"
@@ -15,6 +16,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
@@ -327,7 +329,7 @@ namespace ao::audio::backend::test
     std::ranges::fill(buffer, std::byte{0x5a});
 
     auto const packet = detail::prepareWasapiRenderPacket(
-      buffer, 4, {.bytesWritten = 8, .positionFrameOffset = 1, .positionFrames = 1, .drained = false});
+      buffer, 4, RenderPcmResult{.bytesWritten = 8, .positionFrameOffset = 1, .positionFrames = 1, .drained = false});
 
     CHECK(packet.renderedFrames == 2);
     CHECK(packet.framesToRelease == 4);
@@ -349,7 +351,8 @@ namespace ao::audio::backend::test
 
     SECTION("a final PCM prefix commits a complete silent-padded packet")
     {
-      auto const packet = detail::prepareWasapiRenderPacket(buffer, 4, {.bytesWritten = 4, .drained = true});
+      auto const packet =
+        detail::prepareWasapiRenderPacket(buffer, 4, RenderPcmResult{.bytesWritten = 4, .drained = true});
 
       CHECK(packet.renderedFrames == 1);
       CHECK(packet.framesToRelease == 4);
@@ -361,7 +364,8 @@ namespace ao::audio::backend::test
 
     SECTION("an empty drained packet is released without a commit")
     {
-      auto const packet = detail::prepareWasapiRenderPacket(buffer, 4, {.bytesWritten = 0, .drained = true});
+      auto const packet =
+        detail::prepareWasapiRenderPacket(buffer, 4, RenderPcmResult{.bytesWritten = 0, .drained = true});
 
       CHECK(packet.renderedFrames == 0);
       CHECK(packet.framesToRelease == 0);

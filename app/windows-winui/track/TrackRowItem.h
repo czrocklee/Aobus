@@ -6,13 +6,17 @@
 #include "TrackRowItem.g.h"
 #include <ao/i18n/MessageCatalog.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackRow.h>
 
 #include <winrt/Windows.Foundation.Collections.h>
 
 #include <cstdint>
 #include <span>
 #include <string>
+
+namespace ao::rt
+{
+  struct TrackRow;
+}
 
 namespace ao::winui
 {

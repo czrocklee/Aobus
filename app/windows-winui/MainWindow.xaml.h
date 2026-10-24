@@ -9,7 +9,6 @@
 #include <ao/async/Subscription.h>
 #include <ao/compat/MoveOnlyFunction.h>
 #include <ao/library/Credits.h>
-#include <ao/rt/TrackField.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <bitset>
@@ -19,7 +18,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -42,7 +40,7 @@ namespace ao::winui
   class TrackListController;
   class TrackPropertiesCoordinator;
   class ThemeCoordinator;
-}
+} // namespace ao::winui
 
 namespace ao::winui::layout
 {
@@ -51,6 +49,8 @@ namespace ao::winui::layout
 
 namespace winrt::Aobus::implementation
 {
+  // Generated WinRT/XAML virtuals implement the platform ABI and are validated by the native MSVC build.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct MainWindow : MainWindowT<MainWindow>
   {
     /// What the frame will answer to. Every value here is one some caller asks about.
@@ -65,42 +65,47 @@ namespace winrt::Aobus::implementation
     using RestartLibraryCallback = ao::compat::MoveOnlyFunction<ao::Result<>(std::filesystem::path)>;
 
     MainWindow();
-    ~MainWindow();
+    ~MainWindow() override;
+
+    MainWindow(MainWindow const&) = delete;
+    MainWindow& operator=(MainWindow const&) = delete;
+    MainWindow(MainWindow&&) = delete;
+    MainWindow& operator=(MainWindow&&) = delete;
 
     void initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart);
     ao::Result<> activate();
     ao::Result<> prepareLibraryRestart();
     void retire() noexcept;
 
-    void OnRootSizeChanged(Windows::Foundation::IInspectable const&,
-                           Microsoft::UI::Xaml::SizeChangedEventArgs const& args);
-    void OnRootPointerPressed(Windows::Foundation::IInspectable const&,
-                              Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args);
-    void OnNavigateBackInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
-                               Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
-    void OnNavigateForwardInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
-                                  Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
-    void OnTrackPropertiesInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
-                                  Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
-    void OnColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
-                               Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnColumnResizeCompleted(Windows::Foundation::IInspectable const& sender,
-                                 Microsoft::UI::Xaml::Controls::Primitives::DragCompletedEventArgs const& args);
-    void OnColumnMoveLeftClicked(Windows::Foundation::IInspectable const& sender,
-                                 Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnColumnMoveRightClicked(Windows::Foundation::IInspectable const& sender,
+    void handleRootSizeChanged(Windows::Foundation::IInspectable const&,
+                               Microsoft::UI::Xaml::SizeChangedEventArgs const& args);
+    void handleRootPointerPressed(Windows::Foundation::IInspectable const&,
+                                  Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args);
+    void handleNavigateBackInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                                   Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
+    void handleNavigateForwardInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                                      Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
+    void handleTrackPropertiesInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                                      Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args);
+    void handleColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
+                                   Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void handleColumnResizeCompleted(Windows::Foundation::IInspectable const& sender,
+                                     Microsoft::UI::Xaml::Controls::Primitives::DragCompletedEventArgs const& args);
+    void handleColumnMoveLeftClicked(Windows::Foundation::IInspectable const& sender,
+                                     Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void handleColumnMoveRightClicked(Windows::Foundation::IInspectable const& sender,
+                                      Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void handleGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
+                                Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void handleGroupCoverDataContextChanged(Microsoft::UI::Xaml::FrameworkElement const& sender,
+                                            Microsoft::UI::Xaml::DataContextChangedEventArgs const&);
+    void handleGroupCoverUnloaded(Windows::Foundation::IInspectable const& sender,
                                   Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
-                            Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnGroupCoverDataContextChanged(Microsoft::UI::Xaml::FrameworkElement const& sender,
-                                        Microsoft::UI::Xaml::DataContextChangedEventArgs const&);
-    void OnGroupCoverUnloaded(Windows::Foundation::IInspectable const& sender,
-                              Microsoft::UI::Xaml::RoutedEventArgs const&);
 
   private:
     struct GroupCoverPresenterEntry final
     {
-      winrt::weak_ref<Microsoft::UI::Xaml::Controls::Grid> tile;
+      weak_ref<Microsoft::UI::Xaml::Controls::Grid> tile;
       std::unique_ptr<ao::winui::CoverArtPresenter> presenterPtr;
     };
 
@@ -112,7 +117,7 @@ namespace winrt::Aobus::implementation
     void clearGroupCoverPresenters() noexcept;
     void unbindPlayback() noexcept;
     void bindPlayback();
-    bool applyShellState(double width, std::optional<ao::winui::ShellMode> optCandidateMode = std::nullopt);
+    bool tryApplyShellState(double width, std::optional<ao::winui::ShellMode> optCandidateMode = std::nullopt);
     void restoreWindowPlacement();
     void saveWindowState() noexcept;
     void applyTheme(ao::winui::Theme const& theme);
@@ -154,7 +159,7 @@ namespace winrt::Aobus::implementation
 
     void executeSort(std::string const& columnId);
     void moveColumn(Windows::Foundation::IInspectable const& sender, std::int32_t offset);
-    winrt::fire_and_forget pickLibrary();
+    fire_and_forget pickLibrary();
 
     ao::winui::LibrarySession* _session = nullptr;
     RestartLibraryCallback _requestRestart;
@@ -184,13 +189,14 @@ namespace winrt::Aobus::implementation
     /// Window-lifetime owner of native YAML transfer dialogs, pickers, and tasks.
     std::unique_ptr<ao::winui::LibraryTransferCoordinator> _libraryTransferCoordinatorPtr;
     /// The loaded theme override, or nothing while Windows' own appearance is in force.
-    std::optional<ao::winui::Theme> _themeOverride;
+    std::optional<ao::winui::Theme> _optThemeOverride;
     std::unique_ptr<ao::winui::SmtcBridge> _smtcPtr;
     /// The two transport commands a preset's menu can name but no menu item can drive.
     std::unique_ptr<ao::uimodel::TransportViewModel> _playPausePtr;
     std::unique_ptr<ao::uimodel::TransportViewModel> _stopPtr;
     Microsoft::UI::Xaml::Window _soulWindow{nullptr};
-    Aobus::AobusSoulControl _fullscreenSoul{nullptr};
+    // Keep the projected handle distinct from the same-named implementation class in every include order.
+    ::winrt::Aobus::AobusSoulControl _fullscreenSoul{nullptr};
     ao::utility::ScopedRegistration _appWindowChangedSub;
     ao::utility::ScopedRegistration _soulWindowChangedSub;
     /**
@@ -205,10 +211,12 @@ namespace winrt::Aobus::implementation
     std::unordered_map<void const*, GroupCoverPresenterEntry> _groupCoverPresenters;
     SessionPhase _sessionPhase = SessionPhase::Constructed;
   };
-}
+} // namespace winrt::Aobus::implementation
 
 namespace winrt::Aobus::factory_implementation
 {
+  // Generated C++/WinRT factory virtuals implement the ABI and are validated by the native MSVC build.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct MainWindow : MainWindowT<MainWindow, implementation::MainWindow>
   {};
 }

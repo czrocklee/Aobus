@@ -1400,10 +1400,13 @@ class CliParseTest(unittest.TestCase):
             ],
         )
 
-    def test_test_no_build_lint_uses_selected_tree_without_building(self):
+    def test_posix_lint_runner_uses_selected_tree_without_preparing_another_host(self):
         build_dir = Path("/tmp/aobus-test-build")
 
-        with mock.patch.object(test_command.linttest, "run", return_value=0) as run:
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+            mock.patch.object(test_command.linttest, "run", return_value=0) as run,
+        ):
             self.assertEqual(test_command.run_non_catch2_suite("lint", build_dir), 0)
 
         run.assert_called_once_with(build_dir, log=None)
@@ -1594,7 +1597,7 @@ class CliParseTest(unittest.TestCase):
             [mock.call(result.build_dir), mock.call(winui_result.build_dir)],
         )
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "integration", "tooling"),
+            ("core", "tui", "cli", "integration", "tooling", "lint"),
             result.build_dir,
             asan=False,
             tsan=False,
@@ -1674,6 +1677,267 @@ class CliParseTest(unittest.TestCase):
             asan=False,
             tsan=True,
         )
+
+    def test_windows_lint_is_selectable_and_all_includes_it_without_changing_the_fast_loop(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            self.assertEqual(self.parse(["test", "--lint"]).suite, "lint")
+            self.assertEqual(test_command.suites_for("all")[-1], "lint")
+            self.assertEqual(test_command.suites_for("default"), ("core", "tui"))
+            self.assertNotIn("lint", test_command.suites_for("concurrency"))
+
+    def test_windows_lint_does_not_depend_on_the_product_graph_lint_option(self):
+        cache = {**_ENABLED_SUITE_CACHE, "AOBUS_BUILD_LINT_PLUGIN": "OFF"}
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
+        ):
+            self.assertIn("lint", test_command.configured_suites_for("all", Path("product")))
+            self.assertEqual(test_command.configured_suites_for("lint", Path("unconfigured-host")), ("lint",))
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE),
+            mock.patch.object(test_command.compiler_cache, "read_cmake_cache", return_value=cache),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            with self.assertRaises(SystemExit):
+                test_command.configured_suites_for("lint", Path("product"))
+            self.assertNotIn("lint", test_command.configured_suites_for("all", Path("product")))
+
+    def test_windows_standalone_lint_can_prepare_an_absent_default_host_and_honors_no_build(self):
+        host = builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
+        for no_build in (False, True):
+            with self.subTest(no_build=no_build):
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                    mock.patch.dict(os.environ, {}, clear=False),
+                ):
+                    os.environ.pop("BUILD_DIR", None)
+                    with (
+                        mock.patch.object(build_command, "validate_build_tree") as validate,
+                        mock.patch.object(test_command, "run") as build_run,
+                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
+                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
+                    ):
+                        args = self.parse(["test", "--lint", *(["--no-build"] if no_build else [])])
+                        self.assertEqual(test_command.run_command(args), 0)
+                validate.assert_not_called()
+                build_run.assert_not_called()
+                prepare.assert_called_once_with(host, no_build=no_build, reconfigure_preset=not no_build)
+                fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
+
+    def test_windows_lint_tree_policy_matrix(self):
+        """BUILD_DIR stays a primary override; `-p` is exact; derived hosts refresh the preset."""
+        default_host = builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
+        override = Path("/env/primary")
+        explicit = Path("C:/explicit-product-host")
+        matrix = (
+            # (label, arguments, BUILD_DIR, expected host, expected reconfigure_preset)
+            ("default", ["test", "--lint"], None, default_host, True),
+            ("default no-build", ["test", "--lint", "--no-build"], None, default_host, False),
+            (
+                "env override",
+                ["test", "--lint"],
+                str(override),
+                override.with_name(override.name + "-tidy"),
+                True,
+            ),
+            (
+                "env override no-build",
+                ["test", "--lint", "--no-build"],
+                str(override),
+                override.with_name(override.name + "-tidy"),
+                False,
+            ),
+            ("explicit tree", ["test", "--lint", "-p", str(explicit)], None, explicit, False),
+            (
+                "explicit tree no-build",
+                ["test", "--lint", "--no-build", "-p", str(explicit)],
+                None,
+                explicit,
+                False,
+            ),
+        )
+        for label, arguments, build_dir_env, host, reconfigure in matrix:
+            with self.subTest(label=label):
+                environment = {"BUILD_DIR": build_dir_env} if build_dir_env else {}
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                    mock.patch.dict(os.environ, environment, clear=False),
+                ):
+                    if build_dir_env is None:
+                        os.environ.pop("BUILD_DIR", None)
+                    with (
+                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
+                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
+                    ):
+                        args = self.parse(arguments)
+                        self.assertEqual(test_command.run_command(args), 0)
+                    prepare.assert_called_once_with(
+                        host, no_build="--no-build" in arguments, reconfigure_preset=reconfigure
+                    )
+                    fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
+
+    def test_windows_lint_explicit_tree_is_not_replaced_by_default_or_group_sibling(self):
+        # The claim-3 regression: an explicit -p tree keeps its configuration even
+        # without --no-build; it is never reset into the windows-tidy preset.
+        for no_build in (False, True):
+            with self.subTest(no_build=no_build):
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                    mock.patch.dict(os.environ, {}, clear=False),
+                ):
+                    os.environ.pop("BUILD_DIR", None)
+                    with (
+                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
+                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
+                    ):
+                        args = self.parse(["test", "--lint", *(["--no-build"] if no_build else []), "-p", "exact-host"])
+                        self.assertEqual(test_command.run_command(args), 0)
+                prepare.assert_called_once_with(Path("exact-host"), no_build=no_build, reconfigure_preset=False)
+                fixtures.assert_called_once_with(Path("exact-host"), log=None, toolchain=prepare.return_value)
+
+    def test_windows_group_lint_uses_dedicated_host_or_explicit_primary_sibling(self):
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+            mock.patch.dict(os.environ, {}, clear=True),
+        ):
+            primary = builddir.WINDOWS_PROFILE.build_root / "windows-debug-asan"
+            self.assertEqual(builddir.windows_lint_build_dir(primary), primary.parent / "windows-tidy")
+            self.assertEqual(builddir.windows_lint_build_dir(Path("custom")), Path("custom-tidy"))
+            with mock.patch.dict(os.environ, {"BUILD_DIR": str(primary)}):
+                self.assertEqual(builddir.windows_lint_build_dir(primary), primary.with_name(primary.name + "-tidy"))
+            with (
+                mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
+                mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
+            ):
+                self.assertEqual(test_command.run_suites(("lint",), primary, no_build=True), 0)
+        host = primary.parent / "windows-tidy"
+        prepare.assert_called_once_with(host, no_build=True, reconfigure_preset=False)
+        fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
+
+    def test_windows_group_lint_matches_the_standalone_derivation_for_every_primary(self):
+        default_host = builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
+        override = Path("/env/primary")
+        explicit = Path("C:/explicit-product-host")
+        matrix = (
+            # (label, primary, BUILD_DIR, no_build, expected host, expected reconfigure_preset)
+            ("default primary", builddir.WINDOWS_PROFILE.build_root / "windows-debug", None, False, default_host, True),
+            ("env override", override, str(override), False, override.with_name(override.name + "-tidy"), True),
+            (
+                "prepared nondefault primary",
+                explicit,
+                None,
+                False,
+                explicit.with_name(explicit.name + "-tidy"),
+                True,
+            ),
+            ("no-build", explicit, None, True, explicit.with_name(explicit.name + "-tidy"), False),
+        )
+        for label, primary, build_dir_env, no_build, host, reconfigure in matrix:
+            with self.subTest(label=label):
+                environment = {"BUILD_DIR": build_dir_env} if build_dir_env else {}
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                    mock.patch.dict(os.environ, environment, clear=False),
+                ):
+                    if build_dir_env is None:
+                        os.environ.pop("BUILD_DIR", None)
+                    with (
+                        mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
+                        mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
+                    ):
+                        self.assertEqual(test_command.run_suites(("lint",), primary, no_build=no_build), 0)
+                prepare.assert_called_once_with(host, no_build=no_build, reconfigure_preset=reconfigure)
+                fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
+
+    def test_windows_all_suite_group_routes_lint_through_the_dedicated_host(self):
+        primary = builddir.WINDOWS_PROFILE.build_root / "windows-debug"
+        host = primary.parent / "windows-tidy"
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+            mock.patch.dict(os.environ, {}, clear=False),
+        ):
+            os.environ.pop("BUILD_DIR", None)
+            with (
+                mock.patch.object(test_command, "_run_catch2_suite", return_value=test_command._SuiteOutcome(0)),
+                mock.patch.object(test_command.tooltest, "run", return_value=0),
+                mock.patch.object(test_command.tidy, "prepare_toolchain") as prepare,
+                mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
+            ):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(test_command.run_suites(builddir.WINDOWS_PROFILE.all_suites, primary), 0)
+        # The default product tree is never reused as the checker host.
+        prepare.assert_called_once_with(host, no_build=False, reconfigure_preset=True)
+        fixtures.assert_called_once_with(host, log=None, toolchain=prepare.return_value)
+
+    def test_windows_lint_toolchain_verification_failure_stops_before_any_fixture(self):
+        # prepare_toolchain owns both the version and exact-registry assertions.
+        for failure in ("wrong LLVM version", "incomplete Aobus registry", "missing configured host"):
+            with (
+                self.subTest(failure=failure),
+                mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                mock.patch.object(test_command.tidy, "prepare_toolchain", side_effect=SystemExit(failure)) as prepare,
+                mock.patch.object(test_command.linttest, "run") as fixtures,
+            ):
+                with self.assertRaises(SystemExit):
+                    test_command.run_non_catch2_suite("lint", Path("product"), no_build=True)
+            prepare.assert_called_once()
+            fixtures.assert_not_called()
+
+    def test_windows_lint_preflight_verifies_actual_version_and_exact_registry_without_loading_a_plugin(self):
+        registry = "\n".join(sorted(tidy_command.EXPECTED_AOBUS_CHECKS))
+        for version, checks, succeeds in (
+            (tidy_command.tidyengine.PINNED_LLVM_VERSION, registry, True),
+            ("0.0.0", registry, False),
+            (tidy_command.tidyengine.PINNED_LLVM_VERSION, "", False),
+            (tidy_command.tidyengine.PINNED_LLVM_VERSION, registry + "\naobus-unexpected", False),
+        ):
+            with self.subTest(version=version, succeeds=succeeds), tempfile.TemporaryDirectory() as temporary:
+                host_tree = Path(temporary)
+                sdk = host_tree / "sdk"
+                (sdk / "lib/clang/22").mkdir(parents=True)
+                (host_tree / "compile_commands.json").touch()
+                (host_tree / "CMakeCache.txt").write_text(
+                    f"AOBUS_LLVM_SDK_RESOLVED_ROOT:INTERNAL={sdk.as_posix()}\n"
+                    f"AOBUS_LLVM_SDK_RESOLVED_VERSION:INTERNAL={tidy_command.tidyengine.PINNED_LLVM_VERSION}\n",
+                    encoding="utf-8",
+                )
+                host = host_tree / "tool/lint/AobusClangTidy.exe"
+                host.parent.mkdir(parents=True)
+                host.touch()
+                results = [
+                    subprocess.CompletedProcess([], 0, stdout=f"LLVM version {version}"),
+                    subprocess.CompletedProcess([], 0, stdout=checks),
+                ]
+                with (
+                    mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+                    mock.patch.object(tidy_command.subprocess, "run", side_effect=results) as run,
+                    mock.patch.object(test_command.linttest, "run", return_value=0) as fixtures,
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    if succeeds:
+                        self.assertEqual(
+                            test_command.run_non_catch2_suite(
+                                "lint", host_tree, no_build=True, lint_build_dir=host_tree
+                            ),
+                            0,
+                        )
+                        fixtures.assert_called_once()
+                    else:
+                        with self.assertRaises(SystemExit):
+                            test_command.run_non_catch2_suite(
+                                "lint", host_tree, no_build=True, lint_build_dir=host_tree
+                            )
+                        fixtures.assert_not_called()
+                self.assertEqual(run.call_args_list[0].args[0], [str(host), "--version"])
+                self.assertFalse(any("-load=" in argument for call in run.call_args_list for argument in call.args[0]))
+
+    def test_windows_no_build_lint_still_initializes_visual_studio_but_listing_does_not(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            self.assertTrue(buildenv.requires_build_env("test", ["--lint", "--no-build"]))
+            self.assertTrue(buildenv.requires_build_env("test", ["--all", "--no-build"]))
+            self.assertFalse(buildenv.requires_build_env("test", ["--lint", "--no-build", "--list"]))
+            self.assertFalse(buildenv.requires_build_env("test", ["--all", "--no-build", "[focused]"]))
+            self.assertFalse(buildenv.requires_build_env("test", ["--tooling"]))
 
     def test_windows_explicit_tsan_suite_is_rejected(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):

@@ -9,7 +9,6 @@
 // strong view reference. Expected contract failures are reported and counted
 // with a nonzero exit status; the probe never aborts on them.
 
-#include "track/TrackCellItem.h"
 #include "track/TrackItemView.h"
 #include "track/TrackRowItem.h"
 #include <ao/CoreIds.h>
@@ -324,7 +323,7 @@ namespace
     auto const view = ao::winui::makeTrackItemView(6, provider, 8);
 
     auto firstFour = std::vector<Item>(4, nullptr);
-    report.check(view.GetMany(0, winrt::array_view<Item>(firstFour)) == 4,
+    report.check(view.GetMany(0, winrt::array_view<Item>{firstFour}) == 4,
                  "a request within the size copies every requested slot");
     report.check(provider.totalCalls() == 4, "each copied slot materialized exactly one row");
 
@@ -335,17 +334,17 @@ namespace
     }
 
     auto tail = std::vector<Item>(4, nullptr);
-    report.check(view.GetMany(4, winrt::array_view<Item>(tail)) == 2,
+    report.check(view.GetMany(4, winrt::array_view<Item>{tail}) == 2,
                  "a request past the last row copies only the remaining rows");
     report.check(isSameItem(tail[0], view.GetAt(4)) && isSameItem(tail[1], view.GetAt(5)),
                  "the partial tail rows are the same cached instances");
 
     auto buffer = std::vector<Item>(2, nullptr);
-    report.check(view.GetMany(6, winrt::array_view<Item>(buffer)) == 0, "a start at the size bound copies nothing");
-    report.check(view.GetMany(9, winrt::array_view<Item>(buffer)) == 0, "a start beyond the size bound copies nothing");
+    report.check(view.GetMany(6, winrt::array_view<Item>{buffer}) == 0, "a start at the size bound copies nothing");
+    report.check(view.GetMany(9, winrt::array_view<Item>{buffer}) == 0, "a start beyond the size bound copies nothing");
 
     auto empty = std::vector<Item>{};
-    report.check(view.GetMany(0, winrt::array_view<Item>(empty)) == 0, "an empty destination copies nothing");
+    report.check(view.GetMany(0, winrt::array_view<Item>{empty}) == 0, "an empty destination copies nothing");
     report.check(provider.totalCalls() == 6, "tail, out-of-range, and empty requests materialize only real rows");
   }
 
@@ -364,7 +363,7 @@ namespace
     report.check(isSameItem(iterator.Current(), view.GetAt(1)), "the advanced current row is display index 1");
 
     auto step = std::vector<Item>(2, nullptr);
-    report.check(iterator.GetMany(winrt::array_view<Item>(step)) == 2, "the iterator copies the next rows on demand");
+    report.check(iterator.GetMany(winrt::array_view<Item>{step}) == 2, "the iterator copies the next rows on demand");
     report.check(isSameItem(step[0], view.GetAt(1)) && isSameItem(step[1], view.GetAt(2)),
                  "the iterator copy starts at the iterator's own position");
     report.check(isSameItem(iterator.Current(), view.GetAt(3)), "current follows the iterator copy");
@@ -454,7 +453,7 @@ namespace
     }
   }
 
-  int run()
+  std::int32_t run()
   {
     auto report = ScenarioReport{};
 

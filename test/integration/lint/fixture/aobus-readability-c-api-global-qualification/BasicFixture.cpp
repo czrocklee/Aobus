@@ -3,7 +3,11 @@
 
 #include "CompilerBuiltins.h"
 
+#if defined(_WIN32)
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 
 // NOLINTBEGIN(readability-identifier-naming)
 

@@ -9,16 +9,22 @@
 
 namespace winrt::Aobus::implementation
 {
+  // Generated C++/WinRT virtuals implement the platform ABI and are validated by the native MSVC build.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct TrackCellItem : TrackCellItemT<TrackCellItem>
   {
     TrackCellItem(hstring text, hstring fieldId, double width, bool sortable);
 
+    // Project.idl fixes these property names for the generated TrackCellItem projection.
+    // NOLINTNEXTLINE(readability-identifier-naming)
     hstring Text() const noexcept { return _text; }
+    // NOLINTNEXTLINE(readability-identifier-naming)
     hstring FieldId() const noexcept { return _fieldId; }
+    // NOLINTNEXTLINE(readability-identifier-naming)
     double Width() const noexcept { return _width; }
-    // Project.idl fixes this property name for the generated TrackCellItem projection.
-    // NOLINTNEXTLINE(aobus-readability-bool-function-naming)
+    // NOLINTNEXTLINE(aobus-readability-bool-function-naming,readability-identifier-naming)
     bool Sortable() const noexcept { return _sortable; }
+    // NOLINTNEXTLINE(readability-identifier-naming)
     Microsoft::UI::Xaml::TextAlignment Alignment() const noexcept { return _alignment; }
 
   private:
@@ -32,6 +38,8 @@ namespace winrt::Aobus::implementation
 
 namespace winrt::Aobus::factory_implementation
 {
+  // Generated C++/WinRT factory virtuals implement the ABI and are validated by the native MSVC build.
+  // NOLINTNEXTLINE(portability-template-virtual-member-function)
   struct TrackCellItem : TrackCellItemT<TrackCellItem, implementation::TrackCellItem>
   {};
 } // namespace winrt::Aobus::factory_implementation

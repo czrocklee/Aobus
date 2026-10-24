@@ -42,14 +42,12 @@
 #include <expected>
 #include <format>
 #include <iterator>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 #include <vector>
 
 namespace ao::winui
@@ -489,8 +487,8 @@ namespace ao::winui
     beginDialogWorkflow();
     _dialogActive = true;
     auto submission = uimodel::previewListDeletionAsync(&_library, listId, includeDescendants);
-    AO_INVARIANT(_optDialogTasks.has_value() && _dialogGenerationGate.isOpen(),
-                 "A List deletion preview requires an active dialog workflow");
+    AO_INVARIANT(
+      _optDialogTasks && _dialogGenerationGate.isOpen(), "A List deletion preview requires an active dialog workflow");
     auto const token = _dialogGenerationGate.token();
     _asyncRuntime.spawnWithLifetime(
       *_optDialogTasks,
@@ -939,7 +937,7 @@ namespace ao::winui
   void ListAuthoringCoordinator::showDialog()
   {
     _dialogActive = true;
-    AO_INVARIANT(_optDialogTasks.has_value() && _dialogGenerationGate.isOpen(),
+    AO_INVARIANT(_optDialogTasks && _dialogGenerationGate.isOpen(),
                  "A List dialog requires an active task scope and callback generation");
 
     try

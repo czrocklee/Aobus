@@ -4,6 +4,7 @@
 #include "layout/component/track/TrackCoverArt.h"
 
 #include "image/CoverArtPresenter.h"
+#include "layout/runtime/FocusedDetail.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "pch.h"
@@ -27,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::winui::layout
 {

@@ -8,22 +8,8 @@ namespace ao::winui
   class ScopedBooleanFlag final
   {
   public:
-    explicit ScopedBooleanFlag(bool& value, bool const enabled = true) noexcept
-      : _value{enabled ? &value : nullptr}, _previous{value}
-    {
-      if (_value != nullptr)
-      {
-        *_value = true;
-      }
-    }
-
-    ~ScopedBooleanFlag()
-    {
-      if (_value != nullptr)
-      {
-        *_value = _previous;
-      }
-    }
+    explicit ScopedBooleanFlag(bool& value, bool enabled = true) noexcept;
+    ~ScopedBooleanFlag();
 
     ScopedBooleanFlag(ScopedBooleanFlag const&) = delete;
     ScopedBooleanFlag& operator=(ScopedBooleanFlag const&) = delete;

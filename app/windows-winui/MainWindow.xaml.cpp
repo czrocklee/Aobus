@@ -26,6 +26,7 @@
 #include <ao/Error.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -54,6 +55,7 @@
 #include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.h>
 
+#include <bitset>
 #include <format>
 #include <memory>
 #include <string>
@@ -235,7 +237,7 @@ namespace winrt::Aobus::implementation
     updateSoulWindowActivity();
     reconcileLibrary();
     restoreWindowPlacement();
-    applyShellState(RootGrid().ActualWidth());
+    tryApplyShellState(RootGrid().ActualWidth());
 
     // The shell built above is the first to show a status, so the startup
     // warnings reach the status line only here.
@@ -296,22 +298,24 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnNavigateBackInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
-                                         Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
+  void MainWindow::handleNavigateBackInvoked(
+    Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
+    Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
   {
     navigateHistory(false);
     args.Handled(true);
   }
 
-  void MainWindow::OnNavigateForwardInvoked(Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
-                                            Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
+  void MainWindow::handleNavigateForwardInvoked(
+    Microsoft::UI::Xaml::Input::KeyboardAccelerator const& /*sender*/,
+    Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args)
   {
     navigateHistory(true);
     args.Handled(true);
   }
 
-  void MainWindow::OnRootPointerPressed(Windows::Foundation::IInspectable const& /*sender*/,
-                                        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
+  void MainWindow::handleRootPointerPressed(Windows::Foundation::IInspectable const& /*sender*/,
+                                            Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& args)
   {
     auto const kind = args.GetCurrentPoint(RootGrid()).Properties().PointerUpdateKind();
 
@@ -369,7 +373,7 @@ namespace winrt::Aobus::implementation
         .trackList = *_trackListPtr,
         .resourceBytes = _session->runtime().resourceBytes(),
         .theme = *_themePtr,
-        .activeTheme = [this] { return _themeOverride; },
+        .activeTheme = [this] { return _optThemeOverride; },
         .saveSettings = command(&MainWindow::saveWindowState),
         .commands = {
           .openLibrary =

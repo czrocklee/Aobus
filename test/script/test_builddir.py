@@ -134,7 +134,7 @@ class BuildDirTest(unittest.TestCase):
         profile = builddir.platform_profile("nt")
         self.assertEqual(profile.apps, ("cli", "tui", "winui"))
         self.assertEqual(profile.default_suites, ("core", "tui"))
-        self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "tooling"))
+        self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "tooling", "lint"))
         self.assertEqual(profile.tsan_suites, ())
         self.assertEqual(builddir.flavors("nt"), ("debug", "release"))
 
@@ -199,6 +199,33 @@ class BuildDirTest(unittest.TestCase):
             self.assertEqual(builddir.tidy_dir("posix"), root / "debug-clang-tidy")
         self.assertEqual(builddir.tidy_preset("nt"), "windows-tidy")
         self.assertEqual(builddir.tidy_dir("nt"), builddir.windows_build_root() / "windows-tidy")
+
+    def test_windows_lint_host_derivation_never_reuses_the_primary_product_tree(self):
+        # The ao test lint route and setup llvm-sdk own a dedicated checker
+        # host: BUILD_DIR stays a primary product override and always yields a
+        # -tidy sibling, while default product trees share the windows-tidy
+        # host. tidy_dir() keeps its generic ao tidy/format meaning of naming
+        # the override tree itself, so the two contracts stay explicit.
+        with (
+            mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE),
+            mock.patch.dict("os.environ", {}, clear=False),
+        ):
+            os.environ.pop("BUILD_DIR", None)
+            default_primary = builddir.WINDOWS_PROFILE.build_root / "windows-debug"
+            self.assertEqual(
+                builddir.windows_lint_build_dir(default_primary), builddir.WINDOWS_PROFILE.build_root / "windows-tidy"
+            )
+            self.assertEqual(
+                builddir.windows_lint_build_dir(Path("C:/prepared/custom")), Path("C:/prepared/custom-tidy")
+            )
+            with mock.patch.dict("os.environ", {"BUILD_DIR": "C:/state/primary"}):
+                self.assertEqual(builddir.tidy_dir(), Path("C:/state/primary"))
+                self.assertEqual(
+                    builddir.windows_lint_build_dir(builddir.build_dir("debug")), Path("C:/state/primary-tidy")
+                )
+                self.assertEqual(
+                    builddir.windows_lint_build_dir(Path("C:/state/primary")), Path("C:/state/primary-tidy")
+                )
 
     def test_windows_defaults_to_checkout_isolated_local_app_data(self):
         environment = {

@@ -19,6 +19,7 @@
 #include <ao/uimodel/layout/component/LayoutSchema.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInteraction.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
@@ -29,6 +30,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::winui::layout
 {

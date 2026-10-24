@@ -6,10 +6,12 @@ are de-duplicated across translation units before being printed or written to a 
 
 import argparse
 import contextlib
+import ctypes
 import fnmatch
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,7 +22,8 @@ from ..core import builddir, buildlock, gitfiles, pythoncheck, tidyengine, winui
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
-from ..core.tidyconfig import CONFIG_BASE
+from ..core.tidyconfig import checks_for, config_for, mode_disabled_checks
+from ..core.tidyengine import TidyToolchain as TidyToolchain
 from . import build
 
 HELP = "Run C++ clang-tidy and Python Ruff/mypy checks"
@@ -56,76 +59,6 @@ WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = (
     "/experimental:deterministic",
 )
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
-
-# Check groups: start from nothing, enable curated groups, then disable known false
-# positives or project-preference conflicts.
-STRICT_CHECKS = ",".join(
-    [
-        "-*",
-        # === enabled check groups ===
-        "aobus-*",  # Aobus custom checks (naming, spacing, etc.)
-        "bugprone-*",  # bug-prone pattern detection
-        "performance-*",  # performance issues
-        "cppcoreguidelines-*",  # C++ Core Guidelines
-        "misc-*",  # miscellaneous useful checks
-        "modernize-*",  # modern C++ usage
-        "readability-*",  # readability improvements
-        "portability-*",  # portability concerns
-        "objc-avoid-nserror-init",
-        "objc-dealloc-in-category",
-        "objc-forbidden-subclassing",
-        "objc-missing-hash",
-        "objc-nsinvocation-argument-lifetime",
-        "objc-property-declaration",
-        "objc-super-self",
-        "google-objc-avoid-throwing-exception",
-        "google-build-namespaces",
-        "google-readability-casting",
-        "google-readability-namespace-comments",
-        # === disabled: false positives or project preference ===
-        "-bugprone-easily-swappable-parameters",  # frequent false positives
-        # CRTP customization deliberately refines non-virtual fallback methods
-        # (RecursiveASTVisitor and std::ranges::view_interface).
-        "-bugprone-derived-method-shadowing-base-method",
-        "-bugprone-exception-escape",  # dominated by allocation paths and MSVC container moves
-        "-bugprone-throwing-static-initialization",  # dominated by STL startup-allocation details
-        "-cppcoreguidelines-avoid-magic-numbers",  # handled by aobus readability check
-        "-cppcoreguidelines-avoid-const-or-ref-data-members",  # common pattern for views
-        "-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access",  # .at() is not a universal hot-path policy
-        "-cppcoreguidelines-pro-bounds-constant-array-index",  # table dispatch is fine
-        "-cppcoreguidelines-pro-bounds-pointer-arithmetic",  # common in layout/audio code
-        "-misc-no-recursion",  # recursion is idiomatic in some modules
-        "-misc-multiple-inheritance",  # renamed Fuchsia policy conflicts with GTK/framework composition
-        "-misc-non-private-member-variables-in-classes",  # impl structs use this pattern
-        "-modernize-use-trailing-return-type",  # style choice: prefer leading type
-        "-modernize-use-nodiscard",  # not enforced globally
-        "-modernize-use-auto",  # handled by aobus custom check
-        "-performance-unnecessary-value-param",  # too noisy for interface types
-        "-performance-move-const-arg",  # conflicts with const-correctness
-        "-readability-redundant-member-init",  # explicit init is intentional
-        "-readability-convert-member-functions-to-static",  # prefers explicit design intent
-        "-portability-avoid-pragma-once",  # project standard is #pragma once
-        "-clang-diagnostic-*",  # compiler diagnostics not our domain
-    ]
-)
-
-RELAXED_CHECKS = ",".join(
-    [
-        STRICT_CHECKS,
-        # === additionally disabled for test code ===
-        "-bugprone-unchecked-optional-access",  # test code uses .value() liberally
-        "-bugprone-unused-return-value",  # tests often discard return values
-        "-cppcoreguidelines-avoid-c-arrays",  # Catch2 API and test data arrays
-        "-cppcoreguidelines-avoid-magic-numbers",  # not enforced in tests
-        "-cppcoreguidelines-pro-type-reinterpret-cast",  # common pattern in test mocks
-        "-cppcoreguidelines-pro-type-vararg",  # debug helpers use printf-style
-        "-portability-template-virtual-member-function",  # test fixtures use vfunc_* pattern
-        "-modernize-use-designated-initializers",  # positional expected-data tables are clearer in tests
-        "-readability-function-cognitive-complexity",  # test bodies are inherently complex
-        "-readability-identifier-length",  # test locals (id, v, it) are fine
-        "-readability-magic-numbers",  # not enforced in tests
-    ]
-)
 
 EXPECTED_AOBUS_CHECKS = frozenset(
     {
@@ -215,12 +148,106 @@ def exact_header_filter(headers: list[Path], *, source_roots: tuple[Path, ...] |
 def path_line_filter(paths: list[Path], *, source_roots: tuple[Path, ...] | None = None) -> str:
     """Limit diagnostics and exported fixes to the explicitly selected paths."""
     roots = source_roots or (absolute_path(PROJECT_ROOT),)
-    entries = [
-        {"name": spelling.as_posix(), "lines": [[1, 2_147_483_647]]}
+    # LLVM matches these names literally, unlike the separator-aware header regex.
+    names = dict.fromkeys(
+        name
         for path in paths
         for spelling in _source_spellings(path, roots)
-    ]
+        for name in (str(spelling), spelling.as_posix())
+    )
+    entries = [{"name": name, "lines": [[1, 2_147_483_647]]} for name in names]
     return json.dumps(entries, separators=(",", ":"))
+
+
+def write_selected_file_overlay(destination: Path, selected: Path, *, source_roots: tuple[Path, ...]) -> Path:
+    """Keep LLVM's file identity stable without replacing any selected bytes."""
+    spellings = _source_spellings(selected, source_roots)
+    if not selected.is_file() or not spellings:
+        raise ValueError(f"selected file is unavailable: {selected}")
+    for spelling in spellings:
+        if not spelling.is_absolute() or not spelling.is_file() or not spelling.samefile(selected):
+            raise ValueError(f"selected-file alias does not identify {selected}: {spelling}")
+    # LLVM's Windows VFS lookup handles mixed separators, including nested
+    # includes. External names make FileEntryRef and replacement paths use this
+    # validated full name, rather than inventing include-spelling permutations.
+    payload = {
+        "version": 0,
+        "case-sensitive": False,
+        "use-external-names": True,
+        "roots": [
+            {"type": "file", "name": spelling.as_posix(), "external-contents": str(spellings[0])}
+            for spelling in dict.fromkeys(spellings)
+        ],
+    }
+    destination.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return destination
+
+
+def _validate_selected_vfs_inputs(database_dir: Path, translation_units: set[Path], tidy_arguments: list[str]) -> None:
+    """Fail closed instead of shadowing caller-owned virtual file contents."""
+
+    def key(path: Path) -> str:
+        return os.path.normcase(str(workspace_cache.canonical_portal_path(path)))
+
+    def command_arguments(command: str) -> list[str]:
+        if os.name != "nt":
+            return shlex.split(command, posix=False)
+        count = ctypes.c_int()
+        shell: ctypes.CDLL = vars(ctypes)["WinDLL"]("shell32", use_last_error=True)
+        split = shell.CommandLineToArgvW
+        split.argtypes = (ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_int))
+        split.restype = ctypes.POINTER(ctypes.c_wchar_p)
+        arguments = split(command, ctypes.byref(count))
+        if not arguments:
+            raise OSError("cannot inspect Windows compile-command arguments")
+        try:
+            return list(arguments[: count.value])
+        finally:
+            kernel: ctypes.CDLL = vars(ctypes)["WinDLL"]("kernel32", use_last_error=True)
+            free = kernel.LocalFree
+            free.argtypes = (ctypes.c_void_p,)
+            free.restype = ctypes.c_void_p
+            free(arguments)
+
+    required = {key(path) for path in translation_units}
+    found: set[str] = set()
+    arguments_to_check = list(tidy_arguments)
+    for variable in ("CL", "_CL_"):
+        arguments_to_check.extend(command_arguments("clang-cl " + os.environ.get(variable, ""))[1:])
+    for entry in json.loads((database_dir / "compile_commands.json").read_text(encoding="utf-8")):
+        path = Path(entry["file"])
+        if not path.is_absolute():
+            path = Path(entry["directory"]) / path
+        identity = key(path)
+        if identity not in required:
+            continue
+        found.add(identity)
+        arguments = entry.get("arguments")
+        arguments_to_check.extend(arguments if isinstance(arguments, list) else command_arguments(entry["command"]))
+    if found != required:
+        raise ValueError("selected fragment compile commands could not be inspected for VFS overrides")
+    # Caller VFS overlays, response files, and config files cannot compose
+    # with the selected-file overlay: their hidden contents cannot be inspected
+    # or merged here. Do not reinterpret or replace those contexts until
+    # composition can preserve their virtual contents. The slash overlay
+    # spellings are also rejected as defense in depth.
+    wrappers = ("--extra-arg-before=", "-extra-arg-before=", "--extra-arg=", "-extra-arg=", "/clang:")
+    for argument in arguments_to_check:
+        token = argument.strip("\"'").casefold()
+        while wrapper := next((prefix for prefix in wrappers if token.startswith(prefix)), None):
+            token = token.removeprefix(wrapper).strip("\"'")
+        if token.startswith(("-ivfsoverlay", "-vfsoverlay", "--vfsoverlay", "/ivfsoverlay", "/vfsoverlay")):
+            raise ValueError(
+                "selected Windows fragments cannot compose caller VFS overlays with the selected-file overlay"
+            )
+        # The governed clang-tidy invocation passes its own -config, and a
+        # hidden compiler response or config file may carry overlays.
+        if token.startswith(("@", "--config=", "-config=")) or token in ("--config", "-config"):
+            raise ValueError(
+                "selected Windows fragments cannot compose response/config files: their hidden contents "
+                "may shadow the selected-file overlay, and a caller config cannot override the governed "
+                "clang-tidy -config"
+            )
 
 
 @dataclass(frozen=True)
@@ -255,23 +282,6 @@ def build_invocations(
             )
         )
     return invocations
-
-
-def mode_disabled_checks(mode: str) -> list[str]:
-    """The explicit disable directives a mode applies, e.g. ['-bugprone-...', ...]."""
-    source = RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
-    return [token for token in source.split(",") if token.startswith("-") and token != "-*"]
-
-
-def checks_for(mode: str, selected: str | None) -> str:
-    """Resolve the clang-tidy check list for a mode.
-
-    With --check, run only the selected check(s) but still honour the mode's disable
-    list, so a check disabled for tests (e.g. readability-magic-numbers) stays off there.
-    """
-    if selected:
-        return ",".join(["-*", selected, *mode_disabled_checks(mode)])
-    return RELAXED_CHECKS if mode == "RELAXED" else STRICT_CHECKS
 
 
 _NOLINT_OPEN_RE = re.compile(r"\bNOLINT(?:NEXTLINE|BEGIN)?\(([^)]*)\)")
@@ -343,14 +353,6 @@ def classify(path: Path, explicit: bool) -> str:
     if "/test/" in rel_slash:
         return "RELAXED"
     return "STRICT"
-
-
-@dataclass(frozen=True)
-class TidyToolchain:
-    clang_tidy: str
-    plugin: Path | None
-    resource_dir: Path | None
-    expected_llvm_version: str | None = None
 
 
 def expected_lint_artifact_path(build_dir: Path, *, os_name: str | None = None) -> Path:
@@ -465,6 +467,7 @@ def prepare_toolchain(
         plugin=None if profile.name == "windows" else artifact,
         resource_dir=tidyengine.clang_resource_dir(build_dir) if profile.name == "windows" else None,
         expected_llvm_version=(tidyengine.llvm_sdk_version(build_dir) if profile.name == "windows" else None),
+        sdk_root=tidyengine.llvm_sdk_root(build_dir) if profile.name == "windows" else None,
     )
     verify_tidy_toolchain(toolchain)
     return toolchain
@@ -549,7 +552,11 @@ def limits_diagnostics_to_selected_path(invocation: TidyInvocation) -> bool:
     source duplicates unrelated diagnostics; changed headers already receive an
     exact header-as-main invocation of their own.
     """
-    return invocation.is_header or requires_winui_compile_context(invocation.compile_command_source)
+    return (
+        invocation.is_header
+        or invocation.is_include_fragment
+        or requires_winui_compile_context(invocation.compile_command_source)
+    )
 
 
 def winui_build_directory(tidy_build_dir: Path, *, path_was_explicit: bool) -> Path:
@@ -965,6 +972,27 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             )
             return 1
 
+        selected_overlays: dict[Path, Path] = {}
+        fragments = [
+            invocation for batch in invocations.values() for invocation in batch if invocation.is_include_fragment
+        ]
+        if os.name == "nt" and fragments:
+            try:
+                _validate_selected_vfs_inputs(
+                    native_database_dir,
+                    {invocation.compile_command_source for invocation in fragments},
+                    args.tidy_arg,
+                )
+                overlay_dir = tidyengine.make_tmpdir("tidy-selected-vfs-")
+                stack.callback(shutil.rmtree, overlay_dir, ignore_errors=True)
+                for index, invocation in enumerate(fragments):
+                    selected_overlays[invocation.selected] = write_selected_file_overlay(
+                        overlay_dir / f"{index}.json", invocation.selected, source_roots=source_roots
+                    )
+            except (OSError, ValueError) as error:
+                print(f"ERROR: cannot preserve selected fragment identity: {error}", file=sys.stderr)
+                return 1
+
         mapped_headers = [target for target in coverage_plan.targets if target.is_header]
         header_database_dir: Path | None = None
         if mapped_headers:
@@ -1015,18 +1043,18 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
             )
             extra: list[str] = list(isystem)
             if toolchain.resource_dir is not None:
-                extra.append(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}")
-                # VS 18's STL lets Clang classify three-byte records as SIMD-find
-                # candidates, but its vectorized helper supports only 1/2/4/8-byte
-                # elements. clang-tidy does not link or execute the TU, so disabling
-                # that optional STL implementation path preserves the analyzed API.
-                extra.append("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0")
+                extra.extend(
+                    f"--extra-arg-before={argument}"
+                    for argument in tidyengine.windows_analysis_arguments(toolchain.resource_dir)
+                )
                 if requires_winui_compile_context(invocation.compile_command_source):
                     # Generated C++/WinRT headers preserve schema spelling while
                     # Windows resolves include paths case-insensitively.
                     extra.append("--extra-arg-before=-Wno-nonportable-include-path")
             if limits_diagnostics_to_selected_path(invocation):
                 extra.append(f"-line-filter={path_line_filter([invocation.selected], source_roots=source_roots)}")
+            if overlay := selected_overlays.get(invocation.selected):
+                extra.append(f"--vfsoverlay={overlay}")
             if invocation.is_header and invocation.compile_command_source.suffix.lower() != ".mm":
                 extra.append("--extra-arg-before=-x")
                 extra.append("--extra-arg-before=c++-header")
@@ -1038,7 +1066,7 @@ def run_command(args: argparse.Namespace, *, resolved_scope: tuple[list[str], bo
                 extra.append(f"-load={toolchain.plugin}")
             if args.fix:
                 extra.append(f"-export-fixes={log.with_suffix('.yaml')}")
-            config = " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
+            config = config_for(checks)
             compile_database = header_database_dir if invocation.is_header else native_database_dir
             if compile_database is None:
                 raise die(f"synthetic compile database was not created for {invocation.selected}")

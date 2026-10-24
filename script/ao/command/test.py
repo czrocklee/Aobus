@@ -21,7 +21,7 @@ from urllib.parse import quote
 from ..core import appkitprocess, builddir, buildlock, compiler_cache, linttest, proc, tooltest, workspace_cache
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
-from . import build
+from . import build, tidy
 
 HELP = "Build incrementally and run C++ and tooling test suites with optional Catch2 filters"
 NAME = "test"
@@ -42,9 +42,11 @@ SHARD_CAP = 16
 
 def requires_build_environment(args: argparse.Namespace) -> bool:
     """Return whether this invocation can build before running tests."""
-    return not args.no_build and any(
-        SUITES[suite].kind != "tooling" for suite in suites_for(args.suite, tsan=args.tsan)
-    )
+    suites = suites_for(args.suite, tsan=args.tsan)
+    if builddir.platform_profile().name == "windows" and "lint" in suites and not args.filter and not args.list:
+        # Even --no-build syntax checks need the exact VS INCLUDE environment.
+        return True
+    return not args.no_build and any(SUITES[suite].kind != "tooling" for suite in suites)
 
 
 EPILOG = """\
@@ -146,7 +148,8 @@ def suites_for(selection: str, *, tsan: bool = False) -> tuple[str, ...]:
 def configured_suites_for(selection: str, build_dir: Path, *, tsan: bool = False) -> tuple[str, ...]:
     """Plan selected suites against the configured targets, not old executables."""
     suites = suites_for(selection, tsan=tsan)
-    if suites == ("tooling",):
+    windows_lint = builddir.platform_profile().name == "windows" and "lint" in suites
+    if suites == ("tooling",) or (windows_lint and suites == ("lint",)):
         return suites
 
     cache = compiler_cache.read_cmake_cache(build_dir / "CMakeCache.txt")
@@ -157,7 +160,7 @@ def configured_suites_for(selection: str, build_dir: Path, *, tsan: bool = False
         "gtk": "AOBUS_BUILD_GTK",
         "tui": "AOBUS_BUILD_TUI",
         "cli": "AOBUS_BUILD_CLI",
-        "lint": "AOBUS_BUILD_LINT_PLUGIN",
+        **({} if windows_lint else {"lint": "AOBUS_BUILD_LINT_PLUGIN"}),
     }
     disabled = tuple(
         name for name in suites if name in options and not build.cmake_option_enabled(cache, options[name], build_dir)
@@ -950,7 +953,16 @@ def run_suite(
     ).status
 
 
-def run_non_catch2_suite(name: str, build_dir: Path, *, list_only: bool = False, log: Path | None = None) -> int:
+def run_non_catch2_suite(
+    name: str,
+    build_dir: Path,
+    *,
+    list_only: bool = False,
+    log: Path | None = None,
+    no_build: bool = False,
+    lint_build_dir: Path | None = None,
+    lint_build_dir_explicit: bool = False,
+) -> int:
     spec = SUITES[name]
     print("=====================================")
     print(f"{'Listing' if list_only else 'Running'} {spec.label}")
@@ -964,6 +976,18 @@ def run_non_catch2_suite(name: str, build_dir: Path, *, list_only: bool = False,
         return tooltest.run(log=log)
 
     if spec.kind == "lint":
+        if builddir.platform_profile().name == "windows":
+            build_dir = lint_build_dir if lint_build_dir is not None else builddir.windows_lint_build_dir(build_dir)
+            # Reuse the tidy portal's preset, incremental build, version check,
+            # and complete-registry verification, not a second host bootstrap.
+            # A user-selected tree keeps its configuration: only a derived lint
+            # host refreshes the tidy preset, the same policy `ao tidy -p` uses.
+            toolchain = tidy.prepare_toolchain(
+                build_dir,
+                no_build=no_build,
+                reconfigure_preset=not no_build and not lint_build_dir_explicit,
+            )
+            return linttest.run(build_dir, log=log, toolchain=toolchain)
         return linttest.run(build_dir, log=log)
 
     raise ValueError(f"unknown suite kind: {spec.kind}")
@@ -996,6 +1020,9 @@ def run_suites(
     tsan: bool = False,
     concurrency: bool = False,
     log: Path | None = None,
+    no_build: bool = False,
+    lint_build_dir: Path | None = None,
+    lint_build_dir_explicit: bool = False,
 ) -> int:
     suites = _catch2_suites_for_filter(suites, test_filter)
     shards = suite_shards(list_only=list_only, repeat=repeat, tsan=tsan, concurrency=concurrency)
@@ -1030,7 +1057,17 @@ def run_suites(
                         return 1
                     matched_tests += outcome.matched
             else:
-                status = run_non_catch2_suite(name, build_dir, list_only=list_only, log=log)
+                # no_build and the lint host context matter only to the Windows
+                # lint runner; every other suite ignores them.
+                status = run_non_catch2_suite(
+                    name,
+                    build_dir,
+                    list_only=list_only,
+                    log=log,
+                    no_build=no_build,
+                    lint_build_dir=lint_build_dir,
+                    lint_build_dir_explicit=lint_build_dir_explicit,
+                )
                 if status != 0:
                     return status
 
@@ -1074,7 +1111,18 @@ def run_command(args: argparse.Namespace) -> int:
     test_filter = "[concurrency]~[.]" if args.suite == "concurrency" else args.filter
     suites = _catch2_suites_for_filter(suites, test_filter)
 
-    if any(SUITES[suite].kind != "tooling" for suite in suites):
+    windows = builddir.platform_profile().name == "windows"
+    standalone_windows_lint = windows and suites == ("lint",)
+    if standalone_windows_lint:
+        if args.path:
+            # An existing user-selected tree keeps its configured preset. Its
+            # SDK capability may fail, but it is never reset to the tidy preset.
+            build_dir = Path(args.path)
+        else:
+            # BUILD_DIR overrides the primary product tree; the standalone lint
+            # host derives its checker sibling exactly like the grouped route.
+            build_dir = builddir.windows_lint_build_dir(builddir.build_dir("debug"))
+    if any(SUITES[suite].kind != "tooling" for suite in suites) and not standalone_windows_lint:
         if not build_dir.is_dir():
             portal = "ao.bat" if builddir.platform_profile().name == "windows" else "./ao"
             raise die(f"build directory {build_dir} does not exist. Run {portal} build first to configure the project.")
@@ -1083,7 +1131,11 @@ def run_command(args: argparse.Namespace) -> int:
         suites = _catch2_suites_for_filter(suites, test_filter)
 
     if not args.no_build:
-        targets = [target for suite in suites if (target := SUITES[suite].target) is not None]
+        targets = [
+            target
+            for suite in suites
+            if not (windows and suite == "lint") and (target := SUITES[suite].target) is not None
+        ]
         if targets:
             print("=====================================")
             print(f"Building {', '.join(targets)} in {build_dir}...")
@@ -1116,6 +1168,11 @@ def run_command(args: argparse.Namespace) -> int:
         "asan": args.asan,
         "tsan": args.tsan,
     }
+    if windows and "lint" in suites:
+        options["no_build"] = args.no_build
+        if standalone_windows_lint:
+            options["lint_build_dir"] = build_dir
+            options["lint_build_dir_explicit"] = args.path is not None
     if args.suite == "concurrency":
         options["allow_no_tests"] = True
         options["concurrency"] = True

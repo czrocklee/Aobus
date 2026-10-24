@@ -12,7 +12,6 @@
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 

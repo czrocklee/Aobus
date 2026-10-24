@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/i18n/MessageCatalog.h>
-#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
@@ -14,6 +13,13 @@ namespace ao::rt
 {
   class PlaybackService;
 } // namespace ao::rt
+
+namespace ao::uimodel
+{
+  class PlaybackActions;
+  class TransportViewModel;
+  struct TransportViewState;
+} // namespace ao::uimodel
 
 namespace ao::winui
 {

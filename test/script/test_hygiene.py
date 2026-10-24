@@ -16,6 +16,7 @@ from unittest import mock
 
 from ao.command import format as format_command
 from ao.command import hygiene, tidy
+from ao.core import tidyconfig
 
 
 class FormatCommandTest(unittest.TestCase):
@@ -151,16 +152,38 @@ class TidyCommandTest(unittest.TestCase):
 
         self.assertTrue(invocation.is_include_fragment)
         self.assertFalse(invocation.is_header)
-        self.assertFalse(tidy.TidyInvocation(companion, companion).is_include_fragment)
+        self.assertTrue(tidy.limits_diagnostics_to_selected_path(invocation))
+        consumer_invocation = tidy.TidyInvocation(companion, companion)
+        self.assertFalse(consumer_invocation.is_include_fragment)
+        self.assertFalse(tidy.limits_diagnostics_to_selected_path(consumer_invocation))
 
-    def test_winui_sources_limit_diagnostics_to_the_selected_file(self):
-        winui_source = tidy.PROJECT_ROOT / "app" / "windows-winui" / "MainWindow.xaml.cpp"
+    def test_all_header_suffixes_limit_diagnostics_to_the_selected_file(self):
         core_source = tidy.PROJECT_ROOT / "app" / "i18n" / "MessageCatalog.cpp"
-        core_header = tidy.PROJECT_ROOT / "app" / "include" / "ao" / "i18n" / "MessageCatalog.h"
+        for suffix in (".h", ".hh", ".hpp", ".hxx", ".HPP"):
+            with self.subTest(suffix=suffix):
+                header = tidy.PROJECT_ROOT / "app" / "include" / "ao" / "i18n" / f"MessageCatalog{suffix}"
+                invocation = tidy.TidyInvocation(header, core_source)
+                self.assertTrue(invocation.is_header)
+                self.assertTrue(tidy.limits_diagnostics_to_selected_path(invocation))
 
-        self.assertTrue(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(winui_source, winui_source)))
-        self.assertTrue(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(core_header, core_source)))
-        self.assertFalse(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(core_source, core_source)))
+    def test_winui_sources_and_auxiliary_sources_limit_diagnostics_to_the_selected_file(self):
+        for name in (
+            "app/windows-winui/MainWindow.xaml.cpp",
+            "test/helper/WinUiLocalizationProbe.cpp",
+            "test/helper/WinUiTrackItemProbe.cpp",
+            "test/integration/windows/WinUiCreditsProbe.cpp",
+            "test/integration/windows/WinUiSoulProbe.cpp",
+            "test/integration/windows/WinUiTrackTableProbe.cpp",
+        ):
+            with self.subTest(name=name):
+                source = tidy.PROJECT_ROOT / name
+                self.assertTrue(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(source, source)))
+
+    def test_ordinary_translation_units_do_not_limit_diagnostics_to_the_selected_file(self):
+        for name in ("lib/audio/Player.cpp", "app/i18n/MessageCatalog.cpp", "test/unit/audio/PlayerTest.cpp"):
+            with self.subTest(name=name):
+                source = tidy.PROJECT_ROOT / name
+                self.assertFalse(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(source, source)))
 
     def test_default_tidy_uses_only_an_existing_normal_debug_dependency_tree(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -746,6 +769,13 @@ class TidyCommandTest(unittest.TestCase):
                     stack.enter_context(mock.patch.object(tidy, "prepare_toolchain", return_value=toolchain))
                     stack.enter_context(
                         mock.patch.object(
+                            tidy.workspace_cache,
+                            "validated_source_roots",
+                            return_value=(tidy.absolute_path(tidy.PROJECT_ROOT),),
+                        )
+                    )
+                    stack.enter_context(
+                        mock.patch.object(
                             tidy,
                             "classify_existing",
                             return_value={"STRICT": [header], "RELAXED": []},
@@ -783,9 +813,18 @@ class TidyCommandTest(unittest.TestCase):
                 self.assertIn(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}", command)
                 self.assertIn("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0", command)
                 self.assertTrue(any(argument.startswith("-header-filter=^(") for argument in command))
-                line_filter = next(argument for argument in command if argument.startswith("-line-filter="))
-                self.assertIn(tidy.absolute_path(header).as_posix(), line_filter)
-                self.assertNotIn(tidy.absolute_path(translation_unit).as_posix(), line_filter)
+                line_filters = [argument for argument in command if argument.startswith("-line-filter=")]
+                self.assertEqual(len(line_filters), 1)
+                entries = json.loads(line_filters[0].removeprefix("-line-filter="))
+                names = [entry["name"] for entry in entries]
+                expected_names = {str(tidy.absolute_path(header)), tidy.absolute_path(header).as_posix()}
+                self.assertEqual(set(names), expected_names)
+                self.assertEqual(len(names), len(expected_names))
+                self.assertTrue(
+                    all(entry == {"name": entry["name"], "lines": [[1, 2_147_483_647]]} for entry in entries)
+                )
+                self.assertNotIn(str(tidy.absolute_path(translation_unit)), names)
+                self.assertNotIn(tidy.absolute_path(translation_unit).as_posix(), names)
                 self.assertFalse(any(argument.startswith("-load=") for argument in command))
 
                 if suffix == ".mm":
@@ -1034,6 +1073,37 @@ Diagnostics:
                     self.assertTrue(tidy.apply_fixes(tmpdir, tool))
 
             call.assert_called_once_with([tool, "--ignore-insert-conflict", str(tmpdir)])
+
+
+class TidyNamingPolicyTest(unittest.TestCase):
+    """The identifier-naming method exemption is an exact-anchored policy."""
+
+    def ignored_regexp(self) -> re.Pattern[str]:
+        match = re.search(
+            r"readability-identifier-naming\.MethodIgnoredRegexp', value: '([^']+)'", tidyconfig.CONFIG_BASE
+        )
+        assert match is not None
+        return re.compile(match.group(1))
+
+    def test_winrt_metadata_abi_accessors_are_exempt(self):
+        # Every projected winrt::_Class_base type repeats these two metadata ABI
+        # accessors; they are generated surface, not project naming style.
+        pattern = self.ignored_regexp()
+        for name in ("GetXamlType", "GetXmlnsDefinitions"):
+            self.assertTrue(pattern.fullmatch(name), name)
+
+    def test_exemptions_stay_exact_and_anchored(self):
+        pattern = self.ignored_regexp()
+        for name in ("GetXamlTypeExtra", "MyGetXamlType", "getxamltype", "GetTemplate"):
+            self.assertIsNone(pattern.fullmatch(name), name)
+        # Existing external-method entries keep matching.
+        for name in ("GetAt", "MoveNext", "property_foo"):
+            self.assertTrue(pattern.fullmatch(name), name)
+
+    def test_idl_property_names_are_not_globally_exempt(self):
+        pattern = self.ignored_regexp()
+        for name in ("Text", "Width"):
+            self.assertIsNone(pattern.fullmatch(name), name)
 
 
 if __name__ == "__main__":

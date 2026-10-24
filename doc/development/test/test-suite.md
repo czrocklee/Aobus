@@ -33,10 +33,32 @@ standalone integration suite and the portal's tooling, lint, and environment set
 `default` is intentionally the normal development loop. On Linux, the TUI, CLI,
 integration, tooling, and lint suites take longer, so they are included
 only when selected directly or through `all`. The Windows `all` group contains
-core, TUI, CLI, integration, and tooling. The normal Windows presets do not
-build GTK or the lint integration suite. Native `ao.bat tidy`
-uses a separate `windows-tidy` preset that builds the self-contained
-`AobusClangTidy.exe`.
+core, TUI, CLI, integration, tooling, and lint. GTK is not built.
+`ao.bat test --lint`, `ao.bat test --all`, and `ao.bat check` prepare the static
+`AobusClangTidy.exe` through the existing `windows-tidy` preset before running
+fixtures. The checker host stays separate from Debug, Release, and ASan product
+trees: standalone and group runs use `windows-tidy` beside the default flavor
+trees, or `<primary>-tidy` when `BUILD_DIR` selects a nondefault primary tree.
+For a group, `-p <dir>` selects the primary product tree and derives its host
+sibling. Standalone `--lint -p <dir>` instead selects the exact prepared host
+tree and preserves that tree's configured preset rather than resetting it.
+`--no-build` requires that host and its configured SDK to exist and still verifies
+LLVM version and the complete Aobus check registry. First use adds the governed
+LLVM SDK download and static-host build; subsequent gates build it incrementally
+and run the full compatible fixture and smoke stages.
+
+Windows fixture commands use that host, the shared portal checker configuration,
+and explicit clang-cl arguments rather than borrowing product PCH/compiler flags.
+Fixed-output syntax checks and replacement smoke tests use only the configured
+LLVM SDK compiler, resource headers, and replacement tool. Standard includes come
+from the portal-initialized Visual Studio `INCLUDE` search list, including
+under `--no-build`. Empty search-list elements are ignored as by the native
+compiler; unused nonexistent directories do not invalidate the remaining
+providers. Missing required headers still fail compilation. Ambient `CXX`,
+`g++`, and replacement tools are not substitutes.
+Objective-C++ `.mm` fixtures are explicitly listed as platform-incompatible and
+not tested on Windows; C++ and header fixtures retain diagnostic, FixIt, syntax,
+and `NO-FIX` assertions.
 
 The macOS `all` group contains core, TUI, CLI, integration, and lint. GTK is not
 built. Its Homebrew host Python is outside the exact repository-tooling
@@ -56,6 +78,17 @@ running Python, Ruff, and mypy versions against
 contract, and tests documentation validation against isolated fixtures. Run
 `./ao docs check` separately to validate the live documentation tree. It never
 depends on unrelated tools from the ambient Windows `PATH`.
+
+Tooling also exercises real LLVM processes through the portal's selected-file
+diagnostic filters, including exported replacements and unselected-file
+exclusion. These upstream-rule controls do not replace the custom-checker lint
+integration suite. On Windows, prepare their governed SDK with
+`ao.bat setup llvm-sdk` before the tooling gate;
+CI does so explicitly. Missing local tools may skip these controls outside CI;
+under `CI=true`, missing required tools fail on every host. POSIX controls use
+the portal's native LLVM 22 environment and require the compiler and checker to
+report the same release version; Windows uses the exact configured SDK.
+Configured-tool or version failures never become skips.
 
 Each suite is registered once in `script/ao/command/test.py` through `SUITES`
 and the native groups are defined by `script/ao/core/builddir.py` platform profiles.
@@ -82,9 +115,10 @@ tests.
 `--no-build` applies uniformly. Catch2 executables and the native lint artifact
 must already exist in the selected build tree. Tooling tests do not build Aobus,
 but their registration-guard fixtures need CMake and a C++ compiler; on Windows
-they use Visual Studio's bundled CMake. `--path`, compiler, and sanitizer options select the same tree for C++
-and lint integration suites. On every native platform, build and test commands reuse
-the same flavor tree. Tests are configured by default, while `cmake --build
+they use Visual Studio's bundled CMake. On Linux and macOS, `--path`, compiler,
+and sanitizer options select the same flavor tree for C++ and lint integration
+suites. Windows product tests reuse their selected flavor tree; the separately
+configured lint host follows the selection rules above. Tests are configured by default, while `cmake --build
 --target ...` limits an incremental build to the selected suite targets.
 Native test invocations, including `--no-build`, require the tree's recorded C/C++
 compiler family and sanitizer configuration to match the requested options.
@@ -99,7 +133,7 @@ normal output is a concise pass count; unittest output is captured in the gate
 log and shown in full on failure.
 
 The lint suite is implemented by `script/ao/core/linttest.py`; `test/integration/lint/` contains only
-checker fixtures. The runner invokes the existing `ao tidy` implementation without rebuilding, verifies
+checker fixtures. On Linux and macOS the runner invokes the existing `ao tidy` implementation without rebuilding, verifies
 diagnostics against `POSITIVE` and `NEGATIVE` markers, and derives auto-fix expectations directly from
 `FIX-TO` markers. Only fixtures that declare `FIX-TO` expectations enter the auto-fix stage; a fixture whose main file carries a
 standalone `// NO-FIX` marker stays in the diagnostic stage and additionally asserts that the exported fix report contains

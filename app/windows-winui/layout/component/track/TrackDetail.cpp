@@ -3,12 +3,15 @@
 
 #include "layout/component/track/TrackDetail.h"
 
+#include "layout/runtime/FocusedDetail.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "layout/runtime/ResourceLookup.h"
 #include "pch.h"
 #include "track/TrackDetailControl.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/Credits.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/shell/ShellGenerationSequence.h>
@@ -20,9 +23,13 @@
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.h>
 
+#include <bitset>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::winui::layout
 {

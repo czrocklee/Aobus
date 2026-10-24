@@ -32,6 +32,8 @@
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/i18n/MessageCatalog.h>
@@ -45,7 +47,9 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -63,7 +67,7 @@
 #include <ao/uimodel/playback/command/PlaybackActions.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceIntent.h>
-#include <ao/winui/Theme.h>
+#include <ao/utility/ScopedRegistration.h>
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/ShellState.h>
 
@@ -142,8 +146,6 @@ namespace
                      R"(<Grid Height="32"><TextBlock Text="{Binding Text}" VerticalAlignment="Center" /></Grid>)"
                      R"(</DataTemplate>)"};
 
-  std::int32_t exitCode = 1;
-
   /// Scenario-scoped failure collection: expected contract violations are
   /// reported and counted instead of aborting the probe run.
   class ScenarioReport final
@@ -194,7 +196,7 @@ namespace
 
     ~TempRoot()
     {
-      std::error_code ignored;
+      auto ignored = std::error_code{};
       std::filesystem::remove_all(_root, ignored);
     }
 
@@ -228,7 +230,7 @@ namespace
     {
       return {.descriptor = {.id = ao::audio::BackendId{"winui-transport-probe"},
                              .supportedProfiles = {{.id = ao::audio::ProfileId{ao::audio::kProfileShared}}}},
-              .devices = _closed ? std::vector<ao::audio::Device>{} : std::vector<ao::audio::Device>{device()}};
+              .devices = _closed ? std::vector<ao::audio::Device>{} : std::vector{device()}};
     }
 
     ao::utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
@@ -270,7 +272,8 @@ namespace
     : public ApplicationT<WinUiTrackTableProbeApplication, Markup::IXamlMetadataProvider>
   {
   public:
-    WinUiTrackTableProbeApplication()
+    explicit WinUiTrackTableProbeApplication(std::int32_t& exitCode)
+      : _exitCode{exitCode}
     {
       UnhandledException(
         [this](Item const&, UnhandledExceptionEventArgs const& arguments)
@@ -278,7 +281,7 @@ namespace
           _report.record(std::format("unhandled XAML exception: {}", winrt::to_string(arguments.Message())));
           finish();
         });
-      InitializeComponent();
+      initializeComponent();
     }
 
     void OnLaunched(LaunchActivatedEventArgs const& /*arguments*/)
@@ -320,19 +323,20 @@ namespace
       enqueueStep(&WinUiTrackTableProbeApplication::setupGraphStep);
     }
 
+    // The IXamlMetadataProvider boundary requires these exact names for C++/WinRT consume/produce dispatch.
     Markup::IXamlType GetXamlType(winrt::Windows::UI::Xaml::Interop::TypeName const& type)
     {
-      return AppProvider()->GetXamlType(type);
+      return appProvider()->GetXamlType(type);
     }
 
-    Markup::IXamlType GetXamlType(winrt::hstring const& fullName) { return AppProvider()->GetXamlType(fullName); }
+    Markup::IXamlType GetXamlType(winrt::hstring const& fullName) { return appProvider()->GetXamlType(fullName); }
 
-    winrt::com_array<Markup::XmlnsDefinition> GetXmlnsDefinitions() { return AppProvider()->GetXmlnsDefinitions(); }
+    winrt::com_array<Markup::XmlnsDefinition> GetXmlnsDefinitions() { return appProvider()->GetXmlnsDefinitions(); }
 
   private:
     using Step = void (WinUiTrackTableProbeApplication::*)();
 
-    void InitializeComponent()
+    void initializeComponent()
     {
       if (_contentLoaded)
       {
@@ -340,18 +344,18 @@ namespace
       }
 
       _contentLoaded = true;
-      winrt::Windows::Foundation::Uri resourceLocator{L"ms-appx:///App.xaml"};
+      auto const resourceLocator = winrt::Windows::Foundation::Uri{L"ms-appx:///App.xaml"};
       Application::LoadComponent(*this, resourceLocator);
     }
 
-    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> AppProvider()
+    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> appProvider()
     {
-      if (!_appProvider)
+      if (!_appProviderPtr)
       {
-        _appProvider = winrt::make_self<winrt::Aobus::implementation::XamlMetaDataProvider>();
+        _appProviderPtr = winrt::make_self<winrt::Aobus::implementation::XamlMetaDataProvider>();
       }
 
-      return _appProvider;
+      return _appProviderPtr;
     }
 
     // --- Step plumbing -----------------------------------------------------
@@ -406,7 +410,7 @@ namespace
     /// of a deferred checkpoint, so the next step observes genuine delivery.
     void afterPostedNotifications(Step step)
     {
-      _executorPtr->defer([this, step] { enqueueStep(step); });
+      _executor->defer([this, step] { enqueueStep(step); });
     }
 
     void failSetup(std::string_view detail)
@@ -425,7 +429,7 @@ namespace
       {
         if (auto const row = selected.try_as<ProjectedTrackRow>(); row && !row.IsGroupHeader() && row.TrackId() != 0)
         {
-          ids.push_back(TrackId{row.TrackId()});
+          ids.emplace_back(row.TrackId());
         }
       }
 
@@ -433,20 +437,17 @@ namespace
       return ids;
     }
 
-    bool nativeSelectionHasHeader() const
+    bool hasNativeSelectionHeader() const
     {
-      for (auto const& selected : _listView.SelectedItems())
-      {
-        if (auto const row = selected.try_as<ProjectedTrackRow>(); row && row.IsGroupHeader())
-        {
-          return true;
-        }
-      }
-
-      return false;
+      return std::ranges::any_of(_listView.SelectedItems(),
+                                 [](Item const& selected)
+                                 {
+                                   auto const row = selected.try_as<ProjectedTrackRow>();
+                                   return row && row.IsGroupHeader();
+                                 });
     }
 
-    bool everySelectedNativeTrackIsSeeded() const
+    bool isEverySelectedNativeTrackSeeded() const
     {
       for (auto const& selected : _listView.SelectedItems())
       {
@@ -494,7 +495,7 @@ namespace
 
       auto const& items = _trackListPtr->items();
 
-      for (auto index = firstVisible; index < static_cast<std::int32_t>(items.Size()); ++index)
+      for (auto index = firstVisible; std::cmp_less(index, items.Size()); ++index)
       {
         auto const row = items.GetAt(static_cast<std::uint32_t>(index)).try_as<ProjectedTrackRow>();
 
@@ -511,8 +512,8 @@ namespace
     {
       auto const first = _rowsPanel.FirstVisibleIndex();
       auto const last = _rowsPanel.LastVisibleIndex();
-      return first >= 0 && last >= first && displayIndex >= static_cast<std::size_t>(first) &&
-             displayIndex <= static_cast<std::size_t>(last);
+      return first >= 0 && last >= first && std::cmp_greater_equal(displayIndex, first) &&
+             std::cmp_less_equal(displayIndex, last);
     }
 
     void clearSelectionPublications() { _selectionPublications.clear(); }
@@ -525,8 +526,8 @@ namespace
                     "the runtime selection survived the source replacement");
       _report.check(selectedNativeTrackIds() == sortIds(expectedIds),
                     std::format("the native selection was restored to {} row(s) by stable id", expectedIds.size()));
-      _report.check(!nativeSelectionHasHeader(), "no group header remains in the native selection");
-      _report.check(everySelectedNativeTrackIsSeeded(), "the native selection contains no phantom track ids");
+      _report.check(!hasNativeSelectionHeader(), "no group header remains in the native selection");
+      _report.check(isEverySelectedNativeTrackSeeded(), "the native selection contains no phantom track ids");
     }
 
     // --- Steps -------------------------------------------------------------
@@ -599,9 +600,7 @@ namespace
           return std::unexpected{applyRes.error()};
         }
 
-        auto commitRes = transaction.commit();
-
-        if (!commitRes)
+        if (auto commitRes = transaction.commit(); !commitRes)
         {
           return std::unexpected{commitRes.error()};
         }
@@ -629,7 +628,7 @@ namespace
 
       try
       {
-        _tempRoot.emplace();
+        _optTempRoot.emplace();
       }
       catch (std::exception const& error)
       {
@@ -637,9 +636,7 @@ namespace
         return;
       }
 
-      auto seedRes = seedCoreLibrary(_tempRoot->root());
-
-      if (!seedRes)
+      if (auto seedRes = seedCoreLibrary(_optTempRoot->root()); !seedRes)
       {
         failSetup(std::format("core library seeding failed: {}", seedRes.error().message));
         return;
@@ -669,12 +666,12 @@ namespace
       auto* runtimeExecutor = executorPtr.get();
 
       auto workspaceStorePtr = std::make_unique<ao::rt::ConfigStore>(
-        ao::rt::LibraryPaths{_tempRoot->root()}.databasePath() / "workspace.yaml");
+        ao::rt::LibraryPaths{_optTempRoot->root()}.databasePath() / "workspace.yaml");
 
       auto runtimeRes = ao::rt::AppRuntime::create(ao::rt::AppRuntimeDependencies{
         .executorPtr = std::move(executorPtr),
-        .musicRoot = _tempRoot->root(),
-        .databasePath = ao::rt::LibraryPaths{_tempRoot->root()}.databasePath(),
+        .musicRoot = _optTempRoot->root(),
+        .databasePath = ao::rt::LibraryPaths{_optTempRoot->root()}.databasePath(),
         .workspaceConfigStorePtr = std::move(workspaceStorePtr),
       });
 
@@ -686,7 +683,7 @@ namespace
 
       _runtimePtr = std::make_unique<ao::rt::AppRuntime>(std::move(*runtimeRes));
       // Publish the borrow only after the runtime owns the executor in final storage.
-      _executorPtr = runtimeExecutor;
+      _executor = runtimeExecutor;
       _columnLayoutsPtr = std::make_unique<ao::uimodel::TrackColumnLayouts>(_runtimePtr->library().changes());
       _trackListPtr = std::make_unique<ao::winui::TrackListController>(_runtimePtr->views(),
                                                                        _runtimePtr->workspace(),
@@ -766,9 +763,7 @@ namespace
         .titleBarElement = nullptr,
       };
 
-      auto publishRes = _hostPtr->publish(std::move(candidate));
-
-      if (!publishRes)
+      if (auto publishRes = _hostPtr->publish(std::move(candidate)); !publishRes)
       {
         failSetup(std::format("track.table publication failed: {}", publishRes.error().message));
         return;
@@ -806,8 +801,8 @@ namespace
         displayCount == kTrackCount + kAlbumCount,
         std::format("expected {} display items with group headers, saw {}", kTrackCount + kAlbumCount, displayCount));
 
-      auto headerSeen = false;
-      auto trackRowSeen = false;
+      bool headerSeen = false;
+      bool trackRowSeen = false;
 
       for (std::uint32_t index = 0; index < items.Size(); ++index)
       {
@@ -867,9 +862,9 @@ namespace
         _selectionPublications.size() == 1,
         std::format("a plain native selection published {} runtime changes", _selectionPublications.size()));
       _report.check(
-        !_selectionPublications.empty() && sortIds(_selectionPublications.front()) == std::vector<TrackId>{_firstTrack},
+        !_selectionPublications.empty() && sortIds(_selectionPublications.front()) == std::vector{_firstTrack},
         "the plain native selection published exactly the chosen track id");
-      _report.check(sortIds(_trackListPtr->selection()) == std::vector<TrackId>{_firstTrack},
+      _report.check(sortIds(_trackListPtr->selection()) == std::vector{_firstTrack},
                     "the real view service holds the published selection");
 
       clearSelectionPublications();
@@ -952,7 +947,7 @@ namespace
       _report.check(
         _selectionPublications.empty(), "adding a group header to a valid selection publishes no runtime change");
       _report.check(
-        !nativeSelectionHasHeader(), "the non-selectable group header was pruned from the native selection");
+        !hasNativeSelectionHeader(), "the non-selectable group header was pruned from the native selection");
       _report.check(_listView.SelectedItems().Size() == 2,
                     std::format("the native selection holds {} item(s) after the header gesture",
                                 _listView.SelectedItems().Size()));
@@ -970,7 +965,7 @@ namespace
       _report.check(_selectionPublications.empty(), "a header-only choice published no runtime selection change");
       _report.check(sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}),
                     "the previous runtime selection was not cleared by the header-only choice");
-      _report.check(!nativeSelectionHasHeader(), "the non-selectable header was pruned from the native selection");
+      _report.check(!hasNativeSelectionHeader(), "the non-selectable header was pruned from the native selection");
       _report.check(_listView.SelectedItems().Size() == 2,
                     std::format("the native selection was restored to the previous runtime rows, saw {} item(s)",
                                 _listView.SelectedItems().Size()));
@@ -1017,7 +1012,7 @@ namespace
 
       _listView.SelectedItem(_headerItem);
       _report.check(_listView.SelectedItems().Size() == 1 && selectedNativeTrackIds() == sortIds({_secondTrack}) &&
-                      !nativeSelectionHasHeader(),
+                      !hasNativeSelectionHeader(),
                     "the header-only gesture restores exactly the projected selected B track");
       _report.check(
         sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}) && _selectionPublications.empty(),
@@ -1048,7 +1043,7 @@ namespace
       }
 
       _listView.SelectedItem(_headerItem);
-      _report.check(_listView.SelectedItems().Size() == 0 && !nativeSelectionHasHeader(),
+      _report.check(_listView.SelectedItems().Size() == 0 && !hasNativeSelectionHeader(),
                     "a header-only choice restores no native row when neither selected id is projected");
       _report.check(
         sortIds(_trackListPtr->selection()) == sortIds({_firstTrack, _secondTrack}) && _selectionPublications.empty(),
@@ -1118,7 +1113,7 @@ namespace
                     "SelectAll published exactly the valid track ids");
       _report.check(sortIds(_trackListPtr->selection()) == _sortedSeedIds,
                     "the real view service holds every valid track id after SelectAll");
-      _report.check(!nativeSelectionHasHeader(), "SelectAll leaves no group header in the native selection");
+      _report.check(!hasNativeSelectionHeader(), "SelectAll leaves no group header in the native selection");
       _report.check(
         _listView.SelectedItems().Size() == kTrackCount,
         std::format("the native selection holds {} item(s) after SelectAll", _listView.SelectedItems().Size()));
@@ -1161,7 +1156,7 @@ namespace
       _report.beginScenario("the top visible track stays anchored across a source replacement");
 
       auto const optTopTrack = topVisibleTrackId();
-      _report.check(optTopTrack.has_value() && *optTopTrack == _anchorTrack,
+      _report.check(optTopTrack && *optTopTrack == _anchorTrack,
                     "the leading scroll exposed the anchor track at the top of the viewport");
 
       clearSelectionPublications();
@@ -1180,7 +1175,7 @@ namespace
     void anchorAfterSortStep()
     {
       auto const optTopTrack = topVisibleTrackId();
-      _report.check(optTopTrack.has_value() && *optTopTrack == _anchorTrack,
+      _report.check(optTopTrack && *optTopTrack == _anchorTrack,
                     "the top visible track kept its stable id across the source replacement");
       _report.check(
         _selectionPublications.empty(), "the anchored source replacement published no runtime selection change");
@@ -1204,9 +1199,9 @@ namespace
         return;
       }
 
-      _report.check(_selectionPublications.size() == 1 &&
-                      sortIds(_selectionPublications.front()) == std::vector<TrackId>{_revealTrackId},
-                    "the reveal published its own selection exactly once");
+      _report.check(
+        _selectionPublications.size() == 1 && sortIds(_selectionPublications.front()) == std::vector{_revealTrackId},
+        "the reveal published its own selection exactly once");
       clearSelectionPublications();
 
       afterNextLayoutStep(&WinUiTrackTableProbeApplication::revealVisibleStep);
@@ -1397,7 +1392,7 @@ namespace
         return;
       }
 
-      _themeCoordinatorPtr = std::make_unique<ao::winui::ThemeCoordinator>(_tempRoot->root() / "probe-theme.yaml");
+      _themeCoordinatorPtr = std::make_unique<ao::winui::ThemeCoordinator>(_optTempRoot->root() / "probe-theme.yaml");
       _presentationCatalogPtr =
         std::make_unique<ao::uimodel::TrackPresentationCatalog>(_runtimePtr->workspace(), *trackCatalogRes);
       _listPresentationsPtr =
@@ -1649,9 +1644,8 @@ namespace
               .isEnabled = _presentationButton.IsEnabled(),
             });
           });
-        auto const backRes = _runtimePtr->workspace().goBack();
 
-        if (!backRes)
+        if (auto const backRes = _runtimePtr->workspace().goBack(); !backRes)
         {
           failSetup(std::format("presentation history replay failed: {}", backRes.error().message));
           return;
@@ -2062,6 +2056,7 @@ namespace
       _root.UpdateLayout();
       auto const actualBrush = icon.Foreground().try_as<Media::SolidColorBrush>();
       auto const disabledColor = disabledReference.Foreground().as<Media::SolidColorBrush>().Color();
+
       if (actualBrush)
       {
         auto const actualColor = actualBrush.Color();
@@ -2077,6 +2072,7 @@ namespace
           actualColor.B,
           Media::VisualTreeHelper::GetChildrenCount(icon));
       }
+
       checkTransportVisualState(L"Disabled");
       _report.check(actualBrush && actualBrush.Color() == disabledColor,
                     "the unavailable engaged glyph inherits the native disabled foreground");
@@ -2124,9 +2120,7 @@ namespace
         [this](std::string message) { _statusMessages.push_back(std::move(message)); });
 
       // Replace the prior table generation, not the real runtime collaborators.
-      auto presentationIndex = std::uint32_t{};
-
-      if (_root.Children().IndexOf(_presentationButton, presentationIndex))
+      if (std::uint32_t presentationIndex = 0; _root.Children().IndexOf(_presentationButton, presentationIndex))
       {
         _root.Children().RemoveAt(presentationIndex);
       }
@@ -2183,9 +2177,8 @@ namespace
         .focusedDetailPtr = _focusedDetailPtr,
         .titleBarElement = nullptr,
       };
-      auto publishRes = _hostPtr->publish(std::move(candidate));
 
-      if (!publishRes)
+      if (auto publishRes = _hostPtr->publish(std::move(candidate)); !publishRes)
       {
         failSetup(std::format("navigation publication failed: {}", publishRes.error().message));
         return;
@@ -2267,13 +2260,22 @@ namespace
         _report.check(_navigation.ActualTheme() == ElementTheme::Light,
                       "the same native navigation control uses the requested window-local light theme");
       }
+
       auto const width = kNavigationProbeWidths[_navigationWidthIndex];
       _report.check(
         std::abs(_navigation.ActualWidth() - width) < 0.01,
         std::format("native navigation width {} matches requested {} DIP", _navigation.ActualWidth(), width));
-      auto const expectedMode = width < 720.0    ? Controls::NavigationViewPaneDisplayMode::LeftMinimal
-                                : width < 1120.0 ? Controls::NavigationViewPaneDisplayMode::LeftCompact
-                                                 : Controls::NavigationViewPaneDisplayMode::Left;
+      auto expectedMode = Controls::NavigationViewPaneDisplayMode::Left;
+
+      if (width < 720.0)
+      {
+        expectedMode = Controls::NavigationViewPaneDisplayMode::LeftMinimal;
+      }
+      else if (width < 1120.0)
+      {
+        expectedMode = Controls::NavigationViewPaneDisplayMode::LeftCompact;
+      }
+
       _report.check(_navigation.PaneDisplayMode() == expectedMode,
                     std::format("native pane mode follows the expected tier at {} DIP", width));
       _report.check(_navigation.IsPaneOpen() == (width >= 1120.0), "only the expanded pane is initially open");
@@ -2441,9 +2443,9 @@ namespace
         _trackListPtr.reset();
         _columnLayoutsPtr.reset();
 
-        if (_executorPtr != nullptr)
+        if (_executor != nullptr)
         {
-          _executorPtr->beginClosing();
+          _executor->beginClosing();
         }
 
         if (_runtimePtr)
@@ -2451,13 +2453,13 @@ namespace
           _runtimePtr->shutdown();
         }
 
-        if (_executorPtr != nullptr)
+        if (_executor != nullptr)
         {
-          _executorPtr->completeClosing();
+          _executor->completeClosing();
         }
 
         _runtimePtr.reset();
-        _tempRoot.reset();
+        _optTempRoot.reset();
         ao::winui::resetResourceLanguage();
       }
       catch (winrt::hresult_error const& error)
@@ -2476,12 +2478,12 @@ namespace
       if (failures == 0)
       {
         std::cerr << "WinUI track table probe: all scenarios passed\n";
-        exitCode = 0;
+        _exitCode = 0;
       }
       else
       {
         std::cerr << std::format("WinUI track table probe: {} check(s) failed\n", failures);
-        exitCode = 1;
+        _exitCode = 1;
       }
 
       if (_window && !_windowClosed)
@@ -2492,12 +2494,14 @@ namespace
       Exit();
     }
 
+    // main owns the result until Application::Start returns after native shutdown.
+    std::int32_t& _exitCode;
     bool _contentLoaded = false;
     bool _finishing = false;
     bool _windowClosed = false;
     std::size_t _teardownFailures = 0;
 
-    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> _appProvider{nullptr};
+    winrt::com_ptr<winrt::Aobus::implementation::XamlMetaDataProvider> _appProviderPtr{nullptr};
     Window _window{nullptr};
     Grid _root{nullptr};
     Border _hostBorder{nullptr};
@@ -2507,7 +2511,7 @@ namespace
     FrameworkElement::LayoutUpdated_revoker _layoutRevoker{};
 
     ScenarioReport _report;
-    std::optional<TempRoot> _tempRoot;
+    std::optional<TempRoot> _optTempRoot;
 
     std::vector<TrackId> _seededTrackIds;
     std::vector<TrackId> _sortedSeedIds;
@@ -2518,7 +2522,8 @@ namespace
     Item _headerItem{nullptr};
 
     std::unique_ptr<ao::rt::AppRuntime> _runtimePtr;
-    ao::winui::DispatcherQueueExecutor* _executorPtr = nullptr;
+    // AppRuntime owns this borrow through executor closing and runtime destruction.
+    ao::winui::DispatcherQueueExecutor* _executor = nullptr;
     std::unique_ptr<ao::uimodel::TrackColumnLayouts> _columnLayoutsPtr;
     std::unique_ptr<ao::winui::TrackListController> _trackListPtr;
     ao::async::Subscription _selectionSub;
@@ -2603,7 +2608,8 @@ int main()
   try
   {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
-    Application::Start([](auto&&) { std::ignore = winrt::make<WinUiTrackTableProbeApplication>(); });
+    std::int32_t exitCode = 1;
+    Application::Start([&exitCode](auto&&) { std::ignore = winrt::make<WinUiTrackTableProbeApplication>(exitCode); });
     return exitCode;
   }
   catch (winrt::hresult_error const& error)

@@ -11,10 +11,13 @@
 #include "track/TrackCreditsEditorControl.h"
 #include "track/TrackDetailControl.h"
 #include "track/TrackPropertiesCoordinator.h"
+#include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/i18n/MessageCatalog.h>
+#include <ao/library/Credits.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/LibraryWrite.h>
 #include <ao/library/MusicLibrary.h>
@@ -24,13 +27,16 @@
 #include <ao/library/WriteTransaction.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryCommands.h>
 #include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/library/detail/TrackCredits.h>
 #include <ao/uimodel/library/presentation/TrackPresentationText.h>
 
@@ -76,7 +82,6 @@ namespace
   using ao::i18n::MessageId;
   using ao::library::Credit;
   using ao::library::CreditKind;
-  std::int32_t exitCode = 1;
 
   class TempRoot final
   {
@@ -87,6 +92,11 @@ namespace
     {
       std::filesystem::create_directories(_path / "database");
     }
+    TempRoot(TempRoot const&) = delete;
+    TempRoot& operator=(TempRoot const&) = delete;
+    TempRoot(TempRoot&&) = delete;
+    TempRoot& operator=(TempRoot&&) = delete;
+
     ~TempRoot()
     {
       auto error = std::error_code{};
@@ -106,7 +116,7 @@ namespace
       return;
     }
 
-    if (auto control = root.try_as<T>())
+    if (auto control = root.try_as<T>(); control)
     {
       controls.push_back(control);
     }
@@ -133,7 +143,8 @@ namespace
   class AobusCreditsProbeApplication : public ApplicationT<AobusCreditsProbeApplication, Markup::IXamlMetadataProvider>
   {
   public:
-    AobusCreditsProbeApplication()
+    explicit AobusCreditsProbeApplication(std::int32_t& exitCode)
+      : _exitCode{exitCode}
     {
       UnhandledException(
         [this](auto const&, UnhandledExceptionEventArgs const& args)
@@ -144,17 +155,27 @@ namespace
       Application::LoadComponent(*this, winrt::Windows::Foundation::Uri{L"ms-appx:///App.xaml"});
     }
 
-    void OnLaunched(LaunchActivatedEventArgs const&)
+    void OnLaunched(LaunchActivatedEventArgs const& /*arguments*/)
     {
       auto catalogRes = ao::i18n::MessageCatalog::create("en");
       auto seedRes = seedLibrary();
       auto languageRes = ao::winui::configureResourceLanguage("en");
 
-      if (!catalogRes || !seedRes || !languageRes)
+      if (!catalogRes)
       {
-        fail(!catalogRes ? catalogRes.error().message
-             : !seedRes  ? seedRes.error().message
-                         : languageRes.error().message);
+        fail(catalogRes.error().message);
+        return;
+      }
+
+      if (!seedRes)
+      {
+        fail(seedRes.error().message);
+        return;
+      }
+
+      if (!languageRes)
+      {
+        fail(languageRes.error().message);
         return;
       }
 
@@ -207,11 +228,14 @@ namespace
       next();
     }
 
+    // The IXamlMetadataProvider boundary requires these exact names for C++/WinRT consume/produce dispatch.
     Markup::IXamlType GetXamlType(winrt::Windows::UI::Xaml::Interop::TypeName const& type)
     {
       return provider()->GetXamlType(type);
     }
+
     Markup::IXamlType GetXamlType(winrt::hstring const& name) { return provider()->GetXamlType(name); }
+
     winrt::com_array<Markup::XmlnsDefinition> GetXmlnsDefinitions() { return provider()->GetXmlnsDefinitions(); }
 
   private:
@@ -260,6 +284,7 @@ namespace
       }
 
       _queued = true;
+
       if (!_window.DispatcherQueue().TryEnqueue(winrt::Microsoft::UI::Dispatching::DispatcherQueuePriority::Low,
                                                 [this]
                                                 {
@@ -384,15 +409,7 @@ namespace
         return false;
       }
 
-      for (auto const& observed : _textObservations)
-      {
-        if (!observed)
-        {
-          return false;
-        }
-      }
-
-      return true;
+      return std::ranges::all_of(_textObservations, [](bool const observed) { return observed; });
     }
 
     void setText(AutoSuggestBox const& input, winrt::hstring const& text)
@@ -477,8 +494,8 @@ namespace
       }
 
       _finished = true;
-      exitCode = _failures == 0 && _step == _steps.size() ? 0 : 1;
-      std::cerr << std::format("WinUI Credits probe: {} steps, {} failures, exit {}\n", _step, _failures, exitCode);
+      _exitCode = _failures == 0 && _step == _steps.size() ? 0 : 1;
+      std::cerr << std::format("WinUI Credits probe: {} steps, {} failures, exit {}\n", _step, _failures, _exitCode);
 
       if (_timeout)
       {
@@ -502,7 +519,7 @@ namespace
       _detailPtr.reset();
       _controlPtr.reset();
 
-      if (_runtimeExecutor)
+      if (_runtimeExecutor != nullptr)
       {
         _runtimeExecutor->beginClosing();
         _runtimePtr->shutdown();
@@ -525,10 +542,23 @@ namespace
     std::vector<T> controls() const
     {
       auto found = std::vector<T>{};
-      collect(_workflowDialog ? _workflowDialog.as<DependencyObject>()
-              : _controlPtr   ? _controlPtr->element().as<DependencyObject>()
-                              : _scroll.as<DependencyObject>(),
-              found);
+      auto root = DependencyObject{nullptr};
+
+      if (_workflowDialog)
+      {
+        root = _workflowDialog.as<DependencyObject>();
+      }
+      else if (_controlPtr)
+      {
+        root = _controlPtr->element().as<DependencyObject>();
+      }
+      else
+      {
+        root = _scroll.as<DependencyObject>();
+      }
+
+      collect(root, found);
+
       if (_workflowDialog)
       {
         // ContentDialog may reparent its template into a Popup. Include its
@@ -581,9 +611,7 @@ namespace
 
       for (auto const& candidate : controls<Button>())
       {
-        auto text = candidate.Content().try_as<TextBlock>();
-
-        if (text && text.Text() == label && index++ == occurrence)
+        if (auto text = candidate.Content().try_as<TextBlock>(); text && text.Text() == label && index++ == occurrence)
         {
           return candidate;
         }
@@ -641,9 +669,8 @@ namespace
     {
       _controlPtr.reset();
       _optAccepted.reset();
-      auto beginRes = _model.begin(sections, scope);
 
-      if (!beginRes)
+      if (auto beginRes = _model.begin(sections, scope); !beginRes)
       {
         fail(beginRes.error().message);
         return;
@@ -754,9 +781,7 @@ namespace
         return std::unexpected{applyRes.error()};
       }
 
-      auto commitRes = transaction.commit();
-
-      if (!commitRes)
+      if (auto commitRes = transaction.commit(); !commitRes)
       {
         return std::unexpected{commitRes.error()};
       }
@@ -841,15 +866,13 @@ namespace
             {
               auto const label =
                 winrt::to_hstring(ao::i18n::requiredText(*_optCatalog, MessageId::WinUiTrackPropertiesDiscard));
-              for (auto const& command : controls<Button>())
-              {
-                if (auto text = command.Content().try_as<TextBlock>(); text && text.Text() == label)
-                {
-                  return true;
-                }
-              }
 
-              return false;
+              return std::ranges::any_of(controls<Button>(),
+                                         [&label](Button const& command)
+                                         {
+                                           auto const text = command.Content().try_as<TextBlock>();
+                                           return text && text.Text() == label;
+                                         });
             };
           }
 
@@ -955,9 +978,8 @@ namespace
                 .trackIds = std::move(ids),
                 .optCreditsScope = scope,
               });
-            auto presentRes = _coordinatorPtr->present();
 
-            if (!presentRes)
+            if (auto presentRes = _coordinatorPtr->present(); !presentRes)
             {
               throw winrt::hresult_invalid_argument{winrt::to_hstring(presentRes.error().message)};
             }
@@ -1106,7 +1128,7 @@ namespace
     {
       requireNativeRows(3);
       auto names = inputs(MessageId::TrackCreditName);
-      auto input = names.back();
+      auto const& input = names.back();
       auto textBoxes = std::vector<TextBox>{};
       collect(input, textBoxes);
 
@@ -1209,7 +1231,7 @@ namespace
 
     void planFeedbackScenarios()
     {
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           auto sections = emptySections();
@@ -1219,8 +1241,8 @@ namespace
           show(sections, ao::uimodel::allTrackCreditKinds());
           _model.focusRow(2);
         });
-      _steps.push_back([this] { observeUnchangedHydration(); });
-      _steps.push_back(
+      _steps.emplace_back([this] { observeUnchangedHydration(); });
+      _steps.emplace_back(
         [this]
         {
           requireNativeRows(3);
@@ -1232,7 +1254,7 @@ namespace
           _retiredDelete = button(MessageId::TrackCreditDelete, 0);
           _retiredKind.SelectedIndex(2);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           requireNativeRows(3);
@@ -1255,7 +1277,7 @@ namespace
             .Invoke();
           observeUnchangedHydration();
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           requireNativeRows(3);
@@ -1266,8 +1288,8 @@ namespace
                 "retired callbacks cannot claim logical or actual focus");
           _controlPtr->refresh();
         });
-      _steps.push_back([this] { observeUnchangedHydration(); });
-      _steps.push_back(
+      _steps.emplace_back([this] { observeUnchangedHydration(); });
+      _steps.emplace_back(
         [this]
         {
           requireNativeRows(3);
@@ -1275,7 +1297,7 @@ namespace
                 "explicit multirow refresh cannot claim focus through unchanged deferred text");
           editNativeName(L"An");
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_userInputObserved && _model.entries()[2].name == "An" && _model.entries()[2].role == "baton",
@@ -1299,7 +1321,7 @@ namespace
                 "deferred input/completion retains actual focus and caret");
           editNativeName(L"Ann");
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_userInputObserved && _model.focusedRow() == 2 && _model.entries()[2].name == "Ann" &&
@@ -1308,7 +1330,7 @@ namespace
                 "consecutive native edits preserve logical focus, actual focus, value and caret");
           chooseNativeSuggestion(inputs(MessageId::TrackCreditName)[2], L"Anne");
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_suggestionChosenObserved && _model.focusedRow() == 2 &&
@@ -1318,7 +1340,7 @@ namespace
           setText(inputs(MessageId::TrackCreditName)[2], L"Anne edited");
           setText(inputs(MessageId::TrackCreditRole)[2], L"chosen role");
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(
@@ -1326,7 +1348,7 @@ namespace
             "genuine programmatic value edits still mutate names and roles");
           invoke(MessageId::TrackCreditDelete, 2);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           requireNativeRows(2);
@@ -1342,13 +1364,13 @@ namespace
           _retiredDelete = nullptr;
           showDetail({_emptyTrackId}, true);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(0);
           invokeButton(_detailShowEmpty);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(kEveryKindActions);
@@ -1361,38 +1383,38 @@ namespace
 
           invokeButton(_detailShowEmpty);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(0);
           showDetail({_trackId}, true);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(kPerformanceActions);
           invokeDetailScope(ao::uimodel::trackCreditScope(CreditKind::Ensemble));
           invokeButton(_detailShowEmpty);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(kEveryKindActions);
           invokeButton(_detailMetadataHeader);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(0);
           invokeButton(_detailMetadataHeader);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(kEveryKindActions);
           showDetail({_trackId, _emptyTrackId}, true);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           // A fresh detail starts with Show Empty off, so only the performance kinds have actions.
@@ -1410,7 +1432,7 @@ namespace
           invokeDetailScope(ao::uimodel::trackCreditScope(CreditKind::Soloist));
           showDetail({}, true);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkDetailActions(0);
@@ -1421,9 +1443,9 @@ namespace
 
     void planWorkflowScenarios()
     {
-      _steps.push_back([this] { showDetail(); });
-      _steps.push_back([this] { invokeScope(CreditKind::Soloist); });
-      _steps.push_back(
+      _steps.emplace_back([this] { showDetail(); });
+      _steps.emplace_back([this] { invokeScope(CreditKind::Soloist); });
+      _steps.emplace_back(
         [this]
         {
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "active Credits child blocks composed Save");
@@ -1431,13 +1453,13 @@ namespace
           setText(singleCreditName(), L"Staged soloist");
           setTitle(L"Composed title");
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "ordinary edits cannot bypass active child guard");
           invoke(MessageId::TrackCreditsCommit);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkStored("Original title", expectedCredits("Conductor", "Anne"), 0);
@@ -1446,16 +1468,16 @@ namespace
             kPerformanceActions, "Properties offers no one-kind action for an unused kind after Performer");
           invokeScope(CreditKind::Conductor);
         });
-      _steps.push_back([this] { setText(singleCreditName(), L"Staged conductor"); });
-      _steps.push_back([this] { invoke(MessageId::TrackCreditsCommit); });
-      _steps.push_back([this] { invokeScope(CreditKind::Soloist); });
-      _steps.push_back(
+      _steps.emplace_back([this] { setText(singleCreditName(), L"Staged conductor"); });
+      _steps.emplace_back([this] { invoke(MessageId::TrackCreditsCommit); });
+      _steps.emplace_back([this] { invokeScope(CreditKind::Soloist); });
+      _steps.emplace_back(
         [this]
         {
           check(singleCreditName().Text() == L"Staged soloist", "sequential scope reopening uses pending overlay");
           invoke(MessageId::TrackCreditsCancel);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkStored("Original title", expectedCredits("Conductor", "Anne"), 0);
@@ -1463,53 +1485,53 @@ namespace
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "parent submission disables repeated Save");
           _ready = [this] { return _dialogClosed; };
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkStored("Composed title", expectedCredits("Staged conductor", "Staged soloist"), 1);
           // Closing switches discovery back to detail; its refreshed actions need their own native readiness gate.
           releaseClosedDialog();
         });
-      _steps.push_back([this] { invokeScope(CreditKind::Soloist); });
-      _steps.push_back([this] { setText(singleCreditName(), L"Discarded soloist"); });
-      _steps.push_back([this] { invoke(MessageId::TrackCreditsCommit); });
-      _steps.push_back([this] { invokeDialogButton(L"CloseButton"); });
-      _steps.push_back(
+      _steps.emplace_back([this] { invokeScope(CreditKind::Soloist); });
+      _steps.emplace_back([this] { setText(singleCreditName(), L"Discarded soloist"); });
+      _steps.emplace_back([this] { invoke(MessageId::TrackCreditsCommit); });
+      _steps.emplace_back([this] { invokeDialogButton(L"CloseButton"); });
+      _steps.emplace_back(
         [this]
         {
           check(_coordinatorPtr->isActive() && !_dialogClosed, "dirty native Close is cancelled for confirmation");
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "discard decision blocks Save");
           invoke(MessageId::WinUiTrackPropertiesKeepEditing);
         });
-      _steps.push_back([this] { invokeScope(CreditKind::Soloist); });
-      _steps.push_back(
+      _steps.emplace_back([this] { invokeScope(CreditKind::Soloist); });
+      _steps.emplace_back(
         [this]
         {
           check(singleCreditName().Text() == L"Discarded soloist", "declining close preserves pending overlay");
           // Close with the child still active, not merely a staged parent patch.
           invokeDialogButton(L"CloseButton");
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           invoke(MessageId::WinUiTrackPropertiesDiscard);
           _ready = [this] { return _dialogClosed; };
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkStored("Composed title", expectedCredits("Staged conductor", "Staged soloist"), 1);
           releaseClosedDialog();
         });
-      _steps.push_back([this] { invokeScope(CreditKind::Soloist); });
-      _steps.push_back(
+      _steps.emplace_back([this] { invokeScope(CreditKind::Soloist); });
+      _steps.emplace_back(
         [this]
         {
           setText(singleCreditName(), L"Stale draft");
           setTitle(L"Stale title draft");
         });
-      _steps.push_back([this] { mutateExternally(); });
-      _steps.push_back(
+      _steps.emplace_back([this] { mutateExternally(); });
+      _steps.emplace_back(
         [this]
         {
           check(_externalAccepted, "external command completed with an applied revision");
@@ -1521,8 +1543,8 @@ namespace
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "stale parent cannot submit");
           invoke(MessageId::WinUiTrackPropertiesReload);
         });
-      _steps.push_back([this] { invoke(MessageId::WinUiTrackPropertiesKeepEditing); });
-      _steps.push_back(
+      _steps.emplace_back([this] { invoke(MessageId::WinUiTrackPropertiesKeepEditing); });
+      _steps.emplace_back(
         [this]
         {
           check(singleCreditName().Text() == L"Stale draft" && titleInput().Text() == L"Stale title draft",
@@ -1530,8 +1552,8 @@ namespace
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "declining reload does not silently rebind");
           invoke(MessageId::WinUiTrackPropertiesReload);
         });
-      _steps.push_back([this] { invoke(MessageId::WinUiTrackPropertiesDiscard); });
-      _steps.push_back(
+      _steps.emplace_back([this] { invoke(MessageId::WinUiTrackPropertiesDiscard); });
+      _steps.emplace_back(
         [this]
         {
           check(inputs(MessageId::TrackCreditName).empty(), "confirmed reload discards active child");
@@ -1540,20 +1562,20 @@ namespace
           check(!_workflowDialog.IsPrimaryButtonEnabled(), "reloaded unchanged form cannot submit");
           invokeScope(CreditKind::Soloist);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(singleCreditName().Text() == L"Staged soloist", "reload discards stale scoped draft");
           setText(singleCreditName(), L"Reloaded soloist");
         });
-      _steps.push_back([this] { invoke(MessageId::TrackCreditsCommit); });
-      _steps.push_back(
+      _steps.emplace_back([this] { invoke(MessageId::TrackCreditsCommit); });
+      _steps.emplace_back(
         [this]
         {
           invokeDialogButton(L"PrimaryButton");
           _ready = [this] { return _dialogClosed; };
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           checkStored("External title", expectedCredits("Staged conductor", "Reloaded soloist"), 3);
@@ -1563,15 +1585,15 @@ namespace
 
     void planScenarios()
     {
-      _steps.push_back([this] { show(emptySections(), ao::uimodel::trackCreditScope(CreditKind::Soloist)); });
-      _steps.push_back(
+      _steps.emplace_back([this] { show(emptySections(), ao::uimodel::trackCreditScope(CreditKind::Soloist)); });
+      _steps.emplace_back(
         [this]
         {
           check(inputs(MessageId::TrackCreditName).empty(), "zero-entry category renders no invented row");
           check(button(MessageId::TrackCreditsAdd).IsTabStop(), "Add is keyboard reachable");
           invoke(MessageId::TrackCreditsAdd);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           auto names = inputs(MessageId::TrackCreditName);
@@ -1613,7 +1635,7 @@ namespace
           setText(names[0], L"Anne");
           setText(roles[0], L"violin");
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           auto const roles = inputs(MessageId::TrackCreditRole);
@@ -1637,7 +1659,7 @@ namespace
 
           invoke(MessageId::TrackCreditsAdd);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           auto names = inputs(MessageId::TrackCreditName);
@@ -1654,8 +1676,8 @@ namespace
           setText(names[1], L"Anne");
           setText(roles[1], L"piano");
         });
-      _steps.push_back([this] { invoke(MessageId::TrackCreditMoveUp, 1); });
-      _steps.push_back(
+      _steps.emplace_back([this] { invoke(MessageId::TrackCreditMoveUp, 1); });
+      _steps.emplace_back(
         [this]
         {
           check(
@@ -1686,7 +1708,7 @@ namespace
 
           invoke(MessageId::TrackCreditsCommit);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_optAccepted && _optAccepted->optCredits && _optAccepted->optCredits->entries.size() == 2,
@@ -1701,7 +1723,7 @@ namespace
             std::vector<Credit>{{.name = "Existing", .kind = CreditKind::Performer, .role = "piano"}};
           show(sections, ao::uimodel::allTrackCreditKinds());
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           auto kinds = controls<ComboBox>();
@@ -1738,7 +1760,7 @@ namespace
           setText(roles[0], L"Rejected role");
           kinds[0].SelectedIndex(3);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_model.entries() == _disabledDraft && _model.isEditing() && !_optAccepted,
@@ -1761,7 +1783,7 @@ namespace
           // refresh() rebuilt the rows; a selector opens only after its native load.
           _ready = [this] { return controls<ComboBox>().front().IsLoaded(); };
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           // Drive the row kind selector through its dropdown, not a programmatic SelectedIndex.
@@ -1775,7 +1797,7 @@ namespace
             return _kindSelector.IsDropDownOpen() && item && item.IsLoaded();
           };
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           // ComboBox item data peers, not item containers, carry the SelectionItem pattern.
@@ -1808,7 +1830,7 @@ namespace
 
           _ready = [this] { return !_model.entries().empty() && _model.entries().front().name == "Existing"; };
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_model.entries() ==
@@ -1822,7 +1844,7 @@ namespace
           _kindSelector = nullptr;
           invoke(MessageId::TrackCreditDelete, 0);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_model.entries() ==
@@ -1832,7 +1854,7 @@ namespace
                 "rebuilt full-scope Add selector keeps the shared default");
           invoke(MessageId::TrackCreditsAdd);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_model.entries().size() == 2 && _model.entries()[1].kind == CreditKind::Performer &&
@@ -1840,7 +1862,7 @@ namespace
                 "full-scope Add without a kind choice appends a Performer row");
           invoke(MessageId::TrackCreditsCancel);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_cancelled == 1 && !_optAccepted && !_model.isEditing(),
@@ -1849,7 +1871,7 @@ namespace
           sections[3] = {.mixed = true};
           show(sections, ao::uimodel::allTrackCreditKinds());
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(inputs(MessageId::TrackCreditName).empty(), "mixed scope never seeds target or union rows");
@@ -1857,27 +1879,29 @@ namespace
           check(!button(MessageId::TrackCreditsCommit).IsEnabled(), "untouched mixed scope cannot clear");
           invoke(MessageId::TrackCreditsReplaceScope);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(button(MessageId::TrackCreditsAdd).IsEnabled(), "explicit replacement unlocks Add");
           check(!button(MessageId::TrackCreditsCommit).IsEnabled(), "empty mixed replacement is not an implicit clear");
           invoke(MessageId::TrackCreditsClear);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(button(MessageId::TrackCreditsCommit).IsEnabled(), "explicit scoped Clear is committable");
           _controlPtr->setEnabled(false);
+
           for (auto const& input : controls<Control>())
           {
             check(!input.IsEnabled(), "stale/busy owner disables every native child without dropping draft");
           }
+
           check(_model.isEditing() && _model.canCommit(), "disabled presentation retains explicit clear draft");
           _controlPtr->setEnabled(true);
           invoke(MessageId::TrackCreditsCommit);
         });
-      _steps.push_back(
+      _steps.emplace_back(
         [this]
         {
           check(_optAccepted && _optAccepted->optCredits && _optAccepted->optCredits->kinds.all() &&
@@ -1886,6 +1910,8 @@ namespace
         });
     }
 
+    // main owns the result until Application::Start returns after native shutdown.
+    std::int32_t& _exitCode;
     TempRoot _temp;
     std::optional<ao::i18n::MessageCatalog> _optCatalog;
     std::unique_ptr<ao::rt::AppRuntime> _runtimePtr;
@@ -1942,14 +1968,15 @@ namespace
     std::size_t _cancelled = 0;
     bool _finished = false;
   };
-}
+} // namespace
 
 int main()
 {
   try
   {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
-    Application::Start([](auto const&) { std::ignore = winrt::make<AobusCreditsProbeApplication>(); });
+    std::int32_t exitCode = 1;
+    Application::Start([&exitCode](auto const&) { std::ignore = winrt::make<AobusCreditsProbeApplication>(exitCode); });
     return exitCode;
   }
   catch (winrt::hresult_error const& error)
