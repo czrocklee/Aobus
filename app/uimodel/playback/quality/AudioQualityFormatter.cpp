@@ -4,6 +4,7 @@
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <ao/Contract.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/NodeFormat.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
@@ -17,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <format>
 #include <span>
 #include <string>
@@ -69,6 +71,130 @@ namespace ao::uimodel
       auto const signal = audio::signalFormat(format);
       return std::format(
         "{}{}", signal.precisionBits, signal.sampleKind == audio::SampleKind::FloatingPoint ? "f" : "b");
+    }
+
+    constexpr auto kFrontCenterSpeakerMask = 0x4U;
+    constexpr auto kFrontLeftRightSpeakerMask = 0x3U;
+    // Union of the standard WAVE role bits in kSpeakerRoles.
+    constexpr auto kNamedSpeakerRoleMask = 0x7FFU;
+
+    struct SpeakerRole final
+    {
+      std::uint32_t bit;
+      std::string_view token;
+    };
+
+    // Standard WAVE speaker positions, in ascending mask-bit order. Bits
+    // outside this table have no role token; their masks fall back to the raw
+    // value instead of a guessed identity.
+    constexpr auto kSpeakerRoles = std::array{
+      SpeakerRole{.bit = 0x1, .token = "FL"},
+      SpeakerRole{.bit = 0x2, .token = "FR"},
+      SpeakerRole{.bit = 0x4, .token = "FC"},
+      SpeakerRole{.bit = 0x8, .token = "LFE"},
+      SpeakerRole{.bit = 0x10, .token = "BL"},
+      SpeakerRole{.bit = 0x20, .token = "BR"},
+      SpeakerRole{.bit = 0x40, .token = "FLC"},
+      SpeakerRole{.bit = 0x80, .token = "FRC"},
+      SpeakerRole{.bit = 0x100, .token = "BC"},
+      SpeakerRole{.bit = 0x200, .token = "SL"},
+      SpeakerRole{.bit = 0x400, .token = "SR"},
+    };
+
+    // Ascending assigned-bit order matches the effective mask's application
+    // order. Any bit without a token in this table triggers whole-mask raw
+    // fallback, including untabled assigned positions as well as reserved bits.
+    std::string speakerRoleText(std::uint32_t const speakerMask)
+    {
+      auto roles = std::string{};
+
+      for (auto const& role : kSpeakerRoles)
+      {
+        if ((speakerMask & role.bit) == 0)
+        {
+          continue;
+        }
+
+        if (!roles.empty())
+        {
+          roles += " ";
+        }
+
+        roles += role.token;
+      }
+
+      return (speakerMask & ~kNamedSpeakerRoleMask) == 0 ? roles : std::string{};
+    }
+
+    // Truthful compact channel description for the effective identity. Only
+    // the FC mono and FL-FR stereo sets carry the localized Mono/Stereo words;
+    // a zero mask never guesses roles from the channel count.
+    std::string channelText(MessageCatalog const& catalog, std::uint8_t const channels, std::uint32_t const speakerMask)
+    {
+      if (channels == 1 && speakerMask == kFrontCenterSpeakerMask)
+      {
+        return requiredMessage(catalog, MessageId::TrackChannelMono);
+      }
+
+      if (channels == 2 && speakerMask == kFrontLeftRightSpeakerMask)
+      {
+        return requiredMessage(catalog, MessageId::TrackChannelStereo);
+      }
+
+      auto const channelCount = std::to_string(channels);
+
+      if (speakerMask == 0)
+      {
+        auto const arguments = std::array{MessageArgument{"count", channelCount}};
+        return requiredMessage(catalog, MessageId::AudioChannelsCompact, arguments);
+      }
+
+      auto const roles = speakerRoleText(speakerMask);
+      auto const layout = roles.empty() ? std::format("0x{:X}", speakerMask) : roles;
+      auto const arguments = std::array{
+        MessageArgument{"count", channelCount},
+        MessageArgument{"layout", layout},
+      };
+      return requiredMessage(catalog, MessageId::AudioChannelsIdentified, arguments);
+    }
+
+    std::string channelMappingFindingLabel(MessageCatalog const& catalog, audio::QualityFinding const& finding)
+    {
+      auto const hasFormats = finding.optFromFormat && finding.optToFormat;
+
+      // A same-count layout change is exactly what count-only text hides;
+      // present each side's effective identity instead of a bare 2 → 2.
+      if (hasFormats)
+      {
+        auto const& fromSignal = audio::signalFormat(*finding.optFromFormat);
+        auto const& toSignal = audio::signalFormat(*finding.optToFormat);
+
+        auto const fromMask = finding.optFromSpeakerMask.value_or(fromSignal.speakerMask);
+        auto const toMask = finding.optToSpeakerMask.value_or(toSignal.speakerMask);
+
+        if (fromSignal.channels == toSignal.channels && fromMask != toMask)
+        {
+          // Finding roles may come from native observations without changing the
+          // endpoint format's storage-order promise. Catalog arguments borrow
+          // these owning strings until formatting finishes.
+          auto const fromLayout = channelText(catalog, fromSignal.channels, fromMask);
+          auto const toLayout = channelText(catalog, toSignal.channels, toMask);
+          auto const layoutArguments = std::array{
+            MessageArgument{"fromLayout", fromLayout},
+            MessageArgument{"toLayout", toLayout},
+          };
+          return requiredMessage(catalog, MessageId::AudioFindingChannelLayout, layoutArguments);
+        }
+      }
+
+      auto const fromChannels = std::to_string(hasFormats ? audio::signalFormat(*finding.optFromFormat).channels : 0);
+      auto const toChannels = std::to_string(hasFormats ? audio::signalFormat(*finding.optToFormat).channels : 0);
+      auto const arguments = std::array{
+        MessageArgument{"hasFormats", hasFormats ? "yes" : "no"},
+        MessageArgument{"fromChannels", fromChannels},
+        MessageArgument{"toChannels", toChannels},
+      };
+      return requiredMessage(catalog, MessageId::AudioFindingChannelMapping, arguments);
     }
 
     std::vector<audio::QualityFinding const*> visibleFindings(rt::QualityState const& state)
@@ -130,6 +256,27 @@ namespace ao::uimodel
       };
       return requiredMessage(catalog, id, arguments);
     }
+
+    AudioQualityPresentation withChannelNote(MessageCatalog const& catalog,
+                                             audio::ChannelConfidence const confidence,
+                                             AudioQualityPresentation presentation)
+    {
+      switch (confidence)
+      {
+        case audio::ChannelConfidence::Unknown:
+          presentation.channelNote = requiredMessage(catalog, MessageId::AudioQualityUnknownChannelLayout);
+          break;
+        case audio::ChannelConfidence::Unverified:
+          presentation.channelNote = requiredMessage(catalog, MessageId::AudioQualityUnverifiedChannelDelivery);
+          break;
+        case audio::ChannelConfidence::Inferred:
+          presentation.channelNote = requiredMessage(catalog, MessageId::AudioQualityInferredChannelLayout);
+          break;
+        case audio::ChannelConfidence::Verified: break;
+      }
+
+      return presentation;
+    }
   } // namespace
 
   AudioQualityFormatter::AudioQualityFormatter(MessageCatalog catalog)
@@ -161,22 +308,7 @@ namespace ao::uimodel
   {
     constexpr double kKhzMultiplier = 1000.0;
     auto const signal = audio::signalFormat(format);
-    auto const channelsText = [&] -> std::string
-    {
-      if (signal.channels == 1)
-      {
-        return requiredMessage(_catalog, MessageId::TrackChannelMono);
-      }
-
-      if (signal.channels == 2)
-      {
-        return requiredMessage(_catalog, MessageId::TrackChannelStereo);
-      }
-
-      auto const channelCount = std::to_string(signal.channels);
-      auto const arguments = std::array{MessageArgument{"count", channelCount}};
-      return requiredMessage(_catalog, MessageId::AudioChannelsCompact, arguments);
-    }();
+    auto const channelsText = channelText(_catalog, signal.channels, signal.speakerMask);
 
     auto bits = signal.precisionBits;
 
@@ -222,18 +354,7 @@ namespace ao::uimodel
         };
         return requiredMessage(_catalog, MessageId::AudioFindingResampling, arguments);
       }
-      case audio::QualityFindingKind::ChannelMapping:
-      {
-        auto const hasFormats = finding.optFromFormat && finding.optToFormat;
-        auto const fromChannels = std::to_string(hasFormats ? audio::signalFormat(*finding.optFromFormat).channels : 0);
-        auto const toChannels = std::to_string(hasFormats ? audio::signalFormat(*finding.optToFormat).channels : 0);
-        auto const arguments = std::array{
-          MessageArgument{"hasFormats", hasFormats ? "yes" : "no"},
-          MessageArgument{"fromChannels", fromChannels},
-          MessageArgument{"toChannels", toChannels},
-        };
-        return requiredMessage(_catalog, MessageId::AudioFindingChannelMapping, arguments);
-      }
+      case audio::QualityFindingKind::ChannelMapping: return channelMappingFindingLabel(_catalog, finding);
       case audio::QualityFindingKind::LosslessPadding:
         return requiredMessage(_catalog, MessageId::AudioFindingLosslessPadding);
       case audio::QualityFindingKind::LosslessFloat:
@@ -330,6 +451,11 @@ namespace ao::uimodel
 
   AudioQualityPresentation AudioQualityFormatter::presentation(rt::QualityState const& state) const
   {
+    return withChannelNote(_catalog, state.channelConfidence, numericalPresentation(state));
+  }
+
+  AudioQualityPresentation AudioQualityFormatter::numericalPresentation(rt::QualityState const& state) const
+  {
     if (state.overall == audio::Quality::Unknown)
     {
       return AudioQualityPresentation{.headline = requiredMessage(_catalog, MessageId::AudioQualityUnknownPipeline),
@@ -385,6 +511,8 @@ namespace ao::uimodel
                                       .category = AudioQualityCategory::Informational};
     }
 
+    // The medal describes numerical PCM evidence at the observed software
+    // boundary, not proof of speaker routing.
     if (visibleFindings(state).empty() && state.sourceQuality == audio::Quality::BitwisePerfect)
     {
       return AudioQualityPresentation{

@@ -4,15 +4,21 @@
 #include "AppKitPlaybackScenario.h"
 
 #include "AppKitScenarioSupport.h"
+#include "app/macos-appkit/AppKitText.h"
 #include "app/macos-appkit/LibrarySession.h"
 #include "app/macos-appkit/PlaybackBar.h"
 #include "app/macos-appkit/SoulButton.h"
 #include <ao/Contract.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
+#include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
+#include <ao/i18n/MessageCatalog.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #import <QuartzCore/QuartzCore.h>
@@ -24,8 +30,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <limits>
+#include <print>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -136,6 +146,31 @@
 - (double)lastVolume
 {
   return _lastVolume;
+}
+@end
+
+// This target has no runtime collaborator. Any action is a scenario failure;
+// the quality-only case inspects bindings without invoking them.
+@interface AobusQualityPresentationActionTarget : NSObject
+- (void)transport:(id)sender;
+- (void)showOutput:(id)sender;
+- (void)unexpectedAction:(id)sender;
+@end
+
+@implementation AobusQualityPresentationActionTarget
+- (void)transport:(id) [[maybe_unused]] sender
+{
+  AO_INVARIANT(false, "Quality presentation must not invoke transport actions");
+}
+
+- (void)showOutput:(id) [[maybe_unused]] sender
+{
+  AO_INVARIANT(false, "Quality presentation must not invoke output actions");
+}
+
+- (void)unexpectedAction:(id) [[maybe_unused]] sender
+{
+  AO_INVARIANT(false, "Quality presentation must not invoke native actions");
 }
 @end
 
@@ -528,6 +563,192 @@ namespace ao::appkit::test
     }
   } // namespace
 
+  std::int32_t runQualityPresentationScenario(std::filesystem::path const& /*musicRoot*/,
+                                              std::filesystem::path const& stateRoot)
+  {
+    AO_INVARIANT([NSThread isMainThread] != NO && NSApp != nil,
+                 "Quality presentation requires an initialized main-thread NSApplication");
+    std::println("AppKit quality-presentation: synthetic DesktopViewState, real PlaybackBar; "
+                 "no session, runtime, providers, devices, playback, seeking, or actions. "
+                 "Captures record native bars, not tooltip popups or shipping triggers. OS={}",
+                 NSProcessInfo.processInfo.operatingSystemVersionString.UTF8String);
+    auto* const window = [[NSWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 980, 720)
+                styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+                  backing:NSBackingStoreBuffered
+                    defer:NO];
+    window.title = @"Aobus AppKit quality presentation scenario";
+    window.releasedWhenClosed = NO;
+    window.preventsApplicationTerminationWhenModal = NO;
+    auto* const root = [[AobusFlippedView alloc] initWithFrame:window.contentView.bounds];
+    root.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    window.contentView = root;
+    [window center];
+    [window makeKeyAndOrderFront:nil];
+    settleNativeCallbacks();
+
+    struct LocaleCase final
+    {
+      std::string_view request;
+      std::string_view resolved;
+    };
+
+    for (auto const& locale : std::array{LocaleCase{"en-US", "en"}, LocaleCase{"zh-CN", "zh-Hans"}})
+    {
+      auto catalogRes = i18n::MessageCatalog::create(locale.request);
+      AO_INVARIANT(catalogRes, "The quality presentation catalog must load");
+      auto const& catalog = *catalogRes;
+      auto const localized = [&](i18n::MessageId message)
+      {
+        auto messageRes = catalog.format(message);
+        AO_INVARIANT(messageRes && !messageRes->text.empty(), "Quality presentation copy must resolve");
+        AO_INVARIANT(messageRes->locale == locale.resolved,
+                     "Quality presentation must use its selected English or CJK catalog, not fallback copy");
+        std::println("quality-presentation requested={} message={} resolved={} text={}",
+                     locale.request,
+                     static_cast<std::uint16_t>(message),
+                     messageRes->locale,
+                     messageRes->text);
+        return std::move(messageRes->text);
+      };
+      auto const heading = localized(i18n::MessageId::PlaybackAudioPipeline);
+      auto const headline = localized(i18n::MessageId::AudioQualityBitPerfectPlayback);
+      auto const updatedHeadline = localized(i18n::MessageId::AudioQualitySignalPreserved);
+      auto const unknownNote = localized(i18n::MessageId::AudioQualityUnknownChannelLayout);
+      auto const unverifiedNote = localized(i18n::MessageId::AudioQualityUnverifiedChannelDelivery);
+      auto const outputLabel = localized(i18n::MessageId::AppKitOutputDevice);
+      auto const playLabel = localized(i18n::MessageId::PlaybackControlPlay);
+      auto const pauseLabel = localized(i18n::MessageId::PlaybackControlPause);
+      // These are explicit binding inputs, not a second formatter/confidence policy.
+      // Shared formatter and NowPlayingViewModel cases own semantic selection/joining.
+      auto const withNote = std::format("{}:\n\n{}\n{}", heading, headline, unknownNote);
+      auto const withoutNote = std::format("{}:\n\n{}", heading, headline);
+      auto const updated = std::format("{}:\n\n{}\n{}", heading, updatedHeadline, unverifiedNote);
+      struct FallbackCase final
+      {
+        std::string_view name;
+        std::string_view text;
+        bool playing = false;
+      };
+      auto const cases = std::array{FallbackCase{"note-present", withNote},
+                                    FallbackCase{"note-absent", withoutNote},
+                                    FallbackCase{"empty", ""},
+                                    FallbackCase{"updated", updated, true},
+                                    FallbackCase{"note-restored", withNote}};
+      auto* const mirror = [[NSImageView alloc] initWithFrame:NSZeroRect];
+      auto* const target = [[AobusQualityPresentationActionTarget alloc] init];
+      auto* const playback = [[AobusPlaybackBar alloc] initWithCatalog:catalog
+                                                                target:target
+                                                       transportAction:@selector(transport:)
+                                                            seekAction:@selector(unexpectedAction:)
+                                                          volumeAction:@selector(unexpectedAction:)
+                                                      showVolumeAction:@selector(unexpectedAction:)
+                                                      showOutputAction:@selector(showOutput:)
+                                                     showOptionsAction:@selector(unexpectedAction:)
+                                                  playingArtworkMirror:mirror];
+      auto state = DesktopViewState{};
+      state.nowPlaying.title = "Synthetic quality binding input";
+      state.soul.aura = uimodel::SoulAura::Radiant;
+      state.soul.motionMode = uimodel::AobusSoulMotionMode::Dormant;
+      auto& play = state.transport[static_cast<std::size_t>(uimodel::PlaybackCommand::PlayPause)];
+      play.enabled = true;
+      [playback layoutInRoot:root modern:NO];
+      auto* const soul = requireControl<AobusSoulButton>(playback.classicView, @"playback.soul");
+      auto const requireClassic = [&]
+      {
+        AO_INVARIANT(playback.activeView == playback.classicView && playback.classicView.superview == root &&
+                       playback.modernView.superview == nil &&
+                       requireControl<AobusSoulButton>(playback.classicView, @"playback.soul") == soul,
+                     "Classic mode must retain the real shared Soul in its active native bar");
+        AO_INVARIANT(utf8(soul.toolTip) == state.nowPlaying.audioPipeline.plainTextFallback,
+                     "Classic layout and resize must preserve the exact rendered quality tooltip, including empty");
+        AO_INVARIANT(soul.target == target && soul.action == @selector(showOutput:) && soul.enabled != NO &&
+                       utf8(soul.accessibilityLabel) == outputLabel,
+                     "Classic quality text must not replace the enabled Output Device action or accessibility label");
+        AO_INVARIANT(
+          soul.window == window && soul.hidden == NO && ::NSContainsRect(playback.activeView.bounds, soul.frame) != NO,
+          "The captured classic Soul must be visible and bounded by the realized bar");
+      };
+
+      for (auto const& testCase : cases)
+      {
+        state.nowPlaying.audioPipeline.plainTextFallback = testCase.text;
+        play.playing = testCase.playing;
+        play.tooltip = testCase.playing ? pauseLabel : playLabel;
+        [playback renderState:state modern:NO];
+        [playback renderFrameForState:state elapsed:0ms modern:NO];
+        requireClassic();
+
+        for (auto const size : std::array{NSMakeSize(980, 720), NSMakeSize(760, 520)})
+        {
+          [window setContentSize:size];
+          // No render between resizing/repeated layout and the regression assertion.
+          [playback layoutInRoot:root modern:NO];
+          [playback layoutInRoot:root modern:NO];
+          [root layoutSubtreeIfNeeded];
+          requireClassic();
+          AO_INVARIANT(
+            std::abs(root.bounds.size.width - size.width) < 1 && std::abs(root.bounds.size.height - size.height) < 1,
+            "Quality presentation must exercise the requested normal or constrained client size");
+          std::println("quality-presentation locale={} case={} client={}x{} backing-scale={}",
+                       locale.request,
+                       testCase.name,
+                       root.bounds.size.width,
+                       root.bounds.size.height,
+                       window.backingScaleFactor);
+          captureView(playback.classicView,
+                      stateRoot / std::format("appkit-quality-{}-{}-{}x{}-classic.png",
+                                              locale.request,
+                                              testCase.name,
+                                              static_cast<std::int32_t>(size.width),
+                                              static_cast<std::int32_t>(size.height)));
+
+          [playback layoutInRoot:root modern:YES];
+          [playback renderState:state modern:YES];
+          [playback renderFrameForState:state elapsed:0ms modern:YES];
+          [playback layoutInRoot:root modern:YES];
+          [playback layoutInRoot:root modern:YES];
+          [root layoutSubtreeIfNeeded];
+          AO_INVARIANT(playback.activeView == playback.modernView && playback.modernView.superview == root &&
+                         playback.classicView.superview == nil &&
+                         requireControl<AobusSoulButton>(playback.modernView, @"playback.soul") == soul &&
+                         soul.target == target && soul.action == @selector(transport:) && soul.enabled != NO &&
+                         utf8(soul.toolTip) == play.tooltip && utf8(soul.accessibilityLabel) == play.tooltip,
+                       "Modern mode must retain transport tooltip, action, and accessibility across repeated layout");
+          auto* const output = requireControl<NSButton>(playback.modernView, @"playback.output");
+          AO_INVARIANT(output.target == target && output.action == @selector(showOutput:) &&
+                         utf8(output.accessibilityLabel) == outputLabel,
+                       "Modern mode must retain its separate Output Device action and accessibility label");
+
+          if (testCase.name == "note-present")
+          {
+            captureView(playback.modernView,
+                        stateRoot / std::format("appkit-quality-{}-{}x{}-modern.png",
+                                                locale.request,
+                                                static_cast<std::int32_t>(size.width),
+                                                static_cast<std::int32_t>(size.height)));
+          }
+
+          [playback layoutInRoot:root modern:NO];
+          [playback renderState:state modern:NO];
+          [playback renderFrameForState:state elapsed:0ms modern:NO];
+          [playback layoutInRoot:root modern:NO];
+          [playback layoutInRoot:root modern:NO];
+          [root layoutSubtreeIfNeeded];
+          requireClassic();
+        }
+      }
+
+      [playback detach];
+      [playback.activeView removeFromSuperview];
+    }
+
+    [window orderOut:nil];
+    [window close];
+    settleNativeCallbacks();
+    return 0;
+  }
+
   void exercisePlaybackPresentation(LibrarySession& session,
                                     NSWindow* window,
                                     NSView* root,
@@ -569,6 +790,42 @@ namespace ao::appkit::test
     repeat.icon = uimodel::TransportIcon::Repeat;
     repeat.tooltip = "Repeat Off";
 
+    // The AppKit bar renders no formatter of its own; the shared plain-text
+    // fallback is the classic Soul tooltip. Build a truthful unknown-layout
+    // fallback from the production formatter and catalog. The join shape is
+    // pinned by NowPlayingViewModelTest; the scenario provides it as input.
+    auto const qualityFormatter = uimodel::AudioQualityFormatter{session.catalog()};
+    auto const unknownLayoutQuality = rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                                       .pipelineQuality = audio::Quality::BitwisePerfect,
+                                                       .overall = audio::Quality::BitwisePerfect};
+    auto const unknownLayoutPresentation = qualityFormatter.presentation(unknownLayoutQuality);
+    auto const verifiedLayoutPresentation =
+      qualityFormatter.presentation(rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                                     .pipelineQuality = audio::Quality::BitwisePerfect,
+                                                     .overall = audio::Quality::BitwisePerfect,
+                                                     .channelConfidence = audio::ChannelConfidence::Verified});
+    AO_INVARIANT(!unknownLayoutPresentation.headline.empty() && !unknownLayoutPresentation.channelNote.empty() &&
+                   verifiedLayoutPresentation.channelNote.empty(),
+                 "The production formatter must keep the channel note independent of the numerical headline");
+    AO_INVARIANT(uimodel::resolveSoulAura(audio::Transport::Playing, true, unknownLayoutQuality) == state.soul.aura,
+                 "Unknown channel confidence must not change the numerical Soul aura");
+    auto const qualityFallbackWithNote = [&]
+    {
+      auto fallback = std::string{i18n::requiredText(session.catalog(), i18n::MessageId::PlaybackAudioPipeline)};
+      fallback.append(":\n");
+      std::format_to(std::back_inserter(fallback), "\n{}", unknownLayoutPresentation.headline);
+      std::format_to(std::back_inserter(fallback), "\n{}", unknownLayoutPresentation.channelNote);
+      return fallback;
+    }();
+    auto const qualityFallbackWithoutNote = [&]
+    {
+      auto fallback = std::string{i18n::requiredText(session.catalog(), i18n::MessageId::PlaybackAudioPipeline)};
+      fallback.append(":\n");
+      std::format_to(std::back_inserter(fallback), "\n{}", verifiedLayoutPresentation.headline);
+      return fallback;
+    }();
+    state.nowPlaying.audioPipeline.plainTextFallback = qualityFallbackWithNote;
+
     [playback layoutInRoot:root modern:YES];
     [playback renderState:state modern:YES];
     [playback renderFrameForState:state elapsed:state.position.elapsed modern:YES];
@@ -584,6 +841,8 @@ namespace ao::appkit::test
                  "playback seek must expose elapsed and duration accessibility text");
     AO_INVARIANT([soul.accessibilityLabel isEqualToString:@"Play this fixture"] != 0,
                  "Modern Soul must expose the dynamic transport tooltip as its accessible action");
+    AO_INVARIANT([soul.toolTip isEqualToString:@"Play this fixture"] != 0,
+                 "Modern Soul must keep the transport play tooltip and never project the quality fallback");
     AO_INVARIANT(shuffleButton.state == NSControlStateValueOff, "Shuffle must expose its initial native toggle state");
     AO_INVARIANT([static_cast<NSString*>(repeatButton.accessibilityValue) isEqualToString:@"Repeat Off"] != 0 &&
                    [repeatButton.accessibilityValueDescription isEqualToString:@"Repeat Off"] != 0,
@@ -703,6 +962,21 @@ namespace ao::appkit::test
     auto* const playButton = requireControl<NSButton>(playback.classicView, @"playback.play");
     AO_INVARIANT([playButton.accessibilityLabel isEqualToString:@"Play this fixture"] != 0,
                  "Classic Play must expose the dynamic transport action");
+    // The classic Soul tooltip projects the shared quality fallback verbatim;
+    // the note follows the channel confidence and clears with it. The capture
+    // records the realized classic bar, not hovered tooltip pixels.
+    AO_INVARIANT(ao::appkit::utf8(soul.toolTip) == qualityFallbackWithNote,
+                 "Classic Soul tooltip must project the localized quality fallback with its independent note");
+    classicState.nowPlaying.audioPipeline.plainTextFallback = qualityFallbackWithoutNote;
+    [playback renderState:classicState modern:NO];
+    AO_INVARIANT(ao::appkit::utf8(soul.toolTip) == qualityFallbackWithoutNote,
+                 "A verified delivery must drop only the channel note from the classic tooltip");
+    classicState.nowPlaying.audioPipeline.plainTextFallback.clear();
+    [playback renderState:classicState modern:NO];
+    AO_INVARIANT(soul.toolTip.length == 0, "An empty shared fallback must clear the classic Soul tooltip");
+    classicState.nowPlaying.audioPipeline.plainTextFallback = qualityFallbackWithNote;
+    [playback renderState:classicState modern:NO];
+    captureView(root, stateRoot / "appkit-playback-classic-quality.png");
     play.playing = true;
     play.tooltip = "Pause this fixture";
     [playback renderState:state modern:NO];

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "AppKitPlaybackScenario.h"
 #include "AppKitScenarioSupport.h"
 #include <ao/Contract.h>
 #include <ao/desktop/LibrarySuccessorProtocol.h>
@@ -61,7 +62,7 @@ int main(int argc, char** argv)
 
     if (launch.stateRoot.empty() || !launch.optRequest ||
         (scenario != "desktop" && scenario != "authoring" && scenario != "presentation" && scenario != "media" &&
-         scenario != "credits-controls" && scenario != "credits-previews"))
+         scenario != "credits-controls" && scenario != "credits-previews" && scenario != "quality-presentation"))
     {
       return 2;
     }
@@ -117,6 +118,10 @@ int main(int argc, char** argv)
     else if (scenario == "media")
     {
       runScenario = ao::appkit::test::runMediaScenario;
+    }
+    else if (scenario == "quality-presentation")
+    {
+      runScenario = ao::appkit::test::runQualityPresentationScenario;
     }
     else if (scenario == "credits-controls")
     {

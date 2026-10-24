@@ -493,8 +493,6 @@ namespace
     {
       _soul.accessibilityLabel = outputDescription;
     }
-
-    _soul.toolTip = outputDescription;
   }
 
   if (modern == NO)

@@ -325,6 +325,7 @@ root:table {
     audio_node_unknown { "[Unknown]" }
     audio_format { "{sampleRate} kHz · {bits}-bit · {channels}" }
     audio_channels_compact { "{count} ch" }
+    audio_channels_identified { "{count} ch ({layout})" }
     audio_finding_lossy_source { "Lossy source" }
     audio_finding_software_volume_attenuation { "{hasGain, select, yes {Software volume attenuation: {gain}} other {Software volume attenuation}}" }
     audio_finding_software_amplification { "{hasGain, select, yes {Software amplification: {gain} gain (clipping risk)} other {Software amplification (clipping risk)}}" }
@@ -333,12 +334,13 @@ root:table {
     audio_finding_muted { "Muted" }
     audio_finding_resampling { "{hasFormats, select, yes {Resampling: {fromRate}Hz → {toRate}Hz} other {Resampling}}" }
     audio_finding_channel_mapping { "{hasFormats, select, yes {Channels: {fromChannels}ch → {toChannels}ch} other {Channel mapping}}" }
+    audio_finding_channel_layout { "Channel layout: {fromLayout} → {toLayout}" }
     audio_finding_lossless_padding { "Bit-transparent integer padding" }
     audio_finding_lossless_float { "Bit-transparent float mapping" }
     audio_finding_lossless_round_trip { "Bit-transparent round trip (float engine)" }
     audio_finding_truncation { "{kind, select, floatToInteger {Float → integer quantization: {fromPrecision} → {toPrecision}} integerToFloat {Integer → float quantization: {fromPrecision} → {toPrecision}} precision {Precision truncated: {fromPrecision} → {toPrecision}} other {Precision truncated}}" }
     audio_finding_mixed_sources { "{hasApps, select, yes {Mixed with {apps}} other {Mixed sources}}" }
-    audio_quality_bit_perfect_playback { "Bit-perfect playback" }
+    audio_quality_bit_perfect_playback { "Bit-perfect PCM (observed software path)" }
     audio_quality_signal_preserved { "Signal preserved" }
     audio_quality_pipeline_intervention { "Pipeline intervention" }
     audio_quality_signal_clipping_detected { "Signal clipping detected" }
@@ -347,6 +349,9 @@ root:table {
     audio_quality_partially_verified_path { "Partially verified path" }
     audio_quality_clean_lossy_delivery { "Clean lossy delivery" }
     audio_quality_clean_delivery { "Clean delivery" }
+    audio_quality_unknown_channel_layout { "Source channel layout not identified" }
+    audio_quality_unverified_channel_delivery { "Channel delivery not proved" }
+    audio_quality_inferred_channel_layout { "Source channel layout inferred" }
     playback_control_play { "Play" }
     playback_control_pause { "Pause" }
     playback_control_stop { "Stop" }
