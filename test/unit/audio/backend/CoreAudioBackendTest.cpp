@@ -4,7 +4,6 @@
 #include "lib/audio/backend/CoreAudioBackend.h"
 
 #include "lib/audio/backend/detail/BackendGraphRegistry.h"
-#include "lib/audio/backend/detail/CoreAudioDeviceDiscovery.h"
 #include "lib/audio/detail/DecoderOutput.h"
 #include "test/unit/audio/BackendTestSupport.h"
 #include "test/unit/audio/backend/CoreAudioTestSupport.h"
@@ -187,27 +186,22 @@ namespace ao::audio::backend::test
 
     Device requireNativeTestOutput()
     {
-      auto const requestedRes = audio::test::requestedCoreAudioTestOutput();
+      auto const selectedRes = audio::test::selectCoreAudioTestOutput();
 
       // A present but unresolvable UID is a configuration error, not a device skip.
-      if (!requestedRes)
+      if (!selectedRes)
       {
-        FAIL("AOBUS_TEST_COREAUDIO_DEVICE_UID: " << requestedRes.error().message);
+        FAIL("AOBUS_TEST_COREAUDIO_DEVICE_UID: " << selectedRes.error().message);
       }
 
-      if (auto const& optDevice = *requestedRes; optDevice)
-      {
-        return *optDevice;
-      }
-
-      auto const devices = detail::enumerateCoreAudioOutputDevices();
-
-      if (devices.empty())
+      // An unset UID on a host with no live Core Audio output is the only
+      // genuine absence boundary; there is never a substitute device.
+      if (!*selectedRes)
       {
         SKIP("macOS host has no live Core Audio output device");
       }
 
-      return devices.front();
+      return **selectedRes;
     }
   } // namespace
 

@@ -95,6 +95,7 @@ elseif(APPLE)
         backend/detail/CoreAudioRenderAdmission.cpp
         backend/detail/CoreAudioRenderBuffer.cpp
         backend/detail/CoreAudioRunControl.cpp
+        backend/detail/CoreAudioUnitRun.cpp
         backend/detail/CoreFoundationString.cpp
     )
     target_link_libraries(ao_audio PRIVATE

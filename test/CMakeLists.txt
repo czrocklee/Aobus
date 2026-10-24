@@ -521,6 +521,7 @@ add_executable(ao_core_test
     unit/audio/PlayerGraphObservationTest.cpp
     unit/audio/EngineDrainTest.cpp
     unit/audio/EngineErrorTest.cpp
+    unit/audio/EngineControlErrorTest.cpp
     unit/audio/EngineFatalProbeTest.cpp
     unit/audio/EngineGaplessTest.cpp
     unit/audio/EngineChannelLayoutTest.cpp
@@ -900,6 +901,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/CoreAudioBackendFatalProbeTest.cpp
   unit/audio/backend/CoreAudioBackendTest.cpp
+  unit/audio/backend/CoreAudioBackendRunStateTest.cpp
   unit/audio/backend/CoreAudioChannelObservationTest.cpp
   unit/audio/backend/CoreAudioProviderTest.cpp
   unit/audio/backend/CoreAudioTestOutputTest.cpp
@@ -913,6 +915,7 @@ aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/detail/CoreAudioRenderAdmissionTest.cpp
   unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
   unit/audio/backend/detail/CoreAudioRunControlTest.cpp
+  unit/audio/backend/detail/CoreAudioUnitRunTest.cpp
   unit/audio/backend/detail/CoreFoundationStringTest.cpp
 )
 if(APPLE)

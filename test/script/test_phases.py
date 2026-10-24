@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -638,24 +637,32 @@ class PhaseReportTest(RecordFixture, unittest.TestCase):
             self.assertIn("AO_PHASE_RECORD", result.stdout)
 
     def test_summary_lists_slowest_analysis_items_by_source_id(self):
-        digests = {delay: f"{index:064x}" for index, delay in enumerate((0.02, 0.06, 0.12), 1)}
+        durations_ns = (20_000_000, 60_000_000, 120_000_000)
+        digests = {duration_ns: f"{index:064x}" for index, duration_ns in enumerate(durations_ns, 1)}
+        clock_ns = 0
         with tempfile.TemporaryDirectory() as temporary:
             self.enable_logging(temporary)
-            with phases.measure("analysis"):
-                for delay in (0.02, 0.06, 0.12):
-                    with phases.measure("analysis-item", source_id=digests[delay]):
-                        time.sleep(delay)
-                with phases.measure("analysis-item"):
-                    time.sleep(0.02)
+            # Report measured durations, not scheduler or log-I/O delays around real sleeps.
+            with mock.patch.object(phases.time, "monotonic_ns", side_effect=lambda: clock_ns):
+                with phases.measure("analysis"):
+                    for duration_ns in durations_ns:
+                        with phases.measure("analysis-item", source_id=digests[duration_ns]):
+                            clock_ns += duration_ns
+                    with phases.measure("analysis-item"):
+                        clock_ns += 20_000_000
             result = run_cli(temporary)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("### Slowest analysis items", result.stdout)
             table = result.stdout.split("### Slowest analysis items", 1)[1]
             listed = [line for line in table.splitlines() if line.startswith("| ") and "source_id" not in line]
             self.assertEqual(len(listed), 3)
-            self.assertTrue(listed[0].startswith(f"| {digests[0.12]} |"))
-            self.assertTrue(listed[2].startswith(f"| {digests[0.02]} |"))
-            self.assertIn(f"| {digests[0.06]} | ", result.stdout)
+            self.assertTrue(listed[0].startswith(f"| {digests[120_000_000]} |"))
+            self.assertTrue(listed[2].startswith(f"| {digests[20_000_000]} |"))
+            self.assertIn(f"| {digests[60_000_000]} | ", result.stdout)
+            self.assertEqual(
+                [line.split("|")[1].strip() for line in listed],
+                [digests[duration_ns] for duration_ns in reversed(durations_ns)],
+            )
 
     def test_fails_when_directory_is_missing_or_empty(self):
         with tempfile.TemporaryDirectory() as temporary:

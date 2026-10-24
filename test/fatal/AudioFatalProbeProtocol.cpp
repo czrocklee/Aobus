@@ -38,6 +38,20 @@ namespace ao::audio::test
     return kExpectations;
   }
 
+  std::span<AudioFatalProbeExpectation const> callbackFenceFatalProbeExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      AudioFatalProbeExpectation{"callback-fence-reopen-while-open",
+                                 "category=invariant",
+                                 "Cannot reopen a callback fence before its callbacks quiesce"},
+      AudioFatalProbeExpectation{"callback-fence-reopen-with-admitted-borrow",
+                                 "category=invariant",
+                                 "Cannot reopen a callback fence before its callbacks quiesce"},
+    };
+
+    return kExpectations;
+  }
+
 #ifdef __APPLE__
   std::span<AudioFatalProbeExpectation const> coreAudioFatalProbeExpectations() noexcept
   {
@@ -132,6 +146,55 @@ namespace ao::audio::test
       AudioFatalProbeExpectation{"coreaudio-stop-from-drain-complete",
                                  "category=expects",
                                  "Cannot stop Core Audio backend from its render-domain callback"},
+    };
+
+    return kExpectations;
+  }
+
+  std::span<AudioFatalProbeExpectation const> coreAudioRenderAdmissionFatalProbeExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      AudioFatalProbeExpectation{
+        "coreaudio-admission-zero-generation", "category=expects", "A render admission generation must be nonzero"},
+      AudioFatalProbeExpectation{"coreaudio-admission-active-interval",
+                                 "category=expects",
+                                 "Cannot open render admission while a previous interval is still active"},
+    };
+
+    return kExpectations;
+  }
+
+  std::span<AudioFatalProbeExpectation const> coreAudioUnitRunFatalProbeExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      AudioFatalProbeExpectation{"coreaudio-unit-run-unconfirmed-start",
+                                 "category=expects",
+                                 "Cannot start Core Audio output while a native stop is unconfirmed"},
+    };
+
+    return kExpectations;
+  }
+
+  std::span<AudioFatalProbeExpectation const> coreAudioUnitRunConstructorFatalProbeExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      AudioFatalProbeExpectation{
+        "coreaudio-unit-run-unbound-start", "category=expects", "Core Audio native start operation must be bound"},
+      AudioFatalProbeExpectation{
+        "coreaudio-unit-run-unbound-stop", "category=expects", "Core Audio native stop operation must be bound"},
+    };
+
+    return kExpectations;
+  }
+
+  std::span<AudioFatalProbeExpectation const> coreAudioBackendConstructorFatalProbeExpectations() noexcept
+  {
+    static constexpr auto kExpectations = std::array{
+      AudioFatalProbeExpectation{
+        "coreaudio-backend-unbound-reset", "category=expects", "Core Audio native reset operation must be bound"},
+      AudioFatalProbeExpectation{"coreaudio-backend-unbound-frames-readback",
+                                 "category=expects",
+                                 "Core Audio maximum-frames readback operation must be bound"},
     };
 
     return kExpectations;

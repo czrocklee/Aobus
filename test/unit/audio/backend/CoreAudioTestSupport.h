@@ -22,4 +22,11 @@ namespace ao::audio::test
   // Unset yields an empty optional. A present value, including empty, is resolved
   // against the native Core Audio output enumeration.
   Result<std::optional<Device>> requestedCoreAudioTestOutput();
+
+  // Selects a real Core Audio output for tests that need a native device. A
+  // configured UID keeps the strict requestedCoreAudioTestOutput semantics and
+  // never falls back to another device. An unset UID yields the first enumerated
+  // native Core Audio output; a host with no live output is a legitimate
+  // absence reported as an empty optional, never an invented device.
+  Result<std::optional<Device>> selectCoreAudioTestOutput();
 } // namespace ao::audio::test

@@ -27,6 +27,9 @@ namespace ao::audio::backend::detail
 
   std::string coreAudioStatusText(::OSStatus status);
 
+  // Describes a saved unresolved stop, not a new failed native invocation.
+  std::string coreAudioUnconfirmedStopText(::OSStatus status);
+
   std::unexpected<Error> makeCoreAudioError(::OSStatus status,
                                             std::string_view operation,
                                             Error::Code fallback,
