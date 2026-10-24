@@ -899,14 +899,19 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
   unit/audio/backend/CoreAudioBackendFatalProbeTest.cpp
   unit/audio/backend/CoreAudioBackendTest.cpp
+  unit/audio/backend/CoreAudioChannelObservationTest.cpp
   unit/audio/backend/CoreAudioProviderTest.cpp
   unit/audio/backend/CoreAudioTestOutputTest.cpp
+  unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp
+  unit/audio/backend/detail/CoreAudioControlMailboxTest.cpp
   unit/audio/backend/detail/CoreAudioErrorTest.cpp
   unit/audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
   unit/audio/backend/detail/CoreAudioFormatTest.cpp
   unit/audio/backend/detail/CoreAudioGraphTest.cpp
   unit/audio/backend/detail/CoreAudioLatencyTest.cpp
+  unit/audio/backend/detail/CoreAudioRenderAdmissionTest.cpp
   unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
+  unit/audio/backend/detail/CoreAudioRunControlTest.cpp
   unit/audio/backend/detail/CoreFoundationStringTest.cpp
 )
 if(APPLE)

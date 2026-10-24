@@ -4,9 +4,9 @@
 // Native Core Audio fatal-probe scenarios. Each scenario opens the exact
 // Core Audio output device named by AOBUS_TEST_COREAUDIO_DEVICE_UID when one
 // is configured, or the first existing real Core Audio output when the
-// boundary is unset, through a real backend and reenters open() or close()
-// from one of the backend's own RenderTarget callback stacks; the
-// production CallbackStackScope diagnostic must abort the child process. A
+// boundary is unset, through a real backend and reenters open(), close(), or
+// a run control from one of the backend's own RenderTarget callback stacks;
+// the production CallbackStackScope diagnostic must abort the child process. A
 // missing diagnostic may only surface as an orderly nonfatal failure exit or
 // through the intrinsic ProbeProcess timeout; these scenarios never sleep,
 // never fabricate callback-stack membership, and never invoke private or
@@ -62,6 +62,8 @@ namespace ao::audio::test
       RouteReady,
       FormatChanged,
       RenderPcm,
+      Underrun,
+      PositionAdvanced,
       DrainComplete,
     };
 
@@ -69,6 +71,11 @@ namespace ao::audio::test
     {
       Open,
       Close,
+      Start,
+      Pause,
+      Resume,
+      Flush,
+      Stop,
       GraphOpen,
       GraphClose,
     };
@@ -121,6 +128,66 @@ namespace ao::audio::test
                         ProbeReentry::Close,
                         true,
                         false},
+      ProbeScenarioSpec{"coreaudio-start-from-render-pcm", ProbeTrigger::RenderPcm, ProbeReentry::Start, true, false},
+      ProbeScenarioSpec{"coreaudio-pause-from-render-pcm", ProbeTrigger::RenderPcm, ProbeReentry::Pause, true, false},
+      ProbeScenarioSpec{"coreaudio-resume-from-render-pcm", ProbeTrigger::RenderPcm, ProbeReentry::Resume, true, false},
+      ProbeScenarioSpec{"coreaudio-flush-from-render-pcm", ProbeTrigger::RenderPcm, ProbeReentry::Flush, true, false},
+      ProbeScenarioSpec{"coreaudio-stop-from-render-pcm", ProbeTrigger::RenderPcm, ProbeReentry::Stop, true, false},
+      ProbeScenarioSpec{"coreaudio-start-from-underrun", ProbeTrigger::Underrun, ProbeReentry::Start, true, false},
+      ProbeScenarioSpec{"coreaudio-pause-from-underrun", ProbeTrigger::Underrun, ProbeReentry::Pause, true, false},
+      ProbeScenarioSpec{"coreaudio-resume-from-underrun", ProbeTrigger::Underrun, ProbeReentry::Resume, true, false},
+      ProbeScenarioSpec{"coreaudio-flush-from-underrun", ProbeTrigger::Underrun, ProbeReentry::Flush, true, false},
+      ProbeScenarioSpec{"coreaudio-stop-from-underrun", ProbeTrigger::Underrun, ProbeReentry::Stop, true, false},
+      ProbeScenarioSpec{"coreaudio-start-from-position-advanced",
+                        ProbeTrigger::PositionAdvanced,
+                        ProbeReentry::Start,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-pause-from-position-advanced",
+                        ProbeTrigger::PositionAdvanced,
+                        ProbeReentry::Pause,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-resume-from-position-advanced",
+                        ProbeTrigger::PositionAdvanced,
+                        ProbeReentry::Resume,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-flush-from-position-advanced",
+                        ProbeTrigger::PositionAdvanced,
+                        ProbeReentry::Flush,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-stop-from-position-advanced",
+                        ProbeTrigger::PositionAdvanced,
+                        ProbeReentry::Stop,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-start-from-drain-complete",
+                        ProbeTrigger::DrainComplete,
+                        ProbeReentry::Start,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-pause-from-drain-complete",
+                        ProbeTrigger::DrainComplete,
+                        ProbeReentry::Pause,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-resume-from-drain-complete",
+                        ProbeTrigger::DrainComplete,
+                        ProbeReentry::Resume,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-flush-from-drain-complete",
+                        ProbeTrigger::DrainComplete,
+                        ProbeReentry::Flush,
+                        true,
+                        false},
+      ProbeScenarioSpec{"coreaudio-stop-from-drain-complete",
+                        ProbeTrigger::DrainComplete,
+                        ProbeReentry::Stop,
+                        true,
+                        false},
     };
 
     ProbeScenarioSpec const* findProbeScenarioSpec(std::string_view const scenario) noexcept
@@ -139,8 +206,8 @@ namespace ao::audio::test
     /**
      * @brief The single target fixture for the native reentry scenarios.
      *
-     * The designated trigger callback performs exactly one open or close
-     * attempt against the backend that invoked it. The one-attempt guard is
+     * The designated trigger callback performs exactly one control attempt
+     * against the backend that invoked it. The one-attempt guard is
      * what keeps a missing production diagnostic from recursing through
      * nested opens; without it a reentered open() would reenter its own
      * notifications until the stack overflowed. All cross-thread state is an
@@ -181,6 +248,12 @@ namespace ao::audio::test
           attemptReentry();
         }
 
+        if (_trigger == ProbeTrigger::Underrun)
+        {
+          // A short, non-drained render asks the backend to emit a real underrun.
+          return RenderPcmResult{};
+        }
+
         if (_trigger == ProbeTrigger::DrainComplete)
         {
           // Normal drained progress: the backend completes the presentation
@@ -188,11 +261,26 @@ namespace ao::audio::test
           return RenderPcmResult{.drained = true};
         }
 
-        return RenderPcmResult{.bytesWritten = output.size()};
+        return RenderPcmResult{
+          .bytesWritten = output.size(),
+          .positionFrames = _trigger == ProbeTrigger::PositionAdvanced && !output.empty() ? 1U : 0U};
       }
 
-      void handleUnderrun() noexcept override {}
-      void handlePositionAdvanced(std::uint32_t /*frames*/) noexcept override {}
+      void handleUnderrun() noexcept override
+      {
+        if (_trigger == ProbeTrigger::Underrun)
+        {
+          attemptReentry();
+        }
+      }
+
+      void handlePositionAdvanced(std::uint32_t /*frames*/) noexcept override
+      {
+        if (_trigger == ProbeTrigger::PositionAdvanced)
+        {
+          attemptReentry();
+        }
+      }
 
       void handleDrainComplete() noexcept override
       {
@@ -245,6 +333,31 @@ namespace ao::audio::test
           case ProbeReentry::Close:
           {
             _backend->close();
+            return;
+          }
+          case ProbeReentry::Start:
+          {
+            _backend->start();
+            return;
+          }
+          case ProbeReentry::Pause:
+          {
+            _backend->pause();
+            return;
+          }
+          case ProbeReentry::Resume:
+          {
+            _backend->resume();
+            return;
+          }
+          case ProbeReentry::Flush:
+          {
+            _backend->flush();
+            return;
+          }
+          case ProbeReentry::Stop:
+          {
+            _backend->stop();
             return;
           }
           case ProbeReentry::GraphOpen:

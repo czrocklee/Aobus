@@ -85,12 +85,16 @@ elseif(APPLE)
         PlatformBackendProvidersMacos.cpp
         backend/CoreAudioBackend.cpp
         backend/CoreAudioProvider.cpp
+        backend/detail/CoreAudioChannelLayout.cpp
+        backend/detail/CoreAudioControlMailbox.cpp
         backend/detail/CoreAudioError.cpp
         backend/detail/CoreAudioDeviceDiscovery.cpp
         backend/detail/CoreAudioFormat.cpp
         backend/detail/CoreAudioGraph.cpp
         backend/detail/CoreAudioLatency.cpp
+        backend/detail/CoreAudioRenderAdmission.cpp
         backend/detail/CoreAudioRenderBuffer.cpp
+        backend/detail/CoreAudioRunControl.cpp
         backend/detail/CoreFoundationString.cpp
     )
     target_link_libraries(ao_audio PRIVATE

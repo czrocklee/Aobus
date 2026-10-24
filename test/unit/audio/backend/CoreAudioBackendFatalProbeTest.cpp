@@ -16,14 +16,17 @@ namespace ao::audio::backend::test
   {
     // Each native scenario opens a real Core Audio output device, the exact
     // configured UID when AOBUS_TEST_COREAUDIO_DEVICE_UID names one or the
-    // first existing output when it is unset, and reenters open() or close()
-    // from a real backend target callback in a child process. The render-pcm
-    // and drain-complete scenarios issue those target-origin lifecycle
-    // requests from the native render thread and the drain worker, so the
-    // case carries [concurrency]. The abort bound is the existing probe
-    // oracle bound: the diagnostic fires inside the triggered callback, and a
-    // missing diagnostic can only surface as a nonfatal child exit or the
-    // intrinsic probe timeout, never as a false success here. Nested-graph
+    // first existing output when it is unset, and reenters a control from a
+    // real backend target callback in a child process. The ten open/close
+    // scenarios remain, plus all five run controls from PCM, underrun,
+    // position, and ordered drain-complete origins: 30 children in this one
+    // Catch registration. Drain completion is part of the render domain even
+    // though it runs on the control worker, not the native render thread.
+    // These origins cross threads, so the case carries [concurrency]. The
+    // existing probe oracle bounds each child: the diagnostic fires inside
+    // the triggered callback, and a missing diagnostic can only surface as a
+    // nonfatal child exit or the intrinsic probe timeout, never as a false
+    // success here. Nested-graph
     // scenarios deliberately violate the gate-deferral precondition to reach
     // the lifecycle diagnostic; they do not promise safe synchronous graph
     // composition from a target callback.

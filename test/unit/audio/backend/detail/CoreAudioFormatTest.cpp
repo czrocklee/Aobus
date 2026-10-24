@@ -18,6 +18,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
+#include <string_view>
 #include <vector>
 
 namespace ao::audio::backend::detail::test
@@ -125,6 +127,79 @@ namespace ao::audio::backend::detail::test
     CHECK(attemptedFrameByteCounts[1] == 8U);
   }
 
+  TEST_CASE("CoreAudioFormat - selected padded storage retains canonical identity through the candidate walk",
+            "[audio][unit][coreaudio]")
+  {
+    std::size_t attempts = 0U;
+    auto const selectedRes = selectLosslessCoreAudioClientFormat(
+      {.sampleRate = 48000, .channels = 2, .precisionBits = 24, .speakerMask = 0x3},
+      [&](::AudioStreamBasicDescription const& candidate)
+        -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
+      {
+        ++attempts;
+
+        if (attempts == 1U)
+        {
+          return std::unexpected{
+            BackendOpenFailure{.error = makeError(Error::Code::FormatRejected, "packed refused").error(),
+                               .cause = BackendOpenFailure::Cause::TrackRouteIncompatible}};
+        }
+
+        return candidate;
+      });
+    REQUIRE(selectedRes);
+    CHECK(attempts == 2U);
+    CHECK(
+      *selectedRes ==
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed24In32Le, .speakerMask = 0x3});
+  }
+
+  TEST_CASE("CoreAudioFormat - required readback contradictions are terminal on the first candidate",
+            "[audio][unit][coreaudio]")
+  {
+    auto mutate = std::function<void(::AudioStreamBasicDescription&)>{};
+
+    SECTION("frame byte contradiction")
+    {
+      mutate = [](auto& format) { ++format.mBytesPerFrame; };
+    }
+
+    SECTION("sample precision contradiction")
+    {
+      mutate = [](auto& format) { format.mBitsPerChannel = 16U; };
+    }
+
+    SECTION("sample rate contradiction")
+    {
+      mutate = [](auto& format) { format.mSampleRate = 44100.0; };
+    }
+
+    SECTION("interleaving contradiction")
+    {
+      mutate = [](auto& format) { format.mFormatFlags |= ::kAudioFormatFlagIsNonInterleaved; };
+    }
+
+    SECTION("channel count contradiction")
+    {
+      mutate = [](auto& format) { format.mChannelsPerFrame = 1U; };
+    }
+
+    std::size_t attempts = 0U;
+    auto const selectedRes = selectLosslessCoreAudioClientFormat(
+      {.sampleRate = 48000, .channels = 2, .precisionBits = 24},
+      [&](::AudioStreamBasicDescription candidate) -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
+      {
+        ++attempts;
+        mutate(candidate);
+        return candidate;
+      });
+    REQUIRE_FALSE(selectedRes);
+    CHECK(attempts == 1U);
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
+    CHECK(selectedRes.error().error.message == "Core Audio applied a different client PCM mode than requested");
+  }
+
   TEST_CASE("CoreAudioFormat - a mismatched 24-bit read-back stops the walk instead of exhausting candidates",
             "[audio][unit][coreaudio]")
   {
@@ -209,6 +284,48 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().error.code == Error::Code::IoError);
     CHECK(selectedRes.error().error.message == "native read fault");
     CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+  }
+
+  TEST_CASE(
+    "CoreAudioFormat - default output failures retain their original diagnostic even with capability-like codes",
+    "[audio][unit][coreaudio]")
+  {
+    auto code = Error::Code::FormatRejected;
+
+    SECTION("FormatRejected without an explicit incompatibility cause is terminal")
+    {
+    }
+
+    SECTION("NotSupported without an explicit incompatibility cause is terminal")
+    {
+      code = Error::Code::NotSupported;
+    }
+
+    auto const original = makeError(code, "original native operation context").error();
+    std::size_t attempts = 0U;
+    auto const selectedRes =
+      selectLosslessCoreAudioClientFormat({.sampleRate = 48000, .channels = 2, .precisionBits = 24},
+                                          [&](::AudioStreamBasicDescription const& candidate)
+                                            -> std::expected<::AudioStreamBasicDescription, BackendOpenFailure>
+                                          {
+                                            ++attempts;
+
+                                            if (attempts == 1U)
+                                            {
+                                              return std::unexpected{BackendOpenFailure{.error = original}};
+                                            }
+
+                                            return candidate;
+                                          });
+    REQUIRE_FALSE(selectedRes);
+    CHECK(attempts == 1U);
+    CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    CHECK(selectedRes.error().error.code == original.code);
+    CHECK(selectedRes.error().error.message == original.message);
+    CHECK(std::string_view{selectedRes.error().error.location.file_name()} == original.location.file_name());
+    CHECK(std::string_view{selectedRes.error().error.location.function_name()} == original.location.function_name());
+    CHECK(selectedRes.error().error.location.line() == original.location.line());
+    CHECK(selectedRes.error().error.location.column() == original.location.column());
   }
 
   TEST_CASE("CoreAudioFormat - an unrepresentable source is refused without a native attempt",
