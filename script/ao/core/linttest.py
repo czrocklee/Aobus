@@ -9,11 +9,12 @@ import subprocess
 import sys
 import tempfile
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextvars import copy_context
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import builddir, tidyconfig, tidyengine
+from . import builddir, phases, tidyconfig, tidyengine
 from .paths import PROJECT_ROOT
 from .proc import die
 
@@ -655,13 +656,17 @@ def _run_fix(
         errors.append("fixture declares FIX-TO expectations but clang-tidy made no changes")
     errors.extend(verify_fixes(source, fixed_text))
 
-    syntax = subprocess.run(
-        _syntax_command(fixed, case_dir, tools=tools),
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+    # The syntax compile of the auto-fixed fixture is the one native cost in
+    # this helper with its own record; the helper's final bool is not a status.
+    with phases.measure("lint-syntax", tree="tidy", count=1) as syntax_phase:
+        syntax = subprocess.run(
+            _syntax_command(fixed, case_dir, tools=tools),
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        syntax_phase.status = syntax.returncode
     if syntax.returncode != 0:
         errors.append("auto-fixed fixture does not compile")
 
@@ -729,21 +734,26 @@ def _run_replacement_smoke(run_dir: Path, *, tools: WindowsFixtureTools | None =
     return not errors, log
 
 
+# One canary source per case; the stage's phase count is derived from this
+# tuple so the recorded work always matches the executed work.
+_COMPILER_ERROR_SMOKE_CASES = (
+    ("missing-include", '#include "DefinitelyMissingHeader.h"\n', False),
+    ("syntax-error", "void brokenSyntax(;\n", False),
+    ("unknown-type", "DefinitelyUnknownType value;\n", False),
+    (
+        "unused-code",
+        "static void unusedFunction(int unusedParameter) { int unusedVariable; }\n",
+        True,
+    ),
+)
+
+
 def _run_compiler_error_smoke(
     build_dir: Path, run_dir: Path, *, tools: WindowsFixtureTools | None = None
 ) -> tuple[bool, Path]:
     case_dir = Path(tempfile.mkdtemp(prefix="compiler-errors.", dir=run_dir))
     log = case_dir / "run.log"
-    cases = (
-        ("missing-include", '#include "DefinitelyMissingHeader.h"\n', False),
-        ("syntax-error", "void brokenSyntax(;\n", False),
-        ("unknown-type", "DefinitelyUnknownType value;\n", False),
-        (
-            "unused-code",
-            "static void unusedFunction(int unusedParameter) { int unusedVariable; }\n",
-            True,
-        ),
-    )
+    cases = _COMPILER_ERROR_SMOKE_CASES
     errors: list[str] = []
     outputs: list[str] = []
 
@@ -813,6 +823,24 @@ def _report_results(
     return passed
 
 
+def _pool_map_with_context(
+    pool: concurrent.futures.Executor,
+    function: Callable[[Fixture], tuple[bool, Path]],
+    fixtures: list[Fixture],
+) -> Iterator[tuple[bool, Path]]:
+    """Map one fixture task per fresh submitting-thread context snapshot.
+
+    Pool workers do not inherit the submitting thread's ``ContextVar`` state, so
+    each fixture runs inside a ``copy_context`` snapshot taken at submit time:
+    a worker's nested ``phases.measure`` keeps the enclosing root command and
+    its stage phase as the parent. Results stay in submission order and are
+    consumed lazily, matching ``pool.map``; each item gets its own snapshot
+    because one shared Context cannot run in several tasks.
+    """
+    futures = [pool.submit(copy_context().run, function, fixture) for fixture in fixtures]
+    return (future.result() for future in futures)
+
+
 def run(
     build_dir: Path,
     *,
@@ -872,37 +900,52 @@ def run(
 
         reporter.write(f"=== Diagnostic Verification ({len(diagnostic_fixtures)} fixtures) ===")
         worker_count = min(jobs or max((os.cpu_count() or 1) - 1, 1), len(fixtures))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
-            diagnostics_passed = _report_results(
-                "Diagnostics",
-                diagnostic_fixtures,
-                pool.map(
-                    lambda fixture: _run_diagnostic(fixture, build_dir, run_dir, tools=tools),
+        # The phase encloses the whole executor so it also covers the lazy
+        # pool.map consumption inside _report_results; Reporter line ordering
+        # is untouched by the record.
+        with phases.measure(
+            "lint-diagnostics", tree="tidy", jobs=worker_count, count=len(diagnostic_fixtures)
+        ) as phase:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
+                diagnostics_passed = _report_results(
+                    "Diagnostics",
                     diagnostic_fixtures,
-                ),
-                reporter,
-            )
+                    _pool_map_with_context(
+                        pool,
+                        lambda fixture: _run_diagnostic(fixture, build_dir, run_dir, tools=tools),
+                        diagnostic_fixtures,
+                    ),
+                    reporter,
+                )
+            phase.status = 0 if diagnostics_passed else 1
 
         reporter.write(f"=== Diagnostic + Auto-Fix Verification ({len(fix_fixtures)} fixtures) ===")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
-            fixes_passed = _report_results(
-                "Diagnostics + auto-fixes",
-                fix_fixtures,
-                pool.map(
-                    lambda fixture: _run_fix(fixture, build_dir, run_dir, tools=tools),
+        with phases.measure("lint-fixes", tree="tidy", jobs=worker_count, count=len(fix_fixtures)) as phase:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
+                fixes_passed = _report_results(
+                    "Diagnostics + auto-fixes",
                     fix_fixtures,
-                ),
-                reporter,
-            )
+                    _pool_map_with_context(
+                        pool,
+                        lambda fixture: _run_fix(fixture, build_dir, run_dir, tools=tools),
+                        fix_fixtures,
+                    ),
+                    reporter,
+                )
+            phase.status = 0 if fixes_passed else 1
 
         reporter.write("=== Replacement Application Smoke ===")
-        smoke_passed, smoke_log = _run_replacement_smoke(run_dir, tools=tools)
+        with phases.measure("lint-replacements", tree="tidy", count=1) as phase:
+            smoke_passed, smoke_log = _run_replacement_smoke(run_dir, tools=tools)
+            phase.status = 0 if smoke_passed else 1
         reporter.write(f"  [{'PASS' if smoke_passed else 'FAIL'}] insert conflict smoke")
         if not smoke_passed:
             reporter.write_file(smoke_log)
 
         reporter.write("=== Compiler Error Detection Smoke ===")
-        compiler_errors_passed, compiler_errors_log = _run_compiler_error_smoke(build_dir, run_dir, tools=tools)
+        with phases.measure("lint-compiler-errors", tree="tidy", count=len(_COMPILER_ERROR_SMOKE_CASES)) as phase:
+            compiler_errors_passed, compiler_errors_log = _run_compiler_error_smoke(build_dir, run_dir, tools=tools)
+            phase.status = 0 if compiler_errors_passed else 1
         reporter.write(f"  [{'PASS' if compiler_errors_passed else 'FAIL'}] fatal compiler diagnostics")
         if not compiler_errors_passed:
             reporter.write_file(compiler_errors_log)

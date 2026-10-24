@@ -253,8 +253,11 @@ Never substitute a Visual Studio or `PATH` executable, which would omit every `a
 
 The temporary Windows database merges two native trees.
 `windows-tidy` owns shared code, TUI, and CLI; the Visual Studio `windows-winui` tree owns WinUI and generated C++/WinRT headers.
-When WinUI is in scope, the portal incrementally builds the Debug WinUI target already used by `ao.bat check`, asks MSBuild `GetCompileCommands` for exact compiler state, validates every selected translation unit, excludes generated translation units outside the repository, and merges the commands.
-`--no-build` skips the incremental build and requires an existing configured and generated tree.
+When WinUI is in scope, the portal configures the same Visual Studio tree used by `ao.bat check` and builds its Debug `aobus-winui-lint-context` target.
+This target generates native IDL/C++/WinRT projections and both XAML passes for the library and probe contexts without compiling or linking the application, executing probes, or deploying resources.
+The portal then asks MSBuild `GetCompileCommands` for exact compiler state, validates every selected translation unit, excludes generated translation units outside the repository, and merges the commands.
+Generation failures stop analysis; a prior full product build is not required.
+`--no-build` skips configuration and generation and requires an existing configured and generated tree.
 With `-p` or `BUILD_DIR`, the companion appends `-winui`; default names remain `windows-tidy` and `windows-winui`.
 
 Before replay, the portal removes only exact `/Zc:preprocessor`, `/c`, `/ZW:nostdlib`, `/GL`, `/GL-`, and `/experimental:deterministic` driver tokens.

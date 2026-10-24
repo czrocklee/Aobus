@@ -7,9 +7,10 @@ The repository shim prepares the platform's native environment before dispatchin
 import argparse
 import os
 import sys
+from contextlib import nullcontext
 
 from .command import COMMAND_MODULES
-from .core import buildenv, compiler_cache, msbuild_cache, workspace_cache
+from .core import buildenv, compiler_cache, msbuild_cache, phases, workspace_cache
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -58,12 +59,24 @@ def main(argv: list[str] | None = None) -> int:
                 compiler_cache.activate_local()
             except compiler_cache.CompilerCacheError as exc:
                 print(f"Warning: compiler cache is disabled: {exc}", file=sys.stderr)
-        try:
-            with workspace_cache.command_context(args):
-                return args.func(args) or 0
-        except workspace_cache.WorkspaceCacheError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 1
+        # run measures preparation itself: a successful exec cannot close a root span.
+        measurement = phases.measure("command", command=args.command) if args.command != "run" else nullcontext()
+        with measurement as phase:
+            try:
+                with workspace_cache.command_context(args):
+                    status: int = args.func(args) or 0
+                if phase is not None:
+                    phase.status = status
+                return status
+            except workspace_cache.WorkspaceCacheError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                if phase is not None:
+                    phase.status = 1
+                else:
+                    # Context entry/cleanup failures are not successful launch preparation.
+                    with phases.measure("launch-error", command="run") as error_phase:
+                        error_phase.status = 1
+                return 1
     finally:
         if os.name == "nt":
             if previous_tracking is None:

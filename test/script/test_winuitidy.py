@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from phase_support import PhaseRecorder as _PhaseRecorder
+
 from ao.core import winuitidy
 
 
@@ -341,3 +343,110 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             self.assertIn("/DTRACK_ITEM /Iitem-headers", commands[4]["command"])
             self.assertIn("/DTRACK_TABLE /Itable-headers", commands[5]["command"])
             self.assertEqual(requires_context, [True, True, True, True, True])
+
+
+class WinUiCompileCommandsPhaseTest(unittest.TestCase):
+    def setUp(self) -> None:
+        captured_host = platform.system()
+        self.enterContext(mock.patch("ao.core.workspace_cache.platform.system", return_value=captured_host))
+
+    def _query_fixture(self, temp_dir: str) -> tuple:
+        root = Path(temp_dir)
+        source_root = root / "repo"
+        build_dir = root / "build"
+        generator = root / "vs"
+        msbuild = generator / "MSBuild" / "Current" / "Bin" / "MSBuild.exe"
+        main_project = build_dir / "app" / "windows-winui" / "aobus-winui-lib.vcxproj"
+        probe_project = build_dir / "app" / "windows-winui" / "ao_winui_localization_probe.vcxproj"
+        clang_cl = root / "llvm" / "bin" / "clang-cl.exe"
+        main_source = source_root / "app" / "windows-winui" / "App.xaml.cpp"
+        probe_source = source_root / "test" / "helper" / "WinUiLocalizationProbe.cpp"
+        for path in (msbuild, main_project, probe_project, clang_cl, main_source, probe_source):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        (build_dir / "CMakeCache.txt").write_text(
+            f"CMAKE_GENERATOR_INSTANCE:INTERNAL={generator}\n",
+            encoding="utf-8",
+        )
+
+        def payload(source: Path) -> mock.Mock:
+            contents = {
+                "TargetResults": {
+                    "GetCompileCommands": {
+                        "Result": "Success",
+                        "Items": [
+                            {
+                                "Identity": "/c /DWINUI",
+                                "WorkingDirectory": str(source_root),
+                                "Files": str(source),
+                            }
+                        ],
+                    }
+                }
+            }
+            return mock.Mock(returncode=0, stdout=json.dumps(contents))
+
+        return root, source_root, build_dir, clang_cl, main_source, probe_source, payload
+
+    def test_msbuild_query_is_one_aggregated_record(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            (
+                _root,
+                source_root,
+                build_dir,
+                clang_cl,
+                main_source,
+                probe_source,
+                payload,
+            ) = self._query_fixture(temp_dir)
+            recorder = _PhaseRecorder()
+
+            with (
+                mock.patch.object(winuitidy, "PROJECT_ROOT", source_root),
+                mock.patch.object(winuitidy, "_WINUI_ROOT", source_root / "app" / "windows-winui"),
+                mock.patch.object(winuitidy, "phases", recorder),
+                mock.patch.object(
+                    winuitidy.subprocess,
+                    "run",
+                    side_effect=(payload(main_source), payload(probe_source)),
+                ),
+            ):
+                commands = winuitidy.compile_commands(
+                    build_dir,
+                    clang_cl,
+                    required_translation_units=(probe_source,),
+                )
+
+            self.assertEqual([Path(entry["file"]) for entry in commands], [main_source, probe_source])
+            self.assertEqual(
+                recorder.records,
+                [{"name": "compile-commands", "tree": "winui", "count": 2, "status": 0}],
+            )
+
+    def test_msbuild_query_records_the_actual_failure_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            (
+                _root,
+                source_root,
+                build_dir,
+                clang_cl,
+                _main_source,
+                _probe_source,
+                _payload,
+            ) = self._query_fixture(temp_dir)
+            recorder = _PhaseRecorder()
+            failure = mock.Mock(returncode=3, stdout="MSBuild failed")
+
+            with (
+                mock.patch.object(winuitidy, "PROJECT_ROOT", source_root),
+                mock.patch.object(winuitidy, "_WINUI_ROOT", source_root / "app" / "windows-winui"),
+                mock.patch.object(winuitidy, "phases", recorder),
+                mock.patch.object(winuitidy.subprocess, "run", return_value=failure),
+            ):
+                with self.assertRaises(SystemExit):
+                    winuitidy.compile_commands(build_dir, clang_cl)
+
+            self.assertEqual(
+                recorder.records,
+                [{"name": "compile-commands", "tree": "winui", "count": 1, "status": 3}],
+            )

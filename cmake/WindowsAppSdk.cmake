@@ -347,6 +347,11 @@ function(aobus_enable_windows_app_sdk target role)
     "${runtime_link_settings}"
     "  </ItemDefinitionGroup>\n"
     "${generated_module}"
+    # Preserve the native precompile order without entering ClCompile/Lib/Link.
+    # Pass 2 needs the WinMD references computed by ComputeCompileInputsTargets
+    # and completes the .xaml.g.hpp files consumed by authored C++ sources.
+    "  <Target Name=\"AobusPrepareLintContext\"\n"
+    "          DependsOnTargets=\"_BuildGenerateSourcesAction;$(BeforeClCompileTargets);$(ComputeCompileInputsTargets);MarkupCompilePass2\" />\n"
     "</Project>\n")
   _aobus_write_if_different("${props_file}" "${props_content}")
   _aobus_write_if_different("${targets_file}" "${targets_content}")

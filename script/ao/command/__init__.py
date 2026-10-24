@@ -1,43 +1,14 @@
-"""Portal command modules.
+"""Load portal commands from their lightweight identity registry.
 
-COMMAND_MODULES is the single registry: each module declares NAME and
-REQUIRES_BUILD_ENV and registers an argparse subparser under NAME.
+Each module declares the matching NAME, REQUIRES_BUILD_ENV and parser
+registration. Phase reporting reads the registry without importing this package.
 """
 
-from . import (
-    analyze,
-    build,
-    check,
-    coverage,
-    deps,
-    docs,
-    doctor,
-    hygiene,
-    name_audit,
-    perf,
-    run,
-    setup,
-    test,
-    test_audit,
-    tidy,
-)
-from . import format as format_command
+from importlib import import_module
 
-COMMAND_MODULES = (
-    build,
-    check,
-    test,
-    test_audit,
-    name_audit,
-    coverage,
-    deps,
-    doctor,
-    setup,
-    docs,
-    tidy,
-    analyze,
-    format_command,
-    hygiene,
-    perf,
-    run,
-)
+from ..core.command_registry import COMMAND_MODULE_NAMES
+
+COMMAND_MODULES = tuple(import_module(f"{__name__}.{name}") for name in COMMAND_MODULE_NAMES)
+for _name, _module in zip(COMMAND_MODULE_NAMES, COMMAND_MODULES, strict=True):
+    if _module.NAME != _name.replace("_", "-"):
+        raise ValueError("portal command name differs from its registry identity")

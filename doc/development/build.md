@@ -67,6 +67,66 @@ Both use the shared governed vcpkg manifest rather than Linux's Nix resolver.
 The native AppKit desktop remains a development slice and is launched with `./ao run appkit`; macOS also builds the core, CLI, and TUI with Core Audio.
 Windows uses `ao.bat` to initialize the Visual Studio environment and provision the pinned Python tooling.
 
+## Measure native validation
+
+Set `AOBUS_PHASE_LOG_DIR` to an output directory outside the checkout to collect
+opt-in phase measurements while running the normal portal commands:
+
+```bash
+AOBUS_PHASE_LOG_DIR=/tmp/aobus-phases ./ao check
+```
+
+Each process writes its own JSONL file. CI enables this on native jobs, validates
+the records with `python -m ao.core.phases <directory>`, and publishes normalized
+`AO_PHASE_RECORD` rows in the job log plus a GitHub step-summary table. The
+reporter uses the job's Python environment with `PYTHONPATH=script`; it is not a
+second build or test entry point. Its optional `--github-summary <file>` appends
+the same Markdown table. Missing, malformed, or incomplete measurements fail the
+report instead of producing an apparently complete timing result. CI summary
+steps are best-effort: reporting failures remain visible but do not fail an
+otherwise successful native job. Build and hygiene gates remain mandatory.
+
+Records contain fixed phase/command labels, process and nesting identities,
+monotonic durations, exit statuses, and relevant numeric scope/concurrency
+counts. They do not contain command lines, environment values, host paths,
+test filters, or exception messages. Analysis-item records identify a selected
+repository file by the lowercase SHA-256 of its project-relative POSIX spelling
+encoded as UTF-8; the digest can be reproduced from a known tracked path without
+publishing a host-specific path. It is an identifier, not secret anonymization.
+
+The summary distinguishes phase `records` from processed `items`. Items are
+summed only when every record in a group supplies a work count; a dash means
+unspecified or partial counts. Counts from nested phases are not unique inputs.
+Worker tasks inherit the submitting command and phase within one process;
+separate subprocess sessions do not acquire invented parent links. Command and
+suite identities come from lightweight registries, so the reporter does not
+load command parsers or native build modules.
+
+Phase rows can nest or run in parallel; their elapsed times must not be added to
+estimate job wall time. These are portal-dispatch measurements: shell bootstrap,
+compiler-cache activation, cache actions and other job setup are outside the
+recorded command interval. A failed build remains a failed build, while a complete
+record of that failure is still a valid measurement. Logging write failures
+warn without masking the work's original result; incomplete records remain an
+explicit reporting failure. With the variable absent, no timing files are
+created and ordinary command output is unchanged. Source IDs are also computed
+only when collection is enabled. Record appends remain synchronous and ordered;
+encoding happens outside the append lock and directory preparation is amortized.
+
+`ao run` uses a bounded `launch-preparation` phase rather than leaving a root
+command span open across `exec`. Preparation success is not proof of successful
+handoff, application runtime, or application exit status. Failed handoff or run
+workspace setup/cleanup produces `launch-error` evidence, measuring failure
+handling rather than application runtime. An `application` phase
+observes runtime/status only on the existing Windows source-view path where the
+portal already waits for its child. This measurement does not replace `exec`
+with a supervising process or retire source views while the application runs.
+
+These measurements attribute existing work. They do not skip configuration,
+change compiler-cache tracking, reduce suites or lint rules, or establish a
+speedup. For private Windows incremental-build evidence, use the
+[MSBuild capture procedure](windows.md#capture-msbuild-incrementality).
+
 ## Dependencies and optional setup
 
 - [Dependency governance](dependency-governance.md) explains resolver ownership; `./ao deps report` shows governed versions and native identities.

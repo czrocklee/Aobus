@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, winui, workspace_cache
+from ..core import builddir, phases, winui, workspace_cache
 from ..core.proc import die
 from . import build
 
@@ -112,7 +112,7 @@ def _main_thread_checker_environment() -> dict[str, str]:
     return env
 
 
-def run_command(args: argparse.Namespace) -> int:
+def _prepare_launch(args: argparse.Namespace) -> tuple[Path, dict[str, str] | None]:
     profile = build.validate_build_options(args)
     if args.app not in profile.apps:
         available = ", ".join(profile.apps)
@@ -149,24 +149,38 @@ def run_command(args: argparse.Namespace) -> int:
         command = "ao.bat build --target winui" if args.app == "winui" else "./ao build"
         raise die(f"Executable not found at {executable}. Did you build the project? Run '{command}' first.")
     workspace_cache.validate_consumer(build_dir)
+    return executable, checker_env
+
+
+def run_command(args: argparse.Namespace) -> int:
+    with phases.measure("launch-preparation", command=NAME):
+        executable, checker_env = _prepare_launch(args)
 
     if os.environ.get("AOBUS_WINDOWS_SOURCE_VIEW"):
-        with subprocess.Popen([str(executable), *args.app_args]) as child:
-            try:
-                return child.wait()
-            except KeyboardInterrupt as interrupt:
-                # Retire the views only after this application has exited.
-                # An interrupted build still retains its views for surviving workers.
+        with phases.measure("application", command=NAME) as phase:
+            with subprocess.Popen([str(executable), *args.app_args]) as child:
                 try:
-                    child.kill()
-                    child.wait()
-                except OSError as exc:
-                    interrupt.add_note(f"Could not reap the application: {exc}")
-                    raise interrupt from exc
-                return 130
-    # Replaces the current process with the target executable
+                    phase.status = child.wait()
+                except KeyboardInterrupt as interrupt:
+                    # Retire the views only after this application has exited.
+                    # An interrupted build still retains its views for surviving workers.
+                    try:
+                        child.kill()
+                        child.wait()
+                    except OSError as exc:
+                        interrupt.add_note(f"Could not reap the application: {exc}")
+                        raise interrupt from exc
+                    phase.status = 130
+            return phase.status
+    # Preparation success is not proof of exec success. Exec replaces this process;
+    # application runtime and exit status are not observed by the phase logger.
     arguments = [str(executable), *args.app_args]
-    if checker_env is not None:
-        os.execvpe(str(executable), arguments, checker_env)
-    else:
-        os.execvp(str(executable), arguments)
+    try:
+        if checker_env is not None:
+            os.execvpe(str(executable), arguments, checker_env)
+        else:
+            os.execvp(str(executable), arguments)
+    except BaseException:
+        # Measure only error handling, never a span left open by successful exec.
+        with phases.measure("launch-error", command=NAME):
+            raise
