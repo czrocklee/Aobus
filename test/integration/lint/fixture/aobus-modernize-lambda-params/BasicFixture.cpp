@@ -6,7 +6,7 @@
 
 void testLambdaParams()
 {
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto invalidLambda = [] { std::cout << "Hi"; };
+  // POSITIVE
   [[maybe_unused]] auto invalidLambda = []() { std::cout << "Hi"; };
 
   // NEGATIVE
@@ -26,7 +26,7 @@ void testVariadicLambda()
 template<typename T>
 void testTemplatedEmptyLambda()
 {
-  // POSITIVE: FIX-TO: [[maybe_unused]] auto invalidTemplatedLambda = [] { return sizeof(T); };
+  // POSITIVE
   [[maybe_unused]] auto invalidTemplatedLambda = []() { return sizeof(T); };
 }
 

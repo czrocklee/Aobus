@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..core import builddir, tidyengine, workspace_cache
+from ..core import builddir, tidyconfig, tidyengine, workspace_cache
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
@@ -72,8 +72,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         "--tidy-arg",
         action="append",
         default=[],
+        type=tidyconfig.diagnostic_argument,
         metavar="<arg>",
-        help="extra argument passed to clang-tidy verbatim (repeatable)",
+        help="extra diagnostic-only clang-tidy argument (repeatable; no fixes, exports or raw response files)",
     )
     parser.set_defaults(func=run_command)
 
@@ -101,6 +102,13 @@ def analyzer_checks(alpha: bool, only: str | None) -> str:
 
 
 def run_command(args: argparse.Namespace) -> int:
+    # Argparse rejects these during parsing. This remains the guard for a
+    # programmatic Namespace that did not pass through the option type.
+    try:
+        tidyconfig.validate_diagnostic_arguments(args.tidy_arg)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
     if args.jobs < 1:
         raise die("-j must be at least 1.")
     build_dir = Path(args.path) if args.path else builddir.analyze_dir()

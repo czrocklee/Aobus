@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-// FIX-TO: #include <cstdint>\n\n#include "TestHelpers.h"
 #include "TestHelpers.h"
 
 class MyWidget : public gtkmm_mock::Widget
@@ -20,13 +19,13 @@ extern "C"
   }
 }
 
-// POSITIVE: FIX-TO: std::int32_t global_var = 0;
+// POSITIVE
 int global_var = 0;
 
-// POSITIVE: FIX-TO: std::int16_t small_var = 0;
+// POSITIVE
 short small_var = 0;
 
-// POSITIVE: FIX-TO: std::uint32_t u_var = 0;
+// POSITIVE
 unsigned int u_var = 0;
 
 struct AlsaMock
@@ -34,7 +33,7 @@ struct AlsaMock
   // Should ignore because it's used in callAlsa below
   long volumeMin = 0;
 
-  // POSITIVE
+  // POSITIVE | prefer explicit sized integer types over 'long' (review external C API compatibility)
   long unrelatedLong = 0;
 
   void callAlsa() { some_c_api(&volumeMin, 1); }
@@ -42,11 +41,14 @@ struct AlsaMock
 
 void testLogic()
 {
-  // POSITIVE: FIX-TO: std::int32_t local = 0;
+  // POSITIVE
   int local = 0;
 
-  // POSITIVE
-  long big = 0; // WARN only, no fix
+  // POSITIVE | prefer explicit sized integer types over 'long' (review external C API compatibility)
+  long big = 0;
+
+  // POSITIVE | prefer explicit sized integer types over 'unsigned long' (review external C API compatibility)
+  unsigned long unsignedBig = 0;
 
   // Ignored because it's passed to C API via pointer
   long val_for_c = 0;

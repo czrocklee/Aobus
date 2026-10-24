@@ -14,17 +14,17 @@ void testAnyAll(std::vector<int> const& v, std::vector<int> const& w)
 {
   auto pred = [](std::int32_t x) { return x > 0; };
 
-  // POSITIVE: FIX-TO: if (std::ranges::any_of(v, pred))
+  // POSITIVE | use std::ranges::any_of instead of std::ranges::find_if != end()
   if (std::ranges::find_if(v, pred) != v.end())
   {
   }
 
-  // POSITIVE: FIX-TO: if (std::ranges::any_of(v, [](std::int32_t x) { return x > 0; }))
+  // POSITIVE | use std::ranges::any_of instead of std::ranges::find_if != end()
   if (std::ranges::find_if(v, [](std::int32_t x) { return x > 0; }) != std::ranges::end(v))
   {
   }
 
-  // POSITIVE: FIX-TO: bool const hasPositive = std::ranges::any_of(v, pred);
+  // POSITIVE | use std::ranges::any_of instead of std::ranges::find_if != end()
   bool const hasPositive = std::ranges::find_if(v, pred) != std::end(v);
 
   // NEGATIVE
@@ -32,17 +32,22 @@ void testAnyAll(std::vector<int> const& v, std::vector<int> const& w)
   {
   }
 
-  // POSITIVE: FIX-TO: if (std::ranges::none_of(v, pred))
+  // POSITIVE | use std::ranges::none_of instead of std::ranges::find_if == end()
   if (std::ranges::find_if(v, pred) == v.end())
   {
   }
 
-  // POSITIVE: FIX-TO: if (std::ranges::all_of(v, pred))
+  // POSITIVE | use std::ranges::all_of instead of std::ranges::find_if_not == end()
   if (std::ranges::find_if_not(v, pred) == v.end())
   {
   }
 
-  // POSITIVE: FIX-TO: if (std::ranges::any_of(v, pred))
+  // POSITIVE | use !std::ranges::all_of instead of std::ranges::find_if_not != end()
+  if (std::ranges::find_if_not(v, pred) != v.end())
+  {
+  }
+
+  // POSITIVE | use std::ranges::any_of instead of std::ranges::find_if != end()
   if (std::ranges::find_if(v, pred) != v.cend())
   {
   }

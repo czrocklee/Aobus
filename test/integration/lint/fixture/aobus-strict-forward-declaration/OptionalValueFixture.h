@@ -18,6 +18,6 @@ class TestOptionalPointerDependency
 {
   std::optional<TargetBadRawPtr*> value();
 
-  // POSITIVE: FIX-TO: void consume(/* forward declare */ TargetBadRawPtr const& value);
+  // POSITIVE
   void consume(TargetBadRawPtr const& value);
 };

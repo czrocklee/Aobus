@@ -388,8 +388,8 @@ isolated Windows SSH logons.
 
 The default test group is core and TUI. Windows `all` and `ao.bat check` add
 CLI, integration, tooling, and lint. `ao.bat test --lint` prepares the separate
-`windows-tidy` host and runs the custom-check fixtures, replacement assertions,
-and native syntax checks with the governed LLVM SDK and Visual Studio includes.
+`windows-tidy` host and runs the custom-check fixture diagnostics with the governed LLVM SDK and Visual Studio includes.
+Compiler errors in those diagnostic invocations fail the fixtures; there is no second syntax-only pass.
 Objective-C++ fixtures are explicitly deferred, not counted as Windows coverage.
 Use `ao.bat tidy` for native source findings and `ao.bat format --check` for
 formatting. The managed environment owns Ruff and mypy; ambient tools are not used.

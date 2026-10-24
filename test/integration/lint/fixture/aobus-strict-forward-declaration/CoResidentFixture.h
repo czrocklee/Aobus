@@ -77,7 +77,7 @@ class TestClassByValueCoResident
 // ============================================================
 class TestIsolatedWeakRef
 {
-  // POSITIVE: FIX-TO: /* forward declare */ TargetBadRawPtr* _ptr;
+  // POSITIVE
   TargetBadRawPtr* _ptr;
 };
 
@@ -89,7 +89,7 @@ class TestMixedCoResident
   CoResidentNodeType _type = CoResidentNodeType::Decoder;
   // NEGATIVE co-resident with enum
   CoResidentGraph* _graph;
-  // POSITIVE: FIX-TO: /* forward declare */ TargetBadRawPtr* _isolated;
+  // POSITIVE
   TargetBadRawPtr* _isolated;
 };
 
@@ -123,6 +123,6 @@ class TestAliasValueCoResident
   // NEGATIVE The alias provider also defines CoResidentAliasOwner.
   void consume(CoResidentAliasOwner const& owner);
 
-  // POSITIVE: FIX-TO: void consumeIsolated(/* forward declare */ TargetBadRawPtr const& target);
+  // POSITIVE
   void consumeIsolated(TargetBadRawPtr const& target);
 };

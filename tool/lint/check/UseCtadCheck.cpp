@@ -845,8 +845,8 @@ namespace clang::tidy::readability
              isPairWithTypeChangingArgs(construct) || isInitializerListWithTypeChangingElements(construct);
     }
 
-    // Diagnostic only: removing the argument list can change the deduced type, so the
-    // author rewrites the arguments instead of accepting a mechanical FixIt.
+    // Diagnostic only: removing the argument list can change the deduced type, so
+    // the author rewrites the arguments instead of accepting a mechanical edit.
     void reportCtadWarning(ClangTidyCheck& check, SourceLocation loc, TemplateSpecializationTypeLoc tsLoc)
     {
       check.diag(

@@ -6,6 +6,24 @@
 
 using namespace std::string_literals;
 
+// Truth of the starts_with() member. Stored find results are not comparisons,
+// so these asserts are not diagnostics.
+namespace
+{
+  constexpr auto kText = std::string_view{"hello world"};
+  constexpr auto kHello = kText.find("hello");
+  constexpr auto kMissing = kText.find("xyz");
+  constexpr auto kFromZero = kText.find("hello", 0);
+
+  static_assert(kText.starts_with("hello"));
+  static_assert(!kText.starts_with("xyz"));
+  static_assert((kHello == 0) == kText.starts_with("hello"));
+  static_assert((kMissing != 0) == !kText.starts_with("xyz"));
+  static_assert((0 == kHello) == kText.starts_with("hello"));
+  static_assert((0 != kMissing) == !kText.starts_with("xyz"));
+  static_assert((kFromZero == 0) == kText.starts_with("hello"));
+} // namespace
+
 // A find() member that reports a match count, not a position; the type has no
 // starts_with() member.
 struct Config
@@ -15,10 +33,14 @@ struct Config
 
 #define AOBUS_AT_START(s, sub) (s.find(sub) == 0)
 
+// Argument-list macro: the needle and position cover part of the expansion
+// while the comparison stays file-spelled.
+#define AOBUS_FIND_ARGS "pre", 0
+
 void positiveFindStringEqZero()
 {
   auto str = "hello world"s;
-  // POSITIVE: FIX-TO: if (str.starts_with("hello"))
+  // POSITIVE | use starts_with() member instead of find == 0
   if (str.find("hello") == 0)
   {
   }
@@ -27,7 +49,7 @@ void positiveFindStringEqZero()
 void positiveZeroEqFindString()
 {
   auto str = "hello world"s;
-  // POSITIVE: FIX-TO: if (str.starts_with("hello"))
+  // POSITIVE | use starts_with() member instead of find == 0
   if (0 == str.find("hello"))
   {
   }
@@ -36,7 +58,7 @@ void positiveZeroEqFindString()
 void positiveFindCharEqZero()
 {
   auto str = "hello world"s;
-  // POSITIVE: FIX-TO: if (str.starts_with('h'))
+  // POSITIVE | use starts_with() member instead of find == 0
   if (str.find('h') == 0)
   {
   }
@@ -45,7 +67,7 @@ void positiveFindCharEqZero()
 void positiveFindNeqZero()
 {
   auto str = "hello world"s;
-  // POSITIVE: FIX-TO: if (!str.starts_with("hello"))
+  // POSITIVE | use !starts_with() member instead of find != 0
   if (str.find("hello") != 0)
   {
   }
@@ -81,6 +103,42 @@ void negativeMacroSpelled()
   auto str = "hello world"s;
   // NEGATIVE - the find-and-compare is spelled inside a macro expansion
   if (AOBUS_AT_START(str, "hello"))
+  {
+  }
+}
+
+void positiveZeroNeqFindString()
+{
+  auto const str = "hello world"s;
+  // POSITIVE | use !starts_with() member instead of find != 0
+  if (0 != str.find("hello"))
+  {
+  }
+}
+
+void positiveStringViewEqZero()
+{
+  auto const text = std::string_view{"hello world"};
+  // POSITIVE | use starts_with() member instead of find == 0
+  if (text.find("hello") == 0)
+  {
+  }
+}
+
+void positiveFindPosZero()
+{
+  auto const str = "hello world"s;
+  // POSITIVE | use starts_with() member instead of find == 0
+  if (str.find("hello", 0) == 0)
+  {
+  }
+}
+
+void positiveFindPartialMacroArgs()
+{
+  auto const str = "prefix"s;
+  // POSITIVE | use !starts_with() member instead of find != 0
+  if (str.find(AOBUS_FIND_ARGS) != 0)
   {
   }
 }

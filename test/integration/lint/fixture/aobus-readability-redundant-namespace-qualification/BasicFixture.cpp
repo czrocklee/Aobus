@@ -19,15 +19,15 @@ namespace ao
 {
   void test1()
   {
-    // POSITIVE: FIX-TO: Foo const f;
+    // POSITIVE
     ao::Foo const f;
-    // POSITIVE: FIX-TO: Foo const cf;
+    // POSITIVE
     ao::Foo const cf;
     // NEGATIVE
     library::Track const t;
-    // POSITIVE: FIX-TO: library::Track const t2;
+    // POSITIVE
     ao::library::Track const t2;
-    // POSITIVE: FIX-TO: bar();
+    // POSITIVE
     ao::bar();
   }
 }
@@ -36,9 +36,9 @@ namespace ao::library
 {
   void test2()
   {
-    // POSITIVE: FIX-TO: Track const t;
+    // POSITIVE
     ao::library::Track const t;
-    // POSITIVE: FIX-TO: Foo const f;
+    // POSITIVE
     ao::Foo const f;
   }
 }
@@ -141,7 +141,7 @@ namespace ao::qualification::implementation
 {
   struct Window final
   {
-    // POSITIVE: FIX-TO: Plain unshadowed;
+    // POSITIVE
     qualification::Plain unshadowed;
     // NEGATIVE - the unqualified name denotes the implementation, not the projected type.
     qualification::Projected projected;
@@ -223,14 +223,14 @@ namespace ao::retained::unshadowed
 // Reopening a namespace must not prevent safe record-qualified removals.
 namespace ao::retained::unshadowed
 {
-  // POSITIVE: FIX-TO: using SelectedInner = Outer::Inner;
+  // POSITIVE
   using SelectedInner = retained::Outer::Inner;
   static_assert(SelectedInner::kIdentity == 11);
-  // POSITIVE: FIX-TO: static_assert(Outer::staticFn() == 11);
+  // POSITIVE
   static_assert(retained::Outer::staticFn() == 11);
-  // POSITIVE: FIX-TO: using AliasInner = OuterAlias::Inner;
+  // POSITIVE
   using AliasInner = retained::OuterAlias::Inner;
-  // POSITIVE: FIX-TO: using TemplateInner = OuterTemplate<int>::Inner;
+  // POSITIVE
   using TemplateInner = retained::OuterTemplate<int>::Inner;
 }
 
@@ -401,10 +401,10 @@ namespace ao::retained::outerTemplateShadow
   template<typename IrrelevantParameter>
   constexpr int Host<IrrelevantParameter>::unshadowed()
   {
-    // POSITIVE: FIX-TO: using SelectedInner = Outer::Inner;
+    // POSITIVE
     using SelectedInner = retained::Outer::Inner;
     static_assert(SelectedInner::kIdentity == 11);
-    // POSITIVE: FIX-TO: return Outer::staticFn();
+    // POSITIVE
     return retained::Outer::staticFn();
   }
 
@@ -430,7 +430,7 @@ namespace ao::retained
 
 namespace ao::retained::namespaceAliasUnshadowed
 {
-  // POSITIVE: FIX-TO: using SelectedInner = path::Outer::Inner;
+  // POSITIVE
   using SelectedInner = retained::path::Outer::Inner;
   static_assert(SelectedInner::kIdentity == 11);
 }
@@ -552,23 +552,23 @@ namespace ao::imported
 
 namespace ao::imported::unshadowed
 {
-  // POSITIVE: FIX-TO: Credit record;
+  // POSITIVE
   imported::Credit record;
-  // POSITIVE: FIX-TO: CreditAlias alias;
+  // POSITIVE
   imported::CreditAlias alias;
-  // POSITIVE: FIX-TO: Rating enumeration;
+  // POSITIVE
   imported::Rating enumeration;
-  // POSITIVE: FIX-TO: Box<int> specialized;
+  // POSITIVE
   imported::Box<int> specialized;
-  // POSITIVE: FIX-TO: DependentAlias<Box<int>> dependentAlias;
+  // POSITIVE
   imported::DependentAlias<Box<int>> dependentAlias;
 
   template<typename T>
   struct Generic
   {
-    // POSITIVE: FIX-TO: DependentAlias<T> dependent;
+    // POSITIVE
     imported::DependentAlias<T> dependent;
-    // POSITIVE: FIX-TO: typename Box<T>::value_type dependentMember;
+    // POSITIVE
     typename imported::Box<T>::value_type dependentMember;
   };
 
@@ -673,14 +673,14 @@ namespace ao::retained::constraints
 
   template<typename UnrelatedParameter>
   concept UnshadowedConcept = requires {
-    // POSITIVE: FIX-TO: typename Outer::Inner;
+    // POSITIVE
     typename retained::Outer::Inner;
-    // POSITIVE: FIX-TO: requires std::is_class_v<typename Outer::Inner>;
+    // POSITIVE
     requires std::is_class_v<typename retained::Outer::Inner>;
   };
 
   template<typename UnrelatedParameter>
-  // POSITIVE: FIX-TO: requires(Outer::staticFn() == 11)
+  // POSITIVE
     requires(retained::Outer::staticFn() == 11)
   constexpr int unshadowedLeading()
   {
@@ -689,7 +689,7 @@ namespace ao::retained::constraints
 
   template<typename UnrelatedParameter>
   constexpr int unshadowedTrailing()
-    // POSITIVE: FIX-TO: requires(Outer::staticFn() == 11)
+    // POSITIVE
     requires(retained::Outer::staticFn() == 11)
   {
     return 11;

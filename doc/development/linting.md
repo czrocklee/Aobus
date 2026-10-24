@@ -14,7 +14,7 @@ Use project commands as the public entry points:
 
 Use the corresponding `ao.bat` commands on native Windows.
 Do not call clang-tidy, Ruff, or mypy directly during normal repository work.
-The portal owns scope discovery, strict and relaxed modes, plugin loading, include paths, fix filtering, and diagnostic de-duplication.
+The portal owns scope discovery, strict and relaxed modes, plugin loading, include paths, and diagnostic de-duplication.
 Keep lint work scoped to the task; do not turn another change into a drive-by cleanup campaign.
 
 ## Scope behavior
@@ -29,7 +29,7 @@ Empty subsets are skipped, a formatting failure stops later stages, and reposito
 - `STRICT` applies to production C++ under `lib/`, `app/`, `include/`, and `tool/`.
 - `RELAXED` applies to C++ under `test/` with the same baseline but disables test-noisy checks: unchecked optional access, discarded return values, designated initializers for positional expected-data tables, cognitive complexity, identifier length, magic numbers, C arrays, C varargs, and test-only casts.
 - Non-fixture files under `test/integration/lint/` are ignored by normal tidy runs.
-- Fixtures under `test/integration/lint/fixture/` are skipped in batch scans and checked only when explicitly named. `./ao test --lint` owns their diagnostics and FixIts.
+- Fixtures under `test/integration/lint/fixture/` are skipped in batch scans and checked only when explicitly named. `./ao test --lint` owns their diagnostics.
 - Python files in scope are checked against `pyproject.toml` by Ruff and mypy through `./ao tidy`.
 
 ## Objective-C diagnostics
@@ -185,21 +185,23 @@ Linux uses the project shell.
 Windows uses the checkout-specific managed environment and never ambient `PATH` tools.
 Both supported tooling environments must match exact versions in `script/ao/toolchain.json`; Nix checks this during evaluation, while Windows bootstrap and tooling tests probe the managed environment.
 
-- Use `./ao format` for Python formatting. `./ao tidy --fix` exports only clang-tidy replacements.
+- Use `./ao format` for Python formatting.
 - Use targeted `# noqa: RULE` or `# type: ignore[code]` only when the tool cannot express the real contract; explain a non-obvious reason.
 - Do not silence mypy by widening to `Any` unless the boundary is genuinely dynamic.
 
-## Automatic fixes
+## Diagnostic-only runs
 
-Automatic fixes are an optional, recovery-friendly shortcut, not the normal workflow.
-Use them only with a clean or easily reverted tree and a mechanical diagnostic whose diff is straightforward to review.
-They are most defensible for simple repeated edits, checker fixtures, obvious local modernization, or a low-judgment batch that is more error-prone by hand.
+`./ao tidy` and `./ao analyze` are diagnostic-only: the portal never exports or applies replacements, even when an upstream or custom diagnostic carries hint ranges.
+A shared validator in `script/ao/core/tidyconfig.py` enforces the same boundary for both commands.
+Raw clang-tidy arguments that request fixes are rejected: `-fix`, `-fix-errors`, `-fix-notes`, and `-export-fixes` in their single-dash, double-dash, and `=`-joined forms.
+A standalone `@responsefile` argument is rejected as well because a response file can hide those flags; the portal fails closed rather than expanding it.
+The owning argument parser rejects these options before source-scope resolution, compiler-cache activation, workspace setup, or native compiler-environment selection.
+The launcher may still prepare its initial Nix shell or Python interpreter before parsing; rejection does not promise a bootstrap-free invocation.
+Direct programmatic command calls also validate the boundary.
+Compiler database arguments and `--extra-arg=@responsefile` compiler responses remain supported because they select compile state rather than clang-tidy options.
 
+Agents make explicit, reviewable edits under the `use-clang-tidy` skill.
 Prefer hand edits for ownership, public API, behavior, naming, readability tradeoffs, and framework boundaries.
-Never apply automatic fixes repository-wide.
-Review every resulting diff and run the same verification required for a hand edit.
-Agent sessions do not run `./ao tidy --fix` or apply exported replacements; agents make explicit reviewable edits under the `use-clang-tidy` skill.
-The lint fixture suite's own auto-fix stage is separate.
 
 ## Verification
 

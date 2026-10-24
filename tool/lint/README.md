@@ -7,11 +7,11 @@ Use `./ao tidy` or `ao.bat tidy`; the portal selects checks, discovers tools, pr
 
 - [`check/`](check/) contains implementations and local AST helpers.
 - [`AobusLintModule.cpp`](AobusLintModule.cpp) owns command aliases and registration; [`CMakeLists.txt`](CMakeLists.txt) owns source membership and native linkage.
-- [Checker development](../../doc/development/lint/checker-development.md) explains symbol identity, macro safety, diagnostics, FixIts, and fixture design.
+- [Checker development](../../doc/development/lint/checker-development.md) explains symbol identity, macro safety, diagnostics, and fixture design.
 - [Linting](../../doc/development/linting.md) is the starting point for investigating a finding rather than modifying a checker.
 
 Fixtures live under `test/integration/lint/fixture/`.
-`./ao test --lint` runs diagnostic, FixIt, and fixed-output compilation assertions on Linux and macOS.
+`./ao test --lint` verifies diagnostics on Linux and macOS, including optional message assertions and mandatory compiler-error detection while Clang parses the original fixtures.
 A focused `tidy --check` invocation inspects diagnostics; it does not replace those assertions.
 
 ## Native tool boundary

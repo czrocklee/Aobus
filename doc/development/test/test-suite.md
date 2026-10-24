@@ -49,16 +49,15 @@ and run the full compatible fixture and smoke stages.
 
 Windows fixture commands use that host, the shared portal checker configuration,
 and explicit clang-cl arguments rather than borrowing product PCH/compiler flags.
-Fixed-output syntax checks and replacement smoke tests use only the configured
-LLVM SDK compiler, resource headers, and replacement tool. Standard includes come
-from the portal-initialized Visual Studio `INCLUDE` search list, including
-under `--no-build`. Empty search-list elements are ignored as by the native
+Diagnostic invocations use the configured LLVM SDK clang-tidy host and resource
+headers. Standard includes come from the portal-initialized Visual Studio
+`INCLUDE` search list, including under `--no-build`. Empty search-list elements are ignored as by the native
 compiler; unused nonexistent directories do not invalidate the remaining
-providers. Missing required headers still fail compilation. Ambient `CXX`,
-`g++`, and replacement tools are not substitutes.
+providers. Missing required headers still fail compilation. Ambient `CXX`
+and `g++` are not substitutes.
 Objective-C++ `.mm` fixtures are explicitly listed as platform-incompatible and
-not tested on Windows; C++ and header fixtures retain diagnostic, FixIt, syntax,
-and `NO-FIX` assertions.
+not tested on Windows; C++ and header fixtures retain diagnostic assertions and
+compiler-error detection in the diagnostic invocation.
 
 The macOS `all` group contains core, TUI, CLI, integration, and lint. GTK is not
 built. Its Homebrew host Python is outside the exact repository-tooling
@@ -80,7 +79,7 @@ contract, and tests documentation validation against isolated fixtures. Run
 depends on unrelated tools from the ambient Windows `PATH`.
 
 Tooling also exercises real LLVM processes through the portal's selected-file
-diagnostic filters, including exported replacements and unselected-file
+diagnostic filters, including unselected-file
 exclusion. These upstream-rule controls do not replace the custom-checker lint
 integration suite. On Windows, prepare their governed SDK with
 `ao.bat setup llvm-sdk` before the tooling gate;
@@ -133,14 +132,13 @@ normal output is a concise pass count; unittest output is captured in the gate
 log and shown in full on failure.
 
 The lint suite is implemented by `script/ao/core/linttest.py`; `test/integration/lint/` contains only
-checker fixtures. On Linux and macOS the runner invokes the existing `ao tidy` implementation without rebuilding, verifies
-diagnostics against `POSITIVE` and `NEGATIVE` markers, and derives auto-fix expectations directly from
-`FIX-TO` markers. Only fixtures that declare `FIX-TO` expectations enter the auto-fix stage; a fixture whose main file carries a
-standalone `// NO-FIX` marker stays in the diagnostic stage and additionally asserts that the exported fix report contains
-zero replacement records. This keeps checker execution policy in `ao tidy` and avoids a second shell-based test
-orchestration layer.
+checker fixtures. On Linux and macOS the runner invokes the existing `ao tidy` implementation without rebuilding and verifies
+diagnostics against `POSITIVE` and `NEGATIVE` markers, with optional message assertions for semantic advice.
+Clang parses each original fixture during that invocation; compiler errors fail the fixture, and separate compiler-error canaries verify that gate.
+No second syntax-only compiler pass or independent GCC compatibility requirement is imposed on checker fixtures.
+This keeps checker execution policy in `ao tidy` and avoids a second shell-based test orchestration layer.
 
-For fixture placement, marker semantics, context-header constraints, Objective-C++ handling, and FixIt authoring, use [checker development](../lint/checker-development.md#fixture-contract). Those are fixture-authoring rules rather than suite-selection rules.
+For fixture placement, marker semantics, context-header constraints, and Objective-C++ handling, use [checker development](../lint/checker-development.md#fixture-contract). Those are fixture-authoring rules rather than suite-selection rules.
 
 Coverage has a separate `--all` selection of core, TUI, CLI, and GTK. It excludes standalone integration, tooling, and lint suites from the application-source coverage run.
 

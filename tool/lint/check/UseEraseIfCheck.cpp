@@ -5,16 +5,12 @@
 
 #include "check/AstHelpers.h"
 
-#include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
-#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
-
-#include <string>
 
 using namespace clang::ast_matchers;
 
@@ -44,13 +40,6 @@ namespace clang::tidy::readability
     auto const* container = result.Nodes.getNodeAs<VarDecl>("container");
 
     if (eraseCall == nullptr || container == nullptr || eraseCall->getNumArgs() < 2)
-    {
-      return;
-    }
-
-    auto const containerStr = container->getName().str();
-
-    if (containerStr.empty())
     {
       return;
     }
@@ -115,28 +104,13 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const& sm = *result.SourceManager;
-    auto const& langOpts = result.Context->getLangOpts();
-    auto const argumentText = aobus::getExprSourceText(*removeCall->getArg(2), sm, langOpts);
-
-    if (argumentText.empty())
-    {
-      return;
-    }
-
     if (calleeDecl->getName() == "remove_if")
     {
-      auto const replacement = "std::erase_if(" + containerStr + ", " + argumentText + ")";
-
-      diag(eraseCall->getBeginLoc(), "use std::erase_if instead of erase-remove_if idiom")
-        << FixItHint::CreateReplacement(eraseCall->getSourceRange(), replacement);
+      diag(eraseCall->getBeginLoc(), "use std::erase_if instead of erase-remove_if idiom");
     }
     else
     {
-      auto const replacement = "std::erase(" + containerStr + ", " + argumentText + ")";
-
-      diag(eraseCall->getBeginLoc(), "use std::erase instead of erase-remove idiom")
-        << FixItHint::CreateReplacement(eraseCall->getSourceRange(), replacement);
+      diag(eraseCall->getBeginLoc(), "use std::erase instead of erase-remove idiom");
     }
   }
 } // namespace clang::tidy::readability

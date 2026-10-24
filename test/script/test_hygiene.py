@@ -7,7 +7,6 @@ import json
 import os
 import re
 import shlex
-import shutil
 import tempfile
 import unittest
 from argparse import Namespace
@@ -267,7 +266,6 @@ class TidyCommandTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=None,
-            fix=False,
             no_build=False,
             tidy_arg=[],
             header_filter=None,
@@ -295,7 +293,6 @@ class TidyCommandTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=None,
-            fix=False,
             no_build=False,
             tidy_arg=[],
             header_filter=None,
@@ -331,7 +328,6 @@ class TidyCommandTest(unittest.TestCase):
                     output=None,
                     jobs=1,
                     path=None,
-                    fix=False,
                     no_build=False,
                     tidy_arg=[],
                     header_filter=None,
@@ -389,7 +385,6 @@ class TidyCommandTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=None,
-            fix=False,
             no_build=False,
             tidy_arg=[],
             header_filter=None,
@@ -468,7 +463,6 @@ class TidyCommandTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=None,
-            fix=False,
             no_build=False,
             tidy_arg=[],
             header_filter=None,
@@ -532,7 +526,6 @@ class TidyCommandTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=None,
-            fix=False,
             no_build=False,
             tidy_arg=[],
             header_filter=None,
@@ -604,7 +597,6 @@ class TidyCommandTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=None,
-            fix=False,
             no_build=False,
             tidy_arg=[],
             header_filter=None,
@@ -656,7 +648,6 @@ class TidyCommandTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=None,
-            fix=False,
             no_build=False,
             tidy_arg=[],
             header_filter=None,
@@ -716,7 +707,6 @@ class TidyCommandTest(unittest.TestCase):
                     output=None,
                     jobs=1,
                     path=None,
-                    fix=False,
                     no_build=False,
                     tidy_arg=[],
                     header_filter=None,
@@ -928,151 +918,6 @@ class HygieneCommandTest(unittest.TestCase):
     def test_unknown_override_is_rejected(self):
         with self.assertRaises(AttributeError):
             hygiene._subcommand_defaults(tidy.register, "tidy", not_a_tidy_argument=1)
-
-
-class TidyFixesDeduplicationTest(unittest.TestCase):
-    def test_parse_diagnostics_from_yaml(self):
-        content = """---
-MainSourceFile:  'foo.cpp'
-Diagnostics:
-  - DiagnosticName:  readability-magic-numbers
-    DiagnosticMessage:
-      Message:         '1.5 is a magic number'
-      FilePath:        'foo.cpp'
-      FileOffset:      964
-      Replacements:
-        - FilePath:        'foo.cpp'
-          Offset:          964
-          Length:          3
-          ReplacementText: 'kInitVal'
-...
-"""
-        blocks = tidy.parse_diagnostics_from_yaml(content)
-        self.assertEqual(len(blocks), 1)
-        self.assertIn("DiagnosticName:  readability-magic-numbers", blocks[0])
-        self.assertIn("ReplacementText: 'kInitVal'", blocks[0])
-
-    def test_deduplicate_fixes(self):
-        tmpdir = Path(tempfile.mkdtemp(prefix="ao-tidy-dedup-test-"))
-        try:
-            file1 = tmpdir / "1.yaml"
-            file2 = tmpdir / "2.yaml"
-
-            yaml_content = """---
-MainSourceFile:  'foo.cpp'
-Diagnostics:
-  - DiagnosticName:  google-readability-namespace-comments
-    DiagnosticMessage:
-      Message:         'namespace detail not terminated'
-      FilePath:        'header.h'
-      FileOffset:      120
-      Replacements:
-        - FilePath:        'header.h'
-          Offset:          120
-          Length:          0
-          ReplacementText: '  // namespace detail'
-...
-"""
-            file1.write_text(yaml_content, encoding="utf-8")
-            file2.write_text(yaml_content, encoding="utf-8")
-
-            tidy.deduplicate_fixes(tmpdir)
-
-            remaining = list(tmpdir.glob("*.yaml"))
-            self.assertEqual(len(remaining), 1)
-            self.assertEqual(remaining[0].name, "consolidated_fixes.yaml")
-
-            consolidated_content = remaining[0].read_text(encoding="utf-8")
-            self.assertEqual(consolidated_content.count("DiagnosticName:"), 1)
-            self.assertIn("MainSourceFile:  'foo.cpp'", consolidated_content)
-        finally:
-            shutil.rmtree(tmpdir)
-
-    def test_deduplicate_fixes_normalizes_paths(self):
-        tmpdir = Path(tempfile.mkdtemp(prefix="ao-tidy-dedup-test-"))
-        try:
-            file1 = tmpdir / "1.yaml"
-            file2 = tmpdir / "2.yaml"
-
-            dummy_header = tmpdir / "dummy_header.h"
-            dummy_header.touch()
-
-            path1 = f"{tmpdir}/dummy_header.h"
-            path2 = f"{tmpdir}/./dummy_header.h"
-
-            yaml_content1 = f"""---
-MainSourceFile:  'foo.cpp'
-Diagnostics:
-  - DiagnosticName:  google-readability-namespace-comments
-    DiagnosticMessage:
-      Message:         'namespace detail not terminated'
-      FilePath:        '{path1}'
-      FileOffset:      120
-      Replacements:
-        - FilePath:        '{path1}'
-          Offset:          120
-          Length:          0
-          ReplacementText: '  // namespace detail'
-...
-"""
-            yaml_content2 = f"""---
-MainSourceFile:  'foo.cpp'
-Diagnostics:
-  - DiagnosticName:  google-readability-namespace-comments
-    DiagnosticMessage:
-      Message:         'namespace detail not terminated'
-      FilePath:        '{path2}'
-      FileOffset:      120
-      Replacements:
-        - FilePath:        '{path2}'
-          Offset:          120
-          Length:          0
-          ReplacementText: '  // namespace detail'
-...
-"""
-            file1.write_text(yaml_content1, encoding="utf-8")
-            file2.write_text(yaml_content2, encoding="utf-8")
-
-            tidy.deduplicate_fixes(tmpdir)
-
-            remaining = list(tmpdir.glob("*.yaml"))
-            self.assertEqual(len(remaining), 1)
-            self.assertEqual(remaining[0].name, "consolidated_fixes.yaml")
-
-            consolidated_content = remaining[0].read_text(encoding="utf-8")
-            self.assertEqual(consolidated_content.count("DiagnosticName:"), 1)
-        finally:
-            shutil.rmtree(tmpdir)
-
-    def test_apply_fixes_uses_the_resolved_abi_matched_tool(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            tmpdir = Path(temp_dir)
-            fixes = tmpdir / "fixes.yaml"
-            fixes.write_text(
-                """---
-MainSourceFile:  'foo.cpp'
-Diagnostics:
-  - DiagnosticName:  modernize-use-nullptr
-    DiagnosticMessage:
-      Message:         'use nullptr'
-      FilePath:        'foo.cpp'
-      FileOffset:      10
-      Replacements:
-        - FilePath:        'foo.cpp'
-          Offset:          10
-          Length:          1
-          ReplacementText: 'nullptr'
-...
-""",
-                encoding="utf-8",
-            )
-            tool = r"C:\build\vcpkg_installed\x64-windows\tools\llvm\clang-apply-replacements.exe"
-
-            with mock.patch.object(tidy.subprocess, "call", return_value=0) as call:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    self.assertTrue(tidy.apply_fixes(tmpdir, tool))
-
-            call.assert_called_once_with([tool, "--ignore-insert-conflict", str(tmpdir)])
 
 
 class TidyNamingPolicyTest(unittest.TestCase):
