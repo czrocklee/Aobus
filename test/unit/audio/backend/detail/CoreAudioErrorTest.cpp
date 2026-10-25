@@ -124,6 +124,14 @@ namespace ao::audio::backend::detail::test
     CHECK(error.error().message.contains("select Core Audio device"));
   }
 
+  TEST_CASE("CoreAudioError - unconfirmed stop text preserves status without claiming a new attempt",
+            "[audio][unit][coreaudio]")
+  {
+    CHECK(coreAudioUnconfirmedStopText(-123456) == "previous native stop remains unconfirmed (OSStatus -123456)");
+    CHECK(coreAudioUnconfirmedStopText(1937010544) ==
+          "previous native stop remains unconfirmed (OSStatus 'stop' (1937010544))");
+  }
+
   TEST_CASE("CoreAudioError - preserves the owning call site alongside native operation context",
             "[audio][unit][coreaudio]")
   {

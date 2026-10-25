@@ -1,20 +1,35 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-// Native Core Audio fatal-probe scenarios. Each scenario opens the exact
-// Core Audio output device named by AOBUS_TEST_COREAUDIO_DEVICE_UID when one
-// is configured, or the first existing real Core Audio output when the
-// boundary is unset, through a real backend and reenters open(), close(), or
-// a run control from one of the backend's own RenderTarget callback stacks;
-// the production CallbackStackScope diagnostic must abort the child process. A
-// missing diagnostic may only surface as an orderly nonfatal failure exit or
-// through the intrinsic ProbeProcess timeout; these scenarios never sleep,
-// never fabricate callback-stack membership, and never invoke private or
-// manually constructed backend hooks.
+// Native Core Audio fatal-probe scenarios. The thirty RenderTarget reentry
+// scenarios open the exact Core Audio output device named by
+// AOBUS_TEST_COREAUDIO_DEVICE_UID when one is configured, or the first
+// existing real Core Audio output when the boundary is unset, through a real
+// backend and reenter open(), close(), or a run control from one of the
+// backend's own RenderTarget callback stacks. Two admission precondition
+// children call production CoreAudioRenderAdmission::open() only and do not
+// open a device or look up a native component. One device-free unit-run child
+// drives production CoreAudioUnitRun through its constructor-injected
+// operations with both SDK calls overridden, so it also never opens a
+// device, looks up a component, or calls the AudioToolbox SDK. Four further
+// device-free constructor children reject empty native bindings at
+// construction: two construct CoreAudioUnitRun directly with one of the two
+// constructor-injected run bindings empty, and two construct CoreAudioBackend
+// through its four-argument constructor with a value-only device identity and
+// one empty unit operation. In every constructor child the remaining bindings
+// keep their SDK defaults and are never invoked, and no device query,
+// component lookup, open, or start ever happens; if construction unexpectedly
+// survives, the child reports a probe failure and exits nonfatally without
+// calling the empty function. The production
+// diagnostic must abort the child process. A missing diagnostic may only surface as an
+// orderly nonfatal failure exit or through the intrinsic ProbeProcess
+// timeout; these scenarios never sleep, never fabricate callback-stack
+// membership, and never invoke private or manually constructed backend hooks.
 
 #include "lib/audio/backend/CoreAudioBackend.h"
 #include "lib/audio/backend/detail/BackendGraphRegistry.h"
-#include "lib/audio/backend/detail/CoreAudioDeviceDiscovery.h"
+#include "lib/audio/backend/detail/CoreAudioRenderAdmission.h"
+#include "lib/audio/backend/detail/CoreAudioUnitRun.h"
 #include "test/fatal/AudioFatalProbeScenario.h"
 #include "test/unit/audio/backend/CoreAudioTestSupport.h"
 #include <ao/Error.h>
@@ -26,6 +41,8 @@
 #include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/utility/ScopedRegistration.h>
+
+#include <MacTypes.h>
 
 #include <algorithm>
 #include <array>
@@ -392,10 +409,145 @@ namespace ao::audio::test
     {
       std::println(stderr, "coreaudio fatal probe '{}': {}", scenario, reason);
     }
+
+    std::int32_t runRenderAdmissionFatalProbe(std::string_view const scenario)
+    {
+      // Production open() preconditions only. No device, no component lookup,
+      // and no withheld callback scope: an open fence is the active interval,
+      // and the second open() aborts before any token write.
+      if (auto admission = backend::detail::CoreAudioRenderAdmission{};
+          scenario == "coreaudio-admission-zero-generation")
+      {
+        admission.open(std::uint64_t{0});
+      }
+      else if (scenario == "coreaudio-admission-active-interval")
+      {
+        admission.open(std::uint64_t{7});
+        admission.open(std::uint64_t{8});
+      }
+
+      reportProbeFailure(scenario, "admission open returned without the expected abort");
+      return 3;
+    }
+
+    std::int32_t runCoreAudioUnitRunFatalProbe(std::string_view const scenario)
+    {
+      // Device-free pure-state precondition: both constructor-injected
+      // operations are overridden, so no AudioToolbox call ever happens. The
+      // stop status is a plain nonzero value, not a real SDK result, and the
+      // unit pointer stays opaque because the bound operations never inspect
+      // it.
+      constexpr ::OSStatus kProbeStopStatus = 1;
+      auto* const probeUnit = static_cast<::AudioUnit>(nullptr);
+
+      std::int32_t startOperationCalls = 0;
+      auto run = backend::detail::CoreAudioUnitRun{backend::detail::CoreAudioUnitRunOperations{
+        .start =
+          [&](::AudioUnit)
+        {
+          ++startOperationCalls;
+          return ::noErr;
+        },
+        .stop = [](::AudioUnit) { return kProbeStopStatus; },
+      }};
+
+      run.start(probeUnit);
+      run.stop(probeUnit);
+
+      // The second start must abort at the canStart() precondition before
+      // the bound start operation runs.
+      run.start(probeUnit);
+
+      reportProbeFailure(scenario,
+                         startOperationCalls > 1 ? "start reached the bound operation without the expected abort"
+                                                 : "start returned without the expected abort");
+      return 3;
+    }
+
+    std::int32_t runCoreAudioUnitRunConstructorFatalProbe(std::string_view const scenario)
+    {
+      // Construction contract only: exactly one of the two constructor-injected
+      // operations is empty; the other keeps its SDK default, and construction
+      // never invokes either. No AudioToolbox call, device, or component
+      // lookup happens in this child.
+      auto operations = backend::detail::CoreAudioUnitRunOperations{};
+
+      if (scenario == "coreaudio-unit-run-unbound-start")
+      {
+        operations.start = nullptr;
+      }
+      else
+      {
+        operations.stop = nullptr;
+      }
+
+      // The constructor must abort at the empty-binding expects contract
+      // before the record exists.
+      [[maybe_unused]] auto const run = backend::detail::CoreAudioUnitRun{std::move(operations)};
+
+      reportProbeFailure(scenario, "construction returned without the expected abort");
+      return 3;
+    }
+
+    std::int32_t runCoreAudioBackendConstructorFatalProbe(std::string_view const scenario)
+    {
+      // The four-argument constructor reaches the runtime-state constructor,
+      // which must abort at the empty unit-binding expects contract before Impl
+      // creates its control thread. The device is a value-only identity
+      // string, the run bindings keep their SDK defaults, and no open, start,
+      // device query, or component lookup ever happens. If construction
+      // unexpectedly survives, the ordinary no-unit destructor and control
+      // thread join settle without invoking the empty function.
+      auto operations = backend::CoreAudioBackend::NativeOperations{};
+
+      if (scenario == "coreaudio-backend-unbound-reset")
+      {
+        operations.unit.reset = nullptr;
+      }
+      else
+      {
+        operations.unit.getMaximumFramesPerSlice = nullptr;
+      }
+
+      [[maybe_unused]] auto const probeBackend = backend::CoreAudioBackend{
+        Device{.id = DeviceId{"ao-coreaudio-constructor-probe"}, .backendId = kBackendCoreAudio},
+        kProfileShared,
+        std::shared_ptr<backend::detail::BackendGraphRegistry>{},
+        std::move(operations)};
+
+      reportProbeFailure(scenario, "construction returned without the expected abort");
+      return 3;
+    }
   } // namespace
 
   std::int32_t runCoreAudioFatalProbeScenario(std::string_view const scenario)
   {
+    // Admission preconditions abort before device or component lookup. These
+    // children do not open a Core Audio device.
+    if (scenario == "coreaudio-admission-zero-generation" || scenario == "coreaudio-admission-active-interval")
+    {
+      return runRenderAdmissionFatalProbe(scenario);
+    }
+
+    // The unit-run precondition aborts before device or component lookup too;
+    // this child does not open a Core Audio device.
+    if (scenario == "coreaudio-unit-run-unconfirmed-start")
+    {
+      return runCoreAudioUnitRunFatalProbe(scenario);
+    }
+
+    // Constructor binding preconditions abort before any device or component
+    // lookup; these children do not open a Core Audio device either.
+    if (scenario == "coreaudio-unit-run-unbound-start" || scenario == "coreaudio-unit-run-unbound-stop")
+    {
+      return runCoreAudioUnitRunConstructorFatalProbe(scenario);
+    }
+
+    if (scenario == "coreaudio-backend-unbound-reset" || scenario == "coreaudio-backend-unbound-frames-readback")
+    {
+      return runCoreAudioBackendConstructorFatalProbe(scenario);
+    }
+
     auto const* const spec = findProbeScenarioSpec(scenario);
 
     if (spec == nullptr)
@@ -404,38 +556,27 @@ namespace ao::audio::test
       return 2;
     }
 
-    auto const requestedRes = requestedCoreAudioTestOutput();
+    auto const selectedRes = selectCoreAudioTestOutput();
 
-    if (!requestedRes)
+    if (!selectedRes)
     {
       // A configured but unresolvable UID is a setup error, not a skip and
       // never a substitute device.
-      reportProbeFailure(scenario, requestedRes.error().message);
+      reportProbeFailure(scenario, selectedRes.error().message);
       return 3;
     }
 
-    // An unset UID is the legitimate unconfigured boundary and keeps the
-    // owning native test policy: use the first existing real Core Audio
-    // output. A present but invalid, empty, or ambiguous UID stays a hard
-    // failure above; there is never a fallback and never an invented device.
-    auto device = Device{};
-
-    if (auto const& optDevice = *requestedRes; optDevice)
+    if (!*selectedRes)
     {
-      device = *optDevice;
+      // An unset UID on a host with no live Core Audio output is the genuine
+      // absence boundary. This child has no Catch2 skip to delegate to, so the
+      // absence is reported as an orderly nonfatal failure exit; there is
+      // never a fallback and never an invented device.
+      reportProbeFailure(scenario, "macOS host has no live Core Audio output device");
+      return 3;
     }
-    else
-    {
-      auto const devices = backend::detail::enumerateCoreAudioOutputDevices();
 
-      if (devices.empty())
-      {
-        reportProbeFailure(scenario, "macOS host has no live Core Audio output device");
-        return 3;
-      }
-
-      device = devices.front();
-    }
+    auto const& device = **selectedRes;
 
     auto target = ReentryProbeTarget{spec->trigger, spec->reentry};
     auto graphRegistryPtr = spec->requiresGraphRegistry ? std::make_shared<backend::detail::BackendGraphRegistry>()

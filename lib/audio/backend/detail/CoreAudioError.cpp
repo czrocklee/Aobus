@@ -74,6 +74,11 @@ namespace ao::audio::backend::detail
     return std::format("OSStatus {}", status);
   }
 
+  std::string coreAudioUnconfirmedStopText(::OSStatus const status)
+  {
+    return std::format("previous native stop remains unconfirmed ({})", coreAudioStatusText(status));
+  }
+
   std::unexpected<Error> makeCoreAudioError(::OSStatus const status,
                                             std::string_view const operation,
                                             Error::Code const fallback,

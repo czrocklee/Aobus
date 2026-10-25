@@ -77,4 +77,31 @@ namespace ao::audio::test
 
     return std::optional<Device>{*resolvedRes};
   }
+
+  Result<std::optional<Device>> selectCoreAudioTestOutput()
+  {
+    auto const requestedRes = requestedCoreAudioTestOutput();
+
+    if (!requestedRes)
+    {
+      return std::unexpected{requestedRes.error()};
+    }
+
+    if (auto const& optRequestedDevice = *requestedRes; optRequestedDevice)
+    {
+      return optRequestedDevice;
+    }
+
+    // The UID is unset, so the unconfigured boundary takes the first existing
+    // native Core Audio output. A host with no live output stays an absent
+    // selection; this helper never fabricates or substitutes a device.
+    auto const devices = backend::detail::enumerateCoreAudioOutputDevices();
+
+    if (devices.empty())
+    {
+      return std::optional<Device>{};
+    }
+
+    return std::optional<Device>{devices.front()};
+  }
 } // namespace ao::audio::test

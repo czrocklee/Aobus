@@ -630,8 +630,23 @@ Core Audio stops calling `renderPcm` as soon as the AUHAL callback observes
 drain, fills the remainder and later callbacks with silence, and counts a
 conservative presentation tail from the device I/O buffer, safety offset,
 device and stream latency, plus AudioUnit latency. A non-realtime control worker
-closes callback admission, fences the last callback, stops AUHAL, and emits the
-single ordered drain completion after that silent tail.
+closes callback admission, fences the last callback, and stops AUHAL before
+emitting the single ordered drain completion after that silent tail.
+A native stop failure withholds drain completion and is reported after releasing native and run-control locks.
+Core Audio records a successful native start until a native stop succeeds or the unit is detached; a failed stop does not fabricate a stopped unit or independently prove that the unit is still running.
+Pause closes and settles Aobus-owned render admission without advancing the run generation, then requests a native stop when a successful start is still recorded.
+While that stop remains unconfirmed, Aobus-owned render admission stays closed, start/resume cannot reopen it, and flush cannot reset the unit.
+Each later explicit stop request, including flush's stop phase, may make one native stop attempt; Core Audio control-worker error settlement does not retry an already failed stop.
+Engine seek issues stop followed by flush: a confirmed first stop makes flush's stop phase an idle no-op, while a failed first stop permits another native attempt for that distinct request.
+Native stop diagnostics preserve the raw status and use the existing per-run error-delivery gate: only the first admitted error for the current generation is delivered.
+A withheld resume after failed pause therefore emits no duplicate error for that generation; a previously delivered fault can likewise suppress the later pause diagnostic without clearing its saved stop status.
+Distinct stop, flush-stop, and withheld-start generations during a failed seek can each report an error for the same attached target; the exact callback count depends on interleaving.
+Engine's target generation is separate: it settles one terminal playback failure and discards subsequent stale events rather than treating each backend run error as a new playback failure.
+A successful later stop repairs native activation/reset eligibility, but does not revive a logical run deactivated by an error: same-run resume remains inactive, while a new start establishes a new run after fresh execution proof.
+It does not retract an error already delivered to Engine. In particular, a current-target seek stop error remains terminal even if flush's distinct stop attempt succeeds; explicit track replacement instead retires the old Engine target before teardown stop, so that old target's stop error cannot fail the replacement.
+Unit detachment ends the run-status record for that unit; native cleanup and target revocation remain owned by close.
+After detachment and target revocation, close directly requests native stop, uninitialize, and disposal as best-effort cleanup, outside the injected run-control bindings.
+Those cleanup statuses are ignored and are not evidence that the native stop or disposal succeeded.
 The target remains open, permitting stop/flush/start seek flows, while non-render route, property, and error callbacks remain protected by generation checks and the `close()` lifetime boundary.
 `close()` is the revocation boundary and waits for in-flight target callbacks.
 An unrecoverable backend error quiesces its render loop or enters a bounded retry; Engine does not synchronously call stop from the backend error callback.
@@ -668,6 +683,8 @@ Core Audio prepares publications and clears under its owner publication lock, th
 Run controls, drain and fault transitions, and non-render target notifications share callback serialization.
 Core Audio render admission binds each admitted cycle to an immutable run generation before its geometry checks, rendering, or drain work.
 The admission generation is published before opening the fence and replaced only while admission is closed and all admitted cycles have settled; capturing it requires no realtime lock or allocation.
+The shared callback fence increments its in-flight count only when an open-state compare/exchange admits the callback; rejection from a closed fence never changes the count.
+Thus continuing rejected native callbacks cannot manufacture an in-flight borrow between quiescence and reopening, including after an unsuccessful native stop.
 All render-origin faults and drain signals carry that captured generation rather than sampling the current control generation when they publish.
 A callback admitted between stop's generation advance and fence closure therefore still belongs to the retiring render interval and cannot rebrand its fault as the stopped generation's current error.
 Pause does not advance the generation, so resume preserves the same run identity and genuine same-run faults remain eligible.
@@ -847,7 +864,8 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) protects native publication and initial-observer close, property-publication worker handoff with observer-driven close, open-origin notification settlement against external close, final render quiescence after notification-origin restart, current open notifications across run-only changes, and synchronous registry retirement during native publication.
   It also covers deferring a target-origin graph subscription until the open call returns while an observer on another thread holds the shared delivery gate and requests stop; request markers do not prove private mutex admission.
   The different-backend identity case uses an early-refused synthetic open and an inert close, not successful cross-backend shared-gate entry.
-  Apple-only [`CoreAudioBackendFatalProbeTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendFatalProbeTest.cpp) protects the Core Audio target callback-origin open/close misuse diagnostics through child-process fatal probes; it exercises those owned diagnostic scenarios, not every native fault producer path.
+  Apple-only [`CoreAudioBackendRunStateTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendRunStateTest.cpp) drives the real Backend through constructor-injected native control/readback results, covering failed-stop admission/reset gates, current-generation error suppression, and drain/fault settlement. It uses a real output unit but does not demonstrate an actual SDK stop failure or physical routing.
+  Apple-only [`CoreAudioBackendFatalProbeTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendFatalProbeTest.cpp) protects the Core Audio target callback-origin misuse diagnostics and the device-free render-admission/native-run preconditions through child-process fatal probes; it exercises those owned diagnostic scenarios, not every native fault producer path.
   Its nested-graph scenarios deliberately violate the gate-deferral precondition to reach the owned lifecycle diagnostic; they do not establish support for synchronous shared-registry entry from target callbacks.
 - [`CoreAudioChannelLayoutTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) protects observation bounds, role admission, byte permutations, required readback failures and execution/observation refresh; [`CoreAudioGraphTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioGraphTest.cpp) protects sink-only conversion findings and [`CoreAudioRenderBufferTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp) protects nonmutating shape refusal.
 - [`CoreAudioControlMailboxTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioControlMailboxTest.cpp) protects pending-generation arbitration; [`CoreAudioRunControlTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioRunControlTest.cpp) protects consumed-action ordering. These controlled cases do not establish native SDK or callback-lifetime behavior.
@@ -856,6 +874,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineFatalProbeTest.cpp`](../../../test/unit/audio/EngineFatalProbeTest.cpp) and the self-reentering `ao_audio_fatal_probe` under [`test/fatal/`](../../../test/fatal) protect realtime overflow, timeline-owner, and event-queue destruction fatal invariants in a child process.
 - [`EngineTest.cpp`](../../../test/unit/audio/EngineTest.cpp) protects optimistic explicit-start PCM selection, prepared-source reuse, and exact backend-mode fallback.
 - [`EngineSeekErrorTest.cpp`](../../../test/unit/audio/EngineSeekErrorTest.cpp) protects Error rejection through both seek entry points before and after failure delivery, paused-origin failure, unchanged backend/source state on rejection, and recovery through a new playback.
+  [`EngineControlErrorTest.cpp`](../../../test/unit/audio/EngineControlErrorTest.cpp) protects terminal stop-callback delivery across a later successful seek sequence and old-target rejection during explicit replacement; its backend fake does not reproduce an SDK stop failure.
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.

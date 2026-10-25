@@ -4,6 +4,7 @@
 #include "test/fatal/AudioFatalProbeScenario.h"
 
 #include "lib/audio/backend/detail/BackendGraphRegistry.h"
+#include "lib/audio/backend/detail/CallbackFence.h"
 #include "lib/audio/detail/EngineEventQueueInvariants.h"
 #include "lib/audio/detail/EngineRtSignalRing.h"
 #include "lib/audio/detail/RenderTimeline.h"
@@ -29,9 +30,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio> // NOLINT(misc-include-cleaner): Direct provider of stderr.
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <print>
 #include <semaphore>
 #include <stdexcept>
 #include <string_view>
@@ -46,6 +49,40 @@ namespace ao::audio::test
     {
       std::uint32_t value = 0;
     };
+
+    void reportProbeFailure(std::string_view const scenario, std::string_view const reason)
+    {
+      std::println(stderr, "audio fatal probe '{}': {}", scenario, reason);
+    }
+
+    std::int32_t runCallbackFenceFatalProbe(std::string_view const scenario)
+    {
+      // Deterministic public-API preconditions on a single thread: open the
+      // fence, then reopen it either while it is still open or after close()
+      // with an admitted borrow still outstanding. The invalid reopen must
+      // abort at the quiescence invariant. This is not the historical
+      // concurrent fetch_add/undo race window; no timing is involved.
+      auto fence = backend::detail::CallbackFence{};
+      fence.open();
+
+      if (scenario == "callback-fence-reopen-with-admitted-borrow")
+      {
+        if (!fence.tryEnter())
+        {
+          reportProbeFailure(scenario, "tryEnter setup failed to admit the probe borrow");
+          return 3;
+        }
+
+        // close() only: closeAndWait() would restore quiescence and make the
+        // reopen legal.
+        fence.close();
+      }
+
+      fence.open();
+
+      reportProbeFailure(scenario, "reopen returned without the expected abort");
+      return 3;
+    }
   } // namespace
 
   std::int32_t runAudioFatalProbeScenario(std::string_view const scenario)
@@ -56,6 +93,11 @@ namespace ao::audio::test
       return runCoreAudioFatalProbeScenario(scenario);
     }
 #endif
+
+    if (scenario == "callback-fence-reopen-while-open" || scenario == "callback-fence-reopen-with-admitted-borrow")
+    {
+      return runCallbackFenceFatalProbe(scenario);
+    }
 
     if (scenario == "rt-ring-overflow")
     {

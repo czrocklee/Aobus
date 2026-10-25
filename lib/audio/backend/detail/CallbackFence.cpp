@@ -13,14 +13,18 @@ namespace ao::audio::backend::detail
 {
   bool CallbackFence::tryEnter() noexcept
   {
-    auto const previous = _state.fetch_add(1U, std::memory_order_acquire);
+    auto observed = _state.load(std::memory_order_relaxed);
 
-    if ((previous & kClosed) == 0U)
+    while ((observed & kClosed) == 0U)
     {
-      return true;
+      if (_state.compare_exchange_weak(observed, observed + 1U, std::memory_order_acquire, std::memory_order_relaxed))
+      {
+        return true;
+      }
     }
 
-    _state.fetch_sub(1U, std::memory_order_release);
+    // Rejected native callbacks do not borrow or mutate the closed fence.
+    // In particular, they cannot race reopen with a transient in-flight count.
     return false;
   }
 

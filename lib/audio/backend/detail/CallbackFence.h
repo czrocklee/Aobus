@@ -8,7 +8,8 @@
 
 namespace ao::audio::backend::detail
 {
-  /** @brief Allocation-free callback admission with a control-side quiescence fence. */
+  // Allocation-free callback admission with control-side quiescence. Closed
+  // admission never borrows a callback slot, including during a later reopen.
   class CallbackFence final
   {
   public:

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "detail/CoreAudioUnitRun.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -10,6 +11,9 @@
 #include <ao/audio/Property.h>
 #include <ao/audio/SignalFormat.h>
 
+#include <AudioToolbox/AUComponent.h>
+
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -30,10 +34,31 @@ namespace ao::audio::backend
   class CoreAudioBackend final : public Backend
   {
   public:
+    // Synchronous native bindings, not callbacks into Backend or RenderTarget.
+    // Every binding must be nonempty at construction; this does not contain
+    // exceptions thrown by an injected callable. Defaults call the SDK. The
+    // maximum-frames reader is used only for that provisioned readback; the
+    // backend still validates its extent and value.
+    struct NativeOperations final
+    {
+      struct UnitOperations final
+      {
+        std::function<decltype(::AudioUnitReset)> reset{::AudioUnitReset};
+        std::function<decltype(::AudioUnitGetProperty)> getMaximumFramesPerSlice{::AudioUnitGetProperty};
+      };
+
+      detail::CoreAudioUnitRunOperations run{};
+      UnitOperations unit{};
+    };
+
     explicit CoreAudioBackend(Device const& device, ProfileId const& profile);
     CoreAudioBackend(Device const& device,
                      ProfileId const& profile,
                      std::shared_ptr<detail::BackendGraphRegistry> graphRegistryPtr);
+    CoreAudioBackend(Device const& device,
+                     ProfileId const& profile,
+                     std::shared_ptr<detail::BackendGraphRegistry> graphRegistryPtr,
+                     NativeOperations operations);
     ~CoreAudioBackend() override;
 
     CoreAudioBackend(CoreAudioBackend const&) = delete;
