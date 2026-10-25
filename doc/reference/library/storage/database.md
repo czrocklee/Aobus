@@ -552,10 +552,11 @@ The Track write sequencing, validation, and return-value contracts do not change
 
 Version `1` is the first supported layout: exactly the one this reference defines, with no reader for any other.
 Development builds made before the first release used the numbers 1 through 10 for earlier layouts. Those libraries are unsupported, and open does not identify them as development data.
-Version 1 has not been released. Until the first public release, a development build may change its layout or widen one of its limits without incrementing it, and the result is an alternative layout to earlier development builds.
+Version 1 is the layout of the first release, and no later build changes what a version-1 library holds; the platform fixtures named under [Test authority](#test-authority) are frozen with it.
+A version above the last released one is unreleased: until a release ships it, a development build may change its layout or widen one of its limits without incrementing it, and the result is an alternative layout to earlier development builds.
 An earlier build usually rejects such a database on open as `CorruptData`, and one that already has it open fails through the fatal facility when it reads an affected row.
-Rejection is not guaranteed across a layout change: when each credit entry gained its kind byte, some Credits blocks remained valid under both layouts with different credits.
-A development library therefore moves between such builds only through YAML, exported by the build that wrote it and restored into a new library.
+Rejection is not guaranteed across a layout change: when each credit entry gained its kind byte before the first release, some Credits blocks remained valid under both layouts with different credits.
+A library written at an unreleased version is therefore unsupported, and it moves between development builds only through YAML, exported by the build that wrote it and restored into a new library.
 The [YAML reference](../format/yaml.md) separately defines the accepted interchange schema. Neither format provides a dual reader or layout autodetection.
 The current application interpretation belongs to the [predicate language reference](../../query/predicate-language.md), and membership behavior belongs to the [predicate evaluation specification](../../../system/query/predicate-evaluation.md).
 The database version also names the predicate language of stored List filters, which carry no version of their own.
@@ -563,10 +564,10 @@ A grammar, field-binding, or evaluation change that alters the outcome of filter
 Admission still never parses a filter, and stored text that does not parse or compile is an application expression error rather than corrupt storage.
 
 Any incompatible key, record, enum encoding, slot meaning, signature algorithm, List byte layout, or saved-order representation change must increment `kLibraryVersion`.
-After the first release, a version is incremented at most once per release and a released number is never reused; a later release brings every earlier released library forward through an explicit, confirmed upgrade, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
+A version is incremented at most once per release and a released number is never reused; a later release brings every earlier released library forward through an explicit, confirmed upgrade, as [decision 0020](../../../decision/0020-versioning-and-upgrade-policy.md) records.
 No upgrade exists yet. Open accepts only version 1 and never relabels, rewrites, or deletes a library of another version automatically.
 `MusicLibrary.cpp` asserts at compile time that the current version is 1, so incrementing `kLibraryVersion` does not build until open gains the upgrade path for the older version.
-`kLastReleasedLibraryVersion` records the last released version and is `0` before the first release; the [library format change guide](../../../development/library-format-changes.md) describes how a change and a release use it.
+`kLastReleasedLibraryVersion` records the last released version; the [library format change guide](../../../development/library-format-changes.md) describes how a change and a release use it.
 Explicit recreation by rescanning abandons database-only curation, lists, and other state not held in the media files; it is a destructive user choice, not a reconstruction guarantee.
 The current build cannot open an environment of another version to export its curation, and a backup in another format does not become a current-format import merely by changing its version number.
 Transaction-local dictionary publication does not change the row shape or library version; it assumes a freshly created index and adds no legacy-layout migration or validation path.
