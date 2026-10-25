@@ -41,12 +41,14 @@ namespace ao::audio::backend::detail
     {
       Unavailable,
       NoApplicableMap,
+      // A matching-count offer, including partial or legacy-ambiguous roles;
+      // neither complete position evidence nor proof of current mapping.
       ApplicableMap,
     };
 
     Query query = Query::Unavailable;
-    std::vector<std::vector<unsigned int>> supportedMaps;
-    std::optional<std::vector<unsigned int>> optCurrentPositions;
+    std::vector<std::vector<unsigned int>> supportedMaps{};
+    std::optional<std::vector<unsigned int>> optCurrentPositions{};
   };
 
   struct AlsaChannelMap final
