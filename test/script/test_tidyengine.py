@@ -58,7 +58,7 @@ class ClangToolDiscoveryTest(unittest.TestCase):
             root = Path(temp_dir)
             build_dir = root / "build"
             sdk = root / "llvm sdk"
-            tool = sdk / "bin" / "clang-apply-replacements.exe"
+            tool = sdk / "bin" / "clang-format.exe"
             tool.parent.mkdir(parents=True)
             tool.touch()
             build_dir.mkdir()
@@ -68,7 +68,7 @@ class ClangToolDiscoveryTest(unittest.TestCase):
             )
 
             self.assertEqual(
-                tidyengine.clang_tool(build_dir, "clang-apply-replacements", os_name="nt"),
+                tidyengine.clang_tool(build_dir, "clang-format", os_name="nt"),
                 str(tool),
             )
 

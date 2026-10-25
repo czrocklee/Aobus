@@ -4,8 +4,6 @@
 #include "check/UseStdNumbersCheck.h"
 
 #include <clang-tidy/ClangTidyCheck.h>
-#include <clang-tidy/ClangTidyOptions.h>
-#include <clang-tidy/utils/IncludeSorter.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
@@ -33,20 +31,8 @@ using clang::ast_matchers::MatchFinder;
 namespace clang::tidy::readability
 {
   UseStdNumbersCheck::UseStdNumbersCheck(StringRef name, ClangTidyContext* context)
-    : ClangTidyCheck{name, context}, _includeInserter{utils::IncludeSorter::IS_LLVM, true}
+    : ClangTidyCheck{name, context}
   {
-  }
-
-  void UseStdNumbersCheck::storeOptions(ClangTidyOptions::OptionMap& opts)
-  {
-    Options.store(opts, "IncludeStyle", "llvm");
-  }
-
-  void UseStdNumbersCheck::registerPPCallbacks(SourceManager const& /*sm*/,
-                                               Preprocessor* pp,
-                                               Preprocessor* /*moduleExpanderPP*/)
-  {
-    _includeInserter.registerPreprocessor(pp);
   }
 
   void UseStdNumbersCheck::registerMatchers(MatchFinder* finder)
@@ -290,7 +276,6 @@ namespace clang::tidy::readability
 
     struct BuiltinTypeMatch final
     {
-      BuiltinTypeLoc builtinLoc;
       SourceLocation loc;
       Type const* type;
       Decl const* contextDecl;
@@ -327,8 +312,7 @@ namespace clang::tidy::readability
           contextDecl = functionDecl;
         }
 
-        return BuiltinTypeMatch{.builtinLoc = builtinLoc,
-                                .loc = builtinLoc.getBeginLoc(),
+        return BuiltinTypeMatch{.loc = builtinLoc.getBeginLoc(),
                                 .type = builtinLoc.getTypePtr(),
                                 .contextDecl = contextDecl,
                                 .isCast = false};
@@ -342,11 +326,8 @@ namespace clang::tidy::readability
 
           if (!builtinLoc.isNull())
           {
-            return BuiltinTypeMatch{.builtinLoc = builtinLoc,
-                                    .loc = builtinLoc.getBeginLoc(),
-                                    .type = builtinLoc.getTypePtr(),
-                                    .contextDecl = nullptr,
-                                    .isCast = true};
+            return BuiltinTypeMatch{
+              .loc = builtinLoc.getBeginLoc(), .type = builtinLoc.getTypePtr(), .contextDecl = nullptr, .isCast = true};
           }
         }
       }
@@ -391,9 +372,7 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const& sm = *result.SourceManager;
-
-    if (shouldSkip(*optMatch, sm))
+    if (auto const& sm = *result.SourceManager; shouldSkip(*optMatch, sm))
     {
       return;
     }
@@ -423,38 +402,12 @@ namespace clang::tidy::readability
 
     if (isLong && !optMatch->isCast)
     {
-      diag(optMatch->loc,
-           "prefer explicit sized integer types over '%0' (avoid auto-fix to prevent breaking external C APIs)")
+      diag(optMatch->loc, "prefer explicit sized integer types over '%0' (review external C API compatibility)")
         << optMatch->type->getAs<BuiltinType>()->getName(result.Context->getPrintingPolicy());
       return;
     }
 
-    auto diagBuilder = diag(optMatch->loc, "prefer explicit sized integer type '%0' over '%1'")
-                       << replacement
-                       << optMatch->type->getAs<BuiltinType>()->getName(result.Context->getPrintingPolicy());
-
-    auto const charRange = CharSourceRange::getTokenRange(optMatch->builtinLoc.getSourceRange());
-    diagBuilder << FixItHint::CreateReplacement(charRange, replacement);
-
-    if (replacement.starts_with("std::int") || replacement.starts_with("std::uint"))
-    {
-      if (auto const fileId = sm.getFileID(optMatch->loc); _insertedHeaders[fileId].insert("<cstdint>").second)
-      {
-        if (auto optFixit = _includeInserter.createIncludeInsertion(fileId, "<cstdint>"); optFixit)
-        {
-          diagBuilder << *optFixit;
-        }
-      }
-    }
-    else if (replacement.starts_with("std::size_t") || replacement.starts_with("std::ptrdiff_t"))
-    {
-      if (auto const fileId = sm.getFileID(optMatch->loc); _insertedHeaders[fileId].insert("<cstddef>").second)
-      {
-        if (auto optFixit = _includeInserter.createIncludeInsertion(fileId, "<cstddef>"); optFixit)
-        {
-          diagBuilder << *optFixit;
-        }
-      }
-    }
+    diag(optMatch->loc, "prefer explicit sized integer type '%0' over '%1'")
+      << replacement << optMatch->type->getAs<BuiltinType>()->getName(result.Context->getPrintingPolicy());
   }
 } // namespace clang::tidy::readability

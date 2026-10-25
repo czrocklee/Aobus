@@ -15,7 +15,7 @@ namespace clang::tidy::aobus
   ///
   /// For example:
   /// \code
-  ///   if (auto ptr = raw(); ptr) {} // triggers warning and suggests ptr != nullptr
+  ///   if (auto ptr = raw(); ptr) {} // triggers a warning to use '!= nullptr'
   /// \endcode
   class ImplicitBoolConversionInInitCheck : public ClangTidyCheck
   {

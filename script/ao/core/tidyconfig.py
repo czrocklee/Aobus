@@ -1,11 +1,13 @@
-"""clang-tidy base configuration and check-group policy shared by ao tidy.
+"""clang-tidy configuration and diagnostic-only portal argument validation.
 
-Pure data module: the CheckOptions values mirror CONTRIBUTING.md conventions, and the
+The CheckOptions values mirror CONTRIBUTING.md conventions, and the
 check groups/disables below are the single policy for both the tidy portal and the lint
 fixture runner. Kept separate from the tidy command so its unavoidably long option lines
 need only a local E501 ignore (see pyproject.toml) instead of relaxing the whole command
 implementation.
 """
+
+import argparse
 
 # The identifier-naming method exemption exempts exactly two WinRT metadata ABI
 # accessors (GetXamlType, GetXmlnsDefinitions) beyond the existing external-method
@@ -148,3 +150,41 @@ def checks_for(mode: str, selected: str | None) -> str:
 def config_for(checks: str) -> str:
     """Serialize the base config with a check list, compacted identically for every caller."""
     return " ".join(CONFIG_BASE.replace("PLACEHOLDER", checks).split())
+
+
+# Clang-tidy option names without leading dashes. Dashes are stripped only for
+# option-shaped tokens, so a bare word such as "fix" is not treated as a flag.
+# This is the readable four-name spelling, not a claim about allocation.
+_UNSUPPORTED_DIAGNOSTIC_OPTION_NAMES: frozenset[str] = frozenset({"export-fixes", "fix", "fix-errors", "fix-notes"})
+
+
+def validate_diagnostic_arguments(arguments: list[str]) -> None:
+    """Keep both clang-tidy portal commands diagnostic-only.
+
+    A raw response file could hide mutation/export options, so it is not
+    expanded or forwarded. Compiler response files in compile commands or
+    explicit --extra-arg values are a separate compiler-input contract. The
+    selected-fragment VFS guard applies its own composition constraints.
+    """
+    for argument in arguments:
+        token = argument.strip("\"'")
+        if token.startswith("@"):
+            raise ValueError("raw clang-tidy response files are unsupported; pass diagnostic arguments explicitly")
+        option = token.partition("=")[0]
+        if option.startswith("-") and option.lstrip("-") in _UNSUPPORTED_DIAGNOSTIC_OPTION_NAMES:
+            raise ValueError("clang-tidy fix and export options are unsupported; portal analysis is diagnostic-only")
+
+
+def diagnostic_argument(argument: str) -> str:
+    """Argparse type for one raw diagnostic-only clang-tidy argument.
+
+    The shared validator stays on ValueError. ArgumentTypeError carries that
+    same generic text so argparse does not replace it while the option is
+    parsed, before scope, cache, workspace, or native environment selection.
+    A direct run_command Namespace still uses validate_diagnostic_arguments.
+    """
+    try:
+        validate_diagnostic_arguments([argument])
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+    return argument

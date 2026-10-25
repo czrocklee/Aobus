@@ -30,7 +30,6 @@ PINNED_LLVM_VERSION = "22.1.8"
 PINNED_LLVM_SHA256 = "d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b712a234"
 LLVM_SDK_COMPLETION_MARKER = ".aobus-llvm-sdk-complete"
 LLVM_SDK_REQUIRED_FILES = (
-    "bin/clang-apply-replacements.exe",
     "bin/clang-cl.exe",
     "bin/clang-format.exe",
     "bin/clang-tidy.exe",

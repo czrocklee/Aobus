@@ -6,19 +6,19 @@
 
 namespace ao
 {
-  // POSITIVE: FIX-TO: ;
+  // POSITIVE
   using namespace ao;
 
   namespace rt
   {
-    // POSITIVE: FIX-TO: ;
+    // POSITIVE
     using namespace ao;
-    // POSITIVE: FIX-TO: ;
+    // POSITIVE
     using namespace ao::rt;
 
     namespace test
     {
-      // POSITIVE: FIX-TO: ;
+      // POSITIVE
       using namespace ao::rt;
     }
   }
@@ -34,7 +34,7 @@ namespace ao
 {
   void func()
   {
-    // POSITIVE: FIX-TO: ;
+    // POSITIVE
     using namespace ao;
   }
 }

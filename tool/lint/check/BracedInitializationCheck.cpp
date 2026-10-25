@@ -358,8 +358,8 @@ namespace clang::tidy::readability
       return;
     }
 
-    // Parens inside a macro expansion must not be edited: the FixIt would
-    // rewrite the macro definition rather than this use site.
+    // Parens inside a macro expansion are skipped: a diagnostic anchored
+    // there would point into the macro definition rather than this use site.
     if (optTarget->lParen.isMacroID() || optTarget->rParen.isMacroID())
     {
       return;
@@ -370,11 +370,6 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto diagBuilder = diag(optTarget->lParen, "use brace initialization '%0{...}' instead of parentheses")
-                       << optTarget->name;
-    diagBuilder << FixItHint::CreateReplacement(
-                     CharSourceRange::getCharRange(optTarget->lParen, optTarget->lParen.getLocWithOffset(1)), "{")
-                << FixItHint::CreateReplacement(
-                     CharSourceRange::getCharRange(optTarget->rParen, optTarget->rParen.getLocWithOffset(1)), "}");
+    diag(optTarget->lParen, "use brace initialization '%0{...}' instead of parentheses") << optTarget->name;
   }
 } // namespace clang::tidy::readability

@@ -27,13 +27,13 @@ namespace
 
   void testCApiQualification()
   {
-    // POSITIVE: FIX-TO: ::getpid();
+    // POSITIVE
     getpid();
 
-    // POSITIVE: FIX-TO: (::getpid)();
+    // POSITIVE
     (getpid)();
 
-    // NEGATIVE - callee spelled by a macro; a FixIt would edit the macro definition
+    // NEGATIVE - callee spelled by a macro, so the checker abstains
     (AOBUS_GETPID)();
 
     // NEGATIVE

@@ -10,7 +10,6 @@
 #include <clang/AST/ExprCXX.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
-#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/LLVM.h>
 #include <llvm/ADT/StringRef.h>
 
@@ -127,9 +126,11 @@ namespace clang::tidy::readability
                                                   ignoringParenImpCasts(integerLiteral(equals(0)))))
                         .bind("count_ne");
 
+    // count must be on the left and 0 on the right. 0 > count is always false
+    // for a nonnegative count, and 0 < count is intentionally not matched.
     auto countCmpGt = binaryOperation(hasOperatorName(">"),
-                                      hasOperands(ignoringParenImpCasts(boundAlgoCall),
-                                                  ignoringParenImpCasts(integerLiteral(equals(0)))))
+                                      hasLHS(ignoringParenImpCasts(boundAlgoCall)),
+                                      hasRHS(ignoringParenImpCasts(integerLiteral(equals(0)))))
                         .bind("count_gt");
 
     finder->addMatcher(countCmpEq, this);
@@ -141,15 +142,14 @@ namespace clang::tidy::readability
   {
     auto const* algoCall = result.Nodes.getNodeAs<CallExpr>("algo_call");
     auto const* range = result.Nodes.getNodeAs<Expr>("range");
-    auto const* val = result.Nodes.getNodeAs<Expr>("val");
 
-    if (algoCall == nullptr || range == nullptr || val == nullptr)
+    if (auto const* val = result.Nodes.getNodeAs<Expr>("val");
+        algoCall == nullptr || range == nullptr || val == nullptr)
     {
       return;
     }
 
     auto const* findEq = result.Nodes.getNodeAs<Expr>("find_eq");
-    auto const* countEq = result.Nodes.getNodeAs<Expr>("count_eq");
 
     bool const isFindGroup = findEq != nullptr || result.Nodes.getNodeAs<Expr>("find_ne") != nullptr;
     auto const* cmp = getComparisonExpr(result, isFindGroup);
@@ -184,40 +184,45 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const& sm = *result.SourceManager;
-    auto const& langOpts = result.Context->getLangOpts();
-
-    auto const rangeStr = aobus::getExprSourceText(*range, sm, langOpts);
-    auto valStr = aobus::getExprSourceText(*val, sm, langOpts);
-
-    if (rangeStr.empty() || valStr.empty())
+    // Find must prove the end accessor names the same range. Count has no end
+    // object, so range text is not an identity proof and must not suppress a
+    // macro argument list whose text is empty.
+    if (isFindGroup)
     {
-      return;
+      auto const& sm = *result.SourceManager;
+      auto const& langOpts = result.Context->getLangOpts();
+      auto const rangeStr = aobus::getExprSourceText(*range, sm, langOpts);
+
+      if (rangeStr.empty() ||
+          !aobus::isMatchingEndObject(*result.Nodes.getNodeAs<CallExpr>("end_call"), rangeStr, sm, langOpts))
+      {
+        return;
+      }
     }
 
-    if (isFindGroup &&
-        !aobus::isMatchingEndObject(*result.Nodes.getNodeAs<CallExpr>("end_call"), rangeStr, sm, langOpts))
+    // count > 0 is the remaining count form. Absence comparisons negate contains.
+    auto const* message = "use std::ranges::contains instead of std::ranges::count > 0";
+
+    if (isFindGroup)
     {
-      return;
+      if (findEq != nullptr)
+      {
+        message = "use !std::ranges::contains instead of std::ranges::find == end";
+      }
+      else
+      {
+        message = "use std::ranges::contains instead of std::ranges::find != end";
+      }
+    }
+    else if (result.Nodes.getNodeAs<Expr>("count_eq") != nullptr)
+    {
+      message = "use !std::ranges::contains instead of std::ranges::count == 0";
+    }
+    else if (result.Nodes.getNodeAs<Expr>("count_ne") != nullptr)
+    {
+      message = "use std::ranges::contains instead of std::ranges::count != 0";
     }
 
-    if (isa<StringLiteral>(val->IgnoreParenImpCasts()))
-    {
-      valStr = "std::string_view{" + valStr + "}";
-    }
-
-    auto replacement = "std::ranges::contains(" + rangeStr + ", " + valStr + ")";
-
-    // find == end and count == 0 both assert absence; the other comparison
-    // forms assert presence.
-    if (findEq != nullptr || countEq != nullptr)
-    {
-      replacement = "!" + replacement;
-    }
-
-    auto const* message = isFindGroup ? "use std::ranges::contains instead of std::ranges::find != end"
-                                      : "use std::ranges::contains instead of std::ranges::count > 0";
-
-    diag(cmp->getBeginLoc(), message) << FixItHint::CreateReplacement(cmp->getSourceRange(), replacement);
+    diag(cmp->getBeginLoc(), message);
   }
 } // namespace clang::tidy::readability

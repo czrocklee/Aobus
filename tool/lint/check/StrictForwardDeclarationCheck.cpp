@@ -533,16 +533,8 @@ namespace clang::tidy::aobus
 
           if (!hasDeclInSameFile && !sharesFileWithStrongDep)
           {
-            auto diagBuilder =
-              checker->diag(weak->getLocation(), "use forward declaration instead of including the header for %1 '%0'")
+            checker->diag(weak->getLocation(), "use forward declaration instead of including the header for %1 '%0'")
               << crd->getNameAsString() << crd->getKindName();
-
-            // A declaration spelled inside a macro cannot take the marker
-            // insertion; the FixIt would edit the macro definition.
-            if (!weak->getBeginLoc().isMacroID())
-            {
-              diagBuilder << FixItHint::CreateInsertion(weak->getBeginLoc(), "/* forward declare */ ");
-            }
           }
         }
       }

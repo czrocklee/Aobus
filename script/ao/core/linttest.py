@@ -3,7 +3,6 @@
 import concurrent.futures
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -11,7 +10,7 @@ import tempfile
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from contextvars import copy_context
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import builddir, phases, tidyconfig, tidyengine
@@ -113,15 +112,7 @@ def has_fatal_compiler_error(output: str, *, tag: str | None = None) -> bool:
 
 POSITIVE_RE = re.compile(r"//\s*POSITIVE(?::\s*([a-zA-Z0-9_-]+))?")
 NEGATIVE_RE = re.compile(r"//\s*NEGATIVE(?::\s*([a-zA-Z0-9_-]+))?")
-FIX_TO_RE = re.compile(r"//\s*(?:POSITIVE:\s*)?FIX-TO:\s*(.*)")
-# A per-fixture contract, so the marker must be a standalone comment line.
-NO_FIX_RE = re.compile(r"^[ \t]*//[ \t]*NO-FIX\b", re.MULTILINE)
 LOCAL_INCLUDE_RE = re.compile(r'^\s*#\s*(?:include|import)\s*"([^"]+)"', re.MULTILINE)
-# Keys of the pinned machine-generated clang-tidy export format. The portal's
-# FIX_REPLACEMENT_RE uses the same record shape; this module cannot import it.
-EXPORT_REPLACEMENTS_FIELD_RE = re.compile(r"^\s*Replacements\s*:\s*(.*)$")
-EXPORT_REPLACEMENT_ENTRY_RE = re.compile(r"^\s*-\s*FilePath\s*:")
-EXPORT_REPLACEMENT_TEXT_RE = re.compile(r"^\s*ReplacementText\s*:")
 
 
 @dataclass(frozen=True)
@@ -134,6 +125,7 @@ class Fixture:
 class Expectations:
     expected: dict[int, set[str]]
     negated: dict[int, set[str]]
+    messages: dict[tuple[int, str], str] = field(default_factory=dict)
 
 
 class Reporter:
@@ -161,38 +153,103 @@ def discover_fixtures(fixture_dir: Path = FIXTURE_DIR) -> list[Fixture]:
     return [Fixture(path, path.parent.name) for path in paths]
 
 
-def parse_diagnostics(output: str) -> dict[tuple[Path, int], set[str]]:
-    diagnostics: dict[tuple[Path, int], set[str]] = defaultdict(set)
+def _recorded_diagnostics(
+    output: str,
+) -> tuple[dict[tuple[Path, int], set[str]], dict[tuple[Path, int, str], list[str]]]:
+    """Index warning checks and messages by resolved file, line, and alias."""
+    checks: dict[tuple[Path, int], set[str]] = defaultdict(set)
+    messages: dict[tuple[Path, int, str], list[str]] = defaultdict(list)
     for line in output.splitlines():
-        if match := DIAGNOSTIC_RE.match(line):
-            path = (PROJECT_ROOT / match.group(1)).resolve()
-            diagnostics[path, int(match.group(2))].add(match.group(5))
-    return dict(diagnostics)
+        match = DIAGNOSTIC_RE.match(line)
+        if match is None:
+            continue
+        path = (PROJECT_ROOT / match.group(1)).resolve()
+        line_number = int(match.group(2))
+        checks[path, line_number].add(match.group(5))
+        messages[path, line_number, match.group(5)].append(match.group(4))
+    return dict(checks), dict(messages)
 
 
-def parse_expectations(source: str, check: str) -> Expectations:
+def parse_diagnostics(output: str) -> dict[tuple[Path, int], set[str]]:
+    checks, _messages = _recorded_diagnostics(output)
+    return checks
+
+
+def _marker_location(line_number: int, path: Path | None) -> str:
+    return f"{path}:{line_number}" if path is not None else f"line {line_number}"
+
+
+def _positive_message(line: str, positive: re.Match[str], line_number: int, path: Path | None) -> str | None:
+    """Return required diagnostic text from an optional pipe suffix, if present."""
+    suffix = line[positive.end() :]
+    if re.match(r"\s*\|", suffix) is None:
+        return None
+    required = suffix.split("|", 1)[1].strip()
+    if not required:
+        raise ValueError(
+            f"{_marker_location(line_number, path)}: empty explicit diagnostic text in POSITIVE marker; "
+            "omit '|' or provide required text"
+        )
+    return required
+
+
+def parse_expectations(source: str, check: str, *, path: Path | None = None) -> Expectations:
     expected: dict[int, set[str]] = defaultdict(set)
     negated: dict[int, set[str]] = defaultdict(set)
+    messages: dict[tuple[int, str], str] = {}
 
     for line_number, line in enumerate(source.splitlines(), 1):
-        positive = POSITIVE_RE.search(line)
-        negative = NEGATIVE_RE.search(line)
-        if positive is None and negative is None:
+        # The marker regexes require "//", so required text that merely mentions
+        # POSITIVE or NEGATIVE is not a second marker. A second real marker on
+        # the same physical line is unsupported grammar.
+        positives = list(POSITIVE_RE.finditer(line))
+        negatives = list(NEGATIVE_RE.finditer(line))
+        if not positives and not negatives:
             continue
+        if len(positives) + len(negatives) > 1:
+            raise ValueError(
+                f"{_marker_location(line_number, path)}: unsupported multiple lint fixture markers on one line; "
+                "use one POSITIVE or NEGATIVE marker"
+            )
 
+        positive = positives[0] if positives else None
+        negative = negatives[0] if negatives else None
         code = line.split("//", 1)[0].strip()
         target_line = line_number if code else line_number + 1
         if positive is not None:
-            expected[target_line].add(check if positive.group(1) in {None, "FIX-TO"} else positive.group(1))
+            alias = positive.group(1) or check
+            if alias in negated.get(target_line, ()):
+                raise ValueError(
+                    f"{_marker_location(line_number, path)}: conflicting POSITIVE and NEGATIVE markers "
+                    f"for {alias!r} on line {target_line}"
+                )
+            expected[target_line].add(alias)
+            if (required := _positive_message(line, positive, line_number, path)) is not None:
+                previous = messages.get((target_line, alias))
+                if previous is not None and previous != required:
+                    raise ValueError(
+                        f"{_marker_location(line_number, path)}: conflicting POSITIVE diagnostic text "
+                        f"for {alias!r} on line {target_line}"
+                    )
+                messages[target_line, alias] = required
         if negative is not None:
-            negated[target_line].add(check if negative.group(1) in {None, "FIX-TO"} else negative.group(1))
+            alias = negative.group(1) or check
+            if alias in expected.get(target_line, ()):
+                raise ValueError(
+                    f"{_marker_location(line_number, path)}: conflicting POSITIVE and NEGATIVE markers "
+                    f"for {alias!r} on line {target_line}"
+                )
+            negated[target_line].add(alias)
 
-    return Expectations(dict(expected), dict(negated))
+    return Expectations(dict(expected), dict(negated), messages)
 
 
 def verify_diagnostics(sources: dict[Path, str], output: str, check: str) -> list[str]:
-    actual = parse_diagnostics(output)
-    expectations = {path.resolve(): parse_expectations(source, check) for path, source in sources.items()}
+    actual, actual_messages = _recorded_diagnostics(output)
+    expectations: dict[Path, Expectations] = {}
+    for path, source in sources.items():
+        resolved = path.resolve()
+        expectations[resolved] = parse_expectations(source, check, path=resolved)
     errors: list[str] = []
 
     locations = set(actual)
@@ -213,154 +270,37 @@ def verify_diagnostics(sources: dict[Path, str], output: str, check: str) -> lis
         for expected_check in sorted(expected_checks - actual_checks):
             if expected_check == check:
                 errors.append(f"missing expected diagnostic on line {location}: [{expected_check}]")
+        message_aliases = sorted(alias for message_line, alias in expected.messages if message_line == line)
+        for alias in message_aliases:
+            required = expected.messages[line, alias]
+            texts = actual_messages.get((path, line, alias), [])
+            if any(required in text for text in texts):
+                continue
+            if not texts:
+                errors.append(f"missing expected diagnostic text on line {location}: [{alias}] required {required!r}")
+            else:
+                rendered = "; ".join(repr(text) for text in texts)
+                errors.append(
+                    f"diagnostic text mismatch on line {location}: [{alias}] required {required!r}; actual {rendered}"
+                )
 
-    return errors
-
-
-def no_fix_asserted(source: str) -> bool:
-    """Return whether the main fixture file declares the fixture-wide NO-FIX contract."""
-    return bool(NO_FIX_RE.search(source))
-
-
-def expects_diagnostics(source: str, check: str) -> bool:
-    """Return whether the source expects a diagnostic from its own check."""
-    return any(check in checks for checks in parse_expectations(source, check).expected.values())
-
-
-def expected_fixes(source: str) -> list[tuple[str, str]]:
-    return [
-        (match.group(0).strip(), match.group(1).replace("\\n", "\n"))
-        for line in source.splitlines()
-        if (match := FIX_TO_RE.search(line))
-    ]
-
-
-def verify_fixes(source: str, fixed: str) -> list[str]:
-    fixed_lines = fixed.splitlines()
-    errors: list[str] = []
-    search_from = 0
-
-    for comment, expected in expected_fixes(source):
-        comment_index = next(
-            (index for index in range(search_from, len(fixed_lines)) if comment in fixed_lines[index]),
-            None,
-        )
-        if comment_index is None:
-            errors.append(f"expected comment line not found in fixed file: {comment}")
-            continue
-        search_from = comment_index + 1
-
-        expected_lines = expected.split("\n")
-        if expected.startswith("\n"):
-            if comment_index == 0 or fixed_lines[comment_index - 1].strip():
-                errors.append(f"expected empty line before comment at line {comment_index + 1}")
-            expected_lines = expected_lines[1:]
-
-        inline = bool(fixed_lines[comment_index].split("//", 1)[0].strip())
-        start = comment_index if inline else comment_index + 1
-        for offset, expected_line in enumerate(expected_lines):
-            index = start + offset
-            if index >= len(fixed_lines):
-                errors.append(f"expected line '{expected_line}' but reached end of file")
-                break
-            actual_line = fixed_lines[index]
-            if inline and offset == 0:
-                actual_line = actual_line.split("//", 1)[0]
-            if actual_line.strip() != expected_line.strip():
-                errors.append(f"expected '{expected_line.strip()}' at line {index + 1}, got '{actual_line.strip()}'")
-
-    return errors
-
-
-def verify_no_fix_export(text: str) -> list[str]:
-    """Assert a clang-tidy fixes export contains no replacement records.
-
-    This is bounded inspection of the known machine-generated LLVM report
-    format, not a YAML parser: the required envelope, an exactly empty
-    `Replacements` field per diagnostic message, at least one diagnostic
-    message (a NO-FIX fixture declares POSITIVE expectations, so its report
-    cannot be empty), and replacement record keys anywhere in the document are
-    checked, and any other shape fails closed.
-    """
-    lines = text.splitlines()
-    errors: list[str] = []
-    if not lines or lines[0].strip() != "---":
-        errors.append("fixes export does not start with the pinned '---' document header")
-    if not lines or lines[-1].strip() != "...":
-        errors.append("fixes export does not end with the pinned '...' document terminator")
-    if not any(line.startswith("MainSourceFile:") for line in lines):
-        errors.append("fixes export does not name its MainSourceFile")
-    if not any(line.startswith("Diagnostics:") for line in lines):
-        errors.append("fixes export does not declare its Diagnostics section")
-
-    for number, line in enumerate(lines, 1):
-        if line.startswith("Diagnostics:") and line.split(":", 1)[1].strip() not in ("", "[]"):
-            errors.append(f"fixes export declares an unexpected Diagnostics section on line {number}")
-        if EXPORT_REPLACEMENT_ENTRY_RE.match(line):
-            errors.append(f"replacement record exported on line {number}: {line.strip()}")
-        elif EXPORT_REPLACEMENT_TEXT_RE.match(line):
-            errors.append(f"replacement record exported on line {number}: {line.strip()}")
-
-    errors.extend(_verify_empty_replacements_fields(lines))
-    return errors
-
-
-def _verify_empty_replacements_fields(lines: list[str]) -> list[str]:
-    """Require an exactly empty Replacements field per diagnostic message.
-
-    Note entries reuse the field shape without their own DiagnosticMessage, so
-    an exactly empty field is accepted wherever it appears. A non-empty value,
-    a diagnostic message without its field, or a report without any diagnostic
-    message fails closed.
-    """
-    errors: list[str] = []
-    message_line: int | None = None
-    messages = 0
-    for number, line in enumerate(lines, 1):
-        if line.lstrip().startswith("DiagnosticMessage:"):
-            messages += 1
-            if message_line is not None:
-                errors.append(f"diagnostic message on line {message_line} has no Replacements field")
-            message_line = number
-        elif line.lstrip().startswith("Level:"):
-            # The pinned format serializes the message's Replacements field
-            # before Level; note entries only follow it.
-            if message_line is not None:
-                errors.append(f"diagnostic message on line {message_line} has no Replacements field")
-            message_line = None
-        elif match := EXPORT_REPLACEMENTS_FIELD_RE.match(line):
-            if match.group(1).strip() != "[]":
-                if message_line is not None:
-                    errors.append(f"diagnostic message on line {message_line} exports replacements on line {number}")
-                else:
-                    errors.append(f"Replacements field on line {number} exports replacements")
-            message_line = None
-    if message_line is not None:
-        errors.append(f"diagnostic message on line {message_line} has no Replacements field")
-    if messages == 0:
-        errors.append(
-            "fixes export contains no diagnostic message; a NO-FIX fixture with expected diagnostics must export one"
-        )
     return errors
 
 
 @dataclass(frozen=True)
 class WindowsFixtureTools:
     tidy: str
-    compiler: str
-    replacements: str
     flags: tuple[str, ...]
 
 
 def _windows_fixture_tools(build_dir: Path, toolchain: tidyengine.TidyToolchain) -> WindowsFixtureTools:
-    """Use only the caller-verified toolchain and the initialized VS standard includes.
+    """Use only the caller-verified tidy host and the initialized VS standard includes.
 
     The toolchain context is prepared and verified once by the portal preflight;
-    its SDK root is the single verified source for the fixture-only tools and
+    its SDK root is the single verified source for the fixture tidy host and
     the required-file check, so a stale build cache cannot name a different SDK.
-    The SDK compiler and replacements tools, the complete required-file set,
-    and the VS include search stay local: the context record carries only what
-    its actual consumers need.
+    The complete required-file set and the VS include search stay local: the
+    context record carries only what its actual consumers need.
     """
     sdk = toolchain.sdk_root
     if toolchain.expected_llvm_version is None or toolchain.resource_dir is None or sdk is None:
@@ -378,8 +318,6 @@ def _windows_fixture_tools(build_dir: Path, toolchain: tidyengine.TidyToolchain)
         raise die("Windows lint fixtures require the INCLUDE directories from the Visual Studio x64 environment.")
     return WindowsFixtureTools(
         tidy=toolchain.clang_tidy,
-        compiler=str(sdk / "bin" / "clang-cl.exe"),
-        replacements=str(sdk / "bin" / "clang-apply-replacements.exe"),
         flags=(
             "--driver-mode=cl",
             "/nologo",
@@ -485,6 +423,18 @@ def _fixture_sources(fixture: Fixture) -> dict[Path, str]:
     return sources
 
 
+def _preflight_expectation_errors(fixtures: list[Fixture]) -> list[str]:
+    """Parse discovered fixtures, including Objective-C++ context headers, before any subprocess."""
+    errors: list[str] = []
+    for fixture in fixtures:
+        for path, source in _fixture_sources(fixture).items():
+            try:
+                parse_expectations(source, fixture.check, path=path)
+            except ValueError as error:
+                errors.extend(str(error).splitlines())
+    return errors
+
+
 def _diagnostic_errors(
     fixture: Fixture,
     sources: dict[Path, str],
@@ -498,13 +448,6 @@ def _diagnostic_errors(
         for source in sources.values()
         for checks in parse_expectations(source, fixture.check).expected.values()
     )
-    for path, source in sources.items():
-        if path == fixture.path.resolve():
-            continue
-        if expected_fixes(source):
-            errors.append(f"context header FIX-TO markers require a standalone fixture: {path}")
-        if no_fix_asserted(source):
-            errors.append(f"context header NO-FIX markers require a standalone fixture: {path}")
     if has_fatal_compiler_error(result.stdout):
         errors.append("clang-tidy reported a fatal compiler diagnostic")
     # The portal normalizes native tool failures to 1 too. Its failed-batch
@@ -525,11 +468,6 @@ def _run_diagnostic(
     case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.diag.", dir=run_dir))
     log = case_dir / "run.log"
     sources = _fixture_sources(fixture)
-    export: Path | None = None
-    export_arg: tuple[str, ...] = ()
-    if no_fix_asserted(sources[fixture.path.resolve()]):
-        export = case_dir / "fixes.yaml"
-        export_arg = (f"--tidy-arg=-export-fixes={export}",)
     result = subprocess.run(
         _tidy_command(
             fixture,
@@ -539,7 +477,6 @@ def _run_diagnostic(
                 "objective-c++" if fixture.path.suffix == ".mm" else "c++",
                 windows=tools is not None,
             ),
-            *export_arg,
             tools=tools,
         ),
         cwd=PROJECT_ROOT,
@@ -548,185 +485,6 @@ def _run_diagnostic(
         text=True,
     )
     errors = _diagnostic_errors(fixture, sources, result, direct_host=tools is not None)
-    export_errors: list[str] = []
-    export_text: str | None = None
-    if export is not None:
-        try:
-            export_text = export.read_text(encoding="utf-8")
-        except OSError:
-            export_errors = [
-                "clang-tidy created no fixes export; a NO-FIX fixture with expected diagnostics must produce one"
-            ]
-        else:
-            export_errors = verify_no_fix_export(export_text)
-    errors.extend(export_errors)
-    with log.open("w", encoding="utf-8") as sink:
-        sink.write(result.stdout)
-        if export_errors and export_text is not None:
-            sink.write(f"=== Exported fixes report ({export}) ===\n{export_text}\n")
-        for error in errors:
-            sink.write(f"ERROR: {error}\n")
-    return not errors, log
-
-
-def _copy_fixture_context(fixture: Fixture, case_dir: Path) -> Path:
-    fixed = case_dir / fixture.path.name
-    # The source may live on SMB while case_dir is guest-local. Fixture runs
-    # need file contents only; copy2's metadata propagation asks Darwin to apply
-    # SMB flags with chflags and can fail even though the data copy succeeded.
-    shutil.copyfile(fixture.path, fixed)
-    shutil.copyfile(FIXTURE_DIR / "TestHelpers.h", case_dir / "TestHelpers.h")
-    for sibling in fixture.path.parent.rglob("*.h"):
-        destination = case_dir / sibling.relative_to(fixture.path.parent)
-        if destination != fixed:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(sibling, destination)
-    return fixed
-
-
-def _syntax_command(fixed: Path, case_dir: Path, *, tools: WindowsFixtureTools | None = None) -> list[str]:
-    """Return a syntax-only compile command from the active native toolchain."""
-    if tools is not None:
-        return [
-            tools.compiler,
-            *tools.flags,
-            "/clang:-std=c++26",
-            "/clang:-fsyntax-only",
-            f"/I{PROJECT_ROOT / 'include'}",
-            f"/I{PROJECT_ROOT / 'lib'}",
-            f"/I{case_dir}",
-            str(fixed),
-        ]
-    if builddir.platform_profile().name == "windows":
-        raise die("Windows fixture syntax checks require the configured LLVM SDK compiler.")
-    objective_cpp = fixed.suffix == ".mm"
-    variable = "OBJCXX" if objective_cpp else "CXX"
-    configured = os.environ.get(variable)
-    try:
-        compiler = shlex.split(configured) if configured else []
-    except ValueError as error:
-        raise die(f"{variable} must be a valid compiler command: {error}") from error
-    if not compiler:
-        compiler = ["clang++" if objective_cpp or sys.platform == "darwin" else "g++"]
-    elif not compiler[0]:
-        raise die(f"{variable} must name a compiler executable")
-
-    command = [
-        *compiler,
-        "-std=c++26",
-        "-fsyntax-only",
-        f"-I{PROJECT_ROOT / 'include'}",
-        f"-I{PROJECT_ROOT / 'lib'}",
-        f"-I{case_dir}",
-    ]
-    if objective_cpp:
-        command.append("-fblocks")
-    if expected_shim := os.environ.get("AOBUS_LIBCXX_EXPECTED_SHIM"):
-        command.extend(("-isystem", expected_shim))
-    command.append(str(fixed))
-    return command
-
-
-def _run_fix(
-    fixture: Fixture, build_dir: Path, run_dir: Path, *, tools: WindowsFixtureTools | None = None
-) -> tuple[bool, Path]:
-    case_dir = Path(tempfile.mkdtemp(prefix=f"{fixture.path.name}.fix.", dir=run_dir))
-    log = case_dir / "run.log"
-    fixed = _copy_fixture_context(fixture, case_dir)
-    copied_fixture = Fixture(fixed, fixture.check)
-    sources = _fixture_sources(copied_fixture)
-    source = sources[fixed.resolve()]
-    tidy_args = (
-        "--fix",
-        *_fixture_tidy_args(
-            case_dir, "objective-c++" if fixture.path.suffix == ".mm" else "c++", windows=tools is not None
-        ),
-    )
-    tidy = subprocess.run(
-        _tidy_command(copied_fixture, build_dir, *tidy_args, tools=tools),
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    errors = _diagnostic_errors(copied_fixture, sources, tidy, direct_host=tools is not None)
-    fixed_text = fixed.read_text(encoding="utf-8")
-    fixes = expected_fixes(source)
-    if fixes and fixed_text == source:
-        errors.append("fixture declares FIX-TO expectations but clang-tidy made no changes")
-    errors.extend(verify_fixes(source, fixed_text))
-
-    # The syntax compile of the auto-fixed fixture is the one native cost in
-    # this helper with its own record; the helper's final bool is not a status.
-    with phases.measure("lint-syntax", tree="tidy", count=1) as syntax_phase:
-        syntax = subprocess.run(
-            _syntax_command(fixed, case_dir, tools=tools),
-            cwd=PROJECT_ROOT,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        syntax_phase.status = syntax.returncode
-    if syntax.returncode != 0:
-        errors.append("auto-fixed fixture does not compile")
-
-    with log.open("w", encoding="utf-8") as sink:
-        sink.write(tidy.stdout)
-        sink.write(syntax.stdout)
-        for error in errors:
-            sink.write(f"ERROR: {error}\n")
-    return not errors, log
-
-
-def _run_replacement_smoke(run_dir: Path, *, tools: WindowsFixtureTools | None = None) -> tuple[bool, Path]:
-    case_dir = Path(tempfile.mkdtemp(prefix="apply-conflict.", dir=run_dir))
-    source = case_dir / "sample.cpp"
-    log = case_dir / "run.log"
-    source.write_text("int main() {}\n", encoding="utf-8")
-
-    for name, marker in (("a", "/*a*/"), ("b", "/*b*/")):
-        (case_dir / f"{name}.yaml").write_text(
-            "\n".join(
-                [
-                    "---",
-                    f"MainSourceFile:  '{source}'",
-                    "Diagnostics:",
-                    f"  - DiagnosticName:  test-{name}",
-                    "    DiagnosticMessage:",
-                    f"      Message:         'insert {name}'",
-                    f"      FilePath:        '{source}'",
-                    "      FileOffset:      0",
-                    "      Replacements:",
-                    f"        - FilePath:        '{source}'",
-                    "          Offset:          0",
-                    "          Length:          0",
-                    f"          ReplacementText: '{marker}'",
-                    "    Level:           Warning",
-                    f"    BuildDirectory:  '{case_dir}'",
-                    "...",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-
-    result = subprocess.run(
-        [
-            tools.replacements if tools is not None else "clang-apply-replacements",
-            "--ignore-insert-conflict",
-            str(case_dir),
-        ],
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    content = source.read_text(encoding="utf-8")
-    errors = []
-    if result.returncode != 0:
-        errors.append("clang-apply-replacements failed")
-    if "/*a*/" not in content or "/*b*/" not in content:
-        errors.append("conflicting insertions were not both applied")
     with log.open("w", encoding="utf-8") as sink:
         sink.write(result.stdout)
         for error in errors:
@@ -782,23 +540,6 @@ def _run_compiler_error_smoke(
     return not errors, log
 
 
-def _marker_contract_errors(fixtures: list[Fixture]) -> list[str]:
-    """Reject unrunnable marker combinations before any stage applies fixes."""
-    errors: list[str] = []
-    for fixture in fixtures:
-        source = fixture.path.read_text(encoding="utf-8")
-        if not no_fix_asserted(source):
-            continue
-        label = f"{fixture.check}/{fixture.path.name}"
-        if expected_fixes(source):
-            errors.append(f"fixture cannot combine NO-FIX and FIX-TO markers: {label}")
-        elif not expects_diagnostics(source, fixture.check):
-            # clang-tidy creates the export only when it emits a diagnostic, so
-            # a clean fixture cannot assert on a report that never exists.
-            errors.append(f"NO-FIX fixture must declare a POSITIVE expectation of {fixture.check}: {label}")
-    return errors
-
-
 def _report_results(
     label: str,
     fixtures: list[Fixture],
@@ -851,33 +592,23 @@ def run(
     """Run the lint fixture integration suite.
 
     *toolchain* is the caller-verified tidy context prepared by the portal's
-    toolchain preflight; it is required on the Windows profile and ignored
-    elsewhere, where the portal route supplies the fixture runs.
+    toolchain preflight; it is required before the Windows diagnostic stage and
+    ignored elsewhere, where the portal route supplies the fixture runs.
+    Expectation errors are reported for every discovered fixture before that
+    setup and before diagnostic workers start.
     """
     windows = builddir.platform_profile().name == "windows"
-    if not windows:
-        tools = None
-    else:
-        if toolchain is None:
-            raise die("the Windows lint suite requires the toolchain verified by the tidy portal preflight.")
-        tools = _windows_fixture_tools(build_dir, toolchain)
-    plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
-    compile_db = build_dir / "compile_commands.json"
     reporter = Reporter(log)
-    if not compile_db.is_file():
-        reporter.write(f"ERROR: compile_commands.json not found in {build_dir}")
-        return 1
-    if not windows and not plugin.is_file():
-        reporter.write(f"ERROR: AobusLintPlugin not found at {plugin}")
-        return 1
-
     fixtures = discover_fixtures()
     if not fixtures:
         reporter.write(f"ERROR: no lint fixtures found in {FIXTURE_DIR}")
         return 1
-    marker_errors = _marker_contract_errors(fixtures)
-    if marker_errors:
-        for error in marker_errors:
+    # Current marker grammar on the discovered list, including context headers
+    # _fixture_sources already follows. Windows still executes only the
+    # non-.mm selection after this validation.
+    expectation_errors = _preflight_expectation_errors(fixtures)
+    if expectation_errors:
+        for error in expectation_errors:
             reporter.write(f"ERROR: {error}")
         return 1
     if windows:
@@ -891,56 +622,40 @@ def run(
         if not fixtures:
             reporter.write("ERROR: no compatible lint fixtures selected")
             return 1
+        if toolchain is None:
+            raise die("the Windows lint suite requires the toolchain verified by the tidy portal preflight.")
+        tools = _windows_fixture_tools(build_dir, toolchain)
+    else:
+        tools = None
+    plugin = build_dir / "tool" / "lint" / "libAobusLintPlugin.so"
+    compile_db = build_dir / "compile_commands.json"
+    if not compile_db.is_file():
+        reporter.write(f"ERROR: compile_commands.json not found in {build_dir}")
+        return 1
+    if not windows and not plugin.is_file():
+        reporter.write(f"ERROR: AobusLintPlugin not found at {plugin}")
+        return 1
     run_dir = Path(tempfile.mkdtemp(prefix="aobus-lint-integration-"))
     failed = True
     try:
-        fix_fixtures = [fixture for fixture in fixtures if expected_fixes(fixture.path.read_text(encoding="utf-8"))]
-        fix_paths = {fixture.path for fixture in fix_fixtures}
-        diagnostic_fixtures = [fixture for fixture in fixtures if fixture.path not in fix_paths]
-
-        reporter.write(f"=== Diagnostic Verification ({len(diagnostic_fixtures)} fixtures) ===")
+        reporter.write(f"=== Diagnostic Verification ({len(fixtures)} fixtures) ===")
         worker_count = min(jobs or max((os.cpu_count() or 1) - 1, 1), len(fixtures))
         # The phase encloses the whole executor so it also covers the lazy
         # pool.map consumption inside _report_results; Reporter line ordering
         # is untouched by the record.
-        with phases.measure(
-            "lint-diagnostics", tree="tidy", jobs=worker_count, count=len(diagnostic_fixtures)
-        ) as phase:
+        with phases.measure("lint-diagnostics", tree="tidy", jobs=worker_count, count=len(fixtures)) as phase:
             with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
                 diagnostics_passed = _report_results(
                     "Diagnostics",
-                    diagnostic_fixtures,
+                    fixtures,
                     _pool_map_with_context(
                         pool,
                         lambda fixture: _run_diagnostic(fixture, build_dir, run_dir, tools=tools),
-                        diagnostic_fixtures,
+                        fixtures,
                     ),
                     reporter,
                 )
             phase.status = 0 if diagnostics_passed else 1
-
-        reporter.write(f"=== Diagnostic + Auto-Fix Verification ({len(fix_fixtures)} fixtures) ===")
-        with phases.measure("lint-fixes", tree="tidy", jobs=worker_count, count=len(fix_fixtures)) as phase:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as pool:
-                fixes_passed = _report_results(
-                    "Diagnostics + auto-fixes",
-                    fix_fixtures,
-                    _pool_map_with_context(
-                        pool,
-                        lambda fixture: _run_fix(fixture, build_dir, run_dir, tools=tools),
-                        fix_fixtures,
-                    ),
-                    reporter,
-                )
-            phase.status = 0 if fixes_passed else 1
-
-        reporter.write("=== Replacement Application Smoke ===")
-        with phases.measure("lint-replacements", tree="tidy", count=1) as phase:
-            smoke_passed, smoke_log = _run_replacement_smoke(run_dir, tools=tools)
-            phase.status = 0 if smoke_passed else 1
-        reporter.write(f"  [{'PASS' if smoke_passed else 'FAIL'}] insert conflict smoke")
-        if not smoke_passed:
-            reporter.write_file(smoke_log)
 
         reporter.write("=== Compiler Error Detection Smoke ===")
         with phases.measure("lint-compiler-errors", tree="tidy", count=len(_COMPILER_ERROR_SMOKE_CASES)) as phase:
@@ -950,7 +665,7 @@ def run(
         if not compiler_errors_passed:
             reporter.write_file(compiler_errors_log)
 
-        failed = not (diagnostics_passed and fixes_passed and smoke_passed and compiler_errors_passed)
+        failed = not (diagnostics_passed and compiler_errors_passed)
         reporter.write(
             "=== LINT INTEGRATION TESTS PASSED ===" if not failed else "=== LINT INTEGRATION TESTS FAILED ==="
         )

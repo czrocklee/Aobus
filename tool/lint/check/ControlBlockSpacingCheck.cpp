@@ -386,20 +386,7 @@ namespace clang::tidy::readability
 
       if (!isBlockStart && !isChainAfterBrace && newlines < newlinesMin)
       {
-        auto diagnostic = diag(nextToken.getLocation(), "expected a blank line before '%0'");
-        diagnostic << stmtName;
-
-        if (size_t const firstNewline = gap.find('\n'); firstNewline != StringRef::npos)
-        {
-          FileID const fid = sm.getFileID(previousCodeToken.getLocation());
-          SourceLocation const insertLoc =
-            sm.getLocForStartOfFile(fid).getLocWithOffset(static_cast<std::int32_t>(previousEnd + firstNewline + 1));
-          diagnostic << FixItHint::CreateInsertion(insertLoc, "\n");
-        }
-        else
-        {
-          diagnostic << FixItHint::CreateInsertion(nextToken.getLocation(), newlinesMin == 2 ? "\n\n" : "\n");
-        }
+        diag(nextToken.getLocation(), "expected a blank line before '%0'") << stmtName;
       }
     }
   }
@@ -455,16 +442,7 @@ namespace clang::tidy::readability
 
       if (gap.count('\n') >= 2)
       {
-        size_t const firstNl = gap.find('\n');
-        size_t const lastNl = gap.rfind('\n');
-        auto diagnostic = diag(nextToken.getLocation(), "do not put blank lines at the start of a block");
-
-        if (firstNl != StringRef::npos && lastNl != StringRef::npos && firstNl != lastNl)
-        {
-          SourceLocation const removeStart = loc.getLocWithOffset(1 + static_cast<std::int32_t>(firstNl) + 1);
-          SourceLocation const removeEnd = loc.getLocWithOffset(1 + static_cast<std::int32_t>(lastNl) + 1);
-          diagnostic << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
-        }
+        diag(nextToken.getLocation(), "do not put blank lines at the start of a block");
       }
     }
   }
@@ -496,18 +474,7 @@ namespace clang::tidy::readability
 
       if (gap.count('\n') >= 2)
       {
-        size_t const firstNl = gap.find('\n');
-        size_t const lastNl = gap.rfind('\n');
-        auto diagnostic = diag(loc, "do not put blank lines at the end of a block");
-
-        if (firstNl != StringRef::npos && lastNl != StringRef::npos && firstNl != lastNl)
-        {
-          SourceLocation const removeStart = previousToken.getLocation().getLocWithOffset(
-            static_cast<std::int32_t>(previousToken.getLength()) + static_cast<std::int32_t>(firstNl) + 1);
-          SourceLocation const removeEnd = previousToken.getLocation().getLocWithOffset(
-            static_cast<std::int32_t>(previousToken.getLength()) + static_cast<std::int32_t>(lastNl) + 1);
-          diagnostic << FixItHint::CreateRemoval(CharSourceRange::getCharRange(removeStart, removeEnd));
-        }
+        diag(loc, "do not put blank lines at the end of a block");
       }
     }
   }
@@ -601,18 +568,7 @@ namespace clang::tidy::readability
         return;
       }
 
-      auto diagnostic = diag(rBraceLoc, "expected a blank line after closing '}' of control block");
-
-      if (size_t const firstNewline = gap.find('\n'); firstNewline != StringRef::npos)
-      {
-        SourceLocation const insertLoc =
-          sm.getLocForStartOfFile(fid).getLocWithOffset(static_cast<std::int32_t>(gapStartOffset + firstNewline + 1));
-        diagnostic << FixItHint::CreateInsertion(insertLoc, "\n");
-      }
-      else
-      {
-        diagnostic << FixItHint::CreateInsertion(tokens[codeIndex].getLocation(), "\n\n");
-      }
+      diag(rBraceLoc, "expected a blank line after closing '}' of control block");
     }
   }
 

@@ -14,15 +14,17 @@ namespace and register new checks in `tool/lint/AobusLintModule.cpp` and
 
 Use `doc/development/test/test-suite.md` for fixture markers and runner behavior.
 Fixtures live under `test/integration/lint/fixture/<check-alias>/`.
-`./ao test --lint` owns diagnostic, FixIt, and fixed-output compilation checks.
-Extend the owning fixture for new behavior; wording-only edits can reuse it and
-inspect the emitted text because markers do not assert diagnostic wording.
+`./ao test --lint` owns diagnostic assertions and compiler-error detection while
+Clang parses original fixtures; there is no separate syntax-only compiler stage.
+Extend the owning fixture for new behavior. Use an optional `POSITIVE | text`
+assertion when diagnostic advice must preserve logical polarity or API identity;
+ordinary wording-only edits can reuse markers and inspect the emitted text.
 
 For symbol identity, macro safety, and uncertain AST shapes, consult
 `doc/development/lint/checker-development.md`; naming-proof details are in
 `doc/development/lint/naming-checks.md`. Use the native
 compile database and toolchain. `./ao tidy --no-build --check <alias> <source>`
 allows focused diagnostic inspection with a prepared plugin and compile database;
-it does not run the fixture's diagnostic, FixIt, or compilation assertions.
+it does not run the fixture's marker assertions or compiler-error canaries.
 
 Completion follows `doc/development/test/validation-and-review.md`.

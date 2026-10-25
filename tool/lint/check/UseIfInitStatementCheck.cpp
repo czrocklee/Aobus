@@ -17,7 +17,6 @@
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/Specifiers.h>
-#include <clang/Basic/TokenKinds.h>
 #include <clang/Lex/Lexer.h>
 
 #include <algorithm>
@@ -265,39 +264,9 @@ namespace clang::tidy::readability
     }
 
     bool const isIf = isa<IfStmt>(target);
-    auto diagBuilder = diag(decl->getBeginLoc(),
-                            "variable %0 is only used inside the following '%1' "
-                            "statement; move its declaration into the init-statement")
-                       << varName << (isIf ? "if" : "switch");
 
-    // Fix-it logic
-    auto const stmtBegin = decl->getBeginLoc();
-    auto const stmtEnd = decl->getEndLoc();
-    auto const optNextTok = Lexer::findNextToken(stmtEnd, sm, result.Context->getLangOpts());
-    auto removalEnd = SourceLocation{};
-
-    if (optNextTok && optNextTok->is(tok::semi))
-    {
-      removalEnd = optNextTok->getEndLoc();
-    }
-    else
-    {
-      removalEnd = Lexer::getLocForEndOfToken(stmtEnd, 0, sm, result.Context->getLangOpts());
-    }
-
-    // Remove the declaration statement
-    diagBuilder << FixItHint::CreateRemoval(SourceRange{stmtBegin, removalEnd});
-
-    // Insert declaration into target
-    auto const insertLoc = isIf ? cast<IfStmt>(target)->getLParenLoc().getLocWithOffset(1)
-                                : cast<SwitchStmt>(target)->getLParenLoc().getLocWithOffset(1);
-
-    if (insertLoc.isInvalid())
-    {
-      return;
-    }
-
-    // Insert the previously fetched declaration text
-    diagBuilder << FixItHint::CreateInsertion(insertLoc, declText.str() + "; ");
+    diag(decl->getBeginLoc(),
+         "variable %0 is only used inside the following '%1' statement; move its declaration into the init-statement")
+      << varName << (isIf ? "if" : "switch");
   }
 } // namespace clang::tidy::readability

@@ -140,23 +140,18 @@ namespace clang::tidy::modernize
       return;
     }
 
-    auto const predicateText = aobus::getExprSourceText(*predicateExpr, sm, langOpts);
-
-    auto replacement = std::string{};
     auto diagnosticMsg = std::string{};
 
     if (algoKind == AlgoKind::FindIf)
     {
       if (neOp != nullptr)
       {
-        // find_if != end() -> any_of
-        replacement = "std::ranges::any_of(" + rangeText + ", " + predicateText + ")";
+        // find_if != end() means presence: suggest any_of
         diagnosticMsg = "use std::ranges::any_of instead of std::ranges::find_if != end()";
       }
       else
       {
-        // find_if == end() -> none_of
-        replacement = "std::ranges::none_of(" + rangeText + ", " + predicateText + ")";
+        // find_if == end() means absence: suggest none_of
         diagnosticMsg = "use std::ranges::none_of instead of std::ranges::find_if == end()";
       }
     }
@@ -164,18 +159,16 @@ namespace clang::tidy::modernize
     {
       if (eqOp != nullptr)
       {
-        // find_if_not == end() -> all_of
-        replacement = "std::ranges::all_of(" + rangeText + ", " + predicateText + ")";
+        // find_if_not == end() means all elements match: suggest all_of
         diagnosticMsg = "use std::ranges::all_of instead of std::ranges::find_if_not == end()";
       }
       else
       {
-        // find_if_not != end() -> !all_of (less common, but handled as !all_of)
-        replacement = "!std::ranges::all_of(" + rangeText + ", " + predicateText + ")";
+        // find_if_not != end() means some element does not match: suggest !all_of
         diagnosticMsg = "use !std::ranges::all_of instead of std::ranges::find_if_not != end()";
       }
     }
 
-    diag(match->getBeginLoc(), diagnosticMsg) << FixItHint::CreateReplacement(match->getSourceRange(), replacement);
+    diag(match->getBeginLoc(), diagnosticMsg);
   }
 } // namespace clang::tidy::modernize

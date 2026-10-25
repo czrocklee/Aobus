@@ -1,4 +1,4 @@
-"""Tests for tidy/analyze file classification and tidy fix filtering."""
+"""Tests for tidy/analyze file classification and check policy."""
 
 import tempfile
 import unittest
@@ -205,38 +205,6 @@ class AnalyzerChecksTest(unittest.TestCase):
         checks = analyze.analyzer_checks(alpha=True, only=None)
         self.assertIn("clang-analyzer-alpha.*", checks)
         self.assertNotIn("clang-analyzer-alpha.*", analyze.analyzer_checks(alpha=False, only=None))
-
-
-FIXES_YAML = """\
----
-MainSourceFile:  '/repo/lib/Foo.cpp'
-Diagnostics:
-  - DiagnosticName:  readability-identifier-naming
-    DiagnosticMessage:
-      Message:         'invalid case style'
-      FilePath:        '/repo/lib/Foo.cpp'
-      Replacements:
-        - FilePath:        '/repo/lib/Foo.cpp'
-          Offset:          10
-  - DiagnosticName:  modernize-use-nullptr
-    DiagnosticMessage:
-      Message:         'use nullptr'
-      FilePath:        '/repo/lib/Foo.cpp'
-      Replacements:
-        - FilePath:        '/repo/lib/Foo.cpp'
-          Offset:          20
-...
-"""
-
-
-class FilterFixesYamlTest(unittest.TestCase):
-    def test_identifier_naming_fixes_are_dropped(self):
-        filtered = tidy.filter_fixes_yaml(FIXES_YAML)
-        self.assertNotIn("readability-identifier-naming", filtered)
-        self.assertNotIn("Offset:          10", filtered)
-        self.assertIn("modernize-use-nullptr", filtered)
-        self.assertIn("Offset:          20", filtered)
-        self.assertIn("MainSourceFile", filtered)
 
 
 if __name__ == "__main__":

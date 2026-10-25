@@ -12,7 +12,6 @@ static void testUseIfInit(std::int32_t cond)
   // POSITIVE
   std::int32_t const localX = cond * 2;
 
-  // FIX-TO: if (std::int32_t const localX = cond * 2; localX > 10)
   if (localX > 10)
   {
     std::cout << localX;
@@ -21,7 +20,6 @@ static void testUseIfInit(std::int32_t cond)
   // POSITIVE
   std::int32_t const localSwitch = cond + 1;
 
-  // FIX-TO: switch (std::int32_t const localSwitch = cond + 1; localSwitch)
   switch (localSwitch)
   {
     case 1: break;

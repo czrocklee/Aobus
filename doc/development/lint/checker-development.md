@@ -16,8 +16,8 @@ Existing `AstHelpers.h`, `CalleeQualificationHelpers.h`, and `RaiiHeuristics.h` 
 
 Identify symbols by declarations and qualified names rather than source-text substrings.
 Identify objects by canonical declarations or bound nodes rather than spelling.
-For FixIt changes, cover macro boundaries, same-named foreign symbols, and cross-object cases where relevant.
-A macro diagnostic may be valid while its replacement is unsafe; use `aobus::isInMacro` and omit an unsafe FixIt.
+Cover macro boundaries, same-named foreign symbols, and cross-object cases where relevant before diagnosing a match.
+A diagnostic may be valid even when the spelling comes from a macro definition; keep the intended macro behavior explicit in fixtures.
 
 Use `clang-query` or a raw AST dump when a matcher shape is uncertain, with the affected native compile database and toolchain.
 Linux tools come from the project Nix environment, macOS uses the portal-selected LLVM, and Windows uses the governed LLVM SDK.
@@ -33,7 +33,7 @@ Common AST traps include:
 - C++20 rewritten comparisons contain synthesized operators. Use `aobus::isWithinRewrittenOperator` or match the source comparison to avoid duplicate or inverted diagnostics.
 - Initializer-list constructor detection uses the first parameter's type; parent traversal requires `clang/AST/ParentMapContext.h`.
 
-For namespace-qualification fixes, lookup safety concerns the first component
+For redundant namespace-qualification diagnostics, lookup safety concerns the first component
 left after removal, not just the final referenced member. Preserve source names
 from aliases and using-declarations, and inspect template heads on concepts and
 requires-clauses as well as outer template parameter lists on source definitions
@@ -49,29 +49,28 @@ does not activate ADL through this removal.
 The checker also abstains when inherited, using-directive, inline-namespace, or
 dependent lookup cannot be proved from its AST context. Fixtures record those
 conservative boundaries alongside unshadowed positives and type/callable
-identity assertions; successful compilation alone does not establish that a
-FixIt preserves binding.
+identity assertions; successful compilation alone does not establish that an
+unqualified spelling preserves binding.
 
 ### Fixture contract
 
 Place fixtures under `test/integration/lint/fixture/<check-alias>/`; the directory selects the check.
 The [test-suite reference](../test/test-suite.md) owns the complete runner behavior.
-Use these markers immediately before the source line:
+Use these markers immediately before the source line or inline:
 
 - `// POSITIVE` requires a diagnostic;
-- `// NEGATIVE` forbids a diagnostic;
-- `// POSITIVE: FIX-TO: <fixed line>` requires a diagnostic and the stated replacement; and
-- `// NO-FIX` requires the exported fix report to contain no replacement records.
+- `// POSITIVE | required text` also requires that text in the diagnostic message; and
+- `// NEGATIVE` forbids a diagnostic.
 
-`NO-FIX` is a per-fixture contract on the main file, written as a standalone comment: the fixture stays in the diagnostic stage, and the runner inspects the exported `clang-tidy` fix report for zero replacement records in the known machine-generated serialization.
-The assertion covers the whole fixture, context-header replacements included, and rejects a no-op replacement or a replacement in another file rather than merely unchanged file bytes.
-The bounded inspection requires the pinned report envelope and an exactly empty `Replacements` field per diagnostic message, and it fails closed on a missing, unreadable, or unfamiliar report; the runner does not parse arbitrary YAML.
-clang-tidy writes the export only when it emits a diagnostic, so a `NO-FIX` fixture must declare at least one `POSITIVE` expectation of its owning check in the main file.
-A fixture cannot combine `NO-FIX` with `FIX-TO`, which the runner rejects before applying fixes, and context headers cannot carry the marker themselves.
-
-Only fixtures with `FIX-TO` enter the auto-fix stage, and the runner syntax-checks the fixed temporary copies.
-Markers assert normalized file and line identity plus FixIt output, not diagnostic wording.
-A wording-only change may reuse the fixture and inspect emitted text.
+Use an optional message assertion when advice must preserve logical polarity or name a particular API.
+Ordinary markers continue to assert normalized file, line, and check identity without pinning wording.
+Use only one marker per physical line. A standalone marker targets the next line;
+an inline marker targets its own line. Distinct aliases may share a target, but
+one alias cannot be both positive and negative or require conflicting message text.
+Repeated identical message text is allowed; a bare positive does not erase it.
+The diagnostic invocation parses the original fixture with the native Clang toolchain; compiler errors fail the fixture even if expected warnings were emitted.
+Compiler-error canaries protect that failure path.
+There is no additional syntax-only compiler pass or GCC fixture-portability gate.
 Extend an owning fixture rather than creating a parallel case for a covered contract.
 
 For Objective-C++ `.mm` fixtures, local `.h` context headers also participate in diagnostic assertions.
@@ -79,11 +78,9 @@ A marker-bearing context header must be reached through unconditional literal qu
 For other fixture types, the runner loads marker expectations only from the main fixture file; compiling an included header does not make its markers assertions.
 A header diagnostic cannot satisfy or hide a source marker.
 Keep conditional and generated include graphs out of marker-bearing context headers.
-Header `FIX-TO` markers require a standalone fixture; context headers support `POSITIVE` and `NEGATIVE` only.
-The runner snapshots copied source and context headers before clang-tidy can change line locations.
+Context headers support `POSITIVE` and `NEGATIVE` only.
 
-Objective-C++ `.mm` fixtures enable blocks for diagnostics, FixIts, and fixed-output syntax checks.
-Fixed copies use `OBJCXX` when supplied, otherwise the managed `clang++`; they do not inherit a C++-only GCC `CXX` selection.
+Objective-C++ `.mm` fixtures enable blocks in the diagnostic invocation and use their native Clang compile context.
 Declaration-only fixtures require no Foundation link.
 
 Use `./ao test --lint` for the integration gate.

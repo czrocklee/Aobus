@@ -11,10 +11,6 @@
 #include <clang/AST/OperationKinds.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
-#include <clang/Basic/Diagnostic.h>
-#include <clang/Basic/LLVM.h>
-
-#include <string>
 
 using namespace clang::ast_matchers;
 
@@ -56,9 +52,8 @@ namespace clang::tidy::readability
   {
     auto const* root = result.Nodes.getNodeAs<BinaryOperator>("root");
     auto const* findCall = result.Nodes.getNodeAs<CXXMemberCallExpr>("find_call");
-    auto const* obj = result.Nodes.getNodeAs<Expr>("obj");
 
-    if (root == nullptr || findCall == nullptr || obj == nullptr)
+    if (auto const* obj = result.Nodes.getNodeAs<Expr>("obj"); root == nullptr || findCall == nullptr || obj == nullptr)
     {
       return;
     }
@@ -92,31 +87,11 @@ namespace clang::tidy::readability
       return;
     }
 
-    auto const& sm = *result.SourceManager;
-    auto const& langOpts = result.Context->getLangOpts();
+    // == 0 is a prefix; != 0 is not. Recommend the starts_with() member.
+    // There is no free std::starts_with.
+    auto const* message = root->getOpcode() == BO_NE ? "use !starts_with() member instead of find != 0"
+                                                     : "use starts_with() member instead of find == 0";
 
-    auto const objectText = aobus::getExprSourceText(*obj, sm, langOpts);
-    auto const argumentText = aobus::getExprSourceText(*findCall->getArg(0), sm, langOpts);
-
-    if (objectText.empty() || argumentText.empty())
-    {
-      return;
-    }
-
-    bool const isNegated = root->getOpcode() == BO_NE;
-
-    auto replacement = std::string{};
-
-    if (isNegated)
-    {
-      replacement = "!" + objectText + ".starts_with(" + argumentText + ")";
-    }
-    else
-    {
-      replacement = objectText + ".starts_with(" + argumentText + ")";
-    }
-
-    diag(root->getBeginLoc(), "use std::starts_with instead of find-and-compare pattern")
-      << FixItHint::CreateReplacement(root->getSourceRange(), replacement);
+    diag(root->getBeginLoc(), message);
   }
 } // namespace clang::tidy::readability

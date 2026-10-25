@@ -377,6 +377,7 @@ class MeasureRecordTest(RecordFixture, unittest.TestCase):
             self.enable_logging(log_dir)
             for name, kwargs in (
                 ("phase", {"phase": "bogus"}),
+                ("retired lint-syntax", {"phase": "lint-syntax"}),
                 ("tree", {"phase": "build", "tree": "bogus"}),
                 ("mode", {"phase": "build", "mode": "bogus"}),
                 ("suite", {"phase": "build", "suite": "bogus"}),

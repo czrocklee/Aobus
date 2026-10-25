@@ -57,35 +57,35 @@ void testControlBlockSpacing(std::int32_t x)
   if (x > 0)
   {
     x++;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
   x--;
 
   x++;
-  if (x > 0) // POSITIVE: FIX-TO: \nif (x > 0)
+  if (x > 0) // POSITIVE
   {
     x++;
   }
 
   x++;
-  for (std::int32_t i = 0; i < 10; ++i) // POSITIVE: FIX-TO: \nfor (std::int32_t i = 0; i < 10; ++i)
+  for (std::int32_t i = 0; i < 10; ++i) // POSITIVE
   {
     x += i;
   }
 
   x++;
-  while (x > 100) // POSITIVE: FIX-TO: \nwhile (x > 100)
+  while (x > 100) // POSITIVE
   {
     x--;
   }
 
   x++;
-  switch (x) // POSITIVE: FIX-TO: \nswitch (x)
+  switch (x) // POSITIVE
   {
     default: break;
   }
 
   x++;
-  do // POSITIVE: FIX-TO: \ndo
+  do // POSITIVE
   {
     x--;
   }
@@ -94,25 +94,25 @@ void testControlBlockSpacing(std::int32_t x)
   for (std::int32_t i = 0; i < 10; ++i)
   {
     x += i;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
   x++;
 
   while (x > 100)
   {
     x--;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
   x++;
 
   switch (x)
   {
     default: break;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
   x++;
 
   do
   {
     x--;
-  } // POSITIVE: FIX-TO: }\n  while (x > 0);\n
+  } // POSITIVE
   while (x > 0);
   x++;
 }
@@ -136,7 +136,7 @@ void testControlBlockCommentSpacing(std::int32_t x)
 void testControlBlockTryCatchSpacing(std::int32_t x)
 {
   x++;
-  try // POSITIVE: FIX-TO: \ntry
+  try // POSITIVE
   {
     if (x > 0)
     {
@@ -155,7 +155,7 @@ void testControlBlockTryCatchSpacing(std::int32_t x)
   catch (std::int32_t)
   {
     x = 1;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
   x--;
 
   try
@@ -340,24 +340,24 @@ void testControlBlockDirectiveBoundaries(std::int32_t x)
   // A null directive must not adopt the following C++ 'if' as its name.
   x++;
 #
-  if (x > 0) // POSITIVE: FIX-TO: \nif (x > 0)
+  if (x > 0) // POSITIVE
   {
     x++;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
 #
   x--;
 
   // A non-conditional directive is not a spacing boundary and stays checked.
 #define DIRECTIVE_BOUNDARY_DEFINE 1
-  if (x > 0) // POSITIVE: FIX-TO: \nif (x > 0)
+  if (x > 0) // POSITIVE
   {
     x++;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
 #define DIRECTIVE_BOUNDARY_DEFINE_2 2
 
 #if 1
   x--;
-  if (x > 0) // POSITIVE: FIX-TO: \nif (x > 0)
+  if (x > 0) // POSITIVE
   {
     x++;
   } // NEGATIVE
@@ -367,7 +367,7 @@ void testControlBlockDirectiveBoundaries(std::int32_t x)
   if (x > 0) // NEGATIVE
   {
     x++;
-  } // POSITIVE: FIX-TO: }\n
+  } // POSITIVE
   x--;
 #endif
 }

@@ -117,8 +117,6 @@ class TidyFilterIntegrationTest(unittest.TestCase):
         entry = self.compile_entry(translation_unit)
         entry["arguments"].extend(compile_arguments)
         (self.build / "compile_commands.json").write_text(json.dumps([entry]), encoding="utf-8")
-        export = self.root / "fixes.yaml"
-        export.unlink(missing_ok=True)
         args = argparse.Namespace(
             files=[str(selected)],
             all=False,
@@ -129,9 +127,8 @@ class TidyFilterIntegrationTest(unittest.TestCase):
             output=None,
             jobs=1,
             path=str(self.build),
-            fix=False,
             no_build=True,
-            tidy_arg=[f"-export-fixes={export}", *tidy_arguments],
+            tidy_arg=[*tidy_arguments],
             header_filter=None if exact_filter else ".*",
         )
         original_sources = {path: path.read_bytes() for path in self.source.rglob("*") if path.is_file()}
@@ -142,8 +139,11 @@ class TidyFilterIntegrationTest(unittest.TestCase):
 
         native_call = tidy.subprocess.call
         self.native_statuses = []
+        self.native_commands = []
 
         def run_native(*arguments, **keywords):
+            command = arguments[0] if arguments else keywords.get("args")
+            self.native_commands.append(command)
             status = native_call(*arguments, **keywords)
             self.native_statuses.append(status)
             return status
@@ -169,9 +169,13 @@ class TidyFilterIntegrationTest(unittest.TestCase):
             stack.enter_context(contextlib.redirect_stderr(output))
             status = tidy.run_command(args)
         self.assertEqual({path: path.read_bytes() for path in original_sources}, original_sources)
-        return status, output.getvalue(), export.read_text(encoding="utf-8") if export.is_file() else ""
+        for command in self.native_commands:
+            tokens = command if isinstance(command, (list, tuple)) else [command]
+            exported = [token for token in tokens if "export-fixes" in str(token)]
+            self.assertEqual(exported, [])
+        return status, output.getvalue()
 
-    def assert_selected_diagnostic(self, status, output, export, selected, excluded):
+    def assert_selected_diagnostic(self, status, output, selected, excluded):
         self.assertEqual(status, 1, output)
         self.assertIn("[modernize-use-nullptr]", output)
         self.assertNotIn("[clang-diagnostic-error]", output)
@@ -184,20 +188,14 @@ class TidyFilterIntegrationTest(unittest.TestCase):
                 path = self.source / path
             self.assertTrue(path.is_file(), evidence)
             # LLVM can canonicalize a symlinked native temp directory (notably
-            # /var to /private/var on macOS). Compare physical identity, never a
-            # basename or suffix, for both diagnostics and replacement exports.
+            # /var to /private/var on macOS). Compare physical identity, never
+            # a basename or suffix, for the diagnostic location.
             self.assertTrue(path.samefile(selected), evidence)
 
         diagnostics = re.findall(r"^(.+?):\d+:\d+: warning:.*\[modernize-use-nullptr\]$", normalized, re.MULTILINE)
         self.assertTrue(diagnostics, output)
         for path in diagnostics:
             assert_selected_file(path, output)
-        self.assertRegex(export, r"ReplacementText:\s+nullptr")
-        file_paths = re.findall(r"^\s*(?:-\s+)?FilePath:\s*(.+)$", export, re.MULTILINE)
-        self.assertTrue(file_paths, export)
-        for value in file_paths:
-            value = json.loads(value) if value.startswith('"') else value.strip("'").replace("''", "'")
-            assert_selected_file(value.replace("\\", "/"), export)
         for path in excluded:
             self.assertNotIn(f"{path.relative_to(self.source).as_posix()}:", normalized)
 
@@ -235,15 +233,13 @@ class TidyFilterIntegrationTest(unittest.TestCase):
         def warning(path):
             return f"{path}:3:1: warning: use nullptr [modernize-use-nullptr]\n"
 
-        def fixes(path):
-            return f"FilePath: {json.dumps(str(path))}\nReplacementText: nullptr\n"
+        # Only a diagnostic whose location is physically the selected file can
+        # satisfy the control; a same-basename header cannot stand in for it.
+        with self.assertRaises(AssertionError):
+            self.assert_selected_diagnostic(1, warning(excluded), selected, ())
+        self.assert_selected_diagnostic(1, warning(selected.resolve()), selected, ())
 
-        for diagnostic, exported in ((excluded, selected), (selected, excluded)):
-            with self.subTest(diagnostic=diagnostic, exported=exported), self.assertRaises(AssertionError):
-                self.assert_selected_diagnostic(1, warning(diagnostic), fixes(exported), selected, ())
-        self.assert_selected_diagnostic(1, warning(selected.resolve()), fixes(selected.resolve()), selected, ())
-
-    def test_selected_header_diagnostic_and_fix_survive_but_other_files_do_not(self):
+    def test_selected_header_diagnostic_survives_but_other_files_do_not(self):
         selected, excluded, consumer = self.header_context()
         result = self.run_portal(selected, consumer)
         self.assert_selected_diagnostic(*result, selected, (excluded, consumer))
@@ -251,6 +247,9 @@ class TidyFilterIntegrationTest(unittest.TestCase):
     def test_wrong_filter_cannot_satisfy_the_expected_diagnostic_control(self):
         selected, excluded, consumer = self.header_context()
         result = self.run_portal(selected, consumer, broken_filter=True)
+        # A zero-warning exit alone cannot distinguish a filtered clean pass
+        # from a portal that silently skipped the native checker.
+        self.assertTrue(self.native_commands, "no native checker process ran")
         self.assertEqual(result[0], 0, result[1])
         with self.assertRaises(AssertionError):
             self.assert_selected_diagnostic(*result, selected, (excluded, consumer))
@@ -309,12 +308,6 @@ class TidyFilterIntegrationTest(unittest.TestCase):
                 self.assertTrue(Path(prefix).samefile(directory))
                 result = self.run_portal(selected, consumer, compile_arguments=["-I" + prefix], exact_filter=True)
                 self.assert_selected_diagnostic(*result, selected, (excluded, wrapper, consumer))
-                # Replacement identity must be the real selected external file,
-                # not a fabricated filename that merely satisfies the filter.
-                for value in re.findall(r"^\s*(?:-\s+)?FilePath:\s*(.+)$", result[2], re.MULTILINE):
-                    name = json.loads(value) if value.startswith('"') else value.strip("'")
-                    self.assertEqual(name, str(selected))
-                    self.assertTrue(Path(name).samefile(selected))
 
     @unittest.skipUnless(os.name == "nt", "Windows LLVM path identity")
     def test_selected_fragment_does_not_shadow_caller_vfs_contents(self):
@@ -338,7 +331,7 @@ class TidyFilterIntegrationTest(unittest.TestCase):
             ([], ["--extra-arg=-ivfsoverlay=" + str(overlay)]),
         ):
             with self.subTest(compile_options=compile_options, tool_options=tool_options):
-                status, output, export = self.run_portal(
+                status, output = self.run_portal(
                     selected,
                     consumer,
                     compile_arguments=compile_options,
@@ -347,30 +340,33 @@ class TidyFilterIntegrationTest(unittest.TestCase):
                 )
                 self.assertEqual(status, 1, output)
                 self.assertIn("cannot compose caller VFS", output)
+                # The preflight rejects the composed overlay before any native run.
+                self.assertEqual(self.native_commands, [], "the VFS preflight rejection must not run a native checker")
                 self.assertNotIn("[modernize-use-nullptr]", output)
-                self.assertEqual(export, "")
                 self.assertEqual(overlay.read_bytes(), caller_bytes)
 
     @unittest.skipUnless(os.name == "nt", "Windows LLVM path identity")
     def test_clean_fragment_stays_clean_when_consumer_and_other_fragment_warn(self):
         selected, _excluded, _wrapper, consumer = self.mixed_fragment_context("ao/i18n/deep/MessageInventory.def")
         selected.write_text("inline int* clean_pointer() { return nullptr; }\n", encoding="utf-8")
-        status, output, export = self.run_portal(
+        status, output = self.run_portal(
             selected,
             consumer,
             compile_arguments=["-I" + str(self.source / "app" / "include")],
             exact_filter=True,
         )
+        # The consumer and the other fragment still warn, so a clean status
+        # must be a real filtered native pass, not a skipped run.
+        self.assertTrue(self.native_commands, "no native checker process ran")
         self.assertEqual(status, 0, output)
         self.assertNotIn("[modernize-use-nullptr]", output)
         self.assertNotIn("error:", output)
-        self.assertEqual(export, "")
 
     @unittest.skipUnless(os.name == "nt", "Windows LLVM path identity")
     def test_compiler_error_in_mixed_path_fragment_remains_visible(self):
         selected, _excluded, _wrapper, consumer = self.mixed_fragment_context("ao/i18n/deep/MessageInventory.def")
         selected.write_text("inline int* invalid_pointer(;\n", encoding="utf-8")
-        status, output, _export = self.run_portal(
+        status, output = self.run_portal(
             selected,
             consumer,
             compile_arguments=["-I" + str(self.source / "app" / "include")],
@@ -381,7 +377,9 @@ class TidyFilterIntegrationTest(unittest.TestCase):
     def test_genuinely_clean_selected_header_passes(self):
         selected = self.write("lib/selected/value.h", "#pragma once\ninline int* clean_pointer() { return nullptr; }\n")
         consumer = self.write("lib/selected/value.cpp", '#include "value.h"\n')
-        status, output, _export = self.run_portal(selected, consumer)
+        status, output = self.run_portal(selected, consumer)
+        # A genuinely clean pass must come from a real native run, not a skipped one.
+        self.assertTrue(self.native_commands, "no native checker process ran")
         self.assertEqual(status, 0, output)
         self.assertNotIn("[modernize-use-nullptr]", output)
         self.assertNotIn("[clang-diagnostic-error]", output)
@@ -389,7 +387,7 @@ class TidyFilterIntegrationTest(unittest.TestCase):
     def test_compiler_error_in_selected_header_does_not_look_clean(self):
         selected = self.write("lib/selected/value.h", "inline int* invalid_pointer(;\n")
         consumer = self.write("lib/selected/value.cpp", '#include "value.h"\n')
-        status, output, _export = self.run_portal(selected, consumer)
+        status, output = self.run_portal(selected, consumer)
         self.assert_selected_compiler_error(status, output, selected)
 
 

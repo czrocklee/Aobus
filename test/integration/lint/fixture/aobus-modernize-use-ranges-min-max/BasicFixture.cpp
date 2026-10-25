@@ -8,7 +8,7 @@
 void positiveMinElementDeref()
 {
   auto v = std::vector<int>{1, 2, 3};
-  // POSITIVE: FIX-TO: auto minVal = std::ranges::min(v);
+  // POSITIVE
   auto minVal = *std::min_element(v.begin(), v.end());
   (void)minVal;
 }
@@ -16,7 +16,7 @@ void positiveMinElementDeref()
 void positiveMaxElementDeref()
 {
   auto v = std::vector<int>{1, 2, 3};
-  // POSITIVE: FIX-TO: auto maxVal = std::ranges::max(v);
+  // POSITIVE
   auto maxVal = *std::max_element(v.begin(), v.end());
   (void)maxVal;
 }
@@ -29,7 +29,7 @@ bool less(std::int32_t a, std::int32_t b)
 void positiveMinElementWithComp()
 {
   auto v = std::vector<int>{1, 2, 3};
-  // POSITIVE: FIX-TO: auto minVal = std::ranges::min(v, less);
+  // POSITIVE
   auto minVal = *std::min_element(v.begin(), v.end(), less);
   (void)minVal;
 }
@@ -59,6 +59,10 @@ namespace mylib
 
 #define AOBUS_MIN_OF(c) (*std::min_element(c.begin(), c.end()))
 
+// Argument-list macro: the comparator covers part of the expansion while the
+// dereference stays file-spelled.
+#define AOBUS_MIN_ELEMENT_ARGS v.begin(), v.end(), less
+
 void negativeCustomMinElement()
 {
   auto v = std::vector<int>{1, 2, 3};
@@ -79,5 +83,13 @@ void negativeMacroSpelled()
   auto v = std::vector<int>{1, 2, 3};
   // NEGATIVE - the dereferenced min_element is spelled inside a macro expansion
   auto minVal = AOBUS_MIN_OF(v);
+  (void)minVal;
+}
+
+void positiveMinElementPartialMacroArgs()
+{
+  auto const v = std::vector<int>{1, 2, 3};
+  // POSITIVE
+  auto minVal = *std::min_element(AOBUS_MIN_ELEMENT_ARGS);
   (void)minVal;
 }

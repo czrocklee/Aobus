@@ -86,8 +86,7 @@ namespace clang::tidy::readability
 
     if (nominated != nullptr && isAncestor(nominated, currentContext))
     {
-      diag(loc, "redundant 'using namespace %0' declaration inside its own namespace")
-        << nominated->getNameAsString() << FixItHint::CreateRemoval(usingDecl->getSourceRange());
+      diag(loc, "redundant 'using namespace %0' declaration inside its own namespace") << nominated->getNameAsString();
     }
   }
 } // namespace clang::tidy::readability
