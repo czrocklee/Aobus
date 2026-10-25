@@ -37,10 +37,60 @@ For redundant namespace-qualification diagnostics, lookup safety concerns the fi
 left after removal, not just the final referenced member. Preserve source names
 from aliases and using-declarations, and inspect template heads on concepts and
 requires-clauses as well as outer template parameter lists on source definitions
-when instantiated nodes omit them. Removing the complete qualifier from a
-function call can enable argument-dependent lookup even when ordinary lookup
-finds the same declaration. The bounded proof accepts only fundamental-typed
-source arguments (before implicit conversions), ignoring default arguments.
+when instantiated nodes omit them. Template-scope proof must recover lexical
+source owners as well as semantic declaration contexts: requires-local parameter
+types and template heads can otherwise lose their owning parameter lists.
+A template declaration's templated declaration also owns outer lists on renamed
+out-of-line definitions. Default-argument/default-initializer use sites and
+implicit instantiation copies are not additional lexical lookup scopes.
+Diagnose spelled source rather than revisiting those copies, and reject
+non-ancestor namespace qualifiers before collecting outer source owners.
+Cover shadowed negatives, corresponding unshadowed positives, self-defaults,
+later-parameter declaration-order controls, and used/unused default expressions.
+A template parameter is not visible inside its own default; apply that source
+ordering to class/function templates as well as variable/alias templates.
+Lambda captures, including init-captures, can hide namespace members even when
+ordinary declaration-context enumeration does not expose their names.
+Requires-expression local parameters likewise need their explicit source list:
+visible parameters hide ordinary names inside requirements and later parameter
+types, but not in earlier parameter types. A variable does not hide the first
+surviving type/namespace name before `::`; cover that distinction with positives
+rather than treating every same-named requires-local parameter as a shadow.
+Ordinary parameters become visible after their complete declarator and before
+an attached default argument. Inspect the selected written declaration's parameter
+list, including the written outer function of a lambda in its signature;
+names from nested function types or other redeclarations do not leak into it.
+Unscoped enumerators are injected only into their active lexical region and become
+visible after their complete enumerator-definition. Do not flatten ended or sibling
+block scopes into a function-wide declaration set.
+
+Inline friend definitions use their lexical class for lookup. Class lookup has two
+obligations: lookup from the written position and agreement with lookup in the
+completed class ([class.member.lookup](https://eel.is/c++draft/class.member.lookup#6)).
+Outside a complete-class context, source-order lookup can succeed yet disagree with
+the completed class, making the shortened program ill-formed without a required diagnostic.
+A later same-named member therefore blocks shortening in trailing return types,
+member types, array bounds, and static initializers as well as function bodies,
+constructor initializer lists, defaults, and exception specifications.
+Do not infer safety from a compiler accepting the shortened spelling.
+Use lookup parents for this class relationship, retain explicit lambda-capture checks,
+and distinguish value candidates from type or namespace lookup before a surviving `::`.
+
+The function-body shortcut reuses semantic owners only when each enclosing function
+contains the use in its body and none of those owners is a lambda call operator.
+Lambdas need the full source-owner walk, including ordinary and template parameter lists:
+their semantic contexts can omit template initializers and signature owners, even for
+lambdas in local-class member signatures or another lambda's defaults inside a function.
+Nearest requires-expressions also retain that walk. Local-enumerator scope proof can
+request full ancestry lazily; its declaration scan shares the ordinary closer-name scan.
+Repeated instantiation-owner classification is memoized within one callback, not across
+uses or translation units. Reused default-use edges remain excluded before traversal.
+Cover both hiding cases and unshadowed controls, and measure distinct-local functions
+separately from repeated uses of a single local and deeply nested lambdas.
+Removing the complete qualifier from a function call can enable argument-dependent
+lookup even when ordinary lookup finds the same declaration.
+The bounded proof accepts only fundamental-typed source arguments (before implicit
+conversions), ignoring default arguments.
 Newly unqualified direct calls with explicit template arguments, dependent or
 instantiated source contexts, and unfamiliar function-use forms are left
 qualified. A surviving qualifier, parenthesized callee, or explicit address-taking
