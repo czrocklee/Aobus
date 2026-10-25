@@ -4,6 +4,7 @@
 #include "test/unit/audio/FakeCapturingBackend.h"
 
 #include "lib/audio/detail/DecoderOutput.h"
+#include "lib/audio/detail/OpenedModeValidation.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -42,6 +43,21 @@ namespace ao::audio::test
     }
 
     return Backend::prewarmFormatHint(format);
+  }
+
+  bool FakeCapturingBackend::canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept
+  {
+    if (Backend::canReuseFormat(currentFormat, nextFormat))
+    {
+      return true;
+    }
+
+    auto const lock = std::scoped_lock{_mutex};
+    // Promotion changes the logical track mask, not the installed fake mode.
+    auto const matchesInstalled =
+      isSamePcmMode(_format, currentFormat) || detail::isStereoIdentityAlias(_format, currentFormat);
+    return _stereoIdentityReuse && _target != nullptr && matchesInstalled &&
+           detail::isStereoIdentityAlias(currentFormat, nextFormat);
   }
 
   BackendOpenResult FakeCapturingBackend::open(SignalFormat const& format, RenderTarget& target)
@@ -212,6 +228,12 @@ namespace ao::audio::test
   {
     auto const lock = std::scoped_lock{_mutex};
     _optSelectedEncoding = optEncoding;
+  }
+
+  void FakeCapturingBackend::setStereoIdentityReuse(bool enabled)
+  {
+    auto const lock = std::scoped_lock{_mutex};
+    _stereoIdentityReuse = enabled;
   }
 
   void FakeCapturingBackend::setConfirmedEndpointPrecision(std::optional<std::uint8_t> optPrecisionBits)

@@ -4,6 +4,7 @@
 #include "NullBackend.h"
 
 #include "detail/DecoderOutput.h"
+#include "detail/OpenedModeValidation.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -18,6 +19,13 @@ namespace ao::audio
 {
   NullBackend::NullBackend() noexcept = default;
   NullBackend::~NullBackend() = default;
+
+  bool NullBackend::canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept
+  {
+    // Discarding frames has no native slot mapping or layout refresh to change.
+    return Backend::canReuseFormat(currentFormat, nextFormat) ||
+           detail::isStereoIdentityAlias(currentFormat, nextFormat);
+  }
 
   BackendOpenResult NullBackend::open(SignalFormat const& sourceFormat, RenderTarget& /*target*/)
   {

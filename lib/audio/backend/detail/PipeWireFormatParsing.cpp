@@ -3,6 +3,7 @@
 
 #include "backend/detail/PipeWireFormatParsing.h"
 
+#include "backend/detail/SpeakerSet.h"
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
@@ -403,21 +404,13 @@ namespace ao::audio::backend::detail
     }
   } // namespace
 
-  bool acceptsRawStreamLayout(SignalFormat const& sourceFormat) noexcept
-  {
-    // Source admission only: zero remains unidentified; otherwise every channel
-    // must have one role in the currently supported WAVE speaker vocabulary.
-    // Native observations keep their own partial-role contract in this file.
-    return sourceFormat.speakerMask == 0U || isCompleteWaveSpeakerMask(sourceFormat.speakerMask, sourceFormat.channels);
-  }
-
   ::spa_pod const* buildRawStreamFormatOffer(std::span<std::byte> buffer,
                                              SignalFormat const& sourceFormat,
                                              std::span<SampleEncoding const> encodings) noexcept
   {
     if (buffer.empty() || encodings.empty() || sourceFormat.sampleRate == 0U || sourceFormat.channels == 0U ||
         sourceFormat.sampleRate > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()) ||
-        !acceptsRawStreamLayout(sourceFormat))
+        !hasSupportedSourceSpeakerSet(sourceFormat))
     {
       return nullptr;
     }
@@ -648,7 +641,7 @@ namespace ao::audio::backend::detail
     }
 
     if (sourceFormat.sampleRate != native.format.sampleRate || sourceFormat.channels != native.format.channels ||
-        sourceFormat.channels == 0U || !acceptsRawStreamLayout(sourceFormat) ||
+        sourceFormat.channels == 0U || !hasSupportedSourceSpeakerSet(sourceFormat) ||
         native.format.encoding == SampleEncoding::Unknown)
     {
       return std::unexpected{BackendOpenFailure{

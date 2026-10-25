@@ -27,4 +27,9 @@ namespace ao::audio
 
     return pcmFormat(sourceFormat, *optEncoding);
   }
+
+  bool Backend::canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept
+  {
+    return isSamePcmMode(currentFormat, nextFormat);
+  }
 } // namespace ao::audio

@@ -73,6 +73,10 @@ namespace ao::audio::backend::detail
   std::expected<AlsaChannelMap, BackendOpenFailure> prepareAlsaChannelMap(PcmFormat const& clientFormat,
                                                                           AlsaChannelMapReader const& readMaps);
 
+  // An unidentified stream never permutes. Reusing it as identified stereo
+  // therefore needs an actual, unflagged FL/FR current map in canonical order.
+  bool supportsAlsaStereoIdentityReuse(AlsaChannelMap const& map) noexcept;
+
   // Whole interleaved frames only. The caller provisions one frame of scratch
   // (at most kAlsaPermutationScratchBytes) before rendering. Copy-before-scatter makes cycles safe
   // in-place, without allocation, arithmetic conversion or padding rewrites.

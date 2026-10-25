@@ -46,8 +46,6 @@ namespace ao::audio::backend::detail
     bool needsPermutation = false;
   };
 
-  bool acceptsRawStreamLayout(SignalFormat const& sourceFormat) noexcept;
-
   /**
    * @brief Builds an ordered raw-audio offer in caller-owned storage.
    *

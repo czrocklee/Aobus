@@ -1806,8 +1806,8 @@ namespace ao::audio
       auto const& currentFormat = *_implPtr->optCurrentBackendFormat;
       auto const nextFormat = pcmFormat(sourceFormat, currentFormat.encoding);
       auto const nextMode = OpenedPcmMode{.clientFormat = nextFormat, .optEndpoint = _implPtr->optCurrentEndpoint};
-      auto const reuseLossless =
-        isSamePcmMode(currentFormat, nextFormat) && detail::validateOpenedMode(sourceFormat, nextMode).has_value();
+      auto const reuseLossless = engine._implPtr->backendPtr->canReuseFormat(currentFormat, nextFormat) &&
+                                 detail::validateOpenedMode(sourceFormat, nextMode).has_value();
 
       if (!Engine::Impl::isGaplessCapable(_implPtr->optInspection->info) || !reuseLossless)
       {
@@ -2636,7 +2636,7 @@ namespace ao::audio
       auto const nextMode =
         OpenedPcmMode{.clientFormat = preparedTrack.backendFormat, .optEndpoint = preparationImpl->optCurrentEndpoint};
       capable = Engine::Impl::isGaplessCapable(preparedTrack.info) &&
-                isSamePcmMode(currentBackendFormat, preparedTrack.backendFormat) &&
+                engine._implPtr->backendPtr->canReuseFormat(currentBackendFormat, preparedTrack.backendFormat) &&
                 detail::validateOpenedMode(preparedTrack.info.sourceFormat, nextMode).has_value();
 
       if (capable)

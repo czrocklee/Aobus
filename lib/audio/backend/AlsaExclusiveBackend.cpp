@@ -12,7 +12,9 @@
 #include "backend/detail/AlsaPcmVolume.h"
 #include "backend/detail/AlsaPrewarmCache.h"
 #include "backend/detail/AudioBackendRenderProgress.h"
+#include "backend/detail/SpeakerSet.h"
 #include "detail/DecoderOutput.h"
+#include "detail/OpenedModeValidation.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -763,7 +765,7 @@ namespace ao::audio::backend
     // A nonzero declaration that is not a complete per-channel speaker set
     // is deterministically unopenable here; withhold it before the cache and
     // base hints. An unidentified (zero) mask keeps those paths.
-    if (sourceFormat.speakerMask != 0U && !isCompleteWaveSpeakerMask(sourceFormat.speakerMask, sourceFormat.channels))
+    if (!detail::hasSupportedSourceSpeakerSet(sourceFormat))
     {
       return std::nullopt;
     }
@@ -775,6 +777,28 @@ namespace ao::audio::backend
     }
 
     return Backend::prewarmFormatHint(sourceFormat);
+  }
+
+  bool AlsaExclusiveBackend::canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept
+  {
+    if (Backend::canReuseFormat(currentFormat, nextFormat))
+    {
+      return true;
+    }
+
+    if (!::ao::audio::detail::isStereoIdentityAlias(currentFormat, nextFormat) || !_implPtr->optOpenedMode ||
+        _implPtr->fatalStreamError.load(std::memory_order_relaxed) ||
+        !detail::supportsAlsaStereoIdentityReuse(_implPtr->channelMap))
+    {
+      return false;
+    }
+
+    // This map is immutable while the worker is live. Unlike an unidentified
+    // stream, an identified stream could otherwise need permutation or reject
+    // polarity flags. Only the actual canonical, unflagged map proves both.
+    auto const& installedFormat = _implPtr->optOpenedMode->clientFormat;
+    return isSamePcmMode(installedFormat, currentFormat) ||
+           ::ao::audio::detail::isStereoIdentityAlias(installedFormat, currentFormat);
   }
 
   BackendOpenResult AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)

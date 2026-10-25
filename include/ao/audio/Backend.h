@@ -100,6 +100,23 @@ namespace ao::audio
     virtual std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept;
 
     /**
+     * @brief Checks whether an installed transport can carry another canonical mode.
+     *
+     * The default requires exact PCM identity. An override must retain rate,
+     * channel count, and concrete encoding; it may accept a different mask only
+     * when native byte ordering and every permitted layout refresh are
+     * equivalent for both modes. It must not infer source identity or change the
+     * installed native configuration. Retained mapping evidence may remain
+     * conservative; this query does not manufacture a new native observation.
+     *
+     * Engine calls this under control serialization, without its state or
+     * transition locks, and repeats it when adopting prepared playback. It must
+     * perform no native I/O or outward callbacks. Success is not a liveness lease
+     * and does not waive source or confirmed-endpoint precision validation.
+     */
+    virtual bool canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept;
+
+    /**
      * @brief Opens one render target and returns the mode actually configured.
      *
      * `clientFormat` keeps the source rate, count and effective identity in
