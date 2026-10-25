@@ -201,6 +201,8 @@ deterministic media fixtures.
   --state-root /tmp/aobus-authoring-state --library /tmp/aobus-authoring-music
 ./ao test --appkit --scenario presentation \
   --state-root /tmp/aobus-presentation-state --library /tmp/aobus-presentation-music
+./ao test --appkit --scenario quality-presentation \
+  --state-root /tmp/aobus-quality-state --library /tmp/aobus-quality-music
 ./ao test --appkit --scenario media \
   --state-root /tmp/aobus-media-state --library /tmp/aobus-media-music
 ```
@@ -218,7 +220,14 @@ Treat each scenario only as evidence for the surface it drives:
 | `desktop` | Shipping-window composition, native browsing and playback controls, close/quit coordination, restoration and geometry ownership, `desktop.plist` defaults for malformed values and unknown appearance names, per-mode inspector visibility restoration, unknown-key preservation, and supervised library-successor handoff. |
 | `authoring` | Native property/List editors, validation and stale-draft behavior, save/close/discard ordering, and authoring teardown. |
 | `presentation` | Browser projection and reuse, selection/sort/drag adaptation, activity and inspector presentation, accessibility dismissal actions, and inert callbacks after detach. |
+| `quality-presentation` | Isolated classic quality-tooltip updates, clearing, resize and repeated-layout preservation, plus modern transport separation, using synthetic state and native bar captures without a runtime or audio endpoint. |
 | `media` | MediaPlayer metadata/artwork publication, the seven supported remote commands and disabled unsupported commands, stale-seek guards, main-thread admission, runtime handoff, and retirement. |
+
+The isolated `quality-presentation` scenario exercises English and Simplified
+Chinese catalogs at normal and constrained client sizes. Its captures show the
+native playback bars, not opened tooltip pixels or a shipping playback trigger.
+The broader `presentation` scenario also starts session-backed playback; it is
+not a substitute for the isolated quality-binding check.
 
 These scenarios invoke native controls and production adapters with generated
 fixtures. They do not synthesize physical media keys or prove that Control

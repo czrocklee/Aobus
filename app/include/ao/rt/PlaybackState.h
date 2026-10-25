@@ -6,6 +6,7 @@
 #include "ViewIds.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/OutputDeviceSelection.h>
 #include <ao/audio/Quality.h>
@@ -88,6 +89,7 @@ namespace ao::rt
     audio::Quality pipelineQuality = audio::Quality::Unknown;
     audio::Quality overall = audio::Quality::Unknown;
     bool fullyVerified = true;
+    audio::ChannelConfidence channelConfidence = audio::ChannelConfidence::Unknown;
     std::vector<audio::NodeQualityAssessment> assessments{};
 
     bool operator==(QualityState const&) const = default;

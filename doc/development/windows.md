@@ -246,6 +246,51 @@ fails the probe. It uses the control's normal presentation API and no library,
 audio endpoint, or saved application settings. The shipping executable has no
 probe switches.
 
+### Quality tooltip property probe
+
+`ao_winui_quality_tooltip_probe` is built by native checks but runs only from a
+logged-in desktop:
+`<reported-build-dir>\app\windows-winui\quality-tooltip-probe\Debug\ao_winui_quality_tooltip_probe.exe STATE_ROOT AUDIO_FIXTURE`.
+Both arguments must be absolute paths canonically outside the checkout used
+at build time. CMake resolves and reports `Quality tooltip probe checkout root`
+when configuring the probe. For an SMB checkout, verify that this is the UNC
+checkout path, not an SSH session's temporary `pushd` drive or `S:` compiler
+view. The desktop logon must have access to that same checkout; resolving the
+path does not transfer SMB credentials between logons. Admission fails rather
+than skipping checkout checks if the compiled root is inaccessible.
+The state directory must not exist (even as a symlink), its parent must exist,
+and it must be outside the fixture's directory tree. The probe resolves existing
+ancestors and compares filesystem identities, including Windows path aliases,
+before creating state. Ancestor checks include DOS volume roots and stop at
+real UNC share roots, never the virtual server root. Canonical paths must use
+ordinary DOS-drive or UNC-share syntax; extended spellings are accepted only
+when canonicalization normalizes them to those forms. Other namespaces are
+rejected rather than given guessed containment rules.
+Use an existing `.flac` fixture. The decoder opens it
+read-only; no filesystem read-only attribute is required or changed. Keep the
+fixture and paths unchanged during the run. No media copying, fixture-directory
+writes, or cleanup is performed; database and workspace configuration writes
+stay under the fresh state root.
+
+The probe uses a real decoder and application runtime with a discard backend,
+not an audio endpoint. Its graph has no Sink, so Unknown channel confidence
+here does not establish that the decoder failed to identify its source layout.
+It checks real seeded-track publication and the shipping tooltip adapter's
+text, HelpText, availability, owner-window resize, and teardown against shared
+Now Playing presentation.
+These are native-property observations, not an opened tooltip's wrapping,
+clipping, pixels, or physical speaker-routing evidence. Keep the state directory
+as evidence and close the probe before another build or hygiene refresh.
+
+Input rejection runs before WinRT/XAML startup and can be checked without a
+desktop. Invoke the same executable with invalid arguments and require exit
+code 2, the expected input/startup diagnostic, and no state-directory creation.
+Useful cases include relative paths, reused state, a missing parent, a fresh
+state path inside the checkout (including aliases), state under the fixture's
+directory, and malformed state names. Check the diagnostic as well as the exit
+code: an inaccessible compiled checkout is not evidence that the intended
+externality or overlap check ran. Accepted inputs still require a desktop.
+
 ### Track and navigation probes
 
 The WinUI build also executes `ao_winui_track_item_probe`, a console check of the

@@ -315,6 +315,46 @@ set_target_properties(ao_winui_track_table_probe PROPERTIES
   WindowsTargetPlatformVersion 10.0.26100.0)
 aobus_enable_windows_app_sdk(ao_winui_track_table_probe APPLICATION)
 
+# The shipping quality tooltip over real decoder/runtime publications. Built
+# by native checks, but property observations require an interactive desktop.
+add_executable(ao_winui_quality_tooltip_probe WIN32
+  ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiQualityToolTipProbe.cpp)
+aobus_enable_windows_utf8_manifest(ao_winui_quality_tooltip_probe)
+# Private admission runs in a GUI logon that may not have the compiler's
+# temporary pushd drive or S: view. Resolve the native checkout while those
+# aliases exist, and embed the resulting physical DOS/UNC path instead.
+file(REAL_PATH "${CMAKE_SOURCE_DIR}" _aobus_quality_probe_checkout_root)
+if(NOT IS_DIRECTORY "${_aobus_quality_probe_checkout_root}")
+  message(FATAL_ERROR "Quality tooltip probe cannot resolve its checkout root")
+endif()
+message(STATUS "Quality tooltip probe checkout root: ${_aobus_quality_probe_checkout_root}")
+target_compile_definitions(ao_winui_quality_tooltip_probe PRIVATE
+  AOBUS_QUALITY_PROBE_CHECKOUT_ROOT="${_aobus_quality_probe_checkout_root}")
+unset(_aobus_quality_probe_checkout_root)
+target_include_directories(ao_winui_quality_tooltip_probe PRIVATE
+  "${CMAKE_SOURCE_DIR}"
+  "${CMAKE_CURRENT_BINARY_DIR}/aobus-winui-lib/${CMAKE_VS_PLATFORM_NAME}/$<CONFIG>/Generated Files")
+target_link_libraries(ao_winui_quality_tooltip_probe PRIVATE
+  aobus-winui-lib
+  ao_app_runtime
+  ao_app_uimodel
+  ao_app_i18n
+  ao_unicode_text
+  runtimeobject.lib)
+target_link_options(ao_winui_quality_tooltip_probe PRIVATE /ENTRY:mainCRTStartup)
+set_target_properties(ao_winui_quality_tooltip_probe PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/quality-tooltip-probe"
+  VS_GLOBAL_AppContainerApplication false
+  VS_GLOBAL_ApplicationType "Windows Store"
+  VS_GLOBAL_ApplicationTypeRevision 10.0
+  VS_GLOBAL_DefaultLanguage en
+  VS_GLOBAL_DesktopCompatible true
+  VS_GLOBAL_MinimumVisualStudioVersion 18.0
+  VS_GLOBAL_RootNamespace AobusQualityToolTipProbe
+  VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
+  WindowsTargetPlatformVersion 10.0.26100.0)
+aobus_enable_windows_app_sdk(ao_winui_quality_tooltip_probe APPLICATION)
+
 # Real scoped Credits controls; manually executed on an authenticated desktop.
 add_executable(ao_winui_credits_probe WIN32
   ${CMAKE_SOURCE_DIR}/test/integration/windows/WinUiCreditsProbe.cpp)
@@ -354,7 +394,8 @@ foreach(_project IN ITEMS
     ao_winui_track_item_probe
     ao_winui_track_table_probe
     ao_winui_soul_probe
-    ao_winui_credits_probe)
+    ao_winui_credits_probe
+    ao_winui_quality_tooltip_probe)
   list(APPEND _aobus_winui_lint_commands
     COMMAND "${CMAKE_VS_MSBUILD_COMMAND}"
       "${CMAKE_CURRENT_BINARY_DIR}/${_project}.vcxproj"
@@ -385,12 +426,13 @@ target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
 add_custom_target(ao_winui_credits_probe_build DEPENDS ao_winui_credits_probe)
 add_custom_target(ao_winui_soul_probe_build DEPENDS ao_winui_soul_probe)
 add_custom_target(ao_winui_track_table_probe_build DEPENDS ao_winui_track_table_probe)
+add_custom_target(ao_winui_quality_tooltip_probe_build DEPENDS ao_winui_quality_tooltip_probe)
 add_custom_target(ao_winui_track_item_probe_build
   COMMAND $<TARGET_FILE:ao_winui_track_item_probe>
   DEPENDS ao_winui_track_item_probe
   COMMENT "Verifying the native WinUI track item contract"
   VERBATIM)
-add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_track_item_probe_build ao_winui_track_table_probe_build ao_winui_soul_probe_build ao_winui_credits_probe_build)
+add_dependencies(aobus-winui ao_winui_localization_probe ao_winui_track_item_probe_build ao_winui_track_table_probe_build ao_winui_soul_probe_build ao_winui_credits_probe_build ao_winui_quality_tooltip_probe_build)
 # The static-library project emits the XBF files at its output root, while
 # MSBuild's project-reference copy namespaces them under Aobus. The merged
 # application PRI retains the root-relative XBF paths, so deploy those exact
@@ -426,6 +468,13 @@ add_custom_command(TARGET aobus-winui POST_BUILD
   COMMAND "${CMAKE_COMMAND}" -E copy_if_different
           "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
           "$<TARGET_FILE_DIR:ao_winui_credits_probe>/ao_winui_credits_probe.pri"
+  # The quality tooltip probe uses the same shipping application resources.
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui-lib>/App.xbf"
+          "$<TARGET_FILE_DIR:ao_winui_quality_tooltip_probe>/App.xbf"
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE_DIR:aobus-winui>/Aobus.pri"
+          "$<TARGET_FILE_DIR:ao_winui_quality_tooltip_probe>/ao_winui_quality_tooltip_probe.pri"
   COMMAND $<TARGET_FILE:ao_winui_localization_probe>
   COMMENT "Deploying compiled XAML and verifying the WinUI localization contract"
   VERBATIM)

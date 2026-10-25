@@ -3,6 +3,7 @@
 
 #include "tui/SoulButton.h"
 
+#include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
@@ -91,7 +92,8 @@ namespace ao::tui::test
         .quality = rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
                                     .pipelineQuality = pipeline,
                                     .overall = pipeline,
-                                    .fullyVerified = true},
+                                    .fullyVerified = true,
+                                    .channelConfidence = audio::ChannelConfidence::Verified},
       };
     }
 

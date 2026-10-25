@@ -63,8 +63,11 @@ It is false when the path terminates before a Sink or any path node omits its fo
 Missing evidence does not by itself downgrade the pipeline axis because Aobus cannot claim that an unreported conversion occurred.
 
 Core `channelConfidence` is separate from numerical axes and `fullyVerified`: Unknown lacks a complete interpreted source or a Sink-reaching path; Unverified lacks complete identity or mapping at a required boundary; Inferred retains inferred source interpretation; Verified has complete identity and native mapping throughout the observed software path.
+Unknown therefore does not necessarily mean the source layout is unrecognized: a known source without a reachable Sink also yields Unknown.
 Verified can coexist with a known alteration finding: confidence grades identity and mapping evidence, not path quality.
-It never proves physical wiring. Current runtime/frontend presentation remains unchanged and does not yet project this additional channel-confidence field.
+It never proves physical wiring. Runtime and frontends project `channelConfidence` as an independent channel note that never suppresses numerical positives: a known channel conversion stays a `ChannelMapping` finding that owns the intervention verdict, and equal channel counts alone prove neither identity nor delivery.
+Presentation omits the note when there are no assessments; otherwise Unknown uses generic layout uncertainty, while Inferred specifically describes source inference.
+The note and the numerical axes describe the observed software boundary, not verified speaker routing. These runtime proof rules do not redefine the count-only [metadata track-field labels](../presentation/text-catalog.md#mapping-and-fallback-contracts).
 
 Every assessment records node identity, type, name, optional format, its worst local severity, and ordered findings.
 A node with no property or incoming-transition finding receives an explicit BitPerfect finding; a missing format still makes the whole result partially verified.
@@ -197,7 +200,9 @@ Frontend panels consume the ordered assessments and shared presentation rather t
 - [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication; [`AlsaExclusiveBackendTest.cpp`](../../../test/unit/audio/backend/AlsaExclusiveBackendTest.cpp) proves the concrete property-to-graph observation wiring and closed-state non-publication.
 - [`CoreAudioGraphTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioGraphTest.cpp) proves Core Audio client/device format separation and software-gain evidence.
 - [`PlaybackTransportOutputTest.cpp`](../../../test/unit/runtime/PlaybackTransportOutputTest.cpp) proves lower snapshot/event agreement and route-ready publication; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) proves public output/readiness/quality correlation.
-- [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, and headline precedence.
+- [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, headline precedence, and channel-note selection.
+- [`ChannelLayoutPresentationTest.cpp`](../../../test/unit/uimodel/playback/quality/ChannelLayoutPresentationTest.cpp) covers empty-state note absence, generic Unknown for an identified source without a Sink, equal-endpoint generic channel findings, and assigned height-role labels and ordering.
+- [`DecodedQualityPresentationTest.cpp`](../../../test/unit/uimodel/playback/quality/DecodedQualityPresentationTest.cpp) projects real decoder stream facts through a controlled Sink-reaching graph into numerical and channel presentation. Its layout expectations follow current producer evidence, not a permanent Unknown classification for compressed codecs. The native tooltip probe's incomplete-path evidence boundary is described in [presentation evidence](quality-values.md#compatibility-and-evidence).
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) proves transport-aware aura and motion policy.
 - [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) prove frontend consumption of shared presentation state.
 

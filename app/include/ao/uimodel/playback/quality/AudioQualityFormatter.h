@@ -30,6 +30,8 @@ namespace ao::uimodel
   {
     std::string headline{};
     AudioQualityCategory category = AudioQualityCategory::Unknown;
+    // Independent layout evidence; never upgrades channel confidence.
+    std::string channelNote{};
   };
 
   class AudioQualityFormatter final

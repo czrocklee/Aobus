@@ -5,6 +5,7 @@
 
 #import <AppKit/AppKit.h>
 
+#include <cstdint>
 #include <filesystem>
 
 namespace ao::appkit
@@ -14,6 +15,9 @@ namespace ao::appkit
 
 namespace ao::appkit::test
 {
+  std::int32_t runQualityPresentationScenario(std::filesystem::path const& musicRoot,
+                                              std::filesystem::path const& stateRoot);
+
   void exercisePlaybackPresentation(LibrarySession& session,
                                     NSWindow* window,
                                     NSView* root,

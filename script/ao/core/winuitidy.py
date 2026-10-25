@@ -15,6 +15,7 @@ _AUXILIARY_SOURCE_PROJECTS = {
     "test/helper/WinUiLocalizationProbe.cpp": "app/windows-winui/ao_winui_localization_probe.vcxproj",
     "test/helper/WinUiTrackItemProbe.cpp": "app/windows-winui/ao_winui_track_item_probe.vcxproj",
     "test/integration/windows/WinUiCreditsProbe.cpp": "app/windows-winui/ao_winui_credits_probe.vcxproj",
+    "test/integration/windows/WinUiQualityToolTipProbe.cpp": "app/windows-winui/ao_winui_quality_tooltip_probe.vcxproj",
     "test/integration/windows/WinUiSoulProbe.cpp": "app/windows-winui/ao_winui_soul_probe.vcxproj",
     "test/integration/windows/WinUiTrackTableProbe.cpp": "app/windows-winui/ao_winui_track_table_probe.vcxproj",
 }

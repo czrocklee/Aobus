@@ -473,6 +473,7 @@ namespace ao::uimodel
 
     switch (signal.pipelineQuality)
     {
+      // Aura follows numerical evidence; layout uncertainty is a separate note.
       case audio::Quality::BitwisePerfect: return SoulAura::Radiant;
       case audio::Quality::LosslessPadded:
       case audio::Quality::LosslessFloat: return SoulAura::Flowing;

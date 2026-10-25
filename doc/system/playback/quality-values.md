@@ -61,10 +61,13 @@ See [text semantics](../presentation/text-catalog.md) for the domain mapping and
 
 - `Unknown` raw conclusions and `Unknown`/`BitPerfect` finding labels are empty. Hardware-volume findings have a label but are hidden from the structured headline's visible-finding set.
 - Positive finite gain is shown as signed decibels with one fractional digit; non-positive or non-finite gain omits the number.
-- Resampling and channel findings display both endpoints when available; missing endpoints select the catalog's generic form.
+- Resampling and channel findings display both endpoints when available; missing endpoints select the catalog's generic form. A `ChannelMapping` finding with equal channel counts and equal effective masks also uses the generic label, even when both formats are supplied, rather than displaying an unchanged count transition.
 - Truncation wording distinguishes float-to-integer, integer-to-float, and same-domain precision loss. Precision evidence uses logical bits with `b` for integer and `f` for float.
 - Format labels receive sample rate in kHz with one fractional digit, a bit count, and localized channel text. A signal format shows logical precision; a PCM node shows container width. Thus a 16-bit signal carried in `Signed32Le` displays 32 bits at that PCM node.
-- Mono, stereo, other channel counts, node-role labels, sentence order, punctuation, and units in authored copy are catalog-owned. External application names remain data and are joined for the message argument.
+- In runtime audio-quality labels, Mono names only effective FC (`0x4`, one channel), and Stereo only effective FL/FR (`0x3`, two channels). Unknown identities use a generic count; alternate identified sets retain their roles or mask. Equal counts with different known identities use layout labels rather than a misleading count-only transition. These labels use the finding's independent role constraints when native observations differ from unchanged or unknown storage masks; partial roles keep the actual channel count rather than guessing the unassigned positions. Assigned WAVE roles use standard tokens in ascending mask-bit order; any unknown or reserved bit makes the entire mask fall back to its raw hexadecimal value, without mixing tokens and raw fragments.
+- Channel text, node-role labels, sentence order, punctuation, and units are catalog-owned. Standard role tokens and external application names remain data, not inferred native evidence.
+
+This runtime evidence boundary intentionally differs from the count-only metadata track-field API, which uses lexical Mono/Stereo for counts one/two without claiming effective channel identities or delivery proof; see [track-field semantics](../presentation/text-catalog.md#mapping-and-fallback-contracts). Reusing those lexical messages does not make count alone an identity rule for audio quality.
 
 ## Structured headline precedence
 
@@ -76,15 +79,36 @@ The headline does not repeat per-node rates, gain, shared applications, or other
 | 1 | Overall quality is unknown | No usable pipeline rating | `Unknown` |
 | 2 | Any software-amplification finding | Clipping risk | `Warning` |
 | 3 | Any mute, truncation, resampling, software or unclassified volume modification, mixing, or channel mapping | Pipeline intervention | `Diagnostic` |
-| 4 | Path is not fully verified | Incomplete path evidence | `Informational` |
+| 4 | Path is not fully verified | Incomplete format/path evidence | `Informational` |
 | 5 | Any lossless padding, round trip, or float mapping | Signal preserved | `Positive` |
 | 6 | Source is lossy | Clean delivery of a lossy source | `Informational` |
-| 7 | No visible findings and source quality is bit-perfect | Bit-perfect playback | `Medal` |
+| 7 | No visible findings and source quality is bit-perfect | Bit-perfect PCM at the observed software boundary | `Medal` |
 | 8 | Otherwise | Clean delivery | `Positive` |
 
 `BitPerfect` and `HardwareVolumeModification` do not count as visible findings here.
 The structured headline has no direct `Clipped` branch; raw conclusion/category mapping and Soul aura do.
-Do not equate a headline, raw severity, and confidence flag without applying their respective rules.
+Unknown, Unverified, and Inferred channel confidence do not suppress numerical positives or a clean lossy headline; the headline and `fullyVerified` flag describe the numerical software path, not verified speaker routing.
+
+### Independent channel note
+
+`AudioQualityPresentation::channelNote` owns localized layout uncertainty separately from its numerical headline and category.
+No assessments means no observed pipeline and no channel note, regardless of the confidence value.
+For a nonempty assessment list:
+
+| Channel confidence | Note meaning |
+|---|---|
+| `Unknown` | Channel layout not identified |
+| `Unverified` | Channel delivery not proved |
+| `Inferred` | Source channel layout inferred |
+| `Verified` | No warning |
+
+Unknown can mean either incomplete source interpretation or no Sink-reaching path, even when the source identity is known; its generic note does not attribute the missing evidence to the source.
+Inferred specifically describes source interpretation.
+The note remains visible alongside diagnostic and warning headlines when uncertainty is independently present.
+It never promotes Unknown to Verified or invents speaker roles: an unidentified two-channel source still displays count-owned `2 ch`, not Stereo.
+GTK's pipeline panel and TUI's quality panel render the note as a separate secondary row.
+The shared Now Playing plain-text fallback puts it on a separate line for WinUI's tooltip and AppKit's fallback tooltip; native adapters do not reclassify confidence.
+In AppKit's fallback mode, an empty shared fallback restores the localized Output Device tooltip; a nonempty shared fallback is preserved.
 
 ## Visual categories
 
@@ -114,10 +138,13 @@ For Playing and Paused, aura selection uses the first matching rule:
 | 1 | Output not ready | `Veiled` |
 | 2 | Overall or pipeline quality is clipped | `Burning` |
 | 3 | Pipeline quality is linear intervention | `Turbulent` |
-| 4 | Incomplete verification, or source quality is lossy/unknown | `Veiled` |
+| 4 | Incomplete format verification, or source quality is lossy/unknown | `Veiled` |
 | 5 | Pipeline quality is bit-perfect | `Radiant` |
 | 6 | Pipeline quality is lossless padded/float | `Flowing` |
 | 7 | Pipeline quality is lossy/unknown | `Veiled` |
+
+Channel confidence never selects an aura; the separate channel note carries that uncertainty, and neither aura nor headline upgrades it to a verified-channel claim.
+Known conversion reaches Turbulent only through its finding's pipeline severity, never from the confidence value.
 
 Other transport states select `Dormant` regardless of retained quality evidence.
 Frontend adapters provide frame deltas and own clocks, frame registration, visibility/minimization gates, concrete geometry, and rendering. They keep supplying frames while the shared state still needs them, and settle pending transitions at once when they stop early, as under reduced motion, while hidden or unmapped, or when their frame source stops with playback. Time that passes while settled, before the next frame arrives, does not count as motion. They may quantize the shared visual frame for their medium without changing aura or freeze semantics.
@@ -131,4 +158,7 @@ Changes to severity, confidence, headline precedence, or shared motion/aura beha
 - [`AudioQualityFormatter.cpp`](../../../app/uimodel/playback/quality/AudioQualityFormatter.cpp) owns message selection, categories, and headline precedence; [`AudioQualityCss.cpp`](../../../app/linux-gtk/playback/AudioQualityCss.cpp) adapts GTK classes.
 - [`AobusSoulViewModel.cpp`](../../../app/uimodel/playback/soul/AobusSoulViewModel.cpp) owns shared motion and aura state.
 - [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp), [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp), and [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) cover analysis and shared policy.
+- [`ChannelLayoutPresentationTest.cpp`](../../../test/unit/uimodel/playback/quality/ChannelLayoutPresentationTest.cpp) covers empty-state note absence, generic Unknown without a Sink despite identified source roles, equal-endpoint generic channel findings, and assigned height-role labels and ordering.
+- [`DecodedQualityPresentationTest.cpp`](../../../test/unit/uimodel/playback/quality/DecodedQualityPresentationTest.cpp) carries real compressed-decoder stream information through a controlled Sink-reaching graph into numerical headlines, channel notes, and Soul aura. It projects the producers' current layout facts rather than requiring all compressed codecs to remain Unknown; producer identification changes require corresponding fixture expectations, not weaker presentation rules.
+- [`WinUiQualityToolTipProbe.cpp`](../../../test/integration/windows/WinUiQualityToolTipProbe.cpp) observes native tooltip properties with real decoder publication but no backend Sink graph. An Unknown channel result on that incomplete path cannot by itself prove unknown decoder provenance; the probe does not prove popup pixels or physical routing.
 - [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp), and [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp) cover frontend consumption and frozen-frame behavior.

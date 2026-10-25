@@ -101,8 +101,10 @@ Important formatter semantics include:
 
 - a zero-track selection summary is empty; a nonzero summary includes duration
   only when the supplied preformatted duration is nonempty;
-- channel counts map one to Mono, two to Stereo, larger nonzero values to the
-  plural count message, and zero to empty at the field boundary;
+- metadata track-field channel labels intentionally use a count-only API: one
+  maps to lexical Mono, two to lexical Stereo, larger nonzero values to the
+  plural count message, and zero to empty at the field boundary. These labels
+  do not assert effective speaker identities or prove runtime delivery;
 - completion `ResolvedText` passes through unchanged and frequency is decimal;
 - playback report subjects fall back from nonempty subject, to `track <id>`, to
   the localized playback subject, and an empty required failure reason becomes
@@ -119,6 +121,14 @@ Important formatter semantics include:
   status, distinguishing whether stored manual-order positions were forgotten; and
 - muted volume takes precedence over hardware-assisted state when choosing the
   tooltip selector.
+
+Runtime audio-quality labels have a different evidence boundary: Mono requires
+an effective one-channel FC identity and Stereo an effective two-channel FL/FR
+identity. A count-only unknown identity stays a generic count, even for one or
+two channels; alternate known identities retain their roles or mask. See
+[audio-quality labels](../playback/quality-values.md#localized-labels-and-numeric-evidence).
+These intentionally distinct consumers may reuse lexical messages without
+establishing a global count-to-identity rule or changing metadata field behavior.
 
 The source mappings live in
 [`TrackPresentationText.cpp`](../../../app/uimodel/library/presentation/TrackPresentationText.cpp),
