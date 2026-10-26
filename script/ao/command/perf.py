@@ -5,7 +5,8 @@ import json
 import os
 from pathlib import Path
 
-from ..core import builddir
+from ..core import builddir, gitfiles
+from ..core.paths import PROJECT_ROOT
 from ..core.proc import capture, die, run
 from . import build
 
@@ -77,8 +78,8 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
 
 
 def _revision() -> str:
-    revision = capture(["git", "rev-parse", "--verify", "HEAD"]).strip()
-    if capture(["git", "status", "--porcelain"], check=False).strip():
+    revision = capture(gitfiles._git_command("rev-parse", "--verify", "HEAD"), cwd=PROJECT_ROOT).strip()
+    if capture(gitfiles._git_command("status", "--porcelain"), cwd=PROJECT_ROOT).strip():
         revision += "+dirty"
     return revision
 
