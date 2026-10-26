@@ -33,6 +33,8 @@ namespace ao::audio::detail
     bool isAtEnd() const noexcept;
     std::uint64_t position() const noexcept;
     std::uint64_t size() const noexcept;
+    // Borrowed until close/open; inspection does not move the read position.
+    std::span<std::byte const> bytes() const noexcept;
 
   private:
     utility::MappedFile _mappedFile;

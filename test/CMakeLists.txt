@@ -401,6 +401,7 @@ add_executable(ao_core_test
     # media tests
     unit/media/CueSheetTest.cpp
     unit/media/ExactExtentTest.cpp
+    unit/media/VorbisCommentTest.cpp
     unit/media/ogg/TestOgg.cpp
     unit/media/ogg/DemuxerTest.cpp
     unit/media/opus/HeaderTest.cpp
@@ -492,6 +493,10 @@ add_executable(ao_core_test
     unit/audio/AacDecoderSessionTest.cpp
     unit/audio/AacDecoderMalformedMp4Test.cpp
     unit/audio/FlacDecoderSessionTest.cpp
+    unit/audio/FlacDecoderChannelLayoutTest.cpp
+    unit/audio/FlacCommentCompatibilityTest.cpp
+    unit/audio/FlacMetadataInitializationTest.cpp
+    unit/audio/FlacWavMaskCompatibilityTest.cpp
     unit/audio/FlacDecoderMalformedTest.cpp
     unit/audio/FlacDecoderFormatStabilityTest.cpp
     unit/audio/AlacDecoderSessionTest.cpp
@@ -527,6 +532,8 @@ add_executable(ao_core_test
     unit/audio/EngineGaplessTest.cpp
     unit/audio/EngineChannelLayoutTest.cpp
     unit/audio/EngineWavChannelLayoutTest.cpp
+    unit/audio/EngineFlacChannelLayoutTest.cpp
+    unit/audio/EngineFlacTransitionTest.cpp
     unit/audio/EngineStereoIdentityTest.cpp
     unit/audio/EngineStereoReuseTest.cpp
     unit/audio/EngineEndpointPrecisionTest.cpp
@@ -892,6 +899,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/AlsaBackendReuseTest.cpp
   unit/audio/backend/AlsaChannelObservationTest.cpp
   unit/audio/backend/AlsaProviderTest.cpp
+  unit/audio/backend/FlacAlsaPipeWireRouteTest.cpp
   unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
   unit/audio/backend/detail/PipeWireFormatParsingTest.cpp
   unit/audio/backend/detail/AlsaGraphRegistryTest.cpp

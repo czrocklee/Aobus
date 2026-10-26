@@ -4,9 +4,9 @@
 #pragma once
 
 #include "Content.h"
+#include <ao/media/VorbisComment.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -14,17 +14,7 @@
 
 namespace ao::media::file::detail
 {
-  /**
-   * @brief Whether bytes after the comment list are acceptable.
-   *
-   * A FLAC VORBIS_COMMENT block ends exactly at its list, while an Opus
-   * OpusTags packet may carry padding or further data after it.
-   */
-  enum class VorbisCommentTrailing : std::uint8_t
-  {
-    Rejected,
-    Allowed,
-  };
+  using media::VorbisCommentTrailing;
 
   struct VorbisCommentField final
   {

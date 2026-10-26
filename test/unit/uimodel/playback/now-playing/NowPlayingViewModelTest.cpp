@@ -496,6 +496,7 @@ namespace ao::uimodel::test
     {
       REQUIRE(audioStatePtr->graphChanged);
       CHECK(audioStatePtr->graphRouteAnchor == "controlled-route");
+      CHECK(log.last().streamInfo == "44.1 kHz · 16-bit · Stereo");
       auto const before = playback.snapshot().transport;
       log.clear();
       auto const resampledFormat =
@@ -537,8 +538,8 @@ namespace ao::uimodel::test
       auto const formatter = AudioQualityFormatter{ao::test::englishMessageCatalog()};
       REQUIRE_FALSE(after.quality.assessments.empty());
       REQUIRE(after.quality.assessments.front().optFormat);
-      // Backend resampling must not replace the source's displayed resolution or invent its channel identity.
-      CHECK(log.last().streamInfo == "44.1 kHz · 16-bit · 2 ch");
+      // Backend resampling must preserve the FLAC source's displayed resolution and identified stereo layout.
+      CHECK(log.last().streamInfo == "44.1 kHz · 16-bit · Stereo");
       CHECK(log.last().audioPipeline.plainTextFallback.contains("Pipeline intervention"));
       auto const presentation = formatter.presentation(after.quality);
       REQUIRE_FALSE(presentation.channelNote.empty());

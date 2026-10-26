@@ -8,6 +8,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -49,6 +50,37 @@ namespace ao::audio::detail::test
     CHECK(cursor.position() == 0);
     REQUIRE(cursor.read(output) == output.size());
     CHECK(output == std::array{std::byte{10}, std::byte{20}, std::byte{30}});
+  }
+
+  TEST_CASE("MappedFileCursor - mapped inspection preserves the native read cursor", "[audio][unit][detail]")
+  {
+    auto const temp = ao::test::TempFile{std::vector<std::uint8_t>{0x11, 0x22, 0x33, 0x44}};
+    auto const next = ao::test::TempFile{std::vector<std::uint8_t>{0xA1, 0xB2}};
+    auto cursor = MappedFileCursor{};
+    CHECK(cursor.bytes().empty());
+    REQUIRE(cursor.open(temp.path));
+    auto const borrowed = cursor.bytes();
+    auto const expected = std::array{std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}};
+    CHECK(std::ranges::equal(borrowed, expected));
+    CHECK(cursor.position() == 0);
+    auto output = std::array<std::byte, 2>{};
+    REQUIRE(cursor.read(output) == output.size());
+    CHECK(output == std::array{std::byte{0x11}, std::byte{0x22}});
+    CHECK(cursor.position() == 2);
+    CHECK(cursor.bytes().data() == borrowed.data());
+    CHECK(std::ranges::equal(cursor.bytes(), expected));
+    CHECK(cursor.position() == 2);
+    REQUIRE(cursor.seek(0, SeekOrigin::End));
+    CHECK(std::ranges::equal(borrowed, expected));
+    CHECK(cursor.position() == expected.size());
+
+    // Reopen ends the old borrow; inspect only the new mapping afterwards.
+    REQUIRE(cursor.open(next.path));
+    CHECK(cursor.position() == 0);
+    CHECK(std::ranges::equal(cursor.bytes(), std::array{std::byte{0xA1}, std::byte{0xB2}}));
+    cursor.close();
+    CHECK(cursor.bytes().empty());
+    CHECK(cursor.position() == 0);
   }
 
   TEST_CASE("MappedFileCursor - rejects invalid seeks and resets on close", "[audio][unit][detail]")

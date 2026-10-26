@@ -117,4 +117,9 @@ namespace ao::audio::detail
   {
     return _mappedFile.bytes().size();
   }
+
+  std::span<std::byte const> MappedFileCursor::bytes() const noexcept
+  {
+    return _mappedFile.bytes();
+  }
 } // namespace ao::audio::detail

@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ao::audio::test
@@ -15,8 +16,6 @@ namespace ao::audio::test
   namespace
   {
     constexpr std::uint32_t kStreamSampleRate = 48000;
-    constexpr std::uint8_t kStreamChannels = 2;
-    constexpr std::uint8_t kStreamBitsPerSample = 16;
     constexpr std::uint32_t kFrameSamples = 16;
 
     std::uint8_t computeCrc8(std::span<std::uint8_t const> data)
@@ -87,9 +86,13 @@ namespace ao::audio::test
     }
   } // namespace
 
-  std::vector<std::uint8_t> buildFlacStreaminfoBytes(std::uint64_t totalSamples)
+  std::vector<std::uint8_t> buildFlacStreaminfoBytes(std::uint64_t totalSamples,
+                                                     std::uint8_t channels,
+                                                     std::uint8_t bitsPerSample)
   {
     REQUIRE(totalSamples < (std::uint64_t{1} << 36U));
+    REQUIRE((channels >= 1U && channels <= 8U));
+    REQUIRE((bitsPerSample == 16U || bitsPerSample == 24U));
 
     // Stream marker, last-metadata-block flag with STREAMINFO type, length.
     auto bytes = std::vector<std::uint8_t>{'f', 'L', 'a', 'C', 0x80, 0x00, 0x00, 0x22};
@@ -98,13 +101,78 @@ namespace ao::audio::test
     appendBigEndianUnsigned(bytes, kFrameSamples, 2);
     appendBigEndianUnsigned(bytes, 0, 6);
     auto const packed = (static_cast<std::uint64_t>(kStreamSampleRate) << 44) |
-                        (static_cast<std::uint64_t>(kStreamChannels - 1U) << 41) |
-                        (static_cast<std::uint64_t>(kStreamBitsPerSample - 1U) << 36) | totalSamples;
+                        (static_cast<std::uint64_t>(channels - 1U) << 41) |
+                        (static_cast<std::uint64_t>(bitsPerSample - 1U) << 36) | totalSamples;
     appendBigEndianUnsigned(bytes, packed, 8);
     // MD5 signature absent: sixteen zero bytes.
     bytes.insert(bytes.end(), std::size_t{16}, std::uint8_t{0});
 
     return bytes;
+  }
+
+  void appendFlacCommentBlock(std::vector<std::uint8_t>& metadataBytes, std::span<std::string const> comments)
+  {
+    // The block's 24-bit length also bounds each count/string to uint32_t.
+    std::size_t payloadSize = 8;
+    REQUIRE(comments.size() <= 0xFFFFFFU / 4U);
+
+    for (auto const& comment : comments)
+    {
+      REQUIRE(comment.size() <= 0xFFFFFFU - 4U);
+      payloadSize += 4U + comment.size();
+      REQUIRE(payloadSize <= 0xFFFFFFU);
+    }
+
+    auto payload = std::vector<std::uint8_t>{};
+    payload.reserve(payloadSize);
+    auto const appendLength = [&](std::size_t length)
+    {
+      for (std::uint32_t shift = 0; shift < 32U; shift += 8U)
+      {
+        payload.push_back(static_cast<std::uint8_t>((length >> shift) & 0xFFU));
+      }
+    };
+
+    appendLength(0); // Empty vendor string.
+    appendLength(comments.size());
+
+    for (auto const& comment : comments)
+    {
+      appendLength(comment.size());
+      payload.insert(payload.end(), comment.begin(), comment.end());
+    }
+
+    appendFlacRawCommentBlock(metadataBytes, payload);
+  }
+
+  void appendFlacRawCommentBlock(std::vector<std::uint8_t>& metadataBytes, std::span<std::uint8_t const> payload)
+  {
+    REQUIRE(metadataBytes.size() >= 8U);
+    REQUIRE(metadataBytes[0] == 'f');
+    REQUIRE(metadataBytes[1] == 'L');
+    REQUIRE(metadataBytes[2] == 'a');
+    REQUIRE(metadataBytes[3] == 'C');
+    REQUIRE(payload.size() <= 0xFFFFFFU);
+
+    std::size_t offset = 4;
+    std::size_t lastHeader = 4;
+
+    while (offset < metadataBytes.size())
+    {
+      REQUIRE(metadataBytes.size() - offset >= 4U);
+      auto const length = (static_cast<std::size_t>(metadataBytes[offset + 1]) << 16U) |
+                          (static_cast<std::size_t>(metadataBytes[offset + 2]) << 8U) |
+                          static_cast<std::size_t>(metadataBytes[offset + 3]);
+      REQUIRE(length <= metadataBytes.size() - offset - 4U);
+      lastHeader = offset;
+      offset += 4U + length;
+      REQUIRE(((metadataBytes[lastHeader] & 0x80U) != 0U) == (offset == metadataBytes.size()));
+    }
+
+    metadataBytes[lastHeader] &= 0x7FU;
+    metadataBytes.push_back(0x84); // Last block, VORBIS_COMMENT.
+    appendBigEndianUnsigned(metadataBytes, payload.size(), 3);
+    metadataBytes.insert(metadataBytes.end(), payload.begin(), payload.end());
   }
 
   std::vector<std::uint8_t> buildFlacVerbatimFrameBytes(std::uint32_t frameIndex,

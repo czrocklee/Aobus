@@ -31,8 +31,8 @@ A nonzero mask names speakers in ascending assigned-bit order; zero assigns no p
 Channel count, not mask population, always owns frame geometry.
 Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from format equality and from native mapping observations.
 
-WAV publishes effective source identity through its [source interpretation](#wav-source-interpretation) below.
-The other current codec producers, including FLAC, ALAC, and MP3, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
+WAV and FLAC publish effective source identity through their respective [WAV](#wav-source-interpretation) and [FLAC](#flac-source-interpretation) policies below.
+The other current codec producers, including ALAC and MP3, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
 ALSA admits identified sources against its native channel-map observations.
 PipeWire admits a complete supported WAVE source declaration and validates the Format param actually read back; the offer is not that observation.
 A two-channel offer is one exact role set: the declared WAVE pair when the source mask is nonzero, and FL/FR only when that mask is zero. The offer never writes a new identity into a zero client mask.
@@ -53,7 +53,7 @@ This also applies to independent native-only evidence: ALSA may clear a stream f
 Core Audio admits complete supported identities through a [bounded AUHAL observation and permutation bridge](audio-execution.md#core-audio-channel-admission).
 Its returned client mode stays canonical; native byte order and initial delivery evidence remain separate, and acceptance does not prove physical routing.
 Core Audio hints preserve exact source identity without native I/O and are neither admission nor observation guarantees.
-The [channel-order reference](../../reference/media/channel-order.md) owns the WAV compatibility role sets and Opus slot permutations.
+The [channel-order reference](../../reference/media/channel-order.md) owns WAV compatibility sets, FLAC's narrower format-default identities, and Opus slot permutations.
 Those sets are not a rule for filling a zero PCM or native observation mask.
 A decoder publishing identified speakers normalizes any differing codec order before emitting PCM; it never publishes that codec-native speaker order.
 Existing AAC and Opus byte-order mechanisms remain unchanged: AAC requests FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING`, and Opus mapping family 1 permutes the channel mapping it hands libopus.
@@ -87,6 +87,98 @@ Inference can therefore cause private slot reordering or a route refusal compare
 The [raw RIFF format](../../../include/ao/media/wav/Riff.h) retains the declared DWORD independently, distinguishing absence from explicit zero; playback policy does not change library import.
 [`WavDecoderSession.cpp`](../../../lib/audio/WavDecoderSession.cpp) owns this interpretation, without changing PCM slot order, seeking, or EOF semantics.
 See [Microsoft's format reference](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-waveformatextensible) for declaration ordering and excess-bit semantics.
+
+### FLAC source interpretation
+
+A FLAC session publishes a nonzero effective speaker mask in both source and output formats, with `Identified` interpretation, only when the complete metadata scan establishes an unambiguous identity.
+Untrustworthy optional identity evidence instead leaves both masks zero and interpretation `Unknown`, as described below; it never selects an `Inferred` fallback.
+The final candidate mask is established once before output adaptation, so source and output identity remain aligned; neither the identity nor PCM is published before required initialization and output admission succeed.
+When the metadata scan is trustworthy, every comment block is completely inspectable, and no exact `WAVEFORMATEXTENSIBLE_CHANNEL_MASK` key is present, counts 1, 2, 3, 4, 7, and 8 use the [canonical role sets](../../reference/media/channel-order.md#canonical-role-sets).
+These are `Identified` format defaults, not WAV's multichannel `Inferred` compatibility fallback.
+Five/six-channel FLAC instead leaves both masks zero and origin `Unknown`: [RFC 9639 §9.1.3](https://www.rfc-editor.org/rfc/rfc9639.html#section-9.1.3) does not resolve its back/surround pair into WAVE BL/BR versus SL/SR.
+Changing only the origin to `Inferred` would still publish an effective hard identity, so no count-derived mask is selected for these two counts.
+WAV's five/six-channel inferred back masks remain unchanged; the format-specific default policies intentionally differ.
+Aobus represents literal mono as FC; seven channels use BC with SL/SR and eight use BL/BR with SL/SR.
+These WAVE masks are Aobus's canonical representation, not verbatim RFC mask assignments.
+The [reference `flac` 1.5.0 CLI](https://github.com/xiph/flac/blob/1.5.0/src/flac/decode.c) selects side masks `0x607`/`0x60F` for untagged five/six-channel WAVE output, without changing PCM slots; the RFC does not uniquely mandate those or back masks `0x37`/`0x3F`.
+Complete supported agreeing declarations of either back or side masks remain `Identified` and retain their distinct roles.
+Native delivery evidence cannot independently recover an ambiguously labelled source's original geometric intent or turn its zero mask into source identity.
+
+The standardized comment described in [RFC 9639 §8.6.2](https://www.rfc-editor.org/rfc/rfc9639.html#section-8.6.2) can instead declare any complete set drawn from the eighteen assigned WAVE positions, with exactly one position per source channel.
+Its slots follow ascending assigned-bit order, including nondefault sets; the comment does not describe arbitrary channel swaps.
+libFLAC already supplies logical decoded slots in that order, so the session adds no PCM permutation for either defaults or explicit identities.
+
+FLAC's [coded channel count](https://www.rfc-editor.org/rfc/rfc9639.html#section-8.2) remains limited to eight; eighteen available role bits do not permit nine or more coded channels.
+Unknown identity never admits unsupported coded geometry, so WAV's higher-channel-count policy has no corresponding nine-channel FLAC fallback.
+
+libFLAC retains its default STREAMINFO metadata selection; the session does not request VORBIS_COMMENT callbacks.
+Initialization makes one `FLAC__stream_decoder_process_single` call before bulk metadata processing.
+Identity inspection is permitted only if that first native step delivered STREAMINFO as the first selected metadata block; libFLAC owns prefix selection, without a copied scanner for its ID3, overlap, or frame-sync rules.
+Normal native-tolerated prefixes followed by first-block STREAMINFO remain identifiable.
+A separate bounded scan then borrows views from the same file mapping used for decoding, without moving its read cursor, and parses comment fields outside foreign callbacks.
+Native STREAMINFO positions and metadata-end bounds cross-check this established origin: the mapped chain starts only where the header at the recorded STREAMINFO offset matches the native delivery. They cannot establish the origin alone.
+Native-tolerated metadata with nonfirst STREAMINFO remains `0` / `Unknown`, including when an earlier block holds a valid declaration; a fake marker inside padding never certifies a suffix.
+The allocation-free raw [Vorbis comment walker](../../../include/ao/media/VorbisComment.h) is shared with library import, while each consumer retains its own publication and trailing-byte policy.
+Playback neither owns each tag nor materializes all comments, and imposes no `100000`-comment cap: entry counts and lengths are bounded by the actual block payload.
+This is a parsing/resource contract, not a measured performance improvement.
+
+Only a complete trustworthy metadata chain and completely inspectable comment blocks permit publication of either a declared identity or an absent-comment default:
+
+| Optional identity evidence | Source/output mask and origin |
+|---|---|
+| Complete trustworthy inspection, no exact recognized key, 1/2/3/4/7/8 channels | Count default, `Identified`. |
+| Complete trustworthy inspection, no exact recognized key, 5/6 channels | `0`, `Unknown`; unresolved back/side geometry. |
+| Complete supported declaration, all numeric duplicates agree | Exact declared mask, `Identified`. |
+| Recognized malformed or conflicting declaration | `0`, `Unknown`. |
+| Zero, partial, excess, reserved-bit, or `SPEAKER_ALL` declaration | `0`, `Unknown`; never trimmed or replaced with a default. |
+| Nonfirst STREAMINFO, incomplete comments, or inability to inspect optional positions, marker, or native-boundary cross-checks safely | `0`, `Unknown`. |
+
+A short comment payload, out-of-bounds entry length, or unaccounted trailing bytes withholds identity without newly rejecting otherwise-valid STREAMINFO and audio.
+Unknown is absorbing for this inspection: neither an earlier valid candidate nor a later good declaration repairs malformed, conflicting, unsupported, or incomplete evidence.
+Optional inspection may stop once identity is unknown; it must never resume at a suffix and publish that suffix as complete evidence.
+This is not a blanket decode-error recovery rule: native metadata processing, I/O, required STREAMINFO, precision, frame, timeline, and EOF faults retain their failures.
+In particular, actual outer metadata truncation rejected by native processing remains a decoding failure, not an optional inspection limitation.
+A failed native processing call remains a hard failure even without an error callback.
+Raw frames without STREAMINFO retain the required-STREAMINFO diagnostic through either the guarded write callback or an error in native `READ_FRAME` during the initial step before STREAMINFO.
+The latter covers implicit rate/precision headers and raw-subframe errors, including frame-phase `LOST_SYNC`, that never reach a write callback; it causes the next read callback to abort, although already buffered native bytes may still be scanned.
+This does not override actual native metadata failures such as truncated STREAMINFO or reject tolerated junk/ID3-prefix `LOST_SYNC` notices.
+Valid STREAMINFO still supplies implicit code-zero rate/precision values, including ordinary 48000 Hz / 16-bit geometry.
+The [initialization failure contract](decoder-session.md#failure-behavior) owns cause precedence and read-abort limits; guarded writes never reach an unconfigured output adapter.
+
+The decoder applies this text and duplicate-resolution policy to readable declarations:
+
+- The complete field name and hexadecimal contents are ASCII case-insensitive.
+  Names are not trimmed: leading or trailing spaces name a different, unrecognized field, not a malformed value of the standardized field.
+  The value requires `0x` or `0X` followed by at least one hexadecimal digit and must fit numerically in an unsigned 32-bit integer.
+  Arbitrary leading zero padding is accepted; there is no eight-digit lexical limit.
+- Parsing consumes the full length-delimited value, without whitespace, signs, separators, suffixes, or embedded/trailing NUL bytes.
+  A recognized field with missing or malformed contents leaves identity `Unknown`, never treated as an absent comment.
+- Repeated declarations identify the source only when every occurrence parses to the same supported numeric value.
+  Any malformed recognized occurrence or conflicting value leaves identity `Unknown` regardless of occurrence order.
+
+Whitespace strictness and duplicate resolution are Aobus implementation policy, not requirements specified by the RFC.
+Optional channel evidence cannot introduce an extra source refusal: otherwise-valid audio with these declarations may play best-effort as `Unknown`.
+Requested-output precision rejection remains a required error and is not hidden by an unknown layout; private output configuration still precedes final STREAMINFO geometry validation.
+FLAC never borrows WAV's explicit-zero fallback or excess-bit trimming.
+Zero, partial, or nondefault declarations are not necessarily invalid FLAC; a nondefault layout outside the [streamable subset](https://www.rfc-editor.org/rfc/rfc9639.html#section-7) is not thereby invalid FLAC.
+Withholding identity is not a general file-validity judgment or a claim that the original speaker intent is safe to ignore.
+Lossless WAV-to-FLAC conversion need not preserve identity: a stereo WAV mask `0x7` or reserved-excess `0x40003` is admitted as `0x3` / `Identified` after WAV trimming, whereas those FLAC declarations are admitted as `0` / `Unknown`.
+The [reference `flac` 1.5.0 encoder](https://github.com/xiph/flac/blob/1.5.0/src/flac/encode.c) preserves those nonzero excess masks with a warning; warnings-as-errors aborts instead.
+That version does not automatically turn a zero WAV mask into an explicit FLAC-zero comment; explicit zero remains distinct from absence.
+
+[`FlacDecoderSession.cpp`](../../../lib/audio/FlacDecoderSession.cpp) owns this playback interpretation.
+Sharing the raw comment walker does not change library import's atomic publication or format-specific trailing-byte semantics.
+The existing precision-preserving output adaptation, PCM slot order, seek, flush, EOF, and decoding-error contracts remain unchanged.
+Replacing the earlier zero-mask producer means a native route can now apply a same-set slot permutation or refuse a known role contradiction instead of treating the source as unpositioned.
+For a nonzero source identity and a complete valid current ALSA map, the speaker set must match, not the ordinal order: a same-set private permutation remains available in [`AlsaChannelMap.cpp`](../../../lib/audio/backend/detail/AlsaChannelMap.cpp).
+For example, three-channel FLAC's default FL/FR/FC (`0x7`) conflicts with native FL/FR/LFE (`0xB`); seven-channel FLAC's default FL/FR/FC/LFE/BC/SL/SR (`0x70F`) conflicts with FL/FR/FC/LFE/BL/BR/BC (`0x13F`).
+Missing native positions still do not manufacture evidence or alone require refusal; known contradictory slots in a partial map can still cause refusal, and source identity does not prove native mapping or physical routing.
+Unknown best-effort playback is not a role-safety or native-routing guarantee: zero-mask paths may use ordinal/default transport through different speaker roles, and backend open can still fail.
+For example, delivering zero-mask six-channel decoded FL/FR/FC/LFE/pair-left/pair-right unchanged into native slots FL/FR/RL/RR/FC/LFE puts center/LFE bytes in rear-labelled slots and the final pair in center/LFE slots.
+These examples describe software labels, not physical speakers, audibility, or device measurements.
+Zero alone does not distinguish clean absent-key five/six-channel FLAC from malformed or uninspectable FLAC identity evidence or other unknown codecs; neither zero nor channel count authorizes native role recovery.
+Numerical bit-perfectness and channel confidence are independent.
+The [lookahead contract](audio-execution.md#prepared-lookahead) discloses same-codec FLAC identity-boundary drain/reopen behavior as well as the existing conditional FLAC/ALAC regression.
 
 ### PCM encoding
 
@@ -220,6 +312,9 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 - [`OpenedModeValidationTest.cpp`](../../../test/unit/audio/OpenedModeValidationTest.cpp) locks strict lossless client and endpoint validation.
 - Decoder session tests under [`test/unit/audio/`](../../../test/unit/audio) lock per-codec production of the selected encoding.
 - [`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp) locks WAV fallback origins, declared and trimmed identities, layout refusals, output adaptation, and PCM/seek/EOF preservation.
+- [`FlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/FlacDecoderChannelLayoutTest.cpp) locks FLAC default and declared identities, exact field-name matching, strict length-bounded value parsing, duplicate resolution, unknown admission for unsupported declarations, output adaptation, and PCM/seek/flush/EOF preservation.
+- [`FlacMetadataInitializationTest.cpp`](../../../test/unit/audio/FlacMetadataInitializationTest.cpp) covers required-STREAMINFO initialization diagnostics and valid metadata/prefix controls, independently of optional identity inspection.
+- [`FlacWavMaskCompatibilityTest.cpp`](../../../test/unit/audio/FlacWavMaskCompatibilityTest.cpp) locks format-specific WAV/FLAC identity using retained reference-encoder output bytes and independently authored PCM, including trimmed WAV identity versus unknown FLAC for excess masks; it does not run an encoder during the test.
 - [`CoreAudioChannelLayoutTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh; [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) retains native open and lifetime controls.
 
 ## Related documents

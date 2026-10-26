@@ -12,17 +12,24 @@
 #include <ao/AudioCodec.h>
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
+#include <ao/media/VorbisComment.h>
+#include <ao/media/flac/MetadataBlockLayout.h>
 #include <ao/utility/ByteView.h>
+#include <ao/utility/String.h>
 
 #include <FLAC/format.h>
 #include <FLAC/ordinals.h>
 #include <FLAC/stream_decoder.h>
 
+#include <algorithm>
+#include <array>
 #include <bit>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -37,6 +44,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -45,6 +53,56 @@ namespace ao::audio
   namespace
   {
     constexpr std::uint8_t kLowByteMask = 0xFF;
+    // RFC 9639's five/six-channel back/surround wording does not resolve
+    // WAVE back versus side geometry. Only an explicit mask identifies it.
+    constexpr auto kFlacDefaultSpeakerMasks = std::array<std::uint32_t, 8>{0x4, 0x3, 0x7, 0x33, 0, 0, 0x70F, 0x63F};
+
+    bool isFlacChannelMaskField(std::string_view const field) noexcept
+    {
+      constexpr auto kFieldName = std::string_view{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK"};
+      return std::ranges::equal(
+        field, kFieldName, [](char lhs, char rhs) { return utility::toAsciiUpper(lhs) == rhs; });
+    }
+
+    // These observations establish optional identity, not playback admission.
+    // Any unusable declaration makes the whole inspection inconclusive.
+    bool tryObserveFlacChannelMaskComment(std::string_view const entry,
+                                          std::optional<std::uint32_t>& optDeclaredSpeakerMask) noexcept
+    {
+      auto const separator = entry.find('=');
+
+      if (!isFlacChannelMaskField(entry.substr(0, separator)))
+      {
+        return true;
+      }
+
+      auto value = separator == std::string_view::npos ? std::string_view{} : entry.substr(separator + 1);
+
+      if (value.size() < 3 || value[0] != '0' || utility::toAsciiLower(value[1]) != 'x')
+      {
+        return false;
+      }
+
+      value.remove_prefix(2);
+      std::uint32_t mask = 0;
+      auto const parsed = std::from_chars(value.data(), value.data() + value.size(), mask, 16);
+
+      if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
+          (optDeclaredSpeakerMask && *optDeclaredSpeakerMask != mask))
+      {
+        return false;
+      }
+
+      optDeclaredSpeakerMask = mask;
+      return true;
+    }
+
+    struct FlacStreamInfoMetadata final
+    {
+      std::uint64_t endByteOffset;
+      std::uint32_t payloadBytes;
+      bool isLastBlock;
+    };
 
     struct FlacFrameFormatMismatch final
     {
@@ -151,7 +209,10 @@ namespace ao::audio
     // Only seek_absolute's synchronous write callback uses this target; normal
     // delivery is checked against the next public block's sequential index.
     std::optional<std::uint64_t> optSeekTarget;
-    bool hasConfiguredStreamInfo = false;
+    std::optional<FlacStreamInfoMetadata> optStreamInfoMetadata;
+    bool isReadingFirstMetadataBlock = false;
+    bool hasFramePhaseWithoutStreamInfo = false;
+    bool hasStreamInfo = false;
     bool eof = false;
 
     Impl(std::optional<SampleEncoding> optOutputEncoding)
@@ -172,8 +233,8 @@ namespace ao::audio
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    // All callbacks are noexcept; allocating write/metadata paths also use AO
-    // exception-aware fatal containment before returning through libFLAC.
+    // All callbacks are noexcept; allocating writes also use AO exception-aware
+    // fatal containment before returning through libFLAC.
     static ::FLAC__StreamDecoderReadStatus readCallback(::FLAC__StreamDecoder const* decoder,
                                                         ::FLAC__byte* buffer,
                                                         std::size_t* bytes,
@@ -205,6 +266,88 @@ namespace ao::audio
     static void errorCallback(::FLAC__StreamDecoder const* decoder,
                               ::FLAC__StreamDecoderErrorStatus status,
                               void* clientData) noexcept;
+
+    std::uint32_t channelMaskFromMetadata() const noexcept
+    {
+      ::FLAC__uint64 metadataEndByteOffset = 0;
+      auto const bytes = fileCursor.bytes();
+      constexpr auto kHeaderBytes = sizeof(media::flac::MetadataBlockLayout);
+
+      if (!optStreamInfoMetadata || ::FLAC__stream_decoder_get_decode_position(decoder, &metadataEndByteOffset) == 0 ||
+          metadataEndByteOffset > bytes.size())
+      {
+        return 0;
+      }
+
+      auto const& streamInfoMetadata = *optStreamInfoMetadata;
+
+      if (streamInfoMetadata.endByteOffset > metadataEndByteOffset || streamInfoMetadata.endByteOffset < kHeaderBytes ||
+          streamInfoMetadata.payloadBytes > streamInfoMetadata.endByteOffset - kHeaderBytes)
+      {
+        return 0;
+      }
+
+      auto const streamInfoHeaderOffset =
+        static_cast<std::size_t>(streamInfoMetadata.endByteOffset) - streamInfoMetadata.payloadBytes - kHeaderBytes;
+      auto remaining =
+        bytes.subspan(streamInfoHeaderOffset, static_cast<std::size_t>(metadataEndByteOffset) - streamInfoHeaderOffset);
+
+      // The first native process_single call delivered STREAMINFO as the first
+      // selected block. The mapped chain starts there only if the header at the
+      // recorded offset matches that delivery; nearby magic alone may be padding.
+      if (auto const* const header = utility::layout::view<media::flac::MetadataBlockLayout>(remaining);
+          header->type != media::flac::MetadataBlockType::StreamInfo ||
+          header->size.value() != streamInfoMetadata.payloadBytes ||
+          header->isLastBlock != streamInfoMetadata.isLastBlock)
+      {
+        return 0;
+      }
+
+      bool isLastBlock = false;
+      auto optDeclaredSpeakerMask = std::optional<std::uint32_t>{};
+
+      while (!isLastBlock)
+      {
+        if (remaining.size() < kHeaderBytes)
+        {
+          return 0;
+        }
+
+        auto const* const header = utility::layout::view<media::flac::MetadataBlockLayout>(remaining);
+        auto const payloadBytes = static_cast<std::size_t>(header->size.value());
+        remaining = remaining.subspan(kHeaderBytes);
+
+        if (payloadBytes > remaining.size())
+        {
+          return 0;
+        }
+
+        if (header->type == media::flac::MetadataBlockType::VorbisComment &&
+            !media::tryVisitVorbisComments(remaining.first(payloadBytes),
+                                           media::VorbisCommentTrailing::Rejected,
+                                           [&](std::string_view const entry) noexcept
+                                           { return tryObserveFlacChannelMaskComment(entry, optDeclaredSpeakerMask); }))
+        {
+          return 0;
+        }
+
+        isLastBlock = header->isLastBlock;
+        remaining = remaining.subspan(payloadBytes);
+      }
+
+      if (!remaining.empty())
+      {
+        return 0;
+      }
+
+      auto const channels = static_cast<std::size_t>(info.sourceFormat.channels);
+      auto const defaultMask =
+        channels >= 1U && channels <= kFlacDefaultSpeakerMasks.size() ? kFlacDefaultSpeakerMasks[channels - 1U] : 0U;
+      auto const mask = optDeclaredSpeakerMask.value_or(defaultMask);
+      // Zero withholds identity; it neither repairs a declaration nor proves
+      // that the legacy ordinal transport preserves the intended speaker roles.
+      return isCompleteWaveSpeakerMask(mask, info.sourceFormat.channels) ? mask : 0U;
+    }
 
     void checkDecodeError() const
     {
@@ -296,7 +439,26 @@ namespace ao::audio
         detail::throwDecoderError(Error::Code::InitFailed, "Failed to initialize FLAC decoder");
       }
 
-      // Process until metadata is read
+      // One public native step establishes the selected first-block origin,
+      // without reproducing libFLAC's ID3, overlap or frame-sync search rules.
+      _implPtr->isReadingFirstMetadataBlock = true;
+      auto const firstBlockRead = ::FLAC__stream_decoder_process_single(_implPtr->decoder);
+      _implPtr->isReadingFirstMetadataBlock = false;
+
+      // A header error may never reach writeCallback. Both raw-frame paths
+      // retain the required-STREAMINFO cause, even after native read abort.
+      if (_implPtr->hasFramePhaseWithoutStreamInfo)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC stream is missing valid STREAMINFO");
+      }
+
+      if (firstBlockRead == 0)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "Failed to read FLAC metadata");
+      }
+
+      _implPtr->checkDecodeError();
+
       if (::FLAC__stream_decoder_process_until_end_of_metadata(_implPtr->decoder) == 0)
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "Failed to read FLAC metadata");
@@ -304,14 +466,39 @@ namespace ao::audio
 
       _implPtr->checkDecodeError();
 
-      if (auto const& sourceFormat = _implPtr->info.sourceFormat;
-          !_implPtr->hasConfiguredStreamInfo || sourceFormat.sampleRate == 0 || sourceFormat.channels == 0 ||
-          sourceFormat.channels > FLAC__MAX_CHANNELS || sourceFormat.precisionBits < FLAC__MIN_BITS_PER_SAMPLE ||
+      if (!_implPtr->hasStreamInfo)
+      {
+        detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC stream is missing valid STREAMINFO");
+      }
+
+      // Keep libFLAC's old skip behavior for unrelated comments. Inspect only
+      // bounded mapped views after native metadata processing has succeeded.
+      // Optional inspection may only establish a complete identity or leave the
+      // source unpositioned.
+      auto& sourceFormat = _implPtr->info.sourceFormat;
+      sourceFormat.speakerMask = _implPtr->channelMaskFromMetadata();
+      // Configure the final candidate identity once, before the geometry check,
+      // so requested-output precision errors keep their precedence. No
+      // candidate is published before admission.
+      auto const configuredRes =
+        _implPtr->outputAdapter.configure(sourceFormat, nativeFlacEncoding(sourceFormat.precisionBits));
+
+      if (!configuredRes)
+      {
+        detail::throwDecoderError(configuredRes.error());
+      }
+
+      _implPtr->info.outputFormat = *configuredRes;
+
+      if (sourceFormat.sampleRate == 0 || sourceFormat.channels == 0 || sourceFormat.channels > FLAC__MAX_CHANNELS ||
+          sourceFormat.precisionBits < FLAC__MIN_BITS_PER_SAMPLE ||
           sourceFormat.precisionBits > FLAC__MAX_BITS_PER_SAMPLE)
       {
         detail::throwDecoderError(Error::Code::DecodeFailed, "FLAC stream is missing valid STREAMINFO");
       }
 
+      _implPtr->info.sourceChannelLayout.origin =
+        sourceFormat.speakerMask != 0U ? ChannelLayoutOrigin::Identified : ChannelLayoutOrigin::Unknown;
       return {};
     }
     catch (detail::DecoderException const& ex)
@@ -535,7 +722,8 @@ namespace ao::audio
                                                                          std::size_t* bytes,
                                                                          void* clientData) noexcept
   {
-    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData); *bytes > 0)
+    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
+        *bytes > 0 && !impl->hasFramePhaseWithoutStreamInfo)
     {
       auto const count = impl->fileCursor.read(utility::bytes::view(static_cast<void*>(buffer), *bytes));
       *bytes = count;
@@ -548,6 +736,7 @@ namespace ao::audio
       return ::FLAC__STREAM_DECODER_READ_STATUS_CONTINUE;
     }
 
+    *bytes = 0;
     return ::FLAC__STREAM_DECODER_READ_STATUS_ABORT;
   }
 
@@ -604,19 +793,18 @@ namespace ao::audio
       {
         auto* const impl = utility::unsafeDowncast<Impl>(clientData);
 
-        // libFLAC accepts frames whose header contradicts the STREAMINFO format
-        // instead of rejecting them, so a frame may arrive with a sample rate,
-        // channel count, or bit depth different from the established source
-        // format. Copying, resizing, interleaving, or converting such a frame
-        // would emit PCM that contradicts the published session format, so guard
-        // the frame before any buffer work and abort without emitting its PCM.
+        // A first native step may reach a raw frame without STREAMINFO; later
+        // frames may contradict its established geometry. Neither may reach
+        // buffer work or the output adapter. Keep the required-SI cause distinct
+        // from an established stream's format mismatch when initialization fails.
         if (auto const& sourceFormat = impl->info.sourceFormat;
-            frame->header.sample_rate != sourceFormat.sampleRate ||
+            !impl->hasStreamInfo || frame->header.sample_rate != sourceFormat.sampleRate ||
             frame->header.channels != static_cast<std::uint32_t>(sourceFormat.channels) ||
             frame->header.bits_per_sample != static_cast<std::uint32_t>(sourceFormat.precisionBits))
         {
           // Keep only inline evidence here; diagnostic formatting belongs outside
           // the C callback, and the delivered frame's storage is only borrowed.
+          impl->hasFramePhaseWithoutStreamInfo = !impl->hasStreamInfo;
           impl->optFormatMismatch = FlacFrameFormatMismatch{
             .expectedFormat = sourceFormat,
             .frameSampleRate = frame->header.sample_rate,
@@ -715,56 +903,58 @@ namespace ao::audio
       });
   }
 
-  void FlacDecoderSession::Impl::metadataCallback(::FLAC__StreamDecoder const* /*decoder*/,
+  void FlacDecoderSession::Impl::metadataCallback(::FLAC__StreamDecoder const* decoder,
                                                   ::FLAC__StreamMetadata const* metadata,
                                                   void* clientData) noexcept
   {
-    invokeFlacCallback(
-      "FLAC metadata callback",
-      [&]
+    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
+        metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
+    {
+      auto const& streamInfo = streamInfoFor(metadata);
+
+      if (::FLAC__uint64 endByteOffset = 0; impl->isReadingFirstMetadataBlock && !impl->hasStreamInfo &&
+                                            ::FLAC__stream_decoder_get_decode_position(decoder, &endByteOffset) != 0)
       {
-        if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-            metadata->type == ::FLAC__METADATA_TYPE_STREAMINFO)
-        {
-          auto const& streamInfo = streamInfoFor(metadata);
+        impl->optStreamInfoMetadata = FlacStreamInfoMetadata{
+          .endByteOffset = endByteOffset, .payloadBytes = metadata->length, .isLastBlock = metadata->is_last != 0};
+      }
 
-          impl->info.sourceFormat.channels = static_cast<std::uint8_t>(streamInfo.channels);
-          impl->info.sourceFormat.sampleRate = streamInfo.sample_rate;
-          impl->info.sourceFormat.precisionBits = static_cast<std::uint8_t>(streamInfo.bits_per_sample);
-          impl->info.sourceFormat.sampleKind = SampleKind::Integer;
+      impl->info.sourceFormat.channels = static_cast<std::uint8_t>(streamInfo.channels);
+      impl->info.sourceFormat.sampleRate = streamInfo.sample_rate;
+      impl->info.sourceFormat.precisionBits = static_cast<std::uint8_t>(streamInfo.bits_per_sample);
+      impl->info.sourceFormat.sampleKind = SampleKind::Integer;
 
-          auto const configuredRes = impl->outputAdapter.configure(
-            impl->info.sourceFormat, nativeFlacEncoding(impl->info.sourceFormat.precisionBits));
+      impl->totalFrames = streamInfo.total_samples;
+      impl->info.optTotalFrames =
+        streamInfo.total_samples != 0 ? std::optional<std::uint64_t>{streamInfo.total_samples} : std::nullopt;
 
-          if (!configuredRes)
-          {
-            impl->optOutputError = configuredRes.error();
-            return;
-          }
+      if (streamInfo.sample_rate > 0)
+      {
+        impl->info.duration = detail::convertToDuration(streamInfo.total_samples, streamInfo.sample_rate);
+      }
 
-          impl->info.outputFormat = *configuredRes;
-          impl->totalFrames = streamInfo.total_samples;
-          impl->info.optTotalFrames =
-            streamInfo.total_samples != 0 ? std::optional<std::uint64_t>{streamInfo.total_samples} : std::nullopt;
-
-          if (streamInfo.sample_rate > 0)
-          {
-            impl->info.duration = detail::convertToDuration(streamInfo.total_samples, streamInfo.sample_rate);
-          }
-
-          impl->info.isLossy = false;
-          impl->info.codec = AudioCodec::Flac;
-          impl->hasConfiguredStreamInfo = true;
-        }
-      });
+      impl->info.isLossy = false;
+      impl->info.codec = AudioCodec::Flac;
+      impl->hasStreamInfo = true;
+    }
   }
 
-  void FlacDecoderSession::Impl::errorCallback(::FLAC__StreamDecoder const* /*decoder*/,
+  void FlacDecoderSession::Impl::errorCallback(::FLAC__StreamDecoder const* decoder,
                                                ::FLAC__StreamDecoderErrorStatus status,
                                                void* clientData) noexcept
   {
-    if (auto* const impl = utility::unsafeDowncast<Impl>(clientData);
-        status != ::FLAC__STREAM_DECODER_ERROR_STATUS_LOST_SYNC && !impl->optDecodeError)
+    auto* const impl = utility::unsafeDowncast<Impl>(clientData);
+
+    // A raw header or subframe can fail before write delivery. Stop at the next
+    // read request instead of resynchronizing to EOF. Buffered bytes may still
+    // be consumed. Prefix LOST_SYNC occurs during metadata search, not here.
+    if (impl->isReadingFirstMetadataBlock && !impl->hasStreamInfo &&
+        ::FLAC__stream_decoder_get_state(decoder) == ::FLAC__STREAM_DECODER_READ_FRAME)
+    {
+      impl->hasFramePhaseWithoutStreamInfo = true;
+    }
+
+    if (status != ::FLAC__STREAM_DECODER_ERROR_STATUS_LOST_SYNC && !impl->optDecodeError)
     {
       impl->optDecodeError = status;
     }

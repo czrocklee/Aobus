@@ -24,7 +24,11 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 - Decoders preserve inspected sample rate, channel count, sample kind, precision, and effective speaker mask; they do not silently resample, add or remove channels, or reduce precision.
 - A decoder publishing identified speakers normalizes their codec-native layout to the order owned by the [PCM format reference](pcm-format.md); unassigned channels retain their index order.
   Byte-order normalization alone, such as Opus family 1 mapping, does not establish published layout evidence.
-- WAV applies its [source interpretation](pcm-format.md#wav-source-interpretation) before output adaptation and retains raw declarations independently; the other current codec producers still report zero masks and `Unknown` interpretation evidence.
+- WAV applies its [source interpretation](pcm-format.md#wav-source-interpretation) before output adaptation and retains raw declarations independently; its multichannel and explicit-zero compatibility fallbacks are `Inferred`.
+  FLAC finalizes its candidate effective mask before output adaptation and publishes its distinct [source interpretation](pcm-format.md#flac-source-interpretation) only after required initialization and output admission succeed: with complete trustworthy metadata and first-block STREAMINFO, absent exact mask keys select `Identified` format defaults for counts 1/2/3/4/7/8, but zero / `Unknown` for 5/6 because back/side geometry is unresolved.
+  Complete supported agreeing declarations select exact `Identified` sets without additional PCM reordering, including distinct five/six-channel back and side sets.
+  Malformed, conflicting, zero, partial, excess, reserved-bit, or wildcard declarations, nonfirst STREAMINFO, incomplete comments, and optional inspection inability leave both FLAC masks zero and origin `Unknown`, never `Inferred`; later good evidence cannot repair that inspection.
+  The other current codec producers still report zero masks and `Unknown` interpretation evidence.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -126,13 +130,28 @@ The current engine splice gate accepts only lossless FLAC, lossless ALAC, and WA
 Exact equality is the default; bounded backend proof may additionally admit stereo mask `0` versus FL/FR `0x3` without changing either track's identity.
 Source layout origin is not part of mode equality; successor adoption publishes its own evidence even when an inferred and an identified layout share the same effective mask.
 The already-open mode and any retained confirmed endpoint must preserve the successor signal; otherwise the transition drains and reopens.
-Lossy and unknown sessions use the drain path until delay/padding trim is parsed and fixture-tested.
+This also bounds FLAC↔FLAC transitions: known↔`Unknown` mono or 3–8-channel modes and different nonzero role sets drain/reopen, while equal zero masks may reuse without proving the original roles; stereo `0`/`0x3` has only the backend-specific exceptions above.
+The [lookahead contract](audio-execution.md#prepared-lookahead) records the conditional gapless-eligibility losses and the unchanged ALAC zero-mask boundary.
+Absent-mask five/six-channel FLAC now drains against otherwise-compatible inferred WAV identity, but may regain zero/zero reuse with unknown ALAC or FLAC; this is not a universal splice or native-routing guarantee.
+Lossy and unknown-codec sessions use the drain path until delay/padding trim is parsed and fixture-tested; `Unknown` channel confidence alone does not exclude lossless FLAC.
 
 ## Failure behavior
 
 Malformed external media and unsupported requests return recoverable decoder errors.
 FLAC requires STREAMINFO to establish a valid source and output format before construction succeeds; missing required metadata is `DecodeFailed`.
-FLAC treats corrupted metadata, headers, frames, CRC mismatches, detected missing frames, and premature end before the declared sample count as `DecodeFailed`; a standalone loss-of-sync notice may remain recoverable for resynchronization.
+Initialization makes one native `process_single` call before bulk metadata processing; only STREAMINFO delivered by that first step establishes an origin eligible for optional identity inspection.
+Native positions, bounds, and the mapped STREAMINFO header only cross-check that origin; normal prefixed first-block STREAMINFO remains identifiable, while native-tolerated nonfirst STREAMINFO stays unknown even with an earlier valid declaration or a fake marker inside padding.
+During that initial step, an error in native `READ_FRAME` state before STREAMINFO records a raw-frame-phase, missing-STREAMINFO cause, including when an implicit sample-rate or bit-depth code or a raw-subframe `LOST_SYNC` prevents delivery to the write callback.
+The next read callback returns `ABORT`; libFLAC may still scan already buffered bytes before requesting another read, so this is not immediate termination or a strict byte-count bound.
+Initialization preserves that recorded required-STREAMINFO diagnostic before generic native-false or decode-error handling.
+The write callback also guards raw-frame delivery before STREAMINFO, retaining the same cause without touching an unconfigured adapter.
+Normal junk/ID3-prefix `LOST_SYNC` notices remain ignored for native resynchronization; valid STREAMINFO with implicit code-zero frame fields remains ordinary valid input, including 48000 Hz / 16-bit audio.
+End of stream alone does not establish the raw-frame cause: an actual native metadata-processing failure without that cause, including truncated STREAMINFO, retains `Failed to read FLAC metadata`.
+FLAC preserves native metadata, header, frame, CRC, missing-frame, and premature-end failures as `DecodeFailed`; a failed native processing call remains a hard failure even without an error callback, while a standalone loss-of-sync notice may remain recoverable for resynchronization.
+Internally unreadable VORBIS_COMMENT payloads are a distinct compatibility case: the session leaves those blocks unrequested through libFLAC and scans bounded views from the same file mapping outside C callbacks.
+Such comment damage alone does not newly refuse otherwise-valid audio, but prevents publication of a hard source identity even if another readable declaration is valid.
+The [FLAC source policy](pcm-format.md#flac-source-interpretation) likewise leaves recognized invalid declarations and optional position/marker/cross-check inability unknown instead of refusing playback; it never suppresses I/O, required STREAMINFO, actual outer metadata-boundary, or native audio errors.
+Unknown admission is best-effort transport, not a role-safety or native-routing guarantee; numerical bit-perfectness is independent of channel confidence.
 Delivered frame sample positions must continue the decoded timeline, or begin at the requested seek target.
 A missing-sample gap or additional write over pending PCM is rejected before any incorrectly positioned block is returned, even when libFLAC suppresses its missing-frame notice or the total sample count is unknown.
 A healthy FLAC `flush()` resets provider buffers without skipping unread PCM: the byte cursor is restored to the decoded boundary, and already decoded seek-target PCM remains consumable at its original sample position.
@@ -154,7 +173,13 @@ An Opus first audio page whose granule position is smaller than the samples it c
 MP4 factory routing stops after selecting the first usable audio track. No matching audio track is translated to `NotSupported`, while a structural parser failure encountered before selection preserves its parser error.
 WAV construction validates chunk boundaries only through the first complete supported `fmt` and non-empty `data` pair; unrelated later chunks do not prevent decoding already-bounded audio data.
 After existing geometry and precision validation, the [WAV source policy](pcm-format.md#wav-source-interpretation) refuses unsupported layouts with `NotSupported` before output adaptation or backend open; it never rewrites canonical sample order to manufacture compatibility.
-For `play()`, Engine reports such an inspection refusal as a recoverable `TrackOpen` failure without opening or starting the backend.
+After native metadata processing, bounded optional inspection finalizes the FLAC source mask before requested-output adaptation, followed by STREAMINFO geometry validation.
+Unsupported or malformed optional identity evidence produces aligned zero source/output masks and `Unknown`, not `NotSupported`; required requested-output precision errors retain their existing precedence over final STREAMINFO geometry validation.
+Comment parsing occurs outside foreign callbacks through the allocation-free raw Vorbis comment walker shared with library import; playback does not allocate owning copies of every comment or impose a fixed comment-count cap.
+Sharing the walker does not change import's atomic publication or format-specific trailing-byte semantics.
+Private output configuration is not session publication: a later required geometry failure destroys the candidate, and every returned session remains ready and one-shot.
+FLAC does not apply WAV's zero fallback or excess-bit trimming, and withholding identity is not a general FLAC-validity judgment.
+For `play()`, Engine reports WAV layout refusals and required FLAC inspection failures, including malformed outer metadata, as recoverable `TrackOpen` failures without opening or starting the backend.
 For `setNext()`, it returns the inspection error synchronously after disarming any unconsumed predecessor lookahead; it does not report a current-playback failure or interrupt the current track in the absence of a competing render transition.
 End of stream is a normal `PcmBlock` value.
 
@@ -180,6 +205,17 @@ Decoder session and malformed-input tests under [`test/unit/audio/`](../../../te
 [`DecoderOutputAdapterTest.cpp`](../../../test/unit/audio/detail/DecoderOutputAdapterTest.cpp) directly locks rejection of precision loss, pass-through behavior, exact byte conversion, and reset.
 [`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp) locks effective WAV identity, interpretation origin, refusal precedence, output adaptation, and unchanged PCM/seek/EOF behavior.
 [`EngineWavChannelLayoutTest.cpp`](../../../test/unit/audio/EngineWavChannelLayoutTest.cpp) locks real-WAV mode reuse versus drain/reopen, successor evidence publication, recoverable layout refusal before backend open, and rejected `setNext()` preservation of current playback while clearing old lookahead.
+[`FlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/FlacDecoderChannelLayoutTest.cpp) locks FLAC default and declared identities, exact field-name matching, strict value parsing and duplicate resolution, unknown admission for invalid declarations, output adaptation, and unchanged PCM/seek/flush/EOF behavior.
+[`FlacMetadataInitializationTest.cpp`](../../../test/unit/audio/FlacMetadataInitializationTest.cpp) covers initialization diagnostics for raw frames without STREAMINFO, including implicit rate/precision headers, with valid-STREAMINFO, prefix-tolerance, and truncated-metadata controls.
+[`FlacCommentCompatibilityTest.cpp`](../../../test/unit/audio/FlacCommentCompatibilityTest.cpp) protects bounded comment inspection, absorbing unknown identity after structural damage or invalid declarations, native-prefix first-block STREAMINFO anchoring, unknown identity for nonfirst STREAMINFO even with early valid declarations or fake padding markers, native outer-boundary failures, and large comment counts with literal PCM.
+[`FlacWavMaskCompatibilityTest.cpp`](../../../test/unit/audio/FlacWavMaskCompatibilityTest.cpp) compares WAV identity with retained reference-FLAC output bytes, pinning trimmed WAV identity versus unknown FLAC for excess masks and literal PCM preservation without a runtime encoder dependency.
+[`EngineFlacChannelLayoutTest.cpp`](../../../test/unit/audio/EngineFlacChannelLayoutTest.cpp) owns real WAV/FLAC transition coverage: matching default identities permit strict reuse for counts 1/2/3/4/7/8, whereas absent-mask five/six-channel FLAC differs from inferred WAV and drains/reopens.
+It also covers successor evidence publication, different-role drain/reopen, recoverable malformed-outer-metadata failure before backend open, and rejected `setNext()` preservation of current playback while clearing old lookahead.
+[`EngineFlacTransitionTest.cpp`](../../../test/unit/audio/EngineFlacTransitionTest.cpp) covers six-channel real-FLAC producer transitions: equal known and equal unknown reuse controls, known↔unknown drain/reopen, different nonzero roles, captured PCM, and successor evidence publication.
+[`FlacAlsaPipeWireRouteTest.cpp`](../../../test/unit/audio/backend/FlacAlsaPipeWireRouteTest.cpp) drives real five/six-channel decoders through controlled ALSA and PipeWire parsed-map boundaries: untagged sources retain ordinal bytes across back/side observations, while explicit identities keep strict role checks and same-set permutations. It does not open hardware.
+[`VorbisCommentTest.cpp`](../../../test/unit/media/VorbisCommentTest.cpp) protects the shared raw grammar, borrowed order and bytes, malformed prefixes/tails, visitor abort and exception behavior, large counts, and atomic import collection.
+[`EngineStereoReuseTest.cpp`](../../../test/unit/audio/EngineStereoReuseTest.cpp) retains the real WAV/ALAC stereo fixture and also checks FLAC/ALAC stereo opt-in splicing versus strict draining in both directions, with literal PCM and source-identity publication.
+These controlled Engine cases do not certify native routing or audible gaplessness.
 [`SegmentDecoderSessionTest.cpp`](../../../test/unit/audio/SegmentDecoderSessionTest.cpp) covers range PCM, exact and millisecond seeks, stable EOF, early EOF, structural mismatches, and both decoder openings.
 [`CarrierPlaybackTest.cpp`](../../../test/unit/runtime/CarrierPlaybackTest.cpp) verifies the stored second segment through final runtime PCM and a nonempty zero-millisecond segment.
 
