@@ -56,6 +56,17 @@ Codec-specific initialization-time narrowing includes:
 - AAC/ALAC packet-source `FormatRejected` during initialization is translated to `InitFailed` after the MP4 codec route has already been selected.
 
 FLAC rejects missing STREAMINFO during construction and discontinuous delivered sample positions before returning incorrectly indexed PCM, including when the total sample count is unknown.
+A raw-frame write before STREAMINFO preserves the required-STREAMINFO diagnostic without touching an unconfigured output adapter.
+The same cause is recorded for an error in native `READ_FRAME` during the initial step before STREAMINFO, including implicit rate/precision headers or raw-subframe `LOST_SYNC` that never reach a write callback.
+That cause makes the next read callback abort and takes precedence over generic native-false or decode-error diagnostics; already buffered bytes may still be scanned before the next read.
+Normal prefix `LOST_SYNC` remains tolerated, and end of stream alone is not a missing-STREAMINFO cause marker.
+Without the recorded cause, an actual native metadata failure such as truncated STREAMINFO retains `Failed to read FLAC metadata`; a failed native processing call remains a hard failure even without an error callback.
+The [initialization failure contract](decoder-session.md#failure-behavior) owns these phase and precedence rules.
+Its [source-identity policy](pcm-format.md#flac-source-interpretation) treats absent exact mask keys for five/six channels, malformed recognized channel-mask declarations, conflicting duplicates, zero/partial/excess/reserved/wildcard assignments, nonfirst STREAMINFO, incomplete comments, and optional position/marker/cross-check inability as unknown identity, not new `NotSupported` or `DecodeFailed` gates.
+Otherwise-valid audio may open with aligned zero source/output masks and `Unknown` origin; later valid declarations never repair that inspection.
+Required I/O, native metadata, STREAMINFO, frame, timeline, and premature-EOF faults retain their error behavior, including actual outer metadata truncation rejected by native processing.
+Requested-output precision errors remain required failures with their existing precedence over final STREAMINFO geometry validation; optional unknown evidence never hides them.
+Unknown playback is best-effort admission, not proof of safe speaker roles or native routing, and does not change numerical precision guarantees.
 It preserves a frame-format `DecodeFailed` from a frame delivered to the session while seeking instead of replacing it with generic `SeekFailed`.
 It also preserves a recorded cause when a later seek cannot restart an aborted or seek-error codec without an explicit `flush()`; reads in those states fail instead of retrying without progress.
 The diagnostic identifies the inspected and conflicting frame properties; a seek failure that has no stored decoding cause remains `SeekFailed`.
@@ -72,8 +83,15 @@ Unopened and closed states are not part of the public `DecoderSession` surface.
 Public translating methods catch only `DecoderException` and return its error.
 They do not catch allocation, logic, invariant, or unrelated exceptions.
 Public `DecoderSession` methods are `noexcept`; an unrelated escaping exception therefore terminates rather than being reclassified as external-media failure.
-FLAC callbacks are `noexcept`; its allocating write and metadata callbacks also contain unexpected exceptions through [exception-aware fatal handling](../failure/fatal.md#exception-aware-entry), not C++ exception transport through the provider.
+FLAC callbacks are `noexcept`; the allocating write callback contains unexpected exceptions through [exception-aware fatal handling](../failure/fatal.md#exception-aware-entry), not C++ exception transport through the provider.
+The metadata callback handles STREAMINFO with inline nonallocating `noexcept` state updates, without the allocating write callback's fatal wrapper or a VORBIS_COMMENT request.
+The first native `process_single` step must deliver first-block STREAMINFO before optional identity inspection is eligible; native positions, bounds, and the mapped STREAMINFO header are cross-checks, not sole proof of origin.
+Bounded mapped comment parsing happens outside foreign callbacks through the raw allocation-free Vorbis comment walker shared with library import, without owning copies of each comment or a fixed comment-count cap.
+Import retains its independent atomic-publication and trailing-byte policies.
+Moving this work does not make allocation failure recoverable: the existing one-shot `noexcept` initialization boundary still fails fast for an unrelated escaping exception, including out-of-memory failure.
+Raw-frame-phase missing-STREAMINFO detection records inline state in the error callback and aborts at the next read callback; it does not format an owning diagnostic inside either callback.
 Frame-format and sample-position failures record inline evidence and their detection locations; owning diagnostics are formatted only after the libFLAC call returns.
+Allocation-free comment traversal does not imply allocation-free initialization or whole-stream decoding.
 
 ## Validation rules
 
@@ -110,6 +128,7 @@ if (!session)
 - [`DecoderFactoryTest.cpp`](../../../test/unit/audio/DecoderFactoryTest.cpp) protects ready construction, routing, and initialization failure codes.
 - [`DecoderErrorTest.cpp`](../../../test/unit/audio/DecoderErrorTest.cpp) protects helper location preservation, private exception values, constructor inaccessibility, and the absence of instance `close()`.
 - [`AudioFatalProbeProtocol.cpp`](../../../test/fatal/AudioFatalProbeProtocol.cpp) protects the `TrackSession` invariant that an injected `DecoderFactoryFn` success contains a session.
+- [`FlacMetadataInitializationTest.cpp`](../../../test/unit/audio/FlacMetadataInitializationTest.cpp) covers raw-frame missing-STREAMINFO initialization diagnostics, implicit-header cases, and valid metadata/prefix and truncated-metadata controls.
 - Codec tests under [`test/unit/audio/`](../../../test/unit/audio) protect initialization failures, per-operation failure codes, and end-of-stream values.
 
 ## Related documents

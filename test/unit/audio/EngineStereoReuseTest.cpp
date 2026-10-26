@@ -97,56 +97,60 @@ namespace ao::audio::test
 
     std::vector<std::uint8_t> stereoFlacBytes()
     {
-      // The shared STREAMINFO/frame builder deliberately fixes a 16-frame,
-      // 48000 Hz stereo S16 stream; no external codec process is needed.
       auto bytes = buildFlacStreaminfoBytes(16);
-      auto const markers = std::to_array<std::int32_t>({0x1211, 0x2423});
+      auto const markers = std::to_array<std::int32_t>({0x3635, 0x4847});
       auto const frame = buildFlacVerbatimFrameBytes(0, 48000, 2, 16, markers);
       bytes.insert(bytes.end(), frame.begin(), frame.end());
       return bytes;
     }
+
+    std::vector<std::uint8_t> stereoFlacPcm()
+    {
+      auto bytes = std::vector<std::uint8_t>{};
+
+      for (std::uint32_t frame = 0; frame < 16; ++frame)
+      {
+        // Literal oracle, independent of encoded markers or a decoder result.
+        bytes.insert(bytes.end(), {0x35, 0x36, 0x47, 0x48});
+      }
+
+      return bytes;
+    }
   } // namespace
 
-  TEST_CASE(
-    "Engine - backend stereo identity opt-in splices real WAV with FLAC and ALAC without rewriting source facts",
-    "[audio][integration][engine][gapless][concurrency]")
+  TEST_CASE("Engine - stereo identity opt-in splices real WAV or FLAC with ALAC without rewriting source facts",
+            "[audio][integration][engine][gapless][concurrency]")
   {
-    bool const useAlac = GENERATE(false, true);
-    bool const wavFirst = GENERATE(false, true);
-    CAPTURE(useAlac, wavFirst);
-    auto const compressed =
-      ao::test::TempFile{useAlac ? stereoAlacBytes() : stereoFlacBytes(), useAlac ? ".m4a" : ".flac"};
-    auto const wavPcm = std::vector<std::uint8_t>{0x35, 0x36, 0x47, 0x48, 0x59, 0x5A, 0x6B, 0x6C};
-    auto const wav =
-      ao::test::TempFile{ao::test::wav::makeWav({.sampleFormat = ao::test::wav::SampleFormat::ExtensiblePcm,
-                                                 .channels = 2,
-                                                 .sampleRate = 48000,
-                                                 .channelMask = 3,
-                                                 .audioData = wavPcm}),
-                         ".wav"};
+    bool const identifiedFirst = GENERATE(false, true);
+    bool const identifiedFlac = GENERATE(false, true);
+    CAPTURE(identifiedFirst, identifiedFlac);
+    auto const compressed = ao::test::TempFile{stereoAlacBytes(), ".m4a"};
+    auto const identifiedPcm =
+      identifiedFlac ? stereoFlacPcm() : std::vector<std::uint8_t>{0x35, 0x36, 0x47, 0x48, 0x59, 0x5A, 0x6B, 0x6C};
+    auto const identifiedBytes = identifiedFlac
+                                   ? stereoFlacBytes()
+                                   : ao::test::wav::makeWav({.sampleFormat = ao::test::wav::SampleFormat::ExtensiblePcm,
+                                                             .channels = 2,
+                                                             .sampleRate = 48000,
+                                                             .channelMask = 3,
+                                                             .audioData = identifiedPcm});
+    auto const identified = ao::test::TempFile{identifiedBytes, identifiedFlac ? ".flac" : ".wav"};
     auto compressedPcm = std::vector<std::uint8_t>{};
 
     for (std::uint32_t frame = 0; frame < 16; ++frame)
     {
       // Independent S16LE oracle, never derived from encoded fixture bytes.
-      if (useAlac)
-      {
-        compressedPcm.insert(compressedPcm.end(), {0x52, 0x51, 0x64, 0x63});
-      }
-      else
-      {
-        compressedPcm.insert(compressedPcm.end(), {0x11, 0x12, 0x23, 0x24});
-      }
+      compressedPcm.insert(compressedPcm.end(), {0x52, 0x51, 0x64, 0x63});
     }
 
-    auto const& firstPath = wavFirst ? wav.path : compressed.path;
-    auto const& nextPath = wavFirst ? compressed.path : wav.path;
-    auto const& firstPcm = wavFirst ? wavPcm : compressedPcm;
-    auto const& nextPcm = wavFirst ? compressedPcm : wavPcm;
-    std::uint32_t const firstMask = wavFirst ? 3U : 0U;
-    std::uint32_t const nextMask = wavFirst ? 0U : 3U;
-    auto const firstOrigin = wavFirst ? ChannelLayoutOrigin::Identified : ChannelLayoutOrigin::Unknown;
-    auto const nextOrigin = wavFirst ? ChannelLayoutOrigin::Unknown : ChannelLayoutOrigin::Identified;
+    auto const& firstPath = identifiedFirst ? identified.path : compressed.path;
+    auto const& nextPath = identifiedFirst ? compressed.path : identified.path;
+    auto const& firstPcm = identifiedFirst ? identifiedPcm : compressedPcm;
+    auto const& nextPcm = identifiedFirst ? compressedPcm : identifiedPcm;
+    std::uint32_t const firstMask = identifiedFirst ? 3U : 0U;
+    std::uint32_t const nextMask = identifiedFirst ? 0U : 3U;
+    auto const firstOrigin = identifiedFirst ? ChannelLayoutOrigin::Identified : ChannelLayoutOrigin::Unknown;
+    auto const nextOrigin = identifiedFirst ? ChannelLayoutOrigin::Unknown : ChannelLayoutOrigin::Identified;
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     backendPtr->setStereoIdentityReuse(true);
     auto* const backend = backendPtr.get();
@@ -256,6 +260,72 @@ namespace ao::audio::test
     CHECK(advancedEvents.back().itemId == thirdItem.id);
     CHECK(advancedEvents.back().input.filePath == firstPath);
     CHECK(advancedEvents.back().generation == thirdRes->generation);
+  }
+
+  TEST_CASE("Engine - strict stereo backend drains real FLAC and ALAC without promoting the successor",
+            "[audio][integration][engine][gapless][concurrency]")
+  {
+    bool const flacFirst = GENERATE(false, true);
+    CAPTURE(flacFirst);
+    auto const flac = ao::test::TempFile{stereoFlacBytes(), ".flac"};
+    auto const alac = ao::test::TempFile{stereoAlacBytes(), ".m4a"};
+    auto const flacPcm = stereoFlacPcm();
+    auto alacPcm = std::vector<std::uint8_t>{};
+
+    for (std::uint32_t frame = 0; frame < 16; ++frame)
+    {
+      alacPcm.insert(alacPcm.end(), {0x52, 0x51, 0x64, 0x63});
+    }
+
+    auto const& firstPcm = flacFirst ? flacPcm : alacPcm;
+    auto const firstItem = makePlaybackItem(flacFirst ? flac.path : alac.path);
+    auto const nextItem = makePlaybackItem(flacFirst ? alac.path : flac.path);
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backend = backendPtr.get();
+    auto advanced = CallbackLatch{};
+    auto ended = CallbackLatch{};
+    auto failed = CallbackLatch{};
+    auto settled = CallbackLatch{};
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice()};
+    engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advanced.notify(); });
+    engine.setOnTrackEnded([&](Engine::TrackEnded const&) { ended.notify(); });
+    engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const&) { failed.notify(); });
+    engine.play(firstItem);
+    REQUIRE(engine.transport() == Transport::Playing);
+    auto const info = engine.status().routeState;
+    CHECK(info.sourceFormat.speakerMask == (flacFirst ? 3U : 0U));
+    CHECK(info.sourceChannelLayout.origin ==
+          (flacFirst ? ChannelLayoutOrigin::Identified : ChannelLayoutOrigin::Unknown));
+    auto const preparedRes = engine.setNext(nextItem);
+    REQUIRE(preparedRes);
+    REQUIRE(preparedRes->transition == Engine::PreparedTransitionMode::DrainFallback);
+    auto* const target = backend->target();
+    REQUIRE(target != nullptr);
+    auto output = std::vector<std::byte>(firstPcm.size() * 2U, std::byte{0xA5});
+    auto const rendered = target->renderPcm(output);
+    REQUIRE(rendered.bytesWritten == firstPcm.size());
+    CHECK(std::ranges::equal(std::span<std::byte const>{output}.first(firstPcm.size()),
+                             utility::bytes::view(std::span<std::uint8_t const>{firstPcm})));
+    CHECK(std::ranges::all_of(std::span<std::byte const>{output}.subspan(firstPcm.size()),
+                              [](std::byte value) { return value == std::byte{0xA5}; }));
+    target->handlePositionAdvanced(rendered.positionFrames);
+    auto const drain = target->renderPcm(output);
+    CHECK(drain.bytesWritten == 0);
+    REQUIRE(drain.drained);
+    CHECK(engine.isCurrentPlaybackItem(firstItem.id));
+    CHECK_FALSE(engine.isCurrentPlaybackItem(nextItem.id));
+    CHECK(engine.status().routeState.sourceFormat == info.sourceFormat);
+    CHECK(engine.status().routeState.sourceChannelLayout == info.sourceChannelLayout);
+    backend->emitDrainComplete();
+    REQUIRE(ended.tryWaitForCount(1));
+    CHECK(engine.transport() == Transport::Idle);
+    CHECK(backend->target() == nullptr);
+    engine.defer([&] { settled.notify(); });
+    REQUIRE(settled.tryWaitForCount(1));
+    engine.shutdown();
+    CHECK(advanced.count() == 0);
+    CHECK(ended.count() == 1);
+    CHECK(failed.count() == 0);
   }
 
   TEST_CASE("Engine - default strict stereo backend drains mask aliases but retains equal-mask reuse",

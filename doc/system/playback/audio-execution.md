@@ -285,12 +285,28 @@ An override may additionally prove identical installed transport for stereo mask
 This does not make zero a wildcard, change decoder identity, or relax ordinary open-result validation.
 
 PipeWire proves the same exact FL/FR offer, installed permutation, and later-format admission for this pair; WASAPI configures the same ascending FL/FR client descriptor.
-ALSA additionally requires the installed current map to be exactly unflagged FL,FR in that order; missing, partial, reversed, silent, or flagged observations cannot prove reuse.
+ALSA additionally requires a healthy installed mode whose current map is exactly unflagged FL,FR in that order; missing, partial, reversed, silent, or flagged observations cannot prove reuse.
 The null sink discards either representation identically.
 Core Audio keeps the strict default: an initial identity plan does not prove that later layout refresh using the original client mask remains safe for the other source identity.
-Its cross-codec `0`/`0x3` transition therefore still drains and reopens until that refresh contract or the codec producers supply a stronger identity proof.
-Otherwise-compatible mono and 3–8-channel WAV↔FLAC/ALAC transitions also still drain and reopen on every current backend: WAV publishes a nonzero identity while those codec producers retain zero, and the additional reuse proof is stereo-only.
-This loses splice eligibility that these transitions had when WAV also published zero; it does not prevent playback or equal-identity mono/multichannel reuse.
+Its cross-codec `0`/`0x3` transition therefore still drains and reopens; ALAC stereo remains a zero-mask source.
+Default FLAC and WAV effective identities match for counts 1/2/3/4/7/8, so exact canonical mode equality permits reuse even on Core Audio, subject to the same rate, channel geometry, installed encoding, and retained endpoint precision constraints.
+Different source interpretation origins do not defeat that equality: these FLAC defaults are `Identified`, while WAV's multichannel compatibility defaults are `Inferred`.
+Absent exact mask keys, five/six-channel FLAC instead reports zero / `Unknown` because back/side geometry is unresolved; otherwise-compatible inferred WAV retains a nonzero effective identity, so that boundary drains and reopens on every current backend.
+Complete supported agreeing explicit FLAC back masks `0x37`/`0x3F` can still match WAV's compatibility identities; explicit side masks `0x607`/`0x60F` remain different roles.
+Explicitly different role sets still drain and reopen, and a fresh native open may refuse an incompatible route; matching codec names or channel counts do not guarantee a splice.
+Otherwise-compatible mono and 3–8-channel transitions between ALAC and either WAV or identified FLAC still drain and reopen on every current backend: ALAC retains zero and `Unknown`, while WAV and identified FLAC publish nonzero identities, and the additional alias proof is stereo-only.
+Introducing FLAC identity therefore loses previously available FLAC↔ALAC splice eligibility: before this change both producers reported zero masks, so otherwise-equal modes passed the strict mask comparison.
+For identified FLAC, the loss affects mono and 3–8 channels on every current backend, plus stereo on strict Core Audio and on ALSA without the healthy installed canonical unflagged FL,FR proof.
+PipeWire, WASAPI, and null retain the bounded stereo alias opt-in.
+This is a conditional gapless-eligibility regression, not a universal playback failure; native initial-open admission is a separate prerequisite.
+It does not prevent equal-identity mono/multichannel reuse.
+A FLAC session with absent exact mask keys at five/six channels, nonfirst STREAMINFO, or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence instead retains zero/`Unknown` under its [source policy](pcm-format.md#flac-source-interpretation); uncertainty never authorizes a mask wildcard or bypasses the ordinary reuse checks.
+Withholding absent-mask five/six-channel identity can restore otherwise-compatible zero/zero reuse with unknown ALAC or FLAC, unlike the earlier count-derived `Identified` back-mask interpretation.
+This is conditional eligibility, not a universal splice promise, evidence of original speaker roles, or native-routing proof; ALAC itself remains unchanged.
+This creates a same-codec FLAC↔FLAC gapless-eligibility loss relative to the earlier all-zero FLAC producer: otherwise-equal known↔`Unknown` mono and 3–8-channel pairs, or pairs with different nonzero role sets, now drain and reopen in either direction instead of passing the old zero/zero comparison.
+Stereo known FL/FR `0x3` versus zero has only the bounded backend exceptions above; other different stereo role sets do not acquire an alias.
+Equal known masks and equal zero/zero masks remain eligible under the ordinary geometry, encoding, and retained-endpoint checks, but zero/zero reuse proves neither track's original speaker intent.
+Forgiving optional tags admits more tracks without restoring every clean-track↔unknown-track splice; it does not change ALAC, which remains zero/`Unknown`, or remove the conditional FLAC↔ALAC regression above.
 
 Preparation and adoption both validate the successor's own canonical mode against the confirmed endpoint retained for this native open; promotion refreshes source interpretation without replacing that endpoint bound.
 Native mapping evidence remains tied to this open and its actual observations, so it may stay more conservative than a fresh successor open would report.
@@ -442,9 +458,12 @@ An absent endpoint means only that the backend could not inspect a direct endpoi
 
 #### Channel compatibility and native evidence
 
-WAV's [source interpretation](pcm-format.md#wav-source-interpretation) activates canonical PCM with effective speaker identities without a blanket multichannel ban.
-Its `Identified` or `Inferred` source history does not establish native mapping or physical routing.
-The other current codec producers retain zero masks and `Unknown` source interpretation; WAV compatibility sets are not backend defaults.
+WAV's [source interpretation](pcm-format.md#wav-source-interpretation) and FLAC's distinct [source interpretation](pcm-format.md#flac-source-interpretation) activate canonical PCM with effective speaker identities without a blanket multichannel ban.
+WAV's `Identified` or `Inferred` history and FLAC's `Identified` history do not establish native mapping or physical routing.
+FLAC with absent exact mask keys at five/six channels, nonfirst STREAMINFO, or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence retains zero masks and `Unknown` rather than a guessed identity.
+That best-effort playback admission is not a role-safety or native-routing guarantee: zero-mask paths can use ordinal/default transport through different speaker roles, and native open can still fail.
+Numerical bit-perfectness is independent of channel confidence.
+The other current codec producers retain zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are backend defaults.
 
 Source admission and native delivery evidence are separate decisions.
 A backend may admit transport without proving every speaker relationship; the returned canonical client mask must still retain the source identity.
@@ -903,7 +922,10 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineSeekErrorTest.cpp`](../../../test/unit/audio/EngineSeekErrorTest.cpp) protects Error rejection through both seek entry points before and after failure delivery, paused-origin failure, unchanged backend/source state on rejection, and recovery through a new playback.
   [`EngineControlErrorTest.cpp`](../../../test/unit/audio/EngineControlErrorTest.cpp) protects terminal stop-callback delivery across a later successful seek sequence and old-target rejection during explicit replacement; its backend fake does not reproduce an SDK stop failure.
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
-- [`EngineStereoReuseTest.cpp`](../../../test/unit/audio/EngineStereoReuseTest.cpp) protects backend-authorized WAV/FLAC/ALAC stereo transport reuse, strict fallback, identity preservation, retained endpoint precision, and adoption-time rechecking; native value tests separately protect the transport proof, not physical routing.
+- [`EngineStereoReuseTest.cpp`](../../../test/unit/audio/EngineStereoReuseTest.cpp) protects backend-authorized WAV/ALAC and FLAC/ALAC stereo mask-alias transport reuse, real FLAC/ALAC strict draining, identity preservation, retained endpoint precision, and adoption-time rechecking; native value tests separately protect the transport proof, not physical routing.
+- [`EngineFlacChannelLayoutTest.cpp`](../../../test/unit/audio/EngineFlacChannelLayoutTest.cpp) owns real WAV/FLAC transition coverage: matching default identities permit strict reuse for counts 1/2/3/4/7/8, while absent-mask five/six-channel FLAC versus inferred WAV drains/reopens. It also covers captured PCM, successor interpretation publication, different-role drain/reopen, malformed-outer-metadata refusal before backend open, and rejected lookahead replacement.
+- [`EngineFlacTransitionTest.cpp`](../../../test/unit/audio/EngineFlacTransitionTest.cpp) covers six-channel real-FLAC producer transitions with equal-known and equal-unknown reuse controls, known↔unknown and different-role drain/reopen, captured PCM, and successor evidence publication.
+  These controlled Engine backends are not native hardware, audibility, or performance evidence.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.
 - [`AlsaProviderTest.cpp`](../../../test/unit/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../../test/unit/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../../test/unit/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/unit/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.

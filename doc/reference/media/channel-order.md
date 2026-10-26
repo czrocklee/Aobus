@@ -5,7 +5,7 @@ id: media.channel-order
 
 ## Scope
 
-This reference records WAVE speaker order, WAV compatibility role sets, and current Opus slot normalization.
+This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, and current Opus slot normalization.
 [PCM source interpretation](../../system/playback/pcm-format.md) owns their playback applicability; slot conventions alone do not establish published source identity or native delivery.
 
 ## WAVE speaker positions
@@ -18,7 +18,8 @@ See Microsoft's [WAVEFORMATEXTENSIBLE reference](https://learn.microsoft.com/en-
 ## Canonical role sets
 
 These sets support Aobus's [WAV compatibility policy](../../system/playback/pcm-format.md#wav-source-interpretation).
-They are not defaults for unidentified PCM or native backend observations.
+FLAC uses the same format-default identities only for counts 1, 2, 3, 4, 7, and 8; absent a mask declaration, five/six-channel FLAC remains unidentified as explained [below](#flac).
+These sets are not defaults for unidentified PCM or native backend observations.
 
 | Channels | Mask | Canonical roles |
 |---:|---:|---|
@@ -33,6 +34,20 @@ They are not defaults for unidentified PCM or native backend observations.
 
 `FL`/`FR` are front left/right, `FC` is front center, and `LFE` is low-frequency effects.
 `BL`/`BR` are back left/right, `BC` is back center, and `SL`/`SR` are side left/right.
+
+## FLAC
+
+When metadata inspection is complete and trustworthy and no exact standardized channel-mask key is present, FLAC uses the sets above with `Identified` source interpretation for counts 1, 2, 3, 4, 7, and 8.
+Five/six-channel FLAC instead retains zero effective masks and `Unknown` origin: [RFC 9639 §9.1.3](https://www.rfc-editor.org/rfc/rfc9639.html#section-9.1.3) does not resolve its back/surround pair into WAVE BL/BR versus SL/SR.
+This is not an `Inferred` fallback and does not change WAV's five/six-channel compatibility sets.
+Untrustworthy or incomplete optional identity evidence, including malformed, conflicting, zero, partial, excess, reserved-bit, or wildcard declarations, likewise leaves both effective masks zero and origin `Unknown`; later valid declarations cannot repair it.
+The format-default masks, including FC mono, are Aobus's canonical representation, not verbatim RFC WAVE masks or physical-geometry guarantees.
+Complete supported agreeing `WAVEFORMATEXTENSIBLE_CHANNEL_MASK` comments identify their declared roles in ascending assigned-bit order, not arbitrary slot swaps.
+Explicit five/six-channel back masks `0x37`/`0x3F` and side masks `0x607`/`0x60F` remain distinct identified sets.
+libFLAC already returns logical decoded slots; the session adds no PCM reorder.
+The [owning PCM policy](../../system/playback/pcm-format.md#flac-source-interpretation) defines comment parsing, duplicate resolution, best-effort admission, and the distinction from FLAC validity and streamable-subset membership.
+Unknown playback does not certify intended speaker roles or native routing; numerical bit-perfectness is independent of channel confidence.
+None of these source identities proves native delivery or physical wiring.
 
 ## Opus
 

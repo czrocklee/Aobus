@@ -5,11 +5,9 @@
 
 #include "Content.h"
 #include "Decoder.h"
+#include <ao/media/VorbisComment.h>
 #include <ao/media/file/Visitor.h>
-#include <ao/utility/ByteView.h>
 #include <ao/utility/String.h>
-
-#include <boost/endian/detail/order.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -145,35 +143,16 @@ namespace ao::media::file::detail
   std::optional<std::vector<std::string_view>> parseVorbisComments(std::span<std::byte const> payload,
                                                                    VorbisCommentTrailing trailing)
   {
-    std::size_t offset = 0;
-
-    if (!readSized(payload, offset, boost::endian::order::little))
-    {
-      return std::nullopt;
-    }
-
-    auto const optCount = readU32(payload, offset, boost::endian::order::little);
-
-    if (!optCount)
-    {
-      return std::nullopt;
-    }
-
     auto comments = std::vector<std::string_view>{};
+    bool const complete = media::tryVisitVorbisComments(payload,
+                                                        trailing,
+                                                        [&comments](std::string_view comment)
+                                                        {
+                                                          comments.push_back(comment);
+                                                          return true;
+                                                        });
 
-    for (std::uint32_t index = 0; index < *optCount; ++index)
-    {
-      auto const optComment = readSized(payload, offset, boost::endian::order::little);
-
-      if (!optComment)
-      {
-        return std::nullopt;
-      }
-
-      comments.push_back(utility::bytes::stringView(*optComment));
-    }
-
-    if (trailing == VorbisCommentTrailing::Rejected && offset != payload.size())
+    if (!complete)
     {
       return std::nullopt;
     }
