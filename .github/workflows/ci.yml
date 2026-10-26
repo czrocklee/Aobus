@@ -505,6 +505,10 @@ jobs:
       # Keep portal-owned paths stable across GitHub's fresh Windows VMs so
       # restored tools contain the same absolute paths used when created.
       AOBUS_STATE_ROOT: C:\aobus-state
+      # Native, WinUI and tidy outputs exceed the system drive's free space.
+      # Keep disposable build trees on the runner's roomy local data drive;
+      # restored tools and reusable caches retain their existing paths.
+      AOBUS_BUILD_ROOT: D:\aobus-build
       AOBUS_CHECKOUT_ID: github-actions-windows-x64
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       AOBUS_PHASE_LOG_DIR: C:\aobus-state\phase-records\${{ github.run_id }}-${{ github.run_attempt }}
@@ -682,7 +686,7 @@ jobs:
         run: >-
           python script/ao/core/vcpkg_binary_cache.py seal
           --cache-dir "$env:AOBUS_STATE_ROOT\cache\vcpkg-binary"
-          --build-root "$env:AOBUS_STATE_ROOT\build"
+          --build-root "$env:AOBUS_BUILD_ROOT"
           --key-prefix "${{ steps.vcpkg-key.outputs.prefix }}"
           --github-output $env:GITHUB_OUTPUT
 
