@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/SignalFormat.h>
 
@@ -29,6 +30,7 @@ namespace ao::audio
     NullBackend(NullBackend&&) = delete;
     NullBackend& operator=(NullBackend&&) = delete;
 
+    bool canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept override;
     BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;

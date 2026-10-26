@@ -3,13 +3,13 @@
 
 #include "AlsaChannelMap.h"
 
+#include "SpeakerSet.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/ChannelDeliveryEvidence.h>
 #include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
-#include <ao/audio/SignalFormat.h>
 #include <ao/utility/Raii.h>
 
 extern "C"
@@ -400,7 +400,7 @@ namespace ao::audio::backend::detail
     // current map was observed. Independent reader, capability, and
     // current-shape faults above keep their own failure precedence over
     // this layout refusal.
-    if (sourceIdentified && !isCompleteWaveSpeakerMask(clientFormat.speakerMask, map.channels))
+    if (!hasSupportedSourceSpeakerSet(signalFormat(clientFormat)))
     {
       return incompatibleMap("ALSA source channel mask is incomplete or contains unassigned speaker positions");
     }
@@ -467,6 +467,14 @@ namespace ao::audio::backend::detail
     }
 
     return map;
+  }
+
+  bool supportsAlsaStereoIdentityReuse(AlsaChannelMap const& map) noexcept
+  {
+    auto const& optPositions = map.observations.optCurrentPositions;
+    return map.channels == 2U && map.sampleBytes != 0U && !map.needsPermutation &&
+           map.delivery.nativeSpeakerMask == 0x3U && optPositions && optPositions->size() == 2U &&
+           (*optPositions)[0] == SND_CHMAP_FL && (*optPositions)[1] == SND_CHMAP_FR;
   }
 
   void applyAlsaChannelPermutation(std::span<std::byte> const pcm,

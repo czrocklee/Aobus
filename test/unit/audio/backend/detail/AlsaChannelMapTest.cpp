@@ -117,8 +117,73 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->delivery.isMapped);
     CHECK(mapRes->delivery.nativeSpeakerMask == 0x3U);
     CHECK(mapRes->needsPermutation == swapped);
+    CHECK(supportsAlsaStereoIdentityReuse(*mapRes) == !swapped);
     CHECK(mapRes->sourceSlots[0] == (swapped ? 1U : 0U));
     CHECK(mapRes->sourceSlots[1] == (swapped ? 0U : 1U));
+  }
+
+  TEST_CASE("AlsaChannelMap - stereo identity reuse requires observed canonical unflagged slots",
+            "[audio][unit][alsa-channel-map]")
+  {
+    auto const sourceMask = GENERATE(0x0U, 0x3U);
+    auto const mapRes = prepareAlsaChannelMap(
+      stereoFormat(sourceMask),
+      []
+      {
+        return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{currentMap({SND_CHMAP_FL, SND_CHMAP_FR})};
+      });
+
+    REQUIRE(mapRes);
+    CHECK(supportsAlsaStereoIdentityReuse(*mapRes));
+    CHECK(mapRes->delivery.isMapped == (sourceMask != 0U));
+    CHECK(mapRes->delivery.nativeSpeakerMask == 0x3U);
+    CHECK_FALSE(mapRes->needsPermutation);
+    CHECK(mapRes->sourceSlots[0] == 0U);
+    CHECK(mapRes->sourceSlots[1] == 1U);
+  }
+
+  TEST_CASE("AlsaChannelMap - legacy uncertainty permutation and flags do not authorize stereo identity reuse",
+            "[audio][unit][alsa-channel-map]")
+  {
+    auto observations = AlsaChannelMapObservations{};
+
+    SECTION("no current map")
+    {
+      // Default observations contain no current-position evidence for reuse.
+    }
+
+    SECTION("partial current map")
+    {
+      observations = currentMap({SND_CHMAP_FL, SND_CHMAP_UNKNOWN});
+    }
+
+    SECTION("same speaker set in reversed native order")
+    {
+      observations = currentMap({SND_CHMAP_FR, SND_CHMAP_FL});
+    }
+
+    SECTION("phase flag on an otherwise canonical map")
+    {
+      observations = currentMap({SND_CHMAP_FL | SND_CHMAP_PHASE_INVERSE, SND_CHMAP_FR});
+    }
+
+    SECTION("silent slots")
+    {
+      observations = currentMap({SND_CHMAP_NA, SND_CHMAP_NA});
+    }
+
+    SECTION("different known speaker set")
+    {
+      observations = currentMap({SND_CHMAP_FC, SND_CHMAP_LFE});
+    }
+
+    auto const mapRes = prepareAlsaChannelMap(
+      stereoFormat(0), [&] { return std::expected<AlsaChannelMapObservations, BackendOpenFailure>{observations}; });
+
+    REQUIRE(mapRes);
+    CHECK_FALSE(supportsAlsaStereoIdentityReuse(*mapRes));
+    CHECK_FALSE(mapRes->needsPermutation);
+    CHECK_FALSE(mapRes->delivery.isMapped);
   }
 
   TEST_CASE("AlsaChannelMap - source zero never acquires guessed slot identity", "[audio][unit][alsa-channel-map]")

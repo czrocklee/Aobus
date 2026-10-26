@@ -6,7 +6,9 @@
 #include "backend/detail/AudioBackendVolumeMath.h"
 #include "backend/detail/PipeWireFormatParsing.h"
 #include "backend/detail/PipeWireRuntime.h"
+#include "backend/detail/SpeakerSet.h"
 #include "detail/DecoderOutput.h"
+#include "detail/OpenedModeValidation.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -629,7 +631,7 @@ namespace ao::audio::backend
 
   std::optional<PcmFormat> PipeWireBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
-    if (!acceptsRawStreamLayout(sourceFormat) ||
+    if (!hasSupportedSourceSpeakerSet(sourceFormat) ||
         sourceFormat.sampleRate > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()))
     {
       return std::nullopt;
@@ -642,6 +644,14 @@ namespace ao::audio::backend
     }
 
     return Backend::prewarmFormatHint(sourceFormat);
+  }
+
+  bool PipeWireBackend::canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept
+  {
+    // Both stereo masks offer exactly FL/FR and install the same permutation.
+    // Any later change in their negotiated layout is terminal in both cases.
+    return Backend::canReuseFormat(currentFormat, nextFormat) ||
+           ::ao::audio::detail::isStereoIdentityAlias(currentFormat, nextFormat);
   }
 
   // PipeWire negotiation must remain one transaction under the native thread-loop lock.
@@ -670,7 +680,7 @@ namespace ao::audio::backend
 
     // Precision refusal precedes the layout rung: a caller invalid in both
     // keeps the existing owning precision diagnostic and cause.
-    if (!acceptsRawStreamLayout(sourceFormat))
+    if (!hasSupportedSourceSpeakerSet(sourceFormat))
     {
       return std::unexpected{BackendOpenFailure{
         .error = makeError(Error::Code::NotSupported, "PipeWire requires a complete supported speaker set").error(),

@@ -3,6 +3,7 @@
 
 #include "backend/WasapiSharedBackend.h"
 
+#include "backend/detail/SpeakerSet.h"
 #include "backend/detail/WasapiError.h"
 #include "backend/detail/WasapiFormat.h"
 #include "backend/detail/WasapiFormatObservation.h"
@@ -10,6 +11,7 @@
 #include "backend/detail/WasapiRenderBuffer.h"
 #include "backend/detail/WasapiStrings.h"
 #include "detail/DecoderOutput.h"
+#include "detail/OpenedModeValidation.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -60,21 +62,6 @@
 
 namespace ao::audio::backend
 {
-  namespace detail
-  {
-    namespace
-    {
-      // Source admission only: zero remains unidentified; otherwise every
-      // channel must have one role in the currently supported WAVE speaker
-      // vocabulary. Native observations may retain partial sets and use a
-      // different contract.
-      constexpr bool hasSupportedSourceSpeakerSet(SignalFormat const& source) noexcept
-      {
-        return source.speakerMask == 0U || isCompleteWaveSpeakerMask(source.speakerMask, source.channels);
-      }
-    } // namespace
-  } // namespace detail
-
   namespace
   {
     using Microsoft::WRL::ComPtr;
@@ -679,6 +666,14 @@ namespace ao::audio::backend
   std::optional<PcmFormat> WasapiSharedBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
     return canAdmitSourceFormat(sourceFormat) ? Backend::prewarmFormatHint(sourceFormat) : std::nullopt;
+  }
+
+  bool WasapiSharedBackend::canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept
+  {
+    // Both stereo masks configure the same FL/FR descriptor and byte order.
+    // Mix-format observations never replace that installed client transport.
+    return Backend::canReuseFormat(currentFormat, nextFormat) ||
+           ::ao::audio::detail::isStereoIdentityAlias(currentFormat, nextFormat);
   }
 
   BackendOpenResult WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget& target)

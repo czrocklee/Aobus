@@ -506,6 +506,82 @@ namespace ao::audio::backend::test
     }
   }
 
+  TEST_CASE("WasapiFormat - zero and FL FR stereo identities configure the same lossless native descriptors",
+            "[audio][unit][wasapi][format]")
+  {
+    struct EncodingCase final
+    {
+      SampleEncoding encoding;
+      WORD containerBits;
+      WORD validBits;
+      WORD blockAlign;
+      DWORD byteRate;
+      ::GUID subFormat;
+    };
+    // Literal 48000 Hz stereo geometry, independent of the encoding helpers
+    // used to construct the descriptor. Every supported representation is here.
+    auto const cases =
+      std::array{EncodingCase{SampleEncoding::Signed16Le, 16, 16, 4, 192000, KSDATAFORMAT_SUBTYPE_PCM},
+                 EncodingCase{SampleEncoding::Signed24PackedLe, 24, 24, 6, 288000, KSDATAFORMAT_SUBTYPE_PCM},
+                 EncodingCase{SampleEncoding::Signed24In32Le, 32, 24, 8, 384000, KSDATAFORMAT_SUBTYPE_PCM},
+                 EncodingCase{SampleEncoding::Signed32Le, 32, 32, 8, 384000, KSDATAFORMAT_SUBTYPE_PCM},
+                 EncodingCase{SampleEncoding::Float32Le, 32, 32, 8, 384000, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}};
+    auto const mix = extensibleFloatStereoWave();
+    auto const mixRes = detail::observeWaveFormat(mix.Format);
+    REQUIRE(mixRes);
+    REQUIRE(mixRes->optFormat);
+    CHECK(mixRes->sampleRate == 48000U);
+    CHECK(mixRes->channels == 2U);
+    CHECK(mixRes->speakerMask == 3U);
+    CHECK(mixRes->optFormat->encoding == SampleEncoding::Float32Le);
+
+    for (auto const& fixture : cases)
+    {
+      for (auto const sourceMask : std::to_array<std::uint32_t>({0, 3}))
+      {
+        CAPTURE(fixture.encoding, sourceMask);
+        auto const application =
+          PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = fixture.encoding, .speakerMask = sourceMask};
+        auto const optWave = detail::waveFormatFromPcmFormat(application);
+        REQUIRE(optWave);
+        CHECK(optWave->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE);
+        CHECK(optWave->Format.cbSize == 22U);
+        CHECK(optWave->Format.nSamplesPerSec == 48000U);
+        CHECK(optWave->Format.nChannels == 2U);
+        CHECK(optWave->dwChannelMask == 3U);
+        CHECK(optWave->SubFormat == fixture.subFormat);
+        CHECK(optWave->Format.wBitsPerSample == fixture.containerBits);
+        // WAVEFORMATEXTENSIBLE exposes valid precision through the Windows SDK union.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
+        CHECK(optWave->Samples.wValidBitsPerSample == fixture.validBits);
+        CHECK(optWave->Format.nBlockAlign == fixture.blockAlign);
+        CHECK(optWave->Format.nAvgBytesPerSec == fixture.byteRate);
+        auto const observationRes = detail::observeWaveFormat(optWave->Format);
+        REQUIRE(observationRes);
+        CHECK(observationRes->sampleRate == 48000U);
+        CHECK(observationRes->channels == 2U);
+        CHECK(observationRes->speakerMask == 3U);
+        REQUIRE(observationRes->optFormat);
+        CHECK(observationRes->optFormat->sampleRate == 48000U);
+        CHECK(observationRes->optFormat->channels == 2U);
+        CHECK(observationRes->optFormat->encoding == fixture.encoding);
+        CHECK(observationRes->optFormat->speakerMask == 3U);
+
+        // These are fresh configured-client projections, not evidence updates
+        // for gapless reuse. A zero source mask remains unidentified even when
+        // its native descriptor matches the explicitly identified FL/FR source.
+        auto const unavailableMixEvidence = detail::waveChannelDeliveryFromObservation(application, *optWave, {});
+        CHECK(unavailableMixEvidence.isMapped == (sourceMask == 3U));
+        CHECK(unavailableMixEvidence.nativeSpeakerMask == 3U);
+        CHECK_FALSE(unavailableMixEvidence.hasSharedConversion);
+        auto const observedMixEvidence = detail::waveChannelDeliveryFromObservation(application, *optWave, *mixRes);
+        CHECK(observedMixEvidence.isMapped == (sourceMask == 3U));
+        CHECK(observedMixEvidence.nativeSpeakerMask == 3U);
+        CHECK_FALSE(observedMixEvidence.hasSharedConversion);
+      }
+    }
+  }
+
   TEST_CASE("WasapiFormat - parses independent engine masks and keeps conversion separate from mapping",
             "[audio][unit][wasapi][format]")
   {
@@ -571,6 +647,33 @@ namespace ao::audio::backend::test
       CHECK(evidence.isMapped);
       CHECK(evidence.hasSharedConversion);
       CHECK(optWave->dwChannelMask == 4U);
+    }
+
+    SECTION("zero and FL FR source identities keep the same independently observed engine conversion")
+    {
+      mix.dwChannelMask = 0x30;
+      auto const rearMixRes = detail::observeWaveFormat(mix.Format);
+      REQUIRE(rearMixRes);
+      CHECK(rearMixRes->sampleRate == 48000U);
+      CHECK(rearMixRes->channels == 2U);
+      CHECK(rearMixRes->speakerMask == 0x30U);
+      REQUIRE(rearMixRes->optFormat);
+      CHECK(rearMixRes->optFormat->encoding == SampleEncoding::Float32Le);
+      CHECK(rearMixRes->optFormat->speakerMask == 0x30U);
+
+      for (auto const sourceMask : std::to_array<std::uint32_t>({0, 3}))
+      {
+        CAPTURE(sourceMask);
+        auto const application = PcmFormat{
+          .sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = sourceMask};
+        auto const optWave = detail::waveFormatFromPcmFormat(application);
+        REQUIRE(optWave);
+        CHECK(optWave->dwChannelMask == 3U);
+        auto const evidence = detail::waveChannelDeliveryFromObservation(application, *optWave, *rearMixRes);
+        CHECK(evidence.isMapped == (sourceMask == 3U));
+        CHECK(evidence.nativeSpeakerMask == 3U);
+        CHECK(evidence.hasSharedConversion);
+      }
     }
 
     SECTION("unknown engine mask remains unknown independently of the client request")

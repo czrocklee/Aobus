@@ -5,22 +5,28 @@
 
 #include "test/unit/audio/BackendTestSupport.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cstdint>
+#include <string_view>
 
 namespace ao::audio::backend::test
 {
   namespace
   {
-    // The backend constructor may initialize PipeWire runtime state, but no
-    // test here reaches native stream work: every open() below is refused by
-    // the deterministic source-admission guard that precedes all native calls.
+    // Construction may initialize/connect PipeWire runtime state. The reuse
+    // query itself performs no I/O and needs no successful connection or open.
+    // Every open() below is refused by the deterministic source-admission
+    // guard before native stream work.
     Device syntheticSink()
     {
       return {.id = DeviceId{"synthetic-sink"},
@@ -29,6 +35,107 @@ namespace ao::audio::backend::test
               .backendId = kBackendPipeWire};
     }
   } // namespace
+
+  TEST_CASE("PipeWireBackend - reuse query preserves exact identity and only admits bounded stereo aliases",
+            "[audio][unit][pipewire]")
+  {
+    struct ReuseCase final
+    {
+      std::string_view name;
+      PcmFormat first;
+      PcmFormat second;
+      bool expected;
+    };
+
+    auto const makeFormat =
+      [](std::uint32_t sampleRate, std::uint8_t channels, SampleEncoding encoding, std::uint32_t speakerMask)
+    {
+      return PcmFormat{
+        .sampleRate = sampleRate, .channels = channels, .encoding = encoding, .speakerMask = speakerMask};
+    };
+    auto const cases = std::array{
+      ReuseCase{.name = "exact valid identified S16 stereo",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0x3),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0x3),
+                .expected = true},
+      // Exact equality is not a global format-validation gate.
+      ReuseCase{.name = "exact empty default", .first = PcmFormat{}, .second = PcmFormat{}, .expected = true},
+      ReuseCase{.name = "S16 stereo identity alias",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0x3),
+                .expected = true},
+      ReuseCase{.name = "packed S24 stereo identity alias",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed24PackedLe, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed24PackedLe, 0x3),
+                .expected = true},
+      ReuseCase{.name = "S24 in S32 stereo identity alias",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed24In32Le, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed24In32Le, 0x3),
+                .expected = true},
+      ReuseCase{.name = "S32 stereo identity alias",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed32Le, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed32Le, 0x3),
+                .expected = true},
+      ReuseCase{.name = "float32 stereo identity alias",
+                .first = makeFormat(48000, 2, SampleEncoding::Float32Le, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Float32Le, 0x3),
+                .expected = true},
+      ReuseCase{.name = "different rate",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(96000, 2, SampleEncoding::Signed16Le, 0x3),
+                .expected = false},
+      ReuseCase{.name = "different channel count",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 1, SampleEncoding::Signed16Le, 0x3),
+                .expected = false},
+      ReuseCase{.name = "different encoding",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed24PackedLe, 0x3),
+                .expected = false},
+      ReuseCase{.name = "back stereo roles are not a wildcard match",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0x30),
+                .expected = false},
+      ReuseCase{.name = "front-left and front-center roles are not a wildcard match",
+                .first = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Signed16Le, 0x5),
+                .expected = false},
+      ReuseCase{.name = "front-center mono is not a stereo alias",
+                .first = makeFormat(48000, 1, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 1, SampleEncoding::Signed16Le, 0x4),
+                .expected = false},
+      ReuseCase{.name = "four-channel speaker set is not a stereo alias",
+                .first = makeFormat(48000, 4, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 4, SampleEncoding::Signed16Le, 0x33),
+                .expected = false},
+      ReuseCase{.name = "zero channels cannot form a stereo alias",
+                .first = makeFormat(48000, 0, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(48000, 0, SampleEncoding::Signed16Le, 0x3),
+                .expected = false},
+      ReuseCase{.name = "zero rate cannot form a stereo alias",
+                .first = makeFormat(0, 2, SampleEncoding::Signed16Le, 0),
+                .second = makeFormat(0, 2, SampleEncoding::Signed16Le, 0x3),
+                .expected = false},
+      ReuseCase{.name = "unknown encoding cannot form a stereo alias",
+                .first = makeFormat(48000, 2, SampleEncoding::Unknown, 0),
+                .second = makeFormat(48000, 2, SampleEncoding::Unknown, 0x3),
+                .expected = false},
+      ReuseCase{.name = "unassigned encoding cannot form a stereo alias",
+                .first = makeFormat(48000, 2, static_cast<SampleEncoding>(0xff), 0),
+                .second = makeFormat(48000, 2, static_cast<SampleEncoding>(0xff), 0x3),
+                .expected = false}};
+    auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
+    Backend const& dispatch = backend;
+
+    for (auto const& row : cases)
+    {
+      CAPTURE(row.name);
+      CHECK(backend.canReuseFormat(row.first, row.second) == row.expected);
+      CHECK(backend.canReuseFormat(row.second, row.first) == row.expected);
+      CHECK(dispatch.canReuseFormat(row.first, row.second) == row.expected);
+      CHECK(dispatch.canReuseFormat(row.second, row.first) == row.expected);
+    }
+  }
 
   TEST_CASE("PipeWireBackend - zero geometry is refused as invalid input before native stream work",
             "[audio][unit][pipewire]")

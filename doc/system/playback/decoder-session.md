@@ -22,7 +22,9 @@ Its constructor and one-shot `initialize()` step are private, and it exposes no 
 - A decoder created without a requested encoding inspects the stream and chooses its preferred lossless native representation.
 - A decoder created with a requested `SampleEncoding` either produces exactly that interleaved representation or is not published.
 - Decoders preserve inspected sample rate, channel count, sample kind, precision, and effective speaker mask; they do not silently resample, add or remove channels, or reduce precision.
-- A codec-native identified speaker layout is normalized to the order owned by the [PCM format reference](pcm-format.md); an unidentified channel layout retains its index order.
+- A decoder publishing identified speakers normalizes their codec-native layout to the order owned by the [PCM format reference](pcm-format.md); unassigned channels retain their index order.
+  Byte-order normalization alone, such as Opus family 1 mapping, does not establish published layout evidence.
+- WAV applies its [source interpretation](pcm-format.md#wav-source-interpretation) before output adaptation and retains raw declarations independently; the other current codec producers still report zero masks and `Unknown` interpretation evidence.
 - Unsupported or precision-losing encoding requests fail during source-private construction before playback begins.
 - An exhausted session returns a stable empty end-of-stream block; destruction ends the session and releases its codec resources.
 
@@ -120,8 +122,10 @@ The application's explicit end-of-Track seek is a separate [transport policy](ap
 `DecodedStreamInfo::codec` and `isLossy` are conservative.
 Unknown codecs remain `Unknown`, and every lossy decoder reports lossy.
 
-The current engine splice gate accepts only lossless FLAC, lossless ALAC, and WAV sessions whose concrete PCM modes are compatible.
-The already-open mode must preserve the successor signal; otherwise the transition drains and reopens.
+The current engine splice gate accepts only lossless FLAC, lossless ALAC, and WAV sessions whose canonical PCM modes satisfy the backend's [installed-transport reuse contract](audio-execution.md#prepared-lookahead).
+Exact equality is the default; bounded backend proof may additionally admit stereo mask `0` versus FL/FR `0x3` without changing either track's identity.
+Source layout origin is not part of mode equality; successor adoption publishes its own evidence even when an inferred and an identified layout share the same effective mask.
+The already-open mode and any retained confirmed endpoint must preserve the successor signal; otherwise the transition drains and reopens.
 Lossy and unknown sessions use the drain path until delay/padding trim is parsed and fixture-tested.
 
 ## Failure behavior
@@ -149,6 +153,9 @@ An Ogg stream whose pages carry no complete audio packet is translated to `Forma
 An Opus first audio page whose granule position is smaller than the samples it completes is corrupt unless that page also ends the stream, where the smaller position is permitted end trim.
 MP4 factory routing stops after selecting the first usable audio track. No matching audio track is translated to `NotSupported`, while a structural parser failure encountered before selection preserves its parser error.
 WAV construction validates chunk boundaries only through the first complete supported `fmt` and non-empty `data` pair; unrelated later chunks do not prevent decoding already-bounded audio data.
+After existing geometry and precision validation, the [WAV source policy](pcm-format.md#wav-source-interpretation) refuses unsupported layouts with `NotSupported` before output adaptation or backend open; it never rewrites canonical sample order to manufacture compatibility.
+For `play()`, Engine reports such an inspection refusal as a recoverable `TrackOpen` failure without opening or starting the backend.
+For `setNext()`, it returns the inspection error synchronously after disarming any unconsumed predecessor lookahead; it does not report a current-playback failure or interrupt the current track in the absence of a competing render transition.
 End of stream is a normal `PcmBlock` value.
 
 Implementations may use the private `ao::audio::detail::DecoderException` and `throwDecoderError` helper to unwind codec helpers.
@@ -171,6 +178,8 @@ Decoder session and malformed-input tests under [`test/unit/audio/`](../../../te
 [`DecoderErrorTest.cpp`](../../../test/unit/audio/DecoderErrorTest.cpp) mechanically rejects direct concrete construction and instance `close()` operations.
 [`DecoderFactoryTest.cpp`](../../../test/unit/audio/DecoderFactoryTest.cpp) locks ready construction, routing, and initialization failure.
 [`DecoderOutputAdapterTest.cpp`](../../../test/unit/audio/detail/DecoderOutputAdapterTest.cpp) directly locks rejection of precision loss, pass-through behavior, exact byte conversion, and reset.
+[`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp) locks effective WAV identity, interpretation origin, refusal precedence, output adaptation, and unchanged PCM/seek/EOF behavior.
+[`EngineWavChannelLayoutTest.cpp`](../../../test/unit/audio/EngineWavChannelLayoutTest.cpp) locks real-WAV mode reuse versus drain/reopen, successor evidence publication, recoverable layout refusal before backend open, and rejected `setNext()` preservation of current playback while clearing old lookahead.
 [`SegmentDecoderSessionTest.cpp`](../../../test/unit/audio/SegmentDecoderSessionTest.cpp) covers range PCM, exact and millisecond seeks, stable EOF, early EOF, structural mismatches, and both decoder openings.
 [`CarrierPlaybackTest.cpp`](../../../test/unit/runtime/CarrierPlaybackTest.cpp) verifies the stored second segment through final runtime PCM and a nonempty zero-millisecond segment.
 

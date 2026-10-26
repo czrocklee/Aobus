@@ -500,6 +500,7 @@ add_executable(ao_core_test
     unit/audio/OpusDecoderSessionTest.cpp
     unit/audio/OpusDecoderMalformedTest.cpp
     unit/audio/WavDecoderSessionTest.cpp
+    unit/audio/WavDecoderChannelLayoutTest.cpp
     unit/audio/SegmentDecoderSessionTest.cpp
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
@@ -525,6 +526,9 @@ add_executable(ao_core_test
     unit/audio/EngineFatalProbeTest.cpp
     unit/audio/EngineGaplessTest.cpp
     unit/audio/EngineChannelLayoutTest.cpp
+    unit/audio/EngineWavChannelLayoutTest.cpp
+    unit/audio/EngineStereoIdentityTest.cpp
+    unit/audio/EngineStereoReuseTest.cpp
     unit/audio/EngineEndpointPrecisionTest.cpp
     unit/audio/EngineRtSignalRingTest.cpp
     unit/audio/EngineSeekErrorTest.cpp
@@ -885,6 +889,7 @@ aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
   unit/audio/backend/PipeWireChannelObservationTest.cpp
   unit/audio/backend/AlsaEnginePropertyTest.cpp
   unit/audio/backend/AlsaExclusiveBackendTest.cpp
+  unit/audio/backend/AlsaBackendReuseTest.cpp
   unit/audio/backend/AlsaChannelObservationTest.cpp
   unit/audio/backend/AlsaProviderTest.cpp
   unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
@@ -947,6 +952,7 @@ endif()
 aobus_target_test_sources(ao_core_test "${WIN32}" "non-Windows host"
   unit/audio/backend/WasapiProviderTest.cpp
   unit/audio/backend/WasapiSharedBackendTest.cpp
+  unit/audio/backend/WasapiBackendReuseTest.cpp
   unit/audio/backend/WasapiChannelObservationTest.cpp
   unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
   unit/audio/backend/detail/WasapiMixFormatTest.cpp

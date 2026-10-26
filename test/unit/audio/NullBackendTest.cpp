@@ -13,6 +13,7 @@
 #include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <cstdint>
 #include <type_traits>
@@ -67,6 +68,135 @@ namespace ao::audio::test
     CHECK(openedRes->clientFormat == expected);
     CHECK(frameBytes(openedRes->clientFormat) == 2);
     CHECK_FALSE(openedRes->optEndpoint);
+  }
+
+  TEST_CASE("NullBackend - reuse preserves exact equality without requiring an open", "[audio][unit][null-backend]")
+  {
+    auto backend = NullBackend{};
+    Backend const& dispatch = backend;
+    auto const format =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
+
+    CHECK(backend.canReuseFormat(format, format));
+    CHECK(dispatch.canReuseFormat(format, format));
+    // Exact equality is not a global format-validation gate.
+    CHECK(backend.canReuseFormat(PcmFormat{}, PcmFormat{}));
+  }
+
+  TEST_CASE("NullBackend - reuse accepts bidirectional stereo identity aliases in every encoding",
+            "[audio][unit][null-backend]")
+  {
+    auto backend = NullBackend{};
+    Backend const& dispatch = backend;
+    auto const encoding = GENERATE(SampleEncoding::Signed16Le,
+                                   SampleEncoding::Signed24PackedLe,
+                                   SampleEncoding::Signed24In32Le,
+                                   SampleEncoding::Signed32Le,
+                                   SampleEncoding::Float32Le);
+    auto const unidentified = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = encoding};
+    auto identified = unidentified;
+    identified.speakerMask = 0x3;
+
+    CHECK(backend.canReuseFormat(unidentified, identified));
+    CHECK(backend.canReuseFormat(identified, unidentified));
+    CHECK(dispatch.canReuseFormat(unidentified, identified));
+    CHECK(dispatch.canReuseFormat(identified, unidentified));
+  }
+
+  TEST_CASE("NullBackend - reuse refuses changed PCM geometry rate or encoding", "[audio][unit][null-backend]")
+  {
+    auto backend = NullBackend{};
+    auto const first = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto second = first;
+    second.speakerMask = 0x3;
+
+    SECTION("different rate")
+    {
+      second.sampleRate = 96000;
+    }
+
+    SECTION("different channel count")
+    {
+      second.channels = 1;
+    }
+
+    SECTION("different encoding")
+    {
+      second.encoding = SampleEncoding::Signed24PackedLe;
+    }
+
+    CHECK_FALSE(backend.canReuseFormat(first, second));
+    CHECK_FALSE(backend.canReuseFormat(second, first));
+  }
+
+  TEST_CASE("NullBackend - unidentified masks are not a reuse wildcard for other roles or channel counts",
+            "[audio][unit][null-backend]")
+  {
+    auto backend = NullBackend{};
+    auto unidentified = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    std::uint32_t mask = 0x30;
+
+    SECTION("back stereo roles")
+    {
+      mask = 0x30;
+    }
+
+    SECTION("front-left and front-center roles")
+    {
+      mask = 0x5;
+    }
+
+    SECTION("front-center mono")
+    {
+      unidentified.channels = 1;
+      mask = 0x4;
+    }
+
+    SECTION("four-channel speaker set")
+    {
+      unidentified.channels = 4;
+      mask = 0x33;
+    }
+
+    SECTION("zero channels")
+    {
+      unidentified.channels = 0;
+      mask = 0x3;
+    }
+
+    auto identified = unidentified;
+    identified.speakerMask = mask;
+
+    CHECK_FALSE(backend.canReuseFormat(unidentified, identified));
+    CHECK_FALSE(backend.canReuseFormat(identified, unidentified));
+  }
+
+  TEST_CASE("NullBackend - stereo aliases with invalid rate or encoding cannot be reused",
+            "[audio][unit][null-backend]")
+  {
+    auto backend = NullBackend{};
+    auto unidentified = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+
+    SECTION("zero rate")
+    {
+      unidentified.sampleRate = 0;
+    }
+
+    SECTION("unknown encoding")
+    {
+      unidentified.encoding = SampleEncoding::Unknown;
+    }
+
+    SECTION("unassigned encoding")
+    {
+      unidentified.encoding = static_cast<SampleEncoding>(0xff);
+    }
+
+    auto identified = unidentified;
+    identified.speakerMask = 0x3;
+
+    CHECK_FALSE(backend.canReuseFormat(unidentified, identified));
+    CHECK_FALSE(backend.canReuseFormat(identified, unidentified));
   }
 
   TEST_CASE("NullBackend - source without a lossless PCM encoding is rejected", "[audio][unit][null-backend]")

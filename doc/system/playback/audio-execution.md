@@ -257,7 +257,9 @@ The realtime consumer still performs only ring reads; it does not update a separ
 
 Player captures lookahead input, route, current PCM mode, playback generation, and start-context evidence on the callback executor.
 When the current session is gapless-capable, decoder inspection runs on an async worker.
-If the current PCM mode has the same sample rate, channels, and effective speaker mask, and both its encoding and retained confirmed endpoint preserve the successor's inspected signal, the same worker opens the final successor decoder in that encoding and prerolls it.
+After inspection, Engine queries the backend's installed-mode reuse contract under control serialization, outside state and transition locks.
+If reuse is authorized and the installed encoding and retained confirmed endpoint preserve the successor's inspected signal, a worker opens the final successor decoder in that encoding and prerolls it.
+The worker retains only values, not a backend reference.
 Engine adopts the result only after Player's task remains admissible and Engine's captured playback, route, and mode context still matches.
 Successful adoption starts the decode thread, retains the node as lookahead, and arms its raw pointer for realtime consumption.
 
@@ -277,8 +279,22 @@ An `updateDevice` call carrying the unchanged device snapshot is a no-op and
 does not invalidate pending starts or prepared lookahead.
 Prepared-source failure clears lookahead without changing the current track; after splice, that source generation is current and fails as current.
 
-A splice is permitted only when both sessions are gapless-capable and their sample rate, channel count, concrete encoding, and effective speaker mask match exactly.
-Preparation and adoption both validate the successor against the confirmed endpoint retained for this native open; promotion refreshes source interpretation without replacing that endpoint bound.
+A splice requires both sessions to be gapless-capable and `Backend::canReuseFormat` to authorize the successor's canonical PCM mode, both before preparation and again at adoption.
+The default is exact mode equality, including the speaker mask; this query performs no native I/O, reconfiguration, or outward callback.
+An override may additionally prove identical installed transport for stereo masks `0` and FL/FR `0x3`, with the same nonzero rate and concrete encoding.
+This does not make zero a wildcard, change decoder identity, or relax ordinary open-result validation.
+
+PipeWire proves the same exact FL/FR offer, installed permutation, and later-format admission for this pair; WASAPI configures the same ascending FL/FR client descriptor.
+ALSA additionally requires the installed current map to be exactly unflagged FL,FR in that order; missing, partial, reversed, silent, or flagged observations cannot prove reuse.
+The null sink discards either representation identically.
+Core Audio keeps the strict default: an initial identity plan does not prove that later layout refresh using the original client mask remains safe for the other source identity.
+Its cross-codec `0`/`0x3` transition therefore still drains and reopens until that refresh contract or the codec producers supply a stronger identity proof.
+Otherwise-compatible mono and 3–8-channel WAV↔FLAC/ALAC transitions also still drain and reopen on every current backend: WAV publishes a nonzero identity while those codec producers retain zero, and the additional reuse proof is stereo-only.
+This loses splice eligibility that these transitions had when WAV also published zero; it does not prevent playback or equal-identity mono/multichannel reuse.
+
+Preparation and adoption both validate the successor's own canonical mode against the confirmed endpoint retained for this native open; promotion refreshes source interpretation without replacing that endpoint bound.
+Native mapping evidence remains tied to this open and its actual observations, so it may stay more conservative than a fresh successor open would report.
+Retained native evidence never identifies an unknown source or manufactures a new observation.
 The successor's source precision may be lower than the current track's precision because widening it into the already-open mode is lossless.
 The successor's precision may never exceed what that mode can represent: an S16 current mode followed by 24-bit audio drains, while a packed-24 current mode followed by 16-bit audio may splice.
 
@@ -423,6 +439,17 @@ initial staging, prepared-token and explicit-navigation ownership is unchanged.
 The `clientFormat` must preserve the source precision whether or not endpoint evidence exists.
 When a `ConfirmedEndpoint` is present, its rate, channels, sample domain, and effective precision must agree with the configured client mode and preserve the source as well.
 An absent endpoint means only that the backend could not inspect a direct endpoint; it never weakens the lossless client requirement.
+
+#### Channel compatibility and native evidence
+
+WAV's [source interpretation](pcm-format.md#wav-source-interpretation) activates canonical PCM with effective speaker identities without a blanket multichannel ban.
+Its `Identified` or `Inferred` source history does not establish native mapping or physical routing.
+The other current codec producers retain zero masks and `Unknown` source interpretation; WAV compatibility sets are not backend defaults.
+
+Source admission and native delivery evidence are separate decisions.
+A backend may admit transport without proving every speaker relationship; the returned canonical client mask must still retain the source identity.
+Requests, accepted native configuration, and current observations have the distinct authority defined by each backend below; none manufactures source identity from a zero mask.
+Private native slot permutations do not change canonical PCM identity.
 
 ALSA exposes only direct `hw:C,D` playback endpoints, maps
 `Signed24PackedLe`, `Signed24In32Le`, and `Signed32Le` to distinct native
@@ -876,6 +903,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [`EngineSeekErrorTest.cpp`](../../../test/unit/audio/EngineSeekErrorTest.cpp) protects Error rejection through both seek entry points before and after failure delivery, paused-origin failure, unchanged backend/source state on rejection, and recovery through a new playback.
   [`EngineControlErrorTest.cpp`](../../../test/unit/audio/EngineControlErrorTest.cpp) protects terminal stop-callback delivery across a later successful seek sequence and old-target rejection during explicit replacement; its backend fake does not reproduce an SDK stop failure.
 - [`EngineGaplessTest.cpp`](../../../test/unit/audio/EngineGaplessTest.cpp), [`EngineDrainTest.cpp`](../../../test/unit/audio/EngineDrainTest.cpp), and [`AudioBackendRenderProgressTest.cpp`](../../../test/unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp) protect splice, cross-precision mode reuse, drain, mixed-buffer progress, and fallback.
+- [`EngineStereoReuseTest.cpp`](../../../test/unit/audio/EngineStereoReuseTest.cpp) protects backend-authorized WAV/FLAC/ALAC stereo transport reuse, strict fallback, identity preservation, retained endpoint precision, and adoption-time rechecking; native value tests separately protect the transport proof, not physical routing.
 - [`EngineCallbackTest.cpp`](../../../test/unit/audio/EngineCallbackTest.cpp), [`EngineErrorTest.cpp`](../../../test/unit/audio/EngineErrorTest.cpp), and [`EngineBackendSwapTest.cpp`](../../../test/unit/audio/EngineBackendSwapTest.cpp) protect generations, stale events, typed failures, and synchronous invariant exceptions.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) protects executor marshalling, responsive worker-side preroll, cancellation cleanup, asynchronous diagnostic boundaries, graph epochs, and gate behavior.
 - [`AlsaProviderTest.cpp`](../../../test/unit/audio/backend/AlsaProviderTest.cpp), [`PipeWireMonitorTest.cpp`](../../../test/unit/audio/backend/PipeWireMonitorTest.cpp), [`WasapiProviderTest.cpp`](../../../test/unit/audio/backend/WasapiProviderTest.cpp), and [`CoreAudioProviderTest.cpp`](../../../test/unit/audio/backend/CoreAudioProviderTest.cpp) protect callback-destroys-provider, late subscription/backend teardown, subscribe/shutdown races, nested-callback suppression, monitor exit, and concurrent external callers sharing provider quiescence.

@@ -38,6 +38,7 @@ namespace ao::audio::backend
     PipeWireBackend& operator=(PipeWireBackend&&) = delete;
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept override;
+    bool canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept override;
     BackendOpenResult open(SignalFormat const& sourceFormat, RenderTarget& target) override;
     void start() override;
     void pause() override;

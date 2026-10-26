@@ -57,6 +57,90 @@ namespace ao::audio::detail::test
     }
   } // namespace
 
+  TEST_CASE("OpenedModeValidation - stereo identity aliases remain distinct canonical PCM modes",
+            "[audio][unit][engine]")
+  {
+    auto const firstMask = GENERATE(0x0U, 0x3U);
+    auto const current =
+      PcmFormat{.sampleRate = kRate, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = firstMask};
+    auto next = current;
+    next.speakerMask = firstMask == 0U ? 0x3U : 0U;
+
+    CHECK(isStereoIdentityAlias(current, next));
+    CHECK(isStereoIdentityAlias(next, current));
+    CHECK_FALSE(isSamePcmMode(current, next));
+    // A reuse candidate is not permission for open() or the converter to
+    // substitute another identity for this source.
+    auto const invalidRes = validateOpenedMode(signalFormat(next), OpenedPcmMode{.clientFormat = current});
+    REQUIRE_FALSE(invalidRes);
+    CHECK(invalidRes.error().message == "Backend returned a different client speaker mask");
+  }
+
+  TEST_CASE("OpenedModeValidation - stereo identity aliases exclude geometry encoding and other masks",
+            "[audio][unit][engine]")
+  {
+    auto current = PcmFormat{.sampleRate = kRate, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto next = current;
+    next.speakerMask = 0x3;
+
+    SECTION("zero rate")
+    {
+      current.sampleRate = 0;
+      next.sampleRate = 0;
+    }
+
+    SECTION("different rate")
+    {
+      next.sampleRate = 44100;
+    }
+
+    SECTION("mono is not stereo")
+    {
+      current.channels = 1;
+      next.channels = 1;
+    }
+
+    SECTION("multichannel is not stereo")
+    {
+      current.channels = 4;
+      next.channels = 4;
+    }
+
+    SECTION("different channel counts")
+    {
+      next.channels = 1;
+    }
+
+    SECTION("different encoding")
+    {
+      next.encoding = SampleEncoding::Signed32Le;
+    }
+
+    SECTION("unknown encoding")
+    {
+      current.encoding = SampleEncoding::Unknown;
+      next.encoding = SampleEncoding::Unknown;
+    }
+
+    SECTION("an alternate two-speaker set is not FL FR")
+    {
+      next.speakerMask = kFrontLeftCenterMask;
+    }
+
+    SECTION("equal unidentified masks need no alias")
+    {
+      next.speakerMask = 0;
+    }
+
+    SECTION("equal identified masks need no alias")
+    {
+      current.speakerMask = 0x3;
+    }
+
+    CHECK_FALSE(isStereoIdentityAlias(current, next));
+    CHECK_FALSE(isStereoIdentityAlias(next, current));
+  }
+
   TEST_CASE("validateOpenedMode - a lossy result without a confirmed endpoint is rejected", "[audio][unit][engine]")
   {
     auto const validatedRes = validateOpenedMode(integerSignal(24), unconfirmedMode(SampleEncoding::Signed16Le));

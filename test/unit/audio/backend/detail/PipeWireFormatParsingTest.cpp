@@ -171,6 +171,105 @@ namespace ao::audio::backend::detail::test
     }
   }
 
+  TEST_CASE("PipeWireFormatParsing - zero and FL FR stereo identities install the same native byte transport",
+            "[audio][unit][pipewire]")
+  {
+    struct NativeOrderCase final
+    {
+      std::array<std::uint32_t, 2> positions;
+      std::array<std::uint8_t, 2> sourceSlots;
+      std::uint32_t canonicalMask;
+      bool needsPermutation;
+      std::array<std::byte, 8> expected;
+    };
+    // Two S16LE frames: L=0x1211, R=0x2221; L=-2, R=0x4241.
+    // Expected native bytes are literal oracles, not another delivery result.
+    auto const canonical = std::to_array<std::byte>({std::byte{0x11},
+                                                     std::byte{0x12},
+                                                     std::byte{0x21},
+                                                     std::byte{0x22},
+                                                     std::byte{0xfe},
+                                                     std::byte{0xff},
+                                                     std::byte{0x41},
+                                                     std::byte{0x42}});
+    auto const cases = std::array{NativeOrderCase{{SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR},
+                                                  {0, 1},
+                                                  3,
+                                                  false,
+                                                  {std::byte{0x11},
+                                                   std::byte{0x12},
+                                                   std::byte{0x21},
+                                                   std::byte{0x22},
+                                                   std::byte{0xfe},
+                                                   std::byte{0xff},
+                                                   std::byte{0x41},
+                                                   std::byte{0x42}}},
+                                  NativeOrderCase{{SPA_AUDIO_CHANNEL_FR, SPA_AUDIO_CHANNEL_FL},
+                                                  {1, 0},
+                                                  0,
+                                                  true,
+                                                  {std::byte{0x21},
+                                                   std::byte{0x22},
+                                                   std::byte{0x11},
+                                                   std::byte{0x12},
+                                                   std::byte{0x41},
+                                                   std::byte{0x42},
+                                                   std::byte{0xfe},
+                                                   std::byte{0xff}}}};
+    auto const encodings = std::to_array({SampleEncoding::Signed16Le});
+
+    for (auto const sourceMask : std::to_array<std::uint32_t>({0, 3}))
+    {
+      auto const source =
+        SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = sourceMask};
+      auto offerBuffer = std::array<std::byte, 1024>{};
+      auto const* offer = buildRawStreamFormatOffer(offerBuffer, source, encodings);
+      REQUIRE(offer != nullptr);
+      requireSigned16EncodingOffer(offer);
+      auto offered = ::spa_audio_info_raw{};
+      REQUIRE(::spa_format_audio_raw_parse(offer, &offered) >= 0);
+      // The offer's encoding remains an unfixed Enum choice, checked above;
+      // SPA's fixed-format parser does not project that choice into format.
+      CHECK(offered.rate == 48000U);
+      CHECK(offered.channels == 2U);
+      CHECK((offered.flags & SPA_AUDIO_FLAG_UNPOSITIONED) == 0U);
+      CHECK(offered.position[0] == SPA_AUDIO_CHANNEL_FL);
+      CHECK(offered.position[1] == SPA_AUDIO_CHANNEL_FR);
+
+      for (auto const& fixture : cases)
+      {
+        CAPTURE(sourceMask, fixture.needsPermutation);
+        auto nativeBuffer = std::array<std::byte, 1024>{};
+        auto const optNative =
+          parseRawStreamObservation(nativeFormat(nativeBuffer, SPA_AUDIO_FORMAT_S16_LE, 2, fixture.positions));
+        REQUIRE(optNative);
+        CHECK(optNative->format.sampleRate == 48000U);
+        CHECK(optNative->format.channels == 2U);
+        CHECK(optNative->format.encoding == SampleEncoding::Signed16Le);
+        CHECK(optNative->format.speakerMask == fixture.canonicalMask);
+        CHECK(optNative->nativeSpeakerMask == 3U);
+        CHECK_FALSE(optNative->hasUnsupportedPositions);
+        CHECK((optNative->flags & SPA_AUDIO_FLAG_UNPOSITIONED) == 0U);
+        CHECK(optNative->positions[0] == fixture.positions[0]);
+        CHECK(optNative->positions[1] == fixture.positions[1]);
+        auto const deliveryRes = rawStreamDelivery(source, *optNative);
+        REQUIRE(deliveryRes);
+        CHECK(deliveryRes->clientFormat ==
+              PcmFormat{
+                .sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = sourceMask});
+        CHECK(deliveryRes->channelDelivery.isMapped);
+        CHECK(deliveryRes->channelDelivery.nativeSpeakerMask == 3U);
+        CHECK_FALSE(deliveryRes->channelDelivery.hasSharedConversion);
+        CHECK(deliveryRes->needsPermutation == fixture.needsPermutation);
+        CHECK(deliveryRes->sourceSlots[0] == fixture.sourceSlots[0]);
+        CHECK(deliveryRes->sourceSlots[1] == fixture.sourceSlots[1]);
+        auto bytes = canonical;
+        applyRawStreamDelivery(bytes, *deliveryRes);
+        CHECK(bytes == fixture.expected);
+      }
+    }
+  }
+
   TEST_CASE("PipeWireFormatParsing - fixed native array choices retain actual current positions",
             "[audio][unit][pipewire]")
   {
@@ -684,28 +783,45 @@ namespace ao::audio::backend::detail::test
     auto const roles = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
     auto const optInitial = parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 2, roles));
     REQUIRE(optInitial);
-    auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .speakerMask = 3};
-    auto const unchangedRes = rawStreamDelivery(source, *optInitial, optInitial);
-    REQUIRE(unchangedRes);
-    CHECK_FALSE(unchangedRes->needsPermutation);
-    auto changed = *optInitial;
+    auto currentBuffer = std::array<std::byte, 1024>{};
+    auto currentRoles = roles;
+    auto currentPositions = std::span<std::uint32_t const>{currentRoles};
 
     SECTION("same-set slot order changed after activation")
     {
-      changed.positions[0] = SPA_AUDIO_CHANNEL_FR;
-      changed.positions[1] = SPA_AUDIO_CHANNEL_FL;
+      currentRoles = {SPA_AUDIO_CHANNEL_FR, SPA_AUDIO_CHANNEL_FL};
     }
 
     SECTION("positions became unavailable after activation")
     {
-      changed.flags |= SPA_AUDIO_FLAG_UNPOSITIONED;
+      currentPositions = {};
     }
 
-    auto const changedRes = rawStreamDelivery(source, changed, optInitial);
-    REQUIRE_FALSE(changedRes);
-    CHECK(changedRes.error().error.code == Error::Code::FormatRejected);
-    CHECK(changedRes.error().error.message == "PipeWire changed PCM mode after stream activation");
-    CHECK(changedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    SECTION("known native role set changed after activation")
+    {
+      currentRoles = {SPA_AUDIO_CHANNEL_RL, SPA_AUDIO_CHANNEL_RR};
+    }
+
+    auto const optCurrent =
+      parseRawStreamObservation(nativeFormat(currentBuffer, SPA_AUDIO_FORMAT_S16_LE, 2, currentPositions));
+    REQUIRE(optCurrent);
+
+    for (auto const sourceMask : std::to_array<std::uint32_t>({0, 3}))
+    {
+      CAPTURE(sourceMask);
+      auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .speakerMask = sourceMask};
+      auto const unchangedRes = rawStreamDelivery(source, *optInitial, optInitial);
+      REQUIRE(unchangedRes);
+      CHECK(unchangedRes->clientFormat.speakerMask == sourceMask);
+      CHECK(unchangedRes->channelDelivery.isMapped);
+      CHECK(unchangedRes->channelDelivery.nativeSpeakerMask == 3U);
+      CHECK_FALSE(unchangedRes->needsPermutation);
+      auto const changedRes = rawStreamDelivery(source, *optCurrent, optInitial);
+      REQUIRE_FALSE(changedRes);
+      CHECK(changedRes.error().error.code == Error::Code::FormatRejected);
+      CHECK(changedRes.error().error.message == "PipeWire changed PCM mode after stream activation");
+      CHECK(changedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    }
   }
 
   TEST_CASE("PipeWireFormatParsing - source-zero legacy active role refresh keeps identity transport",
@@ -874,7 +990,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - source-zero stereo cannot replace an installed swap after activation",
+  TEST_CASE("PipeWireFormatParsing - zero and FL FR stereo cannot replace an installed swap after activation",
             "[audio][unit][pipewire]")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
@@ -886,22 +1002,28 @@ namespace ao::audio::backend::detail::test
       parseRawStreamObservation(nativeFormat(currentBuffer, SPA_AUDIO_FORMAT_S16_LE, 2, identity));
     REQUIRE(optInitial);
     REQUIRE(optCurrent);
-    auto const source = SignalFormat{.sampleRate = 48000, .channels = 2};
-    auto const installedRes = rawStreamDelivery(source, *optInitial);
-    REQUIRE(installedRes);
-    CHECK(installedRes->clientFormat.speakerMask == 0U);
-    // Complete observed FR/FL is mapped evidence; the zero client mask and swap stay installed.
-    CHECK(installedRes->channelDelivery.isMapped);
-    REQUIRE(installedRes->needsPermutation);
-    CHECK(installedRes->sourceSlots[0] == 1U);
-    CHECK(installedRes->sourceSlots[1] == 0U);
-    auto bytes = std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}, std::byte{0x21}, std::byte{0x22}});
-    applyRawStreamDelivery(bytes, *installedRes);
-    CHECK(bytes == std::to_array<std::byte>({std::byte{0x21}, std::byte{0x22}, std::byte{0x11}, std::byte{0x12}}));
-    auto const currentRes = rawStreamDelivery(source, *optCurrent, optInitial);
-    REQUIRE_FALSE(currentRes);
-    CHECK(currentRes.error().error.message == "PipeWire changed PCM mode after stream activation");
-    CHECK(currentRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+
+    for (auto const sourceMask : std::to_array<std::uint32_t>({0, 3}))
+    {
+      CAPTURE(sourceMask);
+      auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .speakerMask = sourceMask};
+      auto const installedRes = rawStreamDelivery(source, *optInitial);
+      REQUIRE(installedRes);
+      CHECK(installedRes->clientFormat.speakerMask == sourceMask);
+      CHECK(installedRes->channelDelivery.isMapped);
+      CHECK(installedRes->channelDelivery.nativeSpeakerMask == 3U);
+      REQUIRE(installedRes->needsPermutation);
+      CHECK(installedRes->sourceSlots[0] == 1U);
+      CHECK(installedRes->sourceSlots[1] == 0U);
+      auto bytes = std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}, std::byte{0x21}, std::byte{0x22}});
+      applyRawStreamDelivery(bytes, *installedRes);
+      CHECK(bytes == std::to_array<std::byte>({std::byte{0x21}, std::byte{0x22}, std::byte{0x11}, std::byte{0x12}}));
+      auto const currentRes = rawStreamDelivery(source, *optCurrent, optInitial);
+      REQUIRE_FALSE(currentRes);
+      CHECK(currentRes.error().error.code == Error::Code::FormatRejected);
+      CHECK(currentRes.error().error.message == "PipeWire changed PCM mode after stream activation");
+      CHECK(currentRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
+    }
   }
 
   TEST_CASE("PipeWireFormatParsing - source-zero legacy geometry or encoding changes remain terminal",

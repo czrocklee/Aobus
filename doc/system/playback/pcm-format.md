@@ -31,7 +31,8 @@ A nonzero mask names speakers in ascending assigned-bit order; zero assigns no p
 Channel count, not mask population, always owns frame geometry.
 Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from format equality and from native mapping observations.
 
-Shipping decoders currently leave the new mask and source interpretation unknown; enabling codec identification is pending.
+WAV publishes effective source identity through its [source interpretation](#wav-source-interpretation) below.
+The other current codec producers, including FLAC, ALAC, and MP3, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
 ALSA admits identified sources against its native channel-map observations.
 PipeWire admits a complete supported WAVE source declaration and validates the Format param actually read back; the offer is not that observation.
 A two-channel offer is one exact role set: the declared WAVE pair when the source mask is nonzero, and FL/FR only when that mask is zero. The offer never writes a new identity into a zero client mask.
@@ -52,24 +53,40 @@ This also applies to independent native-only evidence: ALSA may clear a stream f
 Core Audio admits complete supported identities through a [bounded AUHAL observation and permutation bridge](audio-execution.md#core-audio-channel-admission).
 Its returned client mode stays canonical; native byte order and initial delivery evidence remain separate, and acceptance does not prove physical routing.
 Core Audio hints preserve exact source identity without native I/O and are neither admission nor observation guarantees.
-Existing byte-order conventions remain unchanged. The following legacy WAV/Microsoft orders are not a rule for filling a zero mask:
+The [channel-order reference](../../reference/media/channel-order.md) owns the WAV compatibility role sets and Opus slot permutations.
+Those sets are not a rule for filling a zero PCM or native observation mask.
+A decoder publishing identified speakers normalizes any differing codec order before emitting PCM; it never publishes that codec-native speaker order.
+Existing AAC and Opus byte-order mechanisms remain unchanged: AAC requests FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING`, and Opus mapping family 1 permutes the channel mapping it hands libopus.
+Neither mechanism itself publishes source identity or proves native delivery.
+Opus mapping family 255 may expose up to 255 channels with no assigned speaker positions, in header-defined output-index order.
 
-| Channels | Order |
-|---:|---|
-| 1 | Mono |
-| 2 | `FL`, `FR` |
-| 3 | `FL`, `FR`, `FC` |
-| 4 | `FL`, `FR`, `BL`, `BR` |
-| 5 | `FL`, `FR`, `FC`, `BL`, `BR` |
-| 6 | `FL`, `FR`, `FC`, `LFE`, `BL`, `BR` |
-| 7 | `FL`, `FR`, `FC`, `LFE`, `BC`, `SL`, `SR` |
-| 8 | `FL`, `FR`, `FC`, `LFE`, `BL`, `BR`, `SL`, `SR` |
+### WAV source interpretation
 
-A decoder whose codec orders identified speakers differently normalizes before emitting PCM; it never publishes that codec-native speaker order.
-AAC does this through the FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING` parameter, and Opus mapping family 1 does it by permuting the channel mapping it hands libopus.
-FLAC, WAVE, and ALAC are already in this order.
+WAV already uses ascending assigned-bit order; attaching identity does not permute PCM or change channel-count-based frame stride.
+The decoder applies this policy before output adaptation, preserving the effective mask in both source and output formats:
 
-Opus mapping family 255 is the exception to the identified-layout table: it may expose up to 255 channels, but those channels have no assigned speaker positions and remain in header-defined output-index order.
+| Input | Effective interpretation |
+|---|---|
+| Absent mask, mono/stereo | FC `0x4` / FL-FR `0x3`, `Identified` format defaults. |
+| Absent mask, 3–8 channels | [WAV compatibility sets](../../reference/media/channel-order.md#canonical-role-sets), `Inferred`. |
+| Extensible explicit zero, 1–8 channels | The same compatibility sets, `Inferred`. |
+| Complete supported nonzero declaration | Its actual set, `Identified`, including alternate mono/two-channel roles. |
+| Excess positional bits | Discard highest set positions until their number matches the channel count, then validate the effective set. |
+| Partial assignment, remaining reserved positions, `SPEAKER_ALL`, or absent/zero outside the fallback table | `NotSupported` source refusal before backend open. |
+
+`SPEAKER_ALL` is rejected before trimming; it is never an excess position.
+Reserved positions that survive trimming are refused rather than replaced with guessed roles.
+Complete supported declarations are not limited to eight channels: nine- and eighteen-channel sets remain valid.
+Existing RIFF geometry and precision validation precedes layout interpretation; requested output adaptation still rejects precision loss.
+Layout refusal is a recoverable source error, not a native backend observation or an output-fault reclassification.
+
+The multichannel and explicit-zero fallbacks are Aobus compatibility policy: WAVE zero normally means direct-out, so these fallbacks can misinterpret discrete/stem content.
+They do not authorize count-derived native identities.
+An inferred compatibility mask is nevertheless an effective source identity, not an advisory hint: ALSA applies the same native-map admission and permutation rules as for an explicit identity.
+Inference can therefore cause private slot reordering or a route refusal compared with an unpositioned source; missing or compatible partial native observations do not themselves require refusal.
+The [raw RIFF format](../../../include/ao/media/wav/Riff.h) retains the declared DWORD independently, distinguishing absence from explicit zero; playback policy does not change library import.
+[`WavDecoderSession.cpp`](../../../lib/audio/WavDecoderSession.cpp) owns this interpretation, without changing PCM slot order, seeking, or EOF semantics.
+See [Microsoft's format reference](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ksmedia/ns-ksmedia-waveformatextensible) for declaration ordering and excess-bit semantics.
 
 ### PCM encoding
 
@@ -159,6 +176,9 @@ Zero precision, integer precision above 32 bits, and unsupported float precision
 [Backend.h](../../../include/ao/audio/Backend.h) declares the prediction and open operations.
 `prewarmFormatHint` returns a non-binding prediction derived without native I/O; an empty result means no optimistic decoder output is prepared.
 `open` requires a live render target and returns the mode actually configured for it, not a cached device capability or an echo of a requested container.
+`canReuseFormat` is a separate control-domain query about retaining that installed transport for a successor's own canonical mode.
+It defaults to exact PCM equality; any additional backend proof leaves source identity, cache equality, conversion checks, and endpoint precision validation unchanged.
+The [audio execution contract](audio-execution.md#prepared-lookahead) bounds the stereo `0`/`0x3` opt-ins and Core Audio's conservative fallback.
 
 ## Validation rules
 
@@ -199,6 +219,7 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 - [`PcmConversionTest.cpp`](../../../test/unit/audio/PcmConversionTest.cpp) locks packed, 24-in-32, full-scale 32-bit, float, and precision-loss rejection behavior.
 - [`OpenedModeValidationTest.cpp`](../../../test/unit/audio/OpenedModeValidationTest.cpp) locks strict lossless client and endpoint validation.
 - Decoder session tests under [`test/unit/audio/`](../../../test/unit/audio) lock per-codec production of the selected encoding.
+- [`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp) locks WAV fallback origins, declared and trimmed identities, layout refusals, output adaptation, and PCM/seek/EOF preservation.
 - [`CoreAudioChannelLayoutTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh; [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) retains native open and lifetime controls.
 
 ## Related documents

@@ -22,8 +22,9 @@ namespace ao::audio::backend::test
             "[audio][integration][alsa][.manual]")
   {
     // Explicitly selected, idle stereo endpoint with an independently known
-    // current FL/FR map. This configures storage only: no start, render, PCM
-    // frames, map SET, mixer write or system-default change is performed.
+    // current canonical, unflagged FL/FR order. This configures storage only:
+    // no start, render, PCM frames, map SET, mixer write or system-default
+    // change is performed.
     auto const* deviceId = std::getenv("AOBUS_TEST_ALSA_DEVICE_ID");
 
     if (deviceId == nullptr || *deviceId == '\0')
@@ -48,7 +49,31 @@ namespace ao::audio::backend::test
     CHECK(openedRes->optEndpoint->signalFormat.speakerMask == 0x3);
     CHECK(openedRes->optEndpoint->signalFormat.precisionBits >= 16);
 
+    auto const identified = openedRes->clientFormat;
+    REQUIRE(identified.sampleRate == 48000);
+    auto unidentified = identified;
+    unidentified.speakerMask = 0;
+    Backend const& dispatch = backend;
+
+    CHECK(backend.canReuseFormat(unidentified, identified));
+    CHECK(backend.canReuseFormat(identified, unidentified));
+    CHECK(dispatch.canReuseFormat(unidentified, identified));
+    CHECK(dispatch.canReuseFormat(identified, unidentified));
+
+    // These two client modes alias each other, but neither matches the
+    // installed 48000 Hz stream whose channel-map evidence authorizes reuse.
+    auto unrelatedUnidentified = unidentified;
+    unrelatedUnidentified.sampleRate = 96000;
+    auto unrelatedIdentified = unrelatedUnidentified;
+    unrelatedIdentified.speakerMask = 0x3;
+    CHECK_FALSE(backend.canReuseFormat(unrelatedUnidentified, unrelatedIdentified));
+    CHECK_FALSE(backend.canReuseFormat(unrelatedIdentified, unrelatedUnidentified));
+
     backend.close();
+
+    CHECK_FALSE(backend.canReuseFormat(unidentified, identified));
+    CHECK_FALSE(backend.canReuseFormat(identified, unidentified));
+    CHECK(backend.canReuseFormat(identified, identified));
 
     // Same rate/count/precision, genuinely different speaker set. The native
     // current map, not the count or an Error code, establishes this constraint.

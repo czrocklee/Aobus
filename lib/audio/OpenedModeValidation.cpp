@@ -6,6 +6,7 @@
 #include "detail/DecoderOutput.h"
 #include <ao/Error.h>
 #include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
 
@@ -14,6 +15,13 @@
 
 namespace ao::audio::detail
 {
+  bool isStereoIdentityAlias(PcmFormat const& lhs, PcmFormat const& rhs) noexcept
+  {
+    return lhs.sampleRate != 0U && lhs.sampleRate == rhs.sampleRate && lhs.channels == 2U && rhs.channels == 2U &&
+           lhs.encoding == rhs.encoding && frameBytes(lhs) != 0U &&
+           ((lhs.speakerMask == 0U && rhs.speakerMask == 0x3U) || (lhs.speakerMask == 0x3U && rhs.speakerMask == 0U));
+  }
+
   Result<> validateOpenedMode(SignalFormat const& sourceFormat, OpenedPcmMode const& mode)
   {
     auto const& client = mode.clientFormat;

@@ -19,6 +19,7 @@
 #include "detail/CoreAudioRunControl.h"
 #include "detail/CoreAudioUnitRun.h"
 #include "detail/DecoderOutput.h"
+#include "detail/SpeakerSet.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
@@ -93,12 +94,6 @@ namespace ao::audio::backend
                                               .mElement = ::kAudioObjectPropertyElementMain}};
     constexpr auto kUnitChannelProperties = std::to_array<::AudioUnitPropertyID>(
       {::kAudioUnitProperty_AudioChannelLayout, ::kAudioOutputUnitProperty_ChannelMap});
-
-    bool hasSupportedSourceSpeakerSet(SignalFormat const& sourceFormat) noexcept
-    {
-      return sourceFormat.speakerMask == 0U ||
-             isCompleteWaveSpeakerMask(sourceFormat.speakerMask, sourceFormat.channels);
-    }
 
     bool canAdmitSourceFormat(SignalFormat const& sourceFormat) noexcept
     {
@@ -1183,7 +1178,7 @@ namespace ao::audio::backend
 
   std::optional<PcmFormat> CoreAudioBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
-    return canAdmitSourceFormat(sourceFormat) && hasSupportedSourceSpeakerSet(sourceFormat)
+    return canAdmitSourceFormat(sourceFormat) && detail::hasSupportedSourceSpeakerSet(sourceFormat)
              ? Backend::prewarmFormatHint(sourceFormat)
              : std::nullopt;
   }
@@ -1212,7 +1207,7 @@ namespace ao::audio::backend
     }
 
     // Precision refusal above precedes layout refusal, including composite input.
-    if (!hasSupportedSourceSpeakerSet(sourceFormat))
+    if (!detail::hasSupportedSourceSpeakerSet(sourceFormat))
     {
       return std::unexpected{BackendOpenFailure{
         .error = makeError(Error::Code::FormatRejected, "Core Audio cannot identify the source channel set").error(),

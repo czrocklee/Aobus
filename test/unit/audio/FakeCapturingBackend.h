@@ -45,6 +45,7 @@ namespace ao::audio::test
     FakeCapturingBackend& operator=(FakeCapturingBackend&&) = delete;
 
     std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& format) const noexcept override;
+    bool canReuseFormat(PcmFormat const& currentFormat, PcmFormat const& nextFormat) const noexcept override;
     BackendOpenResult open(SignalFormat const& format, RenderTarget& target) override;
     void start() override;
     void pause() override;
@@ -76,6 +77,7 @@ namespace ao::audio::test
     // Clearing it restores the source-derived encoding hint.
     void setPrewarmFormat(std::optional<PcmFormat> optFormat);
     void setSelectedEncoding(std::optional<SampleEncoding> optEncoding);
+    void setStereoIdentityReuse(bool enabled);
     /**
      * @brief Makes open() report a confirmed endpoint of the given precision.
      *
@@ -117,5 +119,6 @@ namespace ao::audio::test
     std::map<PropertyId, PropertyInfo> _mockPropertyInfos{};
     float _volume = 1.0F;
     bool _muted = false;
+    bool _stereoIdentityReuse = false;
   };
 } // namespace ao::audio::test
