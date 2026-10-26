@@ -28,7 +28,9 @@
 #include <ao/winui/layout/ShellState.h>
 #include <ao/winui/list/ListAuthoringAdapter.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <algorithm>
@@ -47,10 +49,13 @@ namespace ao::winui::layout
 {
   namespace
   {
+    using winrt::Microsoft::UI::Xaml::DependencyObject;
     using winrt::Microsoft::UI::Xaml::FrameworkElement;
     using winrt::Microsoft::UI::Xaml::HorizontalAlignment;
+    using winrt::Microsoft::UI::Xaml::RoutedEventArgs;
     using winrt::Microsoft::UI::Xaml::TextTrimming;
     using winrt::Microsoft::UI::Xaml::Visibility;
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
     using winrt::Microsoft::UI::Xaml::Controls::Canvas;
     using winrt::Microsoft::UI::Xaml::Controls::Grid;
     using winrt::Microsoft::UI::Xaml::Controls::MenuFlyout;
@@ -68,8 +73,10 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::Controls::SymbolIcon;
     using winrt::Microsoft::UI::Xaml::Controls::TextBlock;
     using winrt::Microsoft::UI::Xaml::Controls::TreeView;
+    using winrt::Microsoft::UI::Xaml::Controls::TreeViewItem;
     using winrt::Microsoft::UI::Xaml::Controls::TreeViewNode;
     using winrt::Microsoft::UI::Xaml::Controls::TreeViewSelectionChangedEventArgs;
+    using winrt::Microsoft::UI::Xaml::Media::VisualTreeHelper;
 
     constexpr auto kTreePresentation = std::string_view{"tree"};
     constexpr auto kTreeNodeTemplateKey = std::string_view{"NavigationTreeNodeTemplate"};
@@ -124,6 +131,30 @@ namespace ao::winui::layout
       }
 
       return content;
+    }
+
+    /**
+     * @brief Name each tree row that hosts @p content after the entry's label.
+     *
+     * A `TreeView` realizes its rows itself and names each after its node, whose
+     * only text is its type name. The content enters a row whenever one realizes
+     * it, so it names that row then, including a row recycled from another node.
+     */
+    void nameHostingTreeItem(FrameworkElement const& content, winrt::hstring label)
+    {
+      content.Loaded(
+        [label = std::move(label)](winrt::Windows::Foundation::IInspectable const& sender, RoutedEventArgs const&)
+        {
+          for (auto current = VisualTreeHelper::GetParent(sender.as<DependencyObject>()); current;
+               current = VisualTreeHelper::GetParent(current))
+          {
+            if (auto const item = current.try_as<TreeViewItem>(); item)
+            {
+              AutomationProperties::SetName(item, label);
+              return;
+            }
+          }
+        });
     }
 
     ListId taggedListId(FrameworkElement const& element)
@@ -370,6 +401,7 @@ namespace ao::winui::layout
         : _binding{std::move(binding)}
         , _width{std::move(paneSettings), ctx.gatePtr}
         , _splitter{PaneEdge::Trailing,
+                    resourceHstring(L"winui_library_navigation_pane_resize"),
                     [this](double const change)
                     {
                       _width.resizeBy(change);
@@ -487,6 +519,8 @@ namespace ao::winui::layout
           item.Content(content);
           item.Icon(SymbolIcon{navigationSymbol(row)});
           item.Tag(winrt::box_value(id.raw()));
+          // The item's content is a panel, from which UI Automation derives no name.
+          AutomationProperties::SetName(item, navigationLabel(row));
           _itemsById.emplace(id, item);
           _labelsById.emplace(id, winrt::to_string(navigationLabel(row)));
           _parentIdsById.emplace(id, row.parentId);
@@ -595,6 +629,7 @@ namespace ao::winui::layout
         : _binding{std::move(binding)}
         , _width{std::move(paneSettings), ctx.gatePtr}
         , _splitter{PaneEdge::Trailing,
+                    resourceHstring(L"winui_library_navigation_pane_resize"),
                     [this](double const change)
                     {
                       _width.resizeBy(change);
@@ -669,6 +704,7 @@ namespace ao::winui::layout
           auto node = TreeViewNode{};
           auto content = navigationContent(row, true);
           content.ContextFlyout(_binding.contextFlyout(row));
+          nameHostingTreeItem(content, navigationLabel(row));
           node.Content(content);
           _nodesById.emplace(id, node);
           _labelsById.emplace(id, winrt::to_string(navigationLabel(row)));

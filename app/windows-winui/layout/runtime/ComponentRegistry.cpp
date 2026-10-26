@@ -15,6 +15,8 @@
 #include <ao/winui/layout/LayoutSchema.h>
 #include <ao/winui/layout/PlacementPlan.h>
 
+#include <winrt/Microsoft.UI.Xaml.Automation.h>
+
 #include <expected>
 #include <format>
 #include <memory>
@@ -89,6 +91,15 @@ namespace ao::winui::layout
 
     auto const placement = winui::planPlacement(node);
     auto const element = (*componentPtrRes)->element();
+    // Preserve explicit IDs; the authored node ID otherwise identifies the
+    // component in UIA diagnostics. It is not a human-readable name fallback.
+    if (!node.id.empty() &&
+        winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::GetAutomationId(element).empty())
+    {
+      winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(
+        element, winrt::to_hstring(node.id));
+    }
+
     auto appliedRes = applyCommonProps(element, node, placement, *optKind, ctx.resources, ctx.surfaceBrush);
 
     if (!appliedRes)

@@ -72,6 +72,9 @@ namespace winrt::Aobus::implementation
     {
       return _cells.GetView();
     }
+    // UI Automation names a list row by its item's text: the track's title, or
+    // the first line of a group heading.
+    hstring ToString() const noexcept { return _title; }
     // NOLINTEND(readability-identifier-naming)
 
   private:

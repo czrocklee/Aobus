@@ -5,8 +5,10 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include "layout/runtime/ResourceLookup.h"
 #include "layout/runtime/UiSubscription.h"
 #include "pch.h"
+#include "platform/NamedControl.h"
 #include "platform/StringResources.h"
 #include "status/ActivityStatusControl.h"
 #include "track/TrackListController.h"
@@ -37,6 +39,8 @@ namespace ao::winui::layout
     using winrt::Microsoft::UI::Xaml::FrameworkElement;
     using winrt::Microsoft::UI::Xaml::GridLength;
     using winrt::Microsoft::UI::Xaml::GridUnitType;
+    using winrt::Microsoft::UI::Xaml::ResourceDictionary;
+    using winrt::Microsoft::UI::Xaml::Style;
     using winrt::Microsoft::UI::Xaml::TextTrimming;
     using winrt::Microsoft::UI::Xaml::Thickness;
     using winrt::Microsoft::UI::Xaml::VerticalAlignment;
@@ -68,10 +72,11 @@ namespace ao::winui::layout
     constexpr double kCompactButtonHorizontalPadding = 4.0;
     constexpr double kCompactButtonVerticalPadding = 2.0;
 
-    /// The compact buttons in the activity strip carry glyphs, not text.
-    Button chromeLessButton()
+    /// The compact buttons in the activity strip carry glyphs, not text, so
+    /// @p name is their only accessible label.
+    Button chromeLessButton(winrt::hstring const& name)
     {
-      auto button = Button{};
+      auto button = makeNamed<Button>(name);
       button.MinWidth(kCompactButtonMinWidth);
       button.Padding(Thickness{.Left = kCompactButtonHorizontalPadding,
                                .Top = kCompactButtonVerticalPadding,
@@ -90,7 +95,8 @@ namespace ao::winui::layout
     class ActivityStatusComponent final : public LayoutComponent
     {
     public:
-      ActivityStatusComponent(rt::NotificationService& notifications,
+      ActivityStatusComponent(ResourceDictionary const& resources,
+                              rt::NotificationService& notifications,
                               rt::LibraryJobs& libraryJobs,
                               i18n::MessageCatalog const& textCatalog)
       {
@@ -108,6 +114,10 @@ namespace ao::winui::layout
         _spinner.Height(kIndicatorSize);
 
         _statusIcon.FontSize(kStatusIconFontSize);
+        // Only the action is unavailable; its information must retain normal,
+        // theme-bound contrast instead of inheriting the Button's disabled ink.
+        _statusIcon.Style(lookupResource(resources, "ActivityStatusIconStyle").try_as<Style>());
+        _label.Style(lookupResource(resources, "ActivityStatusTextStyle").try_as<Style>());
 
         _label.MaxWidth(kLabelMaximumWidth);
         _label.FontSize(kLabelFontSize);
@@ -134,8 +144,8 @@ namespace ao::winui::layout
         dismissGlyph.Glyph(winrt::hstring{kDismissGlyph});
         dismissGlyph.FontSize(kDismissGlyphFontSize);
         _dismissButton.Content(dismissGlyph);
-        ToolTipService::SetToolTip(
-          _dismissButton, winrt::box_value(resourceHstring(L"winui_activity_hide_notification")));
+        auto const hideLabel = resourceHstring(L"winui_activity_hide_notification");
+        ToolTipService::SetToolTip(_dismissButton, winrt::box_value(hideLabel));
         Grid::SetColumn(_dismissButton, 1);
 
         _root.Children().Append(_detailButton);
@@ -165,12 +175,12 @@ namespace ao::winui::layout
 
     private:
       Grid _root{};
-      Button _detailButton{chromeLessButton()};
+      Button _detailButton{chromeLessButton(resourceHstring(L"winui_activity_notifications"))};
       ProgressRing _spinner{};
       FontIcon _statusIcon{};
       TextBlock _label{};
       ProgressBar _progress{};
-      Button _dismissButton{chromeLessButton()};
+      Button _dismissButton{chromeLessButton(resourceHstring(L"winui_activity_hide_notification"))};
       std::optional<ActivityStatusControl> _optControl;
     };
 
@@ -346,8 +356,8 @@ namespace ao::winui::layout
     registry.registerComponent(
       "status.activity",
       [&notifications, &libraryJobs, textCatalog](
-        LayoutBuildContext& /*ctx*/, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
-      { return std::make_unique<ActivityStatusComponent>(notifications, libraryJobs, textCatalog); });
+        LayoutBuildContext& ctx, uimodel::LayoutNode const& /*node*/) -> Result<std::unique_ptr<LayoutComponent>>
+      { return std::make_unique<ActivityStatusComponent>(ctx.resources, notifications, libraryJobs, textCatalog); });
 
     registry.registerComponent(
       "status.trackCount",

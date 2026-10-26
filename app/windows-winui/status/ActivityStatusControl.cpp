@@ -3,6 +3,7 @@
 
 #include "status/ActivityStatusControl.h"
 
+#include "platform/NamedControl.h"
 #include "platform/StringResources.h"
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -125,7 +126,8 @@ namespace ao::winui
 
     Button detailDismissButton()
     {
-      auto button = Button{};
+      auto const hideLabel = resourceHstring(L"winui_activity_hide_notification");
+      auto button = makeNamed<Button>(hideLabel);
       button.MinWidth(kDetailDismissButtonSide);
       button.MinHeight(kDetailDismissButtonSide);
       button.Padding({
@@ -139,7 +141,7 @@ namespace ao::winui
       icon.Glyph(winrt::hstring{kDismissGlyph});
       icon.FontSize(kDetailDismissIconSize);
       button.Content(icon);
-      ToolTipService::SetToolTip(button, winrt::box_value(resourceHstring(L"winui_activity_hide_notification")));
+      ToolTipService::SetToolTip(button, winrt::box_value(hideLabel));
       return button;
     }
   } // namespace
@@ -168,7 +170,6 @@ namespace ao::winui
     detailScroll.Content(_detailRows);
     _detailFlyout.Placement(FlyoutPlacementMode::Top);
     _detailFlyout.Content(detailScroll);
-    _detailButton.Flyout(_detailFlyout);
 
     _dismissClickRevoker = _dismissButton.Click(
       winrt::auto_revoke,
@@ -211,6 +212,8 @@ namespace ao::winui
   {
     _viewModelPtr.reset();
     cancelAutoDismissTimer();
+    _detailFlyout.Hide();
+    _detailButton.Flyout(nullptr);
     clearDetailRows();
   }
 
@@ -239,7 +242,11 @@ namespace ao::winui
     _statusIcon.Glyph(winrt::hstring{glyph});
     _statusIcon.Visibility(glyph.empty() ? Visibility::Collapsed : Visibility::Visible);
     _label.Text(idle ? winrt::hstring{} : winrt::to_hstring(compact.text));
-    AutomationProperties::SetName(_root, idle ? winrt::to_hstring(idleLabel) : _label.Text());
+    // The detail button's content is a panel, from which UI Automation derives
+    // no name; it takes the words the strip shows, as the strip itself does.
+    auto const accessibleName = idle ? winrt::to_hstring(idleLabel) : _label.Text();
+    AutomationProperties::SetName(_root, accessibleName);
+    AutomationProperties::SetName(_detailButton, accessibleName);
 
     if (compact.optProgressFraction)
     {
@@ -252,29 +259,29 @@ namespace ao::winui
     }
 
     _dismissButton.Visibility(compact.dismissible && !idle ? Visibility::Visible : Visibility::Collapsed);
-    bool const openable = uimodel::hasDetailContent(state.detail) && !idle;
-    _detailButton.IsHitTestVisible(openable || reserveIdle);
+    bool const openable = uimodel::hasDetailContent(state.detail) && (!idle || reserveIdle);
+    // Pointer, keyboard, and automation must agree on whether there is an
+    // action. A named but non-hit-testable Button is still UIA-invokable.
+    _detailButton.IsEnabled(openable);
+    _detailButton.IsHitTestVisible(openable);
     _detailButton.IsTabStop(openable);
-    auto detailToolTip = winrt::Windows::Foundation::IInspectable{nullptr};
-
-    if (openable)
-    {
-      detailToolTip = winrt::box_value(resourceHstring(L"winui_activity_details"));
-    }
-    else if (reserveIdle)
-    {
-      detailToolTip = winrt::box_value(winrt::to_hstring(idleLabel));
-    }
-
-    ToolTipService::SetToolTip(_detailButton, detailToolTip);
-
-    renderDetail(state);
 
     if (!openable)
     {
       _detailFlyout.Hide();
     }
 
+    _detailButton.Flyout(openable ? _detailFlyout : nullptr);
+    auto detailToolTip = winrt::Windows::Foundation::IInspectable{nullptr};
+
+    if (openable)
+    {
+      detailToolTip = winrt::box_value(resourceHstring(L"winui_activity_details"));
+    }
+
+    ToolTipService::SetToolTip(_detailButton, detailToolTip);
+
+    renderDetail(state);
     syncAutoDismissTimer(compact);
   }
 

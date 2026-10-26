@@ -1,6 +1,7 @@
 """ao test — incrementally build and run registered development test suites."""
 
 import argparse
+import copy
 import os
 import random
 import re
@@ -27,6 +28,7 @@ from ..core import (
     phases,
     proc,
     tooltest,
+    winui,
     workspace_cache,
 )
 from ..core.paths import PROJECT_ROOT
@@ -110,7 +112,11 @@ SUITE_TARGETS = {
 def selectable_suites() -> tuple[str, ...]:
     """Return individually selectable suites for the active native profile."""
     profile = builddir.platform_profile()
-    return (*profile.all_suites, "appkit") if profile.name == "macos" else profile.all_suites
+    if profile.name == "macos":
+        return (*profile.all_suites, "appkit")
+    if profile.name == "windows":
+        return (*profile.all_suites, "winui")
+    return profile.all_suites
 
 
 def suite_groups() -> dict[str, tuple[str, ...]]:
@@ -343,7 +349,12 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         const="concurrency",
         help="run non-hidden [concurrency] tests across every native Catch2 suite",
     )
-    parser.add_argument("-p", "--path", metavar="<dir>", help="override the native test build directory")
+    parser.add_argument(
+        "-p",
+        "--path",
+        metavar="<dir>",
+        help="override the test build directory (the dedicated WinUI tree with --winui)",
+    )
     parser.add_argument("--clang", action="store_true", help="test the clang build tree")
     sanitizers = parser.add_mutually_exclusive_group()
     sanitizers.add_argument(
@@ -1110,6 +1121,36 @@ def _appkit_options(args: argparse.Namespace) -> tuple[str, Path, Path] | None:
     return scenario or "desktop", resolved_library, resolved_state_root
 
 
+def _run_winui_audit(args: argparse.Namespace) -> int:
+    """Run the explicit Debug desktop gate, never silently skip absent admission."""
+    if args.filter or args.list or args.repeat != 1 or args.clang or args.asan or args.tsan:
+        raise die(
+            "WinUI naming audit runs Debug only and rejects Catch2 filters, --list, "
+            "--repeat, and compiler/sanitizer switches."
+        )
+    try:
+        winui.require_runtime()
+        winui.require_interactive_session()
+    except RuntimeError as error:
+        raise die(str(error)) from error
+
+    build_dir = Path(args.path) if args.path else builddir.winui_build_dir()
+    if not args.no_build:
+        build_args = copy.copy(args)
+        build_args.flavor = "debug"
+        build_args.clean = False
+        build_args.verbose = False
+        build_args.gtk = None
+        build_args.system_media = None
+        build_dir = build.do_build(build_args, targets=["winui"]).build_dir
+    executable = build_dir / "app" / "windows-winui" / "automation-probe" / "Debug" / "ao_winui_automation_probe.exe"
+    if not executable.is_file():
+        raise die(f"WinUI naming probe does not exist: {executable}. Run ao.bat build --target winui first.")
+    with phases.measure("suite", tree="winui", count=1, suite="winui") as phase:
+        phase.status = run([str(executable)], cwd=executable.parent, log=build_dir / "build.log", append=True)
+    return phase.status
+
+
 def run_command(args: argparse.Namespace) -> int:
     build.validate_build_options(args)
     appkit_options = _appkit_options(args)
@@ -1121,6 +1162,8 @@ def run_command(args: argparse.Namespace) -> int:
         raise die("--concurrency supplies [concurrency]~[.]; do not also pass a positional filter.")
 
     suites = suites_for(args.suite, tsan=args.tsan)
+    if args.suite == "winui":
+        return _run_winui_audit(args)
     # An explicit Catch2 tag also selects hidden cases. The automatic gate must
     # not turn a hardware/manual probe into unattended coverage when it is tagged.
     test_filter = "[concurrency]~[.]" if args.suite == "concurrency" else args.filter

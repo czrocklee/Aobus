@@ -32,7 +32,11 @@ namespace ao::winui::layout
   class PaneSplitter final
   {
   public:
-    PaneSplitter(PaneEdge edge, std::function<void(double)> onResize, std::function<void()> onCommit);
+    /// @p name is the accessible name of the boundary, which shows no text of its own.
+    PaneSplitter(PaneEdge edge,
+                 winrt::hstring const& name,
+                 std::function<void(double)> onResize,
+                 std::function<void()> onCommit);
 
     PaneSplitter(PaneSplitter const&) = delete;
     PaneSplitter& operator=(PaneSplitter const&) = delete;

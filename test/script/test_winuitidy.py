@@ -235,6 +235,27 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                                 required_translation_units=(missing,),
                             )
 
+    def test_declared_auxiliary_support_header_uses_its_native_translation_unit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "test/integration/windows/WinUiSilentAudio.cpp"
+            header = source.with_suffix(".h")
+            source.parent.mkdir(parents=True)
+            source.write_text('#include "WinUiSilentAudio.h"\n', encoding="utf-8")
+            header.touch()
+            with (
+                mock.patch.object(winuitidy, "PROJECT_ROOT", root),
+                mock.patch.object(winuitidy, "_WINUI_ROOT", root / "app/windows-winui"),
+            ):
+                self.assertTrue(winuitidy.requires_winui_compile_context(header))
+                companions = winuitidy.find_header_companions(
+                    [{"file": str(source), "directory": str(root)}],
+                    (header,),
+                    project_root=root,
+                    winui_root=root / "app/windows-winui",
+                )
+            self.assertEqual(companions, {header: source})
+
     def test_extracts_required_auxiliary_sources_from_their_own_projects(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -257,6 +278,10 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             credits_source = source_root / "test" / "integration" / "windows" / "WinUiCreditsProbe.cpp"
             quality_project = build_dir / "app" / "windows-winui" / "ao_winui_quality_tooltip_probe.vcxproj"
             quality_source = source_root / "test" / "integration" / "windows" / "WinUiQualityToolTipProbe.cpp"
+            status_project = build_dir / "app" / "windows-winui" / "ao_winui_activity_status_probe.vcxproj"
+            status_source = source_root / "test" / "integration" / "windows" / "WinUiActivityStatusProbe.cpp"
+            automation_project = build_dir / "app" / "windows-winui" / "ao_winui_automation_probe.vcxproj"
+            automation_source = source_root / "test" / "integration" / "windows" / "WinUiAutomationProbe.cpp"
             for path in (
                 msbuild,
                 main_project,
@@ -274,6 +299,10 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                 credits_source,
                 quality_project,
                 quality_source,
+                status_project,
+                status_source,
+                automation_project,
+                automation_source,
             ):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
@@ -306,6 +335,8 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                         "run",
                         side_effect=(
                             payload(main_source),
+                            payload(status_source, "/c /DACTIVITY_STATUS /Istatus-headers"),
+                            payload(automation_source, "/c /DAUTOMATION /Iautomation-headers"),
                             payload(credits_source, "/c /DCREDITS_PROBE /Icredits-headers"),
                             payload(probe_source),
                             payload(quality_source, "/c /DQUALITY_PROBE /Iquality-headers"),
@@ -324,6 +355,8 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                                 table_source,
                                 credits_source,
                                 quality_source,
+                                status_source,
+                                automation_source,
                             ),
                         )
                     requires_context = [
@@ -335,32 +368,48 @@ class WinUiCompileCommandsTest(unittest.TestCase):
                             table_source,
                             credits_source,
                             quality_source,
+                            status_source,
+                            automation_source,
                         )
                     ]
 
             self.assertEqual(
                 [Path(entry["file"]) for entry in commands],
-                [main_source, credits_source, probe_source, quality_source, soul_source, item_source, table_source],
+                [
+                    main_source,
+                    status_source,
+                    automation_source,
+                    credits_source,
+                    probe_source,
+                    quality_source,
+                    soul_source,
+                    item_source,
+                    table_source,
+                ],
             )
-            self.assertEqual(run.call_count, 7)
+            self.assertEqual(run.call_count, 9)
             self.assertIn(str(main_project), run.call_args_list[0].args[0])
-            self.assertIn(str(credits_project), run.call_args_list[1].args[0])
-            self.assertIn(str(probe_project), run.call_args_list[2].args[0])
-            self.assertIn(str(quality_project), run.call_args_list[3].args[0])
-            self.assertIn(str(soul_project), run.call_args_list[4].args[0])
-            self.assertIn(str(item_project), run.call_args_list[5].args[0])
-            self.assertIn(str(table_project), run.call_args_list[6].args[0])
+            self.assertIn(str(status_project), run.call_args_list[1].args[0])
+            self.assertIn(str(automation_project), run.call_args_list[2].args[0])
+            self.assertIn(str(credits_project), run.call_args_list[3].args[0])
+            self.assertIn(str(probe_project), run.call_args_list[4].args[0])
+            self.assertIn(str(quality_project), run.call_args_list[5].args[0])
+            self.assertIn(str(soul_project), run.call_args_list[6].args[0])
+            self.assertIn(str(item_project), run.call_args_list[7].args[0])
+            self.assertIn(str(table_project), run.call_args_list[8].args[0])
+            self.assertIn("/DACTIVITY_STATUS /Istatus-headers", commands[1]["command"])
+            self.assertIn("/DAUTOMATION /Iautomation-headers", commands[2]["command"])
             self.assertEqual(
-                commands[1]["command"],
+                commands[3]["command"],
                 f'"{clang_cl}" /c /DCREDITS_PROBE /Icredits-headers "{credits_source}"',
             )
             self.assertEqual(
-                commands[3]["command"],
+                commands[5]["command"],
                 f'"{clang_cl}" /c /DQUALITY_PROBE /Iquality-headers "{quality_source}"',
             )
-            self.assertIn("/DTRACK_ITEM /Iitem-headers", commands[5]["command"])
-            self.assertIn("/DTRACK_TABLE /Itable-headers", commands[6]["command"])
-            self.assertEqual(requires_context, [True, True, True, True, True, True])
+            self.assertIn("/DTRACK_ITEM /Iitem-headers", commands[7]["command"])
+            self.assertIn("/DTRACK_TABLE /Itable-headers", commands[8]["command"])
+            self.assertEqual(requires_context, [True, True, True, True, True, True, True, True])
 
 
 class WinUiCompileCommandsPhaseTest(unittest.TestCase):

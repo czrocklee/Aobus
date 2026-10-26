@@ -294,10 +294,10 @@ externality or overlap check ran. Accepted inputs still require a desktop.
 ### Track and navigation probes
 
 The WinUI build also executes `ao_winui_track_item_probe`, a console check of the
-real generated TrackRowItem projection and lazy item view. Its eight scenarios
+real generated TrackRowItem projection and lazy item view. Its nine scenarios
 cover bounded materialization, null retry, cache identity and eviction, IndexOf,
-GetMany, iterator lifetime, oversized-count rejection, and duplicate-inclusive
-compact Credits counts. Failure stops the
+GetMany, iterator lifetime, oversized-count rejection, duplicate-inclusive
+compact Credits counts, and the row names UI Automation reads. Failure stops the
 build; no interactive desktop or audio endpoint is required.
 
 `ao_winui_track_table_probe` is built by native checks but runs only from a
@@ -305,7 +305,11 @@ logged-in desktop, like the Soul probe:
 `<reported-build-dir>\app\windows-winui\track-table-probe\Debug\ao_winui_track_table_probe.exe`.
 Its temporary offline library and real application runtime exercise registered
 track-table selection, stable-id restoration, scroll anchoring and reveal
-priority. Sparse selection and interleaved headers distinguish selected-collection
+priority. The frame's compiled header template verifies localized column-resize
+names before and after sort and width changes; the probe does not duplicate
+that binding in test XAML. The template donor has no initialized library session,
+so header click, drag, and context-menu routing are not tested: column changes
+use the controller's public API. Sparse selection and interleaved headers distinguish selected-collection
 positions from display indices. Filtering checks retain partially or fully hidden
 Runtime selection through header-only gestures without publication, then restore
 native rows when the filter is cleared. Presentation checks include the intermediate
@@ -318,6 +322,20 @@ enablement without an audio endpoint or media playback. Native navigation chrome
 clearance covers the 720/1120 effective-width boundaries, including window-local
 Light. A 90-second dispatcher deadline bounds execution; failure reports a
 nonzero exit rather than a dialog.
+
+`ao_winui_activity_status_probe` also runs only from a logged-in desktop:
+`<reported-build-dir>\app\windows-winui\activity-status-probe\Debug\ao_winui_activity_status_probe.exe`.
+It builds the registered `status.activity` component — real chrome, adapter, and
+runtime — in its own window, taking the strip's styles from the actual compiled
+`MainWindow` resources through an uninitialized donor window, and invokes the
+component's native automation providers; a separately theme-bound reference
+provides the normal foreground. Empty idle and ordinary Info states have no
+enabled action, attached flyout, or tooltip; warnings and retained idle details
+remain keyboard- and automation-openable. It checks the real compact and
+detail-dismiss names, null inactive tooltips, Light/Dark foreground updates, and
+native Invoke and lifecycle transitions, without physical input,
+playback, or user state. A 30-second dispatcher deadline bounds the probe. Native
+checks build it but do not execute it unattended.
 
 `ao_winui_credits_probe` likewise requires a logged-in desktop:
 `<reported-build-dir>\app\windows-winui\credits-probe\Debug\ao_winui_credits_probe.exe`.
@@ -339,6 +357,18 @@ audible playback. Inspect the actual shipping window separately for those
 claims. The shipping executable has no probe switches; probe application
 metadata stays outside its WinMD/PRI dependency closure. Close the application
 and probes before another portal build or hygiene refresh can relink them.
+
+### UI Automation naming gate
+
+`ao.bat test --winui` is a Windows-only explicit suite: it builds the Debug configuration of the dedicated WinUI tree plus the `ao_winui_automation_probe` executable (CMake target `ao_winui_automation_probe`), then runs that probe on a desktop. `-n/--no-build` reuses an existing dedicated WinUI tree, and `-p` selects that dedicated tree. Ordinary `check` and `all` runs build the WinUI graph but never execute GUI probes.
+
+The probe requires an authenticated interactive console: it exits with a diagnostic instead of starting a GUI whenever the process is not in the active console session (no session 0, no silent skip, no fallback), so an unattended host fails rather than reports false success. CI runs it as a separate required Windows gate after `check`; the runner must provide that session. The gate does not provision or bypass desktop login.
+
+The probe loads the real `MainWindow` against an isolated `LibrarySession` with two metadata-only tracks in one album (a disposable scratch root, no playback or personal saved settings). It drives the true Modern and Classic shells, flat and album-grouped rows, a narrowed Classic window, and the volume and overflow popups. It walks the automation tree — peers and their children, including disabled controls — and requires a nonblank final `AutomationPeer.Name` from the audited interactive and item roles; an attached property or id stamp alone is never accepted as a name. Decorative (`Raw` view), text, and layout roles are out of scope, and `ScrollBar` template internals are explicitly excluded.
+
+Positive landmarks use those same audited observations, not visual existence or a minimum control count. Native roles and authored component scopes identify the on-screen Soul and seek controls, title header and resize grip, both track rows, and the album heading when grouped. Wide layouts additionally require the navigation and inspector resize grips, plus Classic's All Tracks tree item. The probe requests DPI-scaled client sizes, overrides only its own window's native tracking ceiling (including measured chrome), and checks the effective DIP width before applying wide or narrow expectations; intentionally hidden narrow panes are not required. The sizing fixture verifies both a constrained width and a client request beyond the system's default tracking ceiling, without changing the desktop resolution. Visual ancestors supply scope metadata only for already-audited peers. Canaries reject missing or whitespace-only names, wrong-role and wrong-scope landmarks, a named control moved to Raw view, and a removed control; factory-named controls (`makeNamed`), text content, and `LabeledBy` sources pass.
+
+Name presence is not semantic correctness: dialogs the probe never opens, rows it never materializes, names in other locales, and real assistive technology such as Narrator remain uncertified. The [frontend accessibility contract](../system/frontend/windows.md#frontend-observations) owns how controls receive names; the existing track-table and activity-status probes stay separate, manual desktop contracts.
 
 ### Capture MSBuild incrementality
 
