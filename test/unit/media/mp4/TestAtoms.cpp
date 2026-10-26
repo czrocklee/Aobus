@@ -81,13 +81,15 @@ namespace ao::test::mp4
 
   std::vector<std::uint8_t> makeAudioSampleEntryAtom(std::string_view sampleEntryType,
                                                      std::vector<std::uint8_t> const& extensions,
-                                                     std::uint32_t sampleRate)
+                                                     std::uint32_t sampleRate,
+                                                     std::uint16_t channels,
+                                                     std::uint16_t precisionBits)
   {
     auto sampleEntry = media::mp4::AudioSampleEntryLayout{};
     sampleEntry.common.length = sizeof(media::mp4::AudioSampleEntryLayout);
     std::memcpy(sampleEntry.common.type.data(), sampleEntryType.data(), 4);
-    sampleEntry.channelCount = 2;
-    sampleEntry.sampleSize = 16;
+    sampleEntry.channelCount = channels;
+    sampleEntry.sampleSize = precisionBits;
     sampleEntry.sampleRate = (sampleRate << 16);
 
     auto const* sampleEntryAddr = reinterpret_cast<std::uint8_t const*>(&sampleEntry);
@@ -106,10 +108,13 @@ namespace ao::test::mp4
 
   std::vector<std::uint8_t> makeStsdAtom(std::string_view sampleEntryType,
                                          std::vector<std::uint8_t> const& sampleEntryExtensions,
-                                         std::uint32_t sampleRate)
+                                         std::uint32_t sampleRate,
+                                         std::uint16_t channels,
+                                         std::uint16_t precisionBits)
   {
     auto stsdBody = std::vector<std::uint8_t>{0, 0, 0, 0, 0, 0, 0, 1};
-    auto const sampleEntryAtom = makeAudioSampleEntryAtom(sampleEntryType, sampleEntryExtensions, sampleRate);
+    auto const sampleEntryAtom =
+      makeAudioSampleEntryAtom(sampleEntryType, sampleEntryExtensions, sampleRate, channels, precisionBits);
     stsdBody.insert(stsdBody.end(), sampleEntryAtom.begin(), sampleEntryAtom.end());
     return makeAtom("stsd", stsdBody);
   }
@@ -279,9 +284,11 @@ namespace ao::test::mp4
                                                        std::uint32_t duration,
                                                        std::uint32_t sampleSize,
                                                        std::uint32_t sampleDelta,
-                                                       std::uint32_t chunkOffset)
+                                                       std::uint32_t chunkOffset,
+                                                       std::uint16_t channels,
+                                                       std::uint16_t precisionBits)
   {
-    auto const stsdAtom = makeStsdAtom(sampleEntryType, sampleEntryExtensions, timescale);
+    auto const stsdAtom = makeStsdAtom(sampleEntryType, sampleEntryExtensions, timescale, channels, precisionBits);
     auto const stblAtom = makeSampleTableAtom(stsdAtom, sampleSize, sampleDelta, chunkOffset);
     return makeTrackAtom("soun", stblAtom, timescale, duration);
   }

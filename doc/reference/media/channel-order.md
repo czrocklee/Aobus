@@ -5,7 +5,7 @@ id: media.channel-order
 
 ## Scope
 
-This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, and current Opus slot normalization.
+This reference records WAVE speaker order, WAV compatibility sets, the narrower FLAC format defaults, bounded ALAC channel declarations, and current Opus slot normalization.
 [PCM source interpretation](../../system/playback/pcm-format.md) owns their playback applicability; slot conventions alone do not establish published source identity or native delivery.
 
 ## WAVE speaker positions
@@ -34,6 +34,68 @@ These sets are not defaults for unidentified PCM or native backend observations.
 
 `FL`/`FR` are front left/right, `FC` is front center, and `LFE` is low-frequency effects.
 `BL`/`BR` are back left/right, `BC` is back center, and `SL`/`SR` are side left/right.
+`FLC`/`FRC` are front left/right of center.
+
+## ALAC
+
+The [ALAC source policy](../../system/playback/pcm-format.md#alac-source-interpretation) identifies only trustworthy mono/stereo absence defaults or complete supported explicit declarations.
+The pinned [ALAC magic-cookie description](https://raw.githubusercontent.com/mikebrady/alac/5d8c5db0dfcadd5872f28e665cf4f4303447352a/ALACMagicCookieDescription.txt) explicitly leaves absent layouts above two channels unassigned.
+The same revision's [ALACAudioTypes.h](https://raw.githubusercontent.com/mikebrady/alac/5d8c5db0dfcadd5872f28e665cf4f4303447352a/codec/ALACAudioTypes.h) supplies ALAC named tags.
+Generic declarations are described by Apple's [CAF specification](https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_spec/CAF_spec.html) and [QuickTime audio channel layout atom](https://developer.apple.com/documentation/quicktime-file-format/audio_channel_layout_atom).
+These are format/source references, not evidence of an executed reference encoder or physical speaker delivery.
+
+### Bounded declarations and order
+
+Aobus accepts a bounded union of full named tags, not a channel-count lookup.
+Representative declarations below show raw provider-arrival roles and the zero-based source slot copied to each canonical destination.
+They are explicit declarations, never defaults for untagged multichannel ALAC.
+
+| Tag (identifier/count) | Raw roles | Effective mask | Destination-to-source slots |
+|---|---|---:|---|
+| Generic `114/3` (`0x00720003`) | FC FL FR | `0x007` | `[1,2,0]` |
+| Shared `116/4` | FC FL FR BC | `0x107` | `[1,2,0,3]` |
+| Shared `120/5` | FC FL FR BL BR | `0x037` | `[1,2,0,3,4]` |
+| Shared `124/6` | FC FL FR BL BR LFE | `0x03F` | `[1,2,0,5,3,4]` |
+| Shared `142/7` | FC FL FR BL BR BC LFE | `0x13F` | `[1,2,0,6,3,4,5]` |
+| Shared `127/8` | FC FLC FRC FL FR BL BR LFE | `0x0FF` | `[3,4,0,7,5,6,1,2]` |
+
+The four-channel ALAC reference layout is not quad; the seven-channel layout is not the WAV seven-channel compatibility set, and the eight-channel layout uses front-wide/back roles rather than WAV's side/back set.
+Their masks are respectively `0x107`, `0x13F`, and `0xFF`, not count-derived WAV masks.
+The exact accepted full-tag table lives in [`AlacDecoderSession.cpp`](../../../lib/audio/AlacDecoderSession.cpp), including mono/stereo and generic quad, MPEG 4.0 A, 5.0 A/B, 5.1 A/B/C, and 7.1 A alternatives.
+This is not universal support for ALAC layouts or coding profiles.
+
+Exact full tag `0x00710003` (`113/3`) means FC-FL-FR in ALAC but FL-FR-FC in generic Core Audio.
+It is therefore `Unknown` everywhere, including a physical MP4 sibling `chan`: placement does not establish the namespace.
+Channel count, the first packet's SCE/CPE shape, instance tags, producer guesses, and endian guesses never disambiguate it.
+
+A generic sample-entry sibling `chan` can instead declare:
+
+- Bitmap tag `0x00010000`: a nonzero complete supported WAVE set with one bit per configured channel, in ascending-bit order; no descriptions.
+- Description tag zero: zero bitmap and exactly one complete 20-byte named description per configured channel, in array order.
+  Only distinct labels 1–18 with zero flags are supported; labels 5/6 mean back left/right, and 10/11 mean side left/right.
+  Labels 33/34 are unsupported, not back/side aliases.
+  Unused label zero, coordinate-only label 100, discrete, flagged, duplicate, or unsupported labels do not identify a layout.
+  Coordinate fields are ignored for supported named labels with zero flags, including nonzero coordinate values; they neither invalidate those labels nor supply role evidence.
+
+Sibling parsing uses the actual compact or extended atom header and requires zero version/flags and exact declaration lengths.
+Partial, reserved, wildcard, or zero bitmaps, count mismatches, unsupported tags/versions, and malformed lengths withhold identity.
+Cookie-contained suffixes have a narrower grammar: only supported ALAC named tags in a compact 24-byte `chan`, with zero version/flags and two zero reserved words.
+Those words are not a generic bitmap/description grammar, and generic-only `114/3` is not accepted there.
+All these fields are big-endian.
+The pinned reference `GetMagicCookie` writer's host-endian `memcpy` is not permission to accept an alternate byte-swapped grammar.
+
+### Completeness and compatibility
+
+All inspected cookie-contained and sibling declarations must agree on both order and set.
+A single bad, conflicting, ambiguous, or uninspectable declaration makes identity terminally `Unknown`; a later valid declaration cannot repair it, even for mono/stereo.
+Trustworthy absence requires a completely inspected associated entry and cookie suffix, not merely failure to find `chan`.
+An unassociated entry, unsupported sample-entry version, duplicate cookie, or uninspectable optional tail withholds identity without introducing a new file gate.
+Nested size-zero atoms remain invalid under the existing global parser: invalid required prefixes still fail, while previously unvisited optional tails only withhold identity.
+
+For identified layouts, whole native sample bytes are permuted before precision-preserving output adaptation.
+For `Unknown`, no role permutation occurs and legacy ordinal PCM remains unchanged.
+These guarantees cover the bounded metadata and slot policy, not every ALAC coding profile, hardware route, or a numerical decoder replacement.
+The [decoder lifecycle](../../system/playback/decoder-session.md#alac-metadata-and-pcm) owns the borrowed-entry lifetime and required-error precedence.
 
 ## FLAC
 

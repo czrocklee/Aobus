@@ -744,6 +744,24 @@ namespace ao::media::mp4
       {
         auto const bytes = optNode->bytes();
         _magicCookie.assign(bytes.begin(), bytes.end());
+
+        if (targetFormat == "alac")
+        {
+          static constexpr auto kEntryPath = std::to_array<std::string_view>({"stsd", "alac"});
+          auto const entryRes = findAtom(selectionRes->stsd, kEntryPath);
+
+          if (entryRes && *entryRes)
+          {
+            // Both spans borrow the same file buffer. A later physical entry or
+            // stsd may supply the required cookie, but must not supply this view.
+            if (auto const entryBytes = (**entryRes).bytes();
+                bytes.data() >= entryBytes.data() &&
+                bytes.data() + bytes.size() <= entryBytes.data() + entryBytes.size())
+            {
+              _optAlacSampleEntry = **entryRes;
+            }
+          }
+        }
       }
 
       if (targetFormat == "mp4a")
@@ -803,6 +821,11 @@ namespace ao::media::mp4
   std::span<std::byte const> Demuxer::magicCookie() const
   {
     return _magicCookie;
+  }
+
+  OptionalAtom Demuxer::alacSampleEntry() const noexcept
+  {
+    return _optAlacSampleEntry;
   }
 
   std::uint32_t Demuxer::sampleCount() const

@@ -88,8 +88,11 @@ The first metadata block must be one exact 34-byte `StreamInfo`; all block bound
 
 Every traversed atom must have a complete compact or 64-bit extended header. Recognized semantic boxes read their fields relative to the actual payload and therefore accept either header form. A top-level size `0` atom consumes the remainder of the file; size `0` inside a container, truncated headers, undersized declarations, and boundary overruns are rejected. Path lookup and audio-track selection validate only through the first complete match, while required payload indexing traverses every top-level atom and requires exactly one non-empty `mdat`. Metadata atoms, `mdta` key tables, freeform fields, cover children, and optional timing/property evidence are accepted only within their validated bounds. A malformed optional entry does not overwrite an earlier accepted value, and a malformed multi-image `covr` contributes no image.
 
-The audio packet demuxer supports a single sample description in the selected track's `stsd`; every `stsc` mapping must reference that entry with `sampleDescriptionIndex == 1`.
-Multiple sample entries and mappings to other descriptions are unsupported and return `FormatRejected`, even when the container is otherwise valid.
+The audio packet demuxer requires a declared `stsd` entry count of one in the selected track; every `stsc` mapping must use `sampleDescriptionIndex == 1`.
+Other declared counts and mappings to other descriptions are unsupported and return `FormatRejected`, even when the container is otherwise valid.
+This does not exhaust physical entries: the existing first-match cookie lookup can still reach a later physical entry or `stsd` whose declared count was not selected.
+ALAC's optional borrowed sample-entry view is withheld unless the actual extracted cookie lies wholly inside the selected entry; a later cookie cannot lend another entry's channel declaration to playback.
+This association check does not alter required cookie lookup or AAC extradata.
 The demuxer admits the selected track's compact sample count against its chunk mappings and any supplied timing entries before allocating per-sample records.
 Variable sample sizes require a complete bounded entry table; fixed sample sizes additionally require both their aggregate payload bytes and their expanded sample-index bytes to fit within the mapped file size, and their chunk extents not to overflow.
 The fixed-size index budget can reject otherwise valid containers with unusually small packets. It bounds the sample-index allocation, not total demuxer memory or allocation success; variable-size tables still incur per-entry expansion.
