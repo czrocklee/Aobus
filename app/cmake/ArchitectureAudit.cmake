@@ -11,12 +11,12 @@ function(aobus_add_architecture_audit)
     COMMAND ${CMAKE_COMMAND}
             "-DPUBLIC_ROOT=${CMAKE_SOURCE_DIR}/app/include/ao/uimodel"
             "-DSOURCE_ROOT=${CMAKE_SOURCE_DIR}/app/uimodel"
-            "-DTEST_ROOT=${CMAKE_SOURCE_DIR}/test/unit/uimodel"
+            "-DTEST_ROOT=${CMAKE_SOURCE_DIR}/test/uimodel"
             -P "${CMAKE_SOURCE_DIR}/cmake/AssertUimodelOrganization.cmake"
     COMMAND ${CMAKE_COMMAND}
             "-DPUBLIC_ROOT=${CMAKE_SOURCE_DIR}/app/include/ao/uimodel"
             "-DSOURCE_ROOT=${CMAKE_SOURCE_DIR}/app/uimodel"
-            "-DTEST_ROOT=${CMAKE_SOURCE_DIR}/test/unit/uimodel"
+            "-DTEST_ROOT=${CMAKE_SOURCE_DIR}/test/uimodel"
             -P "${CMAKE_SOURCE_DIR}/cmake/AssertUimodelFrontendNeutrality.cmake"
     COMMAND ${CMAKE_COMMAND}
             "-DROOT=${CMAKE_SOURCE_DIR}/app/windows-winui"

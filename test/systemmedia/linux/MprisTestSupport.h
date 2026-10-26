@@ -7,12 +7,12 @@
 #include "test/runtime/ExecutorTestSupport.h"
 
 #include <gio/gio.h>
+#include <sys/types.h>
 
 #include <chrono>
 #include <future>
 #include <memory>
 #include <string>
-#include <sys/types.h>
 
 namespace ao::systemmedia::test
 {

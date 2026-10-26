@@ -6,6 +6,7 @@
 #include "test/fatal/ProbeProcess.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <sys/semaphore.h>
 
 #include <algorithm>
 #include <array>
@@ -20,7 +21,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <sys/semaphore.h>
 #include <vector>
 
 namespace ao::lmdb::test

@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <gio/gio.h>
 #include <signal.h> // NOLINT(modernize-deprecated-headers) -- POSIX child signal delivery.
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -32,7 +33,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <sys/ioctl.h>
 #include <system_error>
 #include <thread>
 #include <tuple>

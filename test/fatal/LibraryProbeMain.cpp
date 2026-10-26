@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "test/TestFixtureSupport.h"
 #include "test/fatal/LibraryProbeProtocol.h"
 #include "test/fatal/LibraryProbeScenario.h"
 #include "test/fatal/ProbeProcess.h"
-#include "test/TestFixtureSupport.h"
 #include "test/lmdb/LmdbProbeScratch.h"
 
 #include <chrono>

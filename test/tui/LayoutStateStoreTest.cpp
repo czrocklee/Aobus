@@ -16,9 +16,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #ifdef __APPLE__
-#include <unistd.h>
-
 #include <sys/unistd.h>
+#include <unistd.h>
 #endif
 
 #include <filesystem>

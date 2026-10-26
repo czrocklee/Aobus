@@ -17,7 +17,7 @@ PYTHON_SUFFIXES = (".py",)
 SOURCE_SUFFIXES = (*CPP_SUFFIXES, *PYTHON_SUFFIXES)
 
 # Lint checker fixtures contain deliberate violations; batch scans must never pick them up.
-LINT_INTEGRATION_DIR = "test/integration/lint"
+LINT_INTEGRATION_DIR = "test/lint"
 
 
 def _path_is_on_smb_mount(path: Path, mount_output: str) -> bool:

@@ -238,7 +238,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
     def test_declared_auxiliary_support_header_uses_its_native_translation_unit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source = root / "test/integration/windows/WinUiSilentAudio.cpp"
+            source = root / "test/winui/probe/WinUiSilentAudio.cpp"
             header = source.with_suffix(".h")
             source.parent.mkdir(parents=True)
             source.write_text('#include "WinUiSilentAudio.h"\n', encoding="utf-8")
@@ -269,19 +269,19 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             main_source = source_root / "app" / "windows-winui" / "App.xaml.cpp"
             probe_source = source_root / "test" / "helper" / "WinUiLocalizationProbe.cpp"
             soul_project = build_dir / "app" / "windows-winui" / "ao_winui_soul_probe.vcxproj"
-            soul_source = source_root / "test" / "integration" / "windows" / "WinUiSoulProbe.cpp"
+            soul_source = source_root / "test" / "winui" / "probe" / "WinUiSoulProbe.cpp"
             item_project = build_dir / "app" / "windows-winui" / "ao_winui_track_item_probe.vcxproj"
             item_source = source_root / "test" / "helper" / "WinUiTrackItemProbe.cpp"
             table_project = build_dir / "app" / "windows-winui" / "ao_winui_track_table_probe.vcxproj"
-            table_source = source_root / "test" / "integration" / "windows" / "WinUiTrackTableProbe.cpp"
+            table_source = source_root / "test" / "winui" / "probe" / "WinUiTrackTableProbe.cpp"
             credits_project = build_dir / "app" / "windows-winui" / "ao_winui_credits_probe.vcxproj"
-            credits_source = source_root / "test" / "integration" / "windows" / "WinUiCreditsProbe.cpp"
+            credits_source = source_root / "test" / "winui" / "probe" / "WinUiCreditsProbe.cpp"
             quality_project = build_dir / "app" / "windows-winui" / "ao_winui_quality_tooltip_probe.vcxproj"
-            quality_source = source_root / "test" / "integration" / "windows" / "WinUiQualityToolTipProbe.cpp"
+            quality_source = source_root / "test" / "winui" / "probe" / "WinUiQualityToolTipProbe.cpp"
             status_project = build_dir / "app" / "windows-winui" / "ao_winui_activity_status_probe.vcxproj"
-            status_source = source_root / "test" / "integration" / "windows" / "WinUiActivityStatusProbe.cpp"
+            status_source = source_root / "test" / "winui" / "probe" / "WinUiActivityStatusProbe.cpp"
             automation_project = build_dir / "app" / "windows-winui" / "ao_winui_automation_probe.vcxproj"
-            automation_source = source_root / "test" / "integration" / "windows" / "WinUiAutomationProbe.cpp"
+            automation_source = source_root / "test" / "winui" / "probe" / "WinUiAutomationProbe.cpp"
             for path in (
                 msbuild,
                 main_project,

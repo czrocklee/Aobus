@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/fatal/ProbeProcess.h"
 #include "test/audio/backend/CoreAudioTestSupport.h"
+#include "test/fatal/ProbeProcess.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>

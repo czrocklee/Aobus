@@ -9,7 +9,7 @@ from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
 from .testregistry import TEST_SOURCE_SUFFIXES
 
-LINT_FIXTURE_PARTS = ("integration", "lint", "fixture")
+LINT_FIXTURE_PARTS = ("lint", "fixture")
 
 KNOWN_LAYERS = frozenset(
     {

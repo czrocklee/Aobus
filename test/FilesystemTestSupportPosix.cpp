@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -12,7 +13,6 @@
 #include <cstdio>
 #include <filesystem>
 #include <memory>
-#include <sys/stat.h>
 #include <system_error>
 #include <utility>
 #include <vector>

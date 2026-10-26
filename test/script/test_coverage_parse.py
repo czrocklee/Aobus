@@ -221,7 +221,7 @@ class CoverageMeasurementTest(unittest.TestCase):
             (build / "test" / "header.gcda").touch()
 
             def extract(argv, *, cwd, **kwargs):
-                for source in ("include/ao/Example.h", "test/unit/ExampleTest.cpp"):
+                for source in ("include/ao/Example.h", "test/ExampleTest.cpp"):
                     text = GCOV_B.replace("lib/audio/Foo.cpp", str(coverage.PROJECT_ROOT / source))
                     (cwd / (Path(source).name + ".gcov")).write_text(text, encoding="utf-8")
                 return subprocess.CompletedProcess(argv, 0, "", "")

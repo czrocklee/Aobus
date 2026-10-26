@@ -3,8 +3,8 @@
 
 #include <ao/lmdb/Transaction.h>
 
-#include "test/fatal/ProbeProcess.h"
 #include "test/TestFixtureSupport.h"
+#include "test/fatal/ProbeProcess.h"
 #include "test/lmdb/LmdbTestSupport.h"
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>

@@ -535,8 +535,8 @@ class CompileCommandCoverageTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"
             build_dir = Path(temp_dir) / "build"
-            native = root / "test" / "unit" / "utility" / "AtomicFileTest.cpp"
-            header = root / "test" / "unit" / "media" / "TestSupport.h"
+            native = root / "test" / "utility" / "AtomicFileTest.cpp"
+            header = root / "test" / "media" / "TestSupport.h"
             for path in (native, header):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
@@ -557,11 +557,47 @@ class CompileCommandCoverageTest(unittest.TestCase):
             self.assertEqual(list(plan.targets), [])
             self.assertFalse(plan.deferral_details[0].is_platform_incompatible)
 
+    def test_flattened_test_roots_retain_their_native_fallback_owner(self):
+        root = Path("/repo")
+        owned = (
+            ("windows", "test/windows/platform/MemoryRandomAccessStreamTest.cpp"),
+            ("windows", "test/winui/layout/LayoutDialectTest.cpp"),
+            ("windows", "test/winui/probe/WinUiAutomationProbe.cpp"),
+            ("linux", "test/linux-gtk/common/UiWorkflowTest.cpp"),
+            ("linux", "test/linux-gtk/platform/GApplicationReplacementProbeMain.cpp"),
+            ("linux", "test/systemmedia/linux/MprisBridgeTest.cpp"),
+            ("linux", "test/systemmedia/linux/MprisTestSupport.h"),
+            ("macos", "test/macos/lmdb/LmdbProbeScratchTest.cpp"),
+            ("macos", "test/macos-appkit/AppKitSmokeMain.mm"),
+        )
+        shared = (
+            "test/audio/DecoderTest.cpp",
+            "test/systemmedia/shared/MediaControllerTest.cpp",
+            "test/systemmedia/linux-other/MprisBridgeTest.cpp",
+            "test/linux-gtk-other/ApplicationTest.cpp",
+            "test/macos-appkit-other/ScenarioMain.mm",
+            "test/windows-other/platform/MemoryStreamTest.cpp",
+        )
+        for profile in (
+            tidyengine.builddir.LINUX_PROFILE,
+            tidyengine.builddir.MACOS_PROFILE,
+            tidyengine.builddir.WINDOWS_PROFILE,
+        ):
+            with mock.patch.object(tidyengine.builddir, "platform_profile", return_value=profile):
+                for owner, relative in owned:
+                    with self.subTest(profile=profile.name, source=relative):
+                        self.assertEqual(
+                            tidyengine._is_platform_incompatible(root / relative, root), profile.name != owner
+                        )
+                for relative in shared:
+                    with self.subTest(profile=profile.name, source=relative):
+                        self.assertFalse(tidyengine._is_platform_incompatible(root / relative, root))
+
     def test_winui_sources_are_incompatible_with_the_linux_native_graph(self):
         root = Path("/repo")
         paths = (
-            root / "test" / "unit" / "winui" / "ThemeTest.cpp",
-            root / "test" / "unit" / "winui" / "layout" / "LayoutDialectTest.cpp",
+            root / "test" / "winui" / "ThemeTest.cpp",
+            root / "test" / "winui" / "layout" / "LayoutDialectTest.cpp",
         )
 
         with mock.patch.object(
@@ -670,7 +706,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
 
     def test_linux_gtk_integration_sources_are_incompatible_with_the_windows_native_graph(self):
         root = Path("/repo")
-        source = root / "test" / "integration" / "linux-gtk" / "GApplicationReplacementProbeMain.cpp"
+        source = root / "test" / "linux-gtk" / "platform" / "GApplicationReplacementProbeMain.cpp"
 
         with mock.patch.object(
             tidyengine.builddir,
@@ -682,8 +718,8 @@ class CompileCommandCoverageTest(unittest.TestCase):
     def test_macos_test_sources_are_incompatible_with_other_native_graphs(self):
         root = Path("/repo")
         sources = (
-            root / "test" / "integration" / "macos" / "AppKitSmokeMain.mm",
-            root / "test" / "unit" / "macos" / "lmdb" / "LmdbProbeScratchTest.cpp",
+            root / "test" / "macos-appkit" / "AppKitSmokeMain.mm",
+            root / "test" / "macos" / "lmdb" / "LmdbProbeScratchTest.cpp",
         )
 
         for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
@@ -701,7 +737,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
             root / "lib" / "audio" / "PlatformBackendProvidersMacos.cpp",
             root / "lib" / "audio" / "backend" / "CoreAudioBackend.cpp",
             root / "lib" / "audio" / "backend" / "detail" / "CoreFoundationString.cpp",
-            root / "test" / "unit" / "audio" / "backend" / "CoreAudioProviderTest.cpp",
+            root / "test" / "audio" / "backend" / "CoreAudioProviderTest.cpp",
         )
 
         for profile in (tidyengine.builddir.LINUX_PROFILE, tidyengine.builddir.WINDOWS_PROFILE):
@@ -723,7 +759,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
             root / "lib" / "audio" / "backend" / "detail" / "PipeWireRuntime.cpp",
             root / "app" / "linux-gtk" / "Application.cpp",
             root / "app" / "windows" / "Main.cpp",
-            root / "test" / "unit" / "winui" / "ThemeTest.cpp",
+            root / "test" / "winui" / "ThemeTest.cpp",
             root / "tool" / "lint" / "AobusClangTidyMain.cpp",
         )
 
@@ -742,7 +778,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
             root / "lib" / "utility" / "AtomicFilePosix.cpp",
             root / "app" / "tui" / "SignalExitWatcherPosix.cpp",
             root / "lib" / "audio" / "Player.cpp",
-            root / "test" / "unit" / "core" / "EnumerateTest.cpp",
+            root / "test" / "core" / "EnumerateTest.cpp",
         )
 
         with mock.patch.object(
@@ -759,7 +795,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
             root = Path(temp_dir) / "repo"
             build_dir = Path(temp_dir) / "build"
             native = root / "tool" / "lint" / "Check.cpp"
-            fixture = root / "test" / "integration" / "lint" / "fixture" / "check" / "case.cpp"
+            fixture = root / "test" / "lint" / "fixture" / "check" / "case.cpp"
             for path in (native, fixture):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()

@@ -170,16 +170,16 @@ class TidyCommandTest(unittest.TestCase):
             "app/windows-winui/MainWindow.xaml.cpp",
             "test/helper/WinUiLocalizationProbe.cpp",
             "test/helper/WinUiTrackItemProbe.cpp",
-            "test/integration/windows/WinUiCreditsProbe.cpp",
-            "test/integration/windows/WinUiSoulProbe.cpp",
-            "test/integration/windows/WinUiTrackTableProbe.cpp",
+            "test/winui/probe/WinUiCreditsProbe.cpp",
+            "test/winui/probe/WinUiSoulProbe.cpp",
+            "test/winui/probe/WinUiTrackTableProbe.cpp",
         ):
             with self.subTest(name=name):
                 source = tidy.PROJECT_ROOT / name
                 self.assertTrue(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(source, source)))
 
     def test_ordinary_translation_units_do_not_limit_diagnostics_to_the_selected_file(self):
-        for name in ("lib/audio/Player.cpp", "app/i18n/MessageCatalog.cpp", "test/unit/audio/PlayerTest.cpp"):
+        for name in ("lib/audio/Player.cpp", "app/i18n/MessageCatalog.cpp", "test/audio/PlayerTest.cpp"):
             with self.subTest(name=name):
                 source = tidy.PROJECT_ROOT / name
                 self.assertFalse(tidy.limits_diagnostics_to_selected_path(tidy.TidyInvocation(source, source)))
@@ -838,7 +838,7 @@ class HygieneCommandTest(unittest.TestCase):
     def setUp(self):
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
-        self.files = ["test/unit/audio/FooTest.cpp", "lib/audio/Foo.h", "script/foo.py"]
+        self.files = ["test/audio/FooTest.cpp", "lib/audio/Foo.h", "script/foo.py"]
         self.resolve = self.stack.enter_context(
             mock.patch.object(hygiene.format_command, "resolve_files", return_value=self.files)
         )
@@ -874,9 +874,9 @@ class HygieneCommandTest(unittest.TestCase):
         self.assertEqual(self.tidy.call_args.kwargs["resolved_scope"], (["script/foo.py"], True))
 
     def test_objective_cpp_tests_reach_the_test_audit(self):
-        self.resolve.return_value = ["test/unit/utility/FooTest.mm"]
+        self.resolve.return_value = ["test/utility/FooTest.mm"]
         self.assertEqual(hygiene.run_command(_hygiene_args()), 0)
-        self.assertEqual(self.test_audit.call_args.args[0].paths, ["test/unit/utility/FooTest.mm"])
+        self.assertEqual(self.test_audit.call_args.args[0].paths, ["test/utility/FooTest.mm"])
         self.assertTrue(self.test_audit.call_args.args[0].fail_on_issue)
 
     def test_empty_scope_does_not_expand_to_a_repository_scan(self):

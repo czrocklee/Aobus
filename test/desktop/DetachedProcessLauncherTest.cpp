@@ -13,6 +13,8 @@
 
 #include <fcntl.h>
 #include <gsl-lite/gsl-lite.hpp>
+#include <sys/poll.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <array>
@@ -20,8 +22,6 @@
 #include <chrono>
 #include <cstdint>
 #include <future>
-#include <sys/poll.h>
-#include <sys/stat.h>
 #include <tuple>
 #endif
 

@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <gsl-lite/gsl-lite.hpp>
 #include <poll.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -28,7 +29,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <sys/stat.h>
 #include <system_error>
 #include <tuple>
 #include <utility>

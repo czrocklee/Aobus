@@ -18,9 +18,9 @@ class NameAuditTest(unittest.TestCase):
                 "app/include/ao/systemmedia/linux/PublicBridge.h": "class PublicBridge final {};",
                 "app/systemmedia/linux/ProtocolBridge.h": "class ProtocolBridge final {};",
                 "app/linux-gtk/layout/component/FooComponent.cpp": "class FooComponent final {};",
-                "test/unit/winui/layout/FooComponentTest.cpp": "class FooComponent final {};",
-                "test/unit/runtime/FakeService.cpp": "class FakeService final {};",
-                "test/unit/runtime/SpyObserver.cpp": "class SpyObserver final {};",
+                "test/winui/layout/FooComponentTest.cpp": "class FooComponent final {};",
+                "test/runtime/FakeService.cpp": "class FakeService final {};",
+                "test/runtime/SpyObserver.cpp": "class SpyObserver final {};",
             }
             for name, source in files.items():
                 path = root / name
@@ -64,7 +64,7 @@ class NameAuditTest(unittest.TestCase):
                 (
                     "role-location",
                     "Controller types must live under one of: app/linux-gtk/, app/tui/, app/windows-winui/, "
-                    "test/unit/linux-gtk/, test/unit/tui/",
+                    "test/linux-gtk/, test/tui/",
                 ),
             ],
         )
@@ -83,7 +83,7 @@ class NameAuditTest(unittest.TestCase):
     def test_ignores_lint_fixtures(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            fixture = root / "test" / "integration" / "lint" / "fixture" / "aobus" / "BadUtils.h"
+            fixture = root / "test" / "lint" / "fixture" / "aobus" / "BadUtils.h"
             fixture.parent.mkdir(parents=True)
             fixture.write_text("class BadController final {};", encoding="utf-8")
 
@@ -97,7 +97,7 @@ class NameAuditTest(unittest.TestCase):
             files = {
                 "include/ao/PlaybackTransport.h": "struct PlaybackTransportTestAccess;",
                 "app/runtime/TestAccess.cpp": "class TestAccess final {};",
-                "test/unit/runtime/AppRuntimeTestSupport.h": "class RuntimeTestAccess final {};",
+                "test/runtime/AppRuntimeTestSupport.h": "class RuntimeTestAccess final {};",
             }
             for name, source in files.items():
                 path = root / name
@@ -116,7 +116,7 @@ class NameAuditTest(unittest.TestCase):
                     "through a production composition seam",
                 ),
                 (
-                    "test/unit/runtime/AppRuntimeTestSupport.h",
+                    "test/runtime/AppRuntimeTestSupport.h",
                     "test-access",
                     "*TestAccess types are banned; use public behavior or inject collaborators "
                     "through a production composition seam",

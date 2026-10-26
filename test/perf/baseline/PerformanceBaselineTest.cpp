@@ -3,7 +3,6 @@
 //
 // Synthetic baseline measurement — no machine-dependent pass/fail thresholds.
 
-#include "test/perf/report/PerformanceReport.h"
 #include "lib/library/OpenValidationMetrics.h"
 #include "lib/library/TextAdmission.h"
 #include "runtime/library/LibraryWriteLane.h"
@@ -13,6 +12,7 @@
 #include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
+#include "test/perf/report/PerformanceReport.h"
 #include "test/runtime/AsyncTestSupport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include "test/runtime/library/LibraryWriteLaneTestSupport.h"

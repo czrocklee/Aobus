@@ -34,7 +34,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_accepts_project_style_name_and_tags(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/unit/query/ParserTest.cpp"),
+            path=Path("/repo/test/query/ParserTest.cpp"),
             line=12,
             name="Parser - rejects incomplete predicate",
             tags=("query", "unit", "parser"),
@@ -44,7 +44,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_accepts_winui_frontend_layer(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/unit/winui/layout/ThemeSurfaceTest.cpp"),
+            path=Path("/repo/test/winui/layout/ThemeSurfaceTest.cpp"),
             line=12,
             name="ThemeSurface - authored slots resolve through the Windows theme",
             tags=("winui", "unit", "theme"),
@@ -56,7 +56,7 @@ class TestAuditTest(unittest.TestCase):
         for scope in ("unit", "integration"):
             with self.subTest(scope=scope):
                 case = testaudit.TestCase(
-                    path=Path("/repo/test/integration/linux/systemmedia/MprisBridgeTest.cpp"),
+                    path=Path("/repo/test/systemmedia/linux/MprisBridgeTest.cpp"),
                     line=12,
                     name="MprisBridge - exposes root metadata",
                     tags=("platform", scope, "mpris"),
@@ -66,7 +66,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_accepts_function_level_name(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/unit/utility/Base64Test.cpp"),
+            path=Path("/repo/test/utility/Base64Test.cpp"),
             line=12,
             name="base64Decode rejects invalid padding",
             tags=("utility", "unit", "base64"),
@@ -76,7 +76,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_accepts_hidden_kebab_case_tag(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/integration/audio/WasapiProviderTest.cpp"),
+            path=Path("/repo/test/audio/backend/WasapiProviderHardwareTest.cpp"),
             line=12,
             name="WasapiProvider - renders through a real endpoint",
             tags=("audio", "integration", "wasapi", ".manual"),
@@ -86,7 +86,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_accepts_independent_metadata_without_count_or_order_limits(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
+            path=Path("/repo/test/runtime/AsyncRuntimeTest.cpp"),
             line=12,
             name="AsyncRuntime - cancellation races safely with timer expiry",
             tags=("runtime", "unit", "async", "stress", "concurrency", "timer"),
@@ -96,7 +96,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_requires_stress_to_include_concurrency(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
+            path=Path("/repo/test/runtime/AsyncRuntimeTest.cpp"),
             line=12,
             name="AsyncRuntime - cancellation races safely with timer expiry",
             tags=("runtime", "unit", "async", "stress"),
@@ -111,7 +111,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_rejects_retired_regression_tag(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/unit/runtime/AsyncRuntimeTest.cpp"),
+            path=Path("/repo/test/runtime/AsyncRuntimeTest.cpp"),
             line=12,
             name="AsyncRuntime - cancellation races safely with timer expiry",
             tags=("runtime", "unit", "async", "regression"),
@@ -126,7 +126,7 @@ class TestAuditTest(unittest.TestCase):
 
     def test_audit_reports_legacy_name_and_tag_drift(self):
         case = testaudit.TestCase(
-            path=Path("/repo/test/unit/audio/EngineTest.cpp"),
+            path=Path("/repo/test/audio/EngineTest.cpp"),
             line=4,
             name="Engine Basic Playback",
             tags=("playback", "audio", "engine", "slow", "dryrun"),
@@ -181,8 +181,8 @@ class TestAuditTest(unittest.TestCase):
     def test_resolve_files_ignores_lint_fixtures(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            real = root / "test" / "unit" / "core" / "RealTest.cpp"
-            fixture = root / "test" / "integration" / "lint" / "fixture" / "aobus-check" / "BasicTest.cpp"
+            real = root / "test" / "core" / "RealTest.cpp"
+            fixture = root / "test" / "lint" / "fixture" / "aobus-check" / "BasicTest.cpp"
             real.parent.mkdir(parents=True)
             fixture.parent.mkdir(parents=True)
             real.touch()

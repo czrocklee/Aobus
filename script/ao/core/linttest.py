@@ -17,7 +17,7 @@ from . import builddir, phases, tidyconfig, tidyengine
 from .paths import PROJECT_ROOT
 from .proc import die
 
-FIXTURE_DIR = PROJECT_ROOT / "test" / "integration" / "lint" / "fixture"
+FIXTURE_DIR = PROJECT_ROOT / "test" / "lint" / "fixture"
 DIAGNOSTIC_RE = re.compile(r"^(.+):(\d+):(\d+): warning: (.*) \[(.*)\]$")
 # LLVM diagnostic headers start their line: a location, a clang driver
 # banner, or a bare severity, then the severity and its message. The console

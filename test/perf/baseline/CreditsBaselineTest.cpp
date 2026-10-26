@@ -2,13 +2,13 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "PerformanceAllocation.h"
-#include "test/perf/report/PerformanceReport.h"
 #include "runtime/RuntimeOperationProbe.h"
 #include "runtime/source/SmartListEvaluator.h"
 #include "runtime/source/SmartListSource.h"
 #include "test/TestFixtureSupport.h"
 #include "test/library/TrackTestSupport.h"
 #include "test/library/WritableLibraryTestSupport.h"
+#include "test/perf/report/PerformanceReport.h"
 #include "test/runtime/RuntimeLibraryTestSupport.h"
 #include "test/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
