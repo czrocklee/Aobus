@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/media/mp4/Atom.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -13,8 +14,6 @@
 
 namespace ao::media::mp4
 {
-  class AtomView;
-
   /**
    * @brief Demuxer for extracting specific streams (like ALAC/AAC packets) from an MP4 file container.
    */
@@ -50,6 +49,14 @@ namespace ao::media::mp4
      * @brief Returns the codec-specific magic cookie/extradata found during parsing.
      */
     std::span<std::byte const> magicCookie() const;
+
+    /**
+     * @brief Returns the selected ALAC sample entry only when it contains the extracted cookie.
+     *
+     * The view borrows the fileData buffer supplied to parse(); it does not extend
+     * that buffer's lifetime. Absence does not change required extradata parsing.
+     */
+    OptionalAtom alacSampleEntry() const noexcept;
 
     /**
      * @brief Returns the total number of audio samples.
@@ -126,6 +133,7 @@ namespace ao::media::mp4
 
     std::span<std::byte const> _fileData;
     std::vector<std::byte> _magicCookie;
+    OptionalAtom _optAlacSampleEntry;
     std::vector<SampleEntry> _samples;
 
     std::uint32_t _timescale = 0;

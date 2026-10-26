@@ -409,6 +409,7 @@ add_executable(ao_core_test
     unit/media/mp4/TestAtoms.cpp
     unit/media/mp4/AtomTest.cpp
     unit/media/mp4/DemuxerTest.cpp
+    unit/media/mp4/DemuxerAlacLayoutTest.cpp
     unit/media/mp4/SampleDescriptionTest.cpp
     unit/media/wav/TestWav.cpp
     unit/media/wav/RiffTest.cpp
@@ -501,6 +502,9 @@ add_executable(ao_core_test
     unit/audio/FlacDecoderFormatStabilityTest.cpp
     unit/audio/AlacDecoderSessionTest.cpp
     unit/audio/AlacDecoderMalformedMp4Test.cpp
+    unit/audio/AlacFrameTestSupport.cpp
+    unit/audio/AlacDecoderChannelLayoutTest.cpp
+    unit/audio/AlacChannelMetadataTest.cpp
     unit/audio/Mp3DecoderSessionTest.cpp
     unit/audio/OpusDecoderSessionTest.cpp
     unit/audio/OpusDecoderMalformedTest.cpp
@@ -534,6 +538,7 @@ add_executable(ao_core_test
     unit/audio/EngineWavChannelLayoutTest.cpp
     unit/audio/EngineFlacChannelLayoutTest.cpp
     unit/audio/EngineFlacTransitionTest.cpp
+    unit/audio/EngineAlacChannelLayoutTest.cpp
     unit/audio/EngineStereoIdentityTest.cpp
     unit/audio/EngineStereoReuseTest.cpp
     unit/audio/EngineEndpointPrecisionTest.cpp

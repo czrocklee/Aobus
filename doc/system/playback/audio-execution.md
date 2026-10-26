@@ -288,25 +288,28 @@ PipeWire proves the same exact FL/FR offer, installed permutation, and later-for
 ALSA additionally requires a healthy installed mode whose current map is exactly unflagged FL,FR in that order; missing, partial, reversed, silent, or flagged observations cannot prove reuse.
 The null sink discards either representation identically.
 Core Audio keeps the strict default: an initial identity plan does not prove that later layout refresh using the original client mask remains safe for the other source identity.
-Its cross-codec `0`/`0x3` transition therefore still drains and reopens; ALAC stereo remains a zero-mask source.
+Its cross-codec `0`/`0x3` transition therefore still drains and reopens when one source remains unidentified.
 Default FLAC and WAV effective identities match for counts 1/2/3/4/7/8, so exact canonical mode equality permits reuse even on Core Audio, subject to the same rate, channel geometry, installed encoding, and retained endpoint precision constraints.
 Different source interpretation origins do not defeat that equality: these FLAC defaults are `Identified`, while WAV's multichannel compatibility defaults are `Inferred`.
-Absent exact mask keys, five/six-channel FLAC instead reports zero / `Unknown` because back/side geometry is unresolved; otherwise-compatible inferred WAV retains a nonzero effective identity, so that boundary drains and reopens on every current backend.
+ALAC's [bounded source interpretation](pcm-format.md#alac-source-interpretation) establishes the same canonical mono/stereo identity as ordinary FLAC and WAV when layout absence is trustworthy, enabling strict exact-mode reuse, including on Core Audio, under the same requirements.
+Complete supported agreeing explicit ALAC layouts can likewise enable equal-identity reuse after decoder slot normalization; codec names or channel counts alone never guarantee a splice.
+ALAC's declared four-, seven-, and eight-channel reference layouts differ from the WAV compatibility sets; their respective `0x107`, `0x13F`, and `0xFF` masks are not replaced with WAV count defaults.
+
+Absent exact mask keys, five/six-channel FLAC reports zero / `Unknown` because back/side geometry is unresolved; otherwise-compatible inferred WAV retains a nonzero effective identity, so that boundary drains and reopens on every current backend.
 Complete supported agreeing explicit FLAC back masks `0x37`/`0x3F` can still match WAV's compatibility identities; explicit side masks `0x607`/`0x60F` remain different roles.
-Explicitly different role sets still drain and reopen, and a fresh native open may refuse an incompatible route; matching codec names or channel counts do not guarantee a splice.
-Otherwise-compatible mono and 3–8-channel transitions between ALAC and either WAV or identified FLAC still drain and reopen on every current backend: ALAC retains zero and `Unknown`, while WAV and identified FLAC publish nonzero identities, and the additional alias proof is stereo-only.
-Introducing FLAC identity therefore loses previously available FLAC↔ALAC splice eligibility: before this change both producers reported zero masks, so otherwise-equal modes passed the strict mask comparison.
-For identified FLAC, the loss affects mono and 3–8 channels on every current backend, plus stereo on strict Core Audio and on ALSA without the healthy installed canonical unflagged FL,FR proof.
-PipeWire, WASAPI, and null retain the bounded stereo alias opt-in.
-This is a conditional gapless-eligibility regression, not a universal playback failure; native initial-open admission is a separate prerequisite.
-It does not prevent equal-identity mono/multichannel reuse.
-A FLAC session with absent exact mask keys at five/six channels, nonfirst STREAMINFO, or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence instead retains zero/`Unknown` under its [source policy](pcm-format.md#flac-source-interpretation); uncertainty never authorizes a mask wildcard or bypasses the ordinary reuse checks.
-Withholding absent-mask five/six-channel identity can restore otherwise-compatible zero/zero reuse with unknown ALAC or FLAC, unlike the earlier count-derived `Identified` back-mask interpretation.
-This is conditional eligibility, not a universal splice promise, evidence of original speaker roles, or native-routing proof; ALAC itself remains unchanged.
-This creates a same-codec FLAC↔FLAC gapless-eligibility loss relative to the earlier all-zero FLAC producer: otherwise-equal known↔`Unknown` mono and 3–8-channel pairs, or pairs with different nonzero role sets, now drain and reopen in either direction instead of passing the old zero/zero comparison.
-Stereo known FL/FR `0x3` versus zero has only the bounded backend exceptions above; other different stereo role sets do not acquire an alias.
-Equal known masks and equal zero/zero masks remain eligible under the ordinary geometry, encoding, and retained-endpoint checks, but zero/zero reuse proves neither track's original speaker intent.
-Forgiving optional tags admits more tracks without restoring every clean-track↔unknown-track splice; it does not change ALAC, which remains zero/`Unknown`, or remove the conditional FLAC↔ALAC regression above.
+A FLAC session with nonfirst STREAMINFO or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence also retains zero/`Unknown` under its [source policy](pcm-format.md#flac-source-interpretation).
+Untagged ALAC above two channels and ALAC with bad or uninspectable optional declarations retain zero/`Unknown` and legacy ordinal bytes.
+Withholding absent-mask five/six-channel FLAC identity can permit otherwise-compatible zero/zero reuse with untagged multichannel ALAC or unknown FLAC, unlike the earlier count-derived `Identified` back-mask interpretation.
+Zero/zero reuse proves neither track's original speaker intent nor native routing; ordinal/default transport can still misroute content.
+
+Relative to the earlier all-zero FLAC producer, same-codec FLAC↔FLAC known↔`Unknown` mono and 3–8-channel pairs, or pairs with different nonzero role sets, lose otherwise-equal splice eligibility in both directions.
+The same identity boundary conditionally loses FLAC↔ALAC eligibility relative to their earlier all-zero producers: identified FLAC versus unknown ALAC, or unknown FLAC versus identified ALAC, drains and reopens for mono and multichannel modes.
+Stereo known FL/FR `0x3` versus zero has only the bounded backend exceptions above; Core Audio remains strict, ALSA requires its healthy installed canonical unflagged FL,FR proof, and PipeWire, WASAPI, and null retain their opt-ins.
+Other different stereo role sets do not acquire an alias.
+Equal known masks and equal zero/zero masks remain eligible under the ordinary geometry, encoding, and retained-endpoint checks.
+Forgiving optional tags admits more tracks without restoring every clean-track↔unknown-track splice; uncertainty never authorizes a mask wildcard or bypasses reuse checks.
+These are conditional gapless-eligibility differences, not universal playback failures or a universal WAV↔FLAC/ALAC splice promise.
+Explicitly different role sets still drain and reopen, and a fresh native open may refuse an incompatible route; public source facts are never rewritten by backend observations.
 
 Preparation and adoption both validate the successor's own canonical mode against the confirmed endpoint retained for this native open; promotion refreshes source interpretation without replacing that endpoint bound.
 Native mapping evidence remains tied to this open and its actual observations, so it may stay more conservative than a fresh successor open would report.
@@ -458,12 +461,14 @@ An absent endpoint means only that the backend could not inspect a direct endpoi
 
 #### Channel compatibility and native evidence
 
-WAV's [source interpretation](pcm-format.md#wav-source-interpretation) and FLAC's distinct [source interpretation](pcm-format.md#flac-source-interpretation) activate canonical PCM with effective speaker identities without a blanket multichannel ban.
-WAV's `Identified` or `Inferred` history and FLAC's `Identified` history do not establish native mapping or physical routing.
+WAV's [source interpretation](pcm-format.md#wav-source-interpretation), FLAC's distinct [source interpretation](pcm-format.md#flac-source-interpretation), and ALAC's [bounded metadata policy](pcm-format.md#alac-source-interpretation) activate canonical PCM with effective speaker identities without a blanket multichannel ban.
+WAV's `Identified` or `Inferred` history and FLAC's and ALAC's `Identified` histories do not establish native mapping or physical routing.
 FLAC with absent exact mask keys at five/six channels, nonfirst STREAMINFO, or malformed, conflicting, unsupported, incomplete, or safely uninspectable optional identity evidence retains zero masks and `Unknown` rather than a guessed identity.
+ALAC above two channels without a declaration, or at any count with bad or uninspectable optional metadata, likewise retains zero/`Unknown`, not a new source-open refusal; mandatory container/configuration and precision errors remain unchanged.
 That best-effort playback admission is not a role-safety or native-routing guarantee: zero-mask paths can use ordinal/default transport through different speaker roles, and native open can still fail.
 Numerical bit-perfectness is independent of channel confidence.
-The other current codec producers retain zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are backend defaults.
+The other current codec producers, AAC, Opus, and MP3, retain zero masks and `Unknown` source interpretation; neither WAV compatibility sets nor FLAC defaults are ALAC or backend defaults.
+ALAC normalization changes no backend admission, native observation, or quality-analysis policy.
 
 Source admission and native delivery evidence are separate decisions.
 A backend may admit transport without proving every speaker relationship; the returned canonical client mask must still retain the source identity.

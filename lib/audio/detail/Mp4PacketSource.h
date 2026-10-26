@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/Demuxer.h>
 #include <ao/utility/MappedFile.h>
 
@@ -29,6 +30,9 @@ namespace ao::audio::detail
     bool isAtEnd() const noexcept;
     std::span<std::byte const> packet() const;
     std::span<std::byte const> magicCookie() const;
+    // Borrows the mapped file until close(), the next open(), or destruction.
+    // Empty when closed or when the demuxer cannot associate the ALAC entry.
+    media::mp4::OptionalAtom alacSampleEntry() const noexcept;
     media::mp4::Demuxer::SampleEntry sampleInfo() const;
     std::uint32_t sampleIndex() const noexcept;
     std::uint32_t timescale(std::uint32_t fallback = 0) const noexcept;

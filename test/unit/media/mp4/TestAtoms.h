@@ -18,12 +18,16 @@ namespace ao::test::mp4
   std::vector<std::uint8_t> makeExtendedFromCompactAtom(std::vector<std::uint8_t> const& atom);
   std::vector<std::uint8_t> makeAudioSampleEntryAtom(std::string_view sampleEntryType,
                                                      std::vector<std::uint8_t> const& extensions = {},
-                                                     std::uint32_t sampleRate = 44100);
+                                                     std::uint32_t sampleRate = 44100,
+                                                     std::uint16_t channels = 2,
+                                                     std::uint16_t precisionBits = 16);
   std::vector<std::uint8_t> makeSampleEntryAtom(std::string_view sampleEntryType,
                                                 std::vector<std::uint8_t> const& body);
   std::vector<std::uint8_t> makeStsdAtom(std::string_view sampleEntryType,
                                          std::vector<std::uint8_t> const& sampleEntryExtensions = {},
-                                         std::uint32_t sampleRate = 44100);
+                                         std::uint32_t sampleRate = 44100,
+                                         std::uint16_t channels = 2,
+                                         std::uint16_t precisionBits = 16);
   std::vector<std::uint8_t> makeStsdAtomFromSampleEntries(
     std::vector<std::vector<std::uint8_t>> const& sampleEntryAtoms);
   std::vector<std::uint8_t> makeStsdAtomFromSampleEntry(std::vector<std::uint8_t> const& sampleEntryAtom);
@@ -55,7 +59,9 @@ namespace ao::test::mp4
                                                        std::uint32_t duration = 44100,
                                                        std::uint32_t sampleSize = 4,
                                                        std::uint32_t sampleDelta = 1024,
-                                                       std::uint32_t chunkOffset = 0);
+                                                       std::uint32_t chunkOffset = 0,
+                                                       std::uint16_t channels = 2,
+                                                       std::uint16_t precisionBits = 16);
   std::vector<std::uint8_t> makeVideoTrackAtom(std::string_view sampleEntryType = "avc1");
   std::vector<std::uint8_t> makeMinimalAudioMp4(std::string_view sampleEntryType,
                                                 std::vector<std::uint8_t> const& sampleEntryExtensions = {});

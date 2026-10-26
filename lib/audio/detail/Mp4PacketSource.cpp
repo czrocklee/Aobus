@@ -7,6 +7,7 @@
 #include "TimeConversion.h"
 #include <ao/Contract.h>
 #include <ao/Error.h>
+#include <ao/media/mp4/Atom.h>
 #include <ao/media/mp4/Demuxer.h>
 
 #include <chrono>
@@ -93,6 +94,11 @@ namespace ao::audio::detail
   std::span<std::byte const> Mp4PacketSource::magicCookie() const
   {
     return _optDemuxer ? _optDemuxer->magicCookie() : std::span<std::byte const>{};
+  }
+
+  media::mp4::OptionalAtom Mp4PacketSource::alacSampleEntry() const noexcept
+  {
+    return _optDemuxer ? _optDemuxer->alacSampleEntry() : media::mp4::OptionalAtom{};
   }
 
   media::mp4::Demuxer::SampleEntry Mp4PacketSource::sampleInfo() const

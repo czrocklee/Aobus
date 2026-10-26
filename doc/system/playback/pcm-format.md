@@ -31,8 +31,8 @@ A nonzero mask names speakers in ascending assigned-bit order; zero assigns no p
 Channel count, not mask population, always owns frame geometry.
 Source interpretation (`Unknown`, `Identified`, or `Inferred`) is separate from format equality and from native mapping observations.
 
-WAV and FLAC publish effective source identity through their respective [WAV](#wav-source-interpretation) and [FLAC](#flac-source-interpretation) policies below.
-The other current codec producers, including ALAC and MP3, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
+WAV, FLAC, and ALAC publish effective source identity through their respective [WAV](#wav-source-interpretation), [FLAC](#flac-source-interpretation), and [ALAC](#alac-source-interpretation) policies below.
+The other current codec producers, AAC, Opus, and MP3, still report zero masks and `Unknown` interpretation; byte-order conventions alone do not identify them.
 ALSA admits identified sources against its native channel-map observations.
 PipeWire admits a complete supported WAVE source declaration and validates the Format param actually read back; the offer is not that observation.
 A two-channel offer is one exact role set: the declared WAVE pair when the source mask is nonzero, and FL/FR only when that mask is zero. The offer never writes a new identity into a zero client mask.
@@ -53,7 +53,7 @@ This also applies to independent native-only evidence: ALSA may clear a stream f
 Core Audio admits complete supported identities through a [bounded AUHAL observation and permutation bridge](audio-execution.md#core-audio-channel-admission).
 Its returned client mode stays canonical; native byte order and initial delivery evidence remain separate, and acceptance does not prove physical routing.
 Core Audio hints preserve exact source identity without native I/O and are neither admission nor observation guarantees.
-The [channel-order reference](../../reference/media/channel-order.md) owns WAV compatibility sets, FLAC's narrower format-default identities, and Opus slot permutations.
+The [channel-order reference](../../reference/media/channel-order.md) owns WAV compatibility sets, FLAC's narrower format-default identities, bounded ALAC declarations, and Opus slot permutations.
 Those sets are not a rule for filling a zero PCM or native observation mask.
 A decoder publishing identified speakers normalizes any differing codec order before emitting PCM; it never publishes that codec-native speaker order.
 Existing AAC and Opus byte-order mechanisms remain unchanged: AAC requests FDK `AAC_PCM_OUTPUT_CHANNEL_MAPPING`, and Opus mapping family 1 permutes the channel mapping it hands libopus.
@@ -178,7 +178,31 @@ For example, delivering zero-mask six-channel decoded FL/FR/FC/LFE/pair-left/pai
 These examples describe software labels, not physical speakers, audibility, or device measurements.
 Zero alone does not distinguish clean absent-key five/six-channel FLAC from malformed or uninspectable FLAC identity evidence or other unknown codecs; neither zero nor channel count authorizes native role recovery.
 Numerical bit-perfectness and channel confidence are independent.
-The [lookahead contract](audio-execution.md#prepared-lookahead) discloses same-codec FLAC identity-boundary drain/reopen behavior as well as the existing conditional FLAC/ALAC regression.
+The [lookahead contract](audio-execution.md#prepared-lookahead) discloses same-codec and cross-codec identity-boundary drain/reopen behavior, including FLAC/ALAC transitions; equal known or zero/zero identities remain conditionally reusable.
+
+### ALAC source interpretation
+
+ALAC's validated decoder configuration owns sample rate, channel count, and logical precision; sample-entry geometry and optional `chan` declarations never override them.
+After mandatory cookie/configuration and provider initialization succeed, the decoder resolves one final effective layout before its sole output-adapter configuration.
+Source and output masks agree, and only a ready session is published; identity requires no PCM read.
+
+| Optional metadata | Effective interpretation |
+|---|---|
+| Trustworthy complete absence of `chan`, mono/stereo | FC `0x4` / FL-FR `0x3`, `Identified` ALAC format defaults. |
+| Trustworthy absence, more than two channels | Zero mask, `Unknown`; ALAC leaves these roles unassigned. |
+| Complete supported named, bitmap, or ordered-label declarations, all agreeing | Declared set, `Identified`; provider-arrival slots normalize to ascending WAVE bits before output adaptation. |
+| Any malformed, unsupported, conflicting, ambiguous, or uninspectable optional metadata | Zero mask, `Unknown`, with legacy ordinal PCM order; no later good declaration repairs it. |
+
+Agreement includes slot order, not just the role set.
+Neither reference-encoder conventions nor WAV count defaults fill an ALAC multichannel mask.
+In particular, exact tag `0x00710003` is ambiguous between ALAC and generic Core Audio even as an MP4 sibling and always withholds identity.
+The [ALAC channel-order reference](../../reference/media/channel-order.md#alac) owns accepted declaration grammars, representative permutations, and source references.
+
+Normalization copies whole native sample-storage bytes before the precision-preserving adapter; it changes neither numerical precision nor frame geometry.
+Unknown layouts keep the old ordinal bytes and can still misroute multichannel content.
+Known identities remain subject to strict backend role admission; publishing identity is not a native mapping or physical-routing guarantee.
+Optional layout inspection adds no file-rejection gate and does not soften existing required container, cookie, configuration, provider, or requested-precision errors.
+This policy changes neither the distinct FLAC source policy nor native/backend/quality policy.
 
 ### PCM encoding
 
@@ -315,6 +339,7 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 - [`FlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/FlacDecoderChannelLayoutTest.cpp) locks FLAC default and declared identities, exact field-name matching, strict length-bounded value parsing, duplicate resolution, unknown admission for unsupported declarations, output adaptation, and PCM/seek/flush/EOF preservation.
 - [`FlacMetadataInitializationTest.cpp`](../../../test/unit/audio/FlacMetadataInitializationTest.cpp) covers required-STREAMINFO initialization diagnostics and valid metadata/prefix controls, independently of optional identity inspection.
 - [`FlacWavMaskCompatibilityTest.cpp`](../../../test/unit/audio/FlacWavMaskCompatibilityTest.cpp) locks format-specific WAV/FLAC identity using retained reference-encoder output bytes and independently authored PCM, including trimmed WAV identity versus unknown FLAC for excess masks; it does not run an encoder during the test.
+- [`AlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC source/output identity and byte-preserving slot normalization before adaptation; optional metadata and transition coverage are listed in the [decoder test map](decoder-session.md#test-map).
 - [`CoreAudioChannelLayoutTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh; [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) retains native open and lifetime controls.
 
 ## Related documents

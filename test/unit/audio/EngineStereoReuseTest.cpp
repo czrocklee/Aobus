@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "AlacFrameTestSupport.h"
 #include "EngineTestSupport.h"
 #include "FakeCapturingBackend.h"
 #include "FlacFrameTestSupport.h"
 #include "lib/audio/detail/TrackPreparation.h"
 #include "test/unit/TestFixtureSupport.h"
-#include "test/unit/media/mp4/TestAtoms.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/audio/ChannelLayoutEvidence.h>
 #include <ao/audio/Engine.h>
@@ -38,61 +38,12 @@ namespace ao::audio::test
 {
   namespace
   {
-    // Authors an uncompressed ALAC CPE independently of the production decoder,
-    // an encoder, or a production channel-order table.
-    class AlacPacketBitWriter final
-    {
-    public:
-      void write(std::uint32_t value, std::uint8_t bitCount)
-      {
-        for (auto bit = bitCount; bit > 0; --bit)
-        {
-          if ((_bitOffset % 8U) == 0U)
-          {
-            _bytes.push_back(0);
-          }
-
-          auto const shift = 7U - (_bitOffset % 8U);
-          _bytes.back() |= static_cast<std::uint8_t>(((value >> (bit - 1U)) & 1U) << shift);
-          ++_bitOffset;
-        }
-      }
-
-      std::vector<std::uint8_t> const& bytes() const noexcept { return _bytes; }
-
-    private:
-      std::vector<std::uint8_t> _bytes;
-      std::size_t _bitOffset = 0;
-    };
-
     std::vector<std::uint8_t> stereoAlacBytes()
     {
-      // One partial, uncompressed stereo packet: sixteen literal frame pairs.
-      auto writer = AlacPacketBitWriter{};
-      writer.write(1, 3);
-      writer.write(0, 4);
-      writer.write(0, 12);
-      writer.write(0b1001, 4);
-      writer.write(16, 32);
-
-      for (std::uint32_t frame = 0; frame < 16; ++frame)
-      {
-        writer.write(0x5152, 16);
-        writer.write(0x6364, 16);
-      }
-
-      writer.write(7, 3);
-      auto const& packet = writer.bytes();
-      REQUIRE(packet.size() == 72U);
-      auto const cookie =
-        std::vector<std::uint8_t>{0,  0,  0,  36, 'a', 'l', 'a', 'c', 0, 0,  0, 0, 0, 0, 0, 16, 0,    16,
-                                  40, 10, 14, 2,  0,   255, 0,   0,   0, 72, 0, 0, 0, 0, 0, 0,  0xBB, 0x80};
-      auto bytes = std::vector<std::uint8_t>{};
-      ao::test::mp4::addAtom(bytes, "mdat", packet);
-      auto const track = ao::test::mp4::makeCompleteAudioTrackAtom(
-        "alac", cookie, 48000, 16, static_cast<std::uint32_t>(packet.size()), 16, 8);
-      ao::test::mp4::addAtom(bytes, "moov", track);
-      return bytes;
+      // A bounded but unsupported chan tag keeps this source Unknown so the
+      // existing 0-vs-3 stereo identity alias contract remains exercised.
+      return buildAlacUncompressedFileBytes(
+        AlacFrameTestOptions{.sampleEntrySuffix = makeAlacChannelLayoutAtom(0xDEAD0002)});
     }
 
     std::vector<std::uint8_t> stereoFlacBytes()

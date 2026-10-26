@@ -71,6 +71,24 @@ It preserves a frame-format `DecodeFailed` from a frame delivered to the session
 It also preserves a recorded cause when a later seek cannot restart an aborted or seek-error codec without an explicit `flush()`; reads in those states fail instead of retrying without progress.
 The diagnostic identifies the inspected and conflicting frame properties; a seek failure that has no stored decoding cause remains `SeekFailed`.
 
+### ALAC required errors versus optional identity
+
+ALAC retains required MP4 track, sample-table, and extradata errors and their existing initialization translation above.
+Its mandatory cookie must still contain the compact `alac` header and complete configuration; malformed configuration, invalid frame length/version/bit depth/channel count/rate, or provider initialization failure remains `InitFailed`.
+The validated ALAC configuration owns geometry and precision, not sample-entry geometry or optional `chan` fields.
+Requested unsupported or precision-losing output remains `NotSupported` at output-adapter configuration; no partially initialized session is published.
+
+Optional layout inspection adds no rejection gate.
+Malformed, unsupported, conflicting, ambiguous, or uninspectable optional metadata yields zero mask and `Unknown` interpretation, preserving legacy ordinal PCM rather than inventing roles or returning a layout error.
+This includes exact colliding tag `0x00710003`, conflicting declaration order at an equal mask, and an unavailable associated-entry view.
+A later good declaration never repairs an earlier bad one.
+The [ALAC declaration reference](../../reference/media/channel-order.md#alac) owns the bounded grammar and completeness rules.
+
+This is not parser relaxation: invalid atoms encountered on the existing required cookie/container lookup path still fail.
+A malformed or nested size-zero optional tail not previously visited by required parsing withholds identity only.
+Neither metadata failure nor metadata absence bypasses required cookie/configuration/provider checks or precision-loss rejection.
+Read-time provider failures and invalid decoded frame counts remain `DecodeFailed`; normalization does not replace the numerical decoder.
+
 End of stream is `PcmBlock{.endOfStream = true}` rather than an error.
 Unopened and closed states are not part of the public `DecoderSession` surface.
 
@@ -130,6 +148,7 @@ if (!session)
 - [`AudioFatalProbeProtocol.cpp`](../../../test/fatal/AudioFatalProbeProtocol.cpp) protects the `TrackSession` invariant that an injected `DecoderFactoryFn` success contains a session.
 - [`FlacMetadataInitializationTest.cpp`](../../../test/unit/audio/FlacMetadataInitializationTest.cpp) covers raw-frame missing-STREAMINFO initialization diagnostics, implicit-header cases, and valid metadata/prefix and truncated-metadata controls.
 - Codec tests under [`test/unit/audio/`](../../../test/unit/audio) protect initialization failures, per-operation failure codes, and end-of-stream values.
+- [`AlacDecoderMalformedMp4Test.cpp`](../../../test/unit/audio/AlacDecoderMalformedMp4Test.cpp) retains required ALAC/container failure coverage; optional-identity coverage is listed in the [decoder test map](decoder-session.md#test-map).
 
 ## Related documents
 
