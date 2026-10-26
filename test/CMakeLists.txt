@@ -1017,9 +1017,7 @@ add_test(NAME ao_tui_test COMMAND ao_tui_test)
 # aobus-tui allocator, which would collide with the ASan/TSan interceptors that
 # --asan/--tsan apply to every in-gate target. Build explicitly and run directly:
 #   ./ao build --target ao_tui_bench && <builddir>/test/ao_tui_bench
-add_executable(ao_tui_bench EXCLUDE_FROM_ALL
-    tui/TrackTableBenchmark.cpp
-)
+add_executable(ao_tui_bench EXCLUDE_FROM_ALL)
 aobus_enable_windows_utf8_manifest(ao_tui_bench)
 target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_support_i18n ao_test_options Catch2::Catch2WithMain mimalloc)
 endif()
@@ -1087,6 +1085,12 @@ aobus_target_test_sources(ao_tui_test "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
     tui/LayoutStateStoreTest.cpp
     tui/TuiSignalProbeTest.cpp
     tui/TextFieldModelTest.cpp
+)
+
+# The benchmark remains isolated from ordinary runtime and sanitizer groups,
+# but its declarations still require a configured owner or disabled reason.
+aobus_target_test_sources(ao_tui_bench "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
+    tui/TrackTableBenchmark.cpp
 )
 
 if(AOBUS_BUILD_CLI)
@@ -1357,5 +1361,5 @@ target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAK
 
 aobus_finalize_test_sources(
   "${CMAKE_BINARY_DIR}/aobus-test-sources.tsv"
-  ao_core_test ao_tui_test ao_cli_test ao_gtk_test ao_integration_test ao_perf_baseline
+  ao_core_test ao_tui_test ao_cli_test ao_gtk_test ao_integration_test ao_perf_baseline ao_tui_bench
 )

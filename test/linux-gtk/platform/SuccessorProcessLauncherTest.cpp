@@ -207,8 +207,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("SuccessorProcessLauncher - launch plan prefers an executable APPIMAGE and preserves restart intent",
-            "[gtk][unit][process]")
+  TEST_CASE("SuccessorProcessLauncher - launch plan prefers an executable APPIMAGE and preserves restart intent")
   {
     auto const appImage = ao::test::TempFile{".AppImage"};
     std::filesystem::permissions(appImage.path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
@@ -227,8 +226,7 @@ namespace ao::gtk::test
     CHECK(res->optActivationToken == std::optional<std::string>{"activation-token"});
   }
 
-  TEST_CASE("SuccessorProcessLauncher - launch plan falls back to proc and omits empty optional state",
-            "[gtk][unit][process]")
+  TEST_CASE("SuccessorProcessLauncher - launch plan falls back to proc and omits empty optional state")
   {
     auto const nonExecutableAppImage = ao::test::TempFile{".AppImage"};
 
@@ -243,7 +241,7 @@ namespace ao::gtk::test
     CHECK_FALSE(res->optActivationToken);
   }
 
-  TEST_CASE("SuccessorProcessLauncher - relative library root cannot produce a launch plan", "[gtk][unit][process]")
+  TEST_CASE("SuccessorProcessLauncher - relative library root cannot produce a launch plan")
   {
     auto res = planSuccessorLaunch(desktop::LibrarySwitchRequest{.libraryRoot = "music"});
 
@@ -252,8 +250,7 @@ namespace ao::gtk::test
     CHECK(res.error().message.contains("absolute"));
   }
 
-  TEST_CASE("SuccessorProcessLauncher - process creation reports exec failure and detaches success",
-            "[gtk][integration][process]")
+  TEST_CASE("SuccessorProcessLauncher - process creation reports exec failure and detaches success")
   {
     SECTION("exec failure")
     {
@@ -357,8 +354,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("SuccessorProcessLauncher - child environment replaces or clears inherited activation token",
-            "[gtk][integration][process]")
+  TEST_CASE("SuccessorProcessLauncher - child environment replaces or clears inherited activation token")
   {
     [[maybe_unused]] auto const inheritedToken =
       ScopedEnvironmentValue{kActivationTokenEnvironment, std::string_view{"inherited-token"}};

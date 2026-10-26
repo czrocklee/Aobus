@@ -14,7 +14,7 @@ NAME = "perf"
 REQUIRES_BUILD_ENV = True
 
 TARGET = "ao_perf_baseline"
-DEFAULT_FILTER = "[perf][review]"
+DEFAULT_FILTER = "PerformanceReview - ordering and completion-alias workloads"
 DEFAULT_SAMPLES = 20
 DEFAULT_WARMUPS = 1
 REPORT_SCHEMA = "aobus-performance-review/v2"

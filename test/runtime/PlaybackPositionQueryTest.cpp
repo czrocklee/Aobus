@@ -22,8 +22,7 @@ namespace ao::rt::test
   using playback_succession::PlaybackSuccessionTransportFixtureConfig;
   using playback_succession::PreparationReleaseGuard;
 
-  TEST_CASE("PlaybackService - elapsed reads a live correlated clock without publishing",
-            "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackService - elapsed reads a live correlated clock without publishing")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -54,8 +53,7 @@ namespace ao::rt::test
     CHECK(playback.elapsed() == std::chrono::milliseconds{0});
   }
 
-  TEST_CASE("PlaybackService - elapsed does not attribute a pending realtime splice to old metadata",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackService - elapsed does not attribute a pending realtime splice to old metadata", "[concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -81,8 +79,7 @@ namespace ao::rt::test
     CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("PlaybackCommands seekBy - past-end Next cancels an older pending explicit preparation",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackCommands seekBy - past-end Next cancels an older pending explicit preparation", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{

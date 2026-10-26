@@ -49,8 +49,7 @@ namespace ao::winui::layout::test
     }
   } // namespace
 
-  TEST_CASE("registerShellCommandActions - each registered action invokes its own retained command",
-            "[winui][unit][layout]")
+  TEST_CASE("registerShellCommandActions - each registered action invokes its own retained command")
   {
     auto invoked = std::vector<std::string_view>{};
     auto actions = RegisteredActions{};
@@ -108,8 +107,7 @@ namespace ao::winui::layout::test
     verifyActions();
   }
 
-  TEST_CASE("registerShellCommandActions - empty capabilities are omitted individually and together",
-            "[winui][unit][layout]")
+  TEST_CASE("registerShellCommandActions - empty capabilities are omitted individually and together")
   {
     auto const fields = std::to_array<std::pair<std::string_view, std::function<void()> ShellCommands::*>>({
       {"library.open", &ShellCommands::openLibrary},
@@ -140,8 +138,7 @@ namespace ao::winui::layout::test
     CHECK(actions.empty());
   }
 
-  TEST_CASE("registerShellCommandActions - menu-only capabilities are not document registrations",
-            "[winui][unit][layout]")
+  TEST_CASE("registerShellCommandActions - menu-only capabilities are not document registrations")
   {
     auto const commands = ShellCommands{
       .importLibrary = [] {},

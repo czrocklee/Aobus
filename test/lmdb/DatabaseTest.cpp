@@ -41,7 +41,7 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("Database - helper opens database", "[lmdb][unit][database]")
+  TEST_CASE("Database - helper opens database")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -55,7 +55,7 @@ namespace ao::lmdb::test
     CHECK(reader.begin() == reader.end());
   }
 
-  TEST_CASE("Typed databases - open returns the declared key type", "[lmdb][unit][database]")
+  TEST_CASE("Typed databases - open returns the declared key type")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -69,7 +69,7 @@ namespace ao::lmdb::test
     REQUIRE(wtxn.commit());
   }
 
-  TEST_CASE("Typed databases - named database open requires a write transaction", "[lmdb][unit][database]")
+  TEST_CASE("Typed databases - named database open requires a write transaction")
   {
     STATIC_REQUIRE(SupportsDatabaseOpen<IntegerKeyDatabase, WriteTransaction>);
     STATIC_REQUIRE(SupportsDatabaseOpen<ByteKeyDatabase, WriteTransaction>);
@@ -77,7 +77,7 @@ namespace ao::lmdb::test
     STATIC_REQUIRE_FALSE(SupportsDatabaseOpen<ByteKeyDatabase, ReadTransaction>);
   }
 
-  TEST_CASE("Typed databases - openExisting never creates a missing named database", "[lmdb][unit][database]")
+  TEST_CASE("Typed databases - openExisting never creates a missing named database")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -93,7 +93,7 @@ namespace ao::lmdb::test
     REQUIRE(transaction.commit());
   }
 
-  TEST_CASE("Typed databases - openExisting validates exact native key flags", "[lmdb][unit][database]")
+  TEST_CASE("Typed databases - openExisting validates exact native key flags")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -116,7 +116,7 @@ namespace ao::lmdb::test
     CHECK(byteAsIntegerRes.error().message == "Named database 'byte' has flags 0x0 (expected 0x8)");
   }
 
-  TEST_CASE("ByteKeyDatabase - main rejects integer-key storage", "[lmdb][unit][database]")
+  TEST_CASE("ByteKeyDatabase - main rejects integer-key storage")
   {
     auto const temp = ao::test::TempDir{};
     createIntegerKeyMain(temp.path());
@@ -131,8 +131,7 @@ namespace ao::lmdb::test
     CHECK(transaction.isActive());
   }
 
-  TEST_CASE("Typed databases - create-capable open rejects an existing database with different key flags",
-            "[lmdb][unit][database]")
+  TEST_CASE("Typed databases - create-capable open rejects an existing database with different key flags")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -155,7 +154,7 @@ namespace ao::lmdb::test
     CHECK(transaction.isActive());
   }
 
-  TEST_CASE("Typed databases - openExisting rejects an ordinary main-database row", "[lmdb][unit][database]")
+  TEST_CASE("Typed databases - openExisting rejects an ordinary main-database row")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -173,7 +172,7 @@ namespace ao::lmdb::test
     CHECK(ordinaryRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("Typed databases - failed write open unwinds and rolls back database creation", "[lmdb][unit][database]")
+  TEST_CASE("Typed databases - failed write open unwinds and rolls back database creation")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 1});

@@ -49,7 +49,7 @@ namespace ao::gtk::layout::editor::test
   // ---------------------------------------------------------------------------
   // LayoutEditorDialog
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutEditorDialog - renders and edits the current layout document", "[gtk][unit][layout-editor]")
+  TEST_CASE("LayoutEditorDialog - renders and edits the current layout document")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_test");
 
@@ -268,7 +268,7 @@ namespace ao::gtk::layout::editor::test
     }
   }
 
-  TEST_CASE("LayoutEditorDialog - destruction cancels a pending property preview", "[gtk][unit][layout-editor][async]")
+  TEST_CASE("LayoutEditorDialog - destruction cancels a pending property preview")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_preview_lifetime_test");
     auto const tempDir = ao::test::TempDir{};
@@ -407,7 +407,7 @@ namespace ao::gtk::layout::editor::test
     }
   } // namespace
 
-  TEST_CASE("LayoutEditorDialog - structural mutations keep the edited node selected", "[gtk][unit][layout-editor]")
+  TEST_CASE("LayoutEditorDialog - structural mutations keep the edited node selected")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_selection_test");
 
@@ -586,8 +586,7 @@ namespace ao::gtk::layout::editor::test
     }
   }
 
-  TEST_CASE("LayoutEditorDialog - structural mutations keep a nested node selected within its non-root parent",
-            "[gtk][unit][layout-editor]")
+  TEST_CASE("LayoutEditorDialog - structural mutations keep a nested node selected within its non-root parent")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_editor_nested_selection_test");
 

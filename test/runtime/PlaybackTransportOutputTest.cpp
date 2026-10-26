@@ -55,8 +55,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackTransport output device - publishes confirmed selection without premature quality",
-            "[runtime][unit][playback][output]")
+  TEST_CASE("PlaybackTransport output device - publishes confirmed selection without premature quality")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -89,8 +88,7 @@ namespace ao::rt::test
     CHECK(qualityEvents.empty());
   }
 
-  TEST_CASE("PlaybackTransport output device - publishes confirmed quality after route readiness",
-            "[runtime][integration][playback][output]")
+  TEST_CASE("PlaybackTransport output device - publishes confirmed quality after route readiness")
   {
     auto qualityFixture = PlaybackTransportFixture<QueuedExecutor>{};
     auto routedQualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
@@ -123,8 +121,7 @@ namespace ao::rt::test
     CHECK(qualityEvent.ready == qualityFixture.playbackTransport.state().ready);
   }
 
-  TEST_CASE("PlaybackTransport output device - publishes channel confidence independently of numerical quality",
-            "[runtime][unit][playback][output]")
+  TEST_CASE("PlaybackTransport output device - publishes channel confidence independently of numerical quality")
   {
     auto origin = audio::ChannelLayoutOrigin::Unknown;
     auto expectedConfidence = audio::ChannelConfidence::Unknown;
@@ -229,8 +226,7 @@ namespace ao::rt::test
     CHECK(event.ready == mappedEvent.ready);
   }
 
-  TEST_CASE("PlaybackTransport output device - device notification auto-configures output device before first play",
-            "[runtime][unit][playback][output]")
+  TEST_CASE("PlaybackTransport output device - device notification auto-configures output device before first play")
   {
     // A fixture receives its first device notification just before the play
     // request; the notification auto-selects the first available output device.
@@ -244,8 +240,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == TrackId{1});
   }
 
-  TEST_CASE("PlaybackTransport output device - paused playback continues to publish graph quality changes",
-            "[runtime][unit][playback][output]")
+  TEST_CASE("PlaybackTransport output device - paused playback continues to publish graph quality changes")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     auto qualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
@@ -288,8 +283,7 @@ namespace ao::rt::test
     CHECK(qualityEvents.back().quality.pipelineQuality == audio::Quality::LinearIntervention);
   }
 
-  TEST_CASE("PlaybackTransport output device - auto-select notifies device list subscribers",
-            "[runtime][unit][playback][output]")
+  TEST_CASE("PlaybackTransport output device - auto-select notifies device list subscribers")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     bool devicesChangedFired = false;
@@ -303,8 +297,7 @@ namespace ao::rt::test
     REQUIRE(fixture.playbackTransport.state().output.availableBackends.front().devices.size() == 1);
   }
 
-  TEST_CASE("PlaybackTransport output device - repeated and empty device lists keep the confirmed selection",
-            "[runtime][unit][playback][output]")
+  TEST_CASE("PlaybackTransport output device - repeated and empty device lists keep the confirmed selection")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -331,8 +324,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().output.availableBackends.front().devices.empty());
   }
 
-  TEST_CASE("PlaybackTransport output device - auto-select skips unsupported default exclusive profile",
-            "[runtime][unit][playback][output]")
+  TEST_CASE("PlaybackTransport output device - auto-select skips unsupported default exclusive profile")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     fixture.status.devices = {

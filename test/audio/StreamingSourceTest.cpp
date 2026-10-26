@@ -40,7 +40,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("ScriptedDecoderSession - invalid output frame layout is rejected", "[audio][unit][test-support]")
+  TEST_CASE("ScriptedDecoderSession - invalid output frame layout is rejected")
   {
     auto info = testStreamInfo();
     info.outputFormat.channels = 0;
@@ -53,7 +53,7 @@ namespace ao::audio::test
     CHECK(blockRes.error().code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("StreamingSource - preparation fills the configured preroll target", "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - preparation fills the configured preroll target")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
@@ -72,8 +72,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 0);
   }
 
-  TEST_CASE("StreamingSource - preparation accepts EOF during preroll without reporting an error",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - preparation accepts EOF during preroll without reporting an error")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
@@ -96,7 +95,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 0);
   }
 
-  TEST_CASE("StreamingSource - preparation prerolls synchronously", "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - preparation prerolls synchronously")
   {
     auto const info = testStreamInfo();
     auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
@@ -112,8 +111,7 @@ namespace ao::audio::test
     CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{200});
   }
 
-  TEST_CASE("StreamingSource - preparation reports preroll decode failure synchronously",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - preparation reports preroll decode failure synchronously")
   {
     auto const info = testStreamInfo();
 
@@ -128,8 +126,7 @@ namespace ao::audio::test
     CHECK(res.error().message == "fail");
   }
 
-  TEST_CASE("StreamingSource - preparation rejects a decoded block larger than the ring buffer synchronously",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - preparation rejects a decoded block larger than the ring buffer synchronously")
   {
     auto const info = testStreamInfo();
 
@@ -144,8 +141,7 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::DecodeFailed);
   }
 
-  TEST_CASE("StreamingSource - preparation rejects a decoded block that is not a whole number of frames synchronously",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - preparation rejects a decoded block that is not a whole number of frames synchronously")
   {
     auto const info = testStreamInfo();
 
@@ -161,8 +157,7 @@ namespace ao::audio::test
     CHECK(res.error().message == "Decoded PCM block is not a whole number of frames");
   }
 
-  TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - seek clears buffered data and prerolls the requested offset")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
@@ -191,7 +186,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 0);
   }
 
-  TEST_CASE("StreamingSource - seek reports decoder failure", "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - seek reports decoder failure")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};
@@ -214,8 +209,7 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 1);
   }
 
-  TEST_CASE("StreamingSource - background decode failure after activation notifies error callback",
-            "[audio][unit][streaming-source][concurrency]")
+  TEST_CASE("StreamingSource - background decode failure after activation notifies error callback", "[concurrency]")
   {
     auto const info = testStreamInfo();
     auto errors = std::vector<Error>{};
@@ -245,7 +239,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("StreamingSource - background non-whole-frame decoded block notifies the error callback once",
-            "[audio][unit][streaming-source][concurrency]")
+            "[concurrency]")
   {
     auto const info = testStreamInfo();
     auto errors = std::vector<Error>{};
@@ -272,7 +266,7 @@ namespace ao::audio::test
     CHECK(errors.front().message == "Decoded PCM block is not a whole number of frames");
   }
 
-  TEST_CASE("StreamingSource - read drains source after EOF is reached", "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingSource - read drains source after EOF is reached")
   {
     auto const info = testStreamInfo();
     auto errorCount = std::atomic<int>{0};

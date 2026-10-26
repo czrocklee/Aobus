@@ -9,7 +9,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("FrameSegmentStats - accumulates count, total, peak, and average", "[tui][unit][frame-timer]")
+  TEST_CASE("FrameSegmentStats - accumulates count, total, peak, and average")
   {
     auto stats = FrameSegmentStats{};
 
@@ -32,7 +32,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("FrameTimingWindow - reports per interval and resets", "[tui][unit][frame-timer]")
+  TEST_CASE("FrameTimingWindow - reports per interval and resets")
   {
     auto window = FrameTimingWindow{3};
 
@@ -76,7 +76,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("FrameTimingWindow - pending reflects the in-progress window", "[tui][unit][frame-timer]")
+  TEST_CASE("FrameTimingWindow - pending reflects the in-progress window")
   {
     auto window = FrameTimingWindow{4};
 
@@ -92,7 +92,7 @@ namespace ao::tui::test
     CHECK(optPending->present.averageDuration() == std::chrono::microseconds{5});
   }
 
-  TEST_CASE("FrameTimingWindow - flush returns and resets a partial window", "[tui][unit][frame-timer]")
+  TEST_CASE("FrameTimingWindow - flush returns and resets a partial window")
   {
     auto window = FrameTimingWindow{4};
     CHECK_FALSE(window.record(std::chrono::microseconds{5}, std::chrono::microseconds{7}).has_value());
@@ -108,7 +108,7 @@ namespace ao::tui::test
     CHECK_FALSE(window.flush().has_value());
   }
 
-  TEST_CASE("FrameTimer - disabled timer is inert and reports its state", "[tui][unit][frame-timer]")
+  TEST_CASE("FrameTimer - disabled timer is inert and reports its state")
   {
     auto timer = FrameTimer{false};
 

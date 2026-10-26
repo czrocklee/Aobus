@@ -47,7 +47,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ScanPlan - is an opaque move-only value", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - is an opaque move-only value")
   {
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<ScanPlan>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<ScanPlan>);
@@ -197,7 +197,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ScanPlan - classifies supported entries and omits unsupported extensions", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - classifies supported entries and omits unsupported extensions")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -298,7 +298,7 @@ namespace ao::rt::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("ScanPlan - classifies an absent stored modification time as changed", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - classifies an absent stored modification time as changed")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -342,7 +342,7 @@ namespace ao::rt::test
     CHECK_FALSE(item.optManifestEvidence->optMtime);
   }
 
-  TEST_CASE("ScanPlan - reports IO errors while scanning", "[runtime][unit][library-scan][error]")
+  TEST_CASE("ScanPlan - reports IO errors while scanning")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -398,8 +398,7 @@ namespace ao::rt::test
     CHECK(foundRestricted);
   }
 
-  TEST_CASE("ScanPlan - fails the plan when the filesystem walk cannot continue",
-            "[runtime][unit][library-scan][error]")
+  TEST_CASE("ScanPlan - fails the plan when the filesystem walk cannot continue")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -434,7 +433,7 @@ namespace ao::rt::test
     CHECK(res.error().message.contains("removed_dir"));
   }
 
-  TEST_CASE("ScanPlan - handles empty roots", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - handles empty roots")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
@@ -447,7 +446,7 @@ namespace ao::rt::test
     CHECK(plan.empty());
   }
 
-  TEST_CASE("ScanPlan - treats missing roots as fatal", "[runtime][unit][library-scan][error]")
+  TEST_CASE("ScanPlan - treats missing roots as fatal")
   {
     auto const temp = ao::test::TempDir{};
     // Point the library at a music root that does not exist. The database still
@@ -463,7 +462,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ScanPlan - classifies unambiguous moved files by audio identity", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - classifies unambiguous moved files by audio identity")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -500,7 +499,7 @@ namespace ao::rt::test
     CHECK(plan.count(ScanClassification::New) == 0);
   }
 
-  TEST_CASE("ScanPlan - relinks moved files after metadata retag", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - relinks moved files after metadata retag")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -531,7 +530,7 @@ namespace ao::rt::test
     CHECK(item.audioSignature == identity.signature);
   }
 
-  TEST_CASE("ScanPlan - leaves equal-length signature mismatches unresolved", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - leaves equal-length signature mismatches unresolved")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -583,8 +582,7 @@ namespace ao::rt::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("ScanPlan - duplicate-content moves stay unresolved until a valid explicit relink",
-            "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - duplicate-content moves stay unresolved until a valid explicit relink")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -634,7 +632,7 @@ namespace ao::rt::test
     CHECK(relinkItem.trackId == firstTrackId);
   }
 
-  TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities")
   {
     SECTION("pending identity")
     {
@@ -717,7 +715,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ScanPlan - canonicalizes URI edge cases", "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - canonicalizes URI edge cases")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -741,7 +739,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ScanPlan - preserves UTF-8 names on native filesystems", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanPlan - preserves UTF-8 names on native filesystems")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
@@ -762,8 +760,7 @@ namespace ao::rt::test
 
 #ifndef _WIN32
   // Windows forbids control characters in names; POSIX filesystems allow them.
-  TEST_CASE("ScanPlan - an entry whose path forms no URI is reported by its full relative path",
-            "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - an entry whose path forms no URI is reported by its full relative path")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -801,8 +798,7 @@ namespace ao::rt::test
   }
 #endif
 
-  TEST_CASE("ScanPlan - an entry whose path exceeds the URI limit is reported by its full relative path",
-            "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - an entry whose path exceeds the URI limit is reported by its full relative path")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -854,7 +850,7 @@ namespace ao::rt::test
     CHECK(items[2].classification == ScanClassification::New);
   }
 
-  TEST_CASE("ScanPlan - rejects file symlinks escaping the music root", "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - rejects file symlinks escaping the music root")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -877,7 +873,7 @@ namespace ao::rt::test
     CHECK(plan.items().front().errorMessage.contains("outside the library root"));
   }
 
-  TEST_CASE("ScanPlan - in-root symlinks use one canonical target URI", "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - in-root symlinks use one canonical target URI")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -895,8 +891,7 @@ namespace ao::rt::test
     CHECK(plan.items().front().fullPath == std::filesystem::canonical(actualFile));
   }
 
-  TEST_CASE("ScanPlan - an escaping directory symlink does not mark descendants missing",
-            "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - an escaping directory symlink does not mark descendants missing")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";

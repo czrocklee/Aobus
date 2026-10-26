@@ -128,7 +128,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("readResourceBytes - a carrier that still holds the content answers", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a carrier that still holds the content answers")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
@@ -147,8 +147,7 @@ namespace ao::rt::test
     CHECK(**res == fixture.pictureBytes);
   }
 
-  TEST_CASE("readResourceBytes - a track whose own file is gone is served from another carrier",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a track whose own file is gone is served from another carrier")
   {
     auto fixture = CarrierFixture{3};
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
@@ -172,8 +171,7 @@ namespace ao::rt::test
     CHECK(**res == fixture.pictureBytes);
   }
 
-  TEST_CASE("readResourceBytes - a carrier that carries no matching picture advances to the next",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a carrier that carries no matching picture advances to the next")
   {
     auto fixture = CarrierFixture{2};
 
@@ -199,7 +197,7 @@ namespace ao::rt::test
     CHECK(**res == fixture.pictureBytes);
   }
 
-  TEST_CASE("readResourceBytes - no carrier and no cache entry is no image", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - no carrier and no cache entry is no image")
   {
     auto fixture = CarrierFixture{1};
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
@@ -219,8 +217,7 @@ namespace ao::rt::test
     CHECK_FALSE(*res);
   }
 
-  TEST_CASE("readResourceBytes - a carrier hit is cached and survives removal of every carrier",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a carrier hit is cached and survives removal of every carrier")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
@@ -250,8 +247,7 @@ namespace ao::rt::test
     CHECK(**res == fixture.pictureBytes);
   }
 
-  TEST_CASE("readResourceBytes - a stale reference no file can satisfy is not rewritten",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a stale reference no file can satisfy is not rewritten")
   {
     auto fixture = CarrierFixture{1};
     std::filesystem::remove(fixture.temp.path() / fixture.uris[0]);
@@ -292,7 +288,7 @@ namespace ao::rt::test
     CHECK(optDescriptor->byteLength == fixture.pictureBytes.size());
   }
 
-  TEST_CASE("readResourceBytes - bytes above the caller's ceiling are refused", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - bytes above the caller's ceiling are refused")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
@@ -330,7 +326,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("readResourceBytes - a declared length far from the truth blocks nothing", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a declared length far from the truth blocks nothing")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();
@@ -354,8 +350,7 @@ namespace ao::rt::test
     CHECK(**res == fixture.pictureBytes);
   }
 
-  TEST_CASE("readResourceBytes - cancellation before the first candidate stops the walk",
-            "[runtime][unit][resource-walk][concurrency]")
+  TEST_CASE("readResourceBytes - cancellation before the first candidate stops the walk", "[concurrency]")
   {
     auto fixture = CarrierFixture{3};
     auto const index = fixture.buildIndex();
@@ -373,8 +368,7 @@ namespace ao::rt::test
     CHECK_THROWS_AS(std::ignore = readResourceBytes(context, stopSource.get_token()), async::OperationCancelled);
   }
 
-  TEST_CASE("ResourceCarrierIndex - a snapshot answers every request no newer than its stamp",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("ResourceCarrierIndex - a snapshot answers every request no newer than its stamp")
   {
     auto const snapshot = ResourceCarrierIndex{7, {}};
 
@@ -396,8 +390,7 @@ namespace ao::rt::test
     CHECK_FALSE(ResourceCarrierIndex{}.canAnswerRevision(1));
   }
 
-  TEST_CASE("buildResourceCarrierIndex - names every referencing file and nothing else",
-            "[runtime][unit][resource-walk]")
+  TEST_CASE("buildResourceCarrierIndex - names every referencing file and nothing else")
   {
     auto fixture = CarrierFixture{3};
 
@@ -433,8 +426,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("readResourceBytes - a restored library serves a cover with no rescan",
-            "[runtime][integration][resource-walk][cover-art]")
+  TEST_CASE("readResourceBytes - a restored library serves a cover with no rescan")
   {
     auto source = CarrierFixture{1};
     auto const yamlPath = std::filesystem::path{source.temp.path()} / "library.yaml";
@@ -473,7 +465,7 @@ namespace ao::rt::test
     CHECK(**res == source.pictureBytes);
   }
 
-  TEST_CASE("readResourceBytes - a resource with no candidate at all is no image", "[runtime][unit][resource-walk]")
+  TEST_CASE("readResourceBytes - a resource with no candidate at all is no image")
   {
     auto fixture = CarrierFixture{1};
     auto const index = fixture.buildIndex();

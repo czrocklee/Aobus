@@ -59,7 +59,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("createPreparedTrackRecord writes prepared hot and cold track records", "[library][unit][track]")
+  TEST_CASE("createPreparedTrackRecord writes prepared hot and cold track records")
   {
     auto fixture = TrackStoreFixture{};
     auto transaction = writeTransaction(fixture.library);
@@ -88,7 +88,7 @@ namespace ao::library::test
     CHECK(optCommitted->property().uri() == "created.flac");
   }
 
-  TEST_CASE("TrackStore - prepared records emit canonical hot and cold bytes", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - prepared records emit canonical hot and cold bytes")
   {
     auto fixture = TrackStoreFixture{};
     auto transaction = writeTransaction(fixture.library);
@@ -108,7 +108,7 @@ namespace ao::library::test
     REQUIRE(validateSerializedColdTrack(coldBytes));
   }
 
-  TEST_CASE("updatePreparedTrackRecord replaces existing hot and cold track records", "[library][unit][track]")
+  TEST_CASE("updatePreparedTrackRecord replaces existing hot and cold track records")
   {
     auto fixture = TrackStoreFixture{};
     auto transaction = writeTransaction(fixture.library);
@@ -143,7 +143,7 @@ namespace ao::library::test
     CHECK(optCommitted->property().uri() == "updated.flac");
   }
 
-  TEST_CASE("prepared track data is a snapshot unaffected by later builder mutation", "[library][unit][track]")
+  TEST_CASE("prepared track data is a snapshot unaffected by later builder mutation")
   {
     auto fixture = TrackStoreFixture{};
     auto transaction = writeTransaction(fixture.library);
@@ -180,8 +180,7 @@ namespace ao::library::test
     REQUIRE(transaction.commit());
   }
 
-  TEST_CASE("updatePreparedTrackRecord rolls back its hot update when the cold reservation fails",
-            "[library][unit][track-store]")
+  TEST_CASE("updatePreparedTrackRecord rolls back its hot update when the cold reservation fails")
   {
     constexpr std::uint64_t kInitialMapSize = std::uint64_t{1} * 1024 * 1024;
     constexpr std::uint64_t kUpdateHeadroom = std::uint64_t{32} * 1024;

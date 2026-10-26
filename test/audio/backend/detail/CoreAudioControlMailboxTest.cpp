@@ -25,7 +25,7 @@ namespace ao::audio::backend::detail::test
   } // namespace
 
   TEST_CASE("CoreAudioControlMailbox - a delayed old device snapshot cannot supersede a published newer generation",
-            "[audio][unit][coreaudio][concurrency]")
+            "[concurrency]")
   {
     auto mailbox = CoreAudioControlMailbox{};
 
@@ -77,8 +77,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mailbox.takeDeviceChange() == 0);
   }
 
-  TEST_CASE("CoreAudioControlMailbox - a delayed old fault cannot replace a newer pending fault",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioControlMailbox - a delayed old fault cannot replace a newer pending fault", "[concurrency]")
   {
     auto mailbox = CoreAudioControlMailbox{};
 
@@ -135,8 +134,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(mailbox.takeFault().has_value());
   }
 
-  TEST_CASE("CoreAudioControlMailbox - a newer fault generation supersedes an older pending fault",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioControlMailbox - a newer fault generation supersedes an older pending fault", "[concurrency]")
   {
     auto mailbox = CoreAudioControlMailbox{};
     REQUIRE(mailbox.tryPublishFault(kOldGeneration, CoreAudioFault::DeviceLost));
@@ -149,8 +147,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(mailbox.takeFault().has_value());
   }
 
-  TEST_CASE("CoreAudioControlMailbox - the first fault kind wins within one pending generation",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioControlMailbox - the first fault kind wins within one pending generation")
   {
     auto mailbox = CoreAudioControlMailbox{};
     REQUIRE(mailbox.tryPublishFault(kNewGeneration, CoreAudioFault::ChannelRouteChanged));
@@ -163,8 +160,7 @@ namespace ao::audio::backend::detail::test
     CHECK(optFault->kind == CoreAudioFault::ChannelRouteChanged);
   }
 
-  TEST_CASE("CoreAudioControlMailbox - a consumed device generation can publish again while pending work coalesces",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioControlMailbox - a consumed device generation can publish again while pending work coalesces")
   {
     auto mailbox = CoreAudioControlMailbox{};
     REQUIRE(mailbox.tryPublishDeviceChange(kOldGeneration));
@@ -177,8 +173,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mailbox.takeDeviceChange() == 0);
   }
 
-  TEST_CASE("CoreAudioControlMailbox - a consumed fault generation can publish a new pending cause",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioControlMailbox - a consumed fault generation can publish a new pending cause")
   {
     auto mailbox = CoreAudioControlMailbox{};
     REQUIRE(mailbox.tryPublishFault(kNewGeneration, CoreAudioFault::DeviceLost));
@@ -195,7 +190,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(mailbox.takeFault().has_value());
   }
 
-  TEST_CASE("CoreAudioControlMailbox - consuming an idle mailbox yields no event", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioControlMailbox - consuming an idle mailbox yields no event")
   {
     auto mailbox = CoreAudioControlMailbox{};
     CHECK(mailbox.takeDeviceChange() == 0);

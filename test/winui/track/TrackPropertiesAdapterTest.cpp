@@ -25,7 +25,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("TrackPropertiesAdapter - maps shared form rows without WinRT", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - maps shared form rows without WinRT")
   {
     auto const row = uimodel::TrackPropertiesFormRow{
       .field = rt::TrackField::Title,
@@ -67,8 +67,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesAdapter - number, date, and readonly control kinds stay distinct",
-            "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - number, date, and readonly control kinds stay distinct")
   {
     CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::Number) == TrackPropertyControlKind::Number);
     CHECK(trackPropertyControlKind(uimodel::TrackPropertiesFormEditorKind::Date) == TrackPropertyControlKind::Date);
@@ -76,7 +75,7 @@ namespace ao::winui::test
           TrackPropertyControlKind::ReadonlyText);
   }
 
-  TEST_CASE("TrackPropertiesAdapter - projects date rows like editable text metadata", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - projects date rows like editable text metadata")
   {
     auto const row = uimodel::TrackPropertiesFormRow{
       .field = rt::TrackField::RecordingDate,
@@ -115,7 +114,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesAdapter - parses native edits", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - parses native edits")
   {
     auto const textRes = parseTrackPropertyEdit(TrackPropertyControlKind::Text, "Björk");
     REQUIRE(textRes);
@@ -146,13 +145,13 @@ namespace ao::winui::test
     CHECK_FALSE(parseTrackPropertyEdit(TrackPropertyControlKind::ReadonlyText, "ignored"));
   }
 
-  TEST_CASE("TrackPropertiesAdapter - presentation requires a nonempty selection", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - presentation requires a nonempty selection")
   {
     CHECK_FALSE(canPresentTrackProperties({}));
     CHECK(canPresentTrackProperties(std::array{TrackId{7}}));
   }
 
-  TEST_CASE("TrackPropertiesAdapter - projects authoring commit states", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - projects authoring commit states")
   {
     CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::Applied) == TrackPropertiesCommitState::Accepted);
     CHECK(projectTrackPropertiesCommitState(rt::AuthoringStatus::NoOp) == TrackPropertiesCommitState::Accepted);
@@ -162,7 +161,7 @@ namespace ao::winui::test
           TrackPropertiesCommitState::Unavailable);
   }
 
-  TEST_CASE("TrackPropertiesAdapter - projects tag and custom-key vocabulary", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - projects tag and custom-key vocabulary")
   {
     auto const japaneseAliases = std::array<std::string, 1>{"yuduo"};
     auto const vocabulary = std::array{
@@ -178,7 +177,7 @@ namespace ao::winui::test
     CHECK(trackPropertyVocabularySuggestions(vocabulary, "", 2) == std::vector<std::string>{"宇多田光", "Night Drive"});
   }
 
-  TEST_CASE("TrackPropertiesAdapter - explicit empty custom value replaces a mixed original", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - explicit empty custom value replaces a mixed original")
   {
     CHECK(needsCustomMetadataValueUpdate(true, std::nullopt, ""));
     CHECK(needsCustomMetadataValueUpdate(true, std::nullopt, "Ambient"));
@@ -188,7 +187,7 @@ namespace ao::winui::test
     CHECK(needsCustomMetadataValueUpdate(false, std::nullopt, ""));
   }
 
-  TEST_CASE("TrackPropertiesAdapter - category previews never expose scalar credit edits", "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - category previews never expose scalar credit edits")
   {
     for (auto const field : {rt::TrackField::Conductor, rt::TrackField::Ensemble, rt::TrackField::Soloist})
     {
@@ -216,8 +215,7 @@ namespace ao::winui::test
     CHECK(composer.text == "Bach");
   }
 
-  TEST_CASE("TrackPropertiesAdapter - active credit child blocks tags and ordinary field submission",
-            "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - active credit child blocks tags and ordinary field submission")
   {
     auto form = uimodel::TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     form.addField(rt::TrackField::Title, true);
@@ -240,8 +238,7 @@ namespace ao::winui::test
     CHECK_FALSE(patch.optCredits);
   }
 
-  TEST_CASE("TrackPropertiesAdapter - accepting credits stages one typed scope with the ordinary draft",
-            "[winui][unit][property]")
+  TEST_CASE("TrackPropertiesAdapter - accepting credits stages one typed scope with the ordinary draft")
   {
     auto form = uimodel::TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     form.addField(rt::TrackField::Title, true);

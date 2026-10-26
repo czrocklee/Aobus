@@ -30,7 +30,7 @@ namespace ao::utility::test
     }
   } // namespace
 
-  TEST_CASE("Raii - makeUniquePtr properly disposes of C-style handles", "[utility][unit][raii]")
+  TEST_CASE("Raii - makeUniquePtr properly disposes of C-style handles")
   {
     g_deleteCount = 0;
 

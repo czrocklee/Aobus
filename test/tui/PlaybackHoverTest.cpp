@@ -40,8 +40,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("EventController - painted playback geometry retains hover only while its target contains the pointer",
-            "[tui][unit][playback-hover]")
+  TEST_CASE("EventController - painted playback geometry retains hover only while its target contains the pointer")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -125,8 +124,7 @@ namespace ao::tui::test
     CHECK_FALSE(actions.empty());
   }
 
-  TEST_CASE("EventController - height-only workspace resize preserves valid top-bar hover",
-            "[tui][unit][playback-hover]")
+  TEST_CASE("EventController - height-only workspace resize preserves valid top-bar hover")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -144,7 +142,7 @@ namespace ao::tui::test
     CHECK(events.hoveredButton() == HoveredButton::PlaybackMode);
   }
 
-  TEST_CASE("EventController - metadata updates retire hover on a vanished link", "[tui][unit][playback-hover]")
+  TEST_CASE("EventController - metadata updates retire hover on a vanished link")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -165,8 +163,7 @@ namespace ao::tui::test
     CHECK(events.hoveredButton() == HoveredButton::None);
   }
 
-  TEST_CASE("EventController - painted hover refresh never resurrects a cancelled interaction",
-            "[tui][unit][playback-hover]")
+  TEST_CASE("EventController - painted hover refresh never resurrects a cancelled interaction")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -181,8 +178,7 @@ namespace ao::tui::test
     CHECK(events.hoveredButton() == HoveredButton::None);
   }
 
-  TEST_CASE("EventController - opening an overlay retires quality hover without another redraw",
-            "[tui][unit][playback-hover]")
+  TEST_CASE("EventController - opening an overlay retires quality hover without another redraw")
   {
     auto fixture = EventControllerFixture{};
     fixture.preferences.qualityHover = true;

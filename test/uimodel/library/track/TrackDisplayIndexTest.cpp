@@ -9,8 +9,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackDisplayIndex - interleaves group headings without changing source row coordinates",
-            "[uimodel][unit][track-display]")
+  TEST_CASE("TrackDisplayIndex - interleaves group headings without changing source row coordinates")
   {
     auto index = TrackDisplayIndex{};
     auto const sections = std::to_array<TrackDisplaySection>({
@@ -64,8 +63,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(index.displayIndexOfSourceRow(5));
   }
 
-  TEST_CASE("TrackDisplayIndex - rejects malformed sections without replacing the valid mapping",
-            "[uimodel][unit][track-display]")
+  TEST_CASE("TrackDisplayIndex - rejects malformed sections without replacing the valid mapping")
   {
     auto index = TrackDisplayIndex{};
     REQUIRE(index.tryReset(2, {}));
@@ -119,7 +117,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(index.displayIndexOfSourceRow(2));
   }
 
-  TEST_CASE("TrackDisplayIndex - clear discards both row and group coordinates", "[uimodel][unit][track-display]")
+  TEST_CASE("TrackDisplayIndex - clear discards both row and group coordinates")
   {
     auto index = TrackDisplayIndex{};
     auto const sections = std::to_array<TrackDisplaySection>({{.start = 0, .count = 2}});

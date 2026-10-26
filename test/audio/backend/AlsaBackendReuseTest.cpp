@@ -15,8 +15,7 @@
 
 namespace ao::audio::backend::test
 {
-  TEST_CASE("AlsaExclusiveBackend - unopened reuse keeps exact equality but refuses stereo aliases",
-            "[audio][unit][alsa]")
+  TEST_CASE("AlsaExclusiveBackend - unopened reuse keeps exact equality but refuses stereo aliases")
   {
     auto const device = Device{
       .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};
@@ -35,8 +34,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(dispatch.canReuseFormat(identified, unidentified));
   }
 
-  TEST_CASE("AlsaExclusiveBackend - failed native open and close cannot authorize stereo alias reuse",
-            "[audio][unit][alsa]")
+  TEST_CASE("AlsaExclusiveBackend - failed native open and close cannot authorize stereo alias reuse")
   {
     auto const device = Device{
       .id = DeviceId{"hw:127,0"}, .displayName = "Absent card", .description = "hw:127,0", .backendId = kBackendAlsa};

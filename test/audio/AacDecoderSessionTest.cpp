@@ -20,7 +20,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("AacDecoderSession - decodes happy path", "[audio][unit][aac]")
+  TEST_CASE("AacDecoderSession - decodes happy path")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -40,7 +40,7 @@ namespace ao::audio::test
     CHECK(blockRes->firstFrameIndex == 0);
   }
 
-  TEST_CASE("AacDecoderSession - seeks within decoded MP4 samples", "[audio][unit][aac][seek]")
+  TEST_CASE("AacDecoderSession - seeks within decoded MP4 samples")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -62,7 +62,7 @@ namespace ao::audio::test
     CHECK(blockRes->firstFrameIndex + blockRes->frames > targetFrame);
   }
 
-  TEST_CASE("AacDecoderSession - 32-bit padded output", "[audio][unit][aac]")
+  TEST_CASE("AacDecoderSession - 32-bit padded output")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -104,7 +104,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AacDecoderSession - supports lossless output encodings", "[audio][unit][aac]")
+  TEST_CASE("AacDecoderSession - supports lossless output encodings")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -127,7 +127,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AacDecoderSession - reports error paths", "[audio][unit][aac][error]")
+  TEST_CASE("AacDecoderSession - reports error paths")
   {
     SECTION("Non-existent file")
     {
@@ -146,7 +146,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AacDecoderSession - reports end of stream", "[audio][unit][aac]")
+  TEST_CASE("AacDecoderSession - reports end of stream")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 

@@ -16,7 +16,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - access profiles validate independent TrackView tiers", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - access profiles validate independent TrackView tiers")
   {
     auto const hotData = library::test::makeMinimalHotTrackViewData();
     auto const coldData = library::test::makeColdTrackViewData();
@@ -41,7 +41,7 @@ namespace ao::query::test
     CHECK_FALSE(hasRequiredTrackData(AccessProfile::ColdOnly, malformedView));
   }
 
-  TEST_CASE("ExecutionPlan - reports HotOnly access for hot metadata", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports HotOnly access for hot metadata")
   {
     // Metadata variable -> HotOnly
     auto expr = parseOk("$artist = Bach");
@@ -50,7 +50,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for custom metadata", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for custom metadata")
   {
     // Custom variable -> ColdOnly
     auto expr = parseOk("%customkey = value");
@@ -59,7 +59,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports HotAndCold access for mixed predicates", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports HotAndCold access for mixed predicates")
   {
     // Mix of hot and cold -> HotAndCold
     auto expr = parseOk("$artist = Bach && %customkey = value");
@@ -68,7 +68,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for cold property fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for cold property fields")
   {
     // Property variable -> ColdOnly (stored in TrackColdHeader)
     auto expr = parseOk("@duration > 180000");
@@ -77,7 +77,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports HotOnly access for tag fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports HotOnly access for tag fields")
   {
     // Tag variable -> HotOnly
     auto expr = parseOk("#rock");
@@ -86,7 +86,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for cold metadata fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for cold metadata fields")
   {
     // TrackNumber field is in cold storage -> ColdOnly
     auto expr = parseOk("$trackNumber > 5");
@@ -95,7 +95,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for classical role metadata", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for classical role metadata")
   {
     auto expr = parseOk("$conductor = Kleiber");
     auto plan = compileOk(expr);
@@ -103,35 +103,35 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for duration", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for duration")
   {
     auto expr = parseOk("@duration > 180000");
     auto plan = compileOk(expr);
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for bitrate", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for bitrate")
   {
     auto expr = parseOk("@bitrate > 320");
     auto plan = compileOk(expr);
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports HotOnly access for sample rate", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports HotOnly access for sample rate")
   {
     auto expr = parseOk("@sampleRate = 44100");
     auto plan = compileOk(expr);
     CHECK(plan.accessProfile == AccessProfile::HotOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for channels", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for channels")
   {
     auto expr = parseOk("@channels = 2");
     auto plan = compileOk(expr);
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - reports HotAndCold access for hot and cold fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports HotAndCold access for hot and cold fields")
   {
     // Mix of hot ($year) and cold ($trackNumber) -> HotAndCold
     auto expr = parseOk("$year > 2020 && $trackNumber > 5");
@@ -140,7 +140,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
   }
 
-  TEST_CASE("ExecutionPlan - reports ColdOnly access for custom fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - reports ColdOnly access for custom fields")
   {
     // Custom variable -> ColdOnly
     auto expr = parseOk("%customkey = value");
@@ -149,7 +149,7 @@ namespace ao::query::test
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
   }
 
-  TEST_CASE("ExecutionPlan - classifies access profiles exhaustively", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - classifies access profiles exhaustively")
   {
     SECTION("HotOnly")
     {

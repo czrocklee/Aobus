@@ -126,8 +126,7 @@ namespace ao::audio::backend::test
     };
   } // namespace
 
-  TEST_CASE("CoreAudioProvider - enumerates and renders through a real output",
-            "[audio][integration][coreaudio][.manual]")
+  TEST_CASE("CoreAudioProvider - enumerates and renders through a real output", "[.manual]")
   {
     auto provider = CoreAudioProvider{};
     auto const status = provider.status();

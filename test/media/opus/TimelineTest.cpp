@@ -115,7 +115,7 @@ namespace ao::media::opus::test
     }
   } // namespace
 
-  TEST_CASE("packetSampleCount reads the table of contents", "[media][unit][opus]")
+  TEST_CASE("packetSampleCount reads the table of contents")
   {
     SECTION("SILK configurations carry 10, 20, 40, or 60 ms")
     {
@@ -168,7 +168,7 @@ namespace ao::media::opus::test
     }
   }
 
-  TEST_CASE("deriveOggTimeline places a stream on its own timeline", "[media][unit][opus]")
+  TEST_CASE("deriveOggTimeline places a stream on its own timeline")
   {
     SECTION("A stream starting at zero begins decoding there")
     {

@@ -27,7 +27,7 @@ namespace ao::rt::test
 {
   using ao::library::TrackStore;
 
-  TEST_CASE("TrackListProjection - locale policy changes textual order", "[runtime][unit][projection][collation]")
+  TEST_CASE("TrackListProjection - locale policy changes textual order")
   {
     auto env = TrackListProjectionFixture{};
     auto const umlaut = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ä"});
@@ -56,8 +56,7 @@ namespace ao::rt::test
     CHECK(swedish.trackIdAt(1) == umlaut);
   }
 
-  TEST_CASE("TrackListProjection - live locale change rebuilds order and retains policy ownership",
-            "[runtime][unit][projection][collation]")
+  TEST_CASE("TrackListProjection - live locale change rebuilds order and retains policy ownership")
   {
     auto env = TrackListProjectionFixture{};
     auto const umlaut = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ä"});
@@ -90,8 +89,7 @@ namespace ao::rt::test
     CHECK(projection.trackIdAt(1) == zed);
   }
 
-  TEST_CASE("TrackListProjection - non-locale artist order is stable across flat and grouped presentations",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - non-locale artist order is stable across flat and grouped presentations")
   {
     auto env = TrackListProjectionFixture{};
     auto const elan = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Élan"});
@@ -113,7 +111,7 @@ namespace ao::rt::test
     CHECK(projection.trackIdAt(1) == elan);
   }
 
-  TEST_CASE("TrackListProjection - title sort ignores leading articles", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - title sort ignores leading articles")
   {
     auto env = TrackListProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "The Best"});
@@ -151,7 +149,7 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(6) == id4); // Zeppelin
   }
 
-  TEST_CASE("TrackListProjection - sort 20 tracks by year then title", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sort 20 tracks by year then title")
   {
     auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
@@ -217,7 +215,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sort 15 tracks by album disc track", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sort 15 tracks by album disc track")
   {
     auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
@@ -303,7 +301,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sorts by classical role metadata", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sorts by classical role metadata")
   {
     auto env = TrackListProjectionFixture{};
 
@@ -344,8 +342,7 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(2) == id1);
   }
 
-  TEST_CASE("TrackListProjection - category sorts use first names and existing missing-text order",
-            "[runtime][unit][projection][credits]")
+  TEST_CASE("TrackListProjection - category sorts use first names and existing missing-text order")
   {
     auto kind = library::CreditKind::Conductor;
     auto field = TrackSortField::Conductor;
@@ -398,7 +395,7 @@ namespace ao::rt::test
     CHECK(rebuilt.trackIdAt(2) == empty);
   }
 
-  TEST_CASE("TrackListProjection - movement sort keeps performances contiguous", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - movement sort keeps performances contiguous")
   {
     // One work recorded twice (two albums/performances). Grouping by Work merges both
     // performances into a single section. The classical sort order places Album before
@@ -477,8 +474,7 @@ namespace ao::rt::test
     CHECK(orderedMovements == std::vector<std::uint16_t>{1, 2, 3, 1, 2, 3});
   }
 
-  TEST_CASE("TrackListProjection - year sort direction changes produce the exact ascending and descending orders",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - year sort direction changes produce the exact ascending and descending orders")
   {
     auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
@@ -525,7 +521,7 @@ namespace ao::rt::test
     checkOrder(true);
   }
 
-  TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks")
   {
     auto env = TrackListProjectionFixture{};
     auto ids = std::vector<TrackId>{};
@@ -574,7 +570,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - sort by duration", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - sort by duration")
   {
     auto env = TrackListProjectionFixture{};
 

@@ -18,7 +18,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("CenterBox - places start, center, and end children", "[gtk][unit][layout][container]")
+  TEST_CASE("CenterBox - places start, center, and end children")
   {
     auto const vertical = GENERATE(false, true);
     auto fixture = LayoutRuntimeFixture{};

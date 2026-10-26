@@ -93,8 +93,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("MainWindow - restored workspace presentation survives startup and history replay",
-            "[gtk][integration][session-presentation]")
+  TEST_CASE("MainWindow - restored workspace presentation survives startup and history replay")
   {
     auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -132,8 +131,7 @@ namespace ao::gtk::test
     CHECK(state.presentation.id == rt::kListOrderTrackPresentationId);
   }
 
-  TEST_CASE("MainWindow - empty workspace creates All Tracks with its saved preference",
-            "[gtk][integration][session-presentation]")
+  TEST_CASE("MainWindow - empty workspace creates All Tracks with its saved preference")
   {
     auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -154,8 +152,7 @@ namespace ao::gtk::test
     CHECK(state.presentation.id == "songs");
   }
 
-  TEST_CASE("MainWindow - ordinary list selection applies a default only to a new plain view",
-            "[gtk][integration][session-presentation]")
+  TEST_CASE("MainWindow - ordinary list selection applies a default only to a new plain view")
   {
     auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -188,8 +185,7 @@ namespace ao::gtk::test
     CHECK(runtimePtr->views().trackListState(firstViewId).presentation.id == "songs");
   }
 
-  TEST_CASE("MainWindow - playback restore reuses a restored plain view without changing presentation",
-            "[gtk][integration][session-presentation]")
+  TEST_CASE("MainWindow - playback restore reuses a restored plain view without changing presentation")
   {
     auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -232,8 +228,7 @@ namespace ao::gtk::test
     CHECK(state.selection == std::vector<TrackId>{trackId});
   }
 
-  TEST_CASE("MainWindow - replacement activation leaves stored playback identity idle and unrestored",
-            "[gtk][integration][session-presentation]")
+  TEST_CASE("MainWindow - replacement activation leaves stored playback identity idle and unrestored")
   {
     auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -262,8 +257,7 @@ namespace ao::gtk::test
     CHECK(snapshot.succession.currentTrackId == kInvalidTrackId);
   }
 
-  TEST_CASE("MainWindow - playback restore creates a preferred plain view beside a filtered view",
-            "[gtk][integration][session-presentation]")
+  TEST_CASE("MainWindow - playback restore creates a preferred plain view beside a filtered view")
   {
     auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -326,8 +320,7 @@ namespace ao::gtk::test
     CHECK(plainCount == 1);
   }
 
-  TEST_CASE("MainWindow - playback restore creates a preferred plain view when no target view exists",
-            "[gtk][integration][session-presentation]")
+  TEST_CASE("MainWindow - playback restore creates a preferred plain view when no target view exists")
   {
     auto const appPtr = ensureGtkApplication();
     auto tempDir = ao::test::TempDir{};

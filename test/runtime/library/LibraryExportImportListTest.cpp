@@ -98,7 +98,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - list-only export restores lists by track URI", "[runtime][integration][import-export][list]")
+  TEST_CASE("LibraryYaml - list-only export restores lists by track URI")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -190,8 +190,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - import remaps list parents regardless of YAML order",
-            "[runtime][integration][import-export][list]")
+  TEST_CASE("LibraryYaml - import remaps list parents regardless of YAML order")
   {
     auto temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -261,7 +260,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - import drops dangling list references", "[runtime][integration][import-export][list]")
+  TEST_CASE("LibraryYaml - import drops dangling list references")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -334,8 +333,7 @@ library:
     CHECK(foundDanglingParent);
   }
 
-  TEST_CASE("LibraryYaml - a List filter that does not parse or compile survives export and restore",
-            "[runtime][integration][import-export][list]")
+  TEST_CASE("LibraryYaml - a List filter that does not parse or compile survives export and restore")
   {
     // Written raw, as the database admits any filter text. One fails to parse,
     // one parses but fails to compile, and one carries decomposed text and
@@ -438,8 +436,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - mixed list order references preserve first-occurrence order across round-trip",
-            "[runtime][integration][import-export][list]")
+  TEST_CASE("LibraryYaml - mixed list order references preserve first-occurrence order across round-trip")
   {
     auto const sourceTemp = ao::test::TempDir{};
     auto sourceLibrary = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());

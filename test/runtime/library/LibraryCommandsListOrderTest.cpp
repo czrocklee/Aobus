@@ -140,8 +140,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryCommands List order - valid move lazily materializes visible members and retains hidden ranks",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - valid move lazily materializes visible members and retains hidden ranks")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -166,8 +165,7 @@ namespace ao::rt::test
                     });
   }
 
-  TEST_CASE("LibraryCommands List order - semantic no-op does not materialize an unranked tail",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - semantic no-op does not materialize an unranked tail")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -184,8 +182,7 @@ namespace ao::rt::test
     CHECK(fixture.events.empty());
   }
 
-  TEST_CASE("LibraryCommands List order - null anchor moves the selection to the raw order tail",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - null anchor moves the selection to the raw order tail")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -208,8 +205,7 @@ namespace ao::rt::test
                     });
   }
 
-  TEST_CASE("LibraryCommands List order - empty selection is a non-materializing no-op",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - empty selection is a non-materializing no-op")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -227,8 +223,7 @@ namespace ao::rt::test
     CHECK(fixture.events.empty());
   }
 
-  TEST_CASE("LibraryCommands List order - multi-selection uses bound effective order rather than request order",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - multi-selection uses bound effective order rather than request order")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -252,8 +247,7 @@ namespace ao::rt::test
                     });
   }
 
-  TEST_CASE("LibraryCommands List order - reset forgets visible and hidden positions",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - reset forgets visible and hidden positions")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const visible = fixture.addTrack("Visible");
@@ -272,8 +266,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<ListOrderReset>(change.operation));
   }
 
-  TEST_CASE("LibraryCommands List order - forget hidden prunes only absent members",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - forget hidden prunes only absent members")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -295,8 +288,7 @@ namespace ao::rt::test
                     });
   }
 
-  TEST_CASE("LibraryCommands List order - stale bindings cannot overwrite a newer revision",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - stale bindings cannot overwrite a newer revision")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -314,8 +306,7 @@ namespace ao::rt::test
     CHECK(fixture.events.empty());
   }
 
-  TEST_CASE("LibraryCommands List order - invalid selection and anchor are rejected atomically",
-            "[runtime][unit][library][list-order]")
+  TEST_CASE("LibraryCommands List order - invalid selection and anchor are rejected atomically")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");
@@ -344,8 +335,7 @@ namespace ao::rt::test
     CHECK(fixture.events.empty());
   }
 
-  TEST_CASE("LibraryWriteLane - List order binding rejects invalid identities and effective sequences",
-            "[runtime][unit][library][library-authoring][list-order]")
+  TEST_CASE("LibraryWriteLane - List order binding rejects invalid identities and effective sequences")
   {
     auto fixture = ListOrderWriterFixture{};
     auto const first = fixture.addTrack("First");

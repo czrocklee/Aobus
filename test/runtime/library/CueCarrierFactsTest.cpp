@@ -51,8 +51,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("CUE carrier facts - physical media determines capability independently of member codec hints",
-            "[runtime][integration][cue-carrier-facts]")
+  TEST_CASE("CUE carrier facts - physical media determines capability independently of member codec hints")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
@@ -129,8 +128,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CUE carrier facts - a carrier without an exact physical frame count stays undetermined",
-            "[runtime][integration][cue-carrier-facts]")
+  TEST_CASE("CUE carrier facts - a carrier without an exact physical frame count stays undetermined")
   {
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";

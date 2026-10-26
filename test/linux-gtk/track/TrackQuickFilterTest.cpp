@@ -55,8 +55,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackQuickFilter - duplicate surfaces preserve drafts and create from the current commit",
-            "[gtk][unit][track][quick-filter]")
+  TEST_CASE("TrackQuickFilter - duplicate surfaces preserve drafts and create from the current commit")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -112,7 +111,7 @@ namespace ao::gtk::test
     connection.disconnect();
   }
 
-  TEST_CASE("TrackQuickFilter - renders action buttons and follows focused view", "[gtk][unit][track][quick-filter]")
+  TEST_CASE("TrackQuickFilter - renders action buttons and follows focused view")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -138,7 +137,7 @@ namespace ao::gtk::test
     CHECK(filter.get_sensitive());
   }
 
-  TEST_CASE("TrackQuickFilter - clear button clears current filter text", "[gtk][unit][track][quick-filter]")
+  TEST_CASE("TrackQuickFilter - clear button clears current filter text")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -163,8 +162,7 @@ namespace ao::gtk::test
     CHECK_FALSE(clearButton->get_visible());
   }
 
-  TEST_CASE("TrackQuickFilter - active class follows focus within the compound control",
-            "[gtk][unit][track][quick-filter]")
+  TEST_CASE("TrackQuickFilter - active class follows focus within the compound control")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -181,8 +179,7 @@ namespace ao::gtk::test
     CHECK_FALSE(filter.has_css_class("ao-quick-filter-active"));
   }
 
-  TEST_CASE("TrackQuickFilter - completes a field trigger through the shared entry controller",
-            "[gtk][unit][track][quick-filter][completion]")
+  TEST_CASE("TrackQuickFilter - completes a field trigger through the shared entry controller")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -218,8 +215,7 @@ namespace ao::gtk::test
     CHECK_FALSE(popover->get_visible());
   }
 
-  TEST_CASE("TrackQuickFilter - retains shared value completion after filter debounce",
-            "[gtk][unit][track][quick-filter][completion][async]")
+  TEST_CASE("TrackQuickFilter - retains shared value completion after filter debounce")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

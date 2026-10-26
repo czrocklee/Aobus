@@ -73,7 +73,7 @@ namespace ao::uimodel::test
     };
   } // namespace
 
-  TEST_CASE("PlaybackPositionViewModel - reactive updates", "[uimodel][integration][playback][seek][async]")
+  TEST_CASE("PlaybackPositionViewModel - reactive updates")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto& playback = fixture.playback;
@@ -209,7 +209,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("PlaybackPositionViewModel - initial view state", "[uimodel][unit][playback]")
+  TEST_CASE("PlaybackPositionViewModel - initial view state")
   {
     auto fixture = ApplicationPlaybackFixture{};
 
@@ -228,8 +228,7 @@ namespace ao::uimodel::test
     CHECK(log.empty());
   }
 
-  TEST_CASE("PlaybackPositionViewModel - relative seek samples the live clock after headless construction",
-            "[uimodel][integration][playback][seek]")
+  TEST_CASE("PlaybackPositionViewModel - relative seek samples the live clock after headless construction")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     auto const cachedElapsed = fixture.playback.snapshot().transport.elapsed;
@@ -253,8 +252,7 @@ namespace ao::uimodel::test
     CHECK(actualElapsed <= liveElapsed + delta);
   }
 
-  TEST_CASE("PlaybackPositionViewModel - orthogonal publication does not freeze the relative seek clock",
-            "[uimodel][integration][playback][seek]")
+  TEST_CASE("PlaybackPositionViewModel - orthogonal publication does not freeze the relative seek clock")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     auto viewModel =
@@ -277,8 +275,7 @@ namespace ao::uimodel::test
     CHECK(seekEvents.front().elapsed == liveElapsed + delta);
   }
 
-  TEST_CASE("PlaybackPositionViewModel - reentrant relative seeks accumulate from each execution-live target",
-            "[uimodel][integration][playback][seek][async]")
+  TEST_CASE("PlaybackPositionViewModel - reentrant relative seeks accumulate from each execution-live target")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     fixture.playback.commands().pause();
@@ -319,8 +316,7 @@ namespace ao::uimodel::test
     CHECK(after.finalSeekRevision.value == before.finalSeekRevision.value + 2);
   }
 
-  TEST_CASE("PlaybackPositionViewModel - queued navigation retires a stale relative seek occurrence",
-            "[uimodel][integration][playback][seek][async]")
+  TEST_CASE("PlaybackPositionViewModel - queued navigation retires a stale relative seek occurrence")
   {
     auto fixture = PlaybackRelativeSeekFixture{};
     auto viewModel =
@@ -354,8 +350,7 @@ namespace ao::uimodel::test
     CHECK(seekEvents.empty());
   }
 
-  TEST_CASE("PlaybackPositionViewModel - transport seeks render preview and final modes",
-            "[uimodel][unit][playback][seek]")
+  TEST_CASE("PlaybackPositionViewModel - transport seeks render preview and final modes")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto& playback = fixture.playback;

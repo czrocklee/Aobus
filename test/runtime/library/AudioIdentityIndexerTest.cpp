@@ -244,7 +244,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("AudioIdentityIndexer - fills pending available manifest rows", "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - fills pending available manifest rows")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -264,8 +264,7 @@ namespace ao::rt::test
     CHECK(hasManifestIdentity(ml, "song.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows",
-            "[runtime][unit][library][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -293,8 +292,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AudioIdentityIndexer - processes pending rows across range-cursor batch boundaries",
-            "[runtime][unit][library][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - processes pending rows across range-cursor batch boundaries", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -326,8 +324,7 @@ namespace ao::rt::test
     CHECK(hasManifestIdentity(ml, "song-0256.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently",
-            "[runtime][unit][library][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -366,8 +363,7 @@ namespace ao::rt::test
     CHECK(hasManifestIdentity(ml, "b.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - mutation lock is free while fingerprinting",
-            "[runtime][unit][library][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - mutation lock is free while fingerprinting", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -402,8 +398,7 @@ namespace ao::rt::test
     CHECK(identity.audioSignature == fakeIdentity().signature);
   }
 
-  TEST_CASE("AudioIdentityIndexer - single fingerprint failure does not abort the index",
-            "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - single fingerprint failure does not abort the index")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -449,8 +444,7 @@ namespace ao::rt::test
     CHECK(failures.front().message == "injected fingerprint failure");
   }
 
-  TEST_CASE("AudioIdentityIndexer - rejects a stored URI whose symlink now escapes the root",
-            "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - rejects a stored URI whose symlink now escapes the root")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -476,8 +470,7 @@ namespace ao::rt::test
     CHECK(failures.front().message.contains("outside the library root"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - skips rows whose file stat changed before write",
-            "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - skips rows whose file stat changed before write")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -515,7 +508,7 @@ namespace ao::rt::test
     CHECK_FALSE(hasManifestIdentity(ml, "song.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - leaves existing identity untouched", "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - leaves existing identity untouched")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -537,8 +530,7 @@ namespace ao::rt::test
     CHECK(afterIdentity.audioSignature == originalIdentity.audioSignature);
   }
 
-  TEST_CASE("AudioIdentityIndexer - cancellation preserves pending rows",
-            "[runtime][unit][library][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - cancellation preserves pending rows", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -565,8 +557,7 @@ namespace ao::rt::test
     CHECK_FALSE(hasManifestIdentity(ml, "song.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - batch write skips only rows changed mid-batch",
-            "[runtime][unit][library][audio-identity]")
+  TEST_CASE("AudioIdentityIndexer - batch write skips only rows changed mid-batch")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -603,8 +594,7 @@ namespace ao::rt::test
     CHECK(bIdentity.audioSignature == utility::xxh3Hash128("test-identity"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - cancellation preserves committed work and the next run resumes",
-            "[runtime][unit][library][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - cancellation preserves committed work and the next run resumes", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -643,8 +633,7 @@ namespace ao::rt::test
     CHECK(hasManifestIdentity(ml, "b.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - carrier backfill hashes one physical row and keeps all member IDs",
-            "[runtime][integration][audio-identity][concurrency]")
+  TEST_CASE("AudioIdentityIndexer - carrier backfill hashes one physical row and keeps all member IDs", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";

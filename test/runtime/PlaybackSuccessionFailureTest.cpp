@@ -115,8 +115,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackSuccession - accepted final decoder failures stop after three committed attempts",
-            "[runtime][unit][playback-succession]")
+  TEST_CASE("PlaybackSuccession - accepted final decoder failures stop after three committed attempts")
   {
     auto const repeatMode = GENERATE(RepeatMode::One, RepeatMode::Off);
     CAPTURE(repeatMode);
@@ -173,8 +172,7 @@ namespace ao::rt::test
     CHECK(failureLimit->lifetime == NotificationLifetime::pinned());
   }
 
-  TEST_CASE("PlaybackSuccession - unannounced successful recovery resets the failure streak",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - unannounced successful recovery resets the failure streak", "[concurrency]")
   {
     std::size_t committedStarts = 0;
     auto failureGate = audio::test::StagedFailureGate{};
@@ -233,8 +231,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackSuccession - backend route refusals skip ahead to the next playable route",
-            "[runtime][unit][playback-succession][failure]")
+  TEST_CASE("PlaybackSuccession - backend route refusals skip ahead to the next playable route")
   {
     // The script must be declared before the fixture: the SpyBackend open
     // stub captures it by reference, and the fixture teardown (including the
@@ -271,8 +268,7 @@ namespace ao::rt::test
     CHECK(report.count == 2);
   }
 
-  TEST_CASE("PlaybackSuccession - three backend route refusals stop before a fourth committed start",
-            "[runtime][unit][playback-succession][failure]")
+  TEST_CASE("PlaybackSuccession - three backend route refusals stop before a fourth committed start")
   {
     auto script = BackendOpenScript{.incompatibleOpenNumbers = {1, 2, 3}};
     auto fixture = PlaybackSuccessionTransportFixture{};
@@ -332,8 +328,7 @@ namespace ao::rt::test
     CHECK(failureLimit->lifetime == NotificationLifetime::pinned());
   }
 
-  TEST_CASE("PlaybackSuccession - backend output fault stops immediately despite the shared error",
-            "[runtime][unit][playback-succession][failure]")
+  TEST_CASE("PlaybackSuccession - backend output fault stops immediately despite the shared error")
   {
     auto script = BackendOpenScript{.outputFaultOpenNumber = 1};
     auto fixture = PlaybackSuccessionTransportFixture{};
@@ -374,8 +369,7 @@ namespace ao::rt::test
     CHECK(report.detail == "scripted output route refusal");
   }
 
-  TEST_CASE("PlaybackSuccession - prepared drain fallback preserves typed backend refusal semantics",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - prepared drain fallback preserves typed backend refusal semantics", "[concurrency]")
   {
     auto const cause = GENERATE(
       audio::BackendOpenFailure::Cause::TrackRouteIncompatible, audio::BackendOpenFailure::Cause::OutputFailure);
@@ -483,8 +477,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackSuccession - a successful backend open alone does not clear the failure streak",
-            "[runtime][unit][playback-succession][failure]")
+  TEST_CASE("PlaybackSuccession - a successful backend open alone does not clear the failure streak")
   {
     // The third route opens successfully, but its final decoder setup still
     // fails as a recoverable track failure. A mere successful open must not
@@ -540,8 +533,7 @@ namespace ao::rt::test
     CHECK(failureLimit->lifetime == NotificationLifetime::pinned());
   }
 
-  TEST_CASE("PlaybackSuccession - an actually started backend route clears the failure streak",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - an actually started backend route clears the failure streak", "[concurrency]")
   {
     auto script = BackendOpenScript{.incompatibleOpenNumbers = {1, 2, 4}};
     auto failureGate = audio::test::StagedFailureGate{};
@@ -601,8 +593,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackSuccession - accepted final decoder failure skips the failed candidate",
-            "[runtime][unit][playback-succession][failure]")
+  TEST_CASE("PlaybackSuccession - accepted final decoder failure skips the failed candidate")
   {
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
       .finalOpenFailureFileNames = {"transport-playable-2.flac"},
@@ -632,8 +623,7 @@ namespace ao::rt::test
     CHECK(report.count == 1);
   }
 
-  TEST_CASE("PlaybackSuccession - navigation stops after three consecutive unplayable candidates",
-            "[runtime][unit][playback-succession][failure]")
+  TEST_CASE("PlaybackSuccession - navigation stops after three consecutive unplayable candidates")
   {
     auto fixture = PlaybackSuccessionFixture{};
     auto const playable = fixture.addPlayableTrack("Current");
@@ -681,8 +671,7 @@ namespace ao::rt::test
     CHECK(failureLimit->lifetime == NotificationLifetime::pinned());
   }
 
-  TEST_CASE("PlaybackSuccession - non-recoverable device failure terminates the active session",
-            "[runtime][unit][playback-succession][failure]")
+  TEST_CASE("PlaybackSuccession - non-recoverable device failure terminates the active session")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -707,7 +696,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSuccession - track failure on an invalidated source posts one terminal succession error",
-            "[runtime][unit][playback-succession][concurrency]")
+            "[concurrency]")
   {
     auto failureGate = audio::test::StagedFailureGate{};
     auto fixture = PlaybackSuccessionSeekFixture{&failureGate};
@@ -735,8 +724,7 @@ namespace ao::rt::test
     CHECK(report.detail == "gated staged decode failure");
   }
 
-  TEST_CASE("PlaybackSuccession - shuffle failure walks preserve shuffle direction and semantic parity",
-            "[runtime][unit][playback-succession][shuffle]")
+  TEST_CASE("PlaybackSuccession - shuffle failure walks preserve shuffle direction and semantic parity")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();

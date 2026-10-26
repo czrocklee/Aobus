@@ -44,8 +44,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackCommands guarded seek - same-track lower replay rejects a stale published occurrence",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackCommands guarded seek - same-track lower replay rejects a stale published occurrence")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);
@@ -95,8 +94,7 @@ namespace ao::rt::test
     CHECK(previews.empty());
   }
 
-  TEST_CASE("PlaybackCommands trySeek - valid occurrence accepts previews and consecutive final seeks",
-            "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackCommands trySeek - valid occurrence accepts previews and consecutive final seeks")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);
@@ -150,8 +148,7 @@ namespace ao::rt::test
           started.transport.finalSeekRevision.value + 2);
   }
 
-  TEST_CASE("PlaybackCommands guarded seek - orthogonal backlog preserves preview and final settlement",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackCommands guarded seek - orthogonal backlog preserves preview and final settlement")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);
@@ -196,8 +193,7 @@ namespace ao::rt::test
     CHECK(previews.front() == std::chrono::milliseconds{50});
   }
 
-  TEST_CASE("PlaybackService - elapsed retains its committed anchor across lower same-track replay",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService - elapsed retains its committed anchor across lower same-track replay")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);
@@ -218,8 +214,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.elapsed() == std::chrono::milliseconds{0});
   }
 
-  TEST_CASE("PlaybackCommands guarded seek - service destruction discards already queued positioning",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackCommands guarded seek - service destruction discards already queued positioning")
   {
     auto fixture = ApplicationPlaybackFixtureT<ManualExecutor>{};
     preparePlayback(fixture);

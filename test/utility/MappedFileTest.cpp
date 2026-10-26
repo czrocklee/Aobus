@@ -14,7 +14,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("MappedFile - maps files and reports failed mappings", "[utility][unit][mapped-file]")
+  TEST_CASE("MappedFile - maps files and reports failed mappings")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const testFilePath = tempDir.path() / "test.bin";
@@ -110,7 +110,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("MappedFile - a failed remap leaves the previous mapping closed", "[utility][unit][mapped-file]")
+  TEST_CASE("MappedFile - a failed remap leaves the previous mapping closed")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const path = tempDir.path() / "present.bin";

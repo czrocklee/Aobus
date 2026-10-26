@@ -45,7 +45,7 @@ struct ao::yaml::ReflectNameOverrides<ao::cli::test::EmitReportDto>
 
 namespace ao::cli::test
 {
-  TEST_CASE("Output - emitDocument writes reflected YAML documents", "[cli][unit][output]")
+  TEST_CASE("Output - emitDocument writes reflected YAML documents")
   {
     auto os = std::ostringstream{};
     emitDocument(os, OutputFormat::Yaml, EmitReportDto{.name = "alpha", .count = 2, .ok = true, .ids = {4, 8}});
@@ -62,7 +62,7 @@ namespace ao::cli::test
     CHECK_FALSE(tree.rootref()["omitted"].readable());
   }
 
-  TEST_CASE("Output - emitDocument writes reflected JSON documents", "[cli][unit][output]")
+  TEST_CASE("Output - emitDocument writes reflected JSON documents")
   {
     auto os = std::ostringstream{};
     emitDocument(os, OutputFormat::Json, EmitReportDto{.name = "be\"ta", .count = 3, .ok = true, .ids = {5}});
@@ -95,7 +95,7 @@ namespace ao::cli::test
     CHECK(remaining.find_first_not_of(" \t\r\n") == std::string_view::npos);
   }
 
-  TEST_CASE("Output - emitDocument skips plain output", "[cli][unit][output]")
+  TEST_CASE("Output - emitDocument skips plain output")
   {
     auto os = std::ostringstream{};
     emitDocument(os, OutputFormat::Plain, EmitReportDto{.name = "plain"});

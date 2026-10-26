@@ -154,8 +154,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("FlacDecoderSession - reference WAV conversions play without borrowing WAV mask trimming",
-            "[audio][integration][flac][wav]")
+  TEST_CASE("FlacDecoderSession - reference WAV conversions play without borrowing WAV mask trimming")
   {
     // Independently authored interleaved S16LE PCM, also the WAV preimage:
     // (0x1211, -0x2322), (-0x3433, 0x4645), (0x5857, -0x6A69).

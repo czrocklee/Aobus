@@ -110,8 +110,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("TrackListProjection - 10k sorted insertion publishes one exact leading range",
-            "[runtime][unit][projection][scale]")
+  TEST_CASE("TrackListProjection - 10k sorted insertion publishes one exact leading range")
   {
     auto fixture = ScaleProjectionFixture{};
     auto& projection = fixture.projection();
@@ -151,8 +150,7 @@ namespace ao::rt::test
     CHECK(projection.indexOf(fixture.trackIds.back()) == projection.size() - 1);
   }
 
-  TEST_CASE("TrackListProjection - 10k index lookup retains exact boundary and middle positions",
-            "[runtime][unit][projection][scale]")
+  TEST_CASE("TrackListProjection - 10k index lookup retains exact boundary and middle positions")
   {
     auto fixture = ScaleProjectionFixture{};
     auto& projection = fixture.projection();
@@ -177,8 +175,7 @@ namespace ao::rt::test
     CHECK_FALSE(projection.indexOf(TrackId{999999}).has_value());
   }
 
-  TEST_CASE("TrackListProjection - 10k detached mutations publish exact remove and update ranges",
-            "[runtime][unit][projection][scale]")
+  TEST_CASE("TrackListProjection - 10k detached mutations publish exact remove and update ranges")
   {
     auto fixture = ScaleProjectionFixture{};
     auto& projection = fixture.projection();
@@ -229,8 +226,7 @@ namespace ao::rt::test
     CHECK(projection.trackIdAt(secondUpdate.range.start) == updatedIds[1]);
   }
 
-  TEST_CASE("TrackListProjection - 10k presentation change publishes one reset with rebuilt size visible",
-            "[runtime][unit][projection][scale]")
+  TEST_CASE("TrackListProjection - 10k presentation change publishes one reset with rebuilt size visible")
   {
     auto fixture = ScaleProjectionFixture{};
     auto& projection = fixture.projection();

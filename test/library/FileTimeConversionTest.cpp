@@ -61,8 +61,7 @@ namespace ao::library::test
 #endif
   } // namespace
 
-  TEST_CASE("FileTimeConversion - native modification times use Unix seconds and preserve the fraction",
-            "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - native modification times use Unix seconds and preserve the fraction")
   {
     // These constants name 2024-07-01 12:00:59.500 UTC, independently of the
     // host's file-clock epoch and local zone.
@@ -72,14 +71,14 @@ namespace ao::library::test
     CHECK(timestampRes->nanoseconds == 500000000);
   }
 
-  TEST_CASE("FileTimeConversion - epoch zero is a valid instant", "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - epoch zero is a valid instant")
   {
     auto timestampRes = fileTimestampFromFileTime(unixInstantToFileTime(0, 0));
     REQUIRE(timestampRes);
     CHECK(*timestampRes == FileTimestamp{.seconds = 0, .nanoseconds = 0});
   }
 
-  TEST_CASE("FileTimeConversion - negative seconds retain a nonnegative fraction", "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - negative seconds retain a nonnegative fraction")
   {
     // Half a second before the Unix epoch is (-1, 500000000), not (0, -500000000).
     auto timestampRes = fileTimestampFromFileTime(unixInstantToFileTime(-1, 500000000));
@@ -88,8 +87,7 @@ namespace ao::library::test
     CHECK(timestampRes->nanoseconds == 500000000);
   }
 
-  TEST_CASE("FileTimeConversion - dates beyond the Unix nanosecond range retain their instant",
-            "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - dates beyond the Unix nanosecond range retain their instant")
   {
     // 2300-01-01 00:00:00.750 UTC fits the supported file clocks but exceeds
     // signed 64-bit nanoseconds measured from 1970.
@@ -99,8 +97,7 @@ namespace ao::library::test
     CHECK(timestampRes->nanoseconds == 750000000);
   }
 
-  TEST_CASE("FileTimeConversion - the native lower bound does not overflow while extracting the fraction",
-            "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - the native lower bound does not overflow while extracting the fraction")
   {
     using FileDuration = std::filesystem::file_time_type::duration;
     using FileRep = FileDuration::rep;
@@ -122,8 +119,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("FileTimeConversion - a file's last write time reads as its Unix instant",
-            "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - a file's last write time reads as its Unix instant")
   {
     auto const temp = ao::test::TempDir{};
     auto const path = temp.path() / "song.flac";
@@ -136,8 +132,7 @@ namespace ao::library::test
     CHECK(*timestampRes == FileTimestamp{.seconds = 1719835259, .nanoseconds = 0});
   }
 
-  TEST_CASE("FileTimeConversion - a freshly written file reads near the system clock",
-            "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - a freshly written file reads near the system clock")
   {
     // The filesystem, not a standard-library clock conversion, produces this
     // instant, so an epoch or leap-second offset in that conversion fails here.
@@ -158,7 +153,7 @@ namespace ao::library::test
 
 #if __cpp_lib_chrono >= 201907L
   TEMPLATE_TEST_CASE("FileTimeConversion - a UTC-scale file clock maps leap seconds onto the Unix scale",
-                     "[library][unit][file-timestamp]",
+                     "",
                      std::nano,
                      (std::ratio<1, 10'000'000>))
   {
@@ -199,7 +194,7 @@ namespace ao::library::test
   }
 #endif
 
-  TEST_CASE("FileTimeConversion - a missing file reports an I/O error", "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimeConversion - a missing file reports an I/O error")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -209,8 +204,7 @@ namespace ao::library::test
     CHECK(timestampRes.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("FileTimestamp - comparison orders seconds before the normalized fraction",
-            "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimestamp - comparison orders seconds before the normalized fraction")
   {
     auto const beforeEpoch = FileTimestamp{.seconds = -1, .nanoseconds = 999999999};
     auto const epoch = FileTimestamp{.seconds = 0, .nanoseconds = 0};
@@ -220,7 +214,7 @@ namespace ao::library::test
     CHECK(afterEpoch != epoch);
   }
 
-  TEST_CASE("FileTimestamp - a normalized fraction stays below one second", "[library][unit][file-timestamp]")
+  TEST_CASE("FileTimestamp - a normalized fraction stays below one second")
   {
     CHECK(FileTimestamp{.seconds = -1, .nanoseconds = FileTimestamp::kNanosecondsPerSecond - 1}.isNormalized());
     CHECK_FALSE(FileTimestamp{.seconds = 0, .nanoseconds = FileTimestamp::kNanosecondsPerSecond}.isNormalized());

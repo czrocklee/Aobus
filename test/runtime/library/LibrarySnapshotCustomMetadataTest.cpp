@@ -24,8 +24,7 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("LibrarySnapshot - custom metadata values read owning per-key state under one transaction",
-            "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - custom metadata values read owning per-key state under one transaction")
   {
     auto tempDir = ao::test::TempDir{};
     auto storage = library::test::makeTestMusicLibrary(tempDir.path(), LibraryPaths{tempDir.path()}.databasePath());

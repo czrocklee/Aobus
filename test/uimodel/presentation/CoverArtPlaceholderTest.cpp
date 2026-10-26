@@ -17,7 +17,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("CoverArtPlaceholder - style IDs and slot defaults are stable", "[uimodel][unit][cover-art]")
+  TEST_CASE("CoverArtPlaceholder - style IDs and slot defaults are stable")
   {
     constexpr auto kExpected = std::array{
       CoverArtPlaceholderStyleEntry{CoverArtPlaceholderStyle::Monogram, "monogram"},
@@ -48,7 +48,7 @@ namespace ao::uimodel::test
     CHECK(defaultCoverArtPlaceholderStyle(CoverArtPlaceholderSlot::NowPlaying) == CoverArtPlaceholderStyle::Equalizer);
   }
 
-  TEST_CASE("CoverArtPlaceholder - identity preserves candidate priority", "[uimodel][unit][cover-art]")
+  TEST_CASE("CoverArtPlaceholder - identity preserves candidate priority")
   {
     auto const candidates = std::array<std::string_view, 4>{"", "Synthetic Sun", "Parhelion", "2026"};
     auto const identity = makeCoverArtPlaceholderIdentity(candidates);
@@ -68,7 +68,7 @@ namespace ao::uimodel::test
     CHECK(otherPresentation.monogramColor == CoverArtPlaceholderRgb{134, 111, 171});
   }
 
-  TEST_CASE("CoverArtPlaceholder - monogram handles ASCII Unicode and malformed input", "[uimodel][unit][cover-art]")
+  TEST_CASE("CoverArtPlaceholder - monogram handles ASCII Unicode and malformed input")
   {
     auto const ascii = makeCoverArtPlaceholderPresentation(
       CoverArtPlaceholderStyle::Monogram,
@@ -93,7 +93,7 @@ namespace ao::uimodel::test
     CHECK(empty.monogramSize == CoverArtPlaceholderMonogramSize::Regular);
   }
 
-  TEST_CASE("CoverArtPlaceholder - override monograms are normalized and bounded", "[uimodel][unit][cover-art]")
+  TEST_CASE("CoverArtPlaceholder - override monograms are normalized and bounded")
   {
     auto const compact = makeCoverArtPlaceholderPresentation(CoverArtPlaceholderStyle::Monogram,
                                                              CoverArtPlaceholderIdentity{
@@ -155,7 +155,7 @@ namespace ao::uimodel::test
     CHECK(malformedAfterLimit.monogramSize == CoverArtPlaceholderMonogramSize::Regular);
   }
 
-  TEST_CASE("CoverArtPlaceholder - group headings preserve semantic monograms", "[uimodel][unit][cover-art]")
+  TEST_CASE("CoverArtPlaceholder - group headings preserve semantic monograms")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
 

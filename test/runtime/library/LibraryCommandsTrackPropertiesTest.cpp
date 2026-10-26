@@ -22,8 +22,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryCommands - track Properties commits metadata and tags in one revision",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("LibraryCommands - track Properties commits metadata and tags in one revision")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Before");
@@ -59,8 +58,7 @@ namespace ao::rt::test
     CHECK(std::ranges::contains(track.tags().names(), std::string_view{"Favorite"}));
   }
 
-  TEST_CASE("LibraryCommands - invalid tags reject Properties before metadata mutation",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("LibraryCommands - invalid tags reject Properties before metadata mutation")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Before");
@@ -93,8 +91,7 @@ namespace ao::rt::test
     CHECK(optTrack->tags().empty());
   }
 
-  TEST_CASE("LibraryCommands - conflicting Properties tag edits reject the whole patch",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("LibraryCommands - conflicting Properties tag edits reject the whole patch")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack("Before");

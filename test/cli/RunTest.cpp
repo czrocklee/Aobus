@@ -106,7 +106,7 @@ namespace ao::cli::test
     };
   } // namespace
 
-  TEST_CASE("CLI - version flag reports the application version", "[cli][unit][contract]")
+  TEST_CASE("CLI - version flag reports the application version")
   {
     auto const result = runArgs({"aobus", "--version"});
     REQUIRE(result.status == 0);
@@ -114,7 +114,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, ao::kAppVersion));
   }
 
-  TEST_CASE("CLI - help-all expands command tree and teaching footers", "[cli][unit][contract]")
+  TEST_CASE("CLI - help-all expands command tree and teaching footers")
   {
     auto result = runArgs({"aobus", "--help-all"});
     REQUIRE(result.status == 0);
@@ -126,7 +126,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "$artist + \" - \" + $title"));
   }
 
-  TEST_CASE("CLI - help-all follows parser option and literal boundaries", "[cli][unit][contract]")
+  TEST_CASE("CLI - help-all follows parser option and literal boundaries")
   {
     SECTION("A subcommand can request the recursive help tree")
     {
@@ -154,7 +154,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - bare command groups are usage errors", "[cli][unit][contract]")
+  TEST_CASE("CLI - bare command groups are usage errors")
   {
     auto fixture = CliFixture{};
 
@@ -166,7 +166,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - root option works outside the music root", "[cli][unit][root]")
+  TEST_CASE("CLI - root option works outside the music root")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -183,7 +183,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Test Title"));
   }
 
-  TEST_CASE("CLI - root flag overrides AOBUS_ROOT", "[cli][unit][root]")
+  TEST_CASE("CLI - root flag overrides AOBUS_ROOT")
   {
     auto envFixture = CliFixture{};
     envFixture.copyAudio("basic_metadata.flac", "env.flac");

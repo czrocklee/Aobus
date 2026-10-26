@@ -22,7 +22,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TrackTagPopover - applies only explicit tag changes to the captured batch", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - applies only explicit tag changes to the captured batch")
   {
     auto editor = makeEditor({{.title = "First", .album = "Album"}, {.title = "Second", .album = "Album"}},
                              {},
@@ -46,7 +46,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
   }
 
-  TEST_CASE("TrackTagPopover - accepts multiword new names and cancels drafts directly", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - accepts multiword new names and cancels drafts directly")
   {
     auto editor =
       makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -85,7 +85,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - exact existing-tag query stays clean and Enter closes", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - exact existing-tag query stays clean and Enter closes")
   {
     auto editor = makeEditor({{.title = "First", .album = "Album"}}, {}, {}, {"Acoustic"}, "en", TrackEditorMode::Tags);
     typeText(editor, "Acoustic");
@@ -99,7 +99,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isDirty());
   }
 
-  TEST_CASE("TrackTagPopover - mouse motion preserves the rendered row click target", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - mouse motion preserves the rendered row click target")
   {
     auto editor =
       makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -116,7 +116,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToRemove == std::vector<std::string>{"Jazz"});
   }
 
-  TEST_CASE("TrackTagPopover - narrow rows keep spacing after pending status", "[tui][unit][editor][layout]")
+  TEST_CASE("TrackTagPopover - narrow rows keep spacing after pending status")
   {
     auto editor =
       makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -127,7 +127,7 @@ namespace ao::tui::test
     CHECK(narrow.screen.PixelAt(optStatusBox->x_max + 1, optStatusBox->y_min).character == " ");
   }
 
-  TEST_CASE("TrackTagPopover - outside press cancels a dirty draft", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - outside press cancels a dirty draft")
   {
     auto editor =
       makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -139,7 +139,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isConfirmingDiscard());
   }
 
-  TEST_CASE("TrackTagPopover - exit label distinguishes a clean view from pending tag changes", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - exit label distinguishes a clean view from pending tag changes")
   {
     constexpr auto kLabels = std::array{std::tuple{"en", "Close", "Discard changes"},
                                         std::tuple{"zh-Hans", "关闭", "放弃更改"},
@@ -182,8 +182,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - clearing a new-tag query and filtering an existing tag keep the view clean",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - clearing a new-tag query and filtering an existing tag keep the view clean")
   {
     auto editor =
       makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -205,8 +204,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isConfirmingDiscard());
   }
 
-  TEST_CASE("TrackTagPopover - localized narrow frames retain clickable clean and draft exit controls",
-            "[tui][unit][editor][layout]")
+  TEST_CASE("TrackTagPopover - localized narrow frames retain clickable clean and draft exit controls")
   {
     for (auto const* locale : {"en", "zh-Hans", "zh-Hant", "ja", "de", "es", "fr"})
     {
@@ -270,8 +268,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - narrow failure frames preserve recovery controls and drafts",
-            "[tui][unit][editor][layout]")
+  TEST_CASE("TrackTagPopover - narrow failure frames preserve recovery controls and drafts")
   {
     constexpr auto kVisibleLabels =
       std::array{std::tuple{"de", "Schließen", "Änderungen"}, std::tuple{"fr", "Fermer", "Abandonner"}};
@@ -323,7 +320,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - Tab switches Space between query text and tag intent", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - Tab switches Space between query text and tag intent")
   {
     for (auto const& tab : {ftxui::Event::Tab, ftxui::Event::TabReverse})
     {
@@ -345,7 +342,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - deletion from results restores query focus", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - deletion from results restores query focus")
   {
     for (auto const& deletion : {ftxui::Event::Delete, ftxui::Event::Backspace})
     {
@@ -366,7 +363,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - page navigation reaches distant results and returns to the start", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - page navigation reaches distant results and returns to the start")
   {
     auto tags = std::vector<std::pair<std::string, std::size_t>>{};
 
@@ -398,7 +395,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToRemove == std::vector<std::string>{"A"});
   }
 
-  TEST_CASE("TrackTagPopover - wheel moves result focus in both directions", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - wheel moves result focus in both directions")
   {
     auto editor = makeEditor(
       {{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}, {"Modal", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -418,7 +415,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - single target title identifies the captured track", "[tui][unit][editor][layout]")
+  TEST_CASE("TrackTagPopover - single target title identifies the captured track")
   {
     auto editor = makeEditor({{.title = "So What", .album = "Album"}}, {}, {}, {}, "en", TrackEditorMode::Tags);
     auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
@@ -426,7 +423,7 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("So What"));
   }
 
-  TEST_CASE("TrackTagPopover - short terminals retain clickable cancel and apply", "[tui][unit][editor][layout]")
+  TEST_CASE("TrackTagPopover - short terminals retain clickable cancel and apply")
   {
     for (auto const height : {10, 12})
     {
@@ -453,7 +450,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackTagPopover - query Enter creates an offered name alongside partial matches", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - query Enter creates an offered name alongside partial matches")
   {
     auto editor = makeEditor({{.title = "First", .album = "Album"}}, {}, {}, {"jazzy"}, "en", TrackEditorMode::Tags);
     typeText(editor, "jazz");
@@ -466,7 +463,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{"jazz"});
   }
 
-  TEST_CASE("TrackTagPopover - results activation keeps the explicitly chosen partial match", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - results activation keeps the explicitly chosen partial match")
   {
     auto editor = makeEditor({{.title = "First", .album = "Album"}}, {}, {}, {"jazzy"}, "en", TrackEditorMode::Tags);
     typeText(editor, "jazz");
@@ -477,7 +474,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{"jazzy"});
   }
 
-  TEST_CASE("TrackTagPopover - ready reload shortcut preserves the pending draft", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - ready reload shortcut preserves the pending draft")
   {
     auto editor =
       makeEditor({{.title = "First", .album = "Album"}}, {}, {{"Jazz", 1}}, {}, "en", TrackEditorMode::Tags);
@@ -491,7 +488,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{"new tag"});
   }
 
-  TEST_CASE("TrackTagPopover - narrow results preserve readable names across intent changes", "[tui][unit][editor]")
+  TEST_CASE("TrackTagPopover - narrow results preserve readable names across intent changes")
   {
     for (std::int32_t const width : {24, 32})
     {

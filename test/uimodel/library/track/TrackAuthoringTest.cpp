@@ -80,7 +80,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("TrackAuthoring - preserves text edit input", "[uimodel][unit][track-authoring][codec]")
+  TEST_CASE("TrackAuthoring - preserves text edit input")
   {
     auto const editValue = makeTextEditValue(" Test ");
     auto const* text = std::get_if<std::string>(&editValue);
@@ -94,7 +94,7 @@ namespace ao::uimodel::test
     CHECK(*parsedText == "New Title");
   }
 
-  TEST_CASE("TrackAuthoring - parses uint16 edit text", "[uimodel][unit][track-authoring][codec]")
+  TEST_CASE("TrackAuthoring - parses uint16 edit text")
   {
     SECTION("valid number")
     {
@@ -155,7 +155,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackAuthoring - writes editable metadata fields", "[uimodel][unit][track-authoring][patch]")
+  TEST_CASE("TrackAuthoring - writes editable metadata fields")
   {
     checkStringField(rt::TrackField::Title, &rt::MetadataPatch::optTitle);
     checkStringField(rt::TrackField::Artist, &rt::MetadataPatch::optArtist);
@@ -175,8 +175,7 @@ namespace ao::uimodel::test
     checkUint16Field(rt::TrackField::MovementTotal, &rt::MetadataPatch::optMovementTotal);
   }
 
-  TEST_CASE("TrackAuthoring - rejects wrong edit value variants without mutation",
-            "[uimodel][unit][track-authoring][patch]")
+  TEST_CASE("TrackAuthoring - rejects wrong edit value variants without mutation")
   {
     auto textPatch = rt::MetadataPatch{};
     textPatch.optTitle = "Before";
@@ -199,8 +198,7 @@ namespace ao::uimodel::test
     CHECK(patchValues(numberPatch) == patchValues(originalNumberPatch));
   }
 
-  TEST_CASE("TrackAuthoring - rejects read-only and synthetic fields without mutation",
-            "[uimodel][unit][track-authoring][patch]")
+  TEST_CASE("TrackAuthoring - rejects read-only and synthetic fields without mutation")
   {
     auto patch = rt::MetadataPatch{};
     patch.optTitle = "Before";
@@ -245,7 +243,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TrackAuthoring - protects aggregate sentinel values", "[uimodel][unit][track-authoring]")
+  TEST_CASE("TrackAuthoring - protects aggregate sentinel values")
   {
     constexpr auto kLocalizedMixedText = "Mehrere Werte";
     auto snap = rt::TrackDetailSnapshot{};

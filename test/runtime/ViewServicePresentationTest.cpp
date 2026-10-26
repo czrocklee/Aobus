@@ -24,8 +24,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ViewService - live locale change preserves captured playbackPtr ordering",
-            "[runtime][unit][view][collation]")
+  TEST_CASE("ViewService - live locale change preserves captured playbackPtr ordering")
   {
     auto env = ViewServiceFixture{};
     auto const umlaut = env.addTrack(library::test::TrackSpec{.title = "ä"});
@@ -54,7 +53,7 @@ namespace ao::rt::test
     CHECK(env.requireProjection(next)->trackIdAt(0) == zed);
   }
 
-  TEST_CASE("ViewService - createView with groupBy applies effective sort", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - createView with groupBy applies effective sort")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -79,7 +78,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - presentation mutation reports a removed view", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - presentation mutation reports a removed view")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -91,7 +90,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ViewService - createView with Album groupBy applies album sort", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - createView with Album groupBy applies album sort")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -115,8 +114,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - absent presentation uses the normal library default for saved Lists",
-            "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - absent presentation uses the normal library default for saved Lists")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -134,8 +132,7 @@ namespace ao::rt::test
     CHECK(state.sortBy == expected.sortBy);
   }
 
-  TEST_CASE("ViewService - explicit presentation wins over the saved List default",
-            "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - explicit presentation wins over the saved List default")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -155,8 +152,7 @@ namespace ao::rt::test
     CHECK(state.sortBy == expected.sortBy);
   }
 
-  TEST_CASE("ViewService - saved Lists and All Tracks retain the normal default presentation",
-            "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - saved Lists and All Tracks retain the normal default presentation")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -174,8 +170,7 @@ namespace ao::rt::test
     CHECK(service.trackListState(savedList).presentation == expected);
   }
 
-  TEST_CASE("ViewService - playback launch capture contains exact list filter and sort only",
-            "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - playback launch capture contains exact list filter and sort only")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -195,7 +190,7 @@ namespace ao::rt::test
     CHECK(missingRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ViewService - setPresentation updates state and projection", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - setPresentation updates state and projection")
   {
     auto env = ViewServiceFixture{};
     auto const rockTrack = env.addTrack(library::test::TrackSpec{.title = "A rock", .genre = "Rock"});
@@ -225,7 +220,7 @@ namespace ao::rt::test
     CHECK(projectionPtr->trackIdAt(1) == rockTrack);
   }
 
-  TEST_CASE("ViewService - setPresentation no-ops on same value", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - setPresentation no-ops on same value")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -247,8 +242,7 @@ namespace ao::rt::test
     CHECK(snapAfter.groupBy == TrackGroupKey::Year);
   }
 
-  TEST_CASE("ViewService - setPresentation applies field changes under the same id and order",
-            "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - setPresentation applies field changes under the same id and order")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -265,7 +259,7 @@ namespace ao::rt::test
     CHECK(state.presentation.visibleFields == presentation.visibleFields);
   }
 
-  TEST_CASE("ViewService - setPresentation publishes PresentationChanged", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - setPresentation publishes PresentationChanged")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -287,7 +281,7 @@ namespace ao::rt::test
     CHECK(received[0].presentation == expected);
   }
 
-  TEST_CASE("ViewService - setPresentation no-op does not publish event", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - setPresentation no-op does not publish event")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -314,8 +308,7 @@ namespace ao::rt::test
     CHECK(callCount == 2);
   }
 
-  TEST_CASE("ViewService - findTrackListPresentation borrows the stored spec and reports a miss",
-            "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - findTrackListPresentation borrows the stored spec and reports a miss")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;

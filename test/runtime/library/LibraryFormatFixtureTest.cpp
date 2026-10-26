@@ -151,15 +151,13 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Library format fixtures - each library format version changes at most once per release",
-            "[runtime][unit][format-fixture]")
+  TEST_CASE("Library format fixtures - each library format version changes at most once per release")
   {
     STATIC_REQUIRE(matchesReleaseRule(library::kLibraryVersion, library::kLastReleasedLibraryVersion));
     STATIC_REQUIRE(matchesReleaseRule(kYamlFormatVersion, kLastReleasedYamlFormatVersion));
   }
 
-  TEST_CASE("Library format fixtures - a library from each platform reads back and accepts a write",
-            "[runtime][integration][import-export][format-fixture]")
+  TEST_CASE("Library format fixtures - a library from each platform reads back and accepts a write")
   {
     auto const expectedYaml = ao::test::readFile(fixtureRoot() / "v1.yaml");
     REQUIRE_FALSE(expectedYaml.empty());
@@ -238,8 +236,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Library format fixtures - the version 1 document restores into an empty library and exports unchanged",
-            "[runtime][integration][import-export][format-fixture]")
+  TEST_CASE("Library format fixtures - the version 1 document restores into an empty library and exports unchanged")
   {
     auto const yamlPath = fixtureRoot() / "v1.yaml";
     auto const temp = ao::test::TempDir{};

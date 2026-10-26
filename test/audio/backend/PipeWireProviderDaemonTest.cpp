@@ -224,7 +224,7 @@ namespace ao::audio::backend::test
     };
   } // namespace
 
-  TEST_CASE("PipeWireProvider - integrates with a real daemon through the API", "[audio][integration][pipewire]")
+  TEST_CASE("PipeWireProvider - integrates with a real daemon through the API")
   {
     auto const envGuard = PipeWireEnvironmentGuard{};
 

@@ -123,7 +123,7 @@ namespace ao::gtk::layout::editor::test
     }
   } // namespace
 
-  TEST_CASE("LayoutEditorDialog - preset session cache preserves dirty edits", "[gtk][unit][layout-editor][session]")
+  TEST_CASE("LayoutEditorDialog - preset session cache preserves dirty edits")
   {
     auto fixture = DialogSessionFixture{};
     std::int32_t loadCount = 0;
@@ -191,8 +191,7 @@ namespace ao::gtk::layout::editor::test
     dialog.close();
   }
 
-  TEST_CASE("LayoutEditorDialog - reset default records reset and modified preset",
-            "[gtk][unit][layout-editor][session]")
+  TEST_CASE("LayoutEditorDialog - reset default records reset and modified preset")
   {
     auto fixture = DialogSessionFixture{};
     auto const customLoader = [](std::string_view presetId) { return presetRootDocument(presetId); };
@@ -243,7 +242,7 @@ namespace ao::gtk::layout::editor::test
     dialog.close();
   }
 
-  TEST_CASE("LayoutEditorDialog - dirty invalid background preset blocks save", "[gtk][unit][layout-editor][session]")
+  TEST_CASE("LayoutEditorDialog - dirty invalid background preset blocks save")
   {
     auto fixture = DialogSessionFixture{};
     std::int32_t loadCount = 0;
@@ -303,8 +302,7 @@ namespace ao::gtk::layout::editor::test
     dialog.close();
   }
 
-  TEST_CASE("LayoutEditorDialog - active preset reset is saved without switching",
-            "[gtk][unit][layout-editor][session]")
+  TEST_CASE("LayoutEditorDialog - active preset reset is saved without switching")
   {
     auto fixture = DialogSessionFixture{};
     auto dialog = LayoutEditorDialog{fixture.window,
@@ -345,8 +343,7 @@ namespace ao::gtk::layout::editor::test
     dialog.close();
   }
 
-  TEST_CASE("LayoutEditorDialog - reset with no active preset leaves the draft unchanged",
-            "[gtk][unit][layout-editor][session]")
+  TEST_CASE("LayoutEditorDialog - reset with no active preset leaves the draft unchanged")
   {
     auto fixture = DialogSessionFixture{};
     auto dialog = LayoutEditorDialog{fixture.window,
@@ -399,8 +396,7 @@ namespace ao::gtk::layout::editor::test
     dialog.close();
   }
 
-  TEST_CASE("LayoutEditorDialog - terminal responses retire a pending property preview",
-            "[gtk][unit][layout-editor][session][async]")
+  TEST_CASE("LayoutEditorDialog - terminal responses retire a pending property preview")
   {
     auto fixture = DialogSessionFixture{};
     auto manualScheduler = sigc::signal<bool()>{};
@@ -461,8 +457,7 @@ namespace ao::gtk::layout::editor::test
     CHECK(previewCount == 0);
   }
 
-  TEST_CASE("LayoutEditorDialog - preset rebind retires the pending property preview",
-            "[gtk][unit][layout-editor][session][async]")
+  TEST_CASE("LayoutEditorDialog - preset rebind retires the pending property preview")
   {
     auto fixture = DialogSessionFixture{};
     auto manualScheduler = sigc::signal<bool()>{};

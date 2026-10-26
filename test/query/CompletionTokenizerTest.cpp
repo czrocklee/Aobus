@@ -108,7 +108,7 @@ namespace ao::query::detail::test
     };
   } // namespace
 
-  TEST_CASE("CompletionTokenizer - tokenizes complete query lexemes", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - tokenizes complete query lexemes")
   {
     checkTokens(R"($artist in ["Miles", "Monk"] and %["Replay Gain"]?)",
                 {
@@ -130,7 +130,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - reports byte offsets for complete Unicode text", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - reports byte offsets for complete Unicode text")
   {
     auto const text = std::string{R"($artist = "Björk")"};
     REQUIRE(text.size() == 18);
@@ -146,7 +146,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - keeps parser keyword boundaries", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - keeps parser keyword boundaries")
   {
     checkTokens("$artistin in9 notation",
                 {
@@ -169,7 +169,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - matches parser keyword casing", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - matches parser keyword casing")
   {
     auto const text = std::string{R"(NoT ($artist IN ["Miles"]) AND ($year = TRUE) Or ($year = FaLsE))"};
     REQUIRE(matchesExpressionSyntax(text));
@@ -210,7 +210,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - classifies incomplete cursor tails", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - classifies incomplete cursor tails")
   {
     checkTokens(R"($artist = "Mil)",
                 {
@@ -227,7 +227,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - rejects invalid string escapes as partial tails", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - rejects invalid string escapes as partial tails")
   {
     // An invalid escape (\x) must not let a later quote close the string.
     checkTokens(R"(%"a\x"=)",
@@ -263,7 +263,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - accepts every shared quoted escape", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - accepts every shared quoted escape")
   {
     constexpr auto kDoubleQuoted = std::array{
       std::string_view{R"("a\"b")"},
@@ -321,7 +321,7 @@ namespace ao::query::detail::test
     }
   }
 
-  TEST_CASE("CompletionTokenizer - tokenizes value completion prefixes", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - tokenizes value completion prefixes")
   {
     checkTokens(R"($artist in ["Miles", Mo)",
                 {
@@ -337,7 +337,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - classifies every operator spelling", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - classifies every operator spelling")
   {
     checkTokens(
       "!= <= >= ~ < > and or && || not ! + ?",
@@ -359,7 +359,7 @@ namespace ao::query::detail::test
       });
   }
 
-  TEST_CASE("CompletionTokenizer - keeps multi-character operators as single tokens", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - keeps multi-character operators as single tokens")
   {
     checkTokens("! =",
                 {{CompletionTokenKind::PrefixOperator, 0, 1, "!"},
@@ -376,7 +376,7 @@ namespace ao::query::detail::test
                  {CompletionTokenKind::Unknown, 2, 3, "."}});
   }
 
-  TEST_CASE("CompletionTokenizer - classifies literal kinds", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - classifies literal kinds")
   {
     checkTokens("true false -42 42 2m30s",
                 {
@@ -392,7 +392,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - classifies grouping and prefix operators", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - classifies grouping and prefix operators")
   {
     checkTokens("not($a=$b)",
                 {
@@ -405,7 +405,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - keeps unknown tokens separate from partial tails", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - keeps unknown tokens separate from partial tails")
   {
     checkTokens("$artist &|.",
                 {
@@ -417,7 +417,7 @@ namespace ao::query::detail::test
                 });
   }
 
-  TEST_CASE("CompletionTokenizer - classifies partial tail variations", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - classifies partial tail variations")
   {
     checkTokens("$", {{CompletionTokenKind::PartialTail, 0, 1, "$"}});
     checkTokens("@ ", {{CompletionTokenKind::PartialTail, 0, 2, "@ "}});
@@ -431,18 +431,18 @@ namespace ao::query::detail::test
     checkTokens(R"("foo\")", {{CompletionTokenKind::PartialTail, 0, 6, R"("foo\")"}});
   }
 
-  TEST_CASE("CompletionTokenizer - tokenizes complete bracketed quoted variables at end", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - tokenizes complete bracketed quoted variables at end")
   {
     checkTokens(R"(%["Replay Gain"])", {{CompletionTokenKind::Variable, 0, 16, R"(%["Replay Gain"])"}});
   }
 
-  TEST_CASE("CompletionTokenizer - tokenizes empty and whitespace inputs", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - tokenizes empty and whitespace inputs")
   {
     checkTokens("", {});
     checkTokens(" \t\n", {{CompletionTokenKind::Whitespace, 0, 3, " \t\n"}});
   }
 
-  TEST_CASE("CompletionTokenizer - keeps token boundaries parser-acceptable", "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - keeps token boundaries parser-acceptable")
   {
     for (auto const expression : kParserAcceptedExpressions)
     {
@@ -488,8 +488,7 @@ namespace ao::query::detail::test
   // construction, incomplete-but-lexically-clean up to its final byte: the tokenizer must tile it
   // contiguously and recognize every lexeme before the trailing incomplete tail. Only the last token
   // may be an error kind (Unknown/PartialTail) -- that is the in-progress tail the user is still typing.
-  TEST_CASE("CompletionTokenizer - lexes prefixes of valid expressions without interior errors",
-            "[query][unit][completion]")
+  TEST_CASE("CompletionTokenizer - lexes prefixes of valid expressions without interior errors")
   {
     for (auto const expression : kParserAcceptedExpressions)
     {

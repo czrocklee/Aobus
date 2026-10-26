@@ -71,8 +71,7 @@ namespace ao::rt::test
   // afresh, and no saved reference may bind to it. A saved Track that a backup
   // lacks is an ordinary deletion instead and may select a replacement by
   // anchor; the playback restore-matrix tests own that case.
-  TEST_CASE("AppRuntime - state saved before a library restore binds to no object the restore recreated",
-            "[runtime][integration][session][library-import]")
+  TEST_CASE("AppRuntime - state saved before a library restore binds to no object the restore recreated")
   {
     auto tempDir = ao::test::TempDir{};
     auto backupDir = ao::test::TempDir{};

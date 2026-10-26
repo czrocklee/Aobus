@@ -34,8 +34,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackPropertiesEditor - mouse selects pages and fields without changing the draft",
-            "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - mouse selects pages and fields without changing the draft")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     auto rendered = renderElement(editor.renderModal(80, 24), 80, 24);
@@ -56,7 +55,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().metadata.optAlbumArtist == patch.metadata.optAlbumArtist);
   }
 
-  TEST_CASE("TrackPropertiesEditor - pointer motion and release preserve the next click", "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - pointer motion and release preserve the next click")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
@@ -71,7 +70,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isDirty());
   }
 
-  TEST_CASE("TrackPropertiesEditor - clicking the active tab preserves its query", "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - clicking the active tab preserves its query")
   {
     auto editor = makeEditor({{"Blue", "Album"}}, {}, {}, {"Jazz", "Rock"});
     selectTab(editor, TrackEditorTab::Tags);
@@ -82,8 +81,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{"Rock"});
   }
 
-  TEST_CASE("TrackPropertiesEditor - wheel navigation survives pointer motion without changing tag intent",
-            "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - wheel navigation survives pointer motion without changing tag intent")
   {
     auto editor = makeEditor({{"Blue", "Album"}}, {}, {{"Jazz", 1}}, {"Rock"});
     selectTab(editor, TrackEditorTab::Tags);
@@ -101,7 +99,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToRemove.empty());
   }
 
-  TEST_CASE("TrackPropertiesEditor - tag clicks share intent and Apply protocol", "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - tag clicks share intent and Apply protocol")
   {
     auto editor = makeEditor({{"Blue", "Album"}}, {}, {{"Jazz", 1}}, {"Rock"});
     selectTab(editor, TrackEditorTab::Tags);
@@ -116,7 +114,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::Apply);
   }
 
-  TEST_CASE("TrackPropertiesEditor - clickable discard prompt preserves cancellation", "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - clickable discard prompt preserves cancellation")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     typeText(editor, "x");
@@ -146,7 +144,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::Close);
   }
 
-  TEST_CASE("TrackPropertiesEditor - keyboard page changes invalidate old mouse regions", "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - keyboard page changes invalidate old mouse regions")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     auto const rendered = renderElement(editor.renderModal(80, 24), 80, 24);
@@ -157,8 +155,7 @@ namespace ao::tui::test
     CHECK_FALSE(editor.isDirty());
   }
 
-  TEST_CASE("TrackPropertiesEditor - clicking an inline completion accepts that candidate",
-            "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - clicking an inline completion accepts that candidate")
   {
     auto editor = makeEditor(
       {{"Blue", ""}},
@@ -178,8 +175,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == TrackEditorRequest::None);
   }
 
-  TEST_CASE("TrackPropertiesEditor - pointer placement follows a horizontally scrolled field",
-            "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - pointer placement follows a horizontally scrolled field")
   {
     auto const prefix = std::string(80, 'x');
     auto editor = makeEditor({{prefix + "pointer", "Album"}});
@@ -190,8 +186,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().metadata.optTitle == prefix + "_pointer");
   }
 
-  TEST_CASE("TrackPropertiesEditor - tag query pointer placement follows the rendered text origin",
-            "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - tag query pointer placement follows the rendered text origin")
   {
     for (auto const& prefix : {std::string{"place "}, std::string(80, 'x')})
     {
@@ -207,8 +202,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - a submitting write ignores a previously painted close button",
-            "[tui][unit][mouse][editor]")
+  TEST_CASE("TrackPropertiesEditor - a submitting write ignores a previously painted close button")
   {
     auto editor = makeEditor({{"Blue", "Album"}});
     auto const rendered = renderElement(editor.renderModal(48, 18), 48, 18);

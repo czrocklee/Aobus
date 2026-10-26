@@ -11,7 +11,7 @@
 
 namespace ao::audio::detail::test
 {
-  TEST_CASE("TimeConversion - scales timestamps without overflow", "[audio][unit][detail]")
+  TEST_CASE("TimeConversion - scales timestamps without overflow")
   {
     CHECK(saturatingScale(44100, 1000, 44100) == 1000);
     CHECK(saturatingScale(22050, 48000, 44100) == 24000);
@@ -20,7 +20,7 @@ namespace ao::audio::detail::test
           std::numeric_limits<std::uint64_t>::max());
   }
 
-  TEST_CASE("TimeConversion - saturates public millisecond duration", "[audio][unit][detail]")
+  TEST_CASE("TimeConversion - saturates public millisecond duration")
   {
     CHECK(convertToDuration(96000, 48000) == std::chrono::seconds{2});
     CHECK(convertToDuration(1, 0) == std::chrono::milliseconds{0});

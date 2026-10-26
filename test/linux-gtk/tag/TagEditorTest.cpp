@@ -100,7 +100,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("TagEditor - locale adapter orders only equal-frequency tag suggestions", "[gtk][unit][tag][collation]")
+  TEST_CASE("TagEditor - locale adapter orders only equal-frequency tag suggestions")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -140,7 +140,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TagEditor - lays out tag chips across widths and themes", "[gtk][unit][tag][geometry]")
+  TEST_CASE("TagEditor - lays out tag chips across widths and themes")
   {
     constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -330,7 +330,7 @@ namespace ao::gtk::test
     window.unset_child();
   }
 
-  TEST_CASE("TagEditor - routes tag draft interactions", "[gtk][unit][tag]")
+  TEST_CASE("TagEditor - routes tag draft interactions")
   {
     constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

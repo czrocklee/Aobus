@@ -12,7 +12,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - records exact required tag symbols", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - records exact required tag symbols")
   {
     SECTION("Single tag")
     {

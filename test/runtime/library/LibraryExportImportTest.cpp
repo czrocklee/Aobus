@@ -119,8 +119,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - round trip preserves tracks, covers, and lists",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - round trip preserves tracks, covers, and lists")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -292,7 +291,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - round trip preserves hidden List ranks", "[runtime][integration][import-export][list-order]")
+  TEST_CASE("LibraryYaml - round trip preserves hidden List ranks")
   {
     auto const sourceTemp = ao::test::TempDir{};
     auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
@@ -342,7 +341,7 @@ namespace ao::rt::test
     CHECK(iterator == reader.end());
   }
 
-  TEST_CASE("LibraryYaml - restore preserves classical metadata fields", "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - restore preserves classical metadata fields")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -437,7 +436,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - merge updates existing tracks and adds new tracks", "[runtime][integration][import-export]")
+  TEST_CASE("LibraryYaml - merge updates existing tracks and adds new tracks")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -507,8 +506,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - merge distinguishes omitted and empty tag collections",
-            "[runtime][integration][import-export]")
+  TEST_CASE("LibraryYaml - merge distinguishes omitted and empty tag collections")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -573,8 +571,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - import reports counts and dry-run leaves target unchanged",
-            "[runtime][integration][import-export][dry-run]")
+  TEST_CASE("LibraryYaml - import reports counts and dry-run leaves target unchanged")
   {
     SECTION("restore into empty target")
     {
@@ -657,8 +654,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - import canonicalizes track URIs and recovers file sizes",
-            "[runtime][integration][import-export][uri]")
+  TEST_CASE("LibraryYaml - import canonicalizes track URIs and recovers file sizes")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -744,8 +740,7 @@ library:
                          std::array{idsByUri.at("song.flac"), idsByUri.at("song2.flac"), idsByUri.at("song3.flac")}));
   }
 
-  TEST_CASE("LibraryYaml - metadata restore and delta merge report unmapped track references",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - metadata restore and delta merge report unmapped track references")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -879,7 +874,7 @@ library:
     CHECK(addedLists == 1);
   }
 
-  TEST_CASE("LibraryYaml - version 1 rejects unknown root fields", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 rejects unknown root fields")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -905,8 +900,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - metadata import clears absent classical fields from file tags",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - metadata import clears absent classical fields from file tags")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -939,8 +933,7 @@ library:
     CHECK(optView->performance().credits().empty());
   }
 
-  TEST_CASE("LibraryYaml - full transfer preserves modification instants exactly",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - full transfer preserves modification instants exactly")
   {
     struct StampedTrack final
     {
@@ -1008,8 +1001,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - full transfer records an unknown modification time as null",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - full transfer records an unknown modification time as null")
   {
     auto const sourceTemp = ao::test::TempDir{};
     auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
@@ -1054,8 +1046,7 @@ library:
     CHECK_FALSE(optManifest->mtime());
   }
 
-  TEST_CASE("LibraryYaml - restore reads no filesystem fact the document supplies",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - restore reads no filesystem fact the document supplies")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -1092,8 +1083,7 @@ library:
     CHECK(*optManifest->mtime() == FileTimestamp{.seconds = 1719835259, .nanoseconds = 500000000});
   }
 
-  TEST_CASE("LibraryYaml - merge overlays modification instants by presence",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - merge overlays modification instants by presence")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());

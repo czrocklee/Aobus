@@ -89,8 +89,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - round trip preserves date precision and complete canonical credits",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - round trip preserves date precision and complete canonical credits")
   {
     auto date = RecordingDate{};
 
@@ -161,8 +160,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - role absence and literal null text survive round trip",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - role absence and literal null text survive round trip")
   {
     auto const temp = ao::test::TempDir{};
     auto destination = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -197,8 +195,7 @@ namespace ao::rt::test
               { CHECK(library::test::trackSpecFromView(destination, view).credits == expected); });
   }
 
-  TEST_CASE("LibraryYaml - every metadata mode preserves omitted merge credits and replaces present credits",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - every metadata mode preserves omitted merge credits and replaces present credits")
   {
     auto const original = std::vector<Credit>{
       {.name = "Curated", .kind = CreditKind::Soloist, .role = "Piano"}, {.name = "Other", .role = "Guitar"}};
@@ -251,8 +248,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - creation and restore choose credits baselines by payload mode",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - creation and restore choose credits baselines by payload mode")
   {
     for (auto const mode : {ExportMode::Full, ExportMode::Metadata, ExportMode::Delta})
     {
@@ -301,8 +297,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - empty performance metadata round trips explicitly",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - empty performance metadata round trips explicitly")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -323,7 +318,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - list-only transfer leaves credits untouched", "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - list-only transfer leaves credits untouched")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -342,8 +337,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - recording-date empty scalar text clears on merge and invalid text has no effect",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - recording-date empty scalar text clears on merge and invalid text has no effect")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");

@@ -143,7 +143,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("FlacDecoderSession - stable two-frame stream decodes complete authored PCM", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - stable two-frame stream decodes complete authored PCM")
   {
     auto const temp = ao::test::TempFile{buildStableTwoFrameStream(), ".flac"};
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
@@ -178,7 +178,7 @@ namespace ao::audio::test
     CHECK(endRes->bytes.empty());
   }
 
-  TEST_CASE("FlacDecoderSession - requested output encoding adapts the stable stream", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - requested output encoding adapts the stable stream")
   {
     auto const temp = ao::test::TempFile{buildStableTwoFrameStream(), ".flac"};
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, SampleEncoding::Signed32Le));
@@ -208,8 +208,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - requested output encoding still rejects a contradicting frame",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - requested output encoding still rejects a contradicting frame")
   {
     auto const temp = ao::test::TempFile{buildTwoFrameStream(kStreamSampleRate, 3, kStreamBitsPerSample), ".flac"};
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, SampleEncoding::Signed32Le));
@@ -231,8 +230,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - later frames contradicting the stream format are rejected",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - later frames contradicting the stream format are rejected")
   {
     SECTION("Channel count differs from STREAMINFO")
     {
@@ -251,8 +249,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - first frame contradicting the stream fails before any PCM",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - first frame contradicting the stream fails before any PCM")
   {
     auto const temp = ao::test::TempFile{buildFirstFrameMismatchStream(), ".flac"};
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
@@ -274,8 +271,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - seeking into a contradicting frame preserves the failure",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - seeking into a contradicting frame preserves the failure")
   {
     auto const temp = ao::test::TempFile{buildTwoFrameStream(kStreamSampleRate, 3, kStreamBitsPerSample), ".flac"};
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
@@ -307,8 +303,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - flush and seek restore decoding before a contradicting frame",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - flush and seek restore decoding before a contradicting frame")
   {
     auto const temp = ao::test::TempFile{buildTwoFrameStream(kStreamSampleRate, kStreamChannels, 24), ".flac"};
     auto decoderPtr = ao::test::requireValue(FlacDecoderSession::open(temp.path, std::nullopt));
@@ -345,8 +340,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - seek without flush cannot clear a terminal decode failure",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - seek without flush cannot clear a terminal decode failure")
   {
     // Both entry paths into the terminal failure state share this arrange: the
     // intact first frame decodes, and the changed second frame owns the last
@@ -445,8 +439,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - seek failure without a stored format cause repeats without flush",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - seek failure without a stored format cause repeats without flush")
   {
     // The STREAMINFO-only stream declares samples but contains no frames, so
     // seeking has no frame to land on and records no format cause: the
@@ -483,8 +476,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - flush and seek do not recover a stream with no frames",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - flush and seek do not recover a stream with no frames")
   {
     // The STREAMINFO-only stream declares 32 samples but contains no frames,
     // so a seek records no frame to land on and no decoding cause. Neither

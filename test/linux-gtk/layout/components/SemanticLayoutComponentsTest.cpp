@@ -137,7 +137,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("SemanticLayoutComponents - render missing-service errors", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - render missing-service errors")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -207,7 +207,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("SemanticLayoutComponents - renders the ready status message", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - renders the ready status message")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const node = LayoutNode{.type = "status.message"};
@@ -220,8 +220,7 @@ namespace ao::gtk::layout::test
     CHECK(label->get_text() == "Aobus Ready");
   }
 
-  TEST_CASE("SemanticLayoutComponents - open library button invokes its action service",
-            "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - open library button invokes its action service")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto actions = RecordingImportExportActions{};
@@ -242,7 +241,7 @@ namespace ao::gtk::layout::test
     CHECK(actions.openLibraryCount() == 1);
   }
 
-  TEST_CASE("SemanticLayoutComponents - configures native menu widgets", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - configures native menu widgets")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto menuModelPtr = Gio::Menu::create();
@@ -289,7 +288,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("SemanticLayoutComponents - builds detail and selection scopes", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - builds detail and selection scopes")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -337,8 +336,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("SemanticLayoutComponents - configures cover art geometry and placeholder",
-            "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - configures cover art geometry and placeholder")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -419,8 +417,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("SemanticLayoutComponents - field grid leaves scrolling to its layout parent",
-            "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - field grid leaves scrolling to its layout parent")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const node = LayoutNode{.type = "track.fieldGrid"};
@@ -434,8 +431,7 @@ namespace ao::gtk::layout::test
     CHECK(dynamic_cast<Gtk::ScrolledWindow*>(grid != nullptr ? grid->get_parent() : nullptr) == nullptr);
   }
 
-  TEST_CASE("SemanticLayoutComponents - detail undo bar reflects pending undo and rejection",
-            "[gtk][integration][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - detail undo bar reflects pending undo and rejection")
   {
     auto undoTrackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test",
@@ -485,8 +481,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(bar.get_visible());
   }
 
-  TEST_CASE("SemanticLayoutComponents - tag editor retains its empty selection footprint",
-            "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("SemanticLayoutComponents - tag editor retains its empty selection footprint")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -511,8 +506,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("TrackTagEditorComponent - snapshot callbacks outlive the transient build context",
-            "[gtk][unit][layout-component]")
+  TEST_CASE("TrackTagEditorComponent - snapshot callbacks outlive the transient build context")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.tag_editor_transient_context_test",
@@ -538,8 +532,7 @@ namespace ao::gtk::layout::test
     CHECK(directChildLabelTextsByClass(*editor, "ao-tag-chip-current") == std::vector<std::string>{"after-context"});
   }
 
-  TEST_CASE("TrackTagEditorComponent - forwards runtime text order to tag suggestions",
-            "[gtk][unit][layout-component][collation]")
+  TEST_CASE("TrackTagEditorComponent - forwards runtime text order to tag suggestions")
   {
     auto policyRes = i18n::createIcuTextOrderingPolicy("de-DE");
     REQUIRE(policyRes);
@@ -567,8 +560,7 @@ namespace ao::gtk::layout::test
     CHECK(directChildLabelTextsByClass(*editor, "ao-tag-chip-suggested") == std::vector<std::string>{"ä", "z"});
   }
 
-  TEST_CASE("TrackTagEditorComponent - stale completion preserves a replacement selection session",
-            "[gtk][integration][layout-component][library-authoring][concurrency]")
+  TEST_CASE("TrackTagEditorComponent - stale completion preserves a replacement selection session", "[concurrency]")
   {
     auto firstTrackId = kInvalidTrackId;
     auto secondTrackId = kInvalidTrackId;
@@ -638,8 +630,7 @@ namespace ao::gtk::layout::test
     CHECK(runtime.notifications().feed().entries.back().severity == rt::NotificationSeverity::Error);
   }
 
-  TEST_CASE("TrackTagEditorComponent - fallback reports a concurrent retry as busy",
-            "[gtk][integration][layout-component][library-authoring][concurrency]")
+  TEST_CASE("TrackTagEditorComponent - fallback reports a concurrent retry as busy", "[concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -672,8 +663,7 @@ namespace ao::gtk::layout::test
     REQUIRE(tryPumpGtkEventsUntil([&runtime, trackId] { return trackSpecFor(runtime, trackId).tags.size() == 1; }));
   }
 
-  TEST_CASE("TrackDetailUndoController - restores deleted custom metadata",
-            "[gtk][integration][layout-component][semantic]")
+  TEST_CASE("TrackDetailUndoController - restores deleted custom metadata")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -694,8 +684,7 @@ namespace ao::gtk::layout::test
     CHECK(spec.customMetadata[0].second == "Bright");
   }
 
-  TEST_CASE("TrackDetailUndoController - clears pending undo after timeout",
-            "[gtk][unit][layout-component][semantic][async]")
+  TEST_CASE("TrackDetailUndoController - clears pending undo after timeout")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -721,8 +710,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
   }
 
-  TEST_CASE("TrackDetailUndoController - an intervening commit makes undo stale",
-            "[gtk][integration][layout-component][library-authoring]")
+  TEST_CASE("TrackDetailUndoController - an intervening commit makes undo stale")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_undo_test",
@@ -753,8 +741,7 @@ namespace ao::gtk::layout::test
     CHECK(trackSpecFor(runtime, trackId).customMetadata.empty());
   }
 
-  TEST_CASE("TrackDetailUndoController - rejected undo clears the terminal action",
-            "[gtk][integration][layout-component][library-authoring]")
+  TEST_CASE("TrackDetailUndoController - rejected undo clears the terminal action")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -779,8 +766,7 @@ namespace ao::gtk::layout::test
     CHECK(trackSpecFor(fixture.runtime(), trackId).customMetadata.empty());
   }
 
-  TEST_CASE("TrackDetailUndoController - publication may destroy the controller before undo settles",
-            "[gtk][integration][layout-component][semantic][concurrency]")
+  TEST_CASE("TrackDetailUndoController - publication may destroy the controller before undo settles", "[concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -810,8 +796,7 @@ namespace ao::gtk::layout::test
     CHECK(spec.customMetadata.front() == std::pair{std::string{"Mood"}, std::string{"Bright"}});
   }
 
-  TEST_CASE("TrackFieldGrid - a stale authoring session cancels the active editor",
-            "[gtk][unit][layout-component][library-authoring]")
+  TEST_CASE("TrackFieldGrid - a stale authoring session cancels the active editor")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -845,8 +830,7 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
-  TEST_CASE("TrackFieldGrid - an intervening revision cancels custom metadata editing without changing storage",
-            "[gtk][integration][layout-component][library-authoring]")
+  TEST_CASE("TrackFieldGrid - an intervening revision cancels custom metadata editing without changing storage")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_custom_metadata_test",
@@ -890,8 +874,7 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
-  TEST_CASE("TrackFieldGrid - custom metadata delete offers the stored value at the bound revision",
-            "[gtk][integration][layout-component][library-authoring]")
+  TEST_CASE("TrackFieldGrid - custom metadata delete offers the stored value at the bound revision")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -932,8 +915,7 @@ namespace ao::gtk::layout::test
     CHECK(spec.customMetadata.front() == std::pair{std::string{"Mood"}, std::string{"New"}});
   }
 
-  TEST_CASE("TrackFieldGrid - mixed custom metadata values delete without an undo opportunity",
-            "[gtk][integration][layout-component][library-authoring]")
+  TEST_CASE("TrackFieldGrid - mixed custom metadata values delete without an undo opportunity")
   {
     auto first = kInvalidTrackId;
     auto second = kInvalidTrackId;
@@ -979,8 +961,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(undoController.pendingCustomMetadataUndo());
   }
 
-  TEST_CASE("TrackFieldGrid - custom metadata delete eligibility covers common empty and missing values",
-            "[gtk][integration][layout-component][library-authoring]")
+  TEST_CASE("TrackFieldGrid - custom metadata delete eligibility covers common empty and missing values")
   {
     auto first = kInvalidTrackId;
     auto second = kInvalidTrackId;
@@ -1081,8 +1062,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("TrackDetailUndoController - an invalidated session cannot displace or resurrect an undo opportunity",
-            "[gtk][integration][layout-component][library-authoring]")
+  TEST_CASE("TrackDetailUndoController - an invalidated session cannot displace or resurrect an undo opportunity")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_offer_test",
@@ -1153,8 +1133,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("TrackFieldGrid - built-in edit failures restore display and notify",
-            "[gtk][integration][layout-component][library-authoring][concurrency]")
+  TEST_CASE("TrackFieldGrid - built-in edit failures restore display and notify", "[concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{
@@ -1218,8 +1197,7 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
-  TEST_CASE("TrackDetailScope - clears pending detail undo when selection changes",
-            "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("TrackDetailScope - clears pending detail undo when selection changes")
   {
     auto firstTrackId = kInvalidTrackId;
     auto secondTrackId = kInvalidTrackId;
@@ -1261,8 +1239,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(undoBar->get_visible());
   }
 
-  TEST_CASE("TrackDetailUndoBar - restores deleted custom metadata from button",
-            "[gtk][integration][layout-component][semantic][concurrency]")
+  TEST_CASE("TrackDetailUndoBar - restores deleted custom metadata from button", "[concurrency]")
   {
     auto trackId = kInvalidTrackId;
     auto fixture =
@@ -1318,8 +1295,7 @@ namespace ao::gtk::layout::test
     CHECK(hasNotification(runtime.notifications(), rt::NotificationSeverity::Warning, "Library is busy. Try again."));
   }
 
-  TEST_CASE("TrackFieldGrid - add custom metadata writes metadata and clears stale delete undo",
-            "[gtk][integration][layout-component][semantic]")
+  TEST_CASE("TrackFieldGrid - add custom metadata writes metadata and clears stale delete undo")
   {
     auto trackId = kInvalidTrackId;
     auto fixture =
@@ -1389,7 +1365,7 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
-  TEST_CASE("track.quickFilter - wires create smart list action", "[gtk][unit][layout-component][semantic]")
+  TEST_CASE("track.quickFilter - wires create smart list action")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};

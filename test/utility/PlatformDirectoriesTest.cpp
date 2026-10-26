@@ -107,7 +107,7 @@ namespace ao::utility::test
     };
   } // namespace
 
-  TEST_CASE("applicationConfigDirectory - prefers the primary variable", "[utility][unit][platform-directory]")
+  TEST_CASE("applicationConfigDirectory - prefers the primary variable")
   {
 #ifdef _WIN32
     auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
@@ -122,8 +122,7 @@ namespace ao::utility::test
     CHECK(*res == std::filesystem::path{kPrimaryRoot} / kExpectedDirectoryName);
   }
 
-  TEST_CASE("applicationConfigDirectory - falls back when the primary variable is unset",
-            "[utility][unit][platform-directory]")
+  TEST_CASE("applicationConfigDirectory - falls back when the primary variable is unset")
   {
 #ifdef _WIN32
     auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
@@ -148,7 +147,7 @@ namespace ao::utility::test
 #endif
   }
 
-  TEST_CASE("applicationConfigDirectory - an empty variable is treated as unset", "[utility][unit][platform-directory]")
+  TEST_CASE("applicationConfigDirectory - an empty variable is treated as unset")
   {
 #ifdef _WIN32
     auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
@@ -172,8 +171,7 @@ namespace ao::utility::test
 #endif
   }
 
-  TEST_CASE("applicationConfigDirectory - a relative variable is treated as unset",
-            "[utility][unit][platform-directory]")
+  TEST_CASE("applicationConfigDirectory - a relative variable is treated as unset")
   {
     // A relative value resolves against the working directory, so honoring one
     // would put configuration, layout presets, and user CSS wherever the
@@ -209,8 +207,7 @@ namespace ao::utility::test
 
 #ifdef _WIN32
 
-  TEST_CASE("applicationConfigDirectory - reports NotFound when nothing names a location",
-            "[utility][unit][platform-directory]")
+  TEST_CASE("applicationConfigDirectory - reports NotFound when nothing names a location")
   {
     auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
     auto const fallback = ScopedEnvironment{"APPDATA"};
@@ -224,8 +221,7 @@ namespace ao::utility::test
   }
 #else
 
-  TEST_CASE("applicationConfigDirectory - falls back to the account entry without HOME",
-            "[utility][unit][platform-directory]")
+  TEST_CASE("applicationConfigDirectory - falls back to the account entry without HOME")
   {
     // A service-style or `env -i` session exports no HOME. GLib consults the
     // password database there, and GTK reaches this helper through the same
@@ -243,7 +239,7 @@ namespace ao::utility::test
   }
 #endif
 
-  TEST_CASE("applicationCacheDirectory - prefers the primary variable", "[utility][unit][platform-directory]")
+  TEST_CASE("applicationCacheDirectory - prefers the primary variable")
   {
 #ifdef _WIN32
     auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
@@ -266,7 +262,7 @@ namespace ao::utility::test
 
 #ifdef _WIN32
 
-  TEST_CASE("applicationCacheDirectory - a roaming profile is not a candidate", "[utility][unit][platform-directory]")
+  TEST_CASE("applicationCacheDirectory - a roaming profile is not a candidate")
   {
     // A cache under APPDATA would be synchronized between machines, which is
     // work for bytes any machine can rebuild for itself. With no local profile
@@ -282,8 +278,7 @@ namespace ao::utility::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset",
-            "[utility][unit][platform-directory]")
+  TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset")
   {
     auto const primary = ScopedEnvironment{"LOCALAPPDATA"};
     auto const roaming = ScopedEnvironment{"APPDATA"};
@@ -299,7 +294,7 @@ namespace ao::utility::test
   }
 #else
 
-  TEST_CASE("applicationCacheDirectory - falls back to the home cache directory", "[utility][unit][platform-directory]")
+  TEST_CASE("applicationCacheDirectory - falls back to the home cache directory")
   {
     // The fallback is `.cache`, not the `.config` the sibling resolver uses: a
     // derived cache in the configuration directory would be backed up and synced
@@ -315,8 +310,7 @@ namespace ao::utility::test
     CHECK(*res == std::filesystem::path{kHomeRoot} / ".cache" / kExpectedDirectoryName);
   }
 
-  TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset",
-            "[utility][unit][platform-directory]")
+  TEST_CASE("applicationCacheDirectory - an empty or relative variable is treated as unset")
   {
     auto const primary = ScopedEnvironment{"XDG_CACHE_HOME"};
     auto const home = ScopedEnvironment{"HOME"};
@@ -335,8 +329,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("applicationCacheDirectory - falls back to the account entry without HOME",
-            "[utility][unit][platform-directory]")
+  TEST_CASE("applicationCacheDirectory - falls back to the account entry without HOME")
   {
     auto const primary = ScopedEnvironment{"XDG_CACHE_HOME"};
     auto const home = ScopedEnvironment{"HOME"};

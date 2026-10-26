@@ -37,7 +37,7 @@ namespace ao::media::ogg::test
   static_assert(std::is_nothrow_move_constructible_v<Demuxer>);
   static_assert(!std::is_move_assignable_v<Demuxer>);
 
-  TEST_CASE("Ogg Demuxer - rejects content that cannot start a logical bitstream", "[media][unit][ogg][error]")
+  TEST_CASE("Ogg Demuxer - rejects content that cannot start a logical bitstream")
   {
     SECTION("Empty input is corrupt")
     {
@@ -83,7 +83,7 @@ namespace ao::media::ogg::test
     }
   }
 
-  TEST_CASE("Ogg Demuxer - a page cut short by the end of the file ends the bitstream", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - a page cut short by the end of the file ends the bitstream")
   {
     auto const pages = std::array{Page{.headerType = kBeginOfStreamFlag,
                                        .granulePosition = 480,
@@ -108,8 +108,7 @@ namespace ao::media::ogg::test
     CHECK(demuxerRes->hasIncompleteTail());
   }
 
-  TEST_CASE("Ogg Demuxer - rejects a continuation flag that contradicts the packet in progress",
-            "[media][unit][ogg][error]")
+  TEST_CASE("Ogg Demuxer - rejects a continuation flag that contradicts the packet in progress")
   {
     SECTION("A continuation without an open packet is corrupt")
     {
@@ -137,7 +136,7 @@ namespace ao::media::ogg::test
     }
   }
 
-  TEST_CASE("Ogg Demuxer - rejects begin-of-stream on a later selected page", "[media][unit][ogg][error]")
+  TEST_CASE("Ogg Demuxer - rejects begin-of-stream on a later selected page")
   {
     auto const pages =
       std::array{Page{.headerType = kBeginOfStreamFlag, .lacingValues = lacingFor({4}), .payload = payloadFor({4})},
@@ -154,7 +153,7 @@ namespace ao::media::ogg::test
     CHECK(res.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("Ogg Demuxer - recovers the packets of a single page", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - recovers the packets of a single page")
   {
     auto const pages = std::array{Page{.headerType = kBeginOfStreamFlag | kEndOfStreamFlag,
                                        .granulePosition = 960,
@@ -182,7 +181,7 @@ namespace ao::media::ogg::test
     CHECK_FALSE(demuxer.hasIncompleteTail());
   }
 
-  TEST_CASE("Ogg Demuxer - preserves a zero-length packet", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - preserves a zero-length packet")
   {
     auto const pages = std::array{Page{.headerType = kBeginOfStreamFlag | kEndOfStreamFlag,
                                        .granulePosition = 480,
@@ -197,7 +196,7 @@ namespace ao::media::ogg::test
     CHECK(demuxerRes->packet(2).bytes.size() == 4);
   }
 
-  TEST_CASE("Ogg Demuxer - terminates a packet whose size is a multiple of the lacing limit", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - terminates a packet whose size is a multiple of the lacing limit")
   {
     auto const pages = std::array{Page{.headerType = kBeginOfStreamFlag | kEndOfStreamFlag,
                                        .granulePosition = 480,
@@ -212,7 +211,7 @@ namespace ao::media::ogg::test
     CHECK_FALSE(demuxerRes->hasIncompleteTail());
   }
 
-  TEST_CASE("Ogg Demuxer - reassembles a packet that spans pages", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - reassembles a packet that spans pages")
   {
     SECTION("Two pages")
     {
@@ -282,7 +281,7 @@ namespace ao::media::ogg::test
     }
   }
 
-  TEST_CASE("Ogg Demuxer - rejects a gap in the page sequence", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - rejects a gap in the page sequence")
   {
     SECTION("A missing page between two complete packets is corrupt")
     {
@@ -357,7 +356,7 @@ namespace ao::media::ogg::test
     }
   }
 
-  TEST_CASE("Ogg Demuxer - groups the packets completing on each page", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - groups the packets completing on each page")
   {
     auto const pages = std::array{Page{.headerType = kBeginOfStreamFlag,
                                        .granulePosition = 960,
@@ -387,7 +386,7 @@ namespace ao::media::ogg::test
     CHECK(last.endsOnEndOfStreamPage);
   }
 
-  TEST_CASE("Ogg Demuxer - exposes only the first logical bitstream", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - exposes only the first logical bitstream")
   {
     SECTION("Pages of a multiplexed serial are skipped")
     {
@@ -433,7 +432,7 @@ namespace ao::media::ogg::test
     }
   }
 
-  TEST_CASE("Ogg Demuxer - reports an incomplete ending", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - reports an incomplete ending")
   {
     SECTION("A stream without an end-of-stream page is incomplete")
     {
@@ -485,7 +484,7 @@ namespace ao::media::ogg::test
     }
   }
 
-  TEST_CASE("Ogg Demuxer - names the position a restart resumes from even without a page granule", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - names the position a restart resumes from even without a page granule")
   {
     // The middle page completes a packet while declaring no granule position,
     // which the Ogg specification does not allow. The restart position must
@@ -512,7 +511,7 @@ namespace ao::media::ogg::test
     CHECK(restart.granulePosition == 1000);
   }
 
-  TEST_CASE("Ogg Demuxer - maps a granule position to its page restart point", "[media][unit][ogg]")
+  TEST_CASE("Ogg Demuxer - maps a granule position to its page restart point")
   {
     auto const pages = std::array{
       Page{.headerType = kBeginOfStreamFlag,

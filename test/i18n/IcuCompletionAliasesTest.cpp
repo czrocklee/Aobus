@@ -27,7 +27,7 @@ namespace ao::i18n::test
     }
   } // namespace
 
-  TEST_CASE("IcuCompletionAliases - Kana runs produce useful romanized spellings", "[runtime][unit][completion-alias]")
+  TEST_CASE("IcuCompletionAliases - Kana runs produce useful romanized spellings")
   {
     auto const policyPtr = createIcuCompletionAliasPolicy();
 
@@ -37,8 +37,7 @@ namespace ao::i18n::test
     CHECK(aliasesFor(*policyPtr, "あ゙いう") == std::vector<std::string>{"aiu"});
   }
 
-  TEST_CASE("IcuCompletionAliases - punctuation-separated Kana runs add one combined spelling",
-            "[runtime][unit][completion-alias]")
+  TEST_CASE("IcuCompletionAliases - punctuation-separated Kana runs add one combined spelling")
   {
     auto const policyPtr = createIcuCompletionAliasPolicy();
 
@@ -48,8 +47,7 @@ namespace ao::i18n::test
           std::vector<std::string>{"hanbato", "hanbatonohanbato"});
   }
 
-  TEST_CASE("IcuCompletionAliases - Han-only values use the explicit Mandarin transform",
-            "[runtime][unit][completion-alias]")
+  TEST_CASE("IcuCompletionAliases - Han-only values use the explicit Mandarin transform")
   {
     auto const policyPtr = createIcuCompletionAliasPolicy();
 
@@ -60,8 +58,7 @@ namespace ao::i18n::test
     CHECK(aliasesFor(*policyPtr, "音乐") == std::vector<std::string>{"yinle"});
   }
 
-  TEST_CASE("IcuCompletionAliases - values without useful distinct romanization produce no aliases",
-            "[runtime][unit][completion-alias]")
+  TEST_CASE("IcuCompletionAliases - values without useful distinct romanization produce no aliases")
   {
     auto const policyPtr = createIcuCompletionAliasPolicy();
 
@@ -72,8 +69,7 @@ namespace ao::i18n::test
     CHECK(aliasesFor(*policyPtr, "").empty());
   }
 
-  TEST_CASE("IcuCompletionAliases - caller storage is replaced and admitted text is enforced",
-            "[runtime][unit][completion-alias]")
+  TEST_CASE("IcuCompletionAliases - caller storage is replaced and admitted text is enforced")
   {
     auto const policyPtr = createIcuCompletionAliasPolicy();
     auto aliases = std::vector<std::string>{"stale"};

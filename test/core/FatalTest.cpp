@@ -28,7 +28,7 @@ namespace ao::test
     }
   } // namespace
 
-  TEST_CASE("Fatal - category names are stable", "[utility][unit][fatal]")
+  TEST_CASE("Fatal - category names are stable")
   {
     auto const categories = std::array{
       FatalCategory::Expects,
@@ -55,7 +55,7 @@ namespace ao::test
     CHECK(fatalCategoryName(static_cast<FatalCategory>(255)) == "unknown");
   }
 
-  TEST_CASE("Fatal - successful contracts are lazy", "[utility][unit][fatal]")
+  TEST_CASE("Fatal - successful contracts are lazy")
   {
     std::int32_t conditionEvaluations = 0;
     std::int32_t contextEvaluations = 0;
@@ -69,7 +69,7 @@ namespace ao::test
     CHECK(contextEvaluations == 0);
   }
 
-  TEST_CASE("Fatal - sink registration preserves exact ownership", "[utility][unit][fatal]")
+  TEST_CASE("Fatal - sink registration preserves exact ownership")
   {
     REQUIRE(tryRegisterFatalSink(&tryAcceptFirstFatal));
     [[maybe_unused]] auto registration =
@@ -82,7 +82,7 @@ namespace ao::test
     CHECK_FALSE(tryUnregisterFatalSink(nullptr));
   }
 
-  TEST_CASE("Fatal - concurrent sink registration has one winner", "[utility][unit][fatal][concurrency]")
+  TEST_CASE("Fatal - concurrent sink registration has one winner", "[concurrency]")
   {
     auto start = std::barrier{3};
     auto results = std::array<std::atomic_bool, 2>{};

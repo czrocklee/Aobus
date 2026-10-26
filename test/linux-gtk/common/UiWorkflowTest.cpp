@@ -71,7 +71,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("UiWorkflow - body enters on the callback executor", "[gtk][unit][uiworkflow][concurrency]")
+  TEST_CASE("UiWorkflow - body enters on the callback executor", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
@@ -97,8 +97,7 @@ namespace ao::gtk::test
     CHECK(scope.empty());
   }
 
-  TEST_CASE("UiWorkflow - cancellation before callback admission suppresses the body",
-            "[gtk][unit][uiworkflow][concurrency]")
+  TEST_CASE("UiWorkflow - cancellation before callback admission suppresses the body", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
@@ -123,7 +122,7 @@ namespace ao::gtk::test
     CHECK(scope.empty());
   }
 
-  TEST_CASE("UiWorkflow - result tasks complete on the callback executor", "[gtk][unit][uiworkflow][concurrency]")
+  TEST_CASE("UiWorkflow - result tasks complete on the callback executor", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};
@@ -154,7 +153,7 @@ namespace ao::gtk::test
     CHECK(scope.empty());
   }
 
-  TEST_CASE("UiWorkflow - owner cancellation suppresses a late result callback", "[gtk][unit][uiworkflow][concurrency]")
+  TEST_CASE("UiWorkflow - owner cancellation suppresses a late result callback", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = async::Runtime{executor};

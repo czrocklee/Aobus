@@ -32,7 +32,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryCommands - updateMetadata publishes TracksMutated", "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - updateMetadata publishes TracksMutated")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
@@ -52,7 +52,7 @@ namespace ao::rt::test
     CHECK(mutated[0] == trackId);
   }
 
-  TEST_CASE("LibraryCommands - observers see committed metadata", "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - observers see committed metadata")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
@@ -87,8 +87,7 @@ namespace ao::rt::test
     CHECK(optView->metadata().title() == "Committed Title");
   }
 
-  TEST_CASE("LibraryCommands - updateMetadata reports no mutation for identical values",
-            "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - updateMetadata reports no mutation for identical values")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
@@ -109,7 +108,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryCommands - updateMetadata compares canonical Unicode identity", "[runtime][unit][library][unicode]")
+  TEST_CASE("LibraryCommands - updateMetadata compares canonical Unicode identity")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Café");
@@ -128,7 +127,7 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryCommands - updateMetadata accepts complete metadata patches", "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - updateMetadata accepts complete metadata patches")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
@@ -188,8 +187,7 @@ namespace ao::rt::test
     CHECK(optView->metadata().discTotal() == 2);
   }
 
-  TEST_CASE("LibraryCommands - updateMetadata applies and removes custom metadata",
-            "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - updateMetadata applies and removes custom metadata")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -239,8 +237,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryCommands - custom metadata uses canonical key and value identity",
-            "[runtime][unit][library][unicode]")
+  TEST_CASE("LibraryCommands - custom metadata uses canonical key and value identity")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -269,8 +266,7 @@ namespace ao::rt::test
     CHECK(std::ranges::distance(optView->customMetadata()) == 0);
   }
 
-  TEST_CASE("LibraryCommands - updateMetadata returns storage errors without committing",
-            "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - updateMetadata returns storage errors without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -301,7 +297,7 @@ namespace ao::rt::test
     CHECK(std::ranges::distance(optView->customMetadata()) == 0);
   }
 
-  TEST_CASE("LibraryCommands - createList persists its draft", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - createList persists its draft")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -325,7 +321,7 @@ namespace ao::rt::test
     CHECK(optNode->expression == R"(#favorite)");
   }
 
-  TEST_CASE("LibraryCommands - updateList persists its draft", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - updateList persists its draft")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -362,8 +358,7 @@ namespace ao::rt::test
     CHECK(optNode->expression == R"(#favorite or #recent)");
   }
 
-  TEST_CASE("LibraryCommands - List display identity is NFC while filter bytes remain opaque",
-            "[runtime][unit][library][unicode]")
+  TEST_CASE("LibraryCommands - List display identity is NFC while filter bytes remain opaque")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -391,7 +386,7 @@ namespace ao::rt::test
     CHECK(optNode->expression == expression);
   }
 
-  TEST_CASE("LibraryCommands - updateList publishes ListsMutated", "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - updateList publishes ListsMutated")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -415,7 +410,7 @@ namespace ao::rt::test
     CHECK(upserted[0] == listId);
   }
 
-  TEST_CASE("LibraryCommands - createList rejects malformed expressions", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - createList rejects malformed expressions")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -434,8 +429,7 @@ namespace ao::rt::test
           library::ListStore::Reader::Iterator{});
   }
 
-  TEST_CASE("LibraryCommands - createList accepts an empty expression as the parent identity",
-            "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - createList accepts an empty expression as the parent identity")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -452,7 +446,7 @@ namespace ao::rt::test
     CHECK(optNode->expression.empty());
   }
 
-  TEST_CASE("LibraryCommands - createList rejects a missing parent", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - createList rejects a missing parent")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -469,7 +463,7 @@ namespace ao::rt::test
     CHECK(res.error().message.contains("list parent not found"));
   }
 
-  TEST_CASE("LibraryCommands - updateList rejects itself as parent", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - updateList rejects itself as parent")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -488,7 +482,7 @@ namespace ao::rt::test
     CHECK(res.error().message.contains("list parent cannot be the list itself"));
   }
 
-  TEST_CASE("LibraryCommands - updateList rejects a descendant as parent", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - updateList rejects a descendant as parent")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -518,7 +512,7 @@ namespace ao::rt::test
     CHECK(res.error().message.contains("list parent cannot be a descendant of the list"));
   }
 
-  TEST_CASE("LibraryCommands - updateList skips unchanged drafts", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - updateList skips unchanged drafts")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -541,7 +535,7 @@ namespace ao::rt::test
     CHECK(upserted.empty());
   }
 
-  TEST_CASE("LibraryCommands - updateList reports missing lists as NotFound", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryCommands - updateList reports missing lists as NotFound")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -574,7 +568,7 @@ namespace ao::rt::test
     CHECK_FALSE(snapshot.listNode(ListId{999}));
   }
 
-  TEST_CASE("LibraryCommands - deleteList publishes ListsMutated", "[runtime][unit][library][mutation]")
+  TEST_CASE("LibraryCommands - deleteList publishes ListsMutated")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -594,8 +588,7 @@ namespace ao::rt::test
     CHECK(deleted[0] == listId);
   }
 
-  TEST_CASE("LibraryCommands - subtree delete previews and commits every descendant atomically",
-            "[runtime][unit][library][list-delete][delete-subtree]")
+  TEST_CASE("LibraryCommands - subtree delete previews and commits every descendant atomically")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());

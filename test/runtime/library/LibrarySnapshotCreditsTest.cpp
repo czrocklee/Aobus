@@ -18,8 +18,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibrarySnapshot - credit reads own canonical ordered entries and distinguish missing tracks",
-            "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - credit reads own canonical ordered entries and distinguish missing tracks")
   {
     auto fixture = MusicLibraryFixture{};
     auto const expected = std::vector<library::Credit>{
@@ -53,8 +52,7 @@ namespace ao::rt::test
     CHECK(optOwnedEmpty->empty());
   }
 
-  TEST_CASE("LibrarySnapshot - credit reads remain bound to their committed revision",
-            "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibrarySnapshot - credit reads remain bound to their committed revision")
   {
     auto fixture = MusicLibraryFixture{};
     auto const original = std::vector<library::Credit>{

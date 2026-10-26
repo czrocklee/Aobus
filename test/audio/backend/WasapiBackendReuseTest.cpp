@@ -23,8 +23,7 @@ namespace ao::audio::backend::test
     }
   } // namespace
 
-  TEST_CASE("WasapiSharedBackend - identical valid PCM modes are reusable before opening",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - identical valid PCM modes are reusable before opening")
   {
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared};
     Backend const& polymorphicBackend = backend;
@@ -45,8 +44,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiSharedBackend - zero and FL FR stereo reuse is bidirectional for every encoding",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - zero and FL FR stereo reuse is bidirectional for every encoding")
   {
     // This immutable transport policy needs no installed native client. The
     // synthetic endpoint is never opened; this does not test device liveness.
@@ -71,8 +69,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiSharedBackend - rate count and encoding changes prevent stereo identity reuse",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - rate count and encoding changes prevent stereo identity reuse")
   {
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared};
     Backend const& polymorphicBackend = backend;
@@ -119,8 +116,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(polymorphicBackend.canReuseFormat(second, first));
   }
 
-  TEST_CASE("WasapiSharedBackend - identity aliases do not extend to mono multichannel or other roles",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - identity aliases do not extend to mono multichannel or other roles")
   {
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared};
     Backend const& polymorphicBackend = backend;
@@ -187,8 +183,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(polymorphicBackend.canReuseFormat(second, first));
   }
 
-  TEST_CASE("WasapiSharedBackend - invalid stereo alias geometry is refused before opening",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - invalid stereo alias geometry is refused before opening")
   {
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared};
     Backend const& polymorphicBackend = backend;

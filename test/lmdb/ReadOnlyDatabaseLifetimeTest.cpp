@@ -77,8 +77,7 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("ReadTransaction - NOTLS handoff recreates retained DBI bindings on the receiving thread",
-            "[lmdb][unit][transaction][concurrency]")
+  TEST_CASE("ReadTransaction - NOTLS handoff recreates retained DBI bindings on the receiving thread", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto environment = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 2});
@@ -139,8 +138,7 @@ namespace ao::lmdb::test
     CHECK(byteDatabase.reader(fresh).entryCount() == 1);
   }
 
-  TEST_CASE("Transaction-bound readers - every operation of both key families rejects a stale binding",
-            "[lmdb][unit][transaction]")
+  TEST_CASE("Transaction-bound readers - every operation of both key families rejects a stale binding")
   {
     auto const family = GENERATE(std::string_view{"integer"}, std::string_view{"byte"});
     auto const owner = GENERATE(std::string_view{"read"}, std::string_view{"write"});
@@ -162,8 +160,7 @@ namespace ao::lmdb::test
     checkStaleReaderProbe(family, owner, "round-trip", operation);
   }
 
-  TEST_CASE("Transaction-bound readers - every complete owner transfer invalidates readers and iterators",
-            "[lmdb][unit][transaction]")
+  TEST_CASE("Transaction-bound readers - every complete owner transfer invalidates readers and iterators")
   {
     auto const owner = GENERATE(std::string_view{"read"}, std::string_view{"write"});
     // Write-backed readers point to a base subobject, which cannot be transparently replaced.
@@ -181,8 +178,7 @@ namespace ao::lmdb::test
     checkStaleReaderProbe("integer", owner, transfer, operation);
   }
 
-  TEST_CASE("ReadTransaction - public base moves reject writer sources and destinations even after finish",
-            "[lmdb][unit][transaction]")
+  TEST_CASE("ReadTransaction - public base moves reject writer sources and destinations even after finish")
   {
     static constexpr auto kScenarios = std::array<std::string_view, 16>{
       "construct-active",

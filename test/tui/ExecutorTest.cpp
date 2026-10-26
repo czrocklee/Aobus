@@ -16,7 +16,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("Executor - dispatch runs immediately on the owner thread", "[tui][unit][executor]")
+  TEST_CASE("Executor - dispatch runs immediately on the owner thread")
   {
     auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
     bool ran = false;
@@ -35,7 +35,7 @@ namespace ao::tui::test
     CHECK(ranOnOwner);
   }
 
-  TEST_CASE("Executor - defer queues work onto the FTXUI loop", "[tui][unit][executor][async]")
+  TEST_CASE("Executor - defer queues work onto the FTXUI loop")
   {
     auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
     auto executor = Executor{screen};
@@ -54,7 +54,7 @@ namespace ao::tui::test
     CHECK(ran);
   }
 
-  TEST_CASE("Executor - dispatch before the FTXUI loop starts can be drained", "[tui][unit][executor][concurrency]")
+  TEST_CASE("Executor - dispatch before the FTXUI loop starts can be drained", "[concurrency]")
   {
     auto screen = ftxui::ScreenInteractive::FixedSize(20, 5);
     auto ran = std::atomic_bool{false};
@@ -84,7 +84,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("Executor - callbacks queued while terminal hooks are reinstalled run after input dispatch",
-            "[tui][unit][executor][concurrency]")
+            "[concurrency]")
   {
     auto completed = std::vector<std::int32_t>{};
     auto ranOnOwner = std::vector<bool>{};

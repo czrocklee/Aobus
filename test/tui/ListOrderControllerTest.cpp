@@ -126,8 +126,7 @@ namespace ao::tui::test
     };
   } // namespace
 
-  TEST_CASE("ListOrderController - an applied relative move commits the order and reports its count",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - an applied relative move commits the order and reports its count", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -142,8 +141,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.first, fixture.third});
   }
 
-  TEST_CASE("ListOrderController - a relative move of an edge selection is a reported no-op",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a relative move of an edge selection is a reported no-op", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -157,8 +155,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder().empty());
   }
 
-  TEST_CASE("ListOrderController - a command without order capability reports its blocking reason",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a command without order capability reports its blocking reason", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openGroupedView();
@@ -178,8 +175,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder().empty());
   }
 
-  TEST_CASE("ListOrderController - top and bottom move a marked set as one block",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - top and bottom move a marked set as one block", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -197,8 +193,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.third, fixture.first});
   }
 
-  TEST_CASE("ListOrderController - a relative move of several marks moves them together",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a relative move of several marks moves them together", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -211,8 +206,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder() == std::vector{fixture.third, fixture.first, fixture.second});
   }
 
-  TEST_CASE("ListOrderController - reset forgets the saved positions and reports the count",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - reset forgets the saved positions and reports the count", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -230,8 +224,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder().empty());
   }
 
-  TEST_CASE("ListOrderController - a view changed under a submitted command reports a stale order",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a view changed under a submitted command reports a stale order", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -254,8 +247,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder().empty());
   }
 
-  TEST_CASE("ListOrderController - a rejected command stays behind as a warning",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a rejected command stays behind as a warning", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const outsider = rt::test::addRuntimeTrack(*fixture.runtimePtr, library::test::TrackSpec{.title = "Outside"});
@@ -276,8 +268,7 @@ namespace ao::tui::test
     CHECK(fixture.lastMessage() == "Moved 1 track in Manual Order.");
   }
 
-  TEST_CASE("ListOrderController - a second command while one is in flight is dropped",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a second command while one is in flight is dropped", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -296,8 +287,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.first, fixture.third});
   }
 
-  TEST_CASE("ListOrderController - a later command runs after the previous one settled",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a later command runs after the previous one settled", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();
@@ -313,8 +303,7 @@ namespace ao::tui::test
     CHECK(fixture.storedOrder() == std::vector{fixture.second, fixture.third, fixture.first});
   }
 
-  TEST_CASE("ListOrderController - a submission outlives its destroyed controller",
-            "[tui][integration][list-order][concurrency]")
+  TEST_CASE("ListOrderController - a submission outlives its destroyed controller", "[concurrency]")
   {
     auto fixture = OrderFixture{};
     auto const viewId = fixture.openManualOrderView();

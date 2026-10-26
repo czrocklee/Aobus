@@ -136,7 +136,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("TrackFieldGrid - lays out collapsible metadata sections", "[gtk][unit][track-field-grid][geometry]")
+  TEST_CASE("TrackFieldGrid - lays out collapsible metadata sections")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.collapsible_test"};
     auto& scope = fixture.attachTrackDetailScope();
@@ -374,8 +374,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("TrackFieldGrid - shows custom add action when an empty custom selection appears",
-            "[gtk][unit][track-field-grid]")
+  TEST_CASE("TrackFieldGrid - shows custom add action when an empty custom selection appears")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.custom_section_regression_test"};
     auto& scope = fixture.attachTrackDetailScope();
@@ -410,8 +409,7 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
-  TEST_CASE("TrackFieldGrid - closes custom add popover before rebuilding the action row",
-            "[gtk][unit][track-field-grid]")
+  TEST_CASE("TrackFieldGrid - closes custom add popover before rebuilding the action row")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.custom_add_popover_rebuild_test"};
     auto& scope = fixture.attachTrackDetailScope();
@@ -453,8 +451,7 @@ namespace ao::gtk::layout::test
     fixture.window().unset_child();
   }
 
-  TEST_CASE("TrackFieldGrid - hides metadata and custom controls for technical-only category",
-            "[gtk][unit][track-field-grid]")
+  TEST_CASE("TrackFieldGrid - hides metadata and custom controls for technical-only category")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.technical_only_field_grid_test"};
     auto& scope = fixture.attachTrackDetailScope();

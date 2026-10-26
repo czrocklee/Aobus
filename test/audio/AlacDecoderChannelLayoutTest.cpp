@@ -157,8 +157,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("AlacDecoderSession - absent metadata identifies only mono and stereo without relabeling PCM",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - absent metadata identifies only mono and stereo without relabeling PCM")
   {
     using enum Speaker;
     auto const cases = std::vector<LayoutExpectation>{
@@ -180,8 +179,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - named layouts canonicalize every supported channel count before publication",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - named layouts canonicalize every supported channel count before publication")
   {
     using enum Speaker;
     struct NamedCase final
@@ -228,8 +226,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoderSession - permutation decisions remain session-local across sequential opens",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - permutation decisions remain session-local across sequential opens")
   {
     using enum Speaker;
     // Apple CoreAudioBaseTypes.h raw orders: MPEG 5.0 B is L R Ls Rs C;
@@ -262,8 +259,7 @@ namespace ao::audio::test
                        expectedB);
   }
 
-  TEST_CASE("AlacDecoderSession - generic bitmap and ordered descriptions preserve their declared three-slot roles",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - generic bitmap and ordered descriptions preserve their declared three-slot roles")
   {
     using enum Speaker;
     auto options = AlacFrameTestOptions{.channels = 3, .packetCount = 3};
@@ -285,8 +281,7 @@ namespace ao::audio::test
     checkAlacOpenPaths(options, expected);
   }
 
-  TEST_CASE("AlacDecoderSession - slot normalization precedes lossless sixteen-bit widening",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - slot normalization precedes lossless sixteen-bit widening")
   {
     using enum Speaker;
     checkAlacOpenPaths(
@@ -298,8 +293,7 @@ namespace ao::audio::test
       SampleEncoding::Signed32Le);
   }
 
-  TEST_CASE("AlacDecoderSession - packed twenty-four-bit normalization copies complete native samples",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - packed twenty-four-bit normalization copies complete native samples")
   {
     using enum Speaker;
     checkAlacOpenPaths({.channels = 4,
@@ -312,8 +306,7 @@ namespace ao::audio::test
                        SampleEncoding::Signed24PackedLe);
   }
 
-  TEST_CASE("AlacDecoderSession - thirty-two-bit normalization retains low bits and negative slot markers",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - thirty-two-bit normalization retains low bits and negative slot markers")
   {
     using enum Speaker;
     checkAlacOpenPaths(
@@ -328,8 +321,7 @@ namespace ao::audio::test
       SampleEncoding::Signed32Le);
   }
 
-  TEST_CASE("AlacDecoderSession - twenty-bit surround normalization retains signed packed sample markers",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - twenty-bit surround normalization retains signed packed sample markers")
   {
     using enum Speaker;
     checkAlacOpenPaths(
@@ -343,8 +335,7 @@ namespace ao::audio::test
       SampleEncoding::Signed24PackedLe);
   }
 
-  TEST_CASE("AlacDecoderSession - twenty-bit normalization retains packed alignment and source precision",
-            "[audio][integration][alac][decoder]")
+  TEST_CASE("AlacDecoderSession - twenty-bit normalization retains packed alignment and source precision")
   {
     using enum Speaker;
     checkAlacOpenPaths(

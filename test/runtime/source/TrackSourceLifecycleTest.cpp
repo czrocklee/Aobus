@@ -22,8 +22,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackSource - live subscription publishes exact deltas without a synthetic batch",
-            "[runtime][unit][source]")
+  TEST_CASE("TrackSource - live subscription publishes exact deltas without a synthetic batch")
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{10});
@@ -51,8 +50,7 @@ namespace ao::rt::test
     CHECK(removed.trackIds == std::vector{TrackId{20}});
   }
 
-  TEST_CASE("TrackSource - one mixed operation publishes after the complete source state is visible",
-            "[runtime][unit][source]")
+  TEST_CASE("TrackSource - one mixed operation publishes after the complete source state is visible")
   {
     auto source = MutableTrackSource{};
     source.setInitial(std::to_array<TrackId>({TrackId{10}, TrackId{20}, TrackId{30}}));
@@ -89,7 +87,7 @@ namespace ao::rt::test
     CHECK(observedIds == std::vector<TrackId>(finalIds.begin(), finalIds.end()));
   }
 
-  TEST_CASE("TrackSource - invalidation is terminal and idempotent", "[runtime][unit][source]")
+  TEST_CASE("TrackSource - invalidation is terminal and idempotent")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto first = libraryFixture.addTrack("first");
@@ -131,8 +129,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceInvalidated>(lateBatches[0]));
   }
 
-  TEST_CASE("TrackSource - destruction disconnects subscribers without semantic invalidation",
-            "[runtime][unit][source]")
+  TEST_CASE("TrackSource - destruction disconnects subscribers without semantic invalidation")
   {
     auto batches = std::vector<TrackSourceDelta>{};
     auto subscription = async::Subscription{};
@@ -146,7 +143,7 @@ namespace ao::rt::test
     subscription.reset();
   }
 
-  TEST_CASE("TrackSource - releasing a subscription stops later delivery", "[runtime][unit][source]")
+  TEST_CASE("TrackSource - releasing a subscription stops later delivery")
   {
     auto source = MutableTrackSource{};
     std::uint32_t batchCount = 0;
@@ -161,7 +158,7 @@ namespace ao::rt::test
     CHECK(retainedBatchCount == 1);
   }
 
-  TEST_CASE("TrackSourceLease - shared ownership pins source identity", "[runtime][unit][source]")
+  TEST_CASE("TrackSourceLease - shared ownership pins source identity")
   {
     auto sourcePtr = std::make_shared<MutableTrackSource>();
     auto weakSourcePtr = std::weak_ptr<TrackSource>{sourcePtr};

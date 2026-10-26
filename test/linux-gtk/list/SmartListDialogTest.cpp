@@ -45,7 +45,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("SmartListDialog - renders the initial smart-list draft", "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - renders the initial smart-list draft")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -90,7 +90,7 @@ namespace ao::gtk::test
     CHECK(foundPreviewPane);
   }
 
-  TEST_CASE("SmartListDialog - invalid preview source shows the acquisition failure", "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - invalid preview source shows the acquisition failure")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -120,8 +120,7 @@ namespace ao::gtk::test
     CHECK(visibleError);
   }
 
-  TEST_CASE("SmartListDialog - valid expression filters the transient preview projection",
-            "[gtk][unit][list][dialog][preview]")
+  TEST_CASE("SmartListDialog - valid expression filters the transient preview projection")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -156,7 +155,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(dialog, "Showing all matches: 1") != nullptr);
   }
 
-  TEST_CASE("SmartListDialog - invalid expression rejects the transient preview", "[gtk][unit][list][dialog][preview]")
+  TEST_CASE("SmartListDialog - invalid expression rejects the transient preview")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -197,8 +196,7 @@ namespace ao::gtk::test
     CHECK(visibleFilterError);
   }
 
-  TEST_CASE("SmartListDialog - valid local expression surfaces a stored parent filter error",
-            "[gtk][unit][list][dialog][preview]")
+  TEST_CASE("SmartListDialog - valid local expression surfaces a stored parent filter error")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto parentListId = kInvalidListId;
@@ -244,8 +242,7 @@ namespace ao::gtk::test
   // The preview source is acquired from an idle task. Until it arrives the
   // dialog treats the expression as unvalidated, so the readiness pass must
   // re-run the full preview or naming a list never enables submission.
-  TEST_CASE("SmartListDialog - naming a list enables submission once the preview source is ready",
-            "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - naming a list enables submission once the preview source is ready")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -288,8 +285,7 @@ namespace ao::gtk::test
     CHECK(okButton->get_sensitive());
   }
 
-  TEST_CASE("SmartListDialog - pending submission remains guarded while the draft changes",
-            "[gtk][unit][list][dialog][async]")
+  TEST_CASE("SmartListDialog - pending submission remains guarded while the draft changes")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -343,7 +339,7 @@ namespace ao::gtk::test
   // editing, carries parentId kInvalidListId. The source cache rejects that id
   // outright, so the dialog must resolve it to the All Tracks root or the
   // preview never builds and the editor opens showing an acquisition error.
-  TEST_CASE("SmartListDialog - root parent previews against All Tracks", "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - root parent previews against All Tracks")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -395,8 +391,7 @@ namespace ao::gtk::test
     CHECK(okButton->get_sensitive());
   }
 
-  TEST_CASE("SmartListDialog - Playlist template exposes a visible tag and chooses Manual Order",
-            "[gtk][unit][list][dialog][playlist]")
+  TEST_CASE("SmartListDialog - Playlist template exposes a visible tag and chooses Manual Order")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -425,8 +420,7 @@ namespace ao::gtk::test
           query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = "Road Trip"}));
   }
 
-  TEST_CASE("SmartListDialog - retained presentation callback retires with the dialog",
-            "[gtk][unit][list][dialog][async]")
+  TEST_CASE("SmartListDialog - retained presentation callback retires with the dialog")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -456,7 +450,7 @@ namespace ao::gtk::test
     CHECK(presentationCount == 1);
   }
 
-  TEST_CASE("SmartListDialog - round-trips a list's assigned custom presentation", "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - round-trips a list's assigned custom presentation")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto listId = kInvalidListId;
@@ -514,7 +508,7 @@ namespace ao::gtk::test
     CHECK(dialog.presentationId() == "custom-albums-view");
   }
 
-  TEST_CASE("SmartListDialog - a new list starts as Auto with an absent preference", "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - a new list starts as Auto with an absent preference")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -538,8 +532,7 @@ namespace ao::gtk::test
     CHECK(dialog.presentationId().empty());
   }
 
-  TEST_CASE("SmartListDialog - shows an unknown stored presentation as an explicit unavailable option",
-            "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - shows an unknown stored presentation as an explicit unavailable option")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto listId = kInvalidListId;
@@ -620,8 +613,7 @@ namespace ao::gtk::test
     CHECK(dialog.presentationId() == rt::kListOrderTrackPresentationId);
   }
 
-  TEST_CASE("SmartListDialog - repopulating replaces the unavailable option without stale rows",
-            "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - repopulating replaces the unavailable option without stale rows")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto listId = kInvalidListId;
@@ -700,8 +692,7 @@ namespace ao::gtk::test
     CHECK(dialog.presentationId().empty());
   }
 
-  TEST_CASE("SmartListDialog - a custom presentation without a label falls back to its raw id",
-            "[gtk][unit][list][dialog]")
+  TEST_CASE("SmartListDialog - a custom presentation without a label falls back to its raw id")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -739,8 +730,7 @@ namespace ao::gtk::test
     CHECK(dialog.presentationId() == "custom-unnamed");
   }
 
-  TEST_CASE("SmartListDialog - the selected presentation option ellipsizes and keeps its full text reachable",
-            "[gtk][unit][list][dialog][geometry]")
+  TEST_CASE("SmartListDialog - the selected presentation option ellipsizes and keeps its full text reachable")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto listId = kInvalidListId;
@@ -798,8 +788,7 @@ namespace ao::gtk::test
     CHECK(hasAccessibleLabel(*selectedLabel, "Auto"));
   }
 
-  TEST_CASE("SmartListDialog - popup rows carry a trailing check on the selected option",
-            "[gtk][unit][list][dialog][geometry]")
+  TEST_CASE("SmartListDialog - popup rows carry a trailing check on the selected option")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

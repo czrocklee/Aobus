@@ -48,7 +48,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("observeMixFormat releases successful query storage after observation", "[audio][unit][wasapi][format]")
+  TEST_CASE("observeMixFormat releases successful query storage after observation")
   {
     std::uint32_t releases = 0;
     auto wavePtr = makeMixAllocation(releases);
@@ -86,7 +86,7 @@ namespace ao::audio::backend::detail::test
     CHECK(*observationRes->optFormat == expectedFormat);
   }
 
-  TEST_CASE("observeMixFormat rejects successful null storage", "[audio][unit][wasapi][format]")
+  TEST_CASE("observeMixFormat rejects successful null storage")
   {
     auto const observationRes = observeMixFormat(S_OK, WaveFormatPtr{nullptr, &releaseMixAllocation});
 
@@ -95,8 +95,7 @@ namespace ao::audio::backend::detail::test
     CHECK(observationRes.error().message == "WASAPI GetMixFormat succeeded without a descriptor");
   }
 
-  TEST_CASE("observeMixFormat drops failed query facts and releases any returned storage",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("observeMixFormat drops failed query facts and releases any returned storage")
   {
     std::uint32_t releases = 0;
     auto wavePtr = WaveFormatPtr{nullptr, &releaseMixAllocation};

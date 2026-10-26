@@ -41,8 +41,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CliRuntime - runTask returns worker completion on the CLI owner thread",
-            "[cli][unit][runtime][concurrency]")
+  TEST_CASE("CliRuntime - runTask returns worker completion on the CLI owner thread", "[concurrency]")
   {
     auto temp = ao::test::TempDir{};
     auto out = std::ostringstream{};
@@ -58,7 +57,7 @@ namespace ao::cli::test
     CHECK(result.callbackThread == ownerThread);
   }
 
-  TEST_CASE("CliRuntime - runTask rethrows worker failure on the CLI owner thread", "[cli][unit][runtime][concurrency]")
+  TEST_CASE("CliRuntime - runTask rethrows worker failure on the CLI owner thread", "[concurrency]")
   {
     auto temp = ao::test::TempDir{};
     auto out = std::ostringstream{};
@@ -70,7 +69,7 @@ namespace ao::cli::test
     CHECK_THROWS_AS(cli.runTask(failOnWorkerAsync(&asyncRuntime)), std::runtime_error);
   }
 
-  TEST_CASE("CliRuntime - teardown drains callbacks queued by a foreign producer", "[cli][unit][runtime][concurrency]")
+  TEST_CASE("CliRuntime - teardown drains callbacks queued by a foreign producer", "[concurrency]")
   {
     auto temp = ao::test::TempDir{};
     auto out = std::ostringstream{};

@@ -43,7 +43,7 @@ classic:
 )";
   } // namespace
 
-  TEST_CASE("Theme - valid semantic tokens replace the complete active theme", "[winui][unit][theme]")
+  TEST_CASE("Theme - valid semantic tokens replace the complete active theme")
   {
     auto model = ThemeSessionModel{};
     auto tree = themeTree(kValidTheme);
@@ -54,7 +54,7 @@ classic:
     CHECK(model.theme().classic.chrome == ClassicChrome::System);
   }
 
-  TEST_CASE("Theme - invalid reload preserves the last valid theme", "[winui][unit][theme]")
+  TEST_CASE("Theme - invalid reload preserves the last valid theme")
   {
     auto model = ThemeSessionModel{};
     auto valid = themeTree(kValidTheme);
@@ -117,7 +117,7 @@ classic: {chrome: arbitrary, toolbarBackground: '#F3F4F6', treeBackground: '#FFF
     CHECK(model.theme() == previous);
   }
 
-  TEST_CASE("Theme - a rejected chrome selector quotes a bounded value", "[winui][unit][theme]")
+  TEST_CASE("Theme - a rejected chrome selector quotes a bounded value")
   {
     // The startup warning quotes this reason, and a notification above its
     // byte ceiling is dropped whole.
@@ -134,7 +134,7 @@ classic: {chrome: )"} + std::string(5000, 'x') +
     CHECK(res.error().message.size() < 512);
   }
 
-  TEST_CASE("Theme - retro chrome is a closed built-in choice", "[winui][unit][theme]")
+  TEST_CASE("Theme - retro chrome is a closed built-in choice")
   {
     auto tree = themeTree(R"(
 shared: {fontFamily: Segoe UI, accent: '#06B6D4', windowBackground: '#111827', surface: '#1F2937', textPrimary: '#F9FAFB', textSecondary: '#9CA3AF', divider: '#374151', selection: '#334155'}

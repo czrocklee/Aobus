@@ -55,7 +55,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("ListOrder - capability follows structure rather than presentation id", "[uimodel][unit][list][list-order]")
+  TEST_CASE("ListOrder - capability follows structure rather than presentation id")
   {
     auto input = eligibleInput();
     auto const state = describeListOrderCapabilities(ao::test::englishMessageCatalog(), input);
@@ -74,7 +74,7 @@ namespace ao::uimodel::test
     checkDisabled(sorted);
   }
 
-  TEST_CASE("ListOrder - quick filter keeps only absolute moves", "[uimodel][unit][list][list-order]")
+  TEST_CASE("ListOrder - quick filter keeps only absolute moves")
   {
     auto input = eligibleInput();
     input.quickFilterExpression = "$year >= 2020";
@@ -90,8 +90,7 @@ namespace ao::uimodel::test
     CHECK(state.disabledReason.contains("Clear the quick filter"));
   }
 
-  TEST_CASE("ListOrder - disabled reasons come from the injected locale",
-            "[uimodel][unit][list][list-order][localization]")
+  TEST_CASE("ListOrder - disabled reasons come from the injected locale")
   {
     auto input = eligibleInput();
     input.authoring.state = rt::LibraryAuthoringState::Maintenance;
@@ -103,8 +102,7 @@ namespace ao::uimodel::test
           "Die Bibliothek ist beschäftigt. Die manuelle Reihenfolge ist nach Abschluss der Wartung wieder verfügbar.");
   }
 
-  TEST_CASE("ListOrder - rejects virtual, grouped, unavailable, and erroneous sources",
-            "[uimodel][unit][list][list-order]")
+  TEST_CASE("ListOrder - rejects virtual, grouped, unavailable, and erroneous sources")
   {
     auto input = eligibleInput();
     auto expectedReason = std::string_view{};
@@ -173,7 +171,7 @@ namespace ao::uimodel::test
     CHECK(state.disabledReason.contains(expectedReason));
   }
 
-  TEST_CASE("ListOrder - drag selection follows effective order", "[uimodel][unit][list][list-order]")
+  TEST_CASE("ListOrder - drag selection follows effective order")
   {
     auto const effective = std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}};
 
@@ -183,7 +181,7 @@ namespace ao::uimodel::test
     CHECK(listOrderDragSelection(TrackId{99}, std::array{TrackId{99}}, effective).empty());
   }
 
-  TEST_CASE("ListOrder - drop gaps normalize around the dragged selection", "[uimodel][unit][list][list-order]")
+  TEST_CASE("ListOrder - drop gaps normalize around the dragged selection")
   {
     auto const effective = std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}};
     auto const selected = std::array{TrackId{2}, TrackId{3}};
@@ -210,7 +208,7 @@ namespace ao::uimodel::test
     CHECK(outsideRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("listOrderAnchorForGap rejects invalid track identities", "[uimodel][unit][list][list-order]")
+  TEST_CASE("listOrderAnchorForGap rejects invalid track identities")
   {
     SECTION("effective sequence")
     {

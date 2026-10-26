@@ -110,7 +110,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackSelectionController - synchronizes GTK selection with runtime views", "[gtk][unit][track][selection]")
+  TEST_CASE("TrackSelectionController - synchronizes GTK selection with runtime views")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId1 = kInvalidTrackId;

@@ -224,8 +224,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("shellPresetResource - project declarations pair both preset files with shell paths",
-            "[winui][unit][layout]")
+  TEST_CASE("shellPresetResource - project declarations pair both preset files with shell paths")
   {
     // Source-level CMake/reader-name pairing only. MSBuild deployment and the
     // executable's files must still be checked on native Windows.
@@ -254,8 +253,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - both shipped presets resolve frame commands to offered registrations",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - both shipped presets resolve frame commands to offered registrations")
   {
     auto const commands = layout::ShellCommands{
       .openLibrary = [] {},
@@ -317,8 +315,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - modern toggle and classic menu name the inspector command",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - modern toggle and classic menu name the inspector command")
   {
     /*
      * Below the wide tier the inspector is an overlay, which shows nothing
@@ -342,7 +339,7 @@ namespace ao::winui::test
     CHECK(builder.contains("commands.toggleInspector"));
   }
 
-  TEST_CASE("prepareShellPresetDocument - both shipped presets parse, expand, and validate", "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - both shipped presets parse, expand, and validate")
   {
     for (auto const preset : {ShellPreset::Modern, ShellPreset::Classic})
     {
@@ -356,8 +353,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - every preset paints the surfaces its theme section describes",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - every preset paints the surfaces its theme section describes")
   {
     // A theme section that no node claims is a colour the user can set and
     // never see, so each preset must reach every slot its own half names.
@@ -402,8 +398,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - each preset carries the components the shell reconciles",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - each preset carries the components the shell reconciles")
   {
     SECTION("modern")
     {
@@ -478,8 +473,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - a pane that owns its width is never given a proportional slot",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - a pane that owns its width is never given a proportional slot")
   {
     // A `split` keeps its share of the axis whatever the child does with it, so
     // a pane that resizes and collapses itself would leave a hole behind. Those
@@ -508,8 +502,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - only a browser summary yields its space below the wide tier",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - only a browser summary yields its space below the wide tier")
   {
     // The Windows desktop shell specification has the browser summary yield to
     // the filter below the wide tier, and the component answers that by
@@ -550,8 +543,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - the Classic status message owns the bar's remaining width",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - the Classic status message owns the bar's remaining width")
   {
     // Classic has no activity surface, so its status line is the only place a
     // message is presented. An auto slot measures the text at its natural width
@@ -569,7 +561,7 @@ namespace ao::winui::test
     CHECK(planPlacement(*trackCount).horizontalSlot == SlotSizing::Auto);
   }
 
-  TEST_CASE("prepareShellPresetDocument - every preset offers play/pause exactly once", "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - every preset offers play/pause exactly once")
   {
     // The soul is a transport control in one shell and the output device
     // affordance in the other, and nothing but its primary action slot says
@@ -627,8 +619,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - the presets keep disjoint node ids so state never crosses shells",
-            "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - the presets keep disjoint node ids so state never crosses shells")
   {
     auto const modernRes =
       prepareShellPresetDocument(readShippedDocument(ShellPreset::Modern), shellPresetResource(ShellPreset::Modern));
@@ -646,7 +637,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("prepareShellPresetDocument - a defective document is rejected as a whole", "[winui][unit][layout]")
+  TEST_CASE("prepareShellPresetDocument - a defective document is rejected as a whole")
   {
     SECTION("unparsable YAML")
     {

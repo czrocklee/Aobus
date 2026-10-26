@@ -32,8 +32,7 @@ extern "C"
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AlsaMixerSession - initialization repeat, failed reopen, and close never write shared mixer values",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - initialization repeat, failed reopen, and close never write shared mixer values")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawRange = {.min = 0L, .max = 255L}, .rawLevels = {255L}});
@@ -51,8 +50,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.session.volumeMode() == AlsaVolumeControlMode::Unavailable);
   }
 
-  TEST_CASE("AlsaMixerSession - candidate validation is read-only for mono and unbalanced channels",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - candidate validation is read-only for mono and unbalanced channels")
   {
     auto fixture = MixerFixture{};
 
@@ -79,8 +77,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 0U);
   }
 
-  TEST_CASE("AlsaMixerSession - invalid preferred candidates are skipped without probing writes",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - invalid preferred candidates are skipped without probing writes")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "Master", .index = 0U}, .readable = false});
@@ -95,8 +92,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->hardwareElements[1].rawLevels == std::vector<long>{100L});
   }
 
-  TEST_CASE("AlsaMixerSession - no valid candidate falls back without changing mixer values",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - no valid candidate falls back without changing mixer values")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "Master", .index = 0U}, .active = false, .rawLevels = {44L}});
@@ -109,8 +105,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->hardwareElements.front().rawLevels == std::vector<long>{44L});
   }
 
-  TEST_CASE("AlsaMixerSession - explicit raw volume writes use exact endpoints and fresh range",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - explicit raw volume writes use exact endpoints and fresh range")
   {
     auto fixture = MixerFixture{};
     fixture.addElement(
@@ -132,8 +127,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 3U);
   }
 
-  TEST_CASE("AlsaMixerSession - explicit decibel volume writes use the readable decibel scale",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - explicit decibel volume writes use the readable decibel scale")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U},
@@ -156,8 +150,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 3U);
   }
 
-  TEST_CASE("AlsaMixerSession - mute-sentinel decibel ranges use the raw scale for reads and writes",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - mute-sentinel decibel ranges use the raw scale for reads and writes")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U},
@@ -180,8 +173,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.session.stateSnapshot().volume == 1.0F);
   }
 
-  TEST_CASE("AlsaMixerSession - NaN volume is rejected before refresh and preserves hardware state",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - NaN volume is rejected before refresh and preserves hardware state")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U},
@@ -209,8 +201,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writtenLevels == std::vector<long>{0L});
   }
 
-  TEST_CASE("AlsaMixerSession - infinite inputs and midpoint map across the full raw range",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - infinite inputs and midpoint map across the full raw range")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U},
@@ -227,8 +218,7 @@ namespace ao::audio::backend::detail::test
            std::vector<long>{std::numeric_limits<long>::min(), std::numeric_limits<long>::max(), 0L}));
   }
 
-  TEST_CASE("AlsaMixerSession - narrow raw and decibel spans retain precision near long limits",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - narrow raw and decibel spans retain precision near long limits")
   {
     for (auto const range : std::array{
            AlsaMixerLevelRange{.min = std::numeric_limits<long>::max() - 2L, .max = std::numeric_limits<long>::max()},
@@ -260,8 +250,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaMixerSession - reads refresh external volume and writes relocate an INFO-rebuilt element",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - reads refresh external volume and writes relocate an INFO-rebuilt element")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 3U}, .rawLevels = {20L}, .generation = 1U});
@@ -282,8 +271,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->refreshCount == 3U);
   }
 
-  TEST_CASE("AlsaMixerSession - REMOVE during refresh falls back without using the removed element",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - REMOVE during refresh falls back without using the removed element")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawLevels = {64L}});
@@ -306,8 +294,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 0U);
   }
 
-  TEST_CASE("AlsaMixerSession - refresh failure prevents a hardware write and publishes unity fallback",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - refresh failure prevents a hardware write and publishes unity fallback")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawLevels = {70L}});
@@ -327,8 +314,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->hardwareElements.front().rawLevels == std::vector<long>{70L});
   }
 
-  TEST_CASE("AlsaMixerSession - failed volume write is not compensated after a possible partial change",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - failed volume write is not compensated after a possible partial change")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawLevels = {90L, 80L}});
@@ -354,8 +340,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 1U);
   }
 
-  TEST_CASE("AlsaMixerSession - failed decibel write reports possible partial hardware effects",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - failed decibel write reports possible partial hardware effects")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U},
@@ -378,8 +363,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.session.renderGain() == 1.0F);
   }
 
-  TEST_CASE("AlsaMixerSession - failed hardware element remains excluded across close and reopen",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - failed hardware element remains excluded across close and reopen")
   {
     bool const decibels = GENERATE(false, true);
     auto fixture = MixerFixture{};
@@ -412,8 +396,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 1U);
   }
 
-  TEST_CASE("AlsaMixerSession - failed element identity does not exclude another candidate",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - failed element identity does not exclude another candidate")
   {
     auto const alternativeId =
       GENERATE(AlsaMixerElementId{.name = "Master", .index = 1U}, AlsaMixerElementId{.name = "PCM", .index = 0U});
@@ -447,7 +430,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 3U);
   }
 
-  TEST_CASE("AlsaMixerSession - failed element identity is local to one session", "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - failed element identity is local to one session")
   {
     auto statePtr = std::make_shared<FakeMixerState>();
     statePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {90L}});
@@ -468,8 +451,7 @@ namespace ao::audio::backend::detail::test
     CHECK(statePtr->writeCount == 2U);
   }
 
-  TEST_CASE("AlsaMixerSession - refresh and read failures do not exclude an element on reopen",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - refresh and read failures do not exclude an element on reopen")
   {
     bool const refreshFails = GENERATE(false, true);
     auto fixture = MixerFixture{};
@@ -499,8 +481,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 1U);
   }
 
-  TEST_CASE("AlsaMixerSession - external mute changes only effective state and pure application reads do not refresh",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - external mute changes only effective state and pure application reads do not refresh")
   {
     auto fixture = MixerFixture{};
     fixture.statePtr->optHardwareMuted = true;
@@ -516,8 +497,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.session.renderGain() == 1.0F);
   }
 
-  TEST_CASE("AlsaMixerSession - application mute persists across close and reinitialization without hardware writes",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - application mute persists across close and reinitialization without hardware writes")
   {
     auto fixture = MixerFixture{};
     fixture.statePtr->optHardwareMuted = true;
@@ -538,8 +518,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 0U);
   }
 
-  TEST_CASE("AlsaMixerSession - application mute is software-only and preserves hardware volume mode",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - application mute is software-only and preserves hardware volume mode")
   {
     auto fixture = MixerFixture{};
     fixture.statePtr->optHardwareMuted = true;
@@ -571,8 +550,7 @@ namespace ao::audio::backend::detail::test
     CHECK((fixture.statePtr->hardwareElements.front().rawLevels == std::vector<long>{99L, 77L}));
   }
 
-  TEST_CASE("AlsaMixerSession - mute publication refreshes external switches without writing them",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - mute publication refreshes external switches without writing them")
   {
     for (bool const initiallyMuted : std::to_array<bool>({false, true}))
     {
@@ -605,7 +583,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaMixerSession - explicit volume preserves an externally changed switch", "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - explicit volume preserves an externally changed switch")
   {
     auto fixture = MixerFixture{};
     fixture.statePtr->optHardwareMuted = false;
@@ -622,7 +600,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.session.stateSnapshot().effectiveMuted);
   }
 
-  TEST_CASE("AlsaMixerSession - invalid software volume preserves the existing gain", "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - invalid software volume preserves the existing gain")
   {
     auto fixture = MixerFixture{};
     fixture.statePtr->openSucceeds = false;
@@ -638,7 +616,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 0U);
   }
 
-  TEST_CASE("AlsaMixerSession - render gain follows software controls and mixer lifecycle", "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - render gain follows software controls and mixer lifecycle")
   {
     auto fixture = MixerFixture{};
     REQUIRE(fixture.session.setVolume(0.25F));
@@ -681,8 +659,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 0U);
   }
 
-  TEST_CASE("AlsaMixerSession - successful hardware attenuation is not replayed as software gain after failed reopen",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - successful hardware attenuation is not replayed as software gain after failed reopen")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawRange = {.min = 0L, .max = 100L}, .rawLevels = {100L}});
@@ -721,8 +698,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.session.renderGain() == 1.0F);
   }
 
-  TEST_CASE("AlsaMixerSession - hardware write failure preserves mute in the published render gain",
-            "[audio][unit][alsa-mixer]")
+  TEST_CASE("AlsaMixerSession - hardware write failure preserves mute in the published render gain")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawLevels = {90L, 80L}});
@@ -743,8 +719,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 1U);
   }
 
-  TEST_CASE("AlsaMixerSession - mute gain is readable before hardware refresh completes",
-            "[audio][unit][alsa-mixer][concurrency]")
+  TEST_CASE("AlsaMixerSession - mute gain is readable before hardware refresh completes", "[concurrency]")
   {
     auto fixture = MixerFixture{};
     fixture.addElement({.id = {.name = "PCM", .index = 0U}, .rawLevels = {80L}});
@@ -793,8 +768,7 @@ namespace ao::audio::backend::detail::test
     CHECK(fixture.statePtr->writeCount == 0U);
   }
 
-  TEST_CASE("AlsaMixerSession - concurrent mute and volume changes never expose a muted-only gain",
-            "[audio][unit][alsa-mixer][concurrency][stress]")
+  TEST_CASE("AlsaMixerSession - concurrent mute and volume changes never expose a muted-only gain", "[concurrency]")
   {
     auto fixture = MixerFixture{};
     CHECK_FALSE(fixture.session.tryInit(nullptr));

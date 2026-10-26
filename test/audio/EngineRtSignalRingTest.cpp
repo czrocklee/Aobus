@@ -91,8 +91,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Engine RT signal ring - legal splice and drain fill the exact capacity",
-            "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine RT signal ring - legal splice and drain fill the exact capacity", "[concurrency]")
   {
     auto ring = detail::EngineRtSignalRing<ProbeSignal>{};
     static_assert(decltype(ring)::kCapacity == 2);
@@ -111,8 +110,7 @@ namespace ao::audio::test
     CHECK_FALSE(ring.tryPop(signal));
   }
 
-  TEST_CASE("Engine RT signal ring - serialized producer ownership may hand off between threads",
-            "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine RT signal ring - serialized producer ownership may hand off between threads", "[concurrency]")
   {
     auto ring = detail::EngineRtSignalRing<ProbeSignal>{};
 
@@ -131,8 +129,7 @@ namespace ao::audio::test
     CHECK_FALSE(ring.tryPop(signal));
   }
 
-  TEST_CASE("Engine render path - sequential splices never accumulate two splice signals",
-            "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine render path - sequential splices never accumulate two splice signals", "[concurrency]")
   {
     auto timeline = detail::RenderTimeline{};
     timeline.publishCurrent(makeTimelineNode(std::byte{0x11}, std::byte{0x12}));
@@ -204,8 +201,7 @@ namespace ao::audio::test
     CHECK(pendingSignals == 0);
   }
 
-  TEST_CASE("Engine lookahead - a pending drain signal does not prohibit an empty-owner arm",
-            "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine lookahead - a pending drain signal does not prohibit an empty-owner arm", "[concurrency]")
   {
     auto ring = detail::EngineRtSignalRing<ProbeSignal>{};
     ring.push({.kind = ProbeSignalKind::Drained, .sequence = 1});
@@ -270,13 +266,12 @@ namespace ao::audio::test
     engine.shutdown();
   }
 
-  TEST_CASE("Engine event queue - settled destruction state satisfies every invariant", "[audio][unit][engine]")
+  TEST_CASE("Engine event queue - settled destruction state satisfies every invariant")
   {
     detail::verifyEngineEventQueueDestruction({});
   }
 
-  TEST_CASE("Engine RT signal ring - blocked consumer accepts the legal splice-drain full sequence",
-            "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine RT signal ring - blocked consumer accepts the legal splice-drain full sequence", "[concurrency]")
   {
     auto callbacks = std::vector<std::string_view>{};
     callbacks.reserve(2);

@@ -219,7 +219,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("FlacDecoderSession - malformed stream handling", "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - malformed stream handling")
   {
     auto const fixture = requireAudioFixture("basic_metadata.flac");
     auto const source = readFileBytes(fixture);
@@ -280,8 +280,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - corrupted middle frame sync is rejected before misplaced PCM",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - corrupted middle frame sync is rejected before misplaced PCM")
   {
     // Three stable 16-sample frames with one changed sync byte in the middle
     // frame: the provider pads the gap with silence and delivers the last
@@ -298,8 +297,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - lost first frame with unknown total fails the first read",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - lost first frame with unknown total fails the first read")
   {
     // With an unknown declared total, no end-of-stream sample-count check can
     // catch a lost first frame, and the provider performs no silent padding
@@ -316,8 +314,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - cleanly omitted middle frame is rejected before later PCM",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - cleanly omitted middle frame is rejected before later PCM")
   {
     // Removing the middle frame without any preceding sync loss makes the
     // provider report a missing frame; the read must fail before the intact
@@ -348,8 +345,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - stray bytes between frames resynchronize without losing samples",
-            "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - stray bytes between frames resynchronize without losing samples")
   {
     // Positive control for gap rejection: harmless noise between otherwise
     // contiguous frames only makes the provider resynchronize. Every sample
@@ -394,7 +390,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - clamped seek target returns only the remaining samples", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - clamped seek target returns only the remaining samples")
   {
     // 1 ms at 48 kHz is one sample past the 48 declared samples, so the seek
     // clamps to the last sample and the provider trims the final frame to a
@@ -445,7 +441,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - healthy flush preserves unread PCM and decode position", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - healthy flush preserves unread PCM and decode position")
   {
     // This tiny file fits entirely in provider read-ahead. Flushing must not
     // skip those unread bytes or discard a decoded but unread seek target.
@@ -489,7 +485,7 @@ namespace ao::audio::test
     CHECK(decoder.streamInfo() == info);
   }
 
-  TEST_CASE("FlacDecoderSession - open rejects a stream without usable STREAMINFO", "[audio][unit][flac][malformed]")
+  TEST_CASE("FlacDecoderSession - open rejects a stream without usable STREAMINFO")
   {
     SECTION("fLaC with only a last zero-length PADDING block")
     {

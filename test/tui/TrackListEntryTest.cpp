@@ -15,7 +15,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TrackListEntry - chooses useful title and detail text", "[tui][unit][track-list]")
+  TEST_CASE("TrackListEntry - chooses useful title and detail text")
   {
     auto row = rt::TrackRow{.id = TrackId{7},
                             .optUriPath = std::filesystem::path{"music/untitled.flac"},

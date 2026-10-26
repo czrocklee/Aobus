@@ -39,8 +39,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ScanApplyOperation - filesystem errors retain the scan failure stage",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - filesystem errors retain the scan failure stage")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -77,8 +76,7 @@ namespace ao::rt::test
     CHECK(uris == std::vector<std::string>{"locked"});
   }
 
-  TEST_CASE("ScanApplyOperation - malformed sheets retain the CUE binding failure stage",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - malformed sheets retain the CUE binding failure stage")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -100,8 +98,7 @@ namespace ao::rt::test
     CHECK(stages == std::vector<std::string>{"bind CUE sheet for"});
   }
 
-  TEST_CASE("ScanApplyOperation - a folder lost after planning fails only its own items",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - a folder lost after planning fails only its own items")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -145,7 +142,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - preparation shares a directory snapshot and final revalidation rereads it",
-            "[runtime][integration][library-scan][concurrency]")
+            "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";

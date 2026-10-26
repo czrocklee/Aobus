@@ -75,7 +75,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackPropertiesEditor - completes metadata values from provider", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - completes metadata values from provider")
   {
     bool completionInvoked = false;
     auto const mockCompleter = TrackPropertiesEditor::CompletionProvider{
@@ -160,8 +160,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - a confirmation prompt takes the surface from the completion popup",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - a confirmation prompt takes the surface from the completion popup")
   {
     auto const mockCompleter = TrackPropertiesEditor::CompletionProvider{
       [](rt::TrackField const field,
@@ -206,7 +205,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - pages and browses candidates without editing", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - pages and browses candidates without editing")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");
@@ -251,7 +250,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - word and line caret moves dismiss stale candidates", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - word and line caret moves dismiss stale candidates")
   {
     for (auto const& event : {ftxui::Event::CtrlA, ftxui::Event::Special("\033b"), ftxui::Event::ArrowLeftCtrl})
     {
@@ -265,7 +264,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - caret commands dismiss completion even at a boundary", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - caret commands dismiss completion even at a boundary")
   {
     for (auto const& event : {ftxui::Event::CtrlA,
                               ftxui::Event::CtrlE,
@@ -285,7 +284,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - scrolls short terminals to the selected completion", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - scrolls short terminals to the selected completion")
   {
     for (auto const height : {24, 20, 16})
     {
@@ -310,8 +309,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - locked Soloist completion stays visible without scalar editing",
-            "[tui][unit][editor][credits]")
+  TEST_CASE("TrackPropertiesEditor - locked Soloist completion stays visible without scalar editing")
   {
     for (auto const columns : {80, 48, 32})
     {
@@ -422,8 +420,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - reversing candidate navigation preserves the visible window",
-            "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - reversing candidate navigation preserves the visible window")
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");
@@ -444,7 +441,7 @@ namespace ao::tui::test
     CHECK_FALSE(rendered.contains("Cand00"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - page navigation advances a full candidate window", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - page navigation advances a full candidate window")
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = ""}}, numberedCandidates());
     focusRow(editor, "Album");

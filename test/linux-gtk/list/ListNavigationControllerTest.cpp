@@ -261,7 +261,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("ListNavigationController - routes saved-list selection", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - routes saved-list selection")
   {
     auto state = NavigationFixture{};
 
@@ -276,7 +276,7 @@ namespace ao::gtk::test
     CHECK(state.selectedId == testListId);
   }
 
-  TEST_CASE("ListNavigationController - restores workspace selection and action state", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - restores workspace selection and action state")
   {
     auto state = NavigationFixture{};
 
@@ -309,7 +309,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ListNavigationController - follows the workspace into collapsed list subtrees", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - follows the workspace into collapsed list subtrees")
   {
     SECTION("workspace navigation expands the collapsed parent of the focused list")
     {
@@ -438,7 +438,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ListNavigationController - updates action availability from the selected list", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - updates action availability from the selected list")
   {
     auto state = NavigationFixture{};
 
@@ -476,7 +476,7 @@ namespace ao::gtk::test
     CHECK_FALSE(deleteSubtreeActionPtr->get_enabled());
   }
 
-  TEST_CASE("ListNavigationController - opens the visible-tag playlist template", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - opens the visible-tag playlist template")
   {
     auto state = NavigationFixture{};
 
@@ -501,8 +501,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("ListNavigationController - ignores duplicate OK responses during submission",
-            "[gtk][integration][list][concurrency]")
+  TEST_CASE("ListNavigationController - ignores duplicate OK responses during submission", "[concurrency]")
   {
     auto state = NavigationFixture{};
 
@@ -524,7 +523,7 @@ namespace ao::gtk::test
     CHECK(countListsNamed(state.runtimeFixture.runtime(), "Single submission") == 1);
   }
 
-  TEST_CASE("ListNavigationController - presentation changes do not re-drive selection", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - presentation changes do not re-drive selection")
   {
     auto state = NavigationFixture{};
 
@@ -547,8 +546,7 @@ namespace ao::gtk::test
     CHECK(state.selectedId == kInvalidListId);
   }
 
-  TEST_CASE("ListNavigationController - selects submitted lists after synchronous publication rebuilds",
-            "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - selects submitted lists after synchronous publication rebuilds")
   {
     auto state = NavigationFixture{};
 
@@ -576,8 +574,7 @@ namespace ao::gtk::test
     CHECK(state.savedPresentationId == presentationId);
   }
 
-  TEST_CASE("ListNavigationController - reconciles rejected selections against newer authoritative state",
-            "[gtk][unit][list][async]")
+  TEST_CASE("ListNavigationController - reconciles rejected selections against newer authoritative state")
   {
     auto state = NavigationFixture{};
 
@@ -690,7 +687,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ListNavigationController - edit saves the seeded presentation preference unchanged", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - edit saves the seeded presentation preference unchanged")
   {
     auto state = NavigationFixture{};
     auto const listId = createList(state.runtimeFixture.runtime(), "Seeded Name");
@@ -776,7 +773,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ListNavigationController - editing preserves the presentation callback", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - editing preserves the presentation callback")
   {
     auto state = NavigationFixture{};
 
@@ -812,7 +809,7 @@ namespace ao::gtk::test
     CHECK(state.selectedId == listId);
   }
 
-  TEST_CASE("ListNavigationController - stale edit responses preserve the visible draft", "[gtk][unit][list][async]")
+  TEST_CASE("ListNavigationController - stale edit responses preserve the visible draft")
   {
     auto state = NavigationFixture{};
 
@@ -859,8 +856,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("ListNavigationController - deletes the selected leaf and falls back to all tracks",
-            "[gtk][integration][list]")
+  TEST_CASE("ListNavigationController - deletes the selected leaf and falls back to all tracks")
   {
     auto state = NavigationFixture{};
 
@@ -906,7 +902,7 @@ namespace ao::gtk::test
     CHECK(state.selectedId == rt::kAllTracksListId);
   }
 
-  TEST_CASE("ListNavigationController - previews and deletes the selected derived subtree", "[gtk][integration][list]")
+  TEST_CASE("ListNavigationController - previews and deletes the selected derived subtree")
   {
     auto state = NavigationFixture{};
 
@@ -959,8 +955,7 @@ namespace ao::gtk::test
     CHECK_FALSE(findList(runtime, grandchildId));
   }
 
-  TEST_CASE("ListNavigationController - failed deletion preserves selection and a parent-bound error",
-            "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - failed deletion preserves selection and a parent-bound error")
   {
     auto state = NavigationFixture{};
 
@@ -994,7 +989,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("ListNavigationController - registration retirement revokes retained actions", "[gtk][unit][list][async]")
+  TEST_CASE("ListNavigationController - registration retirement revokes retained actions")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -1033,8 +1028,7 @@ namespace ao::gtk::test
     CHECK(actionGroupPtr->lookup_action("list-new-smart-list") == nullptr);
   }
 
-  TEST_CASE("ListNavigationController - replacement registration preserves current action availability",
-            "[gtk][unit][list]")
+  TEST_CASE("ListNavigationController - replacement registration preserves current action availability")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -1079,8 +1073,7 @@ namespace ao::gtk::test
     CHECK_FALSE(replacementEditActionPtr->get_enabled());
   }
 
-  TEST_CASE("ListNavigationController - writable-tag delete offers optional tag cleanup",
-            "[gtk][integration][list][list-delete]")
+  TEST_CASE("ListNavigationController - writable-tag delete offers optional tag cleanup")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -1131,7 +1124,7 @@ namespace ao::gtk::test
     CHECK_FALSE(hasTrackTag(fixture.runtime(), trackId, "road-trip"));
   }
 
-  TEST_CASE("ListNavigationPanel - retired selection model no longer drives callbacks", "[gtk][unit][list][async]")
+  TEST_CASE("ListNavigationPanel - retired selection model no longer drives callbacks")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -1170,7 +1163,7 @@ namespace ao::gtk::test
     CHECK(selectedIds == std::vector{listId});
   }
 
-  TEST_CASE("ListNavigationPanel - physical separator follows saved List section", "[gtk][unit][list]")
+  TEST_CASE("ListNavigationPanel - physical separator follows saved List section")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

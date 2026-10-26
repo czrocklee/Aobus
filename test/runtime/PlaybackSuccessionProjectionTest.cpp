@@ -28,8 +28,7 @@ namespace ao::rt::test
   using playback_succession::navigationRequest;
   using playback_succession::PlaybackSuccessionFixture;
 
-  TEST_CASE("PlaybackSuccession - List reorder updates only the live semantic tuple",
-            "[runtime][unit][playback-succession][projection]")
+  TEST_CASE("PlaybackSuccession - List reorder updates only the live semantic tuple")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();
@@ -57,8 +56,7 @@ namespace ao::rt::test
     CHECK(changedCount == 1);
   }
 
-  TEST_CASE("PlaybackSuccession - smart membership changes retain current audio and a gap anchor",
-            "[runtime][unit][playback-succession][projection]")
+  TEST_CASE("PlaybackSuccession - smart membership changes retain current audio and a gap anchor")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.firstTrackId = fixture.addPlayableTrack("First", 1990);
@@ -106,8 +104,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - empty live repeat-one remains navigable until invalidation",
-            "[runtime][unit][playback-succession][repeat]")
+  TEST_CASE("PlaybackSuccession - empty live repeat-one remains navigable until invalidation")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.firstTrackId = fixture.addPlayableTrack("Only");
@@ -143,8 +140,7 @@ namespace ao::rt::test
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
   }
 
-  TEST_CASE("PlaybackSuccession - empty live source has no successor with repeat off or all",
-            "[runtime][unit][playback-succession][repeat]")
+  TEST_CASE("PlaybackSuccession - empty live source has no successor with repeat off or all")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.firstTrackId = fixture.addPlayableTrack("Only");
@@ -182,8 +178,7 @@ namespace ao::rt::test
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
   }
 
-  TEST_CASE("PlaybackSuccession - live membership governs succession without interrupting current audio",
-            "[runtime][unit][playback-succession][projection]")
+  TEST_CASE("PlaybackSuccession - live membership governs succession without interrupting current audio")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();

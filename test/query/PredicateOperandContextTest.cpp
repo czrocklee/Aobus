@@ -26,7 +26,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("PredicateOperandContext - sibling constants do not inherit codec context", "[query][unit][predicate]")
+  TEST_CASE("PredicateOperandContext - sibling constants do not inherit codec context")
   {
     auto flac = TrackFixture{TrackSpec{.codec = AudioCodec::Flac}};
     auto mp3 = TrackFixture{TrackSpec{.codec = AudioCodec::Mp3}};
@@ -41,7 +41,7 @@ namespace ao::query::test
     CHECK_FALSE(matches("@codec = 'FLAC' and 'x' in ['y', 'x']", mp3));
   }
 
-  TEST_CASE("PredicateOperandContext - sibling constants do not inherit dictionary context", "[query][unit][predicate]")
+  TEST_CASE("PredicateOperandContext - sibling constants do not inherit dictionary context")
   {
     auto bach = TrackFixture{TrackSpec{.artist = "Bach", .genre = "Jazz"}};
     auto mozart = TrackFixture{TrackSpec{.artist = "Mozart", .genre = "Classical"}};
@@ -54,7 +54,7 @@ namespace ao::query::test
     CHECK_FALSE(matches("$genre = 'Jazz' and 'Jazz' = 'Jazz'", mozart));
   }
 
-  TEST_CASE("PredicateOperandContext - sibling constants do not inherit a custom key", "[query][unit][predicate]")
+  TEST_CASE("PredicateOperandContext - sibling constants do not inherit a custom key")
   {
     auto labeled = TrackFixture{TrackSpec{.customPairs = {{"isrc", "ABC"}, {"label", "DG"}}}};
     auto other = TrackFixture{TrackSpec{.customPairs = {{"isrc", "XYZ"}}}};
@@ -66,7 +66,7 @@ namespace ao::query::test
     CHECK_FALSE(matches("%isrc = 'ABC' and %label = 'DG'", other));
   }
 
-  TEST_CASE("PredicateOperandContext - sibling constants do not inherit unit context", "[query][unit][predicate]")
+  TEST_CASE("PredicateOperandContext - sibling constants do not inherit unit context")
   {
     auto matching = TrackFixture{TrackSpec{
       .duration = std::chrono::milliseconds{1500},
@@ -93,7 +93,7 @@ namespace ao::query::test
     std::ignore = compileError(parseOk("@sampleRate = 44.1k and 44.1k = 44100"));
   }
 
-  TEST_CASE("PredicateOperandContext - nested predicates compare as booleans", "[query][unit][predicate]")
+  TEST_CASE("PredicateOperandContext - nested predicates compare as booleans")
   {
     auto flac = TrackFixture{TrackSpec{.title = "Goldberg", .codec = AudioCodec::Flac}};
     auto mp3 = TrackFixture{TrackSpec{.title = "Other", .codec = AudioCodec::Mp3}};
@@ -120,7 +120,7 @@ namespace ao::query::test
     CHECK_FALSE(matches("(%isrc = 'ABC') = false", labeled));
   }
 
-  TEST_CASE("PredicateOperandContext - date and credit context stays on the direct field", "[query][unit][predicate]")
+  TEST_CASE("PredicateOperandContext - date and credit context stays on the direct field")
   {
     auto dated = TrackFixture{TrackSpec{
       .recordingDate = {.year = 1981, .month = 5, .day = 12},
@@ -145,8 +145,7 @@ namespace ao::query::test
     CHECK_FALSE(matches("($credit = 'Glenn Gould') = false", dated));
   }
 
-  TEST_CASE("PredicateOperandContext - every member selector confines nested and sibling field context",
-            "[query][unit][predicate][credit]")
+  TEST_CASE("PredicateOperandContext - every member selector confines nested and sibling field context")
   {
     auto present = TrackFixture{TrackSpec{.credits = {
                                             {.name = "Name", .kind = CreditKind::Conductor},

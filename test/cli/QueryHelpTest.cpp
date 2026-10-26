@@ -8,7 +8,7 @@
 
 namespace ao::cli::test
 {
-  TEST_CASE("CLI - query help and errors teach filter usage", "[cli][unit][contract]")
+  TEST_CASE("CLI - query help and errors teach filter usage")
   {
     auto fixture = CliFixture{};
     fixture.addTrack(library::test::TrackSpec{});

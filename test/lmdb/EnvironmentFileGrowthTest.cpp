@@ -99,7 +99,7 @@ namespace ao::lmdb::test
   // The data file grows with the pages transactions use, on Windows as well as
   // POSIX, so neither its length nor its allocation follows the map. A Windows
   // build of LMDB with MDB_FIXEDSIZE would extend the file to the map.
-  TEST_CASE("Environment - a configured map size does not become disk usage", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - a configured map size does not become disk usage")
   {
     auto const temp = ao::test::TempDir{};
     auto const dataPath = temp.path() / "data.mdb";
@@ -116,7 +116,7 @@ namespace ao::lmdb::test
     CHECK(std::filesystem::file_size(dataPath) < kAllocationCeiling);
   }
 
-  TEST_CASE("Environment - reopening an environment keeps allocation proportional", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - reopening an environment keeps allocation proportional")
   {
     auto const temp = ao::test::TempDir{};
     auto const dataPath = temp.path() / "data.mdb";
@@ -142,7 +142,7 @@ namespace ao::lmdb::test
     CHECK(std::filesystem::file_size(dataPath) < kAllocationCeiling);
   }
 
-  TEST_CASE("Environment - a map the capacity policy raises does not become disk usage", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - a map the capacity policy raises does not become disk usage")
   {
     auto const temp = ao::test::TempDir{};
     auto const dataPath = temp.path() / "data.mdb";
@@ -175,7 +175,7 @@ namespace ao::lmdb::test
   // aborts. The adapter marks the file sparse so the extension stays a hole,
   // which a volume without sparse files cannot provide. POSIX extends the file
   // only by writing to it.
-  TEST_CASE("Environment - an aborted transaction does not become disk usage", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - an aborted transaction does not become disk usage")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -209,7 +209,7 @@ namespace ao::lmdb::test
     CHECK(utility::allocatedFileBytes(dataPath) < kAbortCeiling);
   }
 
-  TEST_CASE("Environment - opens a path whose name is not ASCII", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - opens a path whose name is not ASCII")
   {
     // Escaped rather than literal bytes so the expectation does not depend on how
     // a compiler reads this source file. LMDB decodes the path as UTF-8 and the
@@ -232,8 +232,7 @@ namespace ao::lmdb::test
     requireRecordsReadable(*envRes, kRecordCount);
   }
 
-  TEST_CASE("EnvironmentDataFile - concurrent preparation of one file all succeeds",
-            "[lmdb][unit][environment][concurrency]")
+  TEST_CASE("EnvironmentDataFile - concurrent preparation of one file all succeeds", "[concurrency]")
   {
     constexpr std::size_t kThreadCount = 8;
     auto const temp = ao::test::TempDir{};
@@ -276,8 +275,7 @@ namespace ao::lmdb::test
     checkFootprintBelowCeiling(temp.path() / "data.mdb");
   }
 
-  TEST_CASE("Environment - concurrent first opens of separate environments all succeed",
-            "[lmdb][unit][environment][concurrency]")
+  TEST_CASE("Environment - concurrent first opens of separate environments all succeed", "[concurrency]")
   {
     constexpr std::size_t kThreadCount = 8;
     auto const temp = ao::test::TempDir{};
@@ -323,7 +321,7 @@ namespace ao::lmdb::test
     CHECK(failures.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("Environment - opening rejects a flag outside the mirrored ones", "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - opening rejects a flag outside the mirrored ones")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -345,8 +343,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("Environment - a read-only open of an absent database leaves the data file absent",
-            "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - a read-only open of an absent database leaves the data file absent")
   {
     auto const temp = ao::test::TempDir{};
 

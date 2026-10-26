@@ -253,7 +253,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("FrameResource - the window frame declares every style the shipped presets name", "[winui][unit][layout]")
+  TEST_CASE("FrameResource - the window frame declares every style the shipped presets name")
   {
     // A preset that names a key the frame does not declare builds an unstyled
     // shell, and one whose element the style cannot target fails the build
@@ -300,8 +300,7 @@ namespace ao::winui::test
     CHECK(styled >= 20);
   }
 
-  TEST_CASE("FrameResource - the window frame declares the resources the Windows components resolve by name",
-            "[winui][unit][layout]")
+  TEST_CASE("FrameResource - the window frame declares the resources the Windows components resolve by name")
   {
     // These are not reachable through `styleKey`: a template, a container
     // style, and the per-presentation slider chrome are handed to the component
@@ -332,7 +331,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("FrameResource - status information declares theme-bound normal foregrounds", "[winui][unit][layout]")
+  TEST_CASE("FrameResource - status information declares theme-bound normal foregrounds")
   {
     auto const resources = windowScopeResources();
 
@@ -351,7 +350,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("FrameResource - track column events bind their required field id", "[winui][unit][layout]")
+  TEST_CASE("FrameResource - track column events bind their required field id")
   {
     auto const tags = xamlTags(readFile(std::filesystem::path{AOBUS_WINDOWS_FRAME_XAML}));
     auto const tagForHandler = [&tags](std::string_view const eventName,
@@ -385,8 +384,7 @@ namespace ao::winui::test
     CHECK(attribute(*optMoveRight, "Tag") == "{x:Bind FieldId}");
   }
 
-  TEST_CASE("FrameResource - the window frame declares the Classic chrome rounding a retro theme replaces",
-            "[winui][unit][layout]")
+  TEST_CASE("FrameResource - the window frame declares the Classic chrome rounding a retro theme replaces")
   {
     // The shell answers `classic.chrome` by replacing this value and rebuilding
     // rather than by reaching for the bars a document built. A `ThemeResource`
@@ -409,8 +407,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("FrameResource - the window frame keeps the seek slider chrome out of the window scope",
-            "[winui][unit][layout]")
+  TEST_CASE("FrameResource - the window frame keeps the seek slider chrome out of the window scope")
   {
     // The slider chrome keys are WinUI's own. Declared in the window they would
     // re-chrome every slider in the shell, so they live inside a keyed

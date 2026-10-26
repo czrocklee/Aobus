@@ -29,7 +29,7 @@ namespace ao::test
     }
   } // namespace
 
-  TEST_CASE("RymlAdapter - scalar parsing is strict and non-throwing", "[core][unit][yaml]")
+  TEST_CASE("RymlAdapter - scalar parsing is strict and non-throwing")
   {
     SECTION("integers must consume the full scalar")
     {
@@ -78,7 +78,7 @@ namespace ao::test
     }
   }
 
-  TEST_CASE("RymlAdapter - readBoolOr reads exact boolean text or preserves fallback", "[core][unit][yaml]")
+  TEST_CASE("RymlAdapter - readBoolOr reads exact boolean text or preserves fallback")
   {
     auto trueTree = parseYaml("true");
     auto falseTree = parseYaml("false");
@@ -98,7 +98,7 @@ namespace ao::test
     CHECK(yaml::readBoolOr(tree.rootref(), true));
   }
 
-  TEST_CASE("RymlAdapter - recoverable helpers return Result", "[core][unit][yaml]")
+  TEST_CASE("RymlAdapter - recoverable helpers return Result")
   {
     SECTION("readFileResult reports missing files as IoError")
     {
@@ -182,7 +182,7 @@ namespace ao::test
     }
   }
 
-  TEST_CASE("RymlAdapter - arena parsing retains source bytes after input destruction", "[core][unit][yaml]")
+  TEST_CASE("RymlAdapter - arena parsing retains source bytes after input destruction")
   {
     auto state = yaml::ErrorCallbackState{"arena.yaml"};
     auto tree = ryml::Tree{yaml::callbacks()};
@@ -196,7 +196,7 @@ namespace ao::test
     CHECK(yaml::scalarView(yaml::findChild(root, "name")) == "preserved");
   }
 
-  TEST_CASE("RymlAdapter - error callback state owns diagnostic filename", "[core][unit][yaml]")
+  TEST_CASE("RymlAdapter - error callback state owns diagnostic filename")
   {
     auto state = yaml::ErrorCallbackState{"fixture.yaml"};
     auto tree = ryml::Tree{yaml::callbacks()};

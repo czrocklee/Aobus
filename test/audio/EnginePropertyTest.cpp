@@ -53,7 +53,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Engine - volume and mute controls update backend and status", "[audio][unit][engine][property]")
+  TEST_CASE("Engine - volume and mute controls update backend and status")
   {
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -92,8 +92,7 @@ namespace ao::audio::test
     CHECK(engine.status().volumeAvailable == true);
   }
 
-  TEST_CASE("Engine - controls refresh volume capability while preserving valid intent",
-            "[audio][unit][engine][property]")
+  TEST_CASE("Engine - controls refresh volume capability while preserving valid intent")
   {
     for (auto const& [propertyId, controlFails] : std::array{std::pair<PropertyId, bool>{PropertyId::Volume, false},
                                                              std::pair<PropertyId, bool>{PropertyId::Volume, true},
@@ -186,8 +185,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - NaN volume is rejected without backend observation or intent mutation",
-            "[audio][unit][engine][property]")
+  TEST_CASE("Engine - NaN volume is rejected without backend observation or intent mutation")
   {
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -242,7 +240,7 @@ namespace ao::audio::test
     CHECK(statusAfterNaN.volumeIsHardwareAssisted == statusBeforeNaN.volumeIsHardwareAssisted);
   }
 
-  TEST_CASE("Engine - property callbacks refresh observed capability and intent", "[audio][unit][engine][property]")
+  TEST_CASE("Engine - property callbacks refresh observed capability and intent")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
@@ -350,7 +348,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - property controls round-trip and survive backend open", "[audio][unit][engine][property]")
+  TEST_CASE("Engine - property controls round-trip and survive backend open")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();

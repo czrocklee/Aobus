@@ -37,21 +37,21 @@ namespace ao::library::test
   } // namespace
 
   // === Metadata Tests ===
-  TEST_CASE("TrackView - returns title from hot data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns title from hot data")
   {
     auto const data = makeHotTrackViewData("Test Title");
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title() == "Test Title");
   }
 
-  TEST_CASE("TrackView - returns empty title when hot title length is zero", "[library][unit][track]")
+  TEST_CASE("TrackView - returns empty title when hot title length is zero")
   {
     auto const data = makeMinimalHotTrackViewData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().title().empty());
   }
 
-  TEST_CASE("TrackView - returns dictionary IDs from hot data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns dictionary IDs from hot data")
   {
     auto const data = makeMinimalHotTrackViewData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -63,14 +63,14 @@ namespace ao::library::test
     CHECK(view.metadata().composerId() == kInvalidDictionaryId);
   }
 
-  TEST_CASE("TrackView - returns year from hot data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns year from hot data")
   {
     auto const data = makeMinimalHotTrackViewData();
     auto const view = TrackView{data, std::span<std::byte const>{}};
     CHECK(view.metadata().year() == 2020);
   }
 
-  TEST_CASE("TrackView - returns track numbering from cold data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns track numbering from cold data")
   {
     auto header = TrackColdHeader{};
     header.trackNumber = 5;
@@ -87,7 +87,7 @@ namespace ao::library::test
     CHECK(view.metadata().discTotal() == 2);
   }
 
-  TEST_CASE("TrackView - returns work and movement IDs from cold data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns work and movement IDs from cold data")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.property().uri("classical.flac");
@@ -124,7 +124,7 @@ namespace ao::library::test
     CHECK(view.work().movementTotal() == 4);
   }
 
-  TEST_CASE("TrackView - returns cover art entries from cold data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns cover art entries from cold data")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.property().uri("cover.flac");
@@ -146,7 +146,7 @@ namespace ao::library::test
     CHECK(view.coverArt().primary()->type == PictureType::BackCover);
   }
 
-  TEST_CASE("TrackView - returns URI from cold data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns URI from cold data")
   {
     auto const data = makeColdTrackViewData({}, {}, "/path/to/file.flac");
     auto const view = makeColdTrackView(data);
@@ -155,7 +155,7 @@ namespace ao::library::test
     CHECK(view.property().uri() == "/path/to/file.flac");
   }
 
-  TEST_CASE("TrackView - returns empty URI when cold URI length is zero", "[library][unit][track]")
+  TEST_CASE("TrackView - returns empty URI when cold URI length is zero")
   {
     auto const data = makeColdTrackViewData({}, {}, "");
     auto const view = makeColdTrackView(data);
@@ -165,7 +165,7 @@ namespace ao::library::test
   }
 
   // === Property Tests ===
-  TEST_CASE("TrackView - returns codec and bit depth from hot data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns codec and bit depth from hot data")
   {
     auto h = TrackHotHeader{};
     h.codec = AudioCodec::Flac;
@@ -179,7 +179,7 @@ namespace ao::library::test
     CHECK(view.property().sampleRate() == 96000);
   }
 
-  TEST_CASE("TrackView - returns audio format from cold data", "[library][unit][track]")
+  TEST_CASE("TrackView - returns audio format from cold data")
   {
     auto header = TrackColdHeader{};
     header.duration = std::chrono::minutes{3};

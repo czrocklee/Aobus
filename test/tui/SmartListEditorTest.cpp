@@ -94,7 +94,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("SmartListEditor - starts from its baseline without pending intent", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - starts from its baseline without pending intent")
   {
     auto baseline = rt::ListDraft{
       .parentId = ListId{7},
@@ -119,7 +119,7 @@ namespace ao::tui::test
     CHECK(draft.expression == "#live");
   }
 
-  TEST_CASE("SmartListEditor - a clean editor closes while a dirty one asks first", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - a clean editor closes while a dirty one asks first")
   {
     auto editor = makeEditor();
     editor.applyPreview(validPreviewState(), {});
@@ -152,7 +152,7 @@ namespace ao::tui::test
     CHECK(dirty.takeRequest() == ListEditorRequest::Close);
   }
 
-  TEST_CASE("SmartListEditor - Ctrl-S asks the owner to judge the draft it holds", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - Ctrl-S asks the owner to judge the draft it holds")
   {
     auto editor = makeEditor();
     editor.applyPreview(validPreviewState(), {});
@@ -178,7 +178,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == ListEditorRequest::Submit);
   }
 
-  TEST_CASE("SmartListEditor - an empty name is not admissible even with a valid expression", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - an empty name is not admissible even with a valid expression")
   {
     auto editor = makeEditor(ListEditorMode::Edit, rt::ListDraft{.listId = ListId{4}, .name = "Named"});
     editor.applyPreview(validPreviewState(), {});
@@ -197,7 +197,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == ListEditorRequest::Submit);
   }
 
-  TEST_CASE("SmartListEditor - edits report the preview change they caused", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - edits report the preview change they caused")
   {
     auto editor = makeEditor();
     editor.applyPreview(validPreviewState(), {});
@@ -220,7 +220,7 @@ namespace ao::tui::test
     CHECK(editor.takeRequest() == ListEditorRequest::PreviewChanged);
   }
 
-  TEST_CASE("SmartListEditor - arrows move fields and Return walks the form", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - arrows move fields and Return walks the form")
   {
     auto editor = makeEditor();
     editor.applyPreview(validPreviewState(), {});
@@ -242,7 +242,7 @@ namespace ao::tui::test
     CHECK(editor.draft().name == "N");
   }
 
-  TEST_CASE("SmartListEditor - expression completion accepts candidates only for the expression", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - expression completion accepts candidates only for the expression")
   {
     auto editor = makeEditor();
     editor.applyPreview(validPreviewState(), {});
@@ -273,7 +273,7 @@ namespace ao::tui::test
     CHECK(editor.isDirty());
   }
 
-  TEST_CASE("SmartListEditor - a submitting editor consumes every event", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - a submitting editor consumes every event")
   {
     auto editor = makeEditor();
     editor.applyPreview(validPreviewState(), {});
@@ -296,7 +296,7 @@ namespace ao::tui::test
     CHECK(editor.canSubmit());
   }
 
-  TEST_CASE("SmartListEditor - renders its fields, preview, and membership rows", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - renders its fields, preview, and membership rows")
   {
     auto editor = makeEditor(ListEditorMode::Edit, rt::ListDraft{.listId = ListId{4}, .name = "Roadsongs"});
     auto state = validPreviewState();
@@ -320,7 +320,7 @@ namespace ao::tui::test
     CHECK_FALSE(findTextCells(rendered.screen, "Effective"));
   }
 
-  TEST_CASE("SmartListEditor - labels follow the widest maintained locale without truncation", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - labels follow the widest maintained locale without truncation")
   {
     auto const cases = std::array<std::pair<std::string_view, std::string_view>, 3>{
       std::pair{std::string_view{"en"}, std::string_view{"Expression"}},
@@ -338,7 +338,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("SmartListEditor - a filtered parent shows inherited and effective expressions", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - a filtered parent shows inherited and effective expressions")
   {
     auto baseline = rt::ListDraft{.listId = ListId{4}, .name = "Roadsongs", .expression = "#live"};
     auto editor = makeEditor(ListEditorMode::Edit, std::move(baseline), "#tour");
@@ -369,7 +369,7 @@ namespace ao::tui::test
     CHECK(findTextCells(edited.screen, "(#tour) and (#live and #bootleg)"));
   }
 
-  TEST_CASE("SmartListEditor - renders the bounded preview its view state describes", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - renders the bounded preview its view state describes")
   {
     auto editor = makeEditor();
     auto state = uimodel::SmartListEditorViewState{};
@@ -393,8 +393,7 @@ namespace ao::tui::test
     CHECK_FALSE(findTextCells(errorRendered.screen, "Only"));
   }
 
-  TEST_CASE("SmartListEditor - mouse input focuses fields and closes through the header control",
-            "[tui][unit][mouse][editor]")
+  TEST_CASE("SmartListEditor - mouse input focuses fields and closes through the header control")
   {
     auto editor = makeEditor();
     editor.applyPreview(validPreviewState(), {});
@@ -441,7 +440,7 @@ namespace ao::tui::test
     CHECK(editor.isConfirmingDiscard());
   }
 
-  TEST_CASE("SmartListEditor - the completion popup opens under the value column", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - the completion popup opens under the value column")
   {
     auto editor = makeEditor(ListEditorMode::Edit, rt::ListDraft{.listId = ListId{4}, .name = "Roadsongs"});
     editor.applyPreview(validPreviewState(), {});
@@ -461,7 +460,7 @@ namespace ao::tui::test
     CHECK(optCandidate->x_min == optValue->x_min + kBorderPaddingAndMarkerColumns);
   }
 
-  TEST_CASE("SmartListEditor - a sole candidate that spells its token closes the popup", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - a sole candidate that spells its token closes the popup")
   {
     // The completed token is the one after the last space, not the whole text.
     auto const lastTokenProvider = [](std::string_view const text,
@@ -491,7 +490,7 @@ namespace ao::tui::test
     CHECK(editor.draft().expression == "#live and #rock");
   }
 
-  TEST_CASE("SmartListEditor - an empty expression shows how completion starts", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - an empty expression shows how completion starts")
   {
     auto editor = makeEditor();
     auto const empty = renderElement(editor.renderModal(80, 24), 80, 24);
@@ -503,7 +502,7 @@ namespace ao::tui::test
     CHECK_FALSE(findTextCells(typed.screen, "type $, @, #, or %"));
   }
 
-  TEST_CASE("SmartListEditor - a short terminal shortens the sample, never the rows below it", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - a short terminal shortens the sample, never the rows below it")
   {
     auto editor = makeEditor(
       ListEditorMode::Edit, rt::ListDraft{.listId = ListId{4}, .name = "Roadsongs", .expression = "#live"}, "#tour");
@@ -535,7 +534,7 @@ namespace ao::tui::test
     CHECK_FALSE(findTextCells(roomy.screen, "\u2026"));
   }
 
-  TEST_CASE("SmartListEditor - long single-row values say they were shortened", "[tui][unit][editor]")
+  TEST_CASE("SmartListEditor - long single-row values say they were shortened")
   {
     auto const longParent = std::string{"#tour and "} + std::string(120, 'x');
     auto editor = makeEditor(

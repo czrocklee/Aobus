@@ -25,7 +25,7 @@ namespace ao::uimodel::test
   using namespace ao::rt;
   using namespace ao::rt::test;
 
-  TEST_CASE("TransportViewModel - renders presentation for actions", "[uimodel][unit][playback]")
+  TEST_CASE("TransportViewModel - renders presentation for actions")
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -167,7 +167,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TransportViewModel - renders command-surface enablement", "[uimodel][unit][playback][sequence]")
+  TEST_CASE("TransportViewModel - renders command-surface enablement")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -196,7 +196,7 @@ namespace ao::uimodel::test
     CHECK(previousLog.last().enabled == false);
   }
 
-  TEST_CASE("TransportViewModel - refreshes only the command it presents", "[uimodel][unit][playback]")
+  TEST_CASE("TransportViewModel - refreshes only the command it presents")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -228,7 +228,7 @@ namespace ao::uimodel::test
     CHECK(shuffleLog.last().engaged == true);
   }
 
-  TEST_CASE("TransportViewModel - clicks delegate to command surface", "[uimodel][integration][playback]")
+  TEST_CASE("TransportViewModel - clicks delegate to command surface")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -289,7 +289,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("TransportViewModel - stops rendering after destruction", "[uimodel][unit][playback]")
+  TEST_CASE("TransportViewModel - stops rendering after destruction")
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
@@ -318,7 +318,7 @@ namespace ao::uimodel::test
     CHECK(log.empty());
   }
 
-  TEST_CASE("TransportViewModel - renders control semantics in the selected locale", "[uimodel][unit][playback]")
+  TEST_CASE("TransportViewModel - renders control semantics in the selected locale")
   {
     auto fixture = PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();

@@ -25,8 +25,7 @@ namespace ao::systemmedia::test
     };
   } // namespace
 
-  TEST_CASE("MprisArtUrlSession - replacing a resource invalidates the cancelled request callback",
-            "[platform][unit][mpris][async]")
+  TEST_CASE("MprisArtUrlSession - replacing a resource invalidates the cancelled request callback")
   {
     constexpr auto kFirstResourceId = ResourceId{11};
     constexpr auto kSecondResourceId = ResourceId{22};
@@ -71,8 +70,7 @@ namespace ao::systemmedia::test
     CHECK(session.urlFor(kSecondResourceId) == "file:///tmp/current.png");
   }
 
-  TEST_CASE("MprisArtUrlSession - synchronous completion publishes once without retaining the request",
-            "[platform][unit][mpris]")
+  TEST_CASE("MprisArtUrlSession - synchronous completion publishes once without retaining the request")
   {
     constexpr auto kResourceId = ResourceId{33};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -103,8 +101,7 @@ namespace ao::systemmedia::test
     CHECK(session.urlFor(kResourceId) == "file:///tmp/synchronous.png");
   }
 
-  TEST_CASE("MprisArtUrlSession - clear invalidates completion before cancelling an active request",
-            "[platform][unit][mpris][async]")
+  TEST_CASE("MprisArtUrlSession - clear invalidates completion before cancelling an active request")
   {
     constexpr auto kResourceId = ResourceId{43};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -134,8 +131,7 @@ namespace ao::systemmedia::test
     CHECK(session.urlFor(kResourceId).empty());
   }
 
-  TEST_CASE("MprisArtUrlSession - destruction invalidates completion before cancelling an active request",
-            "[platform][unit][mpris][async]")
+  TEST_CASE("MprisArtUrlSession - destruction invalidates completion before cancelling an active request")
   {
     constexpr auto kResourceId = ResourceId{44};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};
@@ -164,8 +160,7 @@ namespace ao::systemmedia::test
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("MprisArtUrlSession - requester exceptions invalidate the completion before rethrowing",
-            "[platform][unit][mpris][async]")
+  TEST_CASE("MprisArtUrlSession - requester exceptions invalidate the completion before rethrowing")
   {
     constexpr auto kResourceId = ResourceId{55};
     auto capturedCompletion = MprisArtUrlSession::OnUrlReady{};

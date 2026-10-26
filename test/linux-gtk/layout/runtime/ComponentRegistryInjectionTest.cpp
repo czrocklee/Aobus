@@ -17,8 +17,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("ComponentRegistry - registers schema entries after uimodel action property injection",
-            "[gtk][unit][layout][runtime]")
+  TEST_CASE("ComponentRegistry - registers schema entries after uimodel action property injection")
   {
     auto registry = ComponentRegistry{};
 

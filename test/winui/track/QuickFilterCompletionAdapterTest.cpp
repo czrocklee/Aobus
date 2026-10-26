@@ -13,7 +13,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("quickFilterUtf8Cursor maps UTF-16 caret boundaries to UTF-8 bytes", "[winui][unit][quick-filter]")
+  TEST_CASE("quickFilterUtf8Cursor maps UTF-16 caret boundaries to UTF-8 bytes")
   {
     auto const text = std::string{"A\xF0\x9F\x8E\xB5\xE5\xAE\x87"};
 
@@ -23,14 +23,14 @@ namespace ao::winui::test
     CHECK(quickFilterUtf8Cursor(text, 4) == 8);
   }
 
-  TEST_CASE("quickFilterUtf8Cursor rejects invalid and non-boundary cursors", "[winui][unit][quick-filter]")
+  TEST_CASE("quickFilterUtf8Cursor rejects invalid and non-boundary cursors")
   {
     CHECK_FALSE(quickFilterUtf8Cursor("\xF0\x9F\x8E\xB5", 1));
     CHECK_FALSE(quickFilterUtf8Cursor("A", 2));
     CHECK_FALSE(quickFilterUtf8Cursor("\xC3", 1));
   }
 
-  TEST_CASE("quickFilterUtf16Range maps quoted non-ASCII replacement spans", "[winui][unit][quick-filter]")
+  TEST_CASE("quickFilterUtf16Range maps quoted non-ASCII replacement spans")
   {
     auto const text = std::string{"$artist = \"\xE5\xAE\x87\xE5\xA4\x9A\" and $year"};
     auto const begin = text.find("\xE5\xAE\x87");
@@ -39,7 +39,7 @@ namespace ao::winui::test
     CHECK(quickFilterUtf16Range(text, begin, end) == QuickFilterUtf16Range{.begin = 11, .end = 13});
   }
 
-  TEST_CASE("quickFilterUtf16Range rejects stale or malformed spans", "[winui][unit][quick-filter]")
+  TEST_CASE("quickFilterUtf16Range rejects stale or malformed spans")
   {
     CHECK_FALSE(quickFilterUtf16Range("Aimer", 4, 2));
     CHECK_FALSE(quickFilterUtf16Range("Aimer", 0, 6));
@@ -47,8 +47,7 @@ namespace ao::winui::test
     CHECK_FALSE(quickFilterUtf16Range("\xE5", 0, 1));
   }
 
-  TEST_CASE("quickFilterSuggestionRows preserves semantic item identity and localized detail",
-            "[winui][unit][quick-filter]")
+  TEST_CASE("quickFilterSuggestionRows preserves semantic item identity and localized detail")
   {
     auto const result =
       rt::CompletionResult{.replaceBegin = 0,
@@ -68,8 +67,7 @@ namespace ao::winui::test
     CHECK(rows[0].rank == 7);
   }
 
-  TEST_CASE("quickFilterSuggestionContinuesEditing distinguishes incomplete expression tokens",
-            "[winui][unit][quick-filter]")
+  TEST_CASE("quickFilterSuggestionContinuesEditing distinguishes incomplete expression tokens")
   {
     CHECK(shouldContinueEditingQuickFilterSuggestion(
       {.insertText = "$artist", .detailKind = rt::CompletionDetailKind::Field}));

@@ -23,7 +23,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - compiles simple expressions", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles simple expressions")
   {
     auto expr = parseOk("$artist = Bach");
     auto plan = compileOk(expr);
@@ -35,7 +35,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - compiles constant true expressions", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles constant true expressions")
   {
     auto expr = parseOk("true");
     auto plan = compileOk(expr);
@@ -48,7 +48,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.requiresDictionary);
   }
 
-  TEST_CASE("ExecutionPlan - compiles metadata fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles metadata fields")
   {
     auto expr = parseOk("$title = 'Test'");
     auto plan = compileOk(expr);
@@ -58,7 +58,7 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Eq, Field::Title, 0)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles property fields", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles property fields")
   {
     auto expr = parseOk("@duration > 180000");
     auto plan = compileOk(expr);
@@ -66,7 +66,7 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Gt, Field::Duration, 180000)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles codec constants", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles codec constants")
   {
     SECTION("WAV")
     {
@@ -89,12 +89,12 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - rejects unsupported codec constants", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - rejects unsupported codec constants")
   {
     std::ignore = compileError(parseOk("@codec = VORBIS"));
   }
 
-  TEST_CASE("ExecutionPlan - compiles logical and", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles logical and")
   {
     // Use && for logical and to ensure it's parsed correctly
     auto expr = parseOk("$artist = Bach && $genre = Classical");
@@ -111,7 +111,7 @@ namespace ao::query::test
     CHECK(conjunction->operand == genre->operand - 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles logical or", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles logical or")
   {
     // Use || for logical or to ensure it's parsed correctly
     auto expr = parseOk("$artist = Bach || $artist = Mozart");
@@ -128,7 +128,7 @@ namespace ao::query::test
     CHECK(disjunction->operand == mozart->operand - 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles logical not", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles logical not")
   {
     auto expr = parseOk("not #favorite");
     auto plan = compileOk(expr);
@@ -141,7 +141,7 @@ namespace ao::query::test
     CHECK(negation->operand == tag->operand - 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles existence tests", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles existence tests")
   {
     SECTION("FieldExistenceEmitsExistsOpcode")
     {
@@ -164,7 +164,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - rejects bare non-tag predicate operands", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - rejects bare non-tag predicate operands")
   {
     std::ignore = compileError(parseOk("$year"));
     std::ignore = compileError(parseOk("@duration"));
@@ -176,20 +176,20 @@ namespace ao::query::test
     std::ignore = compileError(parseOk("$year = 1990 or $artist"));
   }
 
-  TEST_CASE("ExecutionPlan - rejects existence on non-variable operands", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - rejects existence on non-variable operands")
   {
     std::ignore = compileError(parseOk("($year = 1990)?"));
     std::ignore = compileError(parseOk("1990?"));
     std::ignore = compileError(parseOk(R"("Bach"?)"));
   }
 
-  TEST_CASE("ExecutionPlan - accepts bare and negated tag predicates", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - accepts bare and negated tag predicates")
   {
     std::ignore = compileOk(parseOk("#favorite"));
     std::ignore = compileOk(parseOk("!#favorite"));
   }
 
-  TEST_CASE("ExecutionPlan - compiles relational operators", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles relational operators")
   {
     auto expr = parseOk("$year < 2000");
     auto plan = compileOk(expr);
@@ -202,13 +202,13 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Le, Field::Year, 2000)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - rejects add operators", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - rejects add operators")
   {
     auto expr = parseOk("$title + $artist");
     std::ignore = compileError(expr);
   }
 
-  TEST_CASE("ExecutionPlan - compiles boolean false to constant zero", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - compiles boolean false to constant zero")
   {
     auto expr = parseOk("false");
     auto plan = compileOk(expr);
@@ -218,7 +218,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - rejects invalid AST nodes", "[query][unit][execution-plan]")
+  TEST_CASE("ExecutionPlan - rejects invalid AST nodes")
   {
     SECTION("Unsupported variable type")
     {

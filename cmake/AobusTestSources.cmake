@@ -17,8 +17,8 @@ function(_aobus_normalize_test_source output source base_directory)
   endif()
   cmake_path(RELATIVE_PATH _absolute BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE _relative)
   string(REPLACE "\\" "/" _relative "${_relative}")
-  if(_relative MATCHES "^\\.\\./" OR NOT _relative MATCHES "^test/.+Test\\.(cpp|mm)$")
-    message(FATAL_ERROR "Test source must be a *Test.cpp or *Test.mm file below test/: ${source}")
+  if(_relative MATCHES "^\\.\\./" OR NOT _relative MATCHES "^test/.+(Test\\.(cpp|mm)|Benchmark\\.cpp)$")
+    message(FATAL_ERROR "Test source must be a *Test.cpp, *Test.mm, or *Benchmark.cpp file below test/: ${source}")
   endif()
   if(NOT EXISTS "${_absolute}")
     message(FATAL_ERROR "Declared test source does not exist: ${_relative}")
@@ -54,7 +54,8 @@ function(aobus_finalize_test_sources manifest)
 
   file(GLOB_RECURSE _expected CONFIGURE_DEPENDS LIST_DIRECTORIES false
     "${CMAKE_SOURCE_DIR}/test/*Test.cpp"
-    "${CMAKE_SOURCE_DIR}/test/*Test.mm")
+    "${CMAKE_SOURCE_DIR}/test/*Test.mm"
+    "${CMAKE_SOURCE_DIR}/test/*Benchmark.cpp")
   list(FILTER _expected EXCLUDE REGEX "/test/lint/fixture/")
   set(_expected_relative)
   foreach(_source IN LISTS _expected)
@@ -84,7 +85,34 @@ function(aobus_finalize_test_sources manifest)
         message(FATAL_ERROR
           "Test target ${_target} has an unsupported source generator expression: ${_source}")
       endif()
-      if(NOT "${_source}" MATCHES "Test\\.(cpp|mm)$")
+      # Case variants such as FooTest.CPP compile with the C++ toolchain but
+      # escape the governed registration suffixes above, so sources below test/
+      # must spell the governed extensions in lowercase. Sources outside test/
+      # and other extensions keep their own policy; only case variants of the
+      # governed extensions are rejected here.
+      cmake_path(IS_ABSOLUTE _source _guard_is_absolute)
+      if(_guard_is_absolute)
+        cmake_path(NORMAL_PATH _source OUTPUT_VARIABLE _guard_absolute)
+      else()
+        cmake_path(ABSOLUTE_PATH _source BASE_DIRECTORY "${_target_source_dir}" NORMALIZE OUTPUT_VARIABLE _guard_absolute)
+      endif()
+      cmake_path(RELATIVE_PATH _guard_absolute BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE _guard_relative)
+      string(REPLACE "\\" "/" _guard_relative "${_guard_relative}")
+      if(_guard_relative MATCHES "^test/")
+        cmake_path(GET _guard_absolute EXTENSION LAST_ONLY _guard_extension)
+        string(TOLOWER "${_guard_extension}" _guard_lowercase_extension)
+        if(NOT "${_guard_extension}" STREQUAL "${_guard_lowercase_extension}"
+            AND ("${_guard_lowercase_extension}" STREQUAL ".cpp"
+              OR "${_guard_lowercase_extension}" STREQUAL ".mm"
+              OR "${_guard_lowercase_extension}" STREQUAL ".h"
+              OR "${_guard_lowercase_extension}" STREQUAL ".hpp"
+              OR "${_guard_lowercase_extension}" STREQUAL ".def"))
+          message(FATAL_ERROR
+            "Test target ${_target} source ${_guard_relative} must use the lowercase "
+            "${_guard_lowercase_extension} extension instead of ${_guard_extension}")
+        endif()
+      endif()
+      if(NOT "${_source}" MATCHES "(Test\\.(cpp|mm)|Benchmark\\.cpp)$")
         continue()
       endif()
       _aobus_normalize_test_source(_relative "${_source}" "${_target_source_dir}")

@@ -18,7 +18,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("VolumeViewModel - view state generation", "[uimodel][integration][playback]")
+  TEST_CASE("VolumeViewModel - view state generation")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto& playback = fixture.playback;
@@ -102,7 +102,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("VolumeViewModel - unrelated playback snapshots do not rerender", "[uimodel][unit][playback]")
+  TEST_CASE("VolumeViewModel - unrelated playback snapshots do not rerender")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<VolumeViewState>{};
@@ -115,7 +115,7 @@ namespace ao::uimodel::test
     CHECK(log.states.size() == 1);
   }
 
-  TEST_CASE("VolumeViewModel - formats volume state in the selected locale", "[uimodel][unit][playback]")
+  TEST_CASE("VolumeViewModel - formats volume state in the selected locale")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto catalog = ao::test::messageCatalog("de-DE");

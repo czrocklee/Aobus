@@ -321,8 +321,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PerformanceMetadataIncrementalBaseline - single-row musician inequality erasures and reinsertions",
-            "[perf][integration][performance-incremental]")
+  TEST_CASE("PerformanceMetadataIncrementalBaseline - single-row musician inequality erasures and reinsertions")
   {
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 20, 1);
     auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", 1, 0);

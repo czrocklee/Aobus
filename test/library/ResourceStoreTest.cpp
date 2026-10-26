@@ -81,7 +81,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("ResourceStore - a row is a descriptor and holds no content", "[library][unit][resource]")
+  TEST_CASE("ResourceStore - a row is a descriptor and holds no content")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -116,7 +116,7 @@ namespace ao::library::test
     CHECK(it->first == id);
   }
 
-  TEST_CASE("ResourceStore - identical content produces one row and one id", "[library][unit][resource]")
+  TEST_CASE("ResourceStore - identical content produces one row and one id")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -138,7 +138,7 @@ namespace ao::library::test
     CHECK(rowCount(store.reader(readTxn)) == 1);
   }
 
-  TEST_CASE("ResourceStore - a handle collision occupies two rows resolved by the probe", "[library][unit][resource]")
+  TEST_CASE("ResourceStore - a handle collision occupies two rows resolved by the probe")
   {
     auto const [first, second] = findHandleCollision();
     REQUIRE_FALSE(first.empty());
@@ -181,8 +181,7 @@ namespace ao::library::test
     CHECK(reader.get(*secondIdRes)->digest == secondDigest);
   }
 
-  TEST_CASE("ResourceStore - a counted length corrects a row and a declared one never does",
-            "[library][unit][resource]")
+  TEST_CASE("ResourceStore - a counted length corrects a row and a declared one never does")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -268,7 +267,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("ResourceStore - a removed row is gone", "[library][unit][resource]")
+  TEST_CASE("ResourceStore - a removed row is gone")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;

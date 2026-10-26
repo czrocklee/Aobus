@@ -45,7 +45,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("PcmFrameRing - reads preserve FIFO bytes and clear resets state", "[audio][unit][frame-ring]")
+  TEST_CASE("PcmFrameRing - reads preserve FIFO bytes and clear resets state")
   {
     auto ring = PcmFrameRing{kMonoU8FrameByteCount};
 
@@ -141,7 +141,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmFrameRing - capacity limit causes short write instead of overflow", "[audio][unit][frame-ring]")
+  TEST_CASE("PcmFrameRing - capacity limit causes short write instead of overflow")
   {
     auto ring = PcmFrameRing{kMonoU8FrameByteCount};
     auto const capacity = ring.byteCapacity();
@@ -171,7 +171,7 @@ namespace ao::audio::test
     CHECK(recovered == extra);
   }
 
-  TEST_CASE("PcmFrameRing - frame-aligned ring parks partial frames at frame boundaries", "[audio][unit][frame-ring]")
+  TEST_CASE("PcmFrameRing - frame-aligned ring parks partial frames at frame boundaries")
   {
     constexpr std::size_t kFrameSize = kStereoS24FrameByteCount;
     auto const usableCapacity = (kPcmFrameRingByteCapacity / kFrameSize) * kFrameSize;
@@ -238,8 +238,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("PcmFrameRing - single producer and consumer preserve byte order",
-            "[audio][unit][frame-ring][concurrency][stress]")
+  TEST_CASE("PcmFrameRing - single producer and consumer preserve byte order", "[concurrency]")
   {
     auto ring = PcmFrameRing{kMonoU8FrameByteCount};
     std::int32_t const iterations = 10000;
@@ -368,8 +367,7 @@ namespace ao::audio::test
     CHECK(ring.readableByteCount() == 0);
   }
 
-  TEST_CASE("PcmFrameRing - concurrent frame-aligned producer and consumer park whole frames",
-            "[audio][unit][frame-ring][concurrency][stress]")
+  TEST_CASE("PcmFrameRing - concurrent frame-aligned producer and consumer park whole frames", "[concurrency]")
   {
     constexpr std::size_t kFrameSize = kStereoS24FrameByteCount;
     constexpr std::size_t kTotalFrames = 400000;

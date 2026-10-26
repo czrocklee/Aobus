@@ -225,7 +225,7 @@ namespace ao::systemmedia::test
     }
   } // namespace
 
-  TEST_CASE("MprisBridge - playback status maps transport to MPRIS states", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - playback status maps transport to MPRIS states")
   {
     CHECK(MprisBridge::playbackStatus(audio::Transport::Opening) == "Playing");
     CHECK(MprisBridge::playbackStatus(audio::Transport::Buffering) == "Playing");
@@ -237,7 +237,7 @@ namespace ao::systemmedia::test
     CHECK(MprisBridge::playbackStatus(audio::Transport::Error) == "Stopped");
   }
 
-  TEST_CASE("MprisBridge - metadata snapshot maps playback state to MPRIS fields", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - metadata snapshot maps playback state to MPRIS fields")
   {
     auto const state = rt::PlaybackTransportSnapshot{
       .occurrenceId = rt::PlaybackOccurrenceId{7},
@@ -263,7 +263,7 @@ namespace ao::systemmedia::test
     CHECK(MprisBridge::metadataForState(rt::PlaybackTransportSnapshot{}).trackObjectPath.empty());
   }
 
-  TEST_CASE("MprisBridge - same-track replay changes metadata identity", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - same-track replay changes metadata identity")
   {
     auto before = playbackSnapshot(TrackId{42}, ResourceId{77}, rt::PlaybackOccurrenceId{8});
     auto after = before;
@@ -274,8 +274,7 @@ namespace ao::systemmedia::test
     CHECK(MprisBridge::metadataForState(after.transport).trackObjectPath == "/org/mpris/MediaPlayer2/Track/42_9");
   }
 
-  TEST_CASE("MprisBridge - delayed art URL completion cannot publish for a replaced track",
-            "[platform][unit][mpris][async]")
+  TEST_CASE("MprisBridge - delayed art URL completion cannot publish for a replaced track")
   {
     constexpr auto kFirstTrackId = TrackId{1};
     constexpr auto kSecondTrackId = TrackId{2};
@@ -338,7 +337,7 @@ namespace ao::systemmedia::test
     CHECK(cancellationCount == 2);
   }
 
-  TEST_CASE("MprisBridge - art requester exceptions reach the snapshot owner", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - art requester exceptions reach the snapshot owner")
   {
     constexpr auto kTrackId = TrackId{3};
     constexpr auto kResourceId = ResourceId{33};
@@ -369,7 +368,7 @@ namespace ao::systemmedia::test
     REQUIRE(capturedCompletion);
   }
 
-  TEST_CASE("MprisBridge - UTF-8 metadata survives the Giomm property mapping", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - UTF-8 metadata survives the Giomm property mapping")
   {
     constexpr auto kTitle = std::string_view{"龙卷风"};
     auto fixture = rt::test::PlaybackUiFixture{};
@@ -392,8 +391,7 @@ namespace ao::systemmedia::test
     CHECK(title.get_dynamic<Glib::ustring>().raw() == kTitle);
   }
 
-  TEST_CASE("MprisArtUrlCache - exports library cover art resources as file URLs",
-            "[platform][unit][mpris][concurrency]")
+  TEST_CASE("MprisArtUrlCache - exports library cover art resources as file URLs", "[concurrency]")
   {
     constexpr auto kResourceId = ResourceId{77};
     constexpr auto kPngBytes = std::array{std::byte{0x89},
@@ -481,8 +479,7 @@ namespace ao::systemmedia::test
     runtime.join();
   }
 
-  TEST_CASE("MprisArtUrlCache - invalid and missing resources complete without a URL",
-            "[platform][unit][mpris][concurrency]")
+  TEST_CASE("MprisArtUrlCache - invalid and missing resources complete without a URL", "[concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executor = rt::test::QueuedExecutor{};
@@ -521,8 +518,7 @@ namespace ao::systemmedia::test
     runtime.join();
   }
 
-  TEST_CASE("MprisArtUrlCache - cancelling one waiter preserves the other completion",
-            "[platform][unit][mpris][concurrency]")
+  TEST_CASE("MprisArtUrlCache - cancelling one waiter preserves the other completion", "[concurrency]")
   {
     // Export creates Gio::File wrappers on a worker, even without a frontend application.
     Gio::init();
@@ -591,8 +587,7 @@ namespace ao::systemmedia::test
     CHECK(cancelledCallbackCount == 0);
   }
 
-  TEST_CASE("MprisArtUrlCache - independent resource handles retain content-addressed files",
-            "[platform][unit][mpris][concurrency]")
+  TEST_CASE("MprisArtUrlCache - independent resource handles retain content-addressed files", "[concurrency]")
   {
     constexpr auto kResourceId = ResourceId{91};
     auto const pngBytes = std::vector{std::byte{0x89},
@@ -674,8 +669,7 @@ namespace ao::systemmedia::test
     runtime.join();
   }
 
-  TEST_CASE("MprisArtUrlCache - failed replacement preserves the previously published URI",
-            "[platform][unit][mpris][concurrency]")
+  TEST_CASE("MprisArtUrlCache - failed replacement preserves the previously published URI", "[concurrency]")
   {
     constexpr auto kResourceId = ResourceId{51};
     constexpr auto kPngBytes = std::array{std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}};
@@ -722,8 +716,7 @@ namespace ao::systemmedia::test
     runtime.join();
   }
 
-  TEST_CASE("MprisArtUrlCache - failed resource reads terminate their request flight",
-            "[platform][unit][mpris][concurrency]")
+  TEST_CASE("MprisArtUrlCache - failed resource reads terminate their request flight", "[concurrency]")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto runtime = async::Runtime{executor, 1};
@@ -783,7 +776,7 @@ namespace ao::systemmedia::test
     }
   }
 
-  TEST_CASE("MprisBridge - elapsed helpers convert MPRIS time without overflow", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - elapsed helpers convert MPRIS time without overflow")
   {
     CHECK(MprisBridge::microsecondsFromMilliseconds(std::chrono::milliseconds{1234}) == 1'234'000);
     CHECK(MprisBridge::fromMprisMicroseconds(1'234'567) == std::chrono::milliseconds{1234});
@@ -794,7 +787,7 @@ namespace ao::systemmedia::test
           std::numeric_limits<std::int64_t>::min());
   }
 
-  TEST_CASE("MprisBridge - Seeked follows final seek identity rather than elapsed drift", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - Seeked follows final seek identity rather than elapsed drift")
   {
     auto before = rt::PlaybackTransportSnapshot{.elapsed = std::chrono::milliseconds{100}};
     auto after = before;
@@ -809,7 +802,7 @@ namespace ao::systemmedia::test
     CHECK(MprisBridge::shouldEmitSeeked(before, after));
   }
 
-  TEST_CASE("MprisBridge - loop status maps runtime repeat modes", "[platform][unit][mpris]")
+  TEST_CASE("MprisBridge - loop status maps runtime repeat modes")
   {
     CHECK(MprisBridge::loopStatus(rt::RepeatMode::Off) == "None");
     CHECK(MprisBridge::loopStatus(rt::RepeatMode::One) == "Track");
@@ -829,8 +822,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(MprisBridge::repeatModeForLoopStatus("Album").has_value());
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - player methods execute shared and guarded playback commands",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - player methods execute shared and guarded playback commands")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
@@ -863,8 +855,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(endpoint.tryDispatchPlayerMethod("Seek"));
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - publication-issued past-end Seek advances after handoff",
-            "[platform][integration][mpris][async]")
+  TEST_CASE("MprisPlaybackEndpoint - publication-issued past-end Seek advances after handoff")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
@@ -905,8 +896,7 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().transport.finalSeekRevision == before.finalSeekRevision);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - Raise dispatches synchronously but Quit is reserved for the bridge",
-            "[platform][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - Raise dispatches synchronously but Quit is reserved for the bridge")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -931,7 +921,7 @@ namespace ao::systemmedia::test
     CHECK(quitCount == 0);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - unsupported player methods are rejected", "[platform][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - unsupported player methods are rejected")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -942,8 +932,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(endpoint.tryDispatchPlayerMethod("Seek"));
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - capability properties mirror playback command capability",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - capability properties mirror playback command capability")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
@@ -986,8 +975,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(endpoint.playerCapabilityProperty("Volume", playback.snapshot().transport).has_value());
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - seek capability requires a current subject with known positive duration",
-            "[platform][unit][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - seek capability requires a current subject with known positive duration")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -1010,8 +998,7 @@ namespace ao::systemmedia::test
     CHECK(endpoint.playerCapabilityProperty("CanSeek", state) == std::optional<bool>{false});
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - volume setter delegates to playback service normalization",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - volume setter delegates to playback service normalization")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -1029,7 +1016,7 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().transport.volume.level == 0.0F);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - rate setter keeps fixed rate and pauses on zero", "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - rate setter keeps fixed rate and pauses on zero")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
@@ -1062,8 +1049,7 @@ namespace ao::systemmedia::test
     CHECK_FALSE(endpoint.tryDispatchSetRate(std::numeric_limits<double>::quiet_NaN()));
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - shuffle and loop status setters delegate to playback sequence",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - shuffle and loop status setters delegate to playback sequence")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& playback = fixture.runtime().playback();
@@ -1087,8 +1073,7 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().succession.repeat == rt::RepeatMode::Off);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - shuffle and loop status setters update an active sequence",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - shuffle and loop status setters update an active sequence")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
@@ -1119,7 +1104,7 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().succession.hasNext);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - seek methods update playback service position", "[platform][integration][mpris]")
+  TEST_CASE("MprisPlaybackEndpoint - seek methods update playback service position")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();
@@ -1198,8 +1183,7 @@ namespace ao::systemmedia::test
     CHECK(playback.snapshot().transport.finalSeekRevision == stopped.finalSeekRevision);
   }
 
-  TEST_CASE("MprisPlaybackEndpoint - queued Next makes observer SetPosition a successful stale no-op",
-            "[platform][integration][mpris][async]")
+  TEST_CASE("MprisPlaybackEndpoint - queued Next makes observer SetPosition a successful stale no-op")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
     auto& runtime = fixture.runtime();

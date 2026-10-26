@@ -67,7 +67,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("whenAll - completes after all tasks ran", "[runtime][unit][async][concurrency]")
+  TEST_CASE("whenAll - completes after all tasks ran", "[concurrency]")
   {
     auto executor = InlineExecutor{};
     auto counter = std::atomic<std::int32_t>{0};
@@ -85,7 +85,7 @@ namespace ao::rt::test
     CHECK(counter.load() == 8);
   }
 
-  TEST_CASE("whenAll - empty task list completes immediately", "[runtime][unit][async]")
+  TEST_CASE("whenAll - empty task list completes immediately")
   {
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor, 1};
@@ -93,7 +93,7 @@ namespace ao::rt::test
     runtime.spawn(awaitAllTaskAsync(&runtime, {})).get();
   }
 
-  TEST_CASE("whenAll - rethrows a task exception after all tasks finished", "[runtime][unit][async][concurrency]")
+  TEST_CASE("whenAll - rethrows a task exception after all tasks finished", "[concurrency]")
   {
     auto executor = InlineExecutor{};
     auto counter = std::atomic<std::int32_t>{0};
@@ -133,7 +133,7 @@ namespace ao::rt::test
     CHECK(counter.load() == 1);
   }
 
-  TEST_CASE("whenAll - tasks run concurrently on the worker pool", "[runtime][unit][async][concurrency]")
+  TEST_CASE("whenAll - tasks run concurrently on the worker pool", "[concurrency]")
   {
     auto executor = InlineExecutor{};
     auto started = AsyncTestState<std::int32_t>::create(0);
@@ -154,7 +154,7 @@ namespace ao::rt::test
     CHECK(bothStarted);
   }
 
-  TEST_CASE("whenAll - awaiting coroutine holds no pool thread", "[runtime][unit][async][concurrency]")
+  TEST_CASE("whenAll - awaiting coroutine holds no pool thread", "[concurrency]")
   {
     // With a single-thread pool the coordinator must release its thread while
     // suspended in whenAllAsync; a blocking wait would deadlock here instead of

@@ -12,7 +12,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("ExecutionPlan - maps property aliases to bitrate fields", "[query][unit][execution-plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps property aliases to bitrate fields")
   {
     auto expr = parseOk("@br >= 320k");
     auto plan = compileOk(expr);
@@ -22,7 +22,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::Bitrate));
   }
 
-  TEST_CASE("ExecutionPlan - maps metadata aliases to album artist fields", "[query][unit][execution-plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps metadata aliases to album artist fields")
   {
     auto expr = parseOk("$aa = Bach");
     auto plan = compileOk(expr);
@@ -32,7 +32,7 @@ namespace ao::query::test
     CHECK(plan.instructions[0].field == static_cast<std::uint8_t>(Field::AlbumArtistId));
   }
 
-  TEST_CASE("ExecutionPlan - rejects unknown metadata fields", "[query][unit][execution-plan][catalog]")
+  TEST_CASE("ExecutionPlan - rejects unknown metadata fields")
   {
     auto expr = parseOk("$gerne = 'x'");
     auto const error = compileError(expr);
@@ -41,7 +41,7 @@ namespace ao::query::test
     CHECK(error.message.contains("$movement ($m)"));
   }
 
-  TEST_CASE("ExecutionPlan - rejects unknown property fields", "[query][unit][execution-plan][catalog]")
+  TEST_CASE("ExecutionPlan - rejects unknown property fields")
   {
     auto expr = parseOk("@samplerate > 0");
     auto const error = compileError(expr);
@@ -49,14 +49,14 @@ namespace ao::query::test
     CHECK(error.message.contains("available property fields:"));
   }
 
-  TEST_CASE("ExecutionPlan - rejects track ids as query fields", "[query][unit][execution-plan][catalog]")
+  TEST_CASE("ExecutionPlan - rejects track ids as query fields")
   {
     auto expr = parseOk("$id = 1");
     auto const error = compileError(expr);
     CHECK(error.message.contains("unknown metadata field '$id'"));
   }
 
-  TEST_CASE("ExecutionPlan - maps every supported metadata catalog name", "[query][unit][execution-plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps every supported metadata catalog name")
   {
     struct Case final
     {
@@ -114,7 +114,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - maps every supported property catalog name", "[query][unit][execution-plan][catalog]")
+  TEST_CASE("ExecutionPlan - maps every supported property catalog name")
   {
     struct Case final
     {

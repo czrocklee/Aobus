@@ -46,8 +46,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - a cancelled export leaves the file it was asked to replace",
-            "[runtime][unit][import-export][error][concurrency]")
+  TEST_CASE("LibraryYaml - a cancelled export leaves the file it was asked to replace", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -71,8 +70,7 @@ namespace ao::rt::test
     CHECK(readAll(yamlPath) == previous);
   }
 
-  TEST_CASE("LibraryYaml - an export replaces its target with the complete new document",
-            "[runtime][unit][import-export][error]")
+  TEST_CASE("LibraryYaml - an export replaces its target with the complete new document")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -92,8 +90,7 @@ namespace ao::rt::test
     CHECK(readAll(yamlPath) == readAll(freshPath));
   }
 
-  TEST_CASE("LibraryYaml - an export does not create a missing destination directory",
-            "[runtime][unit][import-export][error]")
+  TEST_CASE("LibraryYaml - an export does not create a missing destination directory")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -110,7 +107,7 @@ namespace ao::rt::test
     CHECK_FALSE(std::filesystem::exists(missingDirectory));
   }
 
-  TEST_CASE("LibraryYaml - import reports invalid input errors", "[runtime][unit][import-export][error]")
+  TEST_CASE("LibraryYaml - import reports invalid input errors")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -413,7 +410,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - import handles structural corruption cases", "[runtime][unit][import-export][error]")
+  TEST_CASE("LibraryYaml - import handles structural corruption cases")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -467,7 +464,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - full transfer preserves duration boundaries", "[runtime][integration][import-export]")
+  TEST_CASE("LibraryYaml - full transfer preserves duration boundaries")
   {
     auto const temp = ao::test::TempDir{};
     auto source = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "source");
@@ -501,8 +498,7 @@ library:
     CHECK(optMaximumTrack->property().duration() == std::chrono::milliseconds{2147483647});
   }
 
-  TEST_CASE("LibraryYaml - restore rolls back every mutation when a later track fails",
-            "[runtime][integration][import-export]")
+  TEST_CASE("LibraryYaml - restore rolls back every mutation when a later track fails")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());

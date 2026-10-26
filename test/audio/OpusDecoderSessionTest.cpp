@@ -143,7 +143,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("OpusDecoderSession - decodes happy path", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - decodes happy path")
   {
     auto const testFile = requireAudioFixture("basic_metadata.opus");
 
@@ -167,7 +167,7 @@ namespace ao::audio::test
     CHECK_FALSE(firstBlockRes->bytes.empty());
   }
 
-  TEST_CASE("OpusDecoderSession - native output encoding probes the decoded stream", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - native output encoding probes the decoded stream")
   {
     auto const testFile = requireAudioFixture("basic_metadata.opus");
 
@@ -184,7 +184,7 @@ namespace ao::audio::test
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 2U);
   }
 
-  TEST_CASE("OpusDecoderSession - reports a mono stream as one channel", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - reports a mono stream as one channel")
   {
     auto const testFile = requireAudioFixture("mono.opus");
 
@@ -199,7 +199,7 @@ namespace ao::audio::test
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 1U * 2U);
   }
 
-  TEST_CASE("OpusDecoderSession - handles floating point output", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - handles floating point output")
   {
     auto const testFile = requireAudioFixture("basic_metadata.opus");
 
@@ -215,7 +215,7 @@ namespace ao::audio::test
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 4U);
   }
 
-  TEST_CASE("OpusDecoderSession - trims the pre-skip and the encoder padding", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - trims the pre-skip and the encoder padding")
   {
     auto const testFile = requireAudioFixture("basic_metadata.opus");
 
@@ -228,7 +228,7 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) == kFixtureFrames);
   }
 
-  TEST_CASE("OpusDecoderSession - seeks to an exact playback position", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - seeks to an exact playback position")
   {
     auto const testFile = requireAudioFixture("basic_metadata.opus");
 
@@ -275,7 +275,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoderSession - nonzero granule origin preserves duration and seek positions", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - nonzero granule origin preserves duration and seek positions")
   {
     constexpr std::int64_t kDecodeOrigin = 24000;
     auto data = readFileBytes(requireAudioFixture("short_pages.opus"));
@@ -311,7 +311,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoderSession - known zero-frame stream reaches stable end of stream", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - known zero-frame stream reaches stable end of stream")
   {
     auto const data = makeZeroFrameStream();
     auto const tempFile = ao::test::TempFile{data, ".opus"};
@@ -334,7 +334,7 @@ namespace ao::audio::test
     CHECK(stableBlockRes->endOfStream);
   }
 
-  TEST_CASE("OpusDecoderSession - seek accounting survives a pre-roll walk back", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - seek accounting survives a pre-roll walk back")
   {
     // Pages holding a single packet put a seek restart within one packet of its
     // target, so the pre-roll walks back over several pages. The frames it
@@ -370,7 +370,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoderSession - presents family 1 channels in WAV speaker order", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - presents family 1 channels in WAV speaker order")
   {
     // libopus emits mapping family 1 in Vorbis channel order, while every PCM
     // surface in Aobus is WAV speaker order and carries no layout metadata. The
@@ -422,7 +422,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoderSession - flush keeps the stream readable", "[audio][unit][opus]")
+  TEST_CASE("OpusDecoderSession - flush keeps the stream readable")
   {
     auto const testFile = requireAudioFixture("basic_metadata.opus");
 

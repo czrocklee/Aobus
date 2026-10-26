@@ -21,8 +21,7 @@
 
 namespace ao::audio::backend::test
 {
-  TEST_CASE("Engine - ALSA readback keeps application mute across open swap and stop graph observations",
-            "[audio][unit][alsa]")
+  TEST_CASE("Engine - ALSA readback keeps application mute across open swap and stop graph observations")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
     mixerStatePtr->optHardwareMuted = true;
@@ -152,8 +151,7 @@ namespace ao::audio::backend::test
     CHECK(nextMixerStatePtr->writeCount == 0U);
   }
 
-  TEST_CASE("Engine - ALSA stop preserves successful volume and application mute without another mixer write",
-            "[audio][unit][alsa]")
+  TEST_CASE("Engine - ALSA stop preserves successful volume and application mute without another mixer write")
   {
     bool const hardware = GENERATE(false, true);
     bool const muted = GENERATE(false, true);
@@ -195,7 +193,7 @@ namespace ao::audio::backend::test
     CHECK(mixerStatePtr->writeCount == writesBeforeStop);
   }
 
-  TEST_CASE("Engine - ALSA stop preserves rejected volume intent without another hardware write", "[audio][unit][alsa]")
+  TEST_CASE("Engine - ALSA stop preserves rejected volume intent without another hardware write")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
     mixerStatePtr->hardwareElements.push_back(
@@ -227,7 +225,7 @@ namespace ao::audio::backend::test
     CHECK((mixerStatePtr->hardwareElements.front().rawLevels == std::vector<long>{25L, 80L}));
   }
 
-  TEST_CASE("Engine - ALSA property refresh fallback publishes a graph and current capability", "[audio][unit][alsa]")
+  TEST_CASE("Engine - ALSA property refresh fallback publishes a graph and current capability")
   {
     auto mixerStatePtr = std::make_shared<detail::test::FakeMixerState>();
     mixerStatePtr->hardwareElements.push_back({.id = {.name = "PCM", .index = 0U}, .rawLevels = {80L}});

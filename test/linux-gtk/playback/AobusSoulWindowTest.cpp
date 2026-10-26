@@ -14,7 +14,7 @@ namespace ao::gtk::test
 {
   // Shell smoke only. View-state policy belongs to AobusSoulViewModelTest;
   // this case does not exercise click/Escape dispatch or queued callback retirement.
-  TEST_CASE("AobusSoulWindow - constructs and hides the visualizer shell", "[gtk][unit][playback][soul]")
+  TEST_CASE("AobusSoulWindow - constructs and hides the visualizer shell")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

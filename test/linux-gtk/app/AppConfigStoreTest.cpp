@@ -20,7 +20,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("AppConfigStore - a session with no configuration directory still opens", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - a session with no configuration directory still opens")
   {
     // Reached when the platform names no home at all. The window runs on
     // defaults and forgets them; it does not refuse to start, and it does not
@@ -42,7 +42,7 @@ namespace ao::gtk::test
     CHECK_FALSE(std::filesystem::exists("config.yaml"));
   }
 
-  TEST_CASE("AppConfigStore - missing configuration preserves window defaults", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - missing configuration preserves window defaults")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -59,7 +59,7 @@ namespace ao::gtk::test
     CHECK(windowState.height == 800);
   }
 
-  TEST_CASE("AppConfigStore - persists window state", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - persists window state")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -81,7 +81,7 @@ namespace ao::gtk::test
     CHECK(loadState.maximized == true);
   }
 
-  TEST_CASE("AppConfigStore - persists application preferences", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - persists application preferences")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -106,7 +106,7 @@ namespace ao::gtk::test
     CHECK(loadPrefs.lastThemePreset == "modern");
   }
 
-  TEST_CASE("AppConfigStore - persists session state", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - persists session state")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -129,7 +129,7 @@ namespace ao::gtk::test
     CHECK(loadSession.lastOutputSelection.profileId == "session-profile");
   }
 
-  TEST_CASE("AppConfigStore - window decoding admits compatible fields atomically", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - window decoding admits compatible fields atomically")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -170,7 +170,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("AppConfigStore - partial preferences retain seeded output fields", "[gtk][unit][app][config]")
+  TEST_CASE("AppConfigStore - partial preferences retain seeded output fields")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";
@@ -194,8 +194,7 @@ namespace ao::gtk::test
     CHECK(state.preferredOutputSelection.profileId == "seed-profile");
   }
 
-  TEST_CASE("preferredOutputDeviceRecorder - a recorded route updates only the preferred selection",
-            "[gtk][unit][app][config]")
+  TEST_CASE("preferredOutputDeviceRecorder - a recorded route updates only the preferred selection")
   {
     auto const tempDir = ao::test::TempDir{};
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app_config.yaml");

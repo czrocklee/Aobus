@@ -145,7 +145,7 @@ namespace ao::audio::backend::test
     };
   } // namespace
 
-  TEST_CASE("WasapiProvider - enumerates and renders through real endpoints", "[audio][integration][wasapi][.manual]")
+  TEST_CASE("WasapiProvider - enumerates and renders through real endpoints", "[.manual]")
   {
     auto provider = WasapiProvider{};
     auto const status = provider.status();

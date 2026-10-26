@@ -19,7 +19,7 @@
 namespace ao::audio::backend::test
 {
   TEST_CASE("PipeWireBackend - native client negotiation retains ordinary and alternate two-speaker offers",
-            "[audio][integration][pipewire][.manual]")
+            "[.manual]")
   {
     // Use an explicitly selected existing route; do not provision server sinks,
     // change system defaults or start source rendering. Open creates its own

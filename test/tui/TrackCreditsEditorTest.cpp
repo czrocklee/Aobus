@@ -50,8 +50,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("TrackCreditsEditor - keyboard edits names and roles without losing duplicate entries",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - keyboard edits names and roles without losing duplicate entries")
   {
     using library::CreditKind;
     auto sections = emptySections();
@@ -78,8 +77,7 @@ namespace ao::tui::test
     CHECK(patchRes->optCredits->entries == model.entries());
   }
 
-  TEST_CASE("TrackCreditsEditor - keyboard add validation reorder delete and reclassification retain attributes",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - keyboard add validation reorder delete and reclassification retain attributes")
   {
     using library::CreditKind;
     auto sections = emptySections();
@@ -115,8 +113,7 @@ namespace ao::tui::test
     CHECK(editor.handleEvent(ftxui::Event::Escape, model) == TrackCreditsEditor::Request::Cancel);
   }
 
-  TEST_CASE("TrackCreditsEditor - failed commit localizes a later blank name and returns input to that row",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - failed commit localizes a later blank name and returns input to that row")
   {
     using library::CreditKind;
 
@@ -158,8 +155,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackCreditsEditor - failed commit localizes later text errors and focuses the offending field",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - failed commit localizes later text errors and focuses the offending field")
   {
     using library::CreditKind;
     auto sections = emptySections();
@@ -208,8 +204,7 @@ namespace ao::tui::test
     CHECK(patchRes->optCredits->entries == model.entries());
   }
 
-  TEST_CASE("TrackCreditsEditor - scope caption follows the fixed scope rather than the selected row kind",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - scope caption follows the fixed scope rather than the selected row kind")
   {
     auto sections = emptySections();
     sections[2].optValue = std::vector<library::Credit>{{"Solo", library::CreditKind::Soloist, "violin"}};
@@ -231,7 +226,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackCreditsEditor - Add uses the shared default kind instead of the selected row", "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - Add uses the shared default kind instead of the selected row")
   {
     using library::CreditKind;
     auto sections = emptySections();
@@ -248,8 +243,7 @@ namespace ao::tui::test
     CHECK(model.focusedRow() == 1);
   }
 
-  TEST_CASE("TrackCreditsEditor - empty editable scopes start on Add and return there after the last delete",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - empty editable scopes start on Add and return there after the last delete")
   {
     using library::CreditKind;
 
@@ -283,7 +277,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackCreditsEditor - kind and row position use localized patterns", "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - kind and row position use localized patterns")
   {
     using library::CreditKind;
     auto sections = emptySections();
@@ -309,8 +303,7 @@ namespace ao::tui::test
     CHECK_FALSE(emptyFrame.contains(" of "));
   }
 
-  TEST_CASE("TrackCreditsEditor - mixed intent cannot accidentally clear and explicit clear names its scope",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - mixed intent cannot accidentally clear and explicit clear names its scope")
   {
     auto sections = emptySections();
     sections[3] = {.mixed = true};
@@ -333,8 +326,7 @@ namespace ao::tui::test
     CHECK(patchRes->optCredits->kinds == uimodel::trackCreditScope(library::CreditKind::Performer));
   }
 
-  TEST_CASE("TrackCreditsEditor - completion follows the selected kind and keeps role vocabulary separate",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - completion follows the selected kind and keeps role vocabulary separate")
   {
     using library::CreditKind;
     auto sections = emptySections();
@@ -372,8 +364,7 @@ namespace ao::tui::test
     CHECK(editor.handleEvent(ftxui::Event::Escape, model) == TrackCreditsEditor::Request::Cancel);
   }
 
-  TEST_CASE("TrackCreditsEditor - completion paging preserves drafts and restores the scrolled input caret",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - completion paging preserves drafts and restores the scrolled input caret")
   {
     for (auto const columns : {32, 80})
     {
@@ -453,8 +444,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackCreditsEditor - controls remain keyboard reachable in constrained localized layouts",
-            "[tui][unit][credits]")
+  TEST_CASE("TrackCreditsEditor - controls remain keyboard reachable in constrained localized layouts")
   {
     auto sections = emptySections();
     auto model = uimodel::TrackCreditsEditorModel{};

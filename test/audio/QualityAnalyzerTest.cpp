@@ -103,7 +103,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("QualityAnalyzer - unchanged playback path is bitwise perfect", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - unchanged playback path is bitwise perfect")
   {
     auto const result = analyzeAudioQuality(buildBaseMergedGraph());
 
@@ -120,7 +120,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - source and pipeline quality remain separate", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - source and pipeline quality remain separate")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[0].isLossySource = true;
@@ -135,7 +135,7 @@ namespace ao::audio::test
     CHECK(hasFinding(findAssessment(result, "ao-engine"), QualityFindingKind::Resampling));
   }
 
-  TEST_CASE("QualityAnalyzer - volume observations retain their intervention class", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - volume observations retain their intervention class")
   {
     auto graph = buildBaseMergedGraph();
 
@@ -246,7 +246,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - external mixing reports shared applications", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - external mixing reports shared applications")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes.push_back(flow::Node{.id = "external-app", .type = flow::NodeType::ExternalSource, .name = "Firefox"});
@@ -261,7 +261,7 @@ namespace ao::audio::test
     CHECK(result.pipelineQuality == Quality::LinearIntervention);
   }
 
-  TEST_CASE("QualityAnalyzer - wider PCM containers report lossless padding", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - wider PCM containers report lossless padding")
   {
     auto graph = buildBaseMergedGraph();
 
@@ -277,7 +277,7 @@ namespace ao::audio::test
     CHECK(hasFinding(findAssessment(result, "ao-stream"), QualityFindingKind::BitPerfect));
   }
 
-  TEST_CASE("QualityAnalyzer - source padding is attributed to the decoder", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - source padding is attributed to the decoder")
   {
     auto graph = buildBaseMergedGraph();
 
@@ -293,7 +293,7 @@ namespace ao::audio::test
     CHECK(hasFinding(findAssessment(result, "ao-source"), QualityFindingKind::BitPerfect));
   }
 
-  TEST_CASE("QualityAnalyzer - precision loss reports truncation", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - precision loss reports truncation")
   {
     auto graph = buildBaseMergedGraph();
     signalAt(graph, 0).precisionBits = 32;
@@ -310,7 +310,7 @@ namespace ao::audio::test
     CHECK(hasFinding(findAssessment(result, "ao-engine"), QualityFindingKind::Truncation));
   }
 
-  TEST_CASE("QualityAnalyzer - channel mapping and truncation remain distinct findings", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - channel mapping and truncation remain distinct findings")
   {
     auto graph = buildBaseMergedGraph();
     signalAt(graph, 0).precisionBits = 24;
@@ -329,7 +329,7 @@ namespace ao::audio::test
     CHECK(hasFinding(engine, QualityFindingKind::Truncation));
   }
 
-  TEST_CASE("QualityAnalyzer - integer to float conversion uses retained signal precision", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - integer to float conversion uses retained signal precision")
   {
     auto graph = buildBaseMergedGraph();
 
@@ -361,7 +361,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("QualityAnalyzer - clean float round trip preserves proven integer precision", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - clean float round trip preserves proven integer precision")
   {
     auto graph = buildBaseMergedGraph();
     pcmAt(graph, 2) = pcm(SampleEncoding::Float32Le);
@@ -375,7 +375,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasFinding(sink, QualityFindingKind::Truncation));
   }
 
-  TEST_CASE("QualityAnalyzer - interventions invalidate float round-trip proof", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - interventions invalidate float round-trip proof")
   {
     auto graph = buildBaseMergedGraph();
     pcmAt(graph, 2) = pcm(SampleEncoding::Float32Le);
@@ -390,7 +390,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasFinding(sink, QualityFindingKind::LosslessRoundTrip));
   }
 
-  TEST_CASE("QualityAnalyzer - native float source quantized to integer is truncation", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - native float source quantized to integer is truncation")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[0].optFormat =
@@ -412,7 +412,7 @@ namespace ao::audio::test
   // The ALSA sink reports the precision its converter resolves, which may be
   // narrower than the container feeding it. Narrowing back to bits that were
   // only padded on the way in returns the original samples.
-  TEST_CASE("QualityAnalyzer - narrowing back to proven integer precision is lossless", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - narrowing back to proven integer precision is lossless")
   {
     auto graph = buildBaseMergedGraph();
     signalAt(graph, 0).precisionBits = 24;
@@ -429,7 +429,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasFinding(findAssessment(result, "ao-sink"), QualityFindingKind::Truncation));
   }
 
-  TEST_CASE("QualityAnalyzer - an endpoint narrower than the source reports truncation", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - an endpoint narrower than the source reports truncation")
   {
     // Same 32-bit container, but now the source really has 32 bits, so the
     // endpoint discards eight of them.
@@ -446,8 +446,7 @@ namespace ao::audio::test
     CHECK(hasFinding(findAssessment(result, "ao-sink"), QualityFindingKind::Truncation));
   }
 
-  TEST_CASE("QualityAnalyzer - a reduced endpoint after full-precision delivery reports truncation",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - a reduced endpoint after full-precision delivery reports truncation")
   {
     // The Jabra shape: a 24-bit source delivered as 16-bit bytes to a 16-bit
     // endpoint. The loss happens upstream of the sink and must be reported.
@@ -471,7 +470,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasFinding(findAssessment(result, "ao-sink"), QualityFindingKind::LosslessRoundTrip));
   }
 
-  TEST_CASE("QualityAnalyzer - missing format leaves downstream transitions unverified", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - missing format leaves downstream transitions unverified")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes[3].optFormat.reset();
@@ -485,8 +484,7 @@ namespace ao::audio::test
     CHECK_FALSE(hasFinding(findAssessment(result, "ao-sink"), QualityFindingKind::Resampling));
   }
 
-  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a duplicated multi-hop dead end regardless of order",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a duplicated multi-hop dead end regardless of order")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes.push_back({.id = "monitor-input", .type = flow::NodeType::Intermediary});
@@ -525,7 +523,7 @@ namespace ao::audio::test
     CHECK(findAssessment(result, "monitor-endpoint") == nullptr);
   }
 
-  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a cyclic side branch", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - a reachable Sink wins over a cyclic side branch")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes.push_back({.id = "cycle-a", .type = flow::NodeType::Intermediary});
@@ -550,7 +548,7 @@ namespace ao::audio::test
     CHECK(findAssessment(result, "cycle-b") == nullptr);
   }
 
-  TEST_CASE("QualityAnalyzer - an inactive Sink connection cannot verify the output", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - an inactive Sink connection cannot verify the output")
   {
     auto graph = buildBaseMergedGraph();
     auto const sinkConnectionIt = std::ranges::find_if(
@@ -566,8 +564,7 @@ namespace ao::audio::test
     CHECK(findAssessment(result, "ao-sink") == nullptr);
   }
 
-  TEST_CASE("QualityAnalyzer - the first stored Sink-reaching branch breaks ties between output paths",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - the first stored Sink-reaching branch breaks ties between output paths")
   {
     auto graph = buildBaseMergedGraph();
     graph.nodes.push_back(
@@ -597,7 +594,7 @@ namespace ao::audio::test
     CHECK(result.assessments.back().nodeId == expectedSinkId);
   }
 
-  TEST_CASE("QualityAnalyzer - incomplete and absent playback paths are not verified", "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - incomplete and absent playback paths are not verified")
   {
     SECTION("path without sink")
     {

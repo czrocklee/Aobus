@@ -95,7 +95,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("PipeWireMonitorParsing - sink media classes", "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - sink media classes")
   {
     CHECK(isSinkMediaClass("Audio/Sink"));
     CHECK(isSinkMediaClass("Audio/Duplex"));
@@ -104,7 +104,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(isSinkMediaClass("Video/Sink"));
   }
 
-  TEST_CASE("PipeWireMonitorParsing - dictionary property lookup", "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - dictionary property lookup")
   {
     auto const items = std::to_array<::spa_dict_item>(
       {::spa_dict_item{.key = "key1", .value = "val1"}, ::spa_dict_item{.key = "key2", .value = "val2"}});
@@ -116,7 +116,7 @@ namespace ao::audio::backend::detail::test
     CHECK(lookupProperty(nullptr, "key1").empty());
   }
 
-  TEST_CASE("PipeWireMonitorParsing - strict unsigned integer properties", "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - strict unsigned integer properties")
   {
     CHECK(parsePipeWireUint32(nullptr) == std::nullopt);
     CHECK(parsePipeWireUint32("") == std::nullopt);
@@ -131,7 +131,7 @@ namespace ao::audio::backend::detail::test
     CHECK(parsePipeWireUint32("4294967295") == 4294967295U);
   }
 
-  TEST_CASE("PipeWireMonitorParsing - node record fields", "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - node record fields")
   {
     auto const items =
       std::to_array<::spa_dict_item>({::spa_dict_item{.key = PW_KEY_MEDIA_CLASS, .value = "Audio/Sink"},
@@ -148,8 +148,7 @@ namespace ao::audio::backend::detail::test
     CHECK(record.optDriverId == 5678);
   }
 
-  TEST_CASE("SinkProps::classifyVolume - zero channel gain remains the range minimum regardless of order",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("SinkProps::classifyVolume - zero channel gain remains the range minimum regardless of order")
   {
     for (auto const& channelVolumes : {std::vector<float>{0.0F, 0.8F}, std::vector<float>{0.8F, 0.0F}})
     {
@@ -169,8 +168,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorParsing - preferred offer encoding is also a valid enum alternative",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - preferred offer encoding is also a valid enum alternative")
   {
     auto offerBuffer = std::array<std::byte, 1024>{};
     auto const encodings =
@@ -196,8 +194,7 @@ namespace ao::audio::backend::detail::test
     CHECK(values[3] == SPA_AUDIO_FORMAT_S32_LE);
   }
 
-  TEST_CASE("PipeWireMonitorParsing - only current-format parameters describe the opened format",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - only current-format parameters describe the opened format")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);
@@ -254,7 +251,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorParsing - rejects an unsupported negotiated encoding", "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - rejects an unsupported negotiated encoding")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);
@@ -278,8 +275,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE(
-    "PipeWireMonitorParsing - rejects raw formats whose rate or channel count cannot narrow to the client format",
-    "[audio][unit][pipewire][monitor]")
+    "PipeWireMonitorParsing - rejects raw formats whose rate or channel count cannot narrow to the client format")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);
@@ -350,7 +346,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorParsing - failed current format clears the stale cache", "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - failed current format clears the stale cache")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);
@@ -378,8 +374,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(cache.contains(42));
   }
 
-  TEST_CASE("PipeWireMonitorParsing - current observations replace position evidence without copying the request",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - current observations replace position evidence without copying the request")
   {
     struct PositionCase final
     {
@@ -438,8 +433,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(cache.contains(42));
   }
 
-  TEST_CASE("PipeWireMonitorParsing - unusable position semantics preserve fresh numerics and known constraints",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - unusable position semantics preserve fresh numerics and known constraints")
   {
     auto const cases = std::to_array<std::array<std::uint32_t, 3>>({
       {SPA_AUDIO_CHANNEL_FL, 0xffffffffU, SPA_AUDIO_CHANNEL_UNKNOWN},
@@ -506,8 +500,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorParsing - oversized position storage preserves numerics without a native array copy",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - oversized position storage preserves numerics without a native array copy")
   {
     auto buffer = std::array<std::byte, 2048>{};
     auto roles = std::array<std::uint32_t, 65>{};
@@ -548,8 +541,7 @@ namespace ao::audio::backend::detail::test
     CHECK(optMonitor->positions.back() == SPA_AUDIO_CHANNEL_UNKNOWN);
   }
 
-  TEST_CASE("PipeWireMonitorParsing - mismatched position cardinality keeps numerics without prefix role claims",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - mismatched position cardinality keeps numerics without prefix role claims")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
     auto currentBuffer = std::array<std::byte, 1024>{};
@@ -624,8 +616,7 @@ namespace ao::audio::backend::detail::test
     CHECK(cache.at(42).positions[1] == SPA_AUDIO_CHANNEL_UNKNOWN);
   }
 
-  TEST_CASE("PipeWireMonitorParsing - invalid current geometry or pod storage invalidates all cached facts",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - invalid current geometry or pod storage invalidates all cached facts")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
     auto currentBuffer = std::array<std::byte, 1024>{};
@@ -723,7 +714,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(cache.contains(42));
   }
 
-  TEST_CASE("PipeWireMonitorParsing - merges sink property updates", "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - merges sink property updates")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);
@@ -813,8 +804,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorParsing - classifies hardware software and ambiguous volume evidence",
-            "[audio][unit][pipewire][monitor]")
+  TEST_CASE("PipeWireMonitorParsing - classifies hardware software and ambiguous volume evidence")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);

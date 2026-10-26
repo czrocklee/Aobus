@@ -19,8 +19,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - empty expression matches all tracks in upstream order",
-            "[runtime][unit][smart-list][expression]")
+  TEST_CASE("SmartListEvaluator - empty expression matches all tracks in upstream order")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2020));
@@ -42,8 +41,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceReset>(spy.batches.front()));
   }
 
-  TEST_CASE("SmartListEvaluator - invalid expression remains empty while sibling list receives inserts",
-            "[runtime][unit][smart-list][expression]")
+  TEST_CASE("SmartListEvaluator - invalid expression remains empty while sibling list receives inserts")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2022));
@@ -84,8 +82,7 @@ namespace ao::rt::test
     CHECK(invalidList.size() == 0);
   }
 
-  TEST_CASE("SmartListEvaluator - setting a valid expression clears invalid expression error",
-            "[runtime][unit][smart-list][expression]")
+  TEST_CASE("SmartListEvaluator - setting a valid expression clears invalid expression error")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2022));
@@ -116,8 +113,7 @@ namespace ao::rt::test
     CHECK(invalidList.size() == 1); // Only 'first' is in source at this point
   }
 
-  TEST_CASE("SmartListEvaluator - existing plan binds dictionary symbols introduced by a later commit",
-            "[runtime][unit][smart-list]")
+  TEST_CASE("SmartListEvaluator - existing plan binds dictionary symbols introduced by a later commit")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(makeSmartListSpec("future metadata", 2026));

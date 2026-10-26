@@ -18,7 +18,7 @@ namespace ao::test
   static_assert(audioCodecStorageValue(AudioCodec::Opus) == 130);
   static_assert(audioCodecFromStorage(255) == AudioCodec::Unknown);
 
-  TEST_CASE("AudioCodec - names map to stable display strings", "[core][unit][codec]")
+  TEST_CASE("AudioCodec - names map to stable display strings")
   {
     CHECK(audioCodecName(AudioCodec::Unknown).empty());
     CHECK(audioCodecName(AudioCodec::Flac) == "FLAC");
@@ -29,7 +29,7 @@ namespace ao::test
     CHECK(audioCodecName(AudioCodec::Opus) == "Opus");
   }
 
-  TEST_CASE("AudioCodec - parser accepts case-insensitive names", "[core][unit][codec]")
+  TEST_CASE("AudioCodec - parser accepts case-insensitive names")
   {
     CHECK(parseAudioCodecName("Flac") == AudioCodec::Flac);
     CHECK(parseAudioCodecName("alac") == AudioCodec::Alac);
@@ -41,7 +41,7 @@ namespace ao::test
     CHECK_FALSE(parseAudioCodecName("not-a-codec").has_value());
   }
 
-  TEST_CASE("AudioCodec - storage conversion rejects unknown raw values", "[core][unit][codec]")
+  TEST_CASE("AudioCodec - storage conversion rejects unknown raw values")
   {
     CHECK(audioCodecStorageValue(AudioCodec::Flac) == 1);
     CHECK(audioCodecStorageValue(AudioCodec::Alac) == 2);

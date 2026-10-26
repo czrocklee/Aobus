@@ -15,14 +15,14 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("SelectionNavigation - clamps to available items", "[tui][unit][selection]")
+  TEST_CASE("SelectionNavigation - clamps to available items")
   {
     CHECK(clampSelection(0, 0) == 0);
     CHECK(clampSelection(4, 3) == 2);
     CHECK(clampSelection(1, 3) == 1);
   }
 
-  TEST_CASE("SelectionNavigation - summary is one-based and bounded", "[tui][unit][selection]")
+  TEST_CASE("SelectionNavigation - summary is one-based and bounded")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(selectionSummary(textCatalog, 0, 0) == "0 tracks");
@@ -35,7 +35,7 @@ namespace ao::tui::test
     CHECK(selectionSummary(textCatalog, 12, 0, 0, true) == "VISUAL · 1 / 12 tracks");
   }
 
-  TEST_CASE("SelectionNavigation - page steps and optional Vim keys", "[tui][unit][selection]")
+  TEST_CASE("SelectionNavigation - page steps and optional Vim keys")
   {
     CHECK(listNavigationDelta(ftxui::Event::PageDown, 3) == 3);
     CHECK(listNavigationDelta(ftxui::Event::PageUp, 17) == -17);
@@ -52,7 +52,7 @@ namespace ao::tui::test
     CHECK(listNavigationDelta(ftxui::Event::PageDown, -4) == 1);
   }
 
-  TEST_CASE("SelectionNavigation - movement is bounded", "[tui][unit][selection]")
+  TEST_CASE("SelectionNavigation - movement is bounded")
   {
     CHECK(moveSelection(0, 1, 0) == 0);
     CHECK(moveSelection(4, 1, 5) == 4);
@@ -61,8 +61,7 @@ namespace ao::tui::test
     CHECK(moveSelection(2, -2, 5) == 0);
   }
 
-  TEST_CASE("SelectionNavigation - measured viewport determines page size with empty fallback",
-            "[tui][unit][selection]")
+  TEST_CASE("SelectionNavigation - measured viewport determines page size with empty fallback")
   {
     auto const emptyViewport = ftxui::Box{.x_max = -1, .y_max = -1};
     REQUIRE(emptyViewport.IsEmpty());
@@ -72,7 +71,7 @@ namespace ao::tui::test
     CHECK(navigationPageRows(ftxui::Box{.x_min = 0, .x_max = 20, .y_min = 6, .y_max = 6}) == 1);
   }
 
-  TEST_CASE("SelectionNavigation - wide signed movement saturates at both endpoints", "[tui][unit][selection]")
+  TEST_CASE("SelectionNavigation - wide signed movement saturates at both endpoints")
   {
     constexpr auto kMaxIndex = std::numeric_limits<std::int32_t>::max();
     constexpr auto kMinIndex = std::numeric_limits<std::int32_t>::min();

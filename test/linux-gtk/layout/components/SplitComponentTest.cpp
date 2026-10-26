@@ -23,7 +23,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::AllocationHost;
 
-  TEST_CASE("SplitComponent - applies authored and percentage sizing", "[gtk][unit][layout-component][geometry]")
+  TEST_CASE("SplitComponent - applies authored and percentage sizing")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
@@ -104,7 +104,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("SplitComponent - restores guarded persisted positions", "[gtk][unit][layout-component][geometry]")
+  TEST_CASE("SplitComponent - restores guarded persisted positions")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
@@ -250,8 +250,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("SplitComponent - persists positions and fences retired generations",
-            "[gtk][unit][layout-component][geometry][async]")
+  TEST_CASE("SplitComponent - persists positions and fences retired generations")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};

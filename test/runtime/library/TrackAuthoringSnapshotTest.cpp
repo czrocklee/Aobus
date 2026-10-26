@@ -23,8 +23,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("Library snapshot binding - owns ordered duplicate targets at the baseline revision",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("Library snapshot binding - owns ordered duplicate targets at the baseline revision")
   {
     auto storage = MusicLibraryFixture{};
     auto const first = storage.addTrack(library::test::TrackSpec{.title = "First"});
@@ -58,8 +57,7 @@ namespace ao::rt::test
     CHECK(prepared.first.matches(fixture.library().authoringAvailability()));
   }
 
-  TEST_CASE("Library snapshot binding - rejects empty invalid and missing targets as a complete set",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("Library snapshot binding - rejects empty invalid and missing targets as a complete set")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(library::test::TrackSpec{.title = "Unchanged"});
@@ -97,8 +95,7 @@ namespace ao::rt::test
     CHECK(optRow->title == "Unchanged");
   }
 
-  TEST_CASE("Library snapshot binding - rejects foreign storage despite identical ids and revisions",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("Library snapshot binding - rejects foreign storage despite identical ids and revisions")
   {
     auto storage = MusicLibraryFixture{};
     auto foreignStorage = MusicLibraryFixture{};
@@ -123,8 +120,7 @@ namespace ao::rt::test
     CHECK(optLocalRow->title == "Local");
   }
 
-  TEST_CASE("Library snapshot binding - retained old baseline cannot rebind or submit after a commit",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("Library snapshot binding - retained old baseline cannot rebind or submit after a commit")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(library::test::TrackSpec{.title = "Before"});
@@ -170,8 +166,7 @@ namespace ao::rt::test
     CHECK(optCurrentRow->title == "Committed");
   }
 
-  TEST_CASE("Library snapshot binding - closed lifecycle rejects an otherwise current snapshot",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("Library snapshot binding - closed lifecycle rejects an otherwise current snapshot")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(library::test::TrackSpec{.title = "Unchanged"});
@@ -189,8 +184,7 @@ namespace ao::rt::test
     CHECK(snapshot.containsTrack(trackId));
   }
 
-  TEST_CASE("Library snapshot binding - maintenance rejects a current snapshot until availability returns",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("Library snapshot binding - maintenance rejects a current snapshot until availability returns")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(library::test::TrackSpec{.title = "Unchanged"});
@@ -226,8 +220,7 @@ namespace ao::rt::test
     CHECK(optRow->title == "Unchanged");
   }
 
-  TEST_CASE("Library snapshot binding - same storage snapshot stamps the current runtime instance",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("Library snapshot binding - same storage snapshot stamps the current runtime instance")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(library::test::TrackSpec{.title = "Unchanged"});

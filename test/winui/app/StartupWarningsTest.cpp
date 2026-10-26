@@ -10,7 +10,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("StartupWarnings - the status line joins every warning in the order it arose", "[winui][unit][app]")
+  TEST_CASE("StartupWarnings - the status line joins every warning in the order it arose")
   {
     auto warnings = StartupWarnings{};
     CHECK(warnings.statusLine().empty());
@@ -20,7 +20,7 @@ namespace ao::winui::test
     CHECK(warnings.statusLine() == "Settings were ignored. The theme was rejected.");
   }
 
-  TEST_CASE("StartupWarnings - only a startup scan that did not fail gives the line back once", "[winui][unit][app]")
+  TEST_CASE("StartupWarnings - only a startup scan that did not fail gives the line back once")
   {
     auto warnings = StartupWarnings{};
 

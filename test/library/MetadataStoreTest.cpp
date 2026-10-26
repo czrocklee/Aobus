@@ -36,8 +36,7 @@ namespace ao::library::test
   static_assert(std::is_move_constructible_v<ReadTransaction>);
   static_assert(!std::is_copy_constructible_v<ReadTransaction>);
 
-  TEST_CASE("MusicLibrary metadata - open rejects truncated prefixes and invalid current header sizes",
-            "[library][unit][music-library][integrity]")
+  TEST_CASE("MusicLibrary metadata - open rejects truncated prefixes and invalid current header sizes")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -79,7 +78,7 @@ namespace ao::library::test
     CHECK(res.error().message == expectedDiagnostic);
   }
 
-  TEST_CASE("MusicLibrary metadata - snapshot exposes the admitted header", "[library][unit][music-library]")
+  TEST_CASE("MusicLibrary metadata - snapshot exposes the admitted header")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -90,8 +89,7 @@ namespace ao::library::test
     CHECK(header.libraryVersion == kLibraryVersion);
   }
 
-  TEST_CASE("MusicLibrary metadata - revision candidate publishes exactly once at commit",
-            "[library][unit][write-transaction][revision]")
+  TEST_CASE("MusicLibrary metadata - revision candidate publishes exactly once at commit")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -118,8 +116,7 @@ namespace ao::library::test
     CHECK(library.libraryRevision(read) == 1);
   }
 
-  TEST_CASE("MusicLibrary metadata - failed commit leaves no durable candidate revision",
-            "[library][unit][write-transaction][revision]")
+  TEST_CASE("MusicLibrary metadata - failed commit leaves no durable candidate revision")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -145,8 +142,7 @@ namespace ao::library::test
     CHECK(reopened.libraryRevision(reopenedRead) == 0);
   }
 
-  TEST_CASE("MusicLibrary metadata - candidate revision comes from the durable writer snapshot",
-            "[library][integration][write-transaction][concurrency]")
+  TEST_CASE("MusicLibrary metadata - candidate revision comes from the durable writer snapshot", "[concurrency]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const temp = ao::test::TempDir{};
@@ -176,8 +172,7 @@ namespace ao::library::test
     CHECK(library.libraryRevision(read) == 2);
   }
 
-  TEST_CASE("MusicLibrary - external dictionary commits refresh snapshots and later writer admission",
-            "[library][integration][dictionary][concurrency]")
+  TEST_CASE("MusicLibrary - external dictionary commits refresh snapshots and later writer admission", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");

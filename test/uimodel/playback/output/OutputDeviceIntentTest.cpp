@@ -27,7 +27,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("OutputDeviceIntent - a destination cannot be left undecided", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceIntent - a destination cannot be left undecided")
   {
     // The whole point of the type: a bundle carrying one cannot be assembled
     // without saying where requested routes go, so a shell that forgets to
@@ -35,7 +35,7 @@ namespace ao::uimodel::test
     STATIC_CHECK_FALSE(std::is_default_constructible_v<OutputDeviceIntent>);
   }
 
-  TEST_CASE("OutputDeviceIntent - records what a surface owns", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceIntent - records what a surface owns")
   {
     auto optRecorded = std::optional<audio::OutputDeviceSelection>{};
     auto const intent = OutputDeviceIntent::recordedBy([&optRecorded](audio::OutputDeviceSelection const& selection)
@@ -47,14 +47,14 @@ namespace ao::uimodel::test
     CHECK(*optRecorded == makeSelection());
   }
 
-  TEST_CASE("OutputDeviceIntent - a discarded destination keeps nothing", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceIntent - a discarded destination keeps nothing")
   {
     auto const intent = OutputDeviceIntent::discarded();
 
     CHECK_NOTHROW(intent.record(makeSelection()));
   }
 
-  TEST_CASE("OutputDeviceIntent - a copy records to the same destination", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputDeviceIntent - a copy records to the same destination")
   {
     // Component bundles are copied into each surface that borrows them, so a
     // copy must stay attached to the frontend's recorder.

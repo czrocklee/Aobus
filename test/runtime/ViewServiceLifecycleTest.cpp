@@ -22,14 +22,14 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ViewService - workspace starts without live views", "[runtime][unit][view]")
+  TEST_CASE("ViewService - workspace starts without live views")
   {
     auto env = ViewServiceFixture{};
 
     CHECK(env.workspace.snapshot().openViews.empty());
   }
 
-  TEST_CASE("ViewService - createView assigns ids and lists live views", "[runtime][unit][view]")
+  TEST_CASE("ViewService - createView assigns ids and lists live views")
   {
     auto env = ViewServiceFixture{};
 
@@ -56,8 +56,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - failed creation returns the source error without consuming view state",
-            "[runtime][unit][view]")
+  TEST_CASE("ViewService - failed creation returns the source error without consuming view state")
   {
     auto env = ViewServiceFixture{};
     auto const failedRes = env.workspace.navigate({.target = ListId{kInvalidListId}});
@@ -70,7 +69,7 @@ namespace ao::rt::test
     CHECK(created == ViewId{1});
   }
 
-  TEST_CASE("ViewService - workspace close removes the view from its snapshot", "[runtime][unit][view]")
+  TEST_CASE("ViewService - workspace close removes the view from its snapshot")
   {
     auto env = ViewServiceFixture{};
     auto const viewId = env.requireView();
@@ -81,7 +80,7 @@ namespace ao::rt::test
     CHECK(views.empty());
   }
 
-  TEST_CASE("ViewService - closed views are absent from state and projection lookups", "[runtime][unit][view]")
+  TEST_CASE("ViewService - closed views are absent from state and projection lookups")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -101,7 +100,7 @@ namespace ao::rt::test
     CHECK(projectionRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ViewService - repeated close is a no-op for the same view", "[runtime][unit][view]")
+  TEST_CASE("ViewService - repeated close is a no-op for the same view")
   {
     auto env = ViewServiceFixture{};
     auto const viewId = env.requireView();
@@ -112,7 +111,7 @@ namespace ao::rt::test
     CHECK(env.workspace.snapshot().openViews.empty());
   }
 
-  TEST_CASE("ViewService - closing a view transitions its source from live to missing", "[runtime][unit][view]")
+  TEST_CASE("ViewService - closing a view transitions its source from live to missing")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -129,7 +128,7 @@ namespace ao::rt::test
     CHECK(missingRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ViewService - destroyed views reject launch-context capture", "[runtime][unit][view]")
+  TEST_CASE("ViewService - destroyed views reject launch-context capture")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -142,7 +141,7 @@ namespace ao::rt::test
     CHECK(capturedRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ViewService - close releases the owned projection", "[runtime][unit][view]")
+  TEST_CASE("ViewService - close releases the owned projection")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -162,7 +161,7 @@ namespace ao::rt::test
     CHECK(projectionWeakPtr.expired());
   }
 
-  TEST_CASE("ViewService - state lookups preserve initial and updated view contents", "[runtime][unit][view]")
+  TEST_CASE("ViewService - state lookups preserve initial and updated view contents")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -207,7 +206,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - findTrackListProjection returns the owned projection", "[runtime][unit][view]")
+  TEST_CASE("ViewService - findTrackListProjection returns the owned projection")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -221,7 +220,7 @@ namespace ao::rt::test
     CHECK(projectionPtr->size() == 0);
   }
 
-  TEST_CASE("ViewService - explicit initial order overrides the default presentation order", "[runtime][unit][view]")
+  TEST_CASE("ViewService - explicit initial order overrides the default presentation order")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
@@ -237,7 +236,7 @@ namespace ao::rt::test
     CHECK(launchSpecRes->order.sortBy == order);
   }
 
-  TEST_CASE("ViewService - projection subscription replays initial reset", "[runtime][unit][view]")
+  TEST_CASE("ViewService - projection subscription replays initial reset")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;

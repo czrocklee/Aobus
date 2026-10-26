@@ -14,7 +14,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("buildListTreeProjection projects nested list rows", "[uimodel][unit][list]")
+  TEST_CASE("buildListTreeProjection projects nested list rows")
   {
     auto const parentId = ListId{2};
     auto const childId = ListId{3};
@@ -51,7 +51,7 @@ namespace ao::uimodel::test
     CHECK(child.childIds.empty());
   }
 
-  TEST_CASE("buildListTreeProjection localizes the virtual library row", "[uimodel][unit][list][localization]")
+  TEST_CASE("buildListTreeProjection localizes the virtual library row")
   {
     auto const catalog = ao::test::messageCatalog("de-AT");
     auto const projection = buildListTreeProjection(catalog, {});
@@ -60,7 +60,7 @@ namespace ao::uimodel::test
     CHECK(projection.rowsById.at(rt::kAllTracksListId).name == "Alle Titel");
   }
 
-  TEST_CASE("buildListTreeProjection places invalid parents beside All Tracks", "[uimodel][unit][list]")
+  TEST_CASE("buildListTreeProjection places invalid parents beside All Tracks")
   {
     auto const orphanId = ListId{4};
     auto const selfParentId = ListId{5};
@@ -76,7 +76,7 @@ namespace ao::uimodel::test
     CHECK(projection.rowsById.at(selfParentId).parentId == kInvalidListId);
   }
 
-  TEST_CASE("buildListTreeProjection breaks parent cycles at the lowest cycle id", "[uimodel][unit][list]")
+  TEST_CASE("buildListTreeProjection breaks parent cycles at the lowest cycle id")
   {
     auto const descendantId = ListId{2};
     auto const lowerCycleId = ListId{4};
@@ -98,7 +98,7 @@ namespace ao::uimodel::test
     CHECK(projection.rowsById.at(descendantId).parentId == higherCycleId);
   }
 
-  TEST_CASE("buildListTreeProjection orders children by list id", "[uimodel][unit][list]")
+  TEST_CASE("buildListTreeProjection orders children by list id")
   {
     auto const parentId = ListId{2};
     auto const projection =

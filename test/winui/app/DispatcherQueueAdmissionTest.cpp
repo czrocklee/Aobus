@@ -14,8 +14,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("DispatcherQueueAdmission - closure preserves accepted submissions until the final drain",
-            "[winui][unit][async][concurrency]")
+  TEST_CASE("DispatcherQueueAdmission - closure preserves accepted submissions until the final drain", "[concurrency]")
   {
     constexpr auto kWaitTimeout = std::chrono::seconds{5};
     auto admission = detail::DispatcherQueueAdmission{};
@@ -89,7 +88,7 @@ namespace ao::winui::test
     CHECK_FALSE(admission.tryAcquire(true));
   }
 
-  TEST_CASE("DispatcherQueueAdmission - only live wake rejection is fatal", "[winui][unit][async]")
+  TEST_CASE("DispatcherQueueAdmission - only live wake rejection is fatal")
   {
     using detail::DispatcherQueueAdmissionState;
     using detail::DispatcherQueueWakeRejectionDisposition;
@@ -110,7 +109,7 @@ namespace ao::winui::test
     CHECK_FALSE(detail::isTaskAdmissionOpen(DispatcherQueueAdmissionState::Closed, true));
   }
 
-  TEST_CASE("DispatcherQueueAdmission - destruction fallback refuses an active owner callback", "[winui][unit][async]")
+  TEST_CASE("DispatcherQueueAdmission - destruction fallback refuses an active owner callback")
   {
     auto admission = detail::DispatcherQueueAdmission{};
     auto optOwnerTicket = admission.tryAcquire(true);

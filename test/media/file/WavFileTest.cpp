@@ -151,7 +151,7 @@ namespace ao::media::file::wav::test
     }
   } // namespace
 
-  TEST_CASE("WAV File - emits real INFO tag fields", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - emits real INFO tag fields")
   {
     auto const file = File{audio::test::requireAudioFixture("basic_metadata.wav")};
     auto content = readContent(file);
@@ -168,7 +168,7 @@ namespace ao::media::file::wav::test
                                         .kind = ao::media::file::test::RecordedContent::CallbackKind::Credits}));
   }
 
-  TEST_CASE("WAV File - reads real PCM audio properties", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - reads real PCM audio properties")
   {
     auto const file = File{audio::test::requireAudioFixture("hires.wav")};
     auto content = readContent(file);
@@ -183,7 +183,7 @@ namespace ao::media::file::wav::test
     CHECK(prop.bitrate() >= 4000000);
   }
 
-  TEST_CASE("WAV File - audio payload range points at real data chunk", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - audio payload range points at real data chunk")
   {
     auto const fixture = audio::test::requireAudioFixture("basic_metadata.wav");
     auto const bytes = audio::test::readFileBytes(fixture);
@@ -199,7 +199,7 @@ namespace ao::media::file::wav::test
     CHECK(std::to_integer<std::uint8_t>(range.bytes[1]) == bytes[range.offset + 1U]);
   }
 
-  TEST_CASE("WAV File - audio payload signature ignores INFO metadata changes", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - audio payload signature ignores INFO metadata changes")
   {
     auto firstData = ao::test::wav::makeWav({
       .audioData = {0x00, 0x00, 0x01, 0x00},
@@ -222,7 +222,7 @@ namespace ao::media::file::wav::test
     CHECK(utility::xxh3Hash128(firstPayloadRes->bytes) == utility::xxh3Hash128(secondPayloadRes->bytes));
   }
 
-  TEST_CASE("WAV File - preserves ID3 APIC cover art", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - preserves ID3 APIC cover art")
   {
     auto const id3 = ao::test::wav::makeId3WithPicture(std::array<std::uint8_t, 3>{0x12, 0x34, 0x56});
     auto const data = ao::test::wav::makeWav({
@@ -241,7 +241,7 @@ namespace ao::media::file::wav::test
     CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[2]) == 0x56);
   }
 
-  TEST_CASE("WAV File - preserves ID3 content from unsynchronised chunks", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - preserves ID3 content from unsynchronised chunks")
   {
     // The ID3 reader deunsynchronises the chunk into storage owned by the
     // per-chunk builder, which dies with it; the copied picture bytes must
@@ -272,7 +272,7 @@ namespace ao::media::file::wav::test
     CHECK(std::to_integer<std::uint8_t>(pictures.front().bytes[3]) == 0x56);
   }
 
-  TEST_CASE("WAV File - a later tag chunk replaces an earlier chunk's text fields", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - a later tag chunk replaces an earlier chunk's text fields")
   {
     auto frames = std::vector<std::uint8_t>{};
     appendLatin1TextFrame(frames, "TPE1", "Id3 Artist");
@@ -297,7 +297,7 @@ namespace ao::media::file::wav::test
     CHECK(content.text(TextField::Title) == "Info Title");
   }
 
-  TEST_CASE("WAV File - an INFO list after an embedded ID3 chunk replaces its text fields", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - an INFO list after an embedded ID3 chunk replaces its text fields")
   {
     auto frames = std::vector<std::uint8_t>{};
     appendLatin1TextFrame(frames, "TPE1", "Id3 Artist A");
@@ -325,7 +325,7 @@ namespace ao::media::file::wav::test
     CHECK(content.text(TextField::Title) == "Id3 Title");
   }
 
-  TEST_CASE("WAV File - each embedded ID3 chunk folds only its own repeated values", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - each embedded ID3 chunk folds only its own repeated values")
   {
     auto chunks = std::vector<ao::test::wav::Chunk>{};
 
@@ -349,7 +349,7 @@ namespace ao::media::file::wav::test
     CHECK(readContent(file).text(TextField::Artist) == "Artist C; Artist D");
   }
 
-  TEST_CASE("WAV File - embedded ID3 work survives the copy at its resolved precedence", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - embedded ID3 work survives the copy at its resolved precedence")
   {
     auto const readWorkFromId3 = [](std::vector<std::uint8_t> const& frames) -> std::string
     {
@@ -402,7 +402,7 @@ namespace ao::media::file::wav::test
     }
   }
 
-  TEST_CASE("WAV File - preserves work rank across multiple embedded ID3 chunks", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - preserves work rank across multiple embedded ID3 chunks")
   {
     // Each candidate is its own id3/ID3 chunk. Dropping the copied rank would
     // let a later lower-ranked chunk replace an earlier winner.
@@ -425,8 +425,7 @@ namespace ao::media::file::wav::test
     }
   }
 
-  TEST_CASE("WAV File - public visitor owns ordered credits after scalar and cover callbacks",
-            "[media][unit][wav][file]")
+  TEST_CASE("WAV File - public visitor owns ordered credits after scalar and cover callbacks")
   {
     using Event = ao::media::file::test::RecordedContent::CallbackEvent;
     using Kind = ao::media::file::test::RecordedContent::CallbackKind;
@@ -480,7 +479,7 @@ namespace ao::media::file::wav::test
     CHECK(owned[3] == expected[3]);
   }
 
-  TEST_CASE("WAV File - rejects empty audio data through the content API", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - rejects empty audio data through the content API")
   {
     auto data = ao::test::wav::makeWav({.audioData = {}});
     auto const temp = ao::test::TempFile{data, ".wav"};
@@ -492,7 +491,7 @@ namespace ao::media::file::wav::test
     CHECK(res.error().message == "WAV file has no audio data");
   }
 
-  TEST_CASE("WAV File - discards malformed optional ID3 metadata", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - discards malformed optional ID3 metadata")
   {
     auto malformedId3 =
       std::vector<std::uint8_t>{'I', 'D', '3', 3, 0, 0,   0,   0,   0,   22,  'T', 'I', 'T', '2', 0, 0,
@@ -509,7 +508,7 @@ namespace ao::media::file::wav::test
     CHECK(res->codec() == AudioCodec::Wav);
   }
 
-  TEST_CASE("WAV File - malformed LIST discards fields parsed before the error", "[media][unit][wav][file]")
+  TEST_CASE("WAV File - malformed LIST discards fields parsed before the error")
   {
     auto const fields = std::vector<ao::test::wav::InfoField>{{.id = {'I', 'N', 'A', 'M'}, .value = "Partial"}};
     auto info = ao::test::wav::makeInfoList(fields);

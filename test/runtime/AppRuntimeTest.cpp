@@ -146,7 +146,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("AppRuntime - missing workspace config store is rejected", "[runtime][unit][app-runtime]")
+  TEST_CASE("AppRuntime - missing workspace config store is rejected")
   {
     auto tempDir = ao::test::TempDir{};
 
@@ -162,7 +162,7 @@ namespace ao::rt::test
     CHECK(runtimeRes.error().message == "AppRuntime requires a workspace config store");
   }
 
-  TEST_CASE("runtime factories preserve storage construction errors", "[runtime][unit][app-runtime][factory]")
+  TEST_CASE("runtime factories preserve storage construction errors")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const databaseFile = ao::test::TempFile{".mdb"};
@@ -192,8 +192,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CoreRuntime - move construction preserves service identity after the source retires",
-            "[runtime][unit][core-runtime]")
+  TEST_CASE("CoreRuntime - move construction preserves service identity after the source retires")
   {
     auto tempDir = ao::test::TempDir{};
     auto optRuntime = std::optional<CoreRuntime>{};
@@ -236,8 +235,7 @@ namespace ao::rt::test
     CHECK(&optRuntime->databasePath() == databasePathAddress);
   }
 
-  TEST_CASE("AppRuntime - move construction preserves interactive service identity after the source retires",
-            "[runtime][unit][app-runtime]")
+  TEST_CASE("AppRuntime - move construction preserves interactive service identity after the source retires")
   {
     auto tempDir = ao::test::TempDir{};
     auto optRuntime = std::optional<AppRuntime>{};
@@ -271,7 +269,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("AppRuntime - factory materializes All Tracks before exposure", "[runtime][unit][app-runtime][factory]")
+  TEST_CASE("AppRuntime - factory materializes All Tracks before exposure")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
@@ -293,7 +291,7 @@ namespace ao::rt::test
     CHECK(allTracks->size() == 1);
   }
 
-  TEST_CASE("AppRuntime - playback discard mutates only the selected store", "[runtime][unit][app-runtime]")
+  TEST_CASE("AppRuntime - playback discard mutates only the selected store")
   {
     auto tempDir = ao::test::TempDir{};
     auto overrideStore = ConfigStore{tempDir.path() / "playback.yaml"};
@@ -330,7 +328,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe", "[runtime][unit][app-runtime]")
+  TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe")
   {
     auto tempDir = ao::test::TempDir{};
     auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
@@ -370,7 +368,7 @@ namespace ao::rt::test
     CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("CoreRuntime - shutdown retires a queued library publication", "[runtime][unit][core-runtime][concurrency]")
+  TEST_CASE("CoreRuntime - shutdown retires a queued library publication", "[concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
@@ -407,8 +405,7 @@ namespace ao::rt::test
     CHECK(publications == 0);
   }
 
-  TEST_CASE("AppRuntime - teardown after playback callback settlement shuts down the provider",
-            "[runtime][unit][app-runtime][concurrency]")
+  TEST_CASE("AppRuntime - teardown after playback callback settlement shuts down the provider", "[concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
     auto audioStatePtr = std::make_shared<AppRuntimeAudioState>();

@@ -15,8 +15,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ActionMapRegistration - reset revokes retained actions and preserves replacements",
-            "[gtk][unit][action-registration][async]")
+  TEST_CASE("ActionMapRegistration - reset revokes retained actions and preserves replacements")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto actionGroupPtr = Gio::SimpleActionGroup::create();
@@ -45,7 +44,7 @@ namespace ao::gtk::test
     CHECK(replacementActivationCount == 1);
   }
 
-  TEST_CASE("ActionMapRegistration - removal observation can reenter reset safely", "[gtk][unit][action-registration]")
+  TEST_CASE("ActionMapRegistration - removal observation can reenter reset safely")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto actionGroupPtr = Gio::SimpleActionGroup::create();
@@ -66,7 +65,7 @@ namespace ao::gtk::test
     CHECK(actionGroupPtr->lookup_action("reentrant") == nullptr);
   }
 
-  TEST_CASE("ActionMapRegistration - stack unwinding cleans a partial registration", "[gtk][unit][action-registration]")
+  TEST_CASE("ActionMapRegistration - stack unwinding cleans a partial registration")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto actionGroupPtr = Gio::SimpleActionGroup::create();

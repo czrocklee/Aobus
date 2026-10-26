@@ -53,7 +53,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("NowPlayingFieldLabel - binds model field text and css", "[gtk][unit][playback][field-label]")
+  TEST_CASE("NowPlayingFieldLabel - binds model field text and css")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -113,8 +113,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("NowPlayingFieldLabel - filter action routes the exact title query",
-            "[gtk][integration][playback][field-label]")
+  TEST_CASE("NowPlayingFieldLabel - filter action routes the exact title query")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -144,8 +143,7 @@ namespace ao::gtk::test
     CHECK(state.filterExpression == R"($title = "Filtered Song")");
   }
 
-  TEST_CASE("NowPlayingFieldLabel - reveal action publishes the current track and list",
-            "[gtk][integration][playback][field-label]")
+  TEST_CASE("NowPlayingFieldLabel - reveal action publishes the current track and list")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -176,8 +174,7 @@ namespace ao::gtk::test
     CHECK(optRequest->preferredListId == rt::kAllTracksListId);
   }
 
-  TEST_CASE("NowPlayingFieldLabel - play-pause action resumes a paused track",
-            "[gtk][integration][playback][field-label]")
+  TEST_CASE("NowPlayingFieldLabel - play-pause action resumes a paused track")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

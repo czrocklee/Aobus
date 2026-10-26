@@ -24,7 +24,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - a smart-list lease pins its upstream source", "[runtime][unit][source][smart-list]")
+  TEST_CASE("SmartListEvaluator - a smart-list lease pins its upstream source")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
@@ -39,7 +39,7 @@ namespace ao::rt::test
     CHECK(weakSourcePtr.expired());
   }
 
-  TEST_CASE("SmartListEvaluator - evaluator destruction detaches from sources", "[runtime][unit][source][smart-list]")
+  TEST_CASE("SmartListEvaluator - evaluator destruction detaches from sources")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2020));
@@ -72,7 +72,7 @@ namespace ao::rt::test
     listPtr.reset();
   }
 
-  TEST_CASE("SmartListEvaluator - upstream invalidation propagates terminally", "[runtime][unit][source][smart-list]")
+  TEST_CASE("SmartListEvaluator - upstream invalidation propagates terminally")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto trackId = libraryFixture.addTrack(makeSmartListSpec("matching", 2022));
@@ -103,8 +103,7 @@ namespace ao::rt::test
     CHECK(list.size() == 0);
   }
 
-  TEST_CASE("SmartListEvaluator - index lookup and source update forwarding work for filtered tracks",
-            "[runtime][unit][source][smart-list]")
+  TEST_CASE("SmartListEvaluator - index lookup and source update forwarding work for filtered tracks")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};

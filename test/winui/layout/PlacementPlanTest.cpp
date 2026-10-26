@@ -25,7 +25,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("planPlacement - expansion becomes a parent-allocated star slot", "[winui][unit][layout]")
+  TEST_CASE("planPlacement - expansion becomes a parent-allocated star slot")
   {
     auto const authored =
       planPlacement(nodeWithLayout({{"hexpand", LayoutValue{true}}, {"vexpand", LayoutValue{false}}}));
@@ -38,7 +38,7 @@ namespace ao::winui::test
     CHECK(unauthored.verticalSlot == SlotSizing::Auto);
   }
 
-  TEST_CASE("planPlacement - alignment maps the version 1 vocabulary onto both axes", "[winui][unit][layout]")
+  TEST_CASE("planPlacement - alignment maps the version 1 vocabulary onto both axes")
   {
     auto const endCenter = planPlacement(
       nodeWithLayout({{"halign", LayoutValue{std::string{"end"}}}, {"valign", LayoutValue{std::string{"center"}}}}));
@@ -56,7 +56,7 @@ namespace ao::winui::test
     CHECK(startEnd.optVerticalAlignment == VerticalAlignment::Bottom);
   }
 
-  TEST_CASE("planPlacement - an unauthored field leaves the style default in effect", "[winui][unit][layout]")
+  TEST_CASE("planPlacement - an unauthored field leaves the style default in effect")
   {
     auto const plan = planPlacement(nodeWithLayout({{"halign", LayoutValue{std::string{"start"}}}}));
 
@@ -66,8 +66,7 @@ namespace ao::winui::test
     CHECK_FALSE(plan.optMinHeight);
   }
 
-  TEST_CASE("planPlacement - a size request becomes a minimum and a negative request clears it",
-            "[winui][unit][layout]")
+  TEST_CASE("planPlacement - a size request becomes a minimum and a negative request clears it")
   {
     auto const requested = planPlacement(nodeWithLayout(
       {{"widthRequest", LayoutValue{std::int64_t{320}}}, {"heightRequest", LayoutValue{std::int64_t{48}}}}));
@@ -79,7 +78,7 @@ namespace ao::winui::test
     CHECK(unset.optMinWidth == 0.0);
   }
 
-  TEST_CASE("planPlacement - an authored hide is carried into the plan", "[winui][unit][layout]")
+  TEST_CASE("planPlacement - an authored hide is carried into the plan")
   {
     // The shared LayoutPlacement parser owns the authored visibility value.
     // All the native plan owes is carrying it without inventing a second rule.

@@ -25,7 +25,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("DesktopSettingsYamlSchema - round-trip owns independent desktop state", "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - round-trip owns independent desktop state")
   {
     auto state = DesktopSettings{};
     state.window = {.x = 120, .y = 140, .width = 1440, .height = 900, .maximized = true};
@@ -47,7 +47,7 @@ namespace ao::winui::test
     CHECK(*decodedRes == state);
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - accepts pane width boundaries", "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - accepts pane width boundaries")
   {
     auto state = DesktopSettings{};
     state.navigationPaneWidth = kMaximumNavigationPaneWidth;
@@ -62,8 +62,7 @@ namespace ao::winui::test
     CHECK(decodedRes->inspectorPaneWidth == kMinimumInspectorPaneWidth);
   }
 
-  TEST_CASE("DesktopSettings - captured normal bounds preserve position and unrelated preferences",
-            "[winui][unit][layout]")
+  TEST_CASE("DesktopSettings - captured normal bounds preserve position and unrelated preferences")
   {
     for (auto const& [captured, expectedWindow] : {
            std::pair{WindowPlacement{.x = -21, .y = 37, .width = 639, .height = 700},
@@ -98,8 +97,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("DesktopSettings - small window checkpoints preserve later edits and valid recapture",
-            "[winui][unit][layout]")
+  TEST_CASE("DesktopSettings - small window checkpoints preserve later edits and valid recapture")
   {
     auto const fixture = ao::test::TempDir{};
     auto const configPath = fixture.path() / "windows-settings.yaml";
@@ -147,8 +145,7 @@ namespace ao::winui::test
     checkpoint();
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - undersized windows cannot replace a durable valid setting",
-            "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - undersized windows cannot replace a durable valid setting")
   {
     auto const fixture = ao::test::TempDir{};
     auto const configPath = fixture.path() / "windows-settings.yaml";
@@ -217,7 +214,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - refuses a newer document rather than truncating it", "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - refuses a newer document rather than truncating it")
   {
     auto const source = std::format(R"(
 version: {}
@@ -233,7 +230,7 @@ shellMode: modern
     CHECK(res.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - the store keeps a newer desktop group unchanged", "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - the store keeps a newer desktop group unchanged")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const path = tempDir.path() / "windows.yaml";
@@ -257,7 +254,7 @@ shellMode: modern
     CHECK(ao::test::readFile(path) == document);
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - accepts exactly the versions that were written", "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - accepts exactly the versions that were written")
   {
     // The schema starts at version 1, so 0 names no document that ever
     // existed. It is what a missing or malformed marker parses to, and reading
@@ -284,7 +281,7 @@ shellMode: modern
     CHECK(res->version == kDesktopSettingsVersion);
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - an absent field keeps the seeded value", "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - an absent field keeps the seeded value")
   {
     auto seed = DesktopSettings{};
     seed.window = {.x = 5, .y = 6, .width = 1300, .height = 810, .maximized = false};
@@ -334,7 +331,7 @@ window: {maximized: true}
     }
   }
 
-  TEST_CASE("DesktopSettingsYamlSchema - rejects noncanonical persisted state", "[winui][unit][layout]")
+  TEST_CASE("DesktopSettingsYamlSchema - rejects noncanonical persisted state")
   {
     SECTION("unknown shell mode")
     {

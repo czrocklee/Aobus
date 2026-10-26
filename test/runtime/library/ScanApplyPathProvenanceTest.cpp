@@ -51,8 +51,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ScanApplyOperation - retargeted root alias leaves a planned new whole file stale",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("ScanApplyOperation - retargeted root alias leaves a planned new whole file stale", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const plannedRoot = temp.path() / "planned";
@@ -143,7 +142,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("ScanApplyOperation - retargeted moved carrier aborts every sibling without changing source form",
-            "[runtime][integration][library-scan][concurrency]")
+            "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";

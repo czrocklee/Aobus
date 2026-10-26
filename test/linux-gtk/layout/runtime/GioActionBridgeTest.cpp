@@ -68,7 +68,7 @@ namespace ao::gtk::layout::test
     };
   } // namespace
 
-  TEST_CASE("GioActionBridge - exports actions with the required context capabilities", "[gtk][unit][layout][action]")
+  TEST_CASE("GioActionBridge - exports actions with the required context capabilities")
   {
     auto fixture = GioActionBridgeFixture{};
     auto& window = fixture.window;
@@ -161,7 +161,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("GioActionBridge - refreshes enabled state and live activation", "[gtk][unit][layout][action]")
+  TEST_CASE("GioActionBridge - refreshes enabled state and live activation")
   {
     auto fixture = GioActionBridgeFixture{};
     auto& contextProvider = fixture.contextProvider;
@@ -200,7 +200,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("GioActionBridge - owns export retirement and partial rollback", "[gtk][unit][layout][action][async]")
+  TEST_CASE("GioActionBridge - owns export retirement and partial rollback")
   {
     auto fixture = GioActionBridgeFixture{};
     auto& contextProvider = fixture.contextProvider;

@@ -28,8 +28,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Engine - real WAV layouts control successor reuse without rewriting canonical samples",
-            "[audio][integration][engine][wav][concurrency]")
+  TEST_CASE("Engine - real WAV layouts control successor reuse without rewriting canonical samples", "[concurrency]")
   {
     // First track: plain quad is inferred FL FR BL BR. These complete S16LE
     // frames and the successor frames are independently authored slot markers.
@@ -211,7 +210,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Engine - real partial WAV successor refusal clears armed lookahead without interrupting current playback",
-            "[audio][integration][engine][wav][concurrency]")
+            "[concurrency]")
   {
     auto const currentPcm = std::vector<std::uint8_t>{0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x42};
     auto const currentBytes = ao::test::wav::makeWav({.channels = 2, .audioData = currentPcm});
@@ -312,8 +311,7 @@ namespace ao::audio::test
     CHECK(endedEvents.front().generation == currentGeneration);
   }
 
-  TEST_CASE("Engine - real partial WAV declaration is a recoverable source refusal before backend open",
-            "[audio][integration][engine][wav]")
+  TEST_CASE("Engine - real partial WAV declaration is a recoverable source refusal before backend open")
   {
     auto const bytes = ao::test::wav::makeWav({.sampleFormat = ao::test::wav::SampleFormat::ExtensiblePcm,
                                                .channels = 2,

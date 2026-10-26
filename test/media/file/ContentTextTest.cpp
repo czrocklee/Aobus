@@ -16,7 +16,7 @@
 
 namespace ao::media::file::detail::test
 {
-  TEST_CASE("ContentBuilder - CUE sheets keep distinct nonempty source values in order", "[media][unit][content]")
+  TEST_CASE("ContentBuilder - CUE sheets keep distinct nonempty source values in order")
   {
     auto builder = ContentBuilder::makeEmpty();
     builder.cueSheet("");
@@ -34,7 +34,7 @@ namespace ao::media::file::detail::test
     CHECK(content.cueSheets == std::vector<std::string_view>{"first", "second", "FIRST", " first", " "});
   }
 
-  TEST_CASE("ContentBuilder - many distinct CUE sheets retain source order across repeats", "[media][unit][content]")
+  TEST_CASE("ContentBuilder - many distinct CUE sheets retain source order across repeats")
   {
     constexpr std::size_t kSheetCount = 80000;
     auto expected = std::vector<std::string_view>{};
@@ -62,7 +62,7 @@ namespace ao::media::file::detail::test
     CHECK(content.cueSheets == expected);
   }
 
-  TEST_CASE("ContentBuilder - moving preserves CUE membership while building continues", "[media][unit][content]")
+  TEST_CASE("ContentBuilder - moving preserves CUE membership while building continues")
   {
     auto content = Content{};
 
@@ -93,8 +93,7 @@ namespace ao::media::file::detail::test
     CHECK(content.cueSheets == std::vector<std::string_view>{"first", "second", "third"});
   }
 
-  TEST_CASE("MetadataBuilder - repeated multi-name descriptors join in source order",
-            "[media][unit][content][descriptor]")
+  TEST_CASE("MetadataBuilder - repeated multi-name descriptors join in source order")
   {
     auto builder = ContentBuilder::makeEmpty();
     auto& metadata = builder.metadata();
@@ -108,7 +107,7 @@ namespace ao::media::file::detail::test
     CHECK(metadata.composer() == "Composer A; Composer B");
   }
 
-  TEST_CASE("MetadataBuilder - a joined value owns its text", "[media][unit][content][descriptor]")
+  TEST_CASE("MetadataBuilder - a joined value owns its text")
   {
     auto builder = ContentBuilder::makeEmpty();
     auto first = std::string{"Artist A"};
@@ -123,7 +122,7 @@ namespace ao::media::file::detail::test
     CHECK(content.texts[static_cast<std::size_t>(TextField::Artist)] == "Artist A; Artist B");
   }
 
-  TEST_CASE("MetadataBuilder - blank and already joined values add nothing", "[media][unit][content][descriptor]")
+  TEST_CASE("MetadataBuilder - blank and already joined values add nothing")
   {
     auto builder = ContentBuilder::makeEmpty();
     auto& metadata = builder.metadata();
@@ -171,8 +170,7 @@ namespace ao::media::file::detail::test
     }
   }
 
-  TEST_CASE("MetadataBuilder - joining many values retains text linear in their size",
-            "[media][unit][content][descriptor]")
+  TEST_CASE("MetadataBuilder - joining many values retains text linear in their size")
   {
     constexpr std::size_t kValueCount = 5000;
     // The builder keeps views of its values, so they outlive the content.
@@ -204,7 +202,7 @@ namespace ao::media::file::detail::test
     CHECK(retainedBytes <= 2 * joined.size());
   }
 
-  TEST_CASE("MetadataBuilder - Genre keeps its first nonblank value", "[media][unit][content][descriptor]")
+  TEST_CASE("MetadataBuilder - Genre keeps its first nonblank value")
   {
     auto builder = ContentBuilder::makeEmpty();
     auto& metadata = builder.metadata();
@@ -214,7 +212,7 @@ namespace ao::media::file::detail::test
     CHECK(metadata.genre() == "Rock");
   }
 
-  TEST_CASE("MetadataBuilder - replace supersedes a folded value", "[media][unit][content][descriptor]")
+  TEST_CASE("MetadataBuilder - replace supersedes a folded value")
   {
     auto builder = ContentBuilder::makeEmpty();
     auto& metadata = builder.metadata();
@@ -230,7 +228,7 @@ namespace ao::media::file::detail::test
     CHECK(metadata.artist() == "Later Artist; Artist A");
   }
 
-  TEST_CASE("MetadataBuilder - single-value text fields keep the last value", "[media][unit][content][descriptor]")
+  TEST_CASE("MetadataBuilder - single-value text fields keep the last value")
   {
     auto builder = ContentBuilder::makeEmpty();
     auto& metadata = builder.metadata();

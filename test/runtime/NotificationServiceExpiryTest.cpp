@@ -38,8 +38,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("NotificationService expiry - transient lifetime expires through the callback executor",
-            "[runtime][unit][notification][concurrency]")
+  TEST_CASE("NotificationService expiry - transient lifetime expires through the callback executor", "[concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
     constexpr auto kDuration = std::chrono::milliseconds{1250};
@@ -64,7 +63,7 @@ namespace ao::rt::test
     CHECK(fixture.updates.back().id == id);
   }
 
-  TEST_CASE("NotificationService expiry - retained lifetimes do not schedule expiry", "[runtime][unit][notification]")
+  TEST_CASE("NotificationService expiry - retained lifetimes do not schedule expiry")
   {
     auto fixture = NotificationExpiryFixture{};
 
@@ -87,8 +86,7 @@ namespace ao::rt::test
     CHECK(std::get<std::string>(fixture.service.feed().entries[1].message) == "Pinned");
   }
 
-  TEST_CASE("NotificationService expiry - keyed retention cancels a still-active timer",
-            "[runtime][unit][notification][concurrency]")
+  TEST_CASE("NotificationService expiry - keyed retention cancels a still-active timer", "[concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
     auto const key = NotificationReportKey{"runtime.operation.current"};
@@ -115,7 +113,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("NotificationService expiry - keyed update registration identity rejects an already queued timer",
-            "[runtime][unit][notification][concurrency]")
+            "[concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
     auto const key = NotificationReportKey{"runtime.operation.current"};
@@ -152,8 +150,7 @@ namespace ao::rt::test
     CHECK(fixture.updates.back().mutationKind == NotificationFeedMutationKind::Expired);
   }
 
-  TEST_CASE("NotificationService expiry - keyed lifetime transitions reject a queued obsolete timer",
-            "[runtime][unit][notification][concurrency]")
+  TEST_CASE("NotificationService expiry - keyed lifetime transitions reject a queued obsolete timer", "[concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
     auto const key = NotificationReportKey{"runtime.operation.current"};
@@ -203,8 +200,7 @@ namespace ao::rt::test
     CHECK(fixture.updates.back().id == createdId);
   }
 
-  TEST_CASE("NotificationService expiry - queued callback is safe after service destruction",
-            "[runtime][unit][notification][concurrency]")
+  TEST_CASE("NotificationService expiry - queued callback is safe after service destruction", "[concurrency]")
   {
     auto sleeper = ControlledSleeper{};
     auto executor = QueuedExecutor{};

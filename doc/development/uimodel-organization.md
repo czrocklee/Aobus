@@ -107,10 +107,10 @@ When adding UIModel behavior:
 5. Update the organization guardrail only when introducing a justified new capsule.
 6. For shared authored copy, add or extend a typed semantic input and lock its catalog coverage and fallback in focused tests.
 
-Tests use the `ao::uimodel::test` namespace. Focused presentation contracts use
-`[uimodel][unit][component]`; add feature or behavior tags only when useful for
-selection. [Test scope and metadata](test/layer-selection.md#scope-and-independent-metadata)
-apply independently of the owning binary.
+Tests use the `ao::uimodel::test` namespace. Focused presentation contracts live
+in `uimodel` tests; cases carry no tag except a supported `[concurrency]` or
+`[.manual]` marker. Choose their [assertion boundaries](test/layer-selection.md#assertion-boundaries)
+independently of the owning binary.
 
 ## Validation
 

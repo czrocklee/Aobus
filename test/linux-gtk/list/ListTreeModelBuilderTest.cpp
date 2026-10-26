@@ -24,7 +24,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ListTreeModelBuilder - builds nested list tree rows", "[gtk][unit][list][builder]")
+  TEST_CASE("ListTreeModelBuilder - builds nested list tree rows")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

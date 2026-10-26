@@ -220,7 +220,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("PreferencesWindow - builds first-cut pages and hosts shortcut editor", "[gtk][unit][preference]")
+  TEST_CASE("PreferencesWindow - builds first-cut pages and hosts shortcut editor")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -239,7 +239,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(window, "Ctrl+P") != nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - renders locale-selected page and action copy", "[gtk][unit][preference][localization]")
+  TEST_CASE("PreferencesWindow - renders locale-selected page and action copy")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -252,7 +252,7 @@ namespace ao::gtk::test
     CHECK(findButtonByLabel(window, "Layout bearbeiten...") != nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - layout page dispatches commands", "[gtk][unit][preference]")
+  TEST_CASE("PreferencesWindow - layout page dispatches commands")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -284,7 +284,7 @@ namespace ao::gtk::test
     CHECK(resetCount == 1);
   }
 
-  TEST_CASE("PreferencesWindow - appearance page persists and applies selected theme", "[gtk][unit][preference]")
+  TEST_CASE("PreferencesWindow - appearance page persists and applies selected theme")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -313,7 +313,7 @@ namespace ao::gtk::test
     CHECK(*optTheme == uimodel::ThemePreset::Modern);
   }
 
-  TEST_CASE("PreferencesWindow - layout page persists default preset for next launch", "[gtk][unit][preference]")
+  TEST_CASE("PreferencesWindow - layout page persists default preset for next launch")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -342,7 +342,7 @@ namespace ao::gtk::test
     CHECK(optPersisted->preferredOutputSelection.backendId == "existing-backend");
   }
 
-  TEST_CASE("PreferencesWindow - playback output selection persists the requested device", "[gtk][unit][preference]")
+  TEST_CASE("PreferencesWindow - playback output selection persists the requested device")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -385,8 +385,7 @@ namespace ao::gtk::test
   }
 
   TEST_CASE(
-    "PreferencesWindow - repeated output requests persist exact selections while summary follows the active route",
-    "[gtk][unit][preference]")
+    "PreferencesWindow - repeated output requests persist exact selections while summary follows the active route")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -434,8 +433,7 @@ namespace ao::gtk::test
     CHECK(window.outputDeviceLabelText() == "test_backend");
   }
 
-  TEST_CASE("PreferencesWindow - removing playback retires the selector and leaves output unavailable",
-            "[gtk][unit][preference][async]")
+  TEST_CASE("PreferencesWindow - removing playback retires the selector and leaves output unavailable")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -468,8 +466,7 @@ namespace ao::gtk::test
     CHECK(window.outputDeviceLabelText() == "Unavailable");
   }
 
-  TEST_CASE("PreferencesWindow - consecutive rebinds finalize every retired selector on idle",
-            "[gtk][unit][preference][async]")
+  TEST_CASE("PreferencesWindow - consecutive rebinds finalize every retired selector on idle")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -514,8 +511,7 @@ namespace ao::gtk::test
     CHECK(window.outputDeviceLabelText() == "PW");
   }
 
-  TEST_CASE("PreferencesWindow - destruction with pending selector retirement finalizes every selector once",
-            "[gtk][unit][preference][async]")
+  TEST_CASE("PreferencesWindow - destruction with pending selector retirement finalizes every selector once")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -554,8 +550,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("PreferencesWindow - rebinding during a selection's snapshot publication drops the stale request",
-            "[gtk][unit][preference][async]")
+  TEST_CASE("PreferencesWindow - rebinding during a selection's snapshot publication drops the stale request")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto oldFixture = GtkRuntimeFixture{};
@@ -601,8 +596,7 @@ namespace ao::gtk::test
     CHECK(window.outputDeviceLabelText() == "ALSA");
   }
 
-  TEST_CASE("PreferencesWindow - target hide and ordinary close retire an open output selector",
-            "[gtk][unit][preference][async]")
+  TEST_CASE("PreferencesWindow - target hide and ordinary close retire an open output selector")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -655,8 +649,7 @@ namespace ao::gtk::test
     CHECK(window.outputDeviceLabelText() == "Unavailable");
   }
 
-  TEST_CASE("PreferencesWindow - output summary follows a replacement playback service, not retired events",
-            "[gtk][unit][preference]")
+  TEST_CASE("PreferencesWindow - output summary follows a replacement playback service, not retired events")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto oldFixture = GtkRuntimeFixture{};
@@ -684,7 +677,7 @@ namespace ao::gtk::test
     CHECK(window.hasOutputSelector());
   }
 
-  TEST_CASE("PreferencesWindow - unknown persisted ids fall back to visible defaults", "[gtk][unit][preference]")
+  TEST_CASE("PreferencesWindow - unknown persisted ids fall back to visible defaults")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -699,7 +692,7 @@ namespace ao::gtk::test
     CHECK(window.selectedLayoutPresetId() == "classic");
   }
 
-  TEST_CASE("PreferencesWindow - ordinary close keeps a failed shortcut candidate", "[gtk][unit][preference][shortcut]")
+  TEST_CASE("PreferencesWindow - ordinary close keeps a failed shortcut candidate")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -725,8 +718,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("PreferencesWindow - refreshing the keyboard page keeps a failed shortcut candidate",
-            "[gtk][unit][preference][shortcut]")
+  TEST_CASE("PreferencesWindow - refreshing the keyboard page keeps a failed shortcut candidate")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -747,8 +739,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(window, "Ctrl+P") == nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - Retry after reopening commits the retained candidate to the current target",
-            "[gtk][unit][preference][shortcut]")
+  TEST_CASE("PreferencesWindow - Retry after reopening commits the retained candidate to the current target")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -802,8 +793,7 @@ namespace ao::gtk::test
     CHECK(findLabelByText(window, "Ctrl+P") == nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - a shortcut commit without an active target keeps the candidate for Retry",
-            "[gtk][unit][preference][shortcut]")
+  TEST_CASE("PreferencesWindow - a shortcut commit without an active target keeps the candidate for Retry")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -838,8 +828,7 @@ namespace ao::gtk::test
     CHECK(pendingShortcutClosePrompt() == nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - target hide discards a failed shortcut candidate without a new prompt",
-            "[gtk][unit][preference][shortcut]")
+  TEST_CASE("PreferencesWindow - target hide discards a failed shortcut candidate without a new prompt")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -866,8 +855,7 @@ namespace ao::gtk::test
     CHECK(pendingShortcutClosePrompt() == nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - pending-shortcut close prompt applies the chosen response",
-            "[gtk][unit][preference][shortcut]")
+  TEST_CASE("PreferencesWindow - pending-shortcut close prompt applies the chosen response")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -960,8 +948,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("PreferencesWindow - repeated close requests reuse one pending-shortcut prompt",
-            "[gtk][unit][preference][shortcut]")
+  TEST_CASE("PreferencesWindow - repeated close requests reuse one pending-shortcut prompt")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -991,8 +978,7 @@ namespace ao::gtk::test
     CHECK(pendingShortcutClosePrompt() == nullptr);
   }
 
-  TEST_CASE("PreferencesWindow - dismissal retires a live pending-shortcut prompt",
-            "[gtk][unit][preference][shortcut][async]")
+  TEST_CASE("PreferencesWindow - dismissal retires a live pending-shortcut prompt")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 

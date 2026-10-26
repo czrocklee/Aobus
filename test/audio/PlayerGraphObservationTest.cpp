@@ -144,8 +144,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Player - source identity cannot replace current native channel observations",
-            "[audio][unit][player][concurrency]")
+  TEST_CASE("Player - source identity cannot replace current native channel observations", "[concurrency]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();
@@ -222,7 +221,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - graph bursts remain coalesced through outward publication and yield to owner work",
-            "[audio][unit][player][concurrency][stress]")
+            "[concurrency]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();
@@ -276,8 +275,7 @@ namespace ao::audio::test
     CHECK(queue.queuedCount() == 0);
   }
 
-  TEST_CASE("Player - graph producer remains bounded while the Engine worker is withheld",
-            "[audio][unit][player][concurrency][stress]")
+  TEST_CASE("Player - graph producer remains bounded while the Engine worker is withheld", "[concurrency]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();
@@ -312,7 +310,7 @@ namespace ao::audio::test
   }
 
   TEST_CASE("Player - retiring a graph subscription cancels its queued publication in the same generation",
-            "[audio][unit][player][concurrency]")
+            "[concurrency]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();
@@ -348,8 +346,7 @@ namespace ao::audio::test
     CHECK(fixture.graphName() == "current");
   }
 
-  TEST_CASE("Player - replacing an unregistered graph callback retires its admission",
-            "[audio][unit][player][concurrency]")
+  TEST_CASE("Player - replacing an unregistered graph callback retires its admission", "[concurrency]")
   {
     auto fixture = GraphObservationFixture{false};
     auto& queue = fixture.executor.queue();
@@ -365,7 +362,7 @@ namespace ao::audio::test
     CHECK(fixture.graphName() == "current");
   }
 
-  TEST_CASE("Player - retained graph callbacks become no-ops after teardown", "[audio][unit][player][concurrency]")
+  TEST_CASE("Player - retained graph callbacks become no-ops after teardown", "[concurrency]")
   {
     auto fixture = GraphObservationFixture{};
     auto& queue = fixture.executor.queue();

@@ -32,7 +32,7 @@ Good `runtime` tests usually:
 - Assert emitted callbacks and resulting service state.
 - Keep service tests small and direct.
 - Use deterministic executors, barriers, explicit callbacks, and fake services instead of wall-clock timing.
-- Mark complete library import/export/scan flows `[integration]`; focused planning, validation, and cancellation contracts stay `[unit]`.
+- Exercise complete library import/export/scan flows as end-to-end scenarios; keep focused planning, validation, and cancellation contracts on controlled collaborators.
 
 Appropriate contracts:
 
@@ -63,10 +63,11 @@ Appropriate contracts:
 
 ## Application-platform adapter tests
 
-Use `[platform]` for frontend-independent native system-media adapters under `app/systemmedia`, such as the shared Linux MPRIS adapter.
-Controlled command, metadata, and lifecycle rules can remain `[unit]`; results obtained through a real bus or another production boundary are `[integration]`.
-Tests of a frontend's composition with that adapter retain the frontend layer, such as `[tui]` or `[gtk]`.
-Native availability belongs to the conditional source registration; it does not require a platform-name tag or determine unit/integration scope.
+Frontend-independent native system-media adapters under `app/systemmedia`, such
+as the shared Linux MPRIS adapter, form the application-platform layer.
+Controlled command, metadata, and lifecycle rules can stay on controlled collaborators; results obtained through a real bus or another production boundary form production-boundary scenarios.
+Tests of a frontend's composition with that adapter retain the frontend layer, such as TUI or GTK.
+Native availability belongs to the conditional source registration; it does not decide which kind of contract a case proves.
 
 ## `linux-gtk` tests
 
@@ -74,7 +75,7 @@ Use `test/linux-gtk/...Test.cpp` for GTK adapter behavior: widget construction, 
 
 GTK tests should be thin. Do not re-test all business policy that can be covered in `uimodel` or `runtime`.
 
-GTK scope follows the [direction of the asserted value](#scope-and-independent-metadata).
+Choose GTK tests by the [direction of the asserted value](#assertion-boundaries).
 
 Good GTK tests usually:
 
@@ -93,39 +94,45 @@ Appropriate contracts:
 
 ## CLI and TUI frontend tests
 
-Use `test/cli/...Test.cpp` and `test/tui/...Test.cpp` for frontend-owned parsing, formatting, rendering, input routing, and lifecycle behavior. Keep shared service and presentation policy in `runtime` or `uimodel`. Scope follows the [direction of the asserted value](#scope-and-independent-metadata): a CLI command or TUI action that changes library, playback, workspace, or notification state and asserts that state is `[integration]`; read-only output and TUI rendering of runtime state stay `[unit]`.
+Use `test/cli/...Test.cpp` and `test/tui/...Test.cpp` for frontend-owned parsing, formatting, rendering, input routing, and lifecycle behavior. Keep shared service and presentation policy in `runtime` or `uimodel`. Follow the [direction of the asserted value](#assertion-boundaries): a CLI command or TUI action that changes library, playback, workspace, or notification state and asserts that state crosses from the frontend into the runtime; read-only output and TUI rendering of runtime state stay frontend contracts.
 
 ## WinUI frontend tests
 
 Use `test/winui/...Test.cpp` for native WinUI composition and frontend-owned behavior such as XAML resource lookup, Windows layout dialects, shell policy, startup options, and process-boundary adapters.
 
-Keep pure shared policy in `uimodel` tests. A WinUI test may use the `[winui]` layer tag when the behavior belongs to the Windows frontend even if the implementation is a small pure helper. Many WinRT-free WinUI policy tests are intentionally compiled into `ao_core_test` on every host; suite membership does not change their frontend layer.
+Keep pure shared policy in `uimodel` tests. A test remains Windows-frontend-owned when the behavior belongs to the WinUI frontend even if the implementation is a small pure helper. Many WinRT-free WinUI policy tests are intentionally compiled into `ao_core_test` on every host; suite membership does not change their frontend layer.
 
-## Scope and independent metadata
+## Assertion boundaries
 
-Choose scope from the contract under test, not from the directory or binary:
+Choose each case's assertion layer from the contract it proves. Two useful
+patterns are:
 
-- `[unit]` verifies a focused component contract with controlled collaborators,
-  such as TrackStore read-back, YAML schema rejection, or fake-backend state
-  transitions. An owned temporary database, file, or GTK fixture does not make
-  it an integration test.
-- `[integration]` verifies collaboration across production boundaries, such as
-  export-to-import round trips, CLI-to-runtime mutations, decoder pipelines,
-  subprocess protocols, or a real daemon. The asserted outcome decides: a case
-  is integration when the value it checks is produced across such a boundary,
-  such as stream facts from the real decoder. A real media file that only
-  serves as playable input to a transport, session, or token contract with a
-  fake output device stays unit.
+- A controlled-collaborator contract verifies a focused component with
+  collaborators the case owns, such as TrackStore read-back, YAML schema
+  rejection, or fake-backend state transitions. An owned temporary database,
+  file, or GTK fixture does not by itself turn the case into a
+  production-boundary scenario.
+- A production-boundary scenario verifies collaboration across production
+  boundaries, such as export-to-import round trips, CLI-to-runtime mutations,
+  decoder pipelines, subprocess protocols, or a real daemon. The asserted
+  outcome decides: the scenario earns its cost when the value it checks is
+  produced across such a boundary, such as stream facts from the real decoder.
+  A real media file that only serves as playable input to a transport,
+  session, or token contract with a fake output device proves the focused
+  contract, not a boundary one.
 
-UI-model and frontend components apply the asserted outcome by direction. A
-case that drives the real runtime through a view model, session, or widget and
-asserts runtime state, or state the runtime persisted, is `[integration]`.
-Runtime state projected into view state or rendered into widgets, and
-frontend-owned configuration written by the component itself, stay `[unit]`
-even with an owned runtime fixture.
+UI-model and frontend components read the asserted value's direction. A case
+that drives the real runtime through a view model, session, or widget and
+asserts runtime state, or state the runtime persisted, owns a
+runtime-crossing contract. Runtime state projected into view state or
+rendered into widgets, and frontend-owned configuration written by the
+component itself, stays a frontend contract even with an owned runtime
+fixture.
 
-Scope promises neither speed nor hermeticity, and it is unrelated to the
-`ao_integration_test` binary.
+Neither choice promises speed or hermeticity, and neither decides the owning
+binary: suite membership comes from CMake registration, not from the case's
+contract. The only test-case metadata is the retained `[concurrency]` and
+`[.manual]` markers.
 
 Useful existing samples:
 

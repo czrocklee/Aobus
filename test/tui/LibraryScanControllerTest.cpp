@@ -72,7 +72,7 @@ namespace ao::tui::test
     };
   } // namespace
 
-  TEST_CASE("LibraryScanController - a finished scan presents its real outcome", "[tui][integration][scan]")
+  TEST_CASE("LibraryScanController - a finished scan presents its real outcome")
   {
     auto fixture = ScanFixture{};
     auto controller = fixture.makeController(
@@ -94,8 +94,7 @@ namespace ao::tui::test
             {.verdict = uimodel::LibraryScanVerdict::Complete, .summary = {.newCount = 2}}));
   }
 
-  TEST_CASE("LibraryScanController - start while running posts a transient already-running notice",
-            "[tui][integration][scan][concurrency]")
+  TEST_CASE("LibraryScanController - start while running posts a transient already-running notice", "[concurrency]")
   {
     auto fixture = ScanFixture{};
     auto* const runtime = &fixture.runtimePtr->async();
@@ -117,8 +116,7 @@ namespace ao::tui::test
     CHECK(controller.phase() == LibraryScanController::Phase::Retired);
   }
 
-  TEST_CASE("LibraryScanController - start while cancelling posts a cancellation-in-progress notice",
-            "[tui][integration][scan][concurrency]")
+  TEST_CASE("LibraryScanController - start while cancelling posts a cancellation-in-progress notice", "[concurrency]")
   {
     auto fixture = ScanFixture{};
     auto* const runtime = &fixture.runtimePtr->async();
@@ -137,8 +135,7 @@ namespace ao::tui::test
     REQUIRE(fixture.executor->tryDrainUntil([&] { return controller.phase() == LibraryScanController::Phase::Idle; }));
   }
 
-  TEST_CASE("LibraryScanController - cancellation is silent and returns to Idle",
-            "[tui][integration][scan][concurrency]")
+  TEST_CASE("LibraryScanController - cancellation is silent and returns to Idle", "[concurrency]")
   {
     auto fixture = ScanFixture{};
     auto* const runtime = &fixture.runtimePtr->async();
@@ -155,8 +152,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
 
-  TEST_CASE("LibraryScanController - a real outcome that wins the cancel race is still presented",
-            "[tui][integration][scan][concurrency]")
+  TEST_CASE("LibraryScanController - a real outcome that wins the cancel race is still presented", "[concurrency]")
   {
     auto fixture = ScanFixture{};
     auto controller = fixture.makeController(
@@ -172,7 +168,7 @@ namespace ao::tui::test
             ao::test::englishMessageCatalog(), {.verdict = uimodel::LibraryScanVerdict::Failed}));
   }
 
-  TEST_CASE("LibraryScanController - retire suppresses late presentation", "[tui][integration][scan][concurrency]")
+  TEST_CASE("LibraryScanController - retire suppresses late presentation", "[concurrency]")
   {
     auto fixture = ScanFixture{};
     auto* const runtime = &fixture.runtimePtr->async();
@@ -190,7 +186,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
 
-  TEST_CASE("LibraryScanController - cancel and start are no-ops after retire", "[tui][integration][scan][concurrency]")
+  TEST_CASE("LibraryScanController - cancel and start are no-ops after retire", "[concurrency]")
   {
     auto fixture = ScanFixture{};
     auto controller = fixture.makeController([](std::stop_token const) -> async::Task<uimodel::LibraryScanOutcome>
@@ -205,8 +201,7 @@ namespace ao::tui::test
     CHECK(fixture.runtimePtr->notifications().feed().entries.empty());
   }
 
-  TEST_CASE("LibraryScanController - production scan applies eagerly and leaves no identity backfill",
-            "[tui][integration][scan]")
+  TEST_CASE("LibraryScanController - production scan applies eagerly and leaves no identity backfill")
   {
     auto fixture = ScanFixture{};
     std::filesystem::copy_file(

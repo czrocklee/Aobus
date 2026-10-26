@@ -20,7 +20,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("ListView - returns serialized field values", "[library][unit][list]")
+  TEST_CASE("ListView - returns serialized field values")
   {
     auto const payload =
       ao::test::requireValue(ListBuilder::makeEmpty().name("Test").description("Desc").parentId(ListId{9}).serialize());
@@ -34,7 +34,7 @@ namespace ao::library::test
     CHECK(view.isRootParent() == false);
   }
 
-  TEST_CASE("ListView - returns stored order track IDs", "[library][unit][list]")
+  TEST_CASE("ListView - returns stored order track IDs")
   {
     auto builder = ListBuilder::makeEmpty().name("My List").description("Description");
     builder.orderTrackIds().add(TrackId{100});
@@ -52,7 +52,7 @@ namespace ao::library::test
     CHECK(view.orderTrackIds()[2] == TrackId{300});
   }
 
-  TEST_CASE("ListView - returns local expressions", "[library][unit][list]")
+  TEST_CASE("ListView - returns local expressions")
   {
     auto const payload = ao::test::requireValue(
       ListBuilder::makeEmpty().name("Smart List").description("A smart list").filter("@year > 2020").serialize());
@@ -64,7 +64,7 @@ namespace ao::library::test
     CHECK(view.filter() == "@year > 2020");
   }
 
-  TEST_CASE("ListView - returns empty strings when lengths are zero", "[library][unit][list]")
+  TEST_CASE("ListView - returns empty strings when lengths are zero")
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
     auto const view = ListView{payload};
@@ -76,7 +76,7 @@ namespace ao::library::test
     CHECK(view.isRootParent() == true);
   }
 
-  TEST_CASE("ListView - poisons invalid serialized data", "[library][unit][list]")
+  TEST_CASE("ListView - poisons invalid serialized data")
   {
     auto checkPoisoned = [](ListView const& view)
     {
@@ -118,13 +118,13 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("ListView - valid records report isValid", "[library][unit][list]")
+  TEST_CASE("ListView - valid records report isValid")
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("Test").serialize());
     CHECK(ListView{payload}.isValid());
   }
 
-  TEST_CASE("ListView - rejects trailing bytes and nonzero padding", "[library][unit][list]")
+  TEST_CASE("ListView - rejects trailing bytes and nonzero padding")
   {
     auto trailingPayload = ao::test::requireValue(ListBuilder::makeEmpty().name("Aligned").serialize());
     trailingPayload.insert(trailingPayload.end(), 4, std::byte{0});
@@ -135,7 +135,7 @@ namespace ao::library::test
     CHECK_FALSE(ListView{nonzeroPaddingPayload}.isValid());
   }
 
-  TEST_CASE("ListView - rejects an unaligned record base", "[library][unit][list]")
+  TEST_CASE("ListView - rejects an unaligned record base")
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("Test").serialize());
     auto backing = std::vector<std::byte>(payload.size() + 1);
@@ -145,7 +145,7 @@ namespace ao::library::test
     CHECK_FALSE(ListView{unaligned}.isValid());
   }
 
-  TEST_CASE("ListView - rejects a track count that overflows a 32-bit host", "[library][unit][list]")
+  TEST_CASE("ListView - rejects a track count that overflows a 32-bit host")
   {
     if constexpr (sizeof(std::size_t) == 4)
     {

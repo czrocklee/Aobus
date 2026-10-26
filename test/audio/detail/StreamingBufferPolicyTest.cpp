@@ -12,8 +12,7 @@
 
 namespace ao::audio::detail::test
 {
-  TEST_CASE("StreamingBufferPolicy - duration target is rounded up and bounded by capacity",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingBufferPolicy - duration target is rounded up and bounded by capacity")
   {
     constexpr std::size_t kCapacity = 2097152;
 
@@ -29,8 +28,7 @@ namespace ao::audio::detail::test
             std::numeric_limits<std::uint64_t>::max(), std::chrono::milliseconds::max(), kCapacity) == kCapacity);
   }
 
-  TEST_CASE("StreamingBufferPolicy - decode requires target space and previous-block headroom",
-            "[audio][unit][streaming-source]")
+  TEST_CASE("StreamingBufferPolicy - decode requires target space and previous-block headroom")
   {
     constexpr std::size_t kCapacity = 2097152;
     constexpr std::size_t kBlockByteCount = 32768;

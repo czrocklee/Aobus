@@ -150,8 +150,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("LibraryCommands List membership - Add writes the visible tag without materializing order",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - Add writes the visible tag without materializing order")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Road Song");
@@ -175,7 +174,7 @@ namespace ao::rt::test
     CHECK(fixture.events.front().listOrderChanges.empty());
   }
 
-  TEST_CASE("LibraryCommands List membership - Add is idempotent", "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - Add is idempotent")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Road Song");
@@ -197,8 +196,7 @@ namespace ao::rt::test
     CHECK(fixture.storedOrder(listId).empty());
   }
 
-  TEST_CASE("LibraryCommands List membership - a repeated Track is named once in the reply",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - a repeated Track is named once in the reply")
   {
     auto fixture = ListMembershipFixture{};
     auto const first = fixture.addTrack("First");
@@ -229,8 +227,7 @@ namespace ao::rt::test
     CHECK(reversedRes->reply.targetTrackIds == std::vector{second, first});
   }
 
-  TEST_CASE("LibraryCommands List membership - nested Add rejects the whole selection outside the parent",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - nested Add rejects the whole selection outside the parent")
   {
     auto fixture = ListMembershipFixture{};
     auto const eligible = fixture.addTrack("Eligible");
@@ -258,8 +255,7 @@ namespace ao::rt::test
     CHECK(fixture.hasTag(eligible, "playlist"));
   }
 
-  TEST_CASE("LibraryCommands List membership - invalid stored parent filter rejects before mutation",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - invalid stored parent filter rejects before mutation")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Unchanged");
@@ -279,8 +275,7 @@ namespace ao::rt::test
     CHECK(fixture.events.empty());
   }
 
-  TEST_CASE("LibraryCommands List membership - explicit Remove forgets rank and tag in one revision",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - explicit Remove forgets rank and tag in one revision")
   {
     auto fixture = ListMembershipFixture{};
     auto const selected = fixture.addTrack("Selected");
@@ -308,8 +303,7 @@ namespace ao::rt::test
     CHECK(fixture.events.front().listOrderChanges.front().listId == listId);
   }
 
-  TEST_CASE("LibraryCommands List membership - generic tag edits retain hidden rank",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - generic tag edits retain hidden rank")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Remember Me");
@@ -323,8 +317,7 @@ namespace ao::rt::test
     CHECK(fixture.storedOrder(listId) == std::vector{trackId});
   }
 
-  TEST_CASE("LibraryCommands List membership - computed expressions reject direct membership edits",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - computed expressions reject direct membership edits")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Computed");
@@ -338,8 +331,7 @@ namespace ao::rt::test
     CHECK(res.error().message.contains("membership is computed"));
   }
 
-  TEST_CASE("LibraryCommands List membership - preview validates without committing",
-            "[runtime][unit][library][list-membership]")
+  TEST_CASE("LibraryCommands List membership - preview validates without committing")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Preview");
@@ -357,8 +349,7 @@ namespace ao::rt::test
     CHECK(fixture.events.empty());
   }
 
-  TEST_CASE("LibraryCommands List deletion - optional visible-tag cleanup is previewed and committed atomically",
-            "[runtime][unit][library][list-membership][list-delete]")
+  TEST_CASE("LibraryCommands List deletion - optional visible-tag cleanup is previewed and committed atomically")
   {
     auto fixture = ListMembershipFixture{};
     auto const first = fixture.addTrack("First");
@@ -398,8 +389,7 @@ namespace ao::rt::test
     CHECK(fixture.events.front().listsDeleted == std::vector{listId});
   }
 
-  TEST_CASE("LibraryCommands - List subtree deletion cleans only the root writable tag",
-            "[runtime][unit][library][list-membership][list-delete]")
+  TEST_CASE("LibraryCommands - List subtree deletion cleans only the root writable tag")
   {
     auto fixture = ListMembershipFixture{};
     auto const trackId = fixture.addTrack("Nested");

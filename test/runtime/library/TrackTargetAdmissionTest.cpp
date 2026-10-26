@@ -34,8 +34,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackTargetAdmission - duplicate targets author unseen metadata once in first-seen order",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackTargetAdmission - duplicate targets author unseen metadata once in first-seen order")
   {
     auto storage = MusicLibraryFixture{};
     auto const original = std::vector<library::Credit>{{.name = "Original performer", .role = "Piano"}};
@@ -181,8 +180,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackTargetAdmission - duplicate targets author an unseen tag once in first-seen order",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackTargetAdmission - duplicate targets author an unseen tag once in first-seen order")
   {
     auto storage = MusicLibraryFixture{};
     auto const first = storage.addTrack(library::test::TrackSpec{.title = "First"});
@@ -352,8 +350,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackTargetAdmission - unique ordered targets replace credits with previously unseen names",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackTargetAdmission - unique ordered targets replace credits with previously unseen names")
   {
     auto storage = MusicLibraryFixture{};
     auto const first = storage.addTrack(library::test::TrackSpec{.title = "First"});
@@ -404,8 +401,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackTargetAdmission - empty and missing targets retain their admission errors",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackTargetAdmission - empty and missing targets retain their admission errors")
   {
     auto storage = MusicLibraryFixture{};
     auto const existing = storage.addTrack(library::test::TrackSpec{.title = "Existing"});
@@ -455,8 +451,7 @@ namespace ao::rt::test
     CHECK(publicationCount == 0);
   }
 
-  TEST_CASE("TrackTargetAdmission - closing rejects repeated targets as unavailable",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackTargetAdmission - closing rejects repeated targets as unavailable")
   {
     auto storage = MusicLibraryFixture{};
     auto const existing = storage.addTrack(library::test::TrackSpec{.title = "Existing"});

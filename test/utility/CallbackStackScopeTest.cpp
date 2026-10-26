@@ -12,7 +12,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("CallbackStackScope - nested scopes retain every active identity", "[utility][unit][callback-stack-scope]")
+  TEST_CASE("CallbackStackScope - nested scopes retain every active identity")
   {
     auto firstIdentity = std::byte{};
     auto secondIdentity = std::byte{};
@@ -38,8 +38,7 @@ namespace ao::utility::test
     CHECK_FALSE(CallbackStackScope::containsIdentity(&secondIdentity));
   }
 
-  TEST_CASE("CallbackStackScope - repeated identity remains active until its outer scope exits",
-            "[utility][unit][callback-stack-scope]")
+  TEST_CASE("CallbackStackScope - repeated identity remains active until its outer scope exits")
   {
     auto identity = std::byte{};
 
@@ -57,8 +56,7 @@ namespace ao::utility::test
     CHECK_FALSE(CallbackStackScope::containsIdentity(&identity));
   }
 
-  TEST_CASE("CallbackStackScope - identities are isolated between threads",
-            "[utility][unit][callback-stack-scope][concurrency]")
+  TEST_CASE("CallbackStackScope - identities are isolated between threads", "[concurrency]")
   {
     auto mainIdentity = std::byte{};
     auto workerIdentity = std::byte{};

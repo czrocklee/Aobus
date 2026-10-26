@@ -30,7 +30,7 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("plannedMapBytes - a default policy leaves the map alone", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - a default policy leaves the map alone")
   {
     auto const capacity = capacityOf(mebibytes(8), mebibytes(7));
 
@@ -38,7 +38,7 @@ namespace ao::lmdb::test
     CHECK(detail::plannedMapBytes(capacity, CapacityPolicy{}) == mebibytes(8));
   }
 
-  TEST_CASE("plannedMapBytes - the floor lifts a map below it", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - the floor lifts a map below it")
   {
     // What LMDB gives a database that never configured a size.
     auto const capacity = capacityOf(mebibytes(1), mebibytes(1));
@@ -46,7 +46,7 @@ namespace ao::lmdb::test
     CHECK(detail::plannedMapBytes(capacity, growingPolicy()) == mebibytes(16));
   }
 
-  TEST_CASE("plannedMapBytes - a map above the floor is never lowered to it", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - a map above the floor is never lowered to it")
   {
     // The case that decides whether a database keeps capacity an earlier session
     // gave it. Lowering here would hand back less room than it already holds.
@@ -55,21 +55,21 @@ namespace ao::lmdb::test
     CHECK(detail::plannedMapBytes(capacity, growingPolicy()) == mebibytes(512));
   }
 
-  TEST_CASE("plannedMapBytes - a map is not raised while the peak leaves half of it free", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - a map is not raised while the peak leaves half of it free")
   {
     auto const capacity = capacityOf(mebibytes(64), mebibytes(32));
 
     CHECK(detail::plannedMapBytes(capacity, growingPolicy()) == mebibytes(64));
   }
 
-  TEST_CASE("plannedMapBytes - a map doubles once the peak passes half", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - a map doubles once the peak passes half")
   {
     auto const capacity = capacityOf(mebibytes(64), mebibytes(33));
 
     CHECK(detail::plannedMapBytes(capacity, growingPolicy()) == mebibytes(128));
   }
 
-  TEST_CASE("plannedMapBytes - doubling repeats until the peak has room", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - doubling repeats until the peak has room")
   {
     // A peak far past the map takes several doublings, which is what lets one
     // open recover a database that grew while its map did not.
@@ -78,7 +78,7 @@ namespace ao::lmdb::test
     CHECK(detail::plannedMapBytes(capacity, growingPolicy()) == mebibytes(512));
   }
 
-  TEST_CASE("plannedMapBytes - the ceiling stops growth", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - the ceiling stops growth")
   {
     auto const capacity = capacityOf(mebibytes(512), mebibytes(500));
 
@@ -90,7 +90,7 @@ namespace ao::lmdb::test
     CHECK(detail::plannedMapBytes(atCeiling, growingPolicy()) == mebibytes(1024));
   }
 
-  TEST_CASE("plannedMapBytes - a map already past the ceiling is left where it is", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - a map already past the ceiling is left where it is")
   {
     // A database opened under a larger ceiling keeps its map: growth is bounded,
     // but nothing shrinks a map that already exists.
@@ -99,7 +99,7 @@ namespace ao::lmdb::test
     CHECK(detail::plannedMapBytes(capacity, growingPolicy()) == mebibytes(4096));
   }
 
-  TEST_CASE("plannedMapBytes - a policy with no ceiling still honours its floor", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - a policy with no ceiling still honours its floor")
   {
     // A ceiling of zero disables the growth rule, not the floor. The two answer
     // different questions: the floor is the capacity the caller asked to open
@@ -111,7 +111,7 @@ namespace ao::lmdb::test
     CHECK(detail::plannedMapBytes(capacity, policy) == mebibytes(16));
   }
 
-  TEST_CASE("plannedMapBytes - a peak near the representable limit does not wrap", "[lmdb][unit][capacity]")
+  TEST_CASE("plannedMapBytes - a peak near the representable limit does not wrap")
   {
     constexpr auto kMaxBytes = std::numeric_limits<std::uint64_t>::max();
     auto const capacity = capacityOf(kMaxBytes / 2, kMaxBytes - 1024);

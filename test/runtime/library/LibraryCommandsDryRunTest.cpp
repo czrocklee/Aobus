@@ -165,8 +165,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryCommands - dry-run previews metadata updates without committing",
-            "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - dry-run previews metadata updates without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
@@ -193,8 +192,7 @@ namespace ao::rt::test
     CHECK(recorder.tracksMutated == 1);
   }
 
-  TEST_CASE("LibraryCommands - metadata preview does not publish dictionary symbols",
-            "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - metadata preview does not publish dictionary symbols")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -229,7 +227,7 @@ namespace ao::rt::test
     CHECK(callbackSawDictionary);
   }
 
-  TEST_CASE("LibraryCommands - dry-run previews tag edits without committing", "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - dry-run previews tag edits without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -264,7 +262,7 @@ namespace ao::rt::test
     CHECK(recorder.tracksMutated == 1);
   }
 
-  TEST_CASE("LibraryCommands - dry-run previews list creation without committing", "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - dry-run previews list creation without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -289,8 +287,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryCommands - list creation preview rejects an invalid draft without committing",
-            "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - list creation preview rejects an invalid draft without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -310,7 +307,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 0);
   }
 
-  TEST_CASE("LibraryCommands - dry-run previews list updates without committing", "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - dry-run previews list updates without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -339,7 +336,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryCommands - dry-run previews list deletion without committing", "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - dry-run previews list deletion without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
@@ -364,7 +361,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryCommands - dry-run previews track deletion without committing", "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - dry-run previews track deletion without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Delete Track");
@@ -396,7 +393,7 @@ namespace ao::rt::test
     CHECK(recorder.listsMutated == 1);
   }
 
-  TEST_CASE("LibraryCommands - dry-run previews track creation without committing", "[runtime][unit][library][dry-run]")
+  TEST_CASE("LibraryCommands - dry-run previews track creation without committing")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());

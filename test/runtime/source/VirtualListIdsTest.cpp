@@ -9,7 +9,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("VirtualListIds - identifies IDs that do not reference a user-created list", "[runtime][unit][source]")
+  TEST_CASE("VirtualListIds - identifies IDs that do not reference a user-created list")
   {
     CHECK(isVirtualListId(kInvalidListId));
     CHECK(isVirtualListId(kAllTracksListId));
@@ -17,7 +17,7 @@ namespace ao::rt::test
     CHECK_FALSE(isVirtualListId(ListId{42}));
   }
 
-  TEST_CASE("VirtualListIds - resolves a list parent to the source it derives from", "[runtime][unit][source]")
+  TEST_CASE("VirtualListIds - resolves a list parent to the source it derives from")
   {
     CHECK(resolveParentSourceId(kInvalidListId) == kAllTracksListId);
     CHECK(resolveParentSourceId(kAllTracksListId) == kAllTracksListId);

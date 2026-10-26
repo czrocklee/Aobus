@@ -310,7 +310,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryJobs - prepareLibraryImportAsync returns failure for invalid path", "[runtime][unit][library-task]")
+  TEST_CASE("LibraryJobs - prepareLibraryImportAsync returns failure for invalid path")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -329,8 +329,7 @@ namespace ao::rt::test
     CHECK(std::string_view{res.error().location.file_name()}.contains("LibraryYamlImporter.cpp"));
   }
 
-  TEST_CASE("LibraryJobs - fixture unwinding retires a suspended import",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - fixture unwinding retires a suspended import", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -359,7 +358,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryJobs - fixture unwinding releases admitted maintenance on cancellation or future retirement",
-            "[runtime][unit][library-task][library-import][concurrency]")
+            "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -421,8 +420,7 @@ namespace ao::rt::test
     CHECK(Library::prepare(libraryFixture.library()));
   }
 
-  TEST_CASE("LibraryJobs - lane closing settles import progress when maintenance admission is retired",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - lane closing settles import progress when maintenance admission is retired", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -437,8 +435,7 @@ namespace ao::rt::test
       library.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge));
   }
 
-  TEST_CASE("LibraryJobs - lane closing settles apply progress when maintenance admission is retired",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - lane closing settles apply progress when maintenance admission is retired", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -465,8 +462,7 @@ namespace ao::rt::test
       library, runtime, executor, jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
   }
 
-  TEST_CASE("LibraryJobs - lane closing settles import progress from a queued maintenance admission",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - lane closing settles import progress from a queued maintenance admission", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const parkedTarget = libraryFixture.addTrack("Interactive parking target");
@@ -486,8 +482,7 @@ namespace ao::rt::test
       library.jobs().prepareLibraryImportAsync(libraryFixture.root() / "absent.yaml", ImportMode::Merge));
   }
 
-  TEST_CASE("LibraryJobs - lane closing settles apply progress from a queued maintenance admission",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - lane closing settles apply progress from a queued maintenance admission", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const parkedTarget = libraryFixture.addTrack("Interactive parking target");
@@ -520,8 +515,7 @@ namespace ao::rt::test
                                                       jobs.applyLibraryImportPlanAsync(std::move(*planRes)));
   }
 
-  TEST_CASE("LibraryJobs - import plans bind preview bytes and target state",
-            "[runtime][unit][library-task][library-import][authorization]")
+  TEST_CASE("LibraryJobs - import plans bind preview bytes and target state")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const existingTrackId =
@@ -572,8 +566,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryJobs - import plans reject a different runtime over the same library",
-            "[runtime][unit][library-task][library-import][authorization]")
+  TEST_CASE("LibraryJobs - import plans reject a different runtime over the same library")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const yamlPath = libraryFixture.root() / "import.yaml";
@@ -605,8 +598,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::Conflict);
   }
 
-  TEST_CASE("LibraryJobs - cancelled import preparation never enters maintenance",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - cancelled import preparation never enters maintenance", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -643,8 +635,7 @@ namespace ao::rt::test
     CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
   }
 
-  TEST_CASE("LibraryJobs - import preview cancellation finishes maintenance on the callback owner",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - import preview cancellation finishes maintenance on the callback owner", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -678,8 +669,7 @@ namespace ao::rt::test
     CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
   }
 
-  TEST_CASE("LibraryJobs - cancellation after import commit preserves mandatory completion",
-            "[runtime][unit][library-task][library-import][concurrency]")
+  TEST_CASE("LibraryJobs - cancellation after import commit preserves mandatory completion", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -718,7 +708,7 @@ namespace ao::rt::test
     CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
   }
 
-  TEST_CASE("LibraryJobs - exportLibraryAsync returns failure for invalid path", "[runtime][unit][library-task]")
+  TEST_CASE("LibraryJobs - exportLibraryAsync returns failure for invalid path")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -735,8 +725,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("LibraryJobs - YAML transfers publish coarse progress and one terminal pulse",
-            "[runtime][integration][library-task]")
+  TEST_CASE("LibraryJobs - YAML transfers publish coarse progress and one terminal pulse")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -795,7 +784,7 @@ namespace ao::rt::test
     CHECK(std::filesystem::exists(exportPath));
   }
 
-  TEST_CASE("LibraryJobs - buildScanPlanAsync succeeds", "[runtime][unit][library-task][scan]")
+  TEST_CASE("LibraryJobs - buildScanPlanAsync succeeds")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -814,8 +803,7 @@ namespace ao::rt::test
     CHECK(progressFinishedCount == 1);
   }
 
-  TEST_CASE("LibraryJobs - pre-admission cancellation publishes no progress conversation",
-            "[runtime][unit][library-task][concurrency]")
+  TEST_CASE("LibraryJobs - pre-admission cancellation publishes no progress conversation", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -928,7 +916,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryJobs - scan plan preserves UTF-8 filenames", "[runtime][unit][library-task]")
+  TEST_CASE("LibraryJobs - scan plan preserves UTF-8 filenames")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82.flac"};
     auto libraryFixture = MusicLibraryFixture{};
@@ -951,7 +939,7 @@ namespace ao::rt::test
     CHECK(res->items().front().uri == expected);
   }
 
-  TEST_CASE("LibraryJobs - applyScanPlanAsync succeeds with empty plan", "[runtime][unit][library-task][scan]")
+  TEST_CASE("LibraryJobs - applyScanPlanAsync succeeds with empty plan")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -978,7 +966,7 @@ namespace ao::rt::test
     CHECK(libraryFixture.library().libraryRevision(transaction) == 0);
   }
 
-  TEST_CASE("LibraryJobs - applyScanPlanAsync can defer new audio identity", "[runtime][integration][library-task]")
+  TEST_CASE("LibraryJobs - applyScanPlanAsync can defer new audio identity")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
@@ -1008,8 +996,7 @@ namespace ao::rt::test
     CHECK_FALSE(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
-  TEST_CASE("LibraryJobs - scan preparation permits unrelated interactive authoring",
-            "[runtime][unit][library-task][concurrency]")
+  TEST_CASE("LibraryJobs - scan preparation permits unrelated interactive authoring", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const authoringTarget = libraryFixture.addTrack("Before");
@@ -1111,7 +1098,7 @@ namespace ao::rt::test
     CHECK(postScanAuthoringRes->status == AuthoringStatus::Applied);
   }
 
-  TEST_CASE("LibraryJobs - backfillAudioIdentityAsync fills pending rows", "[runtime][integration][library-task]")
+  TEST_CASE("LibraryJobs - backfillAudioIdentityAsync fills pending rows")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
@@ -1145,8 +1132,7 @@ namespace ao::rt::test
     CHECK(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
   }
 
-  TEST_CASE("LibraryJobs - applyScanPlanAsync reports progress while applying plan",
-            "[runtime][unit][library-task][scan]")
+  TEST_CASE("LibraryJobs - applyScanPlanAsync reports progress while applying plan")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
@@ -1205,8 +1191,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryJobs - scan progress coalesces while callback delivery is backlogged",
-            "[runtime][unit][library-task][concurrency]")
+  TEST_CASE("LibraryJobs - scan progress coalesces while callback delivery is backlogged", "[concurrency]")
   {
     constexpr std::size_t kFileCount = 64;
     auto libraryFixture = MusicLibraryFixture{};
@@ -1282,8 +1267,7 @@ namespace ao::rt::test
     CHECK(eventOrder.back() == "finished");
   }
 
-  TEST_CASE("LibraryJobs - fingerprint progress coalesces only before delivery",
-            "[runtime][unit][library-task][scan][concurrency]")
+  TEST_CASE("LibraryJobs - fingerprint progress coalesces only before delivery", "[concurrency]")
   {
     bool const deliverInitial = GENERATE(false, true);
     CAPTURE(deliverInitial);
@@ -1400,8 +1384,7 @@ namespace ao::rt::test
     CHECK(eventOrder.back() == "finished");
   }
 
-  TEST_CASE("LibraryJobs - applyScanPlanAsync forwards cancellation to scan executor",
-            "[runtime][unit][library-task][scan][concurrency]")
+  TEST_CASE("LibraryJobs - applyScanPlanAsync forwards cancellation to scan executor", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
@@ -1457,8 +1440,7 @@ namespace ao::rt::test
     requireBackgroundTaskLeaseReleased(runtime, executor, jobs);
   }
 
-  TEST_CASE("LibraryJobs - throwing scan progress callback propagates after background lease cleanup",
-            "[runtime][unit][library-task][concurrency]")
+  TEST_CASE("LibraryJobs - throwing scan progress callback propagates after background lease cleanup", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -1496,7 +1478,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryJobs - throwing backfill progress callback propagates after background lease cleanup",
-            "[runtime][unit][library-task][concurrency]")
+            "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
@@ -1541,8 +1523,7 @@ namespace ao::rt::test
     requireBackgroundTaskLeaseReleased(runtime, executor, jobs);
   }
 
-  TEST_CASE("LibraryJobs - apply cancellation finishes the background lease before propagation",
-            "[runtime][unit][library-task][concurrency]")
+  TEST_CASE("LibraryJobs - apply cancellation finishes the background lease before propagation", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = QueuedExecutor{};
@@ -1575,8 +1556,7 @@ namespace ao::rt::test
     requireBackgroundTaskLeaseReleased(runtime, executor, jobs);
   }
 
-  TEST_CASE("LibraryJobs - backfill cancellation finishes the background lease before propagation",
-            "[runtime][unit][library-task][concurrency]")
+  TEST_CASE("LibraryJobs - backfill cancellation finishes the background lease before propagation", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");

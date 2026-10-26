@@ -15,7 +15,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("LibraryPaths - derives the canonical paths for a music root", "[runtime][unit][library]")
+  TEST_CASE("LibraryPaths - derives the canonical paths for a music root")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const paths = LibraryPaths{tempDir.path()};
@@ -25,7 +25,7 @@ namespace ao::rt::test
     CHECK(paths.logsPath() == tempDir.path() / ".aobus" / "logs");
   }
 
-  TEST_CASE("LibraryPaths - detects a database created by MusicLibrary", "[runtime][integration][library]")
+  TEST_CASE("LibraryPaths - detects a database created by MusicLibrary")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const paths = LibraryPaths{tempDir.path()};
@@ -44,7 +44,7 @@ namespace ao::rt::test
     CHECK(paths.hasExistingDatabase());
   }
 
-  TEST_CASE("LibraryPaths - an empty data file is not an existing database", "[runtime][unit][library]")
+  TEST_CASE("LibraryPaths - an empty data file is not an existing database")
   {
     // The Windows data-file preparation creates the file before LMDB initializes
     // it, so a preparation or open that fails afterwards leaves an empty one. Read

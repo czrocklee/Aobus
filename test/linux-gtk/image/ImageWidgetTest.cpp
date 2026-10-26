@@ -42,7 +42,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImageWidget - renders pixbufs at target and allocated sizes", "[gtk][unit][image][async]")
+  TEST_CASE("ImageWidget - renders pixbufs at target and allocated sizes")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = ImageWidget{};
@@ -261,8 +261,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ImageWidget - superseded high-quality render cannot publish stale pixels",
-            "[gtk][unit][image][concurrency]")
+  TEST_CASE("ImageWidget - superseded high-quality render cannot publish stale pixels", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto completions = std::vector<ImageWidget::RenderedImageReady>{};
@@ -311,8 +310,7 @@ namespace ao::gtk::test
     CHECK(paintablePtr->get_intrinsic_height() == 56 * scaleFactor);
   }
 
-  TEST_CASE("ImageWidget - resize keeps its interim frame until worker quality render completes",
-            "[gtk][unit][image][concurrency]")
+  TEST_CASE("ImageWidget - resize keeps its interim frame until worker quality render completes", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto completions = std::vector<ImageWidget::RenderedImageReady>{};
@@ -359,8 +357,7 @@ namespace ao::gtk::test
     CHECK(settledPaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
   }
 
-  TEST_CASE("ImageWidget - destruction cancels and invalidates a retained render completion",
-            "[gtk][unit][image][concurrency]")
+  TEST_CASE("ImageWidget - destruction cancels and invalidates a retained render completion", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto completion = ImageWidget::RenderedImageReady{};
@@ -389,8 +386,7 @@ namespace ao::gtk::test
     completion(makePixbuf(56, 56));
   }
 
-  TEST_CASE("CoverArtView - selects placeholder layers for each style and yields to real artwork",
-            "[gtk][unit][image][cover-art]")
+  TEST_CASE("CoverArtView - selects placeholder layers for each style and yields to real artwork")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = CoverArtView{};
@@ -446,8 +442,7 @@ namespace ao::gtk::test
     CHECK_FALSE(widget.hasImage());
   }
 
-  TEST_CASE("CoverArtView - compact monogram reduces two-scalar text within the cover",
-            "[gtk][unit][image][cover-art][geometry]")
+  TEST_CASE("CoverArtView - compact monogram reduces two-scalar text within the cover")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = CoverArtView{};
@@ -491,7 +486,7 @@ namespace ao::gtk::test
     CHECK(label->get_height() >= compactTextHeight);
   }
 
-  TEST_CASE("CoverArtView - vinyl decoration follows the cover allocation", "[gtk][unit][image][cover-art][geometry]")
+  TEST_CASE("CoverArtView - vinyl decoration follows the cover allocation")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = CoverArtView{};
@@ -520,7 +515,7 @@ namespace ao::gtk::test
     CHECK(decoration->get_height() == widget.get_height());
   }
 
-  TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[gtk][unit][image][concurrency]")
+  TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const fullCoverBytes = encodePng(makePixbuf(128));
@@ -630,8 +625,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceImageController - async thumbnail mode updates the widget image",
-            "[gtk][unit][image][concurrency]")
+  TEST_CASE("ResourceImageController - async thumbnail mode updates the widget image", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     // A large square source so we can prove the cached result is downscaled.

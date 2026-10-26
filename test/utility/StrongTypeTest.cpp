@@ -46,7 +46,7 @@ namespace ao::utility::test
     static_assert(!PostDecrementable<IntId>);
   } // namespace
 
-  TEST_CASE("StrongType - string-backed wrappers expose value semantics", "[utility][unit][strong-type]")
+  TEST_CASE("StrongType - string-backed wrappers expose value semantics")
   {
     auto id1 = StringId{"test"};
     auto id2 = StringId{"test"};
@@ -76,7 +76,7 @@ namespace ao::utility::test
     CHECK(formatted == "test");
   }
 
-  TEST_CASE("StrongType - integer-backed wrappers expose numeric semantics", "[utility][unit][strong-type]")
+  TEST_CASE("StrongType - integer-backed wrappers expose numeric semantics")
   {
     auto id1 = IntId{42};
     auto id2 = IntId{42};

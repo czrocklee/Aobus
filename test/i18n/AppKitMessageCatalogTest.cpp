@@ -16,8 +16,7 @@
 
 namespace ao::i18n::test
 {
-  TEST_CASE("AppKit messages - every message resolves in every maintained locale without English fallback",
-            "[core][unit][catalog]")
+  TEST_CASE("AppKit messages - every message resolves in every maintained locale without English fallback")
   {
     // Maintained locales are sparse by policy, but the AppKit desktop is
     // translated as one unit. A missing override would fall back silently, and
@@ -77,7 +76,7 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("AppKit messages - editor counts use singular and grouped plural forms", "[core][unit][catalog]")
+  TEST_CASE("AppKit messages - editor counts use singular and grouped plural forms")
   {
     auto catalogRes = MessageCatalog::create("en");
     REQUIRE(catalogRes);
@@ -108,7 +107,7 @@ namespace ao::i18n::test
     }
   }
 
-  TEST_CASE("AppKit messages - selection status preserves selected and total counts", "[core][unit][catalog]")
+  TEST_CASE("AppKit messages - selection status preserves selected and total counts")
   {
     auto catalogRes = MessageCatalog::create("en");
     REQUIRE(catalogRes);
@@ -121,7 +120,7 @@ namespace ao::i18n::test
                          {{"elapsed", "1:23"}, {"duration", "5:00"}}) == "1:23 of 5:00");
   }
 
-  TEST_CASE("AppKit messages - repeat modes expose distinct accessibility descriptions", "[core][unit][catalog]")
+  TEST_CASE("AppKit messages - repeat modes expose distinct accessibility descriptions")
   {
     auto catalogRes = MessageCatalog::create("en");
     REQUIRE(catalogRes);
@@ -130,7 +129,7 @@ namespace ao::i18n::test
     CHECK(requiredText(*catalogRes, MessageId::AppKitRepeatOne) == "Repeat One");
   }
 
-  TEST_CASE("AppKit messages - an unsupported locale retains English message grammar", "[core][unit][catalog]")
+  TEST_CASE("AppKit messages - an unsupported locale retains English message grammar")
   {
     // Korean selects the other plural form for one, so the English singular
     // proves that fallback text keeps English grammar.
@@ -145,7 +144,7 @@ namespace ao::i18n::test
           "Actions for 作品 {title}");
   }
 
-  TEST_CASE("AppKit messages - Japanese uses its own plural form and keeps argument text", "[core][unit][catalog]")
+  TEST_CASE("AppKit messages - Japanese uses its own plural form and keeps argument text")
   {
     auto catalogRes = MessageCatalog::create("ja-JP");
     REQUIRE(catalogRes);

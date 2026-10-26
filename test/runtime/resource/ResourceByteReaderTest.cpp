@@ -106,8 +106,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ResourceByteReader - interactive reads return owned bytes on the callback executor",
-            "[runtime][unit][resource][concurrency]")
+  TEST_CASE("ResourceByteReader - interactive reads return owned bytes on the callback executor", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const bytes = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
@@ -130,7 +129,7 @@ namespace ao::rt::test
     CHECK(**observation.res == std::vector<std::byte>{bytes.begin(), bytes.end()});
   }
 
-  TEST_CASE("ResourceByteReader - absent resource identities yield no image", "[runtime][unit][resource]")
+  TEST_CASE("ResourceByteReader - absent resource identities yield no image")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const bytes = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
@@ -164,7 +163,7 @@ namespace ao::rt::test
     CHECK_FALSE(*res);
   }
 
-  TEST_CASE("ResourceByteReader - interactive encoded-byte limit is exact", "[runtime][unit][resource]")
+  TEST_CASE("ResourceByteReader - interactive encoded-byte limit is exact")
   {
     // Full-size verification needs headroom on sanitizer hosts; this is a hang guard, not a latency assertion.
     constexpr auto kEncodedResourceCompletionTimeout = std::chrono::seconds{30};
@@ -218,8 +217,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ResourceByteReader - a descriptor without cached bytes or a carrier yields no image",
-            "[runtime][unit][resource]")
+  TEST_CASE("ResourceByteReader - a descriptor without cached bytes or a carrier yields no image")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const bytes = std::array{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
@@ -234,8 +232,7 @@ namespace ao::rt::test
     CHECK_FALSE(*res);
   }
 
-  TEST_CASE("ResourceByteReader - the carrier index is built lazily and rebuilt once per revision",
-            "[runtime][unit][resource][resource-walk]")
+  TEST_CASE("ResourceByteReader - the carrier index is built lazily and rebuilt once per revision")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const bytes = std::array{std::byte{0xA1}, std::byte{0xB2}};
@@ -264,8 +261,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ResourceByteReader - one stale stamp costs one index build across several workers",
-            "[runtime][unit][resource][concurrency]")
+  TEST_CASE("ResourceByteReader - one stale stamp costs one index build across several workers", "[concurrency]")
   {
     constexpr std::size_t kRequestCount = 50;
     auto libraryFixture = MusicLibraryFixture{};
@@ -299,8 +295,7 @@ namespace ao::rt::test
     CHECK(reader.carrierIndexBuildCount() == 1);
   }
 
-  TEST_CASE("ResourceByteReader - cancelling an interactive read suppresses completion",
-            "[runtime][unit][resource][concurrency]")
+  TEST_CASE("ResourceByteReader - cancelling an interactive read suppresses completion", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const bytes = std::array{std::byte{0x01}, std::byte{0x02}};

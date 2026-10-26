@@ -68,7 +68,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("ExecutionPlan - compiles in lists", "[query][unit][execution-plan][membership]")
+  TEST_CASE("ExecutionPlan - compiles in lists")
   {
     SECTION("CompilesConstantListAsMembershipSet")
     {
@@ -114,7 +114,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - compiles in ranges", "[query][unit][execution-plan][membership]")
+  TEST_CASE("ExecutionPlan - compiles in ranges")
   {
     SECTION("CompilesRangeAsClosedBounds")
     {
@@ -162,8 +162,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("ExecutionPlan - enforces ordered comparison field restrictions",
-            "[query][unit][execution-plan][membership]")
+  TEST_CASE("ExecutionPlan - enforces ordered comparison field restrictions")
   {
     SECTION("AllowsStringRelationalOnDictionaryField")
     {

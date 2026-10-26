@@ -23,7 +23,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("NowPlayingStatusLabel - binds status text and reveals the playing track", "[gtk][integration][playback]")
+  TEST_CASE("NowPlayingStatusLabel - binds status text and reveals the playing track")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

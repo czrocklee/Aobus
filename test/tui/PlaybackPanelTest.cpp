@@ -81,7 +81,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackPanel - playback bar renders idle fallback state", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar renders idle fallback state")
   {
     auto const state = rt::PlaybackTransportSnapshot{};
 
@@ -98,8 +98,7 @@ namespace ao::tui::test
     CHECK(text.contains("Vol 100%"));
   }
 
-  TEST_CASE("PlaybackPanel - playback bar uses localized copy without changing track data",
-            "[tui][unit][playback][localization]")
+  TEST_CASE("PlaybackPanel - playback bar uses localized copy without changing track data")
   {
     auto const german = ao::test::messageCatalog("de-DE");
     auto state = rt::PlaybackTransportSnapshot{
@@ -114,7 +113,7 @@ namespace ao::tui::test
     CHECK(text.contains("Kein aktiver Titel"));
   }
 
-  TEST_CASE("PlaybackPanel - muted volume remains visible as a mouse target", "[tui][unit][playback][mouse]")
+  TEST_CASE("PlaybackPanel - muted volume remains visible as a mouse target")
   {
     auto state = rt::PlaybackTransportSnapshot{.volume = rt::VolumeState{.level = 0.42F, .muted = true}};
     auto box = ftxui::Box{};
@@ -132,7 +131,7 @@ namespace ao::tui::test
     CHECK(box.y_max < screen.dimy());
   }
 
-  TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume")
   {
     auto state =
       rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
@@ -155,8 +154,7 @@ namespace ao::tui::test
     CHECK(text.contains("Vol 42%"));
   }
 
-  TEST_CASE("PlaybackPanel - paused soul draws the supplied visual frame at any animation time",
-            "[tui][unit][playback][soul]")
+  TEST_CASE("PlaybackPanel - paused soul draws the supplied visual frame at any animation time")
   {
     auto const state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Paused, .ready = true};
     auto const motion = uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080});
@@ -193,7 +191,7 @@ namespace ao::tui::test
     CHECK_FALSE(changed.PixelAt(1, 0).foreground_color == early.PixelAt(1, 0).foreground_color);
   }
 
-  TEST_CASE("PlaybackPanel - playback bar anchors the soul button at the far left", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar anchors the soul button at the far left")
   {
     auto const state = rt::PlaybackTransportSnapshot{};
     auto soulButtonBox = ftxui::Box{};
@@ -208,7 +206,7 @@ namespace ao::tui::test
     CHECK(soulButtonBox.y_min == 0);
   }
 
-  TEST_CASE("PlaybackPanel - playback bar previews seek position without percent text", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar previews seek position without percent text")
   {
     auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
                                                .duration = std::chrono::seconds{100},
@@ -223,7 +221,7 @@ namespace ao::tui::test
     CHECK(text.contains("1:40"));
   }
 
-  TEST_CASE("PlaybackPanel - playback bar reflects only the seek rail", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar reflects only the seek rail")
   {
     auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
                                                .duration = std::chrono::seconds{100},
@@ -242,7 +240,7 @@ namespace ao::tui::test
     CHECK(seekRailBox.x_min > 0);
   }
 
-  TEST_CASE("PlaybackPanel - playback bar places output selector before elapsed time", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar places output selector before elapsed time")
   {
     auto state = rt::PlaybackTransportSnapshot{
       .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
@@ -269,7 +267,7 @@ namespace ao::tui::test
     CHECK(outputDeviceBox.y_min == seekRailBox.y_min);
   }
 
-  TEST_CASE("PlaybackPanel - playback bar expands seek rail on wide terminals", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar expands seek rail on wide terminals")
   {
     auto const state = rt::PlaybackTransportSnapshot{
       .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
@@ -291,7 +289,7 @@ namespace ao::tui::test
     CHECK(wideRailBox.x_max - wideRailBox.x_min + 1 == 48);
   }
 
-  TEST_CASE("PlaybackPanel - playback dock stays on one row", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback dock stays on one row")
   {
     auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
                                                .duration = std::chrono::seconds{100},
@@ -312,7 +310,7 @@ namespace ao::tui::test
     CHECK(seekRailBox.y_max == 0);
   }
 
-  TEST_CASE("PlaybackPanel - playback bar renders output backend badge", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - playback bar renders output backend badge")
   {
     auto const state = rt::PlaybackTransportSnapshot{};
     auto const output = uimodel::OutputDeviceViewState{
@@ -328,7 +326,7 @@ namespace ao::tui::test
     CHECK(text.contains("No active track"));
   }
 
-  TEST_CASE("PlaybackPanel - hovered output selector uses the interactive surface", "[tui][unit][playback]")
+  TEST_CASE("PlaybackPanel - hovered output selector uses the interactive surface")
   {
     auto const state = rt::PlaybackTransportSnapshot{};
     auto const output = uimodel::OutputDeviceViewState{

@@ -12,7 +12,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TrackPresentationNavigation - includes builtin and custom views", "[tui][unit][track-presentation]")
+  TEST_CASE("TrackPresentationNavigation - includes builtin and custom views")
   {
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
       {.label = "Dense Albums", .basePresetId = "albums", .spec = rt::TrackPresentationSpec{.id = "dense-albums"}},
@@ -30,7 +30,7 @@ namespace ao::tui::test
     CHECK(items.back().detail == "custom from albums");
   }
 
-  TEST_CASE("TrackPresentationNavigation - falls back for sparse preset labels", "[tui][unit][track-presentation]")
+  TEST_CASE("TrackPresentationNavigation - falls back for sparse preset labels")
   {
     auto const builtin = std::vector<rt::TrackPresentationPreset>{
       {.spec = rt::TrackPresentationSpec{.id = "raw"}},
@@ -47,8 +47,7 @@ namespace ao::tui::test
     CHECK(items[1].detail == "custom");
   }
 
-  TEST_CASE("TrackPresentationNavigation - preserves complete builtin then custom order",
-            "[tui][unit][track-presentation]")
+  TEST_CASE("TrackPresentationNavigation - preserves complete builtin then custom order")
   {
     auto const builtin = std::vector<rt::TrackPresentationPreset>{
       {.spec = rt::TrackPresentationSpec{.id = "raw-first"}},
@@ -74,7 +73,7 @@ namespace ao::tui::test
     CHECK(items[3].detail == "custom");
   }
 
-  TEST_CASE("TrackPresentationNavigation - display labels fall back to default", "[tui][unit][track-presentation]")
+  TEST_CASE("TrackPresentationNavigation - display labels fall back to default")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(trackPresentationDisplayId(textCatalog, "") == "default");
@@ -83,8 +82,7 @@ namespace ao::tui::test
     CHECK(trackPresentationBadgeLabel(textCatalog, "albums") == "view:albums");
   }
 
-  TEST_CASE("TrackPresentationNavigation - renders locale-selected navigation copy",
-            "[tui][unit][track-presentation][localization]")
+  TEST_CASE("TrackPresentationNavigation - renders locale-selected navigation copy")
   {
     auto const textCatalog = ao::test::messageCatalog("de-DE");
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{

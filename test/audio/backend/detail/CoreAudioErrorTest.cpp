@@ -20,7 +20,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioError - classifies native failures", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - classifies native failures")
   {
     CHECK(coreAudioErrorCode(::kAudioHardwareBadDeviceError, Error::Code::IoError) == Error::Code::DeviceNotFound);
     CHECK(coreAudioErrorCode(::kAudioUnitErr_FormatNotSupported, Error::Code::InitFailed) ==
@@ -30,8 +30,7 @@ namespace ao::audio::backend::detail::test
     CHECK(coreAudioErrorCode(-123456, Error::Code::IoError) == Error::Code::IoError);
   }
 
-  TEST_CASE("CoreAudioError - device loss errors retain native context independently of fallback",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - device loss errors retain native context independently of fallback")
   {
     auto const statuses = std::to_array<::OSStatus>(
       {::kAudioHardwareBadDeviceError, ::kAudioHardwareBadObjectError, ::kAudioHardwareNotRunningError});
@@ -57,7 +56,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioError - arbitrary native faults preserve fallback and native context", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - arbitrary native faults preserve fallback and native context")
   {
     ::OSStatus const status = -123456;
     auto const fallbacks = std::array{Error::Code::InitFailed, Error::Code::IoError};
@@ -80,7 +79,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioError - recognizes terminal device statuses", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - recognizes terminal device statuses")
   {
     CHECK(isCoreAudioDeviceLossStatus(::kAudioHardwareBadDeviceError));
     CHECK(isCoreAudioDeviceLossStatus(::kAudioHardwareBadObjectError));
@@ -88,7 +87,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(isCoreAudioDeviceLossStatus(::kAudioUnitErr_FormatNotSupported));
   }
 
-  TEST_CASE("CoreAudioError - client format set failures map to open causes", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - client format set failures map to open causes")
   {
     struct CauseCase final
     {
@@ -113,7 +112,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioError - describes printable and numeric OSStatus values", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - describes printable and numeric OSStatus values")
   {
     CHECK(coreAudioStatusText(::kAudioHardwareBadDeviceError).contains("!dev"));
     CHECK(coreAudioStatusText(-123456) == "OSStatus -123456");
@@ -124,16 +123,14 @@ namespace ao::audio::backend::detail::test
     CHECK(error.error().message.contains("select Core Audio device"));
   }
 
-  TEST_CASE("CoreAudioError - unconfirmed stop text preserves status without claiming a new attempt",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - unconfirmed stop text preserves status without claiming a new attempt")
   {
     CHECK(coreAudioUnconfirmedStopText(-123456) == "previous native stop remains unconfirmed (OSStatus -123456)");
     CHECK(coreAudioUnconfirmedStopText(1937010544) ==
           "previous native stop remains unconfirmed (OSStatus 'stop' (1937010544))");
   }
 
-  TEST_CASE("CoreAudioError - preserves the owning call site alongside native operation context",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioError - preserves the owning call site alongside native operation context")
   {
     auto const location = std::source_location::current();
     auto const error =

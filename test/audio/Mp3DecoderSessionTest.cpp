@@ -24,7 +24,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Mp3DecoderSession - decodes happy path", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - decodes happy path")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
@@ -57,7 +57,7 @@ namespace ao::audio::test
     CHECK(flushedBlockRes->frames > 0);
   }
 
-  TEST_CASE("Mp3DecoderSession - empty output format probes native stream", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - empty output format probes native stream")
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
@@ -78,7 +78,7 @@ namespace ao::audio::test
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 2U);
   }
 
-  TEST_CASE("Mp3DecoderSession - handles floating point output", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - handles floating point output")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
@@ -96,7 +96,7 @@ namespace ao::audio::test
     CHECK(blockRes->bytes.size() == static_cast<std::size_t>(blockRes->frames) * 2U * 4U);
   }
 
-  TEST_CASE("Mp3DecoderSession - reads until EOF", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - reads until EOF")
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
@@ -106,7 +106,7 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) == 44100);
   }
 
-  TEST_CASE("Mp3DecoderSession - scans VBR streams without seek tables before validating seeks", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - scans VBR streams without seek tables before validating seeks")
   {
     auto const testFile = requireAudioFixture("vbr_no_seek_table.mp3");
     auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
@@ -126,7 +126,7 @@ namespace ao::audio::test
     CHECK_FALSE(decoder.seek(info.duration + std::chrono::milliseconds{1}));
   }
 
-  TEST_CASE("Mp3DecoderSession - rejects a midstream format change", "[audio][unit][mp3][error]")
+  TEST_CASE("Mp3DecoderSession - rejects a midstream format change")
   {
     auto const firstFile = requireAudioFixture("basic_metadata.mp3");
     auto const secondFile = requireAudioFixture("hires.mp3");
@@ -167,7 +167,7 @@ namespace ao::audio::test
     CHECK(recoveredBlockRes->frames > 0);
   }
 
-  TEST_CASE("Mp3DecoderSession - rejects unreadable or malformed input", "[audio][unit][mp3][error]")
+  TEST_CASE("Mp3DecoderSession - rejects unreadable or malformed input")
   {
     SECTION("Non-existent file")
     {
@@ -190,14 +190,14 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Mp3DecoderSession - rejects a seek beyond duration", "[audio][unit][mp3][error]")
+  TEST_CASE("Mp3DecoderSession - rejects a seek beyond duration")
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
     auto decoderPtr = ao::test::requireValue(Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le));
     CHECK_FALSE(decoderPtr->seek(std::chrono::hours{1}));
   }
 
-  TEST_CASE("Mp3DecoderSession - supports wider integer carriers", "[audio][unit][mp3]")
+  TEST_CASE("Mp3DecoderSession - supports wider integer carriers")
   {
     auto const encoding =
       GENERATE(SampleEncoding::Signed32Le, SampleEncoding::Signed24PackedLe, SampleEncoding::Signed24In32Le);

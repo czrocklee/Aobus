@@ -14,7 +14,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Engine - resume on already playing engine does nothing", "[audio][unit][engine][transport]")
+  TEST_CASE("Engine - resume on already playing engine does nothing")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -37,7 +37,7 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Playing);
   }
 
-  TEST_CASE("Engine - pause on idle engine does nothing", "[audio][unit][engine][transport]")
+  TEST_CASE("Engine - pause on idle engine does nothing")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();

@@ -517,8 +517,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ClassicalMetadataBaseline - cold queries and projections over full and subset sources",
-            "[perf][integration][classical-metadata]")
+  TEST_CASE("ClassicalMetadataBaseline - cold queries and projections over full and subset sources")
   {
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 20, 1);
     auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", 1, 0);

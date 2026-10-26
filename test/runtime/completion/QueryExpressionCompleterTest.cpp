@@ -61,8 +61,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("QueryExpressionCompleter - completes field aliases from query prefixes",
-            "[runtime][unit][completion-query]")
+  TEST_CASE("QueryExpressionCompleter - completes field aliases from query prefixes")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
@@ -86,8 +85,7 @@ namespace ao::rt::test
     CHECK(insertTexts(optBitrate->items) == std::vector<std::string>{"@bitrate"});
   }
 
-  TEST_CASE("QueryExpressionCompleter - completes operators allowed after fields",
-            "[runtime][unit][completion-query][operator]")
+  TEST_CASE("QueryExpressionCompleter - completes operators allowed after fields")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
@@ -109,8 +107,7 @@ namespace ao::rt::test
     CHECK(insertTexts(optYear->items) == std::vector<std::string>{" > ", " >= "});
   }
 
-  TEST_CASE("QueryExpressionCompleter - completes logical operators after values",
-            "[runtime][unit][completion-query][operator]")
+  TEST_CASE("QueryExpressionCompleter - completes logical operators after values")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};
@@ -144,8 +141,7 @@ namespace ao::rt::test
     CHECK(insertTexts(optTag->items) == std::vector<std::string>{" and ", " or ", " && ", " || "});
   }
 
-  TEST_CASE("QueryExpressionCompleter - completes metadata values for value positions",
-            "[runtime][unit][completion-query][value]")
+  TEST_CASE("QueryExpressionCompleter - completes metadata values for value positions")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto tags = std::vector<std::string>{};
@@ -185,8 +181,7 @@ namespace ao::rt::test
     CHECK_FALSE(completer.complete(R"(%"Mood" = Br)", 12));
   }
 
-  TEST_CASE("QueryExpressionCompleter - romanized value completion inserts the original expression value",
-            "[runtime][unit][completion-query][completion-alias]")
+  TEST_CASE("QueryExpressionCompleter - romanized value completion inserts the original expression value")
   {
     auto libraryFixture = MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -205,7 +200,7 @@ namespace ao::rt::test
     CHECK(optResult->items.front().displayText == "周杰倫");
   }
 
-  TEST_CASE("QueryExpressionCompleter - completes tag and custom-key variables", "[runtime][unit][completion-query]")
+  TEST_CASE("QueryExpressionCompleter - completes tag and custom-key variables")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto tags = std::vector<std::string>{"90s Rock", "Rock"};
@@ -238,8 +233,7 @@ namespace ao::rt::test
       optCustomKey->items.front(), R"(%"Replay Gain")", R"(%"Replay Gain")", CompletionDetailKind::Frequency, 1, 0);
   }
 
-  TEST_CASE("QueryExpressionCompleter - respects limits and token boundaries",
-            "[runtime][unit][completion-query][boundary]")
+  TEST_CASE("QueryExpressionCompleter - respects limits and token boundaries")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changesPtr = std::unique_ptr<LibraryChanges>{};

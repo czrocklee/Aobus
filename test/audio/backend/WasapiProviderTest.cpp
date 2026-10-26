@@ -27,7 +27,7 @@ namespace ao::audio::backend::test
   constexpr auto kWaitTimeout = std::chrono::seconds{5};
 
   TEST_CASE("WasapiProvider - shared-mode wiring retires on repeated shutdown without a render endpoint",
-            "[audio][unit][wasapi][provider][concurrency]")
+            "[concurrency]")
   {
     auto deviceSnapshotCount = std::atomic<std::size_t>{0};
     auto provider = WasapiProvider{};
@@ -86,8 +86,7 @@ namespace ao::audio::backend::test
     CHECK(graph.connections.empty());
   }
 
-  TEST_CASE("WasapiProvider - device callback may destroy provider safely",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - device callback may destroy provider safely", "[concurrency]")
   {
     auto providerPtr = std::make_unique<WasapiProvider>();
     std::size_t callbackCount = 0;
@@ -105,8 +104,7 @@ namespace ao::audio::backend::test
     sub.reset();
   }
 
-  TEST_CASE("WasapiProvider - nested provider callback may destroy the outer provider",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - nested provider callback may destroy the outer provider", "[concurrency]")
   {
     auto makeHooks = []
     {
@@ -148,8 +146,7 @@ namespace ao::audio::backend::test
     innerSub.reset();
   }
 
-  TEST_CASE("WasapiProvider - monitor callback may destroy provider on its own thread",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - monitor callback may destroy provider on its own thread", "[concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -187,8 +184,7 @@ namespace ao::audio::backend::test
     sub.reset();
   }
 
-  TEST_CASE("WasapiProvider - initial callback destruction cannot deadlock a waiting monitor",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - initial callback destruction cannot deadlock a waiting monitor", "[concurrency]")
   {
     auto callbacksReadyPtr = std::make_shared<std::binary_semaphore>(0);
     auto monitorExitedPtr = std::make_shared<std::binary_semaphore>(0);
@@ -225,8 +221,7 @@ namespace ao::audio::backend::test
     CHECK(monitorExitedPtr->try_acquire_for(kWaitTimeout));
   }
 
-  TEST_CASE("WasapiProvider - cancellation removes a device callback already copied by monitor",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - cancellation removes a device callback already copied by monitor", "[concurrency]")
   {
     auto refreshCompleted = std::binary_semaphore{0};
     auto hooksPtr = std::make_shared<detail::WasapiProviderMonitorHooks>();
@@ -268,8 +263,7 @@ namespace ao::audio::backend::test
     provider.shutdown();
   }
 
-  TEST_CASE("WasapiProvider - concurrent external shutdown callers share callback quiescence",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - concurrent external shutdown callers share callback quiescence", "[concurrency]")
   {
     auto callbackEntered = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
@@ -335,8 +329,7 @@ namespace ao::audio::backend::test
     CHECK(provider.status().devices.empty());
   }
 
-  TEST_CASE("WasapiProvider - callback shutdown returns while later external shutdown waits",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - callback shutdown returns while later external shutdown waits", "[concurrency]")
   {
     auto callbackShutdownReturned = std::binary_semaphore{0};
     auto releaseCallback = std::binary_semaphore{0};
@@ -395,8 +388,7 @@ namespace ao::audio::backend::test
     CHECK(provider.status().devices.empty());
   }
 
-  TEST_CASE("WasapiProvider - graph callback may destroy provider and retained backend stays inert",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - graph callback may destroy provider and retained backend stays inert", "[concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto monitorStateDestroyed = std::binary_semaphore{0};
@@ -440,8 +432,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(graphSub);
   }
 
-  TEST_CASE("WasapiProvider - device subscription racing shutdown receives no initial callback",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - device subscription racing shutdown receives no initial callback", "[concurrency]")
   {
     auto monitorExited = std::binary_semaphore{0};
     auto startSubscription = std::binary_semaphore{0};
@@ -487,7 +478,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(racedSub);
   }
 
-  TEST_CASE("WasapiProvider - device subscription may outlive provider", "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - device subscription may outlive provider", "[concurrency]")
   {
     auto sub = utility::ScopedRegistration{};
 
@@ -500,8 +491,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(sub);
   }
 
-  TEST_CASE("WasapiProvider - backend cannot republish a route after provider destruction",
-            "[audio][unit][wasapi][provider][concurrency]")
+  TEST_CASE("WasapiProvider - backend cannot republish a route after provider destruction", "[concurrency]")
   {
     auto providerPtr = std::make_unique<WasapiProvider>();
     auto graph = flow::Graph{};

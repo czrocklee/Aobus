@@ -40,7 +40,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("CreditPredicate - category selectors search every name without crossing kinds", "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - category selectors search every name without crossing kinds")
   {
     auto fixture = TrackFixture{TrackSpec{.credits = {
                                             {.name = "First", .kind = CreditKind::Conductor, .role = "Piano"},
@@ -78,7 +78,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("CreditPredicate - credit selects kinds that have no selector of their own", "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - credit selects kinds that have no selector of their own")
   {
     auto fixture = TrackFixture{TrackSpec{.credits = {
                                             {.name = "Lee", .kind = CreditKind::Lyricist},
@@ -92,7 +92,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesCredit("$conductor?", fixture));
   }
 
-  TEST_CASE("CreditPredicate - empty selections include absence in inequality only", "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - empty selections include absence in inequality only")
   {
     auto fixture = TrackFixture{};
 
@@ -115,7 +115,7 @@ namespace ao::query::test
     CHECK(matchesCredit("$credit?", otherKind));
   }
 
-  TEST_CASE("CreditPredicate - equality admits NFC but preserves case and literal whitespace", "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - equality admits NFC but preserves case and literal whitespace")
   {
     auto fixture = TrackFixture{TrackSpec{.credits = {
                                             {.name = "Caf\u00e9", .kind = CreditKind::Conductor},
@@ -137,8 +137,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("CreditPredicate - substring searches individual names with Unicode caseless matching",
-            "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - substring searches individual names with Unicode caseless matching")
   {
     auto fixture = TrackFixture{TrackSpec{.credits = {
                                             {.name = "Other", .kind = CreditKind::Performer, .role = "Piano"},
@@ -155,7 +154,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesCredit("$credit ~ 'Other; Stra'", fixture));
   }
 
-  TEST_CASE("CreditPredicate - unresolved constants match nothing without dictionary writes", "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - unresolved constants match nothing without dictionary writes")
   {
     auto fixture =
       TrackFixture{TrackSpec{.credits = {{.name = "Glenn Gould", .kind = CreditKind::Performer, .role = "Piano"}}}};
@@ -187,8 +186,7 @@ namespace ao::query::test
     CHECK(dictionary.size() == size);
   }
 
-  TEST_CASE("CreditPredicate - rejects scalar coercion reversed comparisons and indirect operands",
-            "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - rejects scalar coercion reversed comparisons and indirect operands")
   {
     for (auto const name : kMemberNames)
     {
@@ -227,8 +225,7 @@ namespace ao::query::test
     CHECK_FALSE(compileFormat(parseOk("$musician")));
   }
 
-  TEST_CASE("CreditPredicate - members are cold non-scalar fields with dictionary-free existence",
-            "[query][unit][credit]")
+  TEST_CASE("CreditPredicate - members are cold non-scalar fields with dictionary-free existence")
   {
     for (auto const field : {Field::Conductor, Field::Ensemble, Field::Soloist, Field::Performer, Field::Credit})
     {

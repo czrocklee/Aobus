@@ -47,7 +47,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("parseRecordingDate - accepts canonical literals at each precision", "[library][unit][recording-date]")
+  TEST_CASE("parseRecordingDate - accepts canonical literals at each precision")
   {
     auto const yearOnly = requireParsed("1981");
     CHECK(yearOnly.year == 1981);
@@ -78,7 +78,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("parseRecordingDate - rejects malformed date text", "[library][unit][recording-date]")
+  TEST_CASE("parseRecordingDate - rejects malformed date text")
   {
     SECTION("empty and whitespace text")
     {
@@ -142,7 +142,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("parseRecordingDate - validates real month lengths and leap years", "[library][unit][recording-date]")
+  TEST_CASE("parseRecordingDate - validates real month lengths and leap years")
   {
     SECTION("leap years admit February 29")
     {
@@ -197,7 +197,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("RecordingDate - zero is the absence sentinel", "[library][unit][recording-date]")
+  TEST_CASE("RecordingDate - zero is the absence sentinel")
   {
     auto const absent = RecordingDate{};
     CHECK_FALSE(absent.isPresent());
@@ -233,7 +233,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("RecordingDate - exact equality includes the stored precision", "[library][unit][recording-date]")
+  TEST_CASE("RecordingDate - exact equality includes the stored precision")
   {
     // 1981, 1981-05, and 1981-05-12 are three different stored values.
     CHECK(RecordingDate{.year = 1981, .month = 0, .day = 0} == RecordingDate{.year = 1981, .month = 0, .day = 0});
@@ -247,7 +247,7 @@ namespace ao::library::test
     CHECK(requireParsed("1981-05") != requireParsed("1981-05-12"));
   }
 
-  TEST_CASE("formatRecordingDate - preserves the stored precision", "[library][unit][recording-date]")
+  TEST_CASE("formatRecordingDate - preserves the stored precision")
   {
     CHECK(formatRecordingDate(RecordingDate{}).empty());
     CHECK(formatRecordingDate(RecordingDate{.year = 1981, .month = 0, .day = 0}) == "1981");
@@ -274,8 +274,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("compareRecordingDateAtLiteralPrecision - compares a stored date at the literal's precision",
-            "[library][unit][recording-date]")
+  TEST_CASE("compareRecordingDateAtLiteralPrecision - compares a stored date at the literal's precision")
   {
     auto const fullDate = requireParsed("1981-05-12");
     auto const yearOnly = requireParsed("1981");

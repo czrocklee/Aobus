@@ -99,7 +99,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("AudioQualityFormatter - audioNodeTypeLabel", "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - audioNodeTypeLabel")
   {
     CHECK(audioNodeTypeLabel(audio::flow::NodeType::Source) == "[Source]");
     CHECK(audioNodeTypeLabel(audio::flow::NodeType::Decoder) == "[Decoder]");
@@ -110,7 +110,7 @@ namespace ao::uimodel::test
     CHECK(audioNodeTypeLabel(audio::flow::NodeType::ExternalSource) == "[Other Source]");
   }
 
-  TEST_CASE("AudioQualityFormatter - audioFormatLabel", "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - audioFormatLabel")
   {
     auto format = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
     CHECK(audioFormatLabel(format) == "44.1 kHz · 16-bit · Stereo");
@@ -133,8 +133,7 @@ namespace ao::uimodel::test
     CHECK(audioFormatLabel(pcmFormat) == "44.1 kHz · 32-bit · Stereo");
   }
 
-  TEST_CASE("AudioQualityFormatter - formatLabel names only effective speaker identities",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - formatLabel names only effective speaker identities")
   {
     auto const signal =
       [](std::uint8_t const channels, std::uint32_t const speakerMask, std::uint8_t const precisionBits = 16)
@@ -169,8 +168,7 @@ namespace ao::uimodel::test
     CHECK(audioFormatLabel(signal(2, 0x40003)) == "44.1 kHz · 16-bit · 2 ch (0x40003)");
   }
 
-  TEST_CASE("AudioQualityFormatter - channel mapping findings distinguish same-count relabels",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - channel mapping findings distinguish same-count relabels")
   {
     auto const frontPair =
       audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -196,8 +194,7 @@ namespace ao::uimodel::test
           "Channel mapping");
   }
 
-  TEST_CASE("AudioQualityFormatter - same-count independent mask overrides retain whole raw layouts",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - same-count independent mask overrides retain whole raw layouts")
   {
     auto const frontPair =
       audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -221,8 +218,7 @@ namespace ao::uimodel::test
           "Channel layout: 2 ch (0x40001) → 2 ch (0x80000000)");
   }
 
-  TEST_CASE("AudioQualityFormatter - analyzer findings retain independently observed native layouts",
-            "[uimodel][integration][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - analyzer findings retain independently observed native layouts")
   {
     auto graph = identifiedChannelGraph(4, 0x33, {.isMapped = true});
     std::size_t changedIndex = 2;
@@ -263,8 +259,7 @@ namespace ao::uimodel::test
     CHECK(audio::signalFormat(*graph.nodes[changedIndex].optFormat).speakerMask == expectedStorageMask);
   }
 
-  TEST_CASE("AudioQualityFormatter - partial native constraints remain visible without guessed roles",
-            "[uimodel][integration][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - partial native constraints remain visible without guessed roles")
   {
     auto const graph = identifiedChannelGraph(2, 0x3, {.nativeSpeakerMask = 0x4});
     auto const result = audio::analyzeAudioQuality(graph);
@@ -285,8 +280,7 @@ namespace ao::uimodel::test
           "Channel mapping");
   }
 
-  TEST_CASE("AudioQualityFormatter - long channel layout finding labels stay intact across locales",
-            "[uimodel][unit][playback][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - long channel layout finding labels stay intact across locales")
   {
     // Different four-channel sets keep both argument strings alive through
     // formatting. These longer labels also exceed MSVC's small-string capacity;
@@ -304,8 +298,7 @@ namespace ao::uimodel::test
     CHECK(german.findingLabel(layoutFinding) == "Kanallayout: 4 Kan. (FL FR BL BR) → 4 Kan. (FL FR FC BC)");
   }
 
-  TEST_CASE("AudioQualityFormatter - quality categories map raw quality to visual tiers",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - quality categories map raw quality to visual tiers")
   {
     CHECK(audioQualityCategory(audio::Quality::BitwisePerfect) == AudioQualityCategory::Medal);
     CHECK(audioQualityCategory(audio::Quality::LosslessPadded) == AudioQualityCategory::Positive);
@@ -323,8 +316,7 @@ namespace ao::uimodel::test
           AudioQualityCategory::Diagnostic);
   }
 
-  TEST_CASE("AudioQualityFormatter - precision findings describe effective domain changes",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - precision findings describe effective domain changes")
   {
     auto const float32 =
       audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Float32Le};
@@ -344,8 +336,7 @@ namespace ao::uimodel::test
           "Precision truncated: 32b → 24b");
   }
 
-  TEST_CASE("AudioQualityFormatter - volume findings describe software gain magnitude",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - volume findings describe software gain magnitude")
   {
     CHECK(audioFindingLabel(audio::QualityFinding{.kind = audio::QualityFindingKind::SoftwareVolumeModification,
                                                   .gain = 0.5F}) == "Software volume attenuation: -6.0 dB");
@@ -356,8 +347,7 @@ namespace ao::uimodel::test
           "Software amplification (clipping risk)");
   }
 
-  TEST_CASE("AudioQualityFormatter - unclassified volume findings describe device gain magnitude",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - unclassified volume findings describe device gain magnitude")
   {
     CHECK(audioFindingLabel(audio::QualityFinding{.kind = audio::QualityFindingKind::UnclassifiedVolumeModification,
                                                   .gain = 0.5F}) == "Device volume: -6.0 dB (source unverified)");
@@ -367,16 +357,14 @@ namespace ao::uimodel::test
           "Device volume change (source unverified)");
   }
 
-  TEST_CASE("AudioQualityFormatter - signal-preserved quality conclusions share one verdict",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - signal-preserved quality conclusions share one verdict")
   {
     CHECK(audioQualityConclusion(audio::Quality::BitwisePerfect) == "Bit-perfect PCM (observed software path)");
     CHECK(audioQualityConclusion(audio::Quality::LosslessPadded) == "Signal preserved");
     CHECK(audioQualityConclusion(audio::Quality::LosslessFloat) == "Signal preserved");
   }
 
-  TEST_CASE("AudioQualityFormatter - presentation headlines prioritize pipeline delivery",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - presentation headlines prioritize pipeline delivery")
   {
     auto const sourceFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
     auto const paddedFormat =
@@ -603,8 +591,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - layout notes remain independent of numerical headlines",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - layout notes remain independent of numerical headlines")
   {
     struct Case final
     {
@@ -661,8 +648,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - inferred source layout accompanies lossless numerical positives",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - inferred source layout accompanies lossless numerical positives")
   {
     auto const sourceFormat =
       audio::SignalFormat{.sampleRate = 44100, .channels = 6, .precisionBits = 24, .speakerMask = 0x3F};
@@ -736,8 +722,7 @@ namespace ao::uimodel::test
     CHECK(preservedFloat.channelNote.empty());
   }
 
-  TEST_CASE("AudioQualityFormatter - numerical alterations keep precedence alongside layout uncertainty",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - numerical alterations keep precedence alongside layout uncertainty")
   {
     for (auto const kind : {audio::QualityFindingKind::Muted,
                             audio::QualityFindingKind::Truncation,
@@ -771,8 +756,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - known channel conversion stays an intervention",
-            "[uimodel][unit][playback][quality]")
+  TEST_CASE("AudioQualityFormatter - known channel conversion stays an intervention")
   {
     // The ChannelMapping finding is the conversion authority: it keeps the
     // intervention headline even when the numerical axes disagree.
@@ -793,8 +777,7 @@ namespace ao::uimodel::test
     CHECK(mapped.category == AudioQualityCategory::Diagnostic);
   }
 
-  TEST_CASE("AudioQualityFormatter - localized copy preserves numeric and external values",
-            "[uimodel][unit][playback][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - localized copy preserves numeric and external values")
   {
     auto const catalog = ao::test::messageCatalog("de-DE");
     auto const formatter = AudioQualityFormatter{catalog};
@@ -810,8 +793,7 @@ namespace ao::uimodel::test
           "Audiokette unbekannt");
   }
 
-  TEST_CASE("AudioQualityFormatter - unclassified volume copy keeps both selector branches in every locale",
-            "[uimodel][unit][playback][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - unclassified volume copy keeps both selector branches in every locale")
   {
     // The catalog compiler validates argument names and kinds, not branch placement. A translation
     // that drops the `yes` branch or moves `{gain}` into `other` still compiles, so assert the shape
@@ -845,8 +827,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - localized bit units preserve signal and PCM widths",
-            "[uimodel][unit][playback][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - localized bit units preserve signal and PCM widths")
   {
     struct ExpectedFormatLabels final
     {
@@ -885,8 +866,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AudioQualityFormatter - localized unclassified volume copy",
-            "[uimodel][unit][playback][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - localized unclassified volume copy")
   {
     auto const catalog = ao::test::messageCatalog("de-DE");
     auto const formatter = AudioQualityFormatter{catalog};
@@ -900,8 +880,7 @@ namespace ao::uimodel::test
           }) == "Gerätelautstärke geändert (Herkunft ungeklärt)");
   }
 
-  TEST_CASE("AudioQualityFormatter - localized channel layout copy keeps role tokens external",
-            "[uimodel][unit][playback][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - localized channel layout copy keeps role tokens external")
   {
     auto const frontPair =
       audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -930,8 +909,7 @@ namespace ao::uimodel::test
     CHECK(simplified.presentation(inferredState).channelNote == "源声道布局来自推断");
   }
 
-  TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values",
-            "[uimodel][unit][playback][quality][localization]")
+  TEST_CASE("AudioQualityFormatter - pseudo copy preserves external values")
   {
     auto const catalog = ao::test::messageCatalog("qps-ploc");
     auto const formatter = AudioQualityFormatter{catalog};

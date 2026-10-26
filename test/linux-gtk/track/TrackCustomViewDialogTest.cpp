@@ -40,7 +40,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackCustomViewDialog - renders the initial custom-view draft", "[gtk][unit][track][dialog]")
+  TEST_CASE("TrackCustomViewDialog - renders the initial custom-view draft")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};
@@ -128,7 +128,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackCustomViewDialog - returns only the publicly submitted draft", "[gtk][unit][track][dialog]")
+  TEST_CASE("TrackCustomViewDialog - returns only the publicly submitted draft")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};
@@ -195,7 +195,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackCustomViewDialog - renders locale-selected editor copy", "[gtk][unit][track][dialog][localization]")
+  TEST_CASE("TrackCustomViewDialog - renders locale-selected editor copy")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};

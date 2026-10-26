@@ -17,7 +17,7 @@
 
 namespace ao::audio::detail::test
 {
-  TEST_CASE("DecoderOutputAdapter - configure rejects precision loss", "[audio][unit][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - configure rejects precision loss")
   {
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24};
 
@@ -50,7 +50,7 @@ namespace ao::audio::detail::test
     }
   }
 
-  TEST_CASE("DecoderOutputAdapter - matching encoding passes through native bytes", "[audio][unit][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - matching encoding passes through native bytes")
   {
     auto adapter = DecoderOutputAdapter{SampleEncoding::Signed16Le};
     auto const sourceFormat = SignalFormat{.sampleRate = 44100, .channels = 1, .precisionBits = 16};
@@ -65,7 +65,7 @@ namespace ao::audio::detail::test
     CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
   }
 
-  TEST_CASE("DecoderOutputAdapter - requested encoding converts exact byte layout", "[audio][unit][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - requested encoding converts exact byte layout")
   {
     auto adapter = DecoderOutputAdapter{SampleEncoding::Signed24In32Le};
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 24};
@@ -79,8 +79,7 @@ namespace ao::audio::detail::test
     CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
   }
 
-  TEST_CASE("DecoderOutputAdapter - widened native PCM may narrow to the requested lossless container",
-            "[audio][unit][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - widened native PCM may narrow to the requested lossless container")
   {
     auto adapter = DecoderOutputAdapter{SampleEncoding::Signed24PackedLe};
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 1, .precisionBits = 16};
@@ -94,8 +93,7 @@ namespace ao::audio::detail::test
     CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
   }
 
-  TEST_CASE("DecoderOutputAdapter - pass-through of an identified stereo stream preserves mask and bytes",
-            "[audio][unit][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - pass-through of an identified stereo stream preserves mask and bytes")
   {
     auto adapter = DecoderOutputAdapter{SampleEncoding::Signed16Le};
     auto const sourceFormat = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -114,8 +112,7 @@ namespace ao::audio::detail::test
     CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
   }
 
-  TEST_CASE("DecoderOutputAdapter - narrowing a widened masked stereo stream keeps mask and exact bytes",
-            "[audio][unit][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - narrowing a widened masked stereo stream keeps mask and exact bytes")
   {
     auto adapter = DecoderOutputAdapter{SampleEncoding::Signed24PackedLe};
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -143,7 +140,7 @@ namespace ao::audio::detail::test
     CHECK(std::vector<std::byte>{convertedRes->begin(), convertedRes->end()} == expected);
   }
 
-  TEST_CASE("DecoderOutputAdapter - reset revokes the configured format", "[audio][unit][decoder-output]")
+  TEST_CASE("DecoderOutputAdapter - reset revokes the configured format")
   {
     auto adapter = DecoderOutputAdapter{std::nullopt};
     auto const sourceFormat = SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};

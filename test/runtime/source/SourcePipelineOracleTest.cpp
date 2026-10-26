@@ -140,8 +140,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Source pipeline oracle - mutation storm matches full recomputation after every write",
-            "[runtime][unit][source]")
+  TEST_CASE("Source pipeline oracle - mutation storm matches full recomputation after every write")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto initialTrackIds = std::vector<TrackId>{};

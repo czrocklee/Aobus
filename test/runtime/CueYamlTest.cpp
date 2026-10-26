@@ -65,8 +65,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CueYaml - every export mode preserves sparse segment identities and list order offline",
-            "[runtime][integration][import-export][cue]")
+  TEST_CASE("CueYaml - every export mode preserves sparse segment identities and list order offline")
   {
     auto const temp = ao::test::TempDir{};
     auto source = library::test::makeTestMusicLibrary(temp.path() / "absent-source", temp.path() / "source-db");
@@ -121,8 +120,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml - malformed structural facts reject the complete restore before writes",
-            "[runtime][unit][import-export][cue]")
+  TEST_CASE("CueYaml - malformed structural facts reject the complete restore before writes")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -184,8 +182,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml - segments name FLAC or WAV carriers and duplicate URIs report their form",
-            "[runtime][unit][import-export][cue]")
+  TEST_CASE("CueYaml - segments name FLAC or WAV carriers and duplicate URIs report their form")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -225,8 +222,7 @@ namespace ao::rt::test
     REQUIRE(importCue(library, path, cueDocument(cueRecord(1, 0, 588, 1176, 44100, "", "DISC.WAV"))));
   }
 
-  TEST_CASE("CueYaml - merge retains matched IDs and validates additions against retained members",
-            "[runtime][integration][import-export][cue]")
+  TEST_CASE("CueYaml - merge retains matched IDs and validates additions against retained members")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path() / "missing", temp.path() / "db");
@@ -290,8 +286,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml - conflicting merge forms extents rates and ranges roll back atomically",
-            "[runtime][integration][import-export][cue]")
+  TEST_CASE("CueYaml - conflicting merge forms extents rates and ranges roll back atomically")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path() / "missing", temp.path() / "db");
@@ -328,8 +323,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml - URI ranks without ordinal resolve only whole files",
-            "[runtime][integration][import-export][cue]")
+  TEST_CASE("CueYaml - URI ranks without ordinal resolve only whole files")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -362,8 +356,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml - full restore trusts structural facts without opening readable audio",
-            "[runtime][integration][import-export][cue]")
+  TEST_CASE("CueYaml - full restore trusts structural facts without opening readable audio")
   {
     auto const temp = ao::test::TempDir{};
     writeScanFlacMetadataFixture(temp.path() / "disc.flac", {"TITLE=Do not read"}, 88200);
@@ -387,8 +380,7 @@ namespace ao::rt::test
     CHECK(library.manifest().reader(transaction).get("disc.flac")->totalFrames() == 589);
   }
 
-  TEST_CASE("CueYaml - malformed ordinal rank references reject instead of falling back to whole files",
-            "[runtime][unit][import-export][cue]")
+  TEST_CASE("CueYaml - malformed ordinal rank references reject instead of falling back to whole files")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
@@ -419,8 +411,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("CueYaml - delta and metadata enforce readable exact carrier facts without changing segment duration",
-            "[runtime][integration][import-export][cue]")
+  TEST_CASE("CueYaml - delta and metadata enforce readable exact carrier facts without changing segment duration")
   {
     auto const temp = ao::test::TempDir{};
     auto const path = temp.path() / "document.yaml";

@@ -42,7 +42,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("OutputSelection - validates intent against the output catalog", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputSelection - validates intent against the output catalog")
   {
     auto const output = outputCatalog();
 
@@ -103,7 +103,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("OutputSelection - resolves preferred intent before session fallback", "[uimodel][unit][playback][output]")
+  TEST_CASE("OutputSelection - resolves preferred intent before session fallback")
   {
     auto const output = outputCatalog();
     auto const fallback = audio::OutputDeviceSelection{

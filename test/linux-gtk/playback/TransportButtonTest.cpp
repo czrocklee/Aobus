@@ -17,7 +17,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("TransportButton - projects initial and localized action presentation", "[gtk][unit][playback]")
+  TEST_CASE("TransportButton - projects initial and localized action presentation")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -56,7 +56,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TransportButton - routes a play click once to selection playback", "[gtk][unit][playback]")
+  TEST_CASE("TransportButton - routes a play click once to selection playback")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

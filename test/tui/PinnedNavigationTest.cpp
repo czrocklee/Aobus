@@ -47,8 +47,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("ShellInteractionModel - navigation access and focus preserve pin preference across dock availability",
-            "[tui][unit][navigation]")
+  TEST_CASE("ShellInteractionModel - navigation access and focus preserve pin preference across dock availability")
   {
     auto shell = ShellInteractionModel{};
     CHECK(shell.isNavigationPinned());
@@ -91,8 +90,7 @@ namespace ao::tui::test
     CHECK(shell.isNavigationPinned());
   }
 
-  TEST_CASE("PinnedNavigation - access never changes pin preference and pin promotes the popup",
-            "[tui][unit][navigation]")
+  TEST_CASE("PinnedNavigation - access never changes pin preference and pin promotes the popup")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -122,8 +120,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isNavigationPinned());
   }
 
-  TEST_CASE("PinnedNavigation - divider controls collapse and expand without navigating",
-            "[tui][unit][navigation][mouse]")
+  TEST_CASE("PinnedNavigation - divider controls collapse and expand without navigating")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -158,8 +155,7 @@ namespace ao::tui::test
     CHECK(fixture.layoutCheckpointCount == 2);
   }
 
-  TEST_CASE("PinnedNavigation - popup dismissal and mouse activation preserve an unpinned layout",
-            "[tui][unit][navigation][mouse]")
+  TEST_CASE("PinnedNavigation - popup dismissal and mouse activation preserve an unpinned layout")
   {
     auto fixture = EventControllerFixture{};
     auto const target = fixture.addList("Popup target");
@@ -206,8 +202,7 @@ namespace ao::tui::test
     CHECK(fixture.layoutCheckpointCount == 0);
   }
 
-  TEST_CASE("PinnedNavigation - chooser search with no matches clears targets and cannot activate",
-            "[tui][unit][navigation][search]")
+  TEST_CASE("PinnedNavigation - chooser search with no matches clears targets and cannot activate")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -261,7 +256,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.listSearch().isActive());
   }
 
-  TEST_CASE("PinnedNavigation - status advertises popup only when the pinned pane is absent", "[tui][unit][navigation]")
+  TEST_CASE("PinnedNavigation - status advertises popup only when the pinned pane is absent")
   {
     for (bool const docked : {false, true})
     {
@@ -278,7 +273,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PinnedNavigation - pin binding can be remapped independently from popup access", "[tui][unit][navigation]")
+  TEST_CASE("PinnedNavigation - pin binding can be remapped independently from popup access")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -295,8 +290,7 @@ namespace ao::tui::test
     CHECK(plan.shortcutFor(KeyAction::TogglePinnedLists) == "F4");
   }
 
-  TEST_CASE("PinnedNavigation - restored frame button opens the chooser and hidden targets are cleared",
-            "[tui][unit][navigation][mouse]")
+  TEST_CASE("PinnedNavigation - restored frame button opens the chooser and hidden targets are cleared")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -318,8 +312,7 @@ namespace ao::tui::test
     CHECK(fixture.hitRegions.hitTestButton(4, 20).hoveredButton == HoveredButton::None);
   }
 
-  TEST_CASE("PinnedNavigation - chooser search owns uppercase text and pinning closes the chooser",
-            "[tui][unit][navigation][search]")
+  TEST_CASE("PinnedNavigation - chooser search owns uppercase text and pinning closes the chooser")
   {
     auto fixture = EventControllerFixture{};
     fixture.addList("Lovely list");
@@ -339,8 +332,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isNavigationFocused());
   }
 
-  TEST_CASE("PinnedNavigation - narrow access uses the chooser without changing the pin preference",
-            "[tui][unit][navigation]")
+  TEST_CASE("PinnedNavigation - narrow access uses the chooser without changing the pin preference")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -354,8 +346,7 @@ namespace ao::tui::test
     CHECK(fixture.layoutCheckpointCount == 0);
   }
 
-  TEST_CASE("PinnedNavigation - restoring room for a pinned tree retires its temporary chooser",
-            "[tui][unit][navigation]")
+  TEST_CASE("PinnedNavigation - restoring room for a pinned tree retires its temporary chooser")
   {
     auto shell = ShellInteractionModel{};
     shell.toggleNavigation(false);
@@ -374,8 +365,7 @@ namespace ao::tui::test
     CHECK_FALSE(shell.isNavigationPinned());
   }
 
-  TEST_CASE("PinnedNavigation - footer search starts local input and disappears outside its context",
-            "[tui][unit][navigation][search]")
+  TEST_CASE("PinnedNavigation - footer search starts local input and disappears outside its context")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -431,7 +421,7 @@ namespace ao::tui::test
     CHECK(fixture.hitRegions.navigationSearchBox.IsEmpty());
   }
 
-  TEST_CASE("PinnedNavigation - sidebar arrow hover follows the clickable target", "[tui][unit][navigation][mouse]")
+  TEST_CASE("PinnedNavigation - sidebar arrow hover follows the clickable target")
   {
     using namespace ftxui;
     auto fixture = EventControllerFixture{};
@@ -463,8 +453,7 @@ namespace ao::tui::test
     CHECK(controller.hoveredButton() == HoveredButton::None);
   }
 
-  TEST_CASE("PinnedNavigation - detail edge toggles independently and cannot act behind a modal",
-            "[tui][unit][navigation][detail][mouse]")
+  TEST_CASE("PinnedNavigation - detail edge toggles independently and cannot act behind a modal")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -495,8 +484,7 @@ namespace ao::tui::test
     CHECK(fixture.hitRegions.detailPanel.box.IsEmpty());
   }
 
-  TEST_CASE("PinnedNavigation - pinning resolves focus using the resulting constrained detail width",
-            "[tui][unit][navigation]")
+  TEST_CASE("PinnedNavigation - pinning resolves focus using the resulting constrained detail width")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -520,8 +508,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.isTracksFocused());
   }
 
-  TEST_CASE("PinnedNavigation - docked List disclosure focuses navigation and expands without opening a List",
-            "[tui][unit][navigation][mouse]")
+  TEST_CASE("PinnedNavigation - docked List disclosure focuses navigation and expands without opening a List")
   {
     auto fixture = EventControllerFixture{};
     auto const parentId = fixture.addList("Parent");
@@ -564,7 +551,7 @@ namespace ao::tui::test
     CHECK(fixture.layoutCheckpointCount == 0);
   }
 
-  TEST_CASE("PinnedNavigation - a foreground interaction cancels scrollbar capture", "[tui][unit][navigation][mouse]")
+  TEST_CASE("PinnedNavigation - a foreground interaction cancels scrollbar capture")
   {
     auto fixture = EventControllerFixture{};
 

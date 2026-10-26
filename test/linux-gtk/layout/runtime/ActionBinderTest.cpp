@@ -20,7 +20,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using namespace ao::gtk::test;
 
-  TEST_CASE("ActionBinder - binds layout action properties to activation callbacks", "[gtk][unit][layout][runtime]")
+  TEST_CASE("ActionBinder - binds layout action properties to activation callbacks")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};
@@ -105,7 +105,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("ActionBinder - bound callbacks outlive the binder and authored node", "[gtk][unit][layout][runtime]")
+  TEST_CASE("ActionBinder - bound callbacks outlive the binder and authored node")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto window = Gtk::Window{};

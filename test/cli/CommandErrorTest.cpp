@@ -13,7 +13,7 @@
 
 namespace ao::cli::test
 {
-  TEST_CASE("throwCommandError - preserves the original error", "[cli][unit][error]")
+  TEST_CASE("throwCommandError - preserves the original error")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::IoError, .message = "propagated failure", .location = origin};
@@ -37,7 +37,7 @@ namespace ao::cli::test
     REQUIRE(caught);
   }
 
-  TEST_CASE("throwCommandError - preserves code and source location", "[cli][unit][error]")
+  TEST_CASE("throwCommandError - preserves code and source location")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::IoError, .message = "disk full", .location = origin};
@@ -59,7 +59,7 @@ namespace ao::cli::test
     REQUIRE(caught);
   }
 
-  TEST_CASE("throwCommandError - captures the call site", "[cli][unit][error]")
+  TEST_CASE("throwCommandError - captures the call site")
   {
     auto const here = std::source_location::current();
     bool caught = false;
@@ -81,7 +81,7 @@ namespace ao::cli::test
     REQUIRE(caught);
   }
 
-  TEST_CASE("throwCommandError format overloads format inline and preserve codes", "[cli][unit][error]")
+  TEST_CASE("throwCommandError format overloads format inline and preserve codes")
   {
     SECTION("not found code")
     {

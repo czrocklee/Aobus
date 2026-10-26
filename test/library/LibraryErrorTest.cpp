@@ -12,7 +12,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("throwLibraryError - preserves the original error's source location", "[library][unit][error]")
+  TEST_CASE("throwLibraryError - preserves the original error's source location")
   {
     auto const origin = std::source_location::current();
     auto const error = Error{.code = Error::Code::IoError, .message = "propagated failure", .location = origin};
@@ -30,7 +30,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("throwLibraryError - captures the call site", "[library][unit][error]")
+  TEST_CASE("throwLibraryError - captures the call site")
   {
     auto const here = std::source_location::current();
 
@@ -48,7 +48,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryException - exposes its Error through what()", "[library][unit][error]")
+  TEST_CASE("LibraryException - exposes its Error through what()")
   {
     auto const ex = detail::LibraryException{Error::Code::ResourceExhausted, "store full"};
 

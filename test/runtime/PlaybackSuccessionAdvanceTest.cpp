@@ -31,8 +31,7 @@ namespace ao::rt::test
   using playback_succession::PlaybackSuccessionTransportFixtureConfig;
   using playback_succession::PreparationReleaseGuard;
 
-  TEST_CASE("PlaybackSuccession - idle fallback advances without a prepared successor",
-            "[runtime][unit][playback-succession]")
+  TEST_CASE("PlaybackSuccession - idle fallback advances without a prepared successor")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -70,8 +69,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - output and final seek replace the disarmed lookahead token",
-            "[runtime][unit][playback-succession][token]")
+  TEST_CASE("PlaybackSuccession - output and final seek replace the disarmed lookahead token")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -101,8 +99,7 @@ namespace ao::rt::test
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - paired mode update replaces lookahead once from the final state",
-            "[runtime][unit][playback-succession][token]")
+  TEST_CASE("PlaybackSuccession - paired mode update replaces lookahead once from the final state")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -145,8 +142,7 @@ namespace ao::rt::test
     CHECK(activationCount() == beforeActivations + 1);
   }
 
-  TEST_CASE("PlaybackSuccession - natural prepared winner is adopted exactly once",
-            "[runtime][unit][playback-succession][token][concurrency]")
+  TEST_CASE("PlaybackSuccession - natural prepared winner is adopted exactly once", "[concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -167,8 +163,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - positioning commands retain a naturally advanced winner",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - positioning commands retain a naturally advanced winner", "[concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -221,8 +216,7 @@ namespace ao::rt::test
     CHECK(finalSeekCount == expectedFinalSeekCount);
   }
 
-  TEST_CASE("PlaybackSuccession - natural gapless advance invalidates a pending explicit start",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - natural gapless advance invalidates a pending explicit start", "[concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
     auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
@@ -256,8 +250,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - destruction disconnects a queued natural-advance callback",
-            "[runtime][unit][playback-succession][concurrency]")
+  TEST_CASE("PlaybackSuccession - destruction disconnects a queued natural-advance callback", "[concurrency]")
   {
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
@@ -275,8 +268,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.secondTrackId);
   }
 
-  TEST_CASE("PlaybackSuccession - previous restart uses a strict greater-than three-second final seek",
-            "[runtime][unit][playback-succession]")
+  TEST_CASE("PlaybackSuccession - previous restart uses a strict greater-than three-second final seek")
   {
     auto fixture = PlaybackSuccessionSeekFixture{};
     fixture.buildThreeTrackManualView();
@@ -302,7 +294,7 @@ namespace ao::rt::test
     CHECK(playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - Next and Previous follow the cursor", "[runtime][unit][playback-succession][command]")
+  TEST_CASE("PlaybackSuccession - Next and Previous follow the cursor")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();
@@ -317,8 +309,7 @@ namespace ao::rt::test
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
   }
 
-  TEST_CASE("PlaybackSuccession - dedicated mode signals notify only on changes",
-            "[runtime][unit][playback-succession][command]")
+  TEST_CASE("PlaybackSuccession - dedicated mode signals notify only on changes")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();
@@ -344,8 +335,7 @@ namespace ao::rt::test
     CHECK(shuffleEvents == 1);
   }
 
-  TEST_CASE("PlaybackSuccession - clear deactivates succession without stopping transport",
-            "[runtime][unit][playback-succession][command]")
+  TEST_CASE("PlaybackSuccession - clear deactivates succession without stopping transport")
   {
     auto fixture = PlaybackSuccessionFixture{};
     fixture.buildThreeTrackManualView();

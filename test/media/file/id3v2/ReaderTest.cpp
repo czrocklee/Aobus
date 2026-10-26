@@ -53,7 +53,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   } // namespace
 
-  TEST_CASE("ID3v2 - converts text encodings to UTF-8", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - converts text encodings to UTF-8")
   {
     SECTION("Latin1 to UTF-8")
     {
@@ -162,7 +162,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - deunsynchronises v2.3 tags with the tag-level unsync flag", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - deunsynchronises v2.3 tags with the tag-level unsync flag")
   {
     auto body = Bytes{};
 
@@ -188,7 +188,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(std::ranges::equal(pictures.front().bytes, expectedPicture));
   }
 
-  TEST_CASE("ID3v2 - deunsynchronises v2.4 frames carrying the per-frame unsync flag", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - deunsynchronises v2.4 frames carrying the per-frame unsync flag")
   {
     auto body = Bytes{};
 
@@ -229,7 +229,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(std::ranges::equal(pictures.front().bytes, expectedPicture));
   }
 
-  TEST_CASE("ID3v2 - deunsynchronises v2.4 tags with the tag-level unsync flag", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - deunsynchronises v2.4 tags with the tag-level unsync flag")
   {
     auto body = Bytes{};
 
@@ -266,7 +266,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(std::ranges::equal(pictures.front().bytes, expectedPicture));
   }
 
-  TEST_CASE("ID3v2 - skips the v2.4 data length indicator before frame data", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - skips the v2.4 data length indicator before frame data")
   {
     SECTION("data length indicator without unsynchronisation")
     {
@@ -322,7 +322,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - ignores unknown frames in unsynchronised v2.4 tags", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - ignores unknown frames in unsynchronised v2.4 tags")
   {
     // Unknown frames are not dispatched, but their stored sizes still
     // advance the frame walk to the handled frames behind them.
@@ -336,7 +336,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(optFrames->metadata().title() == "Title");
   }
 
-  TEST_CASE("ID3v2 - keeps the zero-copy view for unsynchronised frames without escapes", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - keeps the zero-copy view for unsynchronised frames without escapes")
   {
     // The unsynchronisation flag without a single stored FF 00 pair must not
     // allocate a copy; the frame still parses and the walk reaches the next one.
@@ -351,7 +351,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(optFrames->metadata().artist() == "Artist");
   }
 
-  TEST_CASE("ID3v2 - skips v2.4 frames with a malformed data length indicator", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - skips v2.4 frames with a malformed data length indicator")
   {
     // A non-syncsafe indicator cannot encode a length, so the frame is
     // skipped while the rest of the tag still applies.
@@ -369,7 +369,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(optFrames->metadata().artist() == "Artist");
   }
 
-  TEST_CASE("ID3v2 - skips the v2.4 grouping identity byte", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - skips the v2.4 grouping identity byte")
   {
     SECTION("grouping identity alone")
     {
@@ -477,7 +477,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - skips v2.4 frames with compression or encryption", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - skips v2.4 frames with compression or encryption")
   {
     // Compressed and encrypted frames have no decoder here, so each is
     // dropped while the rest of the tag still applies.
@@ -494,7 +494,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(optFrames->metadata().artist() == "Artist");
   }
 
-  TEST_CASE("ID3v2 - handles v2.3 frame format flags", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - handles v2.3 frame format flags")
   {
     SECTION("grouping identity is dropped before the content")
     {
@@ -530,7 +530,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - skips the v2.3 extended header before frames", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - skips the v2.3 extended header before frames")
   {
     SECTION("extended header before a frame")
     {
@@ -571,7 +571,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - skips the v2.4 extended header before frames", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - skips the v2.4 extended header before frames")
   {
     // The v2.4 size is syncsafe and includes the size field itself: size(4) +
     // flag byte count(1) + extended flags(1) = 6.
@@ -587,7 +587,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(optFrames->metadata().title() == "Title");
   }
 
-  TEST_CASE("ID3v2 - rejects extended headers that overrun the tag", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - rejects extended headers that overrun the tag")
   {
     SECTION("v2.3 extended header exceeds the tag body")
     {
@@ -650,7 +650,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - applies v2.4 NUL-separated text values in order", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - applies v2.4 NUL-separated text values in order")
   {
     SECTION("UTF-8")
     {
@@ -821,7 +821,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - keeps v2.3 text values at the first terminator", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - keeps v2.3 text values at the first terminator")
   {
     SECTION("text frames")
     {
@@ -850,8 +850,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 credits - v2.3 TPE3 and TXXX stop at the first terminator without splitting slash text",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 credits - v2.3 TPE3 and TXXX stop at the first terminator without splitting slash text")
   {
     auto body = Bytes{};
     appendFrame(body, "TPE3", false, 0, textContent(Encoding::Latin1, std::string_view{"A/B\0C", 5}));
@@ -868,7 +867,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(credits[1].role.empty());
   }
 
-  TEST_CASE("ID3v2 - parses ordinary v2.3 and v2.4 frames", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - parses ordinary v2.3 and v2.4 frames")
   {
     SECTION("v2.3")
     {
@@ -908,8 +907,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 - explicit work frames outrank grouping aliases regardless of frame order",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 - explicit work frames outrank grouping aliases regardless of frame order")
   {
     auto const txxxContent = [](Encoding encoding, std::string_view description, std::string_view value)
     {

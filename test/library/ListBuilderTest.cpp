@@ -55,7 +55,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("ListBuilder - expression and order coexist in one record", "[library][unit][list]")
+  TEST_CASE("ListBuilder - expression and order coexist in one record")
   {
     auto builder = ListBuilder::makeEmpty()
                      .name("My Saved List")
@@ -74,7 +74,7 @@ namespace ao::library::test
     CHECK(view.orderTrackIds()[1] == TrackId{12});
   }
 
-  TEST_CASE("ListBuilder - normalizes display text", "[library][unit][list][unicode]")
+  TEST_CASE("ListBuilder - normalizes display text")
   {
     auto const payload = ao::test::requireValue(
       ListBuilder::makeEmpty().name("Cafe\u0301").description("Cre\u0300me bru\u0302le\u0301e").serialize());
@@ -85,7 +85,7 @@ namespace ao::library::test
     CHECK(validateSerializedList(payload));
   }
 
-  TEST_CASE("ListBuilder - rejects malformed UTF-8 text", "[library][unit][list][unicode]")
+  TEST_CASE("ListBuilder - rejects malformed UTF-8 text")
   {
     auto const malformed = std::string{"\xC0\xAF", 2};
     auto const res = ListBuilder::makeEmpty().name(malformed).serialize();
@@ -95,7 +95,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("List name"));
   }
 
-  TEST_CASE("ListBuilder - validation rejects persisted non-NFC text", "[library][unit][list][unicode]")
+  TEST_CASE("ListBuilder - validation rejects persisted non-NFC text")
   {
     auto const payload = rawNamePayload("Cafe\u0301");
     auto const view = ListView{payload};
@@ -107,7 +107,7 @@ namespace ao::library::test
     CHECK(res.error().message.contains("List name"));
   }
 
-  TEST_CASE("ListBuilder - zeroes every alignment padding byte", "[library][unit][list]")
+  TEST_CASE("ListBuilder - zeroes every alignment padding byte")
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("x").serialize());
     constexpr auto kLogicalSize = kListHeaderSize + 1;
@@ -119,7 +119,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("ListBuilder - add retains only the first occurrence in request order", "[library][unit][list]")
+  TEST_CASE("ListBuilder - add retains only the first occurrence in request order")
   {
     auto builder = ListBuilder::makeEmpty();
     builder.orderTrackIds().add(TrackId{30}).add(TrackId{10}).add(TrackId{30}).add(TrackId{20}).add(TrackId{10});
@@ -133,7 +133,7 @@ namespace ao::library::test
     CHECK(view.orderTrackIds()[2] == TrackId{20});
   }
 
-  TEST_CASE("ListBuilder - remove eliminates an ID after repeated add requests", "[library][unit][list]")
+  TEST_CASE("ListBuilder - remove eliminates an ID after repeated add requests")
   {
     auto builder = ListBuilder::makeEmpty();
     builder.orderTrackIds().add(TrackId{10}).add(TrackId{20}).add(TrackId{10}).add(TrackId{30});
@@ -147,7 +147,7 @@ namespace ao::library::test
     CHECK(view.orderTrackIds()[1] == TrackId{30});
   }
 
-  TEST_CASE("ListBuilder - fromView canonicalizes duplicate order IDs by first occurrence", "[library][unit][list]")
+  TEST_CASE("ListBuilder - fromView canonicalizes duplicate order IDs by first occurrence")
   {
     auto const duplicateTrackIds = std::array{TrackId{30}, TrackId{10}, TrackId{30}, TrackId{20}, TrackId{10}};
     auto const duplicatePayload = duplicateOrderPayload(duplicateTrackIds);
@@ -167,7 +167,7 @@ namespace ao::library::test
     CHECK(rebuiltView.orderTrackIds()[2] == TrackId{20});
   }
 
-  TEST_CASE("ListBuilder - empty expression and order round-trip", "[library][unit][list]")
+  TEST_CASE("ListBuilder - empty expression and order round-trip")
   {
     auto const payload =
       ao::test::requireValue(ListBuilder::makeEmpty().name("Empty List").description("No tracks").serialize());
@@ -178,7 +178,7 @@ namespace ao::library::test
     CHECK(view.parentId() == kInvalidListId);
   }
 
-  TEST_CASE("ListBuilder - parentId round-trip through View", "[library][unit][list]")
+  TEST_CASE("ListBuilder - parentId round-trip through View")
   {
     auto builder = ListBuilder::makeEmpty()
                      .name("Nested Smart List")
@@ -198,7 +198,7 @@ namespace ao::library::test
     CHECK(rebuiltView.filter() == "$year >= 2021");
   }
 
-  TEST_CASE("ListBuilder - derives adjacent text field positions", "[library][unit][list]")
+  TEST_CASE("ListBuilder - derives adjacent text field positions")
   {
     auto const payload =
       ao::test::requireValue(ListBuilder::makeEmpty().name("Offset Test").description("Desc Here").serialize());
@@ -208,14 +208,14 @@ namespace ao::library::test
     CHECK(view.description() == "Desc Here");
   }
 
-  TEST_CASE("ListBuilder - serialization rejects text beyond the product limit", "[library][unit][list]")
+  TEST_CASE("ListBuilder - serialization rejects text beyond the product limit")
   {
     auto const longTextRes = ListBuilder::makeEmpty().name(std::string(65'536, 'n')).serialize();
     REQUIRE_FALSE(longTextRes);
     CHECK(longTextRes.error().code == Error::Code::ValueTooLarge);
   }
 
-  TEST_CASE("ListBuilder - preparation preserves opaque filter bytes", "[library][unit][list]")
+  TEST_CASE("ListBuilder - preparation preserves opaque filter bytes")
   {
     auto filter = std::string_view{};
 
@@ -237,7 +237,7 @@ namespace ao::library::test
     CHECK(validateSerializedList(prepared.bytes()));
   }
 
-  TEST_CASE("ListBuilder - builder and prepared values own text snapshots", "[library][unit][list]")
+  TEST_CASE("ListBuilder - builder and prepared values own text snapshots")
   {
     auto name = std::string{"Snapshot"};
     auto filter = std::string{"not valid query syntax (("};
@@ -258,7 +258,7 @@ namespace ao::library::test
     CHECK(validateSerializedList(prepared.bytes()));
   }
 
-  TEST_CASE("ListBuilder - preparation rejects the reserved saved-order Track id", "[library][unit][list]")
+  TEST_CASE("ListBuilder - preparation rejects the reserved saved-order Track id")
   {
     auto builder = ListBuilder::makeEmpty();
     builder.orderTrackIds().add(TrackId{1});
@@ -272,7 +272,7 @@ namespace ao::library::test
     CHECK(preparedRes.error().message == "List record contains the reserved Track id zero");
   }
 
-  TEST_CASE("ListBuilder - order supports more than 16-bit byte offsets", "[library][unit][list]")
+  TEST_CASE("ListBuilder - order supports more than 16-bit byte offsets")
   {
     auto builder = ListBuilder::makeEmpty();
 

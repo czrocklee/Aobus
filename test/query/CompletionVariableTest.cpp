@@ -66,7 +66,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Completion - finds query variable tokens at the cursor", "[query][unit][completion]")
+  TEST_CASE("Completion - finds query variable tokens at the cursor")
   {
     SECTION("Recognizes each trigger and returns replacement span")
     {
@@ -112,7 +112,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - rejects non-token cursor positions", "[query][unit][completion]")
+  TEST_CASE("Completion - rejects non-token cursor positions")
   {
     CHECK_FALSE(variableCompletionAtCursor("", 0));
     CHECK_FALSE(variableCompletionAtCursor("$artist", 99));
@@ -139,7 +139,7 @@ namespace ao::query::test
     CHECK_FALSE(analyzeQueryCompletion(R"($artist = "Mil)", 14));
   }
 
-  TEST_CASE("Completion - keeps cursors inside tag tokens as variable completions", "[query][unit][completion]")
+  TEST_CASE("Completion - keeps cursors inside tag tokens as variable completions")
   {
     auto const text = std::string{"#rock"};
     auto const optContext = analyzeQueryCompletion(text, text.size());
@@ -153,7 +153,7 @@ namespace ao::query::test
     CHECK(token->prefix == "rock");
   }
 
-  TEST_CASE("Completion - preserves mid-input variable and malformed-tail analysis", "[query][unit][completion]")
+  TEST_CASE("Completion - preserves mid-input variable and malformed-tail analysis")
   {
     SECTION("Variable before a suffix remains completable")
     {
@@ -176,7 +176,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("FieldCatalog - lists query variable descriptors in UI order", "[query][unit][field-catalog]")
+  TEST_CASE("FieldCatalog - lists query variable descriptors in UI order")
   {
     auto const metadata = queryVariableDescriptors(VariableType::Metadata);
     REQUIRE(metadata.size() == 22);
@@ -205,7 +205,7 @@ namespace ao::query::test
     CHECK(queryVariableDescriptors(VariableType::Custom).empty());
   }
 
-  TEST_CASE("Completion - completes canonical query variables", "[query][unit][completion]")
+  TEST_CASE("Completion - completes canonical query variables")
   {
     CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "")) ==
           std::vector<std::string_view>{"title",         "artist",     "album",      "albumArtist", "composer",
@@ -223,7 +223,7 @@ namespace ao::query::test
           std::vector<std::string_view>{"coverArt"});
   }
 
-  TEST_CASE("Completion - expands exact aliases to canonical variables", "[query][unit][completion]")
+  TEST_CASE("Completion - expands exact aliases to canonical variables")
   {
     auto albumMatches = completeQueryVariable(VariableType::Metadata, "al");
     REQUIRE(albumMatches.size() == 2);
@@ -244,7 +244,7 @@ namespace ao::query::test
     CHECK(bitrateMatches[0].kind == QueryVariableCompletionMatchKind::ExactAlias);
   }
 
-  TEST_CASE("Completion - does not prefix match aliases", "[query][unit][completion]")
+  TEST_CASE("Completion - does not prefix match aliases")
   {
     CHECK(canonicalNames(completeQueryVariable(VariableType::Metadata, "t")) ==
           std::vector<std::string_view>{"title", "trackNumber", "trackTotal"});
@@ -254,7 +254,7 @@ namespace ao::query::test
           std::vector<std::string_view>{"discNumber", "discTotal"});
   }
 
-  TEST_CASE("FieldCatalog - resolves every descriptor through lookup and completion", "[query][unit][field-catalog]")
+  TEST_CASE("FieldCatalog - resolves every descriptor through lookup and completion")
   {
     for (auto const type : {VariableType::Metadata, VariableType::Property})
     {
@@ -292,7 +292,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - returns nullopt for unknown variable fields", "[query][unit][completion]")
+  TEST_CASE("Completion - returns nullopt for unknown variable fields")
   {
     // Known fields resolve identically to the diagnostic detail::resolveVariableField().
     CHECK(detail::lookupVariableField(VariableType::Metadata, "artist") == Field::ArtistId);
@@ -309,7 +309,7 @@ namespace ao::query::test
     CHECK_FALSE(detail::lookupVariableField(VariableType::Property, "not_a_field").has_value());
   }
 
-  TEST_CASE("Completion - documents query variable aliases in the catalog surface", "[query][unit][completion]")
+  TEST_CASE("Completion - documents query variable aliases in the catalog surface")
   {
     struct Case final
     {
@@ -464,7 +464,7 @@ namespace ao::query::test
     checkDescriptors(queryVariableDescriptors(VariableType::Property), expectedProperties);
   }
 
-  TEST_CASE("FieldCatalog - finds descriptors by canonical name, alias, and field", "[query][unit][field-catalog]")
+  TEST_CASE("FieldCatalog - finds descriptors by canonical name, alias, and field")
   {
     auto const* const canonical = findQueryVariableDescriptor(VariableType::Metadata, "movement");
     auto const* const alias = findQueryVariableDescriptor(VariableType::Metadata, "m");
@@ -482,8 +482,7 @@ namespace ao::query::test
     CHECK(findQueryVariableDescriptor(Field::Uri) == nullptr);
   }
 
-  TEST_CASE("FieldCatalog - supplies canonical diagnostic names and formatted variable text",
-            "[query][unit][field-catalog]")
+  TEST_CASE("FieldCatalog - supplies canonical diagnostic names and formatted variable text")
   {
     for (auto const type : {VariableType::Metadata, VariableType::Property})
     {

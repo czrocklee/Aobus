@@ -32,7 +32,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("Engine - unsupported extension reports track-open failure", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - unsupported extension reports track-open failure")
   {
     auto const device = makeEngineTestDevice();
     auto engine = Engine{std::make_unique<FakeCapturingBackend>(), device};
@@ -54,7 +54,7 @@ namespace ao::audio::test
     CHECK(engine.status().statusText.empty());
   }
 
-  TEST_CASE("Engine - decoder-open failure is recoverable", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - decoder-open failure is recoverable")
   {
     auto const device = makeEngineTestDevice();
     auto const factory = [](auto const&, std::optional<SampleEncoding>) -> Result<std::unique_ptr<DecoderSession>>
@@ -79,7 +79,7 @@ namespace ao::audio::test
     CHECK(engine.status().statusText.empty());
   }
 
-  TEST_CASE("Engine - backend-open failure is a terminal route failure", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - backend-open failure is a terminal route failure")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -115,7 +115,7 @@ namespace ao::audio::test
     CHECK(engine.status().statusText == "hw init failed");
   }
 
-  TEST_CASE("Engine - initial seek failure closes the unopened playback", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - initial seek failure closes the unopened playback")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -159,7 +159,7 @@ namespace ao::audio::test
     CHECK(std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
   }
 
-  TEST_CASE("Engine - changed inspection format rejects and closes the candidate", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - changed inspection format rejects and closes the candidate")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -198,8 +198,7 @@ namespace ao::audio::test
     CHECK(std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
   }
 
-  TEST_CASE("Engine - failed committed start retires the previous session state",
-            "[audio][unit][engine][error][concurrency]")
+  TEST_CASE("Engine - failed committed start retires the previous session state", "[concurrency]")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();
@@ -240,7 +239,7 @@ namespace ao::audio::test
     CHECK(backend->target() == nullptr);
   }
 
-  TEST_CASE("Engine - successful lossy backend result is rejected", "[audio][unit][engine][backend]")
+  TEST_CASE("Engine - successful lossy backend result is rejected")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backend = backendPtr.get();
@@ -273,7 +272,7 @@ namespace ao::audio::test
     CHECK(std::ranges::none_of(events, [](FakeCapturingBackend::Event const& event) { return event.name == "start"; }));
   }
 
-  TEST_CASE("Engine - source decode error transitions to Error and ends track", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - source decode error transitions to Error and ends track")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -328,7 +327,7 @@ namespace ao::audio::test
     CHECK(snap.statusText == "decode failed");
   }
 
-  TEST_CASE("Engine - backend runtime error reports device failure", "[audio][unit][engine][error]")
+  TEST_CASE("Engine - backend runtime error reports device failure")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();

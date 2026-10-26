@@ -138,8 +138,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("PlaybackService metadata - committed edits reach consumers without changing playback identity",
-            "[runtime][unit][playback]")
+  TEST_CASE("PlaybackService metadata - committed edits reach consumers without changing playback identity")
   {
     auto fixture = PlaybackMetadataFixture{};
     auto const trackId = fixture.addTrack("Launch");
@@ -188,8 +187,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot().transport.nowPlaying == after.transport.nowPlaying);
   }
 
-  TEST_CASE("PlaybackService metadata - cover removal and reset survive later transport snapshots",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService metadata - cover removal and reset survive later transport snapshots")
   {
     auto fixture = PlaybackMetadataFixture{};
     auto const trackId = fixture.addTrack("Launch");
@@ -215,8 +213,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot().transport.nowPlaying == expected.transport.nowPlaying);
   }
 
-  TEST_CASE("PlaybackService metadata - deleted tracks keep launch text and clear the cover",
-            "[runtime][unit][playback]")
+  TEST_CASE("PlaybackService metadata - deleted tracks keep launch text and clear the cover")
   {
     auto fixture = PlaybackMetadataFixture{};
     auto const trackId = fixture.addTrack("Launch");
@@ -235,8 +232,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot() == expected);
   }
 
-  TEST_CASE("PlaybackService metadata - unrelated and unchanged presentation edits publish nothing",
-            "[runtime][unit][playback]")
+  TEST_CASE("PlaybackService metadata - unrelated and unchanged presentation edits publish nothing")
   {
     auto fixture = PlaybackMetadataFixture{};
     auto const trackId = fixture.addTrack("Launch");
@@ -252,8 +248,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot() == before);
   }
 
-  TEST_CASE("PlaybackService metadata - prepared successors publish current metadata on activation",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackService metadata - prepared successors publish current metadata on activation", "[concurrency]")
   {
     auto fixture = PlaybackMetadataFixture{};
     auto const currentId = fixture.addTrack("Current");
@@ -298,8 +293,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.playbackTransport.state().nowPlaying.title == "Next");
   }
 
-  TEST_CASE("PlaybackService metadata - live succession edits defer observer commands",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService metadata - live succession edits defer observer commands")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto const trackId = fixture.commandsFixture.addTrack({.title = "Launch"});
@@ -338,8 +332,7 @@ namespace ao::rt::test
     CHECK(snapshots.back().transport.nowPlaying.title == "Edited");
   }
 
-  TEST_CASE("PlaybackService metadata - settlement observers cannot lose a committed library edit",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackService metadata - settlement observers cannot lose a committed library edit", "[concurrency]")
   {
     auto fixture = PlaybackMetadataFixture{};
     auto const trackId = fixture.addTrack("Launch");
@@ -369,8 +362,7 @@ namespace ao::rt::test
     CHECK(snapshots.back() == expected);
   }
 
-  TEST_CASE("PlaybackService metadata - clearing the active title does not mark the view inactive",
-            "[runtime][unit][playback]")
+  TEST_CASE("PlaybackService metadata - clearing the active title does not mark the view inactive")
   {
     auto fixture = PlaybackMetadataFixture{};
     auto const trackId = fixture.addTrack("Launch");
@@ -384,8 +376,7 @@ namespace ao::rt::test
     CHECK(rendered.isActive);
   }
 
-  TEST_CASE("PlaybackService metadata - destruction retires a queued library refresh",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackService metadata - destruction retires a queued library refresh", "[concurrency]")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto const trackId = fixture.commandsFixture.addTrack({.title = "Launch"});

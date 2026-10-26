@@ -14,7 +14,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("ByteKeyDatabase::Reader - reads committed payloads in byte-key order", "[lmdb][unit][database][byte-key]")
+  TEST_CASE("ByteKeyDatabase::Reader - reads committed payloads in byte-key order")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -64,8 +64,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("ByteKeyDatabase::Writer - deletion persists without changing another key",
-            "[lmdb][unit][database][byte-key]")
+  TEST_CASE("ByteKeyDatabase::Writer - deletion persists without changing another key")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -100,8 +99,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optSurvivor) == "value2");
   }
 
-  TEST_CASE("ByteKeyDatabase::Reader - lowerBound seeks to the first key not less than its target",
-            "[lmdb][unit][database][byte-key]")
+  TEST_CASE("ByteKeyDatabase::Reader - lowerBound seeks to the first key not less than its target")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -142,8 +140,7 @@ namespace ao::lmdb::test
     }
   }
 
-  TEST_CASE("ByteKeyDatabase::Reader::Iterator - an open cursor stays counted by its moved read transaction",
-            "[lmdb][unit][database][cursor-lifetime]")
+  TEST_CASE("ByteKeyDatabase::Reader::Iterator - an open cursor stays counted by its moved read transaction")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -165,8 +162,7 @@ namespace ao::lmdb::test
     CHECK(movedTransaction.isActive());
   }
 
-  TEST_CASE("ByteKeyDatabase::Reader::Iterator - destruction remains safe after a write transaction ends",
-            "[lmdb][unit][database][cursor-lifetime]")
+  TEST_CASE("ByteKeyDatabase::Reader::Iterator - destruction remains safe after a write transaction ends")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -190,8 +186,7 @@ namespace ao::lmdb::test
     CHECK(iterator == ByteKeyDatabase::Reader::Iterator{});
   }
 
-  TEST_CASE("ByteKeyDatabase::Writer - destruction remains safe after its transaction object is gone",
-            "[lmdb][unit][database][cursor-lifetime]")
+  TEST_CASE("ByteKeyDatabase::Writer - destruction remains safe after its transaction object is gone")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});

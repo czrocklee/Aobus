@@ -188,7 +188,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("Decoder - bit-perfect conversions preserve PCM output", "[audio][integration][decoder]")
+  TEST_CASE("Decoder - bit-perfect conversions preserve PCM output")
   {
     SECTION("FLAC: 16-bit to 32-bit padding alignment")
     {
@@ -248,7 +248,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoder - fixture decodes with expected integrity", "[audio][integration][flac]")
+  TEST_CASE("FlacDecoder - fixture decodes with expected integrity")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -289,7 +289,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("AlacDecoder - fixture decodes with expected integrity", "[audio][integration][alac]")
+  TEST_CASE("AlacDecoder - fixture decodes with expected integrity")
   {
     auto const testFile = requireAudioFixture("hires.m4a");
 
@@ -314,7 +314,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Mp3Decoder - fixture decodes with expected integrity", "[audio][integration][mp3]")
+  TEST_CASE("Mp3Decoder - fixture decodes with expected integrity")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
@@ -339,7 +339,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoder - fixture decodes with expected integrity", "[audio][integration][opus]")
+  TEST_CASE("OpusDecoder - fixture decodes with expected integrity")
   {
     auto const testFile = requireAudioFixture("basic_metadata.opus");
     constexpr std::uint64_t kHalfwayFrame = 24000;
@@ -401,7 +401,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("OpusDecoder - a seek pre-rolls the decoder before its target", "[audio][integration][opus]")
+  TEST_CASE("OpusDecoder - a seek pre-rolls the decoder before its target")
   {
     // The default one-second pagination puts every mid-stream seek back at the
     // start of the audio, so the decoder is warm by the time it reaches the
@@ -472,7 +472,7 @@ namespace ao::audio::test
     CHECK(error / energy < 0.1);
   }
 
-  TEST_CASE("OpusDecoder - applies the identification packet output gain", "[audio][integration][opus]")
+  TEST_CASE("OpusDecoder - applies the identification packet output gain")
   {
     // No encoder writes a header gain by default, so the only way to prove the
     // field reaches libopus is to set it and measure the decoded level. -1536 in
@@ -515,7 +515,7 @@ namespace ao::audio::test
     CHECK(attenuatedRms / plainRms < 0.56);
   }
 
-  TEST_CASE("FlacDecoder - a non-FLAC file fails to open", "[audio][integration][flac]")
+  TEST_CASE("FlacDecoder - a non-FLAC file fails to open")
   {
     auto const testFile = ao::test::TempFile{".flac"};
     auto const res = FlacDecoderSession::open(testFile.path, SampleEncoding::Signed16Le);
@@ -524,7 +524,7 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::DecodeFailed);
   }
 
-  TEST_CASE("Mp3Decoder - a seek near the end returns a block bounded by the stream", "[audio][integration][mp3]")
+  TEST_CASE("Mp3Decoder - a seek near the end returns a block bounded by the stream")
   {
     auto const testFile = requireAudioFixture("hires.mp3");
     auto decoderRes = Mp3DecoderSession::open(testFile, SampleEncoding::Signed16Le);
@@ -556,7 +556,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoder - a seek near the end returns the target frame or end of stream", "[audio][integration][flac]")
+  TEST_CASE("FlacDecoder - a seek near the end returns the target frame or end of stream")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
     auto decoderRes = FlacDecoderSession::open(testFile, SampleEncoding::Signed16Le);

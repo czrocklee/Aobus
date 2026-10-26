@@ -9,8 +9,7 @@
 
 namespace ao::gtk::layout::test
 {
-  TEST_CASE("presentationForTrackSelectionRegion shows regions for matching selection modes",
-            "[uimodel][unit][library][track]")
+  TEST_CASE("presentationForTrackSelectionRegion shows regions for matching selection modes")
   {
     CHECK(presentationForTrackSelectionRegion(rt::SelectionKind::None, "none", false).visible);
     CHECK_FALSE(presentationForTrackSelectionRegion(rt::SelectionKind::Single, "none", false).visible);
@@ -28,8 +27,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(presentationForTrackSelectionRegion(rt::SelectionKind::Single, "unknown", false).visible);
   }
 
-  TEST_CASE("presentationForTrackSelectionRegion keeps placeholders visible but disabled without selection",
-            "[uimodel][unit][library][track]")
+  TEST_CASE("presentationForTrackSelectionRegion keeps placeholders visible but disabled without selection")
   {
     auto const placeholder = presentationForTrackSelectionRegion(rt::SelectionKind::None, "any", true);
     CHECK(placeholder.visible);

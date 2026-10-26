@@ -9,7 +9,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkText - formats localized list questions with supplied content", "[gtk][unit][gtk-text][localization]")
+  TEST_CASE("GtkText - formats localized list questions with supplied content")
   {
     auto const german = ao::test::messageCatalog("de-DE");
     CHECK(removeFromCurrentList(german, "Straße", "#straße") == "Aus Straße (#straße) entfernen");

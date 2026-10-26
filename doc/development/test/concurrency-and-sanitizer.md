@@ -65,14 +65,16 @@ one thread; a controlled schedule that rejects a stale worker completion
 qualifies. A thread that only toolkit internals use, such as GIO's, does not
 count when Aobus code sees just owner-thread callbacks.
 
-Tag a case `[async]` instead when the component is confined to one owner
-thread and the case asserts ordering or lifetime across later executor or
-main-loop turns: a queued, idle, or timer callback, a stale owner-thread
-completion, deferred teardown, or a retained handle after retirement.
-Synchronous reentrancy and notification, an incidental worker, a coroutine
-that merely returns a value, and destruction with nothing outstanding take
-neither tag. Reserve `[stress]` for added repetition. The `--concurrency` gate
-skips hidden `[.manual]` probes.
+When the component is confined to one owner thread and the case asserts
+ordering or lifetime across later executor or main-loop turns — a queued,
+idle, or timer callback, a stale owner-thread completion, deferred teardown,
+or a retained handle after retirement — it is still a real asynchronous
+contract, but it takes no marker: `[concurrency]` is only for boundaries that
+cross threads or processes. Synchronous reentrancy and notification, an
+incidental worker, a coroutine that merely returns a value, and destruction
+with nothing outstanding take no marker either. Added repetition is not a
+marker; [the test-suite reference](test-suite.md) owns `--repeat` behavior.
+The `--concurrency` gate skips hidden `[.manual]` probes.
 
 ## Validation
 

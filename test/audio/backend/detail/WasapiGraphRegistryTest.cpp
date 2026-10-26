@@ -45,7 +45,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("WasapiGraphRegistry - initial subscription receives a neutral route graph", "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - initial subscription receives a neutral route graph")
   {
     auto registry = WasapiGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -70,8 +70,7 @@ namespace ao::audio::backend::detail::test
     CHECK(graph.connections[0].isActive);
   }
 
-  TEST_CASE("WasapiGraphRegistry - publish projects input and mix formats independently",
-            "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - publish projects input and mix formats independently")
   {
     auto registry = WasapiGraphRegistry{};
     auto received = flow::Graph{};
@@ -104,7 +103,7 @@ namespace ao::audio::backend::detail::test
     CHECK(received.nodes[1].isMuted);
   }
 
-  TEST_CASE("WasapiGraphRegistry - subscriptions receive only their route", "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - subscriptions receive only their route")
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t callsA = 0;
@@ -127,8 +126,7 @@ namespace ao::audio::backend::detail::test
     CHECK(callsB == 2);
   }
 
-  TEST_CASE("WasapiGraphRegistry - cancellation removes a callback already copied for publication",
-            "[audio][unit][wasapi][graph][concurrency]")
+  TEST_CASE("WasapiGraphRegistry - cancellation removes a callback already copied for publication", "[concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     bool cancelSecond = false;
@@ -158,7 +156,7 @@ namespace ao::audio::backend::detail::test
     CHECK(secondCalls == 1);
   }
 
-  TEST_CASE("WasapiGraphRegistry - late subscriber receives current state", "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - late subscriber receives current state")
   {
     auto registry = WasapiGraphRegistry{};
     auto received = flow::Graph{};
@@ -172,7 +170,7 @@ namespace ao::audio::backend::detail::test
     CHECK(received.nodes[1].isMuted);
   }
 
-  TEST_CASE("WasapiGraphRegistry - initial callback may publish reentrantly", "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - initial callback may publish reentrantly")
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t callCount = 0;
@@ -219,7 +217,7 @@ namespace ao::audio::backend::detail::test
     CHECK(received[1].nodes[1].maxSoftwareGain == 0.5F);
   }
 
-  TEST_CASE("WasapiGraphRegistry - clear removes state and emits an empty graph", "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - clear removes state and emits an empty graph")
   {
     auto registry = WasapiGraphRegistry{};
     auto received = flow::Graph{};
@@ -233,8 +231,7 @@ namespace ao::audio::backend::detail::test
     CHECK(received.connections.empty());
   }
 
-  TEST_CASE("WasapiGraphRegistry - shutdown clears routes and rejects later publications",
-            "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - shutdown clears routes and rejects later publications")
   {
     auto registry = WasapiGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -262,8 +259,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(lateSub);
   }
 
-  TEST_CASE("WasapiGraphRegistry - shutdown from initial callback emits one empty graph",
-            "[audio][unit][wasapi][graph][concurrency]")
+  TEST_CASE("WasapiGraphRegistry - shutdown from initial callback emits one empty graph", "[concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t initialCalls = 0;
@@ -294,8 +290,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(sub);
   }
 
-  TEST_CASE("WasapiGraphRegistry - shutdown callback may cancel a later shutdown delivery",
-            "[audio][unit][wasapi][graph][concurrency]")
+  TEST_CASE("WasapiGraphRegistry - shutdown callback may cancel a later shutdown delivery", "[concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     std::int32_t secondShutdownCalls = 0;
@@ -322,8 +317,7 @@ namespace ao::audio::backend::detail::test
     CHECK(secondShutdownCalls == 0);
   }
 
-  TEST_CASE("WasapiGraphRegistry - subscription blocked behind callback delivery loses to shutdown",
-            "[audio][unit][wasapi][graph][concurrency]")
+  TEST_CASE("WasapiGraphRegistry - subscription blocked behind callback delivery loses to shutdown", "[concurrency]")
   {
     auto registry = WasapiGraphRegistry{};
     auto startSubscription = std::binary_semaphore{0};
@@ -368,7 +362,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(racedSub);
   }
 
-  TEST_CASE("WasapiGraphRegistry - client to mix conversion belongs only to its sink", "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - client to mix conversion belongs only to its sink")
   {
     auto mix = WAVEFORMATEXTENSIBLE{};
     mix.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
@@ -455,8 +449,7 @@ namespace ao::audio::backend::detail::test
     CHECK(signalFormat(*conversion->optToFormat).speakerMask == 3U);
   }
 
-  TEST_CASE("WasapiGraphRegistry - a five-point-one side client into a seven-point-one mix converts only at the sink",
-            "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - a five-point-one side client into a seven-point-one mix converts only at the sink")
   {
     // Independent engine descriptor and accepted-client descriptor models;
     // this test executes neither GetMixFormat nor Initialize.
@@ -535,8 +528,7 @@ namespace ao::audio::backend::detail::test
     CHECK(signalFormat(*conversion->optToFormat).speakerMask == 0x63fU);
   }
 
-  TEST_CASE("WasapiGraphRegistry - parsed engine positions establish only the software sink boundary",
-            "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - parsed engine positions establish only the software sink boundary")
   {
     // Independent engine descriptor and accepted-client descriptor models;
     // this test executes neither GetMixFormat nor Initialize.
@@ -747,8 +739,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("WasapiGraphRegistry - incomplete mix sets never promote sink mapping or erase conversion",
-            "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - incomplete mix sets never promote sink mapping or erase conversion")
   {
     auto registry = WasapiGraphRegistry{};
     auto received = std::vector<flow::Graph>{};
@@ -773,8 +764,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("WasapiGraphRegistry - unusable mix evidence never fabricates a sink format, layout or conflict",
-            "[audio][unit][wasapi][graph]")
+  TEST_CASE("WasapiGraphRegistry - unusable mix evidence never fabricates a sink format, layout or conflict")
   {
     // Parser -> graph -> analyzer regression. The engine's optional mix
     // observation contributes independently usable facts only: contradictory

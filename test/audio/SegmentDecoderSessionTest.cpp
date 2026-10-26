@@ -179,8 +179,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("SegmentDecoderSession - FLAC and WAV PCM equals the exact carrier region",
-            "[audio][integration][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - FLAC and WAV PCM equals the exact carrier region")
   {
     auto const flac = GENERATE(false, true);
     auto const frameCount = GENERATE(std::uint64_t{588}, std::uint64_t{574});
@@ -212,8 +211,7 @@ namespace ao::audio::test
     CHECK(negativeRes.error().code == Error::Code::SeekFailed);
   }
 
-  TEST_CASE("SegmentDecoderSession - converted interleaved spans preserve the exact region",
-            "[audio][integration][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - converted interleaved spans preserve the exact region")
   {
     auto const flac = GENERATE(false, true);
     auto const encoding =
@@ -230,8 +228,7 @@ namespace ao::audio::test
       readPcm(*decoderPtr), std::span<std::byte const>{reference}.subspan(317 * bytesPerFrame, 588 * bytesPerFrame)));
   }
 
-  TEST_CASE("SegmentDecoderSession - submillisecond nonempty segments still play at zero",
-            "[audio][integration][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - submillisecond nonempty segments still play at zero")
   {
     auto const flac = GENERATE(false, true);
     auto const temp = ao::test::TempFile{carrierBytes(flac), flac ? ".flac" : ".wav"};
@@ -244,8 +241,7 @@ namespace ao::audio::test
       utility::bytes::view(std::span<std::uint8_t const>{expected}).subspan(static_cast<std::size_t>(43) * 4, 4)));
   }
 
-  TEST_CASE("SegmentDecoderSession - rejects changed carrier facts and invalid ranges before PCM",
-            "[audio][integration][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - rejects changed carrier facts and invalid ranges before PCM")
   {
     auto const flac = GENERATE(false, true);
     auto const temp = ao::test::TempFile{carrierBytes(flac), flac ? ".flac" : ".wav"};
@@ -289,8 +285,7 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("SegmentDecoderSession - codecs without frame seek or exact extent are refused",
-            "[audio][unit][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - codecs without frame seek or exact extent are refused")
   {
     auto info = DecodedStreamInfo{};
     info.optTotalFrames = 64;
@@ -300,8 +295,7 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("SegmentDecoderSession - a FLAC without an exact STREAMINFO extent is refused",
-            "[audio][integration][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - a FLAC without an exact STREAMINFO extent is refused")
   {
     auto bytes = carrierBytes(true);
     bytes[21] &= 0xF0U;
@@ -315,8 +309,7 @@ namespace ao::audio::test
     CHECK(res.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("SegmentDecoderSession - discards leading frames using declared block coordinates",
-            "[audio][unit][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - discards leading frames using declared block coordinates")
   {
     auto decoderPtr = ao::test::requireValue(makeSegmentDecoderSession(
       std::make_unique<FrameSeekDecoderFake>(64), {.startFrame = 19, .frameCount = 20, .totalFrames = 64}, 1000));
@@ -325,7 +318,7 @@ namespace ao::audio::test
     CHECK(readPcm(*decoderPtr, 19).size() == 2);
   }
 
-  TEST_CASE("SegmentDecoderSession - an inner frame seek failure reaches the caller", "[audio][unit][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - an inner frame seek failure reaches the caller")
   {
     constexpr auto kSegment = PlaybackSegment{.startFrame = 19, .frameCount = 20, .totalFrames = 64};
     auto refusedPtr = std::make_unique<FrameSeekDecoderFake>(64);
@@ -350,8 +343,7 @@ namespace ao::audio::test
     CHECK(readPcm(*decoderPtr).size() == 40);
   }
 
-  TEST_CASE("SegmentDecoderSession - premature carrier EOF is a stable decode failure",
-            "[audio][unit][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - premature carrier EOF is a stable decode failure")
   {
     auto decoderPtr = ao::test::requireValue(makeSegmentDecoderSession(
       std::make_unique<FrameSeekDecoderFake>(24), {.startFrame = 19, .frameCount = 20, .totalFrames = 64}, 1000));
@@ -363,8 +355,7 @@ namespace ao::audio::test
     CHECK(repeatedRes.error().code == Error::Code::DecodeFailed);
   }
 
-  TEST_CASE("SegmentDecoderSession - an intact FLAC header with truncated payload fails decoding",
-            "[audio][integration][segment-decoder]")
+  TEST_CASE("SegmentDecoderSession - an intact FLAC header with truncated payload fails decoding")
   {
     auto bytes = carrierBytes(true);
     auto const lastFrame =
@@ -394,8 +385,7 @@ namespace ao::audio::test
     CHECK(deliveredFrames < 2017);
   }
 
-  TEST_CASE("TrackSession - inspection and final preparation enforce stored carrier facts",
-            "[audio][integration][segment-decoder]")
+  TEST_CASE("TrackSession - inspection and final preparation enforce stored carrier facts")
   {
     auto const flac = GENERATE(false, true);
     auto const temp = ao::test::TempFile{carrierBytes(flac), flac ? ".flac" : ".wav"};

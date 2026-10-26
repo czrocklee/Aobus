@@ -48,7 +48,7 @@ namespace ao::winui::test
     KeymapActionAvailability const kEverythingOffered = [](std::string_view) { return true; };
   } // namespace
 
-  TEST_CASE("KeymapAcceleratorPlan - hints describe only surviving executable bindings", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - hints describe only surviving executable bindings")
   {
     auto const keymap = KeymapModel{KeymapBindings{
       {"first", {chord("Ctrl+P")}},
@@ -69,7 +69,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - a binding this shell serves becomes an accelerator", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - a binding this shell serves becomes an accelerator")
   {
     auto const keymap = KeymapModel{KeymapBindings{{"playback.playPause", {chord("Ctrl+P")}}}};
 
@@ -81,7 +81,7 @@ namespace ao::winui::test
     CHECK(plans.front().key.modifiers == kAcceleratorModifierControl);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - an action this shell has no handler for is dropped", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - an action this shell has no handler for is dropped")
   {
     auto const keymap =
       KeymapModel{KeymapBindings{{"playback.playPause", {chord("Ctrl+P")}}, {"track.orderMoveUp", {chord("Alt+Up")}}}};
@@ -93,7 +93,7 @@ namespace ao::winui::test
     CHECK(plans.front().actionId == "playback.playPause");
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - an action that presents from an anchor is dropped", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - an action that presents from an anchor is dropped")
   {
     // A keystroke has no anchor, so binding one would raise a menu at nowhere.
     auto const keymap = KeymapModel{KeymapBindings{{"playback.showOutputDeviceSelector", {chord("Ctrl+O")}}}};
@@ -103,7 +103,7 @@ namespace ao::winui::test
     CHECK(planKeymapAccelerators(keymap, schema, kEverythingOffered).empty());
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - a menu that needs no anchor is kept", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - a menu that needs no anchor is kept")
   {
     auto const keymap = KeymapModel{KeymapBindings{{"shell.showSoul", {chord("Ctrl+K")}}}};
     auto const schema =
@@ -112,7 +112,7 @@ namespace ao::winui::test
     CHECK(planKeymapAccelerators(keymap, schema, kEverythingOffered).size() == 1);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - a chord Windows cannot express is dropped", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - a chord Windows cannot express is dropped")
   {
     auto const keymap =
       KeymapModel{KeymapBindings{{"playback.playPause", {KeyChord{.key = "Hyper"}, chord("Ctrl+P")}}}};
@@ -123,7 +123,7 @@ namespace ao::winui::test
     CHECK(plans.front().key.virtualKey == 0x50);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - media chords are left to the system media controls", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - media chords are left to the system media controls")
   {
     // The shell registers for system media control, which already runs the
     // command. An accelerator on the same key would run it twice while the
@@ -139,7 +139,7 @@ namespace ao::winui::test
     CHECK(plans.front().key.virtualKey == 0x50);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - two chords on one Windows key yield one accelerator", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - two chords on one Windows key yield one accelerator")
   {
     auto const keymap = KeymapModel{KeymapBindings{{"playback.next", {chord("Ctrl+Right"), chord("Ctrl+Right")}}}};
 
@@ -148,7 +148,7 @@ namespace ao::winui::test
     CHECK(plans.size() == 1);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - two actions cannot claim one Windows key", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - two actions cannot claim one Windows key")
   {
     // `Ctrl++` and `Ctrl+Shift+=` read differently and are the same keystroke,
     // because the character `+` carries its own Shift. Installing both would
@@ -165,7 +165,7 @@ namespace ao::winui::test
     CHECK(plans.front().actionId == "playback.playPause");
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - one action keeps every distinct key it asks for", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - one action keeps every distinct key it asks for")
   {
     // The conflict rule must not swallow a second chord that reaches a
     // different key, which is the ordinary way an action gets two shortcuts.
@@ -177,8 +177,7 @@ namespace ao::winui::test
     CHECK(plans.size() == 2);
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - the default Windows keymap plans caller-offered keyboard commands",
-            "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - the default Windows keymap plans caller-offered keyboard commands")
   {
     // Availability is supplied here. Live ShellBuilder registration belongs to
     // the native consumer, not this headless planner test.
@@ -211,7 +210,7 @@ namespace ao::winui::test
     CHECK(planned("track.orderMoveToBottom"));
   }
 
-  TEST_CASE("KeymapAcceleratorPlan - no two accelerators claim the same key", "[winui][unit][input]")
+  TEST_CASE("KeymapAcceleratorPlan - no two accelerators claim the same key")
   {
     auto const schema = layoutSchema();
     auto const keymap = KeymapModel{uimodel::defaultKeymap()};

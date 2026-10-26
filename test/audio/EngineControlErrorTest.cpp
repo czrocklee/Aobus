@@ -35,7 +35,7 @@ namespace ao::audio::test
   // a delivered error around its own stop/flush/start sequencing; they do not
   // demonstrate an actual native SDK stop failure or its recoverability.
   TEST_CASE("Engine - terminal backend error reported during seek stop persists after successful flush and start",
-            "[audio][unit][engine][concurrency]")
+            "[concurrency]")
   {
     auto workerEntered = std::binary_semaphore{0};
     auto workerRelease = std::binary_semaphore{0};
@@ -144,7 +144,7 @@ namespace ao::audio::test
   // the replacement, not which retirement or generation check rejects it,
   // nor any native SDK stop-failure behavior.
   TEST_CASE("Engine - backend error reported during replacement stop does not fail the replacement playback",
-            "[audio][unit][engine][concurrency]")
+            "[concurrency]")
   {
     auto workerEntered = std::binary_semaphore{0};
     auto workerRelease = std::binary_semaphore{0};

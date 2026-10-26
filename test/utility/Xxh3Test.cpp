@@ -16,7 +16,7 @@ namespace ao::utility::test
   // Known-answer vectors verified against xxhsum 0.8.3 (`xxhsum -H2` for
   // XXH128, `xxhsum -H3` for XXH3-64); the empty-string XXH3-64 value also
   // matches the official xxHash reference vector.
-  TEST_CASE("Xxh3Hash128 - produces stable canonical signatures", "[utility][unit][hash]")
+  TEST_CASE("Xxh3Hash128 - produces stable canonical signatures")
   {
     CHECK(xxh3Hash128Hex("") == "99aa06d3014798d86001c324468d497f");
     CHECK(xxh3Hash128Hex("a") == "a96faf705af16834e6c632b61e964e1f");
@@ -29,7 +29,7 @@ namespace ao::utility::test
     CHECK(hash.bytes[15] == std::byte{0x18});
   }
 
-  TEST_CASE("Xxh3Hash64 - produces stable content keys", "[utility][unit][hash]")
+  TEST_CASE("Xxh3Hash64 - produces stable content keys")
   {
     auto const helloBytes =
       std::array{std::byte{0x68}, std::byte{0x65}, std::byte{0x6C}, std::byte{0x6C}, std::byte{0x6F}};
@@ -40,7 +40,7 @@ namespace ao::utility::test
     CHECK(xxh3Hash64Hex("hello") == "9555e8555c62dcfd");
   }
 
-  TEST_CASE("Xxh3Accumulator64 - matches one-shot hashing across chunks", "[utility][unit][hash]")
+  TEST_CASE("Xxh3Accumulator64 - matches one-shot hashing across chunks")
   {
     auto accumulator = Xxh3Accumulator64{};
 
@@ -54,7 +54,7 @@ namespace ao::utility::test
     CHECK(accumulator.value() == xxh3Hash64("Hello Aobus!"));
   }
 
-  TEST_CASE("Xxh3Hash128 - byte spans match string hashing", "[utility][unit][hash]")
+  TEST_CASE("Xxh3Hash128 - byte spans match string hashing")
   {
     auto const helloBytes =
       std::array{std::byte{0x68}, std::byte{0x65}, std::byte{0x6C}, std::byte{0x6C}, std::byte{0x6F}};
@@ -65,7 +65,7 @@ namespace ao::utility::test
     CHECK(xxh3Hash128(std::span<std::byte const>{highBitByte}) == xxh3Hash128(highBitText));
   }
 
-  TEST_CASE("Xxh3Accumulator128 - matches one-shot hashing across chunks", "[utility][unit][hash]")
+  TEST_CASE("Xxh3Accumulator128 - matches one-shot hashing across chunks")
   {
     auto accumulator = Xxh3Accumulator128{};
 
@@ -76,7 +76,7 @@ namespace ao::utility::test
     CHECK(accumulator.hex() == "a2915abc767ab3c64638778d610cb5db");
   }
 
-  TEST_CASE("Xxh3Accumulator128 - is invariant across chunk boundaries", "[utility][unit][hash]")
+  TEST_CASE("Xxh3Accumulator128 - is invariant across chunk boundaries")
   {
     // Larger than the XXH3 internal streaming buffer, so splits exercise the
     // buffered, block-aligned, and long-input code paths.

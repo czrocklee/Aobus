@@ -12,34 +12,34 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("SmartListEditorModel - formats empty expression as none", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - formats empty expression as none")
   {
     CHECK(formatSmartListExpressionDisplayText(ao::test::englishMessageCatalog(), "") == "(none)");
   }
 
-  TEST_CASE("SmartListEditorModel - preserves non-empty display text", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - preserves non-empty display text")
   {
     CHECK(formatSmartListExpressionDisplayText(ao::test::englishMessageCatalog(), "$genre = 'Jazz'") ==
           "$genre = 'Jazz'");
   }
 
-  TEST_CASE("SmartListEditorModel - returns local expression without parent", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - returns local expression without parent")
   {
     CHECK(combineSmartListEffectiveExpression("", "$artist = 'Queen'") == "$artist = 'Queen'");
   }
 
-  TEST_CASE("SmartListEditorModel - combines parent and local expressions", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - combines parent and local expressions")
   {
     auto const effective = combineSmartListEffectiveExpression("$year > 1970", "$artist = 'Queen'");
     CHECK(effective == "($year > 1970) and ($artist = 'Queen')");
   }
 
-  TEST_CASE("SmartListEditorModel - returns parent expression without local filter", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - returns parent expression without local filter")
   {
     CHECK(combineSmartListEffectiveExpression("$year > 1970", "") == "$year > 1970");
   }
 
-  TEST_CASE("SmartListEditorModel - distinguishes complete and partial filtered results", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - distinguishes complete and partial filtered results")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
 
@@ -50,7 +50,7 @@ namespace ao::uimodel::test
     CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, true, false) == "Showing 10 of 11 matches");
   }
 
-  TEST_CASE("SmartListEditorModel - unfiltered previews describe the complete source", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - unfiltered previews describe the complete source")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(formatSmartListPreviewStatusText(textCatalog, true, 1, true, true) == "Showing all tracks: 1");
@@ -64,13 +64,13 @@ namespace ao::uimodel::test
     CHECK(formatSmartListPreviewStatusText(textCatalog, true, 11, false, true) == "Showing all tracks from source: 11");
   }
 
-  TEST_CASE("SmartListEditorModel - formats an invalid expression", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - formats an invalid expression")
   {
     CHECK(formatSmartListPreviewStatusText(ao::test::englishMessageCatalog(), false, 0, false, false) ==
           "Invalid filter");
   }
 
-  TEST_CASE("SmartListEditorModel - formats track labels", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - formats track labels")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(formatSmartListPreviewTrackLabel(textCatalog, "Blue in Green", "Miles Davis", "Kind of Blue") ==
@@ -84,7 +84,7 @@ namespace ao::uimodel::test
     CHECK(formatSmartListPreviewTrackLabel(textCatalog, "", "", "") == "(untitled)");
   }
 
-  TEST_CASE("SmartListEditorModel - preserves parent edit id and filter fields", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - preserves parent edit id and filter fields")
   {
     auto const parentListId = ListId{10};
     auto const editListId = ListId{42};
@@ -101,7 +101,7 @@ namespace ao::uimodel::test
     CHECK(draft.expression == expression);
   }
 
-  TEST_CASE("SmartListEditorModel - preserves create sentinel id", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - preserves create sentinel id")
   {
     auto const parentListId = ListId{10};
     auto const name = std::string{"My Smart List"};
@@ -117,7 +117,7 @@ namespace ao::uimodel::test
     CHECK(draft.expression == expression);
   }
 
-  TEST_CASE("SmartListEditorModel - preserves empty text fields", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - preserves empty text fields")
   {
     auto const draft = makeSmartListDraft(kInvalidListId, kInvalidListId, "", "", "");
 
@@ -128,8 +128,7 @@ namespace ao::uimodel::test
     CHECK(draft.expression.empty());
   }
 
-  TEST_CASE("SmartListEditorModel - explains direct and computed membership while editing",
-            "[uimodel][unit][list][writable-tag]")
+  TEST_CASE("SmartListEditorModel - explains direct and computed membership while editing")
   {
     auto const direct = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
                                                      SmartListPreviewState{
@@ -158,7 +157,7 @@ namespace ao::uimodel::test
     CHECK(computed.membershipEditingText == "Computed membership — edit tags or the expression");
   }
 
-  TEST_CASE("SmartListEditorModel - hides unavailable preview source", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - hides unavailable preview source")
   {
     auto const state = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
                                                     SmartListPreviewState{
@@ -184,7 +183,7 @@ namespace ao::uimodel::test
     CHECK(state.errorVisible == false);
   }
 
-  TEST_CASE("SmartListEditorModel - shows full source for empty local expression", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - shows full source for empty local expression")
   {
     auto const state = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
                                                     SmartListPreviewState{
@@ -222,7 +221,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(unnamed.canSubmit);
   }
 
-  TEST_CASE("SmartListEditorModel - uses library wording for empty all-track source", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - uses library wording for empty all-track source")
   {
     auto const state = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
                                                     SmartListPreviewState{
@@ -238,7 +237,7 @@ namespace ao::uimodel::test
     CHECK(state.previewStatusText == "No tracks in library");
   }
 
-  TEST_CASE("SmartListEditorModel - exposes query errors and hides preview", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - exposes query errors and hides preview")
   {
     auto const state = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
                                                     SmartListPreviewState{
@@ -264,7 +263,7 @@ namespace ao::uimodel::test
     CHECK(state.errorText == "Filter error: expected value");
   }
 
-  TEST_CASE("SmartListEditorModel - keeps empty invalid filter preview visible", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - keeps empty invalid filter preview visible")
   {
     auto const state = makeSmartListEditorViewState(ao::test::englishMessageCatalog(),
                                                     SmartListPreviewState{

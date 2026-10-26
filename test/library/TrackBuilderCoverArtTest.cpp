@@ -18,7 +18,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - cover art builder edits ordered entries", "[library][unit][track-builder][cover-art]")
+  TEST_CASE("TrackBuilder - cover art builder edits ordered entries")
   {
     auto builder = TrackBuilder::makeEmpty();
     auto const data = std::array{std::byte{0x12}, std::byte{0x34}};
@@ -52,7 +52,7 @@ namespace ao::library::test
     CHECK(builder.coverArt().entries().empty());
   }
 
-  TEST_CASE("TrackBuilder - aligns cover table after custom values", "[library][unit][track-builder][cover-art]")
+  TEST_CASE("TrackBuilder - aligns cover table after custom values")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.property().uri("song.flac");

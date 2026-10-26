@@ -41,7 +41,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackStore - create and read", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - create and read")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(fixture.library,
@@ -72,7 +72,7 @@ namespace ao::library::test
     CHECK(it == reader.end());
   }
 
-  TEST_CASE("TrackStore - read by id", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - read by id")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(fixture.library,
@@ -94,7 +94,7 @@ namespace ao::library::test
     CHECK(optFound->metadata().trackNumber() == 5);
   }
 
-  TEST_CASE("TrackStore - update", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - update")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(
@@ -120,7 +120,7 @@ namespace ao::library::test
     CHECK(optView->property().duration() == std::chrono::minutes{3});
   }
 
-  TEST_CASE("TrackStore - delete", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - delete")
   {
     auto fixture = TrackStoreFixture{};
     auto const id = addCommittedTrack(
@@ -137,7 +137,7 @@ namespace ao::library::test
     CHECK(it == reader.end());
   }
 
-  TEST_CASE("TrackStore - create multiple tracks unique IDs", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - create multiple tracks unique IDs")
   {
     auto fixture = TrackStoreFixture{};
     auto wtxn = writeTransaction(fixture.library);
@@ -169,7 +169,7 @@ namespace ao::library::test
     CHECK(collectedTrackNumbers == std::vector<std::uint16_t>{1, 2, 3});
   }
 
-  TEST_CASE("TrackStore - unified TrackView iteration", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - unified TrackView iteration")
   {
     auto fixture = TrackStoreFixture{};
     auto ids = std::vector<TrackId>{};
@@ -204,7 +204,7 @@ namespace ao::library::test
     CHECK(collectedTrackNumbers == std::vector<std::uint16_t>{1, 2, 3});
   }
 
-  TEST_CASE("TrackStore - visitTracks preserves arbitrary request order and duplicates", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - visitTracks preserves arbitrary request order and duplicates")
   {
     auto fixture = TrackStoreFixture{};
     auto wtxn = writeTransaction(fixture.library);
@@ -233,7 +233,7 @@ namespace ao::library::test
     CHECK(titles == std::vector<std::string_view>{"Three", "One", "Three", "Two"});
   }
 
-  TEST_CASE("TrackStore - visitTracks skips missing IDs in ascending dense requests", "[library][unit][track-store]")
+  TEST_CASE("TrackStore - visitTracks skips missing IDs in ascending dense requests")
   {
     auto fixture = TrackStoreFixture{};
     auto wtxn = writeTransaction(fixture.library);

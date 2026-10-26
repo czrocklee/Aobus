@@ -100,7 +100,7 @@ namespace ao::media::file::test
     }
   } // namespace
 
-  TEST_CASE("Media extent - WAV frame counts retain partial milliseconds", "[media][unit][exact-extent]")
+  TEST_CASE("Media extent - WAV frame counts retain partial milliseconds")
   {
     auto const frames = GENERATE(std::uint64_t{1}, std::uint64_t{574}, std::uint64_t{588});
     auto const bytes = ao::test::wav::makeWav(
@@ -115,7 +115,7 @@ namespace ao::media::file::test
     CHECK(visitor.sheets().empty());
   }
 
-  TEST_CASE("Media extent - FLAC reports nonzero STREAMINFO frames but not unknown zero", "[media][unit][exact-extent]")
+  TEST_CASE("Media extent - FLAC reports nonzero STREAMINFO frames but not unknown zero")
   {
     auto const frames =
       GENERATE(std::uint64_t{0}, std::uint64_t{1}, std::uint64_t{588}, (std::uint64_t{1} << 36U) - 1U);
@@ -137,8 +137,7 @@ namespace ao::media::file::test
     CHECK(visitor.sheets().empty());
   }
 
-  TEST_CASE("Media extent - embedded text CUE is copied verbatim while binary CUESHEET stays skipped",
-            "[media][unit][exact-extent]")
+  TEST_CASE("Media extent - embedded text CUE is copied verbatim while binary CUESHEET stays skipped")
   {
     auto const sheet = std::string{"FILE \"image.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n"};
     auto visitor = ExtentVisitorSpy{};
@@ -153,8 +152,7 @@ namespace ao::media::file::test
     CHECK(visitor.exactFrames() == 588);
   }
 
-  TEST_CASE("Media extent - truncated or nonaligned WAV data never advertises a carrier extent",
-            "[media][unit][exact-extent]")
+  TEST_CASE("Media extent - truncated or nonaligned WAV data never advertises a carrier extent")
   {
     auto bytes =
       ao::test::wav::makeWav({.channels = 2, .sampleRate = 44100, .audioData = std::vector<std::uint8_t>(16, 0)});

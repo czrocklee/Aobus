@@ -7,8 +7,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AudioBackendDrainTail - final callback silence contributes to presentation drain",
-            "[audio][unit][drain-tail]")
+  TEST_CASE("AudioBackendDrainTail - final callback silence contributes to presentation drain")
   {
     auto tail = AudioBackendDrainTail{};
     CHECK(tail.start(100U, 24U) == DrainTailEvent::None);
@@ -21,7 +20,7 @@ namespace ao::audio::backend::detail::test
     CHECK(tail.consume(64U) == DrainTailEvent::None);
   }
 
-  TEST_CASE("AudioBackendDrainTail - a complete suffix can finish immediately", "[audio][unit][drain-tail]")
+  TEST_CASE("AudioBackendDrainTail - a complete suffix can finish immediately")
   {
     auto tail = AudioBackendDrainTail{};
     CHECK(tail.start(10U, 12U) == DrainTailEvent::Completed);
@@ -34,7 +33,7 @@ namespace ao::audio::backend::detail::test
     CHECK(tail.consume(1U) == DrainTailEvent::None);
   }
 
-  TEST_CASE("AudioBackendDrainTail - only an active drain can produce a completion event", "[audio][unit][drain-tail]")
+  TEST_CASE("AudioBackendDrainTail - only an active drain can produce a completion event")
   {
     auto tail = AudioBackendDrainTail{};
     CHECK(tail.consume(100U) == DrainTailEvent::None);

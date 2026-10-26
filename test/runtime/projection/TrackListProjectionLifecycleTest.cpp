@@ -59,8 +59,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("TrackListProjection - initialized projection exposes source rows and view metadata",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - initialized projection exposes source rows and view metadata")
   {
     auto env = TrackListProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track A", 2020));
@@ -98,7 +97,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackListProjection - subscribe immediately publishes reset", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - subscribe immediately publishes reset")
   {
     auto env = TrackListProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
@@ -120,7 +119,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
   }
 
-  TEST_CASE("TrackListProjection - subscribe replays reset to each subscriber", "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - subscribe replays reset to each subscriber")
   {
     auto env = TrackListProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
@@ -142,8 +141,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<ProjectionReset>(secondBatches.front().deltas.front()));
   }
 
-  TEST_CASE("TrackListProjection - subscription reset does not emit additional callbacks",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - subscription reset does not emit additional callbacks")
   {
     auto env = TrackListProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
@@ -157,8 +155,7 @@ namespace ao::rt::test
     CHECK(count == initial);
   }
 
-  TEST_CASE("TrackListProjection - empty source exposes no rows and invalid lookup fallback",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - empty source exposes no rows and invalid lookup fallback")
   {
     auto env = TrackListProjectionFixture{};
     env.setupFiltered({});
@@ -169,8 +166,7 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(999) == kInvalidTrackId);
   }
 
-  TEST_CASE("TrackListProjection - construction never queries an already invalidated source",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - construction never queries an already invalidated source")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto sourcePtr = std::make_shared<QueryCountingTrackSource>(TrackId{99});
@@ -191,8 +187,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<ProjectionSourceInvalidated>(batches.front().deltas.front()));
   }
 
-  TEST_CASE("TrackListProjection - source invalidation publishes one terminal batch and no reset afterward",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackListProjection - source invalidation publishes one terminal batch and no reset afterward")
   {
     auto env = TrackListProjectionFixture{};
     auto const id = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));

@@ -71,7 +71,7 @@ namespace ao::compat::test
     }
   } // namespace
 
-  TEST_CASE("MoveOnlyFunction - a default constructed function is empty", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - a default constructed function is empty")
   {
     auto function = Portable<void()>{};
     CHECK_FALSE(function);
@@ -81,7 +81,7 @@ namespace ao::compat::test
     CHECK_FALSE(fromNull);
   }
 
-  TEST_CASE("MoveOnlyFunction - invokes its target and returns the result", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - invokes its target and returns the result")
   {
     auto add = Portable<std::int32_t(std::int32_t, std::int32_t)>{[](std::int32_t left, std::int32_t right)
                                                                   { return left + right; }};
@@ -90,7 +90,7 @@ namespace ao::compat::test
     CHECK(add(2, 3) == 5);
   }
 
-  TEST_CASE("MoveOnlyFunction - holds a move-only capture", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - holds a move-only capture")
   {
     auto ownedPtr = std::make_unique<std::int32_t>(42);
     auto function = Portable<std::int32_t()>{[heldPtr = std::move(ownedPtr)] { return *heldPtr; }};
@@ -99,7 +99,7 @@ namespace ao::compat::test
     CHECK(function() == 42);
   }
 
-  TEST_CASE("MoveOnlyFunction - forwards arguments without copying", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - forwards arguments without copying")
   {
     auto append = Portable<void(std::string&)>{[](std::string& text) { text += "-seen"; }};
 
@@ -108,7 +108,7 @@ namespace ao::compat::test
     CHECK(text == "value-seen");
   }
 
-  TEST_CASE("MoveOnlyFunction - a null function pointer produces an empty function", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - a null function pointer produces an empty function")
   {
     std::int32_t (*target)() = nullptr;
     auto function = Portable<std::int32_t()>{target};
@@ -119,8 +119,7 @@ namespace ao::compat::test
     CHECK(valid() == 7);
   }
 
-  TEST_CASE("MoveOnlyFunction - moving empties the source and keeps one live target",
-            "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - moving empties the source and keeps one live target")
   {
     std::int32_t liveCount = 0;
 
@@ -139,7 +138,7 @@ namespace ao::compat::test
     CHECK(liveCount == 0);
   }
 
-  TEST_CASE("MoveOnlyFunction - a large target survives moves and is released once", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - a large target survives moves and is released once")
   {
     std::int32_t liveCount = 0;
 
@@ -157,7 +156,7 @@ namespace ao::compat::test
     CHECK(liveCount == 0);
   }
 
-  TEST_CASE("MoveOnlyFunction - move assignment releases the previous target", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - move assignment releases the previous target")
   {
     std::int32_t replacedLiveCount = 0;
     std::int32_t adoptedLiveCount = 0;
@@ -180,7 +179,7 @@ namespace ao::compat::test
     CHECK(adoptedLiveCount == 0);
   }
 
-  TEST_CASE("MoveOnlyFunction - assigning nullptr empties the function", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - assigning nullptr empties the function")
   {
     std::int32_t liveCount = 0;
 
@@ -193,7 +192,7 @@ namespace ao::compat::test
     CHECK(liveCount == 0);
   }
 
-  TEST_CASE("MoveOnlyFunction - swap exchanges targets", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - swap exchanges targets")
   {
     auto first = Portable<std::int32_t()>{[] { return 1; }};
     auto second = Portable<std::int32_t()>{[] { return 2; }};
@@ -207,7 +206,7 @@ namespace ao::compat::test
 
 namespace ao::compat::test
 {
-  TEST_CASE("MoveOnlyFunction - the project alias satisfies the same contract", "[core][unit][move-only-function]")
+  TEST_CASE("MoveOnlyFunction - the project alias satisfies the same contract")
   {
     auto empty = MoveOnlyFunction<std::int32_t()>{};
     CHECK_FALSE(empty);

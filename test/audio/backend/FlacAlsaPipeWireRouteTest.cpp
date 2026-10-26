@@ -251,15 +251,13 @@ namespace ao::audio::backend::test
     }
   } // namespace
 
-  TEST_CASE("FlacUnpositionedRoute - untagged five and six channels admit back and side without permutation",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacUnpositionedRoute - untagged five and six channels admit back and side without permutation")
   {
     checkDecodedRoutes(5, 0);
     checkDecodedRoutes(6, 0);
   }
 
-  TEST_CASE("FlacUnpositionedRoute - explicit back and side identities reject opposite native roles",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacUnpositionedRoute - explicit back and side identities reject opposite native roles")
   {
     checkDecodedRoutes(5, 0x37, "WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x37");
     checkDecodedRoutes(5, 0x607, "WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x607");
@@ -267,8 +265,7 @@ namespace ao::audio::backend::test
     checkDecodedRoutes(6, 0x60F, "WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x60F");
   }
 
-  TEST_CASE("FlacUnpositionedRoute - three channel default center and explicit LFE identities remain strict",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacUnpositionedRoute - three channel default center and explicit LFE identities remain strict")
   {
     checkDecodedRoutes(3, 0x7);
     checkDecodedRoutes(3, 0xB, "WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0xB");

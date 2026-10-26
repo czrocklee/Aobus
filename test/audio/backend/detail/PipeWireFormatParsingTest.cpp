@@ -138,8 +138,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("PipeWireFormatParsing - offers independently specified canonical two-channel roles",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - offers independently specified canonical two-channel roles")
   {
     struct OfferCase final
     {
@@ -171,8 +170,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - zero and FL FR stereo identities install the same native byte transport",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - zero and FL FR stereo identities install the same native byte transport")
   {
     struct NativeOrderCase final
     {
@@ -270,8 +268,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - fixed native array choices retain actual current positions",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - fixed native array choices retain actual current positions")
   {
     struct NativeCase final
     {
@@ -332,8 +329,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - live native position choices are not fixed observations",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - live native position choices are not fixed observations")
   {
     auto const positions = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
     auto const alternatives = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_RL, SPA_AUDIO_CHANNEL_RR});
@@ -349,8 +345,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - live scalar choices cannot become current numerical observations",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - live scalar choices cannot become current numerical observations")
   {
     auto const positions = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
 
@@ -377,8 +372,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - unpadded object storage cannot become fresh monitor facts",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - unpadded object storage cannot become fresh monitor facts")
   {
     auto initialBuffer = std::array<std::byte, 512>{};
     auto currentBuffer = std::array<std::byte, 512>{};
@@ -416,8 +410,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(cache.contains(42));
   }
 
-  TEST_CASE("PipeWireFormatParsing - malformed fixed scalar storage rejects readback and invalidates current cache",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - malformed fixed scalar storage rejects readback and invalidates current cache")
   {
     struct ScalarStorageCase final
     {
@@ -498,7 +491,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - malformed fixed position array storage stays rejected", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - malformed fixed position array storage stays rejected")
   {
     auto const positions = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
     auto buffer = std::array<std::byte, 1024>{};
@@ -591,7 +584,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(cache.contains(42));
   }
 
-  TEST_CASE("PipeWireFormatParsing - retains unpositioned mono and multichannel offers", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - retains unpositioned mono and multichannel offers")
   {
     auto const encodings = std::to_array({SampleEncoding::Signed16Le});
 
@@ -627,7 +620,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - actual positions never inherit the application request", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - actual positions never inherit the application request")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const source = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x30};
@@ -683,8 +676,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - negotiated same-set order transports independent marker bytes",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - negotiated same-set order transports independent marker bytes")
   {
     struct EncodingCase final
     {
@@ -742,8 +734,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - a known legacy multichannel order is preserved without a new position offer",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - a known legacy multichannel order is preserved without a new position offer")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const roles = std::to_array<std::uint32_t>(
@@ -776,8 +767,7 @@ namespace ao::audio::backend::detail::test
     CHECK(bytes == expected);
   }
 
-  TEST_CASE("PipeWireFormatParsing - later position or flag changes cannot replace the initial mapping",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - later position or flag changes cannot replace the initial mapping")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const roles = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
@@ -824,8 +814,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - source-zero legacy active role refresh keeps identity transport",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - source-zero legacy active role refresh keeps identity transport")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
     auto currentBuffer = std::array<std::byte, 1024>{};
@@ -853,8 +842,7 @@ namespace ao::audio::backend::detail::test
     CHECK(bytes == std::to_array<std::byte>({std::byte{0x11}, std::byte{0x12}}));
   }
 
-  TEST_CASE("PipeWireFormatParsing - source-zero multichannel active role refresh keeps identity transport",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - source-zero multichannel active role refresh keeps identity transport")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
     auto currentBuffer = std::array<std::byte, 1024>{};
@@ -879,8 +867,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(currentRes->needsPermutation);
   }
 
-  TEST_CASE("PipeWireFormatParsing - the open snapshot projection follows the latest accepted native roles",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - the open snapshot projection follows the latest accepted native roles")
   {
     // Wiring proof for the PipeWireBackend::open() snapshot boundary: that
     // boundary re-runs this same active pure seam on the latest already
@@ -990,8 +977,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - zero and FL FR stereo cannot replace an installed swap after activation",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - zero and FL FR stereo cannot replace an installed swap after activation")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
     auto currentBuffer = std::array<std::byte, 1024>{};
@@ -1026,8 +1012,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - source-zero legacy geometry or encoding changes remain terminal",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - source-zero legacy geometry or encoding changes remain terminal")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
     auto currentBuffer = std::array<std::byte, 1024>{};
@@ -1062,8 +1047,7 @@ namespace ao::audio::backend::detail::test
     CHECK(currentRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
-  TEST_CASE("PipeWireFormatParsing - native MONO remains unknown while known conflicting mono is not hidden",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - native MONO remains unknown while known conflicting mono is not hidden")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const source = SignalFormat{.sampleRate = 48000, .channels = 1, .speakerMask = 1};
@@ -1084,8 +1068,7 @@ namespace ao::audio::backend::detail::test
     CHECK(conflictRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("PipeWireFormatParsing - partial legacy constraints retain facts through a constraint-preserving bijection",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - partial legacy constraints retain facts through a constraint-preserving bijection")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto roles = std::to_array<std::uint32_t>(
@@ -1153,8 +1136,7 @@ namespace ao::audio::backend::detail::test
     CHECK(bytes == expected);
   }
 
-  TEST_CASE("PipeWireFormatParsing - identified unsupported roles are not erased into unknown positions",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - identified unsupported roles are not erased into unknown positions")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const roles = std::to_array<std::uint32_t>(
@@ -1187,7 +1169,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 2, duplicateAux)));
   }
 
-  TEST_CASE("PipeWireFormatParsing - repeated silent NA remains an unsupported constraint", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - repeated silent NA remains an unsupported constraint")
   {
     auto buffer = std::array<std::byte, 1024>{};
 
@@ -1418,7 +1400,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - custom channel ids are unsupported role constraints", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - custom channel ids are unsupported role constraints")
   {
     static_assert(SPA_AUDIO_CHANNEL_START_Custom == 0x10000U);
     auto buffer = std::array<std::byte, 1024>{};
@@ -1520,8 +1502,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireFormatParsing - mixed known and custom positions retain assigned role constraints",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - mixed known and custom positions retain assigned role constraints")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const roles = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, 0x10000U, SPA_AUDIO_CHANNEL_RL, 0x10001U});
@@ -1542,8 +1523,7 @@ namespace ao::audio::backend::detail::test
     CHECK(refusedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("PipeWireFormatParsing - zero-source quad custom refresh keeps identity transport unmapped",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - zero-source quad custom refresh keeps identity transport unmapped")
   {
     auto initialBuffer = std::array<std::byte, 1024>{};
     auto currentBuffer = std::array<std::byte, 1024>{};
@@ -1585,8 +1565,7 @@ namespace ao::audio::backend::detail::test
     CHECK(bytes == expected);
   }
 
-  TEST_CASE("PipeWireFormatParsing - reserved position gaps and the invalid sentinel remain malformed",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - reserved position gaps and the invalid sentinel remain malformed")
   {
     auto buffer = std::array<std::byte, 1024>{};
 
@@ -1601,8 +1580,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(parseRawStreamObservation(nativeFormat(buffer, SPA_AUDIO_FORMAT_S16_LE, 2, duplicateCustom)));
   }
 
-  TEST_CASE("PipeWireFormatParsing - ordinary mask-zero stereo retains its offer without proving source roles",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - ordinary mask-zero stereo retains its offer without proving source roles")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const roles = std::to_array<std::uint32_t>({SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR});
@@ -1616,8 +1594,7 @@ namespace ao::audio::backend::detail::test
     CHECK(deliveryRes->channelDelivery.isMapped);
   }
 
-  TEST_CASE("PipeWireFormatParsing - a short native position array cannot describe a complete stream",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - a short native position array cannot describe a complete stream")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto builder = ::spa_pod_builder{};
@@ -1642,8 +1619,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(parseRawStreamObservation(pod));
   }
 
-  TEST_CASE("PipeWireFormatParsing - invalid geometry layout and empty encoding cannot build an offer",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireFormatParsing - invalid geometry layout and empty encoding cannot build an offer")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto const encodings = std::to_array({SampleEncoding::Signed16Le});

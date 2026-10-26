@@ -56,8 +56,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("LayoutHost - commit replaces widget trees and fences stale state writes",
-            "[gtk][unit][layout][container][async]")
+  TEST_CASE("LayoutHost - commit replaces widget trees and fences stale state writes")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
@@ -219,7 +218,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutHost - shared track stack handoff is atomic across layout replacement", "[gtk][unit][layout]")
+  TEST_CASE("LayoutHost - shared track stack handoff is atomic across layout replacement")
   {
     [[maybe_unused]] auto const appPtr = Gtk::Application::create("io.github.aobus.layout_handoff_test");
     auto runtimeFixture = ao::gtk::test::GtkRuntimeFixture{};

@@ -185,7 +185,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("SeekControlWidget - idle state has a disabled zeroed styled scale", "[gtk][unit][playback]")
+  TEST_CASE("SeekControlWidget - idle state has a disabled zeroed styled scale")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -202,7 +202,7 @@ namespace ao::gtk::test
     CHECK_FALSE(scale->get_sensitive());
   }
 
-  TEST_CASE("SeekControlWidget - exposes an accessible label for the seek scale", "[gtk][unit][playback]")
+  TEST_CASE("SeekControlWidget - exposes an accessible label for the seek scale")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -227,7 +227,7 @@ namespace ao::gtk::test
     CHECK(hasAccessibleLabel(*scale, expectedLabel));
   }
 
-  TEST_CASE("TimeLabel - idle state has template text and style", "[gtk][unit][playback]")
+  TEST_CASE("TimeLabel - idle state has template text and style")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -249,7 +249,7 @@ namespace ao::gtk::test
     CHECK(widthRequest > 0);
   }
 
-  TEST_CASE("TimeLabel - ticks only while mapped and playing", "[gtk][unit][playback]")
+  TEST_CASE("TimeLabel - ticks only while mapped and playing")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -279,7 +279,7 @@ namespace ao::gtk::test
     CHECK_FALSE(timeLabel.isTickActive());
   }
 
-  TEST_CASE("SeekControlWidget - ticks only while mapped and playing", "[gtk][unit][playback]")
+  TEST_CASE("SeekControlWidget - ticks only while mapped and playing")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -313,7 +313,7 @@ namespace ao::gtk::test
   // view model. The constructor body must not overwrite it with template/reset
   // values, or a layout rebuilt during playback stays blank until the next
   // transport change.
-  TEST_CASE("TimeLabel - construction during playback keeps live state", "[gtk][unit][playback]")
+  TEST_CASE("TimeLabel - construction during playback keeps live state")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -339,7 +339,7 @@ namespace ao::gtk::test
     CHECK(timeLabel.isTickActive());
   }
 
-  TEST_CASE("SeekControlWidget - construction during playback keeps live state", "[gtk][unit][playback]")
+  TEST_CASE("SeekControlWidget - construction during playback keeps live state")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -366,8 +366,7 @@ namespace ao::gtk::test
     CHECK(seekControl.isTickActive());
   }
 
-  TEST_CASE("SeekControlWidget - debounce commits the captured value instead of the live scale",
-            "[gtk][integration][playback][async]")
+  TEST_CASE("SeekControlWidget - debounce commits the captured value instead of the live scale")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -395,7 +394,7 @@ namespace ao::gtk::test
     CHECK(playback.snapshot().transport.elapsed == requestedElapsed);
   }
 
-  TEST_CASE("SeekControlWidget - destruction retires a pending final seek", "[gtk][integration][playback][async]")
+  TEST_CASE("SeekControlWidget - destruction retires a pending final seek")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = GtkRuntimeFixture{};
@@ -432,8 +431,7 @@ namespace ao::gtk::test
     CHECK(playback.snapshot().transport.elapsed == before.elapsed);
   }
 
-  TEST_CASE("SeekControlWidget - pending final keeps the playing thumb stable without a frame tick",
-            "[gtk][unit][playback][async]")
+  TEST_CASE("SeekControlWidget - pending final keeps the playing thumb stable without a frame tick")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -467,8 +465,7 @@ namespace ao::gtk::test
     CHECK_FALSE(seekControl.isTickActive());
   }
 
-  TEST_CASE("SeekControlWidget - replacing a pending seek leaves a fresh native gesture usable",
-            "[gtk][integration][playback][async]")
+  TEST_CASE("SeekControlWidget - replacing a pending seek leaves a fresh native gesture usable")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -508,8 +505,7 @@ namespace ao::gtk::test
     checkFrameAlignedElapsed(playback.snapshot().transport.elapsed, targetElapsed);
   }
 
-  TEST_CASE("SeekControlWidget - native range arbitration does not retarget a held seek",
-            "[gtk][integration][playback][async]")
+  TEST_CASE("SeekControlWidget - native range arbitration does not retarget a held seek")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -555,8 +551,7 @@ namespace ao::gtk::test
     checkFrameAlignedElapsed(playback.snapshot().transport.elapsed, targetElapsed);
   }
 
-  TEST_CASE("SeekControlWidget - native interruption permits a fresh gesture without release",
-            "[gtk][integration][playback][async]")
+  TEST_CASE("SeekControlWidget - native interruption permits a fresh gesture without release")
   {
     requireOwnedGtkDisplay();
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();

@@ -65,8 +65,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("TrackDetailPerformance - single selection resolves the owning ordered section",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - single selection resolves the owning ordered section")
   {
     auto env = TrackDetailPerformanceFixture{};
     auto const id = env.addTrack(library::test::TrackSpec{.title = "Goldberg", .credits = gouldPianoSmith()});
@@ -81,8 +80,7 @@ namespace ao::rt::test
     CHECK_FALSE(snap.credits[kPerformer].mixed);
   }
 
-  TEST_CASE("TrackDetailPerformance - an empty single list has present common sections",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - an empty single list has present common sections")
   {
     auto env = TrackDetailPerformanceFixture{};
     auto const id = env.addTrack(library::test::TrackSpec{.title = "No credits"});
@@ -99,8 +97,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackDetailPerformance - identical lists aggregate to one common section",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - identical lists aggregate to one common section")
   {
     auto env = TrackDetailPerformanceFixture{};
     auto const id1 = env.addTrack(library::test::TrackSpec{.title = "First", .credits = gouldPianoSmith()});
@@ -116,8 +113,7 @@ namespace ao::rt::test
     CHECK_FALSE(snap.credits[kPerformer].mixed);
   }
 
-  TEST_CASE("TrackDetailPerformance - identical empty lists aggregate to common empty sections",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - identical empty lists aggregate to common empty sections")
   {
     auto env = TrackDetailPerformanceFixture{};
     auto const id1 = env.addTrack(library::test::TrackSpec{.title = "First"});
@@ -135,8 +131,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackDetailPerformance - order role multiplicity and absence differences report mixed sections",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - order role multiplicity and absence differences report mixed sections")
   {
     auto env = TrackDetailPerformanceFixture{};
     auto differing = std::vector<library::Credit>{};
@@ -173,8 +168,7 @@ namespace ao::rt::test
     CHECK_FALSE(snap.credits[kPerformer].optValue);
   }
 
-  TEST_CASE("TrackDetailPerformance - common complete conductors remain available with mixed performers",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - common complete conductors remain available with mixed performers")
   {
     auto env = TrackDetailPerformanceFixture{};
     auto const conductors =
@@ -199,8 +193,7 @@ namespace ao::rt::test
     CHECK_FALSE(snap.credits[kConductor].mixed);
   }
 
-  TEST_CASE("TrackDetailPerformance - no selection keeps every section absent",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - no selection keeps every section absent")
   {
     auto env = TrackDetailPerformanceFixture{};
     env.addTrack(library::test::TrackSpec{.title = "Ignored"});
@@ -216,8 +209,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackDetailPerformance - refreshes the credit section after an intersecting mutation",
-            "[runtime][unit][projection][track-detail]")
+  TEST_CASE("TrackDetailPerformance - refreshes the credit section after an intersecting mutation")
   {
     auto env = TrackDetailPerformanceFixture{};
     auto const id = env.addTrack(library::test::TrackSpec{.title = "Goldberg", .credits = gouldPianoSmith()});

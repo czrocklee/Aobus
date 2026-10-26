@@ -17,8 +17,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("ContainerErrorStates - container components render validation error states",
-            "[gtk][unit][layout][container]")
+  TEST_CASE("ContainerErrorStates - container components render validation error states")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();

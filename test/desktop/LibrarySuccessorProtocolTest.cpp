@@ -18,8 +18,7 @@
 
 namespace ao::desktop::test
 {
-  TEST_CASE("LibrarySuccessorProtocol - ordinary arguments remain unclaimed in process order",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySuccessorProtocol - ordinary arguments remain unclaimed in process order")
   {
     auto const arguments = std::array<std::string_view, 3>{"--display=:7", "music.aobus", "--name=Aobus"};
 
@@ -30,8 +29,7 @@ namespace ao::desktop::test
     CHECK(res->remainingArguments == std::vector<std::string>{"--display=:7", "music.aobus", "--name=Aobus"});
   }
 
-  TEST_CASE("LibrarySuccessorProtocol - valid paired request round-trips normalized root and scan intent",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySuccessorProtocol - valid paired request round-trips normalized root and scan intent")
   {
     auto const fixture = ao::test::TempDir{};
     auto const root = (fixture.path() / "music" / ".." / "library").lexically_normal();
@@ -65,8 +63,7 @@ namespace ao::desktop::test
     CHECK(roundTripRes->remainingArguments.empty());
   }
 
-  TEST_CASE("LibrarySuccessorProtocol - malformed private arguments fail before frontend startup",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibrarySuccessorProtocol - malformed private arguments fail before frontend startup")
   {
     auto const fixture = ao::test::TempDir{};
     auto const rootText = utility::pathToUtf8(fixture.path());

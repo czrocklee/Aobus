@@ -12,7 +12,7 @@
 
 namespace ao::audio::test
 {
-  TEST_CASE("losslessPcmEncodings - integer candidates preserve source precision", "[audio][unit][decoder]")
+  TEST_CASE("losslessPcmEncodings - integer candidates preserve source precision")
   {
     SECTION("16-bit source prefers its native container")
     {
@@ -43,7 +43,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("losslessPcmEncodings - float source cannot be converted to integer", "[audio][unit][decoder]")
+  TEST_CASE("losslessPcmEncodings - float source cannot be converted to integer")
   {
     auto const encodings =
       detail::losslessPcmEncodings(SignalFormat{.precisionBits = 32, .sampleKind = SampleKind::FloatingPoint});
@@ -51,7 +51,7 @@ namespace ao::audio::test
     CHECK(encodings == std::vector{SampleEncoding::Float32Le});
   }
 
-  TEST_CASE("losslessPcmEncodings - unsupported precision has no output candidate", "[audio][unit][decoder]")
+  TEST_CASE("losslessPcmEncodings - unsupported precision has no output candidate")
   {
     CHECK(detail::losslessPcmEncodings(SignalFormat{.precisionBits = 0}).empty());
     CHECK(detail::losslessPcmEncodings(SignalFormat{.precisionBits = 33}).empty());
@@ -59,7 +59,7 @@ namespace ao::audio::test
       detail::losslessPcmEncodings(SignalFormat{.precisionBits = 24, .sampleKind = SampleKind::FloatingPoint}).empty());
   }
 
-  TEST_CASE("preferredLosslessPcmEncoding - returns the first lossless candidate", "[audio][unit][decoder]")
+  TEST_CASE("preferredLosslessPcmEncoding - returns the first lossless candidate")
   {
     CHECK(detail::preferredLosslessPcmEncoding(SignalFormat{.precisionBits = 16}) == SampleEncoding::Signed16Le);
     CHECK(detail::preferredLosslessPcmEncoding(SignalFormat{.precisionBits = 24}) == SampleEncoding::Signed24PackedLe);

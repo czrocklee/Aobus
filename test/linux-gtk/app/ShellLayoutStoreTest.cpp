@@ -17,8 +17,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ShellLayoutStore - a session with no configuration directory uses the built-in presets",
-            "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - a session with no configuration directory uses the built-in presets")
   {
     // An empty directory would resolve preset files relative to the working
     // directory, so this answers "not customized" instead.
@@ -37,7 +36,7 @@ namespace ao::gtk::test
     CHECK_FALSE(std::filesystem::exists("classic.yaml"));
   }
 
-  TEST_CASE("ShellLayoutStore - loads and saves layout documents", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - loads and saves layout documents")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
@@ -76,7 +75,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutStore - rejected reads report exact errors and preserve bytes", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - rejected reads report exact errors and preserve bytes")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
@@ -127,7 +126,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutStore - failed saves preserve the existing layout", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - failed saves preserve the existing layout")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
@@ -171,7 +170,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutStore - remove deletes a layout idempotently", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - remove deletes a layout idempotently")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
@@ -188,7 +187,7 @@ namespace ao::gtk::test
     REQUIRE(store.remove("classic"));
   }
 
-  TEST_CASE("ShellLayoutStore - isNewer reports only a preset a newer version saved", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - isNewer reports only a preset a newer version saved")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
@@ -236,7 +235,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutStore - remove keeps a preset a newer version saved", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - remove keeps a preset a newer version saved")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";
@@ -282,7 +281,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ShellLayoutStore - remove keeps a preset it cannot open", "[gtk][unit][app][layout]")
+  TEST_CASE("ShellLayoutStore - remove keeps a preset it cannot open")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const layoutsDir = std::filesystem::path{tempDir.path()} / "layouts";

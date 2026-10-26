@@ -32,8 +32,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PreparedNextRegistry - activating a replacement retires the previous commitment",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PreparedNextRegistry - activating a replacement retires the previous commitment", "[concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 1, 4));
@@ -49,8 +48,7 @@ namespace ao::rt::test
     CHECK(registry.retiredCount() == 1);
   }
 
-  TEST_CASE("PreparedNextRegistry - complete batches maintain independent Bound and Gap anchors",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PreparedNextRegistry - complete batches maintain independent Bound and Gap anchors")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 1, 4));
@@ -72,8 +70,7 @@ namespace ao::rt::test
     CHECK(optSecondAnchor->anchorIndex() == 5);
   }
 
-  TEST_CASE("PreparedNextRegistry - exact disarm acknowledgement forgets active and retired tokens",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PreparedNextRegistry - exact disarm acknowledgement forgets active and retired tokens", "[concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
@@ -91,7 +88,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PreparedNextRegistry - retired winner closes the window while unknown token changes nothing",
-            "[runtime][unit][playback-cursor][concurrency]")
+            "[concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
@@ -111,8 +108,7 @@ namespace ao::rt::test
     CHECK_FALSE(registry.activeToken());
   }
 
-  TEST_CASE("PreparedNextRegistry - runtime barrier clears only strictly older issuance generations",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PreparedNextRegistry - runtime barrier clears only strictly older issuance generations", "[concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 3));
@@ -131,8 +127,7 @@ namespace ao::rt::test
     CHECK(registry.size() == 1);
   }
 
-  TEST_CASE("PreparedNextRegistry - equal-generation replacement survives an older barrier",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PreparedNextRegistry - equal-generation replacement survives an older barrier", "[concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
@@ -146,8 +141,7 @@ namespace ao::rt::test
     CHECK_FALSE(registry.resolveWinner(kFirstToken));
   }
 
-  TEST_CASE("PreparedNextRegistry - invalidation retains an unacknowledged race winner",
-            "[runtime][unit][playback-cursor][concurrency]")
+  TEST_CASE("PreparedNextRegistry - invalidation retains an unacknowledged race winner", "[concurrency]")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::gap(kFirstTrack, 2, 3));
@@ -164,8 +158,7 @@ namespace ao::rt::test
     CHECK(registry.size() == 0);
   }
 
-  TEST_CASE("PreparedNextRegistry - invalidation forgets a token with exact disarm proof",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PreparedNextRegistry - invalidation forgets a token with exact disarm proof")
   {
     auto registry = PreparedNextRegistry{};
     registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 1));

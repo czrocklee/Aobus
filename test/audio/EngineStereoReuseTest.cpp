@@ -70,7 +70,7 @@ namespace ao::audio::test
   } // namespace
 
   TEST_CASE("Engine - stereo identity opt-in splices real WAV or FLAC with ALAC without rewriting source facts",
-            "[audio][integration][engine][gapless][concurrency]")
+            "[concurrency]")
   {
     bool const identifiedFirst = GENERATE(false, true);
     bool const identifiedFlac = GENERATE(false, true);
@@ -213,8 +213,7 @@ namespace ao::audio::test
     CHECK(advancedEvents.back().generation == thirdRes->generation);
   }
 
-  TEST_CASE("Engine - strict stereo backend drains real FLAC and ALAC without promoting the successor",
-            "[audio][integration][engine][gapless][concurrency]")
+  TEST_CASE("Engine - strict stereo backend drains real FLAC and ALAC without promoting the successor", "[concurrency]")
   {
     bool const flacFirst = GENERATE(false, true);
     CAPTURE(flacFirst);
@@ -279,8 +278,7 @@ namespace ao::audio::test
     CHECK(failed.count() == 0);
   }
 
-  TEST_CASE("Engine - default strict stereo backend drains mask aliases but retains equal-mask reuse",
-            "[audio][unit][engine][gapless][concurrency]")
+  TEST_CASE("Engine - default strict stereo backend drains mask aliases but retains equal-mask reuse", "[concurrency]")
   {
     auto const masks = GENERATE(std::pair<std::uint32_t, std::uint32_t>{0, 3},
                                 std::pair<std::uint32_t, std::uint32_t>{3, 0},
@@ -342,8 +340,7 @@ namespace ao::audio::test
     CHECK(std::ranges::count(backend->events(), std::string{"open"}, &FakeCapturingBackend::Event::name) == 1);
   }
 
-  TEST_CASE("FakeCapturingBackend - stereo identity opt-in rejects other PCM geometry and known roles",
-            "[audio][unit][backend]")
+  TEST_CASE("FakeCapturingBackend - stereo identity opt-in rejects other PCM geometry and known roles")
   {
     auto const installed =
       PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 3};
@@ -404,8 +401,7 @@ namespace ao::audio::test
     CHECK_FALSE(backend->canReuseFormat(installed, candidate));
   }
 
-  TEST_CASE("Engine - stereo identity reuse retains the endpoint precision veto behind a wider client",
-            "[audio][unit][engine][gapless][concurrency]")
+  TEST_CASE("Engine - stereo identity reuse retains the endpoint precision veto behind a wider client", "[concurrency]")
   {
     bool const promoteFirst = GENERATE(false, true);
     CAPTURE(promoteFirst);
@@ -494,8 +490,7 @@ namespace ao::audio::test
     CHECK(std::ranges::count(backend->events(), std::string{"open"}, &FakeCapturingBackend::Event::name) == 1);
   }
 
-  TEST_CASE("Engine - lookahead adoption rechecks withdrawn backend stereo identity permission",
-            "[audio][unit][engine][gapless][concurrency]")
+  TEST_CASE("Engine - lookahead adoption rechecks withdrawn backend stereo identity permission", "[concurrency]")
   {
     auto const firstFormat =
       PcmFormat{.sampleRate = 1000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 3};

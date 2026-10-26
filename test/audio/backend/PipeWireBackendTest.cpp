@@ -36,8 +36,7 @@ namespace ao::audio::backend::test
     }
   } // namespace
 
-  TEST_CASE("PipeWireBackend - reuse query preserves exact identity and only admits bounded stereo aliases",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireBackend - reuse query preserves exact identity and only admits bounded stereo aliases")
   {
     struct ReuseCase final
     {
@@ -137,8 +136,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - zero geometry is refused as invalid input before native stream work",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireBackend - zero geometry is refused as invalid input before native stream work")
   {
     auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
     auto target = ::ao::audio::test::NoopRenderTarget{};
@@ -168,7 +166,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - geometry refusal outranks layout and precision refusals", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireBackend - geometry refusal outranks layout and precision refusals")
   {
     auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
     auto target = ::ao::audio::test::NoopRenderTarget{};
@@ -196,8 +194,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - an unrepresentable source is refused as a track incompatibility",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireBackend - an unrepresentable source is refused as a track incompatibility")
   {
     auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
     auto target = ::ao::audio::test::NoopRenderTarget{};
@@ -245,8 +242,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - prewarm retains admitted complete sets without native negotiation",
-            "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireBackend - prewarm retains admitted complete sets without native negotiation")
   {
     // prewarmFormatHint is non-blocking and performs no native open or
     // negotiation, so a synthetic device observes only local admission policy.
@@ -270,7 +266,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("PipeWireBackend - malformed speaker sets are local track refusals", "[audio][unit][pipewire]")
+  TEST_CASE("PipeWireBackend - malformed speaker sets are local track refusals")
   {
     auto backend = PipeWireBackend{syntheticSink(), kProfileShared};
     auto target = ::ao::audio::test::NoopRenderTarget{};

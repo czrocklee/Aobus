@@ -22,8 +22,7 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  TEST_CASE("AllTracksSource - reload and track change notifications update source state",
-            "[runtime][unit][source][all-tracks]")
+  TEST_CASE("AllTracksSource - reload and track change notifications update source state")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const& store = libraryFixture.library().tracks();
@@ -117,8 +116,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AllTracksSource - one collection transaction publishes one sequential batch",
-            "[runtime][unit][source][all-tracks]")
+  TEST_CASE("AllTracksSource - one collection transaction publishes one sequential batch")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto source = AllTracksSource{libraryFixture.library().tracks()};
@@ -153,8 +151,7 @@ namespace ao::rt::test
     CHECK(source.trackIdAt(3) == TrackId{30});
   }
 
-  TEST_CASE("AllTracksSource - mixed changes update surviving identities at final coordinates",
-            "[runtime][unit][source][all-tracks]")
+  TEST_CASE("AllTracksSource - mixed changes update surviving identities at final coordinates")
   {
     auto fixture = MusicLibraryFixture{};
     auto source = AllTracksSource{fixture.library().tracks()};
@@ -187,8 +184,7 @@ namespace ao::rt::test
     CHECK(listener.batches.empty());
   }
 
-  TEST_CASE("AllTracksSource - metadata-only changes publish ascending coalesced update ranges",
-            "[runtime][unit][source][all-tracks]")
+  TEST_CASE("AllTracksSource - metadata-only changes publish ascending coalesced update ranges")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto source = AllTracksSource{libraryFixture.library().tracks()};
@@ -257,8 +253,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("AllTracksSource - invalidation clears and permanently fences its snapshot",
-            "[runtime][unit][source][all-tracks]")
+  TEST_CASE("AllTracksSource - invalidation clears and permanently fences its snapshot")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Stored");

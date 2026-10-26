@@ -12,7 +12,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackPropertiesFormSpec - projects editable metadata rows", "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormSpec - projects editable metadata rows")
   {
     using E = TrackPropertiesFormEditorKind;
     using F = rt::TrackField;
@@ -44,7 +44,7 @@ namespace ao::uimodel::test
     CHECK(spec.creditsLabel == "Credits");
   }
 
-  TEST_CASE("TrackPropertiesFormSpec - projects readonly technical property rows", "[uimodel][unit][property]")
+  TEST_CASE("TrackPropertiesFormSpec - projects readonly technical property rows")
   {
     using E = TrackPropertiesFormEditorKind;
     using F = rt::TrackField;
@@ -65,8 +65,7 @@ namespace ao::uimodel::test
     CHECK(spec.propertyRows == expected);
   }
 
-  TEST_CASE("TrackPropertiesFormSpec - owns labels from a temporary locale catalog",
-            "[uimodel][unit][property][localization]")
+  TEST_CASE("TrackPropertiesFormSpec - owns labels from a temporary locale catalog")
   {
     auto const spec = buildTrackPropertiesFormSpec(ao::test::messageCatalog("de-DE"));
 

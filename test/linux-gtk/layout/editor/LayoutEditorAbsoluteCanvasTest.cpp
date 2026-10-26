@@ -36,7 +36,7 @@ namespace ao::gtk::layout::editor::test
   using namespace uimodel;
   using ao::gtk::test::makeRuntime;
 
-  TEST_CASE("absoluteCanvas - builds positioned child containers", "[gtk][unit][layout-editor]")
+  TEST_CASE("absoluteCanvas - builds positioned child containers")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
@@ -122,8 +122,7 @@ namespace ao::gtk::layout::editor::test
     }
   }
 
-  TEST_CASE("absoluteCanvas - geometry allocates children at configured coordinates",
-            "[gtk][unit][absolute-canvas][geometry]")
+  TEST_CASE("absoluteCanvas - geometry allocates children at configured coordinates")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 

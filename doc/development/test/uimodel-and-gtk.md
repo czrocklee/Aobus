@@ -209,8 +209,8 @@ component's own contract: custom flow layout, constrained grids, split/collapsib
 panes, image fitting, responsive allocation classes, or declarative size-request
 properties.
 
-Mark geometry tests with the `[geometry]` tag or an explicit section name so
-future cleanup can distinguish them from incidental gtkmm/default-size
+Give geometry tests an explicit section name so future cleanup can
+distinguish them from incidental gtkmm/default-size
 assertions.
 
 Good geometry tests:
@@ -260,9 +260,9 @@ Do not grow a test framework.
 
 ## Heavy coordinator tests
 
-Keep only a few end-to-end scan or import/export scenarios, tagged
-`[integration]`. Test coordinator control flow and lifecycle through controlled
-seams as `[unit]`; see [scope selection](layer-selection.md#scope-and-independent-metadata).
+Keep only a few end-to-end scan or import/export scenarios. Test coordinator
+control flow and lifecycle through controlled
+seams; see [assertion boundaries](layer-selection.md#assertion-boundaries).
 
 ## Writing testable GTK code
 
@@ -290,7 +290,7 @@ guidelines depend on keeping logic out of widgets:
 - Semantics that can live in a view model are tested there, not at the widget.
 - Every `SECTION` makes at least one assertion about observable behavior.
 - No gtkmm round-trips, allocation sizes, or magic-number constants.
-- Geometry assertions, if any, are tagged `[geometry]` and test a component
+- Geometry assertions, if any, test a component
   contract.
 - Reflection/gesture-poking, if used, asserts the final effect.
 - Reused helpers come from the focused application, widget, layout, or runtime

@@ -70,7 +70,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("PerformanceReport - baseline JSON preserves records and escaped metric values", "[perf][unit][report]")
+  TEST_CASE("PerformanceReport - baseline JSON preserves records and escaped metric values")
   {
     auto const records = sampleBaselineRecords();
     auto output = std::ostringstream{};
@@ -78,7 +78,7 @@ namespace ao::rt::test
     CHECK(output.str() == kExpectedBaseline);
   }
 
-  TEST_CASE("PerformanceReport - incomplete baseline data cannot publish output", "[perf][unit][report]")
+  TEST_CASE("PerformanceReport - incomplete baseline data cannot publish output")
   {
     auto records = std::vector{BaselineRecord{.benchmark = "phase", .metrics = {{"count", 1, "item"}}}};
 
@@ -115,7 +115,7 @@ namespace ao::rt::test
     CHECK(output.str() == "sentinel");
   }
 
-  TEST_CASE("PerformanceReport - baseline files require a fresh writable destination", "[perf][unit][report]")
+  TEST_CASE("PerformanceReport - baseline files require a fresh writable destination")
   {
     auto const directory = ao::test::TempDir{};
     auto const path = directory.path() / utility::pathFromUtf8("报告.json");
@@ -137,7 +137,7 @@ namespace ao::rt::test
     CHECK_FALSE(std::filesystem::exists(emptyPath));
   }
 
-  TEST_CASE("PerformanceReport - insertion and flush failures reject the baseline", "[perf][unit][report]")
+  TEST_CASE("PerformanceReport - insertion and flush failures reject the baseline")
   {
     auto const records = sampleBaselineRecords();
 

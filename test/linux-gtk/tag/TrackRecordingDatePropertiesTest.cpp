@@ -39,8 +39,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackPropertiesDialog - invalid recording date blocks every field until corrected",
-            "[gtk][integration][tag][dialog][recording-date]")
+  TEST_CASE("TrackPropertiesDialog - invalid recording date blocks every field until corrected")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -90,8 +89,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("TrackPropertiesDialog - mixed recording date remains unchanged during another field edit",
-            "[gtk][integration][tag][dialog][recording-date]")
+  TEST_CASE("TrackPropertiesDialog - mixed recording date remains unchanged during another field edit")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto ids = std::vector<TrackId>{};

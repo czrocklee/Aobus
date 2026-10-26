@@ -8,74 +8,100 @@ id: development.test.naming-and-assertion
 Prefer:
 
 ```cpp
-TEST_CASE("Component - behavior under condition", "[layer][scope][component]")
+TEST_CASE("Component - behavior under condition")
 ```
 
 Function-level tests may use:
 
 ```cpp
-TEST_CASE("functionName returns result under condition", "[layer][unit][component]")
+TEST_CASE("functionName returns result under condition")
 ```
 
 Examples:
 
 ```cpp
-TEST_CASE("NotificationService - unchanged keyed report does not publish an update",
-          "[runtime][unit][notification]")
+TEST_CASE("NotificationService - unchanged keyed report does not publish an update")
 
-TEST_CASE("ActivityStatusFeedProjection - pinned info remains in detail after compact hides",
-          "[uimodel][unit][activity-status]")
+TEST_CASE("ActivityStatusFeedProjection - pinned info remains in detail after compact hides")
 
-TEST_CASE("TrackPresentationButton - selecting preset updates active list presentation",
-          "[gtk][integration][track-presentation]")
+TEST_CASE("TrackPresentationButton - selecting preset updates active list presentation")
 
-TEST_CASE("TrackFieldGrid - collapsed metadata keeps custom rows hidden",
-          "[gtk][unit][track-field-grid]")
+TEST_CASE("TrackFieldGrid - collapsed metadata keeps custom rows hidden")
 ```
 
 Avoid vague names such as `"ActionRegistry"`, `"Library Export/Import Cycle"`, or `"Simple Equal Match"` for new tests. Legacy tests may exist; do not copy weak naming.
 
 ## Tags
 
-Every case starts with `[layer][scope][component]`:
+An ordinary case takes no tag at all: the name states the behavior, and the
+[owning layer](layer-selection.md) is a design choice expressed by placement,
+not by tags.
 
-- **Layer** is the testing layer from [layer selection](layer-selection.md):
-  the owning module for `lib` tests (`[core]`, `[library]`, `[query]`, `[audio]`,
-  `[media]`, `[lmdb]`, or `[utility]`), otherwise `[runtime]`, `[uimodel]`,
-  `[platform]` for application-platform adapters, `[gtk]`, `[winui]`, `[tui]`,
-  `[cli]`, or `[perf]`.
-- **Scope** is exactly one of `[unit]` or `[integration]`; see
-  [scope and metadata](layer-selection.md#scope-and-independent-metadata).
-- **Component** names the domain, such as `[track-store]`, `[serializer]`, or
-  `[import-export]`. A scope, descriptive, or hidden tag cannot stand in for it.
+The only supported markers are:
 
-Further tags are optional and need a real selection use:
-
-- Descriptive markers such as `[regression]`, `[workflow]`, or `[smoke]` are
-  retired: they select nothing, and the test name states the protected behavior.
 - `[concurrency]` marks the contracts in
   [concurrency and sanitizer validation](concurrency-and-sanitizer.md) and
   selects the `--concurrency` gate.
-- `[async]` marks owner-thread asynchronous ordering and lifetime contracts
-  from the same document; it is also the component of the async runtime's own
-  tests.
-- `[stress]` marks deliberate repetition and requires `[concurrency]`.
-- A hidden tag such as `[.manual]` opts out of automatic runs. Reserve it for
-  real hardware or deliberate manual execution; `[integration]` does not imply it.
+- `[.manual]` hides a case from automatic runs. Reserve it for real hardware or
+  deliberate manual execution whose prerequisites an automated run cannot
+  provide.
+
+A tagged case passes its markers as the second, literal argument:
 
 ```cpp
-"[runtime][unit][async][concurrency][stress]"
-"[runtime][integration][import-export][yaml]"
+TEST_CASE("PipeWireMonitor - concurrent subscriptions retain distinct registrations",
+          "[concurrency]")
 ```
 
-Use singular kebab-case names (`[track-store]`, `[preference]`), but keep proper
-names and literal identifiers such as `[windows]` or the CLI `[stats]` command.
-Avoid duplicate and synonymous tags.
+Use name globs to select related cases.
+Catch2 treats commas as OR separators even inside shell quotes. Escape every
+literal comma as `\,` when selecting a name that contains commas:
 
-`./ao test-audit` checks the prefix, the single scope, spelling, duplicates,
-`[stress]` pairing, and retired tags; `./ao hygiene` enforces it for changed test files. It cannot
-judge whether the chosen scope matches the contract, and it also accepts `tag`
-as a layer.
+```bash
+./ao test --core --list "FieldCatalog - finds descriptors by canonical name\, alias\, and field"
+```
+
+`TEMPLATE_TEST_CASE` requires a tag argument: pass an empty string for an
+untagged template case or a string containing the supported markers.
+
+```cpp
+TEMPLATE_TEST_CASE("FileTimeConversion - a UTC-scale file clock maps leap seconds onto the Unix scale",
+                   "",
+                   std::nano,
+                   (std::ratio<1, 10'000'000>))
+```
+
+Use literal string arguments only. Registration arguments assembled from
+macros, concatenation, or other expressions fail the audit as unsupported
+syntax, as do invocations of unsupported public registration macro families.
+Backslash-newline line splices are honored outside invocations, so a comment,
+identifier, or literal continued by a splice is still recognized; a
+registration invocation that itself contains a splice — in the macro name,
+between the macro and its parenthesis, or in an argument — fails the audit
+as unsupported syntax instead of being silently missed.
+
+`./ao test-audit` discovers registrations with one content detector shared by
+default, directory, explicit-file, and hygiene scopes. It scans the governed
+test sources (the exact lowercase suffixes `.cpp`, `.mm`, `.h`, `.hpp`, and
+`.def` under `test/`, excluding the lint checker fixtures under `test/lint/`);
+this is the same case-sensitive suffix contract used by the other source tools,
+not host-filesystem case folding. Uppercase suffixes such as `.CPP` and `.HPP`
+are outside that governed universe; registration filenames must use the
+conventional lowercase suffixes on every host. CMake rejects case-variant source
+extensions such as `.CPP` in registered test targets so they cannot compile
+outside this audit contract. In candidate files, comments, strings,
+character literals, and custom raw strings outside invocations are not
+registrations. The scan honors backslash-newline line splices for that
+lexical detection — continued comments stay comments, and raw string bodies
+keep their original spelling, so a splice cannot forge a closing delimiter. Registrations must live in `*Test.cpp`, `*Test.mm`, or
+`*Benchmark.cpp` files. The source audit rejects registrations in headers,
+include fragments, and other discovered filenames such as `FooSupport.cpp`.
+`./ao test-audit` and the source audit in `./ao hygiene` check
+registration syntax, names, markers, and placement without requiring a build
+tree. After a successful build, `./ao check` reconciles whole-project discovery
+with that build's fresh CMake-configured owner/disabled manifest. Only that
+configured check establishes ownership completeness; standalone source audits
+do not detect a missing CMake owner.
 
 ```bash
 ./ao test-audit test/query

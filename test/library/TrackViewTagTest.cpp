@@ -28,7 +28,7 @@ namespace ao::library::test
 #endif
   } // namespace
 
-  TEST_CASE("TrackView - exposes tag bloom filters", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - exposes tag bloom filters")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0xCAFE;
@@ -38,7 +38,7 @@ namespace ao::library::test
     CHECK(view.tags().bloom() == 0xCAFE);
   }
 
-  TEST_CASE("TrackView - returns zero tag count without tags", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - returns zero tag count without tags")
   {
     auto const data = makeHotTrackViewData("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -46,7 +46,7 @@ namespace ao::library::test
     CHECK(view.tags().count() == 0);
   }
 
-  TEST_CASE("TrackView - iterates no tags when tag data is empty", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - iterates no tags when tag data is empty")
   {
     auto const data = makeHotTrackViewData("Test");
     auto const view = TrackView{data, std::span<std::byte const>{}};
@@ -54,7 +54,7 @@ namespace ao::library::test
     CHECK(view.tags().begin() == view.tags().end());
   }
 
-  TEST_CASE("TrackView - returns tag count with tags", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - returns tag count with tags")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -84,7 +84,7 @@ namespace ao::library::test
     CHECK(view.tags().count() == 2);
   }
 
-  TEST_CASE("TrackView - tag counts beyond 255 are not truncated", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - tag counts beyond 255 are not truncated")
   {
     constexpr std::uint16_t kTagCount = 300;
 
@@ -106,7 +106,7 @@ namespace ao::library::test
     CHECK(view.tags().has(DictionaryId{256}));
   }
 
-  TEST_CASE("TrackView - iterates tag IDs", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - iterates tag IDs")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -140,7 +140,7 @@ namespace ao::library::test
     CHECK(ids[1] == DictionaryId{20});
   }
 
-  TEST_CASE("TrackView - reports whether tag IDs exist", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - reports whether tag IDs exist")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;
@@ -167,7 +167,7 @@ namespace ao::library::test
     CHECK(view.tags().has(DictionaryId{30}) == false);
   }
 
-  TEST_CASE("TrackView - returns tag IDs by index", "[library][unit][track][tag]")
+  TEST_CASE("TrackView - returns tag IDs by index")
   {
     auto h = TrackHotHeader{};
     h.tagBloom = 0;

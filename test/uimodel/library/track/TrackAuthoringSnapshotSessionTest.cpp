@@ -25,8 +25,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackAuthoringSession snapshot - prepares an owning mixed baseline at one bound revision",
-            "[uimodel][unit][library-authoring]")
+  TEST_CASE("TrackAuthoringSession snapshot - prepares an owning mixed baseline at one bound revision")
   {
     auto fixture = TrackAuthoringFixture{2};
     auto const targetIds = std::array{fixture.trackIds()[1], fixture.trackIds()[0], fixture.trackIds()[1]};
@@ -56,8 +55,7 @@ namespace ao::uimodel::test
     CHECK(form.rowView(rt::TrackField::Title).mixed);
   }
 
-  TEST_CASE("TrackAuthoringSession snapshot - released baseline permits no-op and applied saves but not stale drafts",
-            "[uimodel][integration][library-authoring]")
+  TEST_CASE("TrackAuthoringSession snapshot - released baseline permits no-op and applied saves but not stale drafts")
   {
     auto fixture = TrackAuthoringFixture{1};
     auto form = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
@@ -114,7 +112,7 @@ namespace ao::uimodel::test
 
   TEST_CASE(
     "TrackAuthoringSession snapshot - a commit during baseline preparation keeps coherent old facts but is stale",
-    "[uimodel][integration][library-authoring][concurrency]")
+    "[concurrency]")
   {
     auto fixture = TrackAuthoringFixture{2};
     auto const targetIds = std::array{fixture.trackIds().front()};
@@ -149,8 +147,7 @@ namespace ao::uimodel::test
     CHECK(fixture.title(fixture.trackIds().back()) == "Other");
   }
 
-  TEST_CASE("TrackAuthoringSession snapshot - rejects foreign storage rather than binding the same local id",
-            "[uimodel][unit][library-authoring]")
+  TEST_CASE("TrackAuthoringSession snapshot - rejects foreign storage rather than binding the same local id")
   {
     auto fixture = TrackAuthoringFixture{1};
     auto foreign = TrackAuthoringFixture{1};
@@ -165,8 +162,7 @@ namespace ao::uimodel::test
     CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
   }
 
-  TEST_CASE("TrackAuthoringSession snapshot - retained old snapshot never silently rebinds after a commit",
-            "[uimodel][integration][library-authoring]")
+  TEST_CASE("TrackAuthoringSession snapshot - retained old snapshot never silently rebinds after a commit")
   {
     auto fixture = TrackAuthoringFixture{1};
     auto snapshot = fixture.library().snapshot();

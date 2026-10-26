@@ -71,8 +71,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackColumnController - teardown cancels queued updates while the column view survives",
-            "[gtk][unit][track-column][async]")
+  TEST_CASE("TrackColumnController - teardown cancels queued updates while the column view survives")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -104,8 +103,7 @@ namespace ao::gtk::test
     CHECK(columnLayouts.snapshot().empty());
   }
 
-  TEST_CASE("TrackColumnController - configures registered fields with their titles and factories",
-            "[gtk][unit][track-column]")
+  TEST_CASE("TrackColumnController - configures registered fields with their titles and factories")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -159,7 +157,7 @@ namespace ao::gtk::test
     CHECK(titleColumnPtr->get_title() == "Title");
   }
 
-  TEST_CASE("TrackColumnController - applies and persists field layouts", "[gtk][unit][track-column]")
+  TEST_CASE("TrackColumnController - applies and persists field layouts")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -249,7 +247,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackColumnController - publishes one layout change across open views", "[gtk][unit][track-column]")
+  TEST_CASE("TrackColumnController - publishes one layout change across open views")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -299,8 +297,7 @@ namespace ao::gtk::test
     CHECK(events.size() == 1);
   }
 
-  TEST_CASE("TrackColumnController - coalesces title position CSS updates through idle",
-            "[gtk][unit][track-column][async]")
+  TEST_CASE("TrackColumnController - coalesces title position CSS updates through idle")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -333,8 +330,7 @@ namespace ao::gtk::test
     CHECK(controller.titlePositionCss() == "columnview { --ao-title-x: 420.0px; }");
   }
 
-  TEST_CASE("TrackColumnController - exposes the realized viewport as horizontal page size",
-            "[gtk][unit][track-column][geometry]")
+  TEST_CASE("TrackColumnController - exposes the realized viewport as horizontal page size")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
@@ -359,7 +355,7 @@ namespace ao::gtk::test
     CHECK(static_cast<std::int32_t>(std::lround(adjPtr->get_page_size())) == columnView.get_width());
   }
 
-  TEST_CASE("TrackColumnController - follows the active horizontal adjustment", "[gtk][unit][track-column][geometry]")
+  TEST_CASE("TrackColumnController - follows the active horizontal adjustment")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};

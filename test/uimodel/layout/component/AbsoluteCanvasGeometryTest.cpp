@@ -10,8 +10,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("AbsoluteCanvasGeometry - orders items by z-index and insertion order",
-            "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasGeometry - orders items by z-index and insertion order")
   {
     auto items = std::vector<AbsoluteCanvasItem>{
       {.id = "middle", .rect = {.x = 10, .y = 20, .width = 80, .height = 40}, .zIndex = 2, .insertOrder = 1},
@@ -28,7 +27,7 @@ namespace ao::uimodel::test
     CHECK(items[2].id == "front");
   }
 
-  TEST_CASE("AbsoluteCanvasGeometry - hit testing returns the topmost item", "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasGeometry - hit testing returns the topmost item")
   {
     SECTION("higher z-index wins and points outside every item miss")
     {
@@ -57,8 +56,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AbsoluteCanvasGeometry - detects resize corners with a small hit target",
-            "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasGeometry - detects resize corners with a small hit target")
   {
     CHECK(detectAbsoluteCanvasResizeCorner(120, 80, 4.0, 5.0) == AbsoluteCanvasResizeCorner::TopLeft);
     CHECK(detectAbsoluteCanvasResizeCorner(120, 80, 117.0, 6.0) == AbsoluteCanvasResizeCorner::TopRight);
@@ -67,7 +65,7 @@ namespace ao::uimodel::test
     CHECK(detectAbsoluteCanvasResizeCorner(120, 80, 45.0, 30.0) == AbsoluteCanvasResizeCorner::None);
   }
 
-  TEST_CASE("AbsoluteCanvasGeometry - snaps to the nearest grid line", "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasGeometry - snaps to the nearest grid line")
   {
     CHECK(snapAbsoluteCanvasValue(29, true, 8) == 32);
     CHECK(snapAbsoluteCanvasValue(27, true, 8) == 24);
@@ -78,7 +76,7 @@ namespace ao::uimodel::test
     CHECK(snapAbsoluteCanvasValue(29, true, 0) == 29);
   }
 
-  TEST_CASE("AbsoluteCanvasGeometry - move drag stays raw until commit", "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasGeometry - move drag stays raw until commit")
   {
     auto const start = AbsoluteCanvasRect{.x = 13, .y = 21, .width = 90, .height = 45};
 
@@ -95,8 +93,7 @@ namespace ao::uimodel::test
     CHECK(committed.height == 45);
   }
 
-  TEST_CASE("AbsoluteCanvasGeometry - resize drag applies corner and minimum policy",
-            "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasGeometry - resize drag applies corner and minimum policy")
   {
     SECTION("top-left snaps origin and clamps dimensions to measured minimums")
     {
@@ -170,7 +167,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("AbsoluteCanvasGeometry - keyboard nudges use the enabled grid step", "[uimodel][unit][layout][component]")
+  TEST_CASE("AbsoluteCanvasGeometry - keyboard nudges use the enabled grid step")
   {
     auto const start = AbsoluteCanvasRect{.x = 40, .y = 50, .width = 75, .height = 25};
 

@@ -72,7 +72,7 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("LmdbProbeScratch - reclaims the semaphores of an aborted environment owner", "[lmdb][integration][fatal]")
+  TEST_CASE("LmdbProbeScratch - reclaims the semaphores of an aborted environment owner")
   {
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
     REQUIRE_FALSE(executablePath.empty());

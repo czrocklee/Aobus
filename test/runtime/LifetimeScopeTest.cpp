@@ -101,7 +101,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LifetimeScope - task completes while scope remains alive", "[runtime][unit][async][concurrency]")
+  TEST_CASE("LifetimeScope - task completes while scope remains alive", "[concurrency]")
   {
     auto barrier = AsyncBarrier{};
     auto executor = ManualExecutor{};
@@ -140,8 +140,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("LifetimeScope - destruction cancels blocked task before callback resume", "[concurrency]")
   {
     auto barrier = AsyncBarrier{};
     auto executor = ManualExecutor{};
@@ -176,8 +175,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("LifetimeScope - cancellation before queued callback resume prevents completion",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("LifetimeScope - cancellation before queued callback resume prevents completion", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto runtime = Runtime{executor};
@@ -198,8 +196,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("OperationCancelled - current exception guard recognizes cancellation",
-            "[runtime][unit][async][cancellation]")
+  TEST_CASE("OperationCancelled - current exception guard recognizes cancellation")
   {
     CHECK_THROWS_AS(
       []
@@ -244,8 +241,7 @@ namespace ao::rt::test
       }());
   }
 
-  TEST_CASE("OperationCancelled - exception pointer classification recognizes only cancellation",
-            "[runtime][unit][async][cancellation]")
+  TEST_CASE("OperationCancelled - exception pointer classification recognizes only cancellation")
   {
     CHECK_FALSE(isOperationCancelled(std::exception_ptr{}));
     CHECK(isOperationCancelled(std::make_exception_ptr(OperationCancelled{})));
@@ -255,7 +251,7 @@ namespace ao::rt::test
     CHECK_FALSE(isOperationCancelled(std::make_exception_ptr(42)));
   }
 
-  TEST_CASE("OperationCancelled - exception rethrow normalizes cancellation", "[runtime][unit][async][cancellation]")
+  TEST_CASE("OperationCancelled - exception rethrow normalizes cancellation")
   {
     bool deferredFailureRethrown = false;
 
@@ -285,7 +281,7 @@ namespace ao::rt::test
     CHECK(cancellationNormalized);
   }
 
-  TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[runtime][unit][async][concurrency]")
+  TEST_CASE("LifetimeScope - member task can complete while owner remains alive", "[concurrency]")
   {
     auto ownerPtr = std::unique_ptr<MemberTaskOwner>{};
     auto executor = InlineExecutor{};
@@ -306,8 +302,7 @@ namespace ao::rt::test
     ownerPtr.reset();
   }
 
-  TEST_CASE("LifetimeScope - cancellation races safely with concurrent completion",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("LifetimeScope - cancellation races safely with concurrent completion", "[concurrency]")
   {
     constexpr std::size_t kIterations = 64;
     auto executor = ManualExecutor{};

@@ -17,7 +17,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("NewerConfigNotice - each member keeps one retained warning", "[uimodel][unit][preference]")
+  TEST_CASE("NewerConfigNotice - each member keeps one retained warning")
   {
     auto executor = rt::test::InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor, 1};

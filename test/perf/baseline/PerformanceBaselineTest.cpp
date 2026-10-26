@@ -2011,8 +2011,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PerformanceBaseline - empty List rank overlay forwards a 50k parent move",
-            "[perf][unit][baseline][list-order]")
+  TEST_CASE("PerformanceBaseline - empty List rank overlay forwards a 50k parent move")
   {
     constexpr std::size_t kTrackCount = 50000;
     constexpr std::size_t kMoveCount = 500;
@@ -2049,8 +2048,7 @@ namespace ao::rt::test
                    });
   }
 
-  TEST_CASE("PerformanceBaseline - source pipeline 50k batch operations",
-            "[perf][integration][baseline][source-pipeline]")
+  TEST_CASE("PerformanceBaseline - source pipeline 50k batch operations")
   {
     Log::initialize(LogLevel::Info);
     constexpr std::size_t kMeasuredRuns = 5;
@@ -2105,8 +2103,7 @@ namespace ao::rt::test
     reportPipelineOperation("saved-order-move-500", moveSamples);
   }
 
-  TEST_CASE("PerformanceBaseline - all-tracks metadata-only publication over 50k tracks",
-            "[perf][integration][baseline][all-tracks-publication]")
+  TEST_CASE("PerformanceBaseline - all-tracks metadata-only publication over 50k tracks")
   {
     Log::initialize(LogLevel::Info);
     constexpr std::size_t kMeasuredRuns = 5;
@@ -2137,7 +2134,7 @@ namespace ao::rt::test
     reportAllTracksPublication("metadata-update-1", 1, singleSamples);
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][integration][baseline]")
+  TEST_CASE("PerformanceBaseline - phase 0 10k baseline")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 10000;
@@ -2162,7 +2159,7 @@ namespace ao::rt::test
     recordScaleBaseline(kN, buildDuration, t);
   }
 
-  TEST_CASE("PerformanceBaseline - Unicode library text admission", "[perf][unit][baseline][unicode]")
+  TEST_CASE("PerformanceBaseline - Unicode library text admission")
   {
     Log::initialize(LogLevel::Info);
 
@@ -2205,7 +2202,7 @@ namespace ao::rt::test
                    });
   }
 
-  TEST_CASE("PerformanceBaseline - Unicode caseless Quick Filter", "[perf][unit][baseline][unicode]")
+  TEST_CASE("PerformanceBaseline - Unicode caseless Quick Filter")
   {
     Log::initialize(LogLevel::Info);
     constexpr std::int32_t kTrackCount = 10'000;
@@ -2232,7 +2229,7 @@ namespace ao::rt::test
     CHECK(timing.secondPassMatches == 1250);
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 query IN threshold sweep", "[perf][unit][baseline][query]")
+  TEST_CASE("PerformanceBaseline - phase 0 query IN threshold sweep")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 10000;
@@ -2269,8 +2266,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry direct entry sort cache pressure",
-            "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry direct entry sort cache pressure")
   {
     Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -2300,7 +2296,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry comparator dispatch cost", "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry comparator dispatch cost")
   {
     Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -2330,7 +2326,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry ranked integer key sort", "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry ranked integer key sort")
   {
     Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -2364,7 +2360,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry compact active key sort", "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry compact active key sort")
   {
     Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -2396,7 +2392,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index sort cache pressure", "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index sort cache pressure")
   {
     Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -2431,8 +2427,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index materialize cache pressure",
-            "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index materialize cache pressure")
   {
     Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -2467,7 +2462,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 projection rebuild stage timing", "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 projection rebuild stage timing")
   {
     Log::initialize(LogLevel::Info);
     constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
@@ -2502,7 +2497,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 projection sort field timing", "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 projection sort field timing")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 1000000;
@@ -2532,7 +2527,7 @@ namespace ao::rt::test
                    });
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 projection preset timing", "[perf][unit][baseline][projection]")
+  TEST_CASE("PerformanceBaseline - phase 0 projection preset timing")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 1000000;
@@ -2555,7 +2550,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PerformanceBaseline - 100k library open admission", "[perf][unit][baseline][library-open-admission]")
+  TEST_CASE("PerformanceBaseline - 100k library open admission")
   {
     constexpr std::size_t kTrackCount = 100'000;
     constexpr std::size_t kArtistCount = 10'000;
@@ -2643,7 +2638,7 @@ namespace ao::rt::test
     CHECK(metrics.namedDatabaseOpens == 7);
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][integration][baseline]")
+  TEST_CASE("PerformanceBaseline - phase 0 100k baseline")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 100000;
@@ -2668,7 +2663,7 @@ namespace ao::rt::test
     recordScaleBaseline(kN, buildDuration, t);
   }
 
-  TEST_CASE("PerformanceBaseline - phase 0 1M baseline", "[perf][integration][baseline]")
+  TEST_CASE("PerformanceBaseline - phase 0 1M baseline")
   {
     Log::initialize(LogLevel::Info);
     constexpr int kN = 1000000;

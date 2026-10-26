@@ -7,8 +7,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("KeyRepeatGuard - accepts one press until the physical key is released",
-            "[uimodel][unit][input][key-repeat]")
+  TEST_CASE("KeyRepeatGuard - accepts one press until the physical key is released")
   {
     auto guard = KeyRepeatGuard{};
 
@@ -21,7 +20,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(guard.tryAcceptPress(40));
   }
 
-  TEST_CASE("KeyRepeatGuard - reset starts a new key cycle", "[uimodel][unit][input][key-repeat]")
+  TEST_CASE("KeyRepeatGuard - reset starts a new key cycle")
   {
     auto guard = KeyRepeatGuard{};
 

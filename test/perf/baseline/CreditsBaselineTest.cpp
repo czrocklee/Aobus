@@ -662,8 +662,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CreditsBaseline - representative credit reads queries completion and scoped edits",
-            "[perf][integration][credits-metadata]")
+  TEST_CASE("CreditsBaseline - representative credit reads queries completion and scoped edits")
   {
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 20, 1);
     auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", 1, 0);
@@ -713,8 +712,7 @@ namespace ao::rt::test
     writeReport(measurements, warmups, samples);
   }
 
-  TEST_CASE("PerformanceAllocation - ordinary aligned sized and worker allocation paths are counted",
-            "[perf][unit][allocation-counter][concurrency]")
+  TEST_CASE("PerformanceAllocation - ordinary aligned sized and worker allocation paths are counted")
   {
     // Direct calls cannot be removed via new-expression allocation elision.
     // Worker creation/teardown and Catch assertions are outside the window.

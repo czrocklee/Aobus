@@ -20,7 +20,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("TrackBuilder - tags builder adds removes and clears names", "[library][unit][track-builder][tag]")
+  TEST_CASE("TrackBuilder - tags builder adds removes and clears names")
   {
     auto builder = TrackBuilder::makeEmpty();
 
@@ -40,7 +40,7 @@ namespace ao::library::test
     CHECK(builder.tags().names().empty());
   }
 
-  TEST_CASE("TrackBuilder - serializes empty tag data", "[library][unit][track-builder][tag]")
+  TEST_CASE("TrackBuilder - serializes empty tag data")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
@@ -53,7 +53,7 @@ namespace ao::library::test
     CHECK(header->tagBloom == 0);
   }
 
-  TEST_CASE("TrackBuilder - serializes multiple tags", "[library][unit][track-builder][tag]")
+  TEST_CASE("TrackBuilder - serializes multiple tags")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
@@ -76,7 +76,7 @@ namespace ao::library::test
     CHECK(context.dictionary().get(view.tags().id(2)) == "tag3");
   }
 
-  TEST_CASE("TrackBuilder - serializes one tag", "[library][unit][track-builder][tag]")
+  TEST_CASE("TrackBuilder - serializes one tag")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
@@ -95,7 +95,7 @@ namespace ao::library::test
     CHECK(context.dictionary().get(view.tags().id(0)) == "tag42");
   }
 
-  TEST_CASE("TrackBuilder - computes tag bloom filters with tags", "[library][unit][track-builder][tag]")
+  TEST_CASE("TrackBuilder - computes tag bloom filters with tags")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
@@ -121,7 +121,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("TrackBuilder - serializeHot writes tag header data", "[library][unit][track-builder][tag]")
+  TEST_CASE("TrackBuilder - serializeHot writes tag header data")
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test Title");

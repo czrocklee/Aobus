@@ -27,7 +27,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackTransport control - initial state is correct", "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - initial state is correct")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -37,7 +37,7 @@ namespace ao::rt::test
     CHECK(state.elapsed == std::chrono::milliseconds{0});
   }
 
-  TEST_CASE("PlaybackTransport control - play pause resume and stop", "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - play pause resume and stop")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -106,8 +106,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == kInvalidTrackId);
   }
 
-  TEST_CASE("PlaybackTransport control - pause and resume publish only real transitions",
-            "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - pause and resume publish only real transitions")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     std::int32_t pausedCount = 0;
@@ -142,7 +141,7 @@ namespace ao::rt::test
     CHECK(startedCount == 1);
   }
 
-  TEST_CASE("PlaybackTransport control - seek updates state and fires event", "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - seek updates state and fires event")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -171,7 +170,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().elapsed == std::chrono::milliseconds{50});
   }
 
-  TEST_CASE("PlaybackTransport control - volume and muted controls update state", "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - volume and muted controls update state")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -205,8 +204,7 @@ namespace ao::rt::test
     CHECK(lastMutedState == true);
   }
 
-  TEST_CASE("PlaybackTransport control - backend fallback capability is projected without notifications",
-            "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - backend fallback capability is projected without notifications")
   {
     bool muteControl = false;
     bool controlFails = false;
@@ -300,8 +298,7 @@ namespace ao::rt::test
     CHECK_FALSE(volume.hardwareAssisted);
   }
 
-  TEST_CASE("PlaybackTransport control - backend volume is normalized before publication",
-            "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - backend volume is normalized before publication")
   {
     bool muted = false;
 
@@ -353,7 +350,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("PlaybackTransport control - commands refresh state synchronously", "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - commands refresh state synchronously")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
 
@@ -385,7 +382,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying.sourceListId == ListId{9});
   }
 
-  TEST_CASE("PlaybackTransport control - rejected play does not emit success", "[runtime][unit][playback][control]")
+  TEST_CASE("PlaybackTransport control - rejected play does not emit success")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = InlineExecutor{};

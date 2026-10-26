@@ -46,8 +46,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("LayoutComponentYaml - YAML action button renders text and dispatches authored actions",
-            "[gtk][unit][layout-component][yaml]")
+  TEST_CASE("LayoutComponentYaml - YAML action button renders text and dispatches authored actions")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& registry = fixture.components();
@@ -113,7 +112,7 @@ namespace ao::gtk::layout::test
     CHECK(textOnlyButton->get_icon_name().empty());
   }
 
-  TEST_CASE("LayoutComponentYaml - action properties expose editor metadata", "[gtk][unit][layout-component][yaml]")
+  TEST_CASE("LayoutComponentYaml - action properties expose editor metadata")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const optComponentSchema = fixture.components().schema().component("actionButton");
@@ -129,8 +128,7 @@ namespace ao::gtk::layout::test
     CHECK(*it->optActionSlot == ActionSlot::PrimaryClick);
   }
 
-  TEST_CASE("LayoutComponentYaml - YAML boxes preserve ordered semantic children",
-            "[gtk][unit][layout-component][yaml]")
+  TEST_CASE("LayoutComponentYaml - YAML boxes preserve ordered semantic children")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -253,8 +251,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutComponentYaml - unknown component types produce detectable error placeholders",
-            "[gtk][unit][layout-component][yaml]")
+  TEST_CASE("LayoutComponentYaml - unknown component types produce detectable error placeholders")
   {
     // This positive control keeps every no-placeholder assertion above and
     // below from passing because the recursive detector never fires.
@@ -266,8 +263,7 @@ namespace ao::gtk::layout::test
     CHECK(containsLayoutErrorPlaceholder(compPtr->widget()));
   }
 
-  TEST_CASE("LayoutComponentYaml - full document round-trip preserves all root children",
-            "[gtk][unit][layout-component][yaml]")
+  TEST_CASE("LayoutComponentYaml - full document round-trip preserves all root children")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const* const yaml = R"(
@@ -323,8 +319,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(containsLayoutErrorPlaceholder(compPtr->widget()));
   }
 
-  TEST_CASE("LayoutComponentYaml - selection detail template round-trip builds without placeholders",
-            "[gtk][unit][layout-component][yaml]")
+  TEST_CASE("LayoutComponentYaml - selection detail template round-trip builds without placeholders")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const* const yaml = R"(

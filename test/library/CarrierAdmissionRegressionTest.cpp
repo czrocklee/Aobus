@@ -154,8 +154,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("TrackWriter - createCarrier rejects a noncanonical first member URI before staging",
-            "[library][unit][track-writer]")
+  TEST_CASE("TrackWriter - createCarrier rejects a noncanonical first member URI before staging")
   {
     // ./disc.flac parses, but manifest lookup aborts unless the caller's spelling
     // is already canonical. Rejection must precede that lookup and any staging.
@@ -230,7 +229,7 @@ namespace ao::library::test
     CHECK(optFirst->property().segment() == TrackSegment{.startFrame = 588, .frameCount = 588, .ordinal = 2});
   }
 
-  TEST_CASE("validateSerializedColdTrack rejects a negative whole-file duration", "[library][unit][track-integrity]")
+  TEST_CASE("validateSerializedColdTrack rejects a negative whole-file duration")
   {
     auto const positive = makeColdData(TrackColdHeader{.duration = TrackDuration{1000}}, kWholeFileUri);
     auto const negative = makeColdData(TrackColdHeader{.duration = TrackDuration{-1}}, kWholeFileUri);
@@ -264,8 +263,7 @@ namespace ao::library::test
     CHECK(minimumRes.error().message == "Cold Track record contains a negative duration");
   }
 
-  TEST_CASE("MusicLibrary - open rejects a whole file whose duration bytes were changed to negative",
-            "[library][unit][track-integrity]")
+  TEST_CASE("MusicLibrary - open rejects a whole file whose duration bytes were changed to negative")
   {
     auto const temp = ao::test::TempDir{};
     auto const databasePath = temp.path() / "db";
@@ -311,8 +309,7 @@ namespace ao::library::test
           "Track 1 failed persisted validation: Cold Track record contains a negative duration");
   }
 
-  TEST_CASE("WriteTransaction - oversized carrier relink returns ValueTooLarge and rolls back staged work",
-            "[library][unit][write-transaction]")
+  TEST_CASE("WriteTransaction - oversized carrier relink returns ValueTooLarge and rolls back staged work")
   {
     auto const destinationUri = oversizedDestinationUri();
     auto const parsedRes = LibraryUri::parse(destinationUri);

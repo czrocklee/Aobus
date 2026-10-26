@@ -44,7 +44,7 @@ namespace ao::audio::backend::test
     }
   } // namespace
 
-  TEST_CASE("WasapiSharedBackend - identity and unopened lifecycle are stable", "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - identity and unopened lifecycle are stable")
   {
     auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
@@ -60,8 +60,7 @@ namespace ao::audio::backend::test
     backend.close();
   }
 
-  TEST_CASE("WasapiSharedBackend - cached properties round trip before opening a device",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - cached properties round trip before opening a device")
   {
     auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
@@ -86,8 +85,7 @@ namespace ao::audio::backend::test
     CHECK(mutedInfo == volumeInfo);
   }
 
-  TEST_CASE("WasapiSharedBackend - unopened property intent does not claim applied session state",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - unopened property intent does not claim applied session state")
   {
     auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
     auto received = std::vector<flow::Graph>{};
@@ -121,8 +119,7 @@ namespace ao::audio::backend::test
     CHECK(received.back().connections.empty());
   }
 
-  TEST_CASE("WasapiSharedBackend - a partial speaker set is rejected before endpoint access",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - a partial speaker set is rejected before endpoint access")
   {
     auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
@@ -141,8 +138,7 @@ namespace ao::audio::backend::test
   }
 
   TEST_CASE(
-    "WasapiSharedBackend - an unrepresentable source is refused as a track incompatibility before endpoint access",
-    "[audio][unit][wasapi][backend]")
+    "WasapiSharedBackend - an unrepresentable source is refused as a track incompatibility before endpoint access")
   {
     // The endpoint id names no real endpoint, so a regressed guard could only
     // surface an endpoint lookup failure here, never a native handle.
@@ -195,8 +191,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiSharedBackend - zero geometry is refused as invalid input before endpoint access",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - zero geometry is refused as invalid input before endpoint access")
   {
     // The endpoint id names no real endpoint, so a regressed guard could only
     // surface an endpoint lookup failure here, never a native handle.
@@ -229,8 +224,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiSharedBackend - geometry refusal outranks layout and precision refusals",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - geometry refusal outranks layout and precision refusals")
   {
     auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
@@ -259,8 +253,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiSharedBackend - descriptor geometry refusal outranks layout refusal before endpoint access",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - descriptor geometry refusal outranks layout refusal before endpoint access")
   {
     // The fake endpoint cannot supply native evidence. Two-channel S16 needs
     // four bytes per frame, so this rate cannot fit the WAVE byte-rate field.
@@ -296,8 +289,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(backend.prewarmFormatHint(sourceFormat).has_value());
   }
 
-  TEST_CASE("WasapiSharedBackend - prewarm preserves complete admitted sets without endpoint negotiation",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("WasapiSharedBackend - prewarm preserves complete admitted sets without endpoint negotiation")
   {
     auto registryPtr = std::make_shared<detail::WasapiGraphRegistry>();
     auto backend = WasapiSharedBackend{testDevice(), kProfileShared, registryPtr};
@@ -323,7 +315,7 @@ namespace ao::audio::backend::test
       SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 1}));
   }
 
-  TEST_CASE("prepareWasapiRenderPacket pads short PCM without advancing silence", "[audio][unit][wasapi][render]")
+  TEST_CASE("prepareWasapiRenderPacket pads short PCM without advancing silence")
   {
     auto buffer = std::array<std::byte, 16>{};
     std::ranges::fill(buffer, std::byte{0x5a});
@@ -343,8 +335,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("prepareWasapiRenderPacket releases drained short and empty packets correctly",
-            "[audio][unit][wasapi][render]")
+  TEST_CASE("prepareWasapiRenderPacket releases drained short and empty packets correctly")
   {
     auto buffer = std::array<std::byte, 16>{};
     std::ranges::fill(buffer, std::byte{0x5a});
@@ -375,7 +366,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("observeWaveFormat parses plain PCM tags without inventing speaker roles", "[audio][unit][wasapi][format]")
+  TEST_CASE("observeWaveFormat parses plain PCM tags without inventing speaker roles")
   {
     struct PlainWaveCase final
     {
@@ -427,7 +418,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("observeWaveFormat preserves endpoint mix precision", "[audio][unit][wasapi][format]")
+  TEST_CASE("observeWaveFormat preserves endpoint mix precision")
   {
     auto wave = WAVEFORMATEXTENSIBLE{};
     wave.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
@@ -450,8 +441,7 @@ namespace ao::audio::backend::test
     CHECK(observationRes->optFormat->encoding == SampleEncoding::Signed24In32Le);
   }
 
-  TEST_CASE("WasapiFormat - accepted descriptors preserve declared role masks at all channel counts",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - accepted descriptors preserve declared role masks at all channel counts")
   {
     struct DescriptorCase final
     {
@@ -506,8 +496,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiFormat - zero and FL FR stereo identities configure the same lossless native descriptors",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - zero and FL FR stereo identities configure the same lossless native descriptors")
   {
     struct EncodingCase final
     {
@@ -582,8 +571,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiFormat - parses independent engine masks and keeps conversion separate from mapping",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - parses independent engine masks and keeps conversion separate from mapping")
   {
     // This is an independently authored engine descriptor, not a copy of the
     // source request. These model tests do not execute Initialize/GetMixFormat.
@@ -687,8 +675,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiFormat - exact client mapping requires equal accepted counts and role masks",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - exact client mapping requires equal accepted counts and role masks")
   {
     // The delivery check is a pure comparison against an accepted descriptor;
     // these sections vary that accepted descriptor away from the application
@@ -732,7 +719,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("WasapiFormat - unsafe descriptors cannot be constructed", "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - unsafe descriptors cannot be constructed")
   {
     CHECK_FALSE(
       detail::waveFormatFromPcmFormat({.sampleRate = 0, .channels = 2, .encoding = SampleEncoding::Signed16Le}));
@@ -746,8 +733,7 @@ namespace ao::audio::backend::test
       {.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 1}));
   }
 
-  TEST_CASE("WasapiFormat - a short extensible descriptor is a storage fault that absent numerics cannot hide",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - a short extensible descriptor is a storage fault that absent numerics cannot hide")
   {
     auto wave = extensibleFloatStereoWave();
 
@@ -769,8 +755,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(observationRes.error().message.empty());
   }
 
-  TEST_CASE("WasapiFormat - absent mix numerics are an unavailable observation without guessed geometry",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - absent mix numerics are an unavailable observation without guessed geometry")
   {
     auto wave = extensibleFloatStereoWave();
 
@@ -798,8 +783,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(observationRes->optFormat);
   }
 
-  TEST_CASE("WasapiFormat - contradictory mix arithmetic withholds the concrete format but keeps facts",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - contradictory mix arithmetic withholds the concrete format but keeps facts")
   {
     auto wave = extensibleFloatStereoWave();
     std::uint32_t expectedMask = 3;
@@ -852,8 +836,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(observationRes->optFormat);
   }
 
-  TEST_CASE("WasapiFormat - reserved mix positions erase the role set instead of becoming legal",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("WasapiFormat - reserved mix positions erase the role set instead of becoming legal")
   {
     auto wave = extensibleFloatStereoWave();
     bool hasConcreteFormat = true;
@@ -898,7 +881,7 @@ namespace ao::audio::backend::test
     }
   }
 
-  TEST_CASE("observeWaveFormat leaves unsupported endpoint encoding unknown", "[audio][unit][wasapi][format]")
+  TEST_CASE("observeWaveFormat leaves unsupported endpoint encoding unknown")
   {
     auto wave = WAVEFORMATEX{};
     wave.wFormatTag = WAVE_FORMAT_MPEGLAYER3;
@@ -915,8 +898,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(observationRes->optFormat);
   }
 
-  TEST_CASE("observeWaveFormat keeps unknown subtype roles independent of PCM geometry",
-            "[audio][unit][wasapi][format]")
+  TEST_CASE("observeWaveFormat keeps unknown subtype roles independent of PCM geometry")
   {
     auto wave = WAVEFORMATEXTENSIBLE{};
     wave.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
@@ -958,8 +940,7 @@ namespace ao::audio::backend::test
     CHECK_FALSE(observationRes->optFormat);
   }
 
-  TEST_CASE("wasapiInitializeFailureCause maps only the unsupported format to a route mismatch",
-            "[audio][unit][wasapi][backend]")
+  TEST_CASE("wasapiInitializeFailureCause maps only the unsupported format to a route mismatch")
   {
     struct CauseCase final
     {

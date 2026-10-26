@@ -19,8 +19,7 @@ namespace ao::uimodel::test
     constexpr auto kMixedText = "Mehrere Werte";
   }
 
-  TEST_CASE("formatTrackCustomMetadataDisplayText formats aggregate custom metadata",
-            "[uimodel][unit][library][detail]")
+  TEST_CASE("formatTrackCustomMetadataDisplayText formats aggregate custom metadata")
   {
     CHECK(formatTrackCustomMetadataDisplayText(
             rt::CustomMetadataItem{.key = "Mood", .value = {.optValue = "Bright"}}, kMixedText) == "Bright");
@@ -29,16 +28,14 @@ namespace ao::uimodel::test
             rt::CustomMetadataItem{.key = "Mood", .value = {.mixed = true}}, kMixedText) == kMixedText);
   }
 
-  TEST_CASE("isProtectedTrackCustomMetadataEditText protects aggregate sentinel text",
-            "[uimodel][unit][library][detail]")
+  TEST_CASE("isProtectedTrackCustomMetadataEditText protects aggregate sentinel text")
   {
     CHECK(isProtectedTrackCustomMetadataEditText(kMixedText, kMixedText));
     CHECK_FALSE(isProtectedTrackCustomMetadataEditText("", kMixedText));
     CHECK_FALSE(isProtectedTrackCustomMetadataEditText("edited", kMixedText));
   }
 
-  TEST_CASE("validateCustomMetadataAddition reserves exact field ids and credits only",
-            "[uimodel][unit][library][detail]")
+  TEST_CASE("validateCustomMetadataAddition reserves exact field ids and credits only")
   {
     auto snap = rt::TrackDetailSnapshot{};
     snap.customMetadata.push_back(rt::CustomMetadataItem{.key = "Mood"});
@@ -64,8 +61,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("validateCustomMetadataAddition prefers an existing custom key over reservation",
-            "[uimodel][unit][library][detail]")
+  TEST_CASE("validateCustomMetadataAddition prefers an existing custom key over reservation")
   {
     auto snap = rt::TrackDetailSnapshot{};
     snap.customMetadata.push_back(rt::CustomMetadataItem{.key = "title"});
@@ -76,7 +72,7 @@ namespace ao::uimodel::test
     CHECK(validateCustomMetadataAddition(snap, "artist") == CustomMetadataAddValidation::ReservedKey);
   }
 
-  TEST_CASE("TrackCustomMetadata - patch helpers write update and delete payloads", "[uimodel][unit][library][detail]")
+  TEST_CASE("TrackCustomMetadata - patch helpers write update and delete payloads")
   {
     auto const updatePatch = makeCustomMetadataUpdatePatch("Mood", "Bright");
     REQUIRE(updatePatch.customUpdates.size() == 1);

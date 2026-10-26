@@ -12,7 +12,7 @@ using namespace ao;
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ListActions - describes available actions from selected list state", "[uimodel][unit][list]")
+  TEST_CASE("ListActions - describes available actions from selected list state")
   {
     SECTION("Invalid list selection")
     {
@@ -51,7 +51,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ListActions - chooses a parent only for user-created list selections", "[uimodel][unit][list]")
+  TEST_CASE("ListActions - chooses a parent only for user-created list selections")
   {
     CHECK(parentForNewSmartList(kInvalidListId) == kInvalidListId);
     CHECK(parentForNewSmartList(rt::kAllTracksListId) == kInvalidListId);

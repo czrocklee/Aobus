@@ -53,8 +53,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("selectCompletionVocabularyEntries preserves bucket and input order within a bound",
-            "[runtime][unit][completion]")
+  TEST_CASE("selectCompletionVocabularyEntries preserves bucket and input order within a bound")
   {
     auto const alias = std::array<std::string, 1>{"zhoujielun"};
     auto const vocabulary = std::array{
@@ -70,8 +69,7 @@ namespace ao::rt::test
     CHECK(selectedValues(vocabulary, "zhou", 0).empty());
   }
 
-  TEST_CASE("selectCompletionVocabularyEntries treats an empty prefix as direct matching",
-            "[runtime][unit][completion]")
+  TEST_CASE("selectCompletionVocabularyEntries treats an empty prefix as direct matching")
   {
     auto const vocabulary = std::array{
       VocabularyEntry{.value = "First"},
@@ -82,8 +80,7 @@ namespace ao::rt::test
     CHECK(selectedValues(vocabulary, "", 2) == std::vector<std::string>{"First", "Second"});
   }
 
-  TEST_CASE("selectCompletionVocabularyEntries keeps UTF-8 word boundaries and alias collisions distinct",
-            "[runtime][unit][completion]")
+  TEST_CASE("selectCompletionVocabularyEntries keeps UTF-8 word boundaries and alias collisions distinct")
   {
     auto const sharedAlias = std::array<std::string, 1>{"wangfei"};
     auto const directAlias = std::array<std::string, 1>{"pinnock"};
@@ -99,8 +96,7 @@ namespace ao::rt::test
     CHECK(selectedValues(vocabulary, "wa", 4).empty());
   }
 
-  TEST_CASE("selectCompletionVocabularyEntries deduplicates alias values without losing later candidates",
-            "[runtime][unit][completion]")
+  TEST_CASE("selectCompletionVocabularyEntries deduplicates alias values without losing later candidates")
   {
     auto const aliases = std::array<std::string, 1>{"wangfei"};
     auto const vocabulary = std::array{
@@ -124,8 +120,7 @@ namespace ao::rt::test
     CHECK(selectedValues(mixedVocabulary, "wang", 3) == std::vector<std::string>{"Wang Direct", "Later Wang", "王菲"});
   }
 
-  TEST_CASE("appendVocabularyCompletionItems respects the existing item count and absolute ranks",
-            "[runtime][unit][completion]")
+  TEST_CASE("appendVocabularyCompletionItems respects the existing item count and absolute ranks")
   {
     auto const vocabulary = std::array{
       VocabularyEntry{.value = "First"},

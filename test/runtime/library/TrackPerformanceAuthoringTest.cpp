@@ -96,8 +96,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("TrackPerformanceAuthoring - recording date replaces the stored precision and reports the change",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - recording date replaces the stored precision and reports the change")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -125,7 +124,7 @@ namespace ao::rt::test
           library::RecordingDate{.year = 1981, .month = 5, .day = 12});
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - recording date clear and exact no-op", "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - recording date clear and exact no-op")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -176,8 +175,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - partial-precision differences are real edits",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - partial-precision differences are real edits")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -224,8 +222,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - invalid partial dates reject the whole patch atomically",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - invalid partial dates reject the whole patch atomically")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -256,8 +253,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - performer scope replaces and clears with order duplicates and roles",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - performer scope replaces and clears with order duplicates and roles")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -325,8 +321,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - credit no-op includes within-kind order and role presence",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - credit no-op includes within-kind order and role presence")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -385,8 +380,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - normalized credit no-op leaves dictionary and revision unchanged",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - normalized credit no-op leaves dictionary and revision unchanged")
   {
     auto storage = MusicLibraryFixture{};
     auto const expected = std::vector<library::Credit>{{.name = "René", .role = "Flûte"}, {.name = "René"}};
@@ -425,8 +419,7 @@ namespace ao::rt::test
     CHECK(storage.library().libraryRevision(transaction) == revision);
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - invalid credit text rejects the whole patch atomically",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - invalid credit text rejects the whole patch atomically")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -466,8 +459,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - date and scoped credit edits preserve unrelated fields",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - date and scoped credit edits preserve unrelated fields")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -522,8 +514,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - stale binding applies neither date nor credits",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - stale binding applies neither date nor credits")
   {
     auto storage = MusicLibraryFixture{};
     auto const trackId = storage.addTrack(performanceSpec());
@@ -549,8 +540,7 @@ namespace ao::rt::test
           std::vector<library::Credit>{{.name = "Glenn Gould", .role = "Piano"}, {.name = "Jane Smith"}});
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - scoped replacement retains each target's unselected segments",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - scoped replacement retains each target's unselected segments")
   {
     auto storage = MusicLibraryFixture{};
     auto const firstCredits = std::vector<library::Credit>{
@@ -666,8 +656,7 @@ namespace ao::rt::test
     CHECK(snapshot.revision() == targets.revision() + 1);
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - canonical grouping and normalized all-kind text are a no-op",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - canonical grouping and normalized all-kind text are a no-op")
   {
     auto storage = MusicLibraryFixture{};
     auto const expected = std::vector<library::Credit>{
@@ -714,8 +703,7 @@ namespace ao::rt::test
     CHECK(storage.library().libraryRevision(transaction) == targets.revision());
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - multiplicity and kind changes are real edits",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - multiplicity and kind changes are real edits")
   {
     auto storage = MusicLibraryFixture{};
     auto const original =
@@ -756,8 +744,7 @@ namespace ao::rt::test
     CHECK(fixture.library().snapshot().revision() == targets.revision() + 1);
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - invalid scopes and enum values reject the composed patch without effects",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - invalid scopes and enum values reject the composed patch without effects")
   {
     auto storage = MusicLibraryFixture{};
     auto const spec = performanceSpec();
@@ -814,8 +801,7 @@ namespace ao::rt::test
     CHECK_FALSE(storage.library().dictionary().findId("Unseen key"));
   }
 
-  TEST_CASE("TrackPerformanceAuthoring - later merged-record overflow aborts all staged rows text and publication",
-            "[runtime][unit][library-authoring]")
+  TEST_CASE("TrackPerformanceAuthoring - later merged-record overflow aborts all staged rows text and publication")
   {
     auto storage = MusicLibraryFixture{};
     auto const firstSpec = performanceSpec();

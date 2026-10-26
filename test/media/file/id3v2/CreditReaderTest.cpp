@@ -104,8 +104,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   } // namespace
 
-  TEST_CASE("ID3v2 TMCL - retains pair positions and ignores absent names and unpaired instruments",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - retains pair positions and ignores absent names and unpaired instruments")
   {
     struct Example final
     {
@@ -156,8 +155,7 @@ namespace ao::media::file::mpeg::id3v2::test
     CHECK(readCredits(4, unsupportedBody).empty());
   }
 
-  TEST_CASE("ID3v2 TMCL - splits only artist commas and keeps the documented surname ambiguity",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - splits only artist commas and keeps the documented surname ambiguity")
   {
     struct Example final
     {
@@ -201,8 +199,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 TMCL - decodes supported encodings and per-value BOMs without shifting empty positions",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - decodes supported encodings and per-value BOMs without shifting empty positions")
   {
     auto const inputs = std::array{
       textContent(Encoding::Latin1,
@@ -240,8 +237,7 @@ namespace ao::media::file::mpeg::id3v2::test
   }
 
   TEST_CASE(
-    "ID3v2 TMCL - shared decoding preserves empty positions comma pairing and trailing values in every encoding",
-    "[media][unit][mpeg][id3v2]")
+    "ID3v2 TMCL - shared decoding preserves empty positions comma pairing and trailing values in every encoding")
   {
     auto const values = std::initializer_list<std::string_view>{
       "", "Anne", "Piano", "", "Guitar, Bass", "Bob, Cara", "Violin", "Dan", "Odd role", "", ""};
@@ -270,8 +266,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 TMCL - UTF-16 odd byte tails do not create a name or displace the next frame",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - UTF-16 odd byte tails do not create a name or displace the next frame")
   {
     for (bool const littleEndian : {false, true})
     {
@@ -288,14 +283,14 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 TMCL - is v2.4-only", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - is v2.4-only")
   {
     auto oldBody = Bytes{};
     appendFrame(oldBody, "TMCL", false, 0, textContent(Encoding::Latin1, nulJoined({"Guitar", "Keith"})));
     CHECK(readCredits(3, oldBody).empty());
   }
 
-  TEST_CASE("ID3v2 TIPL and IPLS - map Picard involvements to credit kinds", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TIPL and IPLS - map Picard involvements to credit kinds")
   {
     // Matching ignores ASCII case and surrounding whitespace. Other involvements,
     // empty names, and an odd final involvement contribute nothing.
@@ -356,8 +351,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 credits - TEXT TPE4 and TXXX Writer name lyricists remixers and writers",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 credits - TEXT TPE4 and TXXX Writer name lyricists remixers and writers")
   {
     SECTION("v2.4 frames apply each NUL-separated value")
     {
@@ -384,7 +378,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 credits - v2.3 UTF-16 TXXX values drop the BOM of their own string", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 credits - v2.3 UTF-16 TXXX values drop the BOM of their own string")
   {
     // Picard and Mutagen encode the description and the value as separate
     // UTF-16 strings, each with a BOM; v2.3 still reads only the first value.
@@ -401,7 +395,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 TMCL - preserves duplicates and order within and across frames", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - preserves duplicates and order within and across frames")
   {
     auto body = Bytes{};
     appendFrame(
@@ -417,7 +411,7 @@ namespace ao::media::file::mpeg::id3v2::test
                                   });
   }
 
-  TEST_CASE("ID3v2 TMCL - never implies Soloist and explicit soloist remains independent", "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 TMCL - never implies Soloist and explicit soloist remains independent")
   {
     auto body = Bytes{};
     appendFrame(body, "TMCL", true, 0, textContent(Encoding::Utf8, nulJoined({"Guitar", "Keith"})));
@@ -430,8 +424,7 @@ namespace ao::media::file::mpeg::id3v2::test
                                   });
   }
 
-  TEST_CASE("ID3v2 credits - TPE3 and supported TXXX mappings accumulate v2.4 NUL values without slash splitting",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 credits - TPE3 and supported TXXX mappings accumulate v2.4 NUL values without slash splitting")
   {
     auto body = Bytes{};
     appendFrame(body, "TPE3", true, 0, textContent(Encoding::Utf8, nulJoined({"A/B", "", " A/B ", " \t"})));
@@ -454,8 +447,7 @@ namespace ao::media::file::mpeg::id3v2::test
                                   });
   }
 
-  TEST_CASE("ID3v2 credits - TPE3 and TXXX retain version-aware multivalue encoding and per-value BOM decoding",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 credits - TPE3 and TXXX retain version-aware multivalue encoding and per-value BOM decoding")
   {
     struct Example final
     {
@@ -498,8 +490,7 @@ namespace ao::media::file::mpeg::id3v2::test
     }
   }
 
-  TEST_CASE("ID3v2 credits - Ensemble whole-tag precedence is nonblank and independent of order",
-            "[media][unit][mpeg][id3v2]")
+  TEST_CASE("ID3v2 credits - Ensemble whole-tag precedence is nonblank and independent of order")
   {
     for (bool const explicitFirst : {false, true})
     {

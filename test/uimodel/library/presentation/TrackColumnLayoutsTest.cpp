@@ -21,7 +21,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackColumnLayouts - stores layouts and emits only for changes", "[uimodel][unit][presentation]")
+  TEST_CASE("TrackColumnLayouts - stores layouts and emits only for changes")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor);
@@ -46,7 +46,7 @@ namespace ao::uimodel::test
     CHECK(store.layoutForList(rt::kAllTracksListId)[1].weight == 1.25);
   }
 
-  TEST_CASE("TrackColumnLayouts - an unchanged empty layout creates no entry", "[uimodel][unit][presentation]")
+  TEST_CASE("TrackColumnLayouts - an unchanged empty layout creates no entry")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor);
@@ -62,8 +62,7 @@ namespace ao::uimodel::test
     CHECK(events.empty());
   }
 
-  TEST_CASE("TrackColumnLayouts - cascade deletion clears every layout",
-            "[uimodel][unit][presentation][delete-subtree]")
+  TEST_CASE("TrackColumnLayouts - cascade deletion clears every layout")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};
@@ -97,7 +96,7 @@ namespace ao::uimodel::test
     CHECK(layouts.snapshot().contains(unrelatedId));
   }
 
-  TEST_CASE("TrackColumnLayouts - library reset clears every layout", "[uimodel][unit][presentation][library-reset]")
+  TEST_CASE("TrackColumnLayouts - library reset clears every layout")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};
@@ -122,7 +121,7 @@ namespace ao::uimodel::test
     CHECK(removed == std::vector{ListId{42}, ListId{43}});
   }
 
-  TEST_CASE("TrackColumnLayouts - deletion callback may destroy its owner", "[uimodel][unit][presentation]")
+  TEST_CASE("TrackColumnLayouts - deletion callback may destroy its owner")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::QueuedExecutor{};
@@ -154,8 +153,7 @@ namespace ao::uimodel::test
     CHECK(layoutsPtr == nullptr);
   }
 
-  TEST_CASE("TrackColumnLayouts - restore drops layouts whose list the library no longer has",
-            "[uimodel][unit][presentation][restore]")
+  TEST_CASE("TrackColumnLayouts - restore drops layouts whose list the library no longer has")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor);
@@ -175,7 +173,7 @@ namespace ao::uimodel::test
     CHECK(layouts.snapshot().contains(rt::kAllTracksListId));
   }
 
-  TEST_CASE("TrackColumnLayouts - bulk state emits only when changed", "[uimodel][unit][presentation]")
+  TEST_CASE("TrackColumnLayouts - bulk state emits only when changed")
   {
     auto executor = rt::test::QueuedExecutor{};
     auto changes = rt::test::makeLibraryChanges(executor);

@@ -42,7 +42,7 @@ namespace ao::media::file::mpeg::test
     }
   } // namespace
 
-  TEST_CASE("MPEG Frame - validates headers", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - validates headers")
   {
     SECTION("Valid V1 Layer III header")
     {
@@ -97,7 +97,7 @@ namespace ao::media::file::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG Frame - derives frame properties", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - derives frame properties")
   {
     SECTION("Layer I")
     {
@@ -140,7 +140,7 @@ namespace ao::media::file::mpeg::test
     }
   }
 
-  TEST_CASE("MPEG Frame - parses Xing information", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - parses Xing information")
   {
     // Construct a buffer with a frame header followed by Xing header
     auto buffer = std::vector<std::uint8_t>(200, 0);
@@ -167,7 +167,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optXing->bytes == 56789);
   }
 
-  TEST_CASE("MPEG Frame - keeps Xing fields inside the current frame", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - keeps Xing fields inside the current frame")
   {
     auto const header =
       createHeader(VersionId::Ver2, LayerDescription::LayerIII, 1, 1, ChannelMode::SingleChannel); // 8kbps, 24000Hz
@@ -194,7 +194,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optXing->frames == 0);
   }
 
-  TEST_CASE("MPEG Frame - parses Xing information after a protected-frame CRC", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - parses Xing information after a protected-frame CRC")
   {
     auto buffer = std::vector<std::uint8_t>(417, 0);
     auto const header =
@@ -215,7 +215,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optXing->frames == 4321);
   }
 
-  TEST_CASE("MPEG Frame - locates frame sync", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - locates frame sync")
   {
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0, ChannelMode::JointStereo);
     auto const frameLength = FrameView{header.data(), header.size()}.length();
@@ -228,7 +228,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optView->isValid());
   }
 
-  TEST_CASE("MPEG Frame - locates free-format frames from adjacent sync distance", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - locates free-format frames from adjacent sync distance")
   {
     constexpr std::size_t kFrameLength = 720;
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 0, 1);
@@ -244,7 +244,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optView->bitrate() == 240000);
   }
 
-  TEST_CASE("MPEG Frame - skips an unconfirmed sync candidate in leading junk", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - skips an unconfirmed sync candidate in leading junk")
   {
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0);
     auto const frameLength = FrameView{header.data(), header.size()}.length();
@@ -260,7 +260,7 @@ namespace ao::media::file::mpeg::test
     CHECK(optView->data() == buffer.data() + kActualFrameOffset);
   }
 
-  TEST_CASE("MPEG Frame - rejects incomplete frame after valid header", "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - rejects incomplete frame after valid header")
   {
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0, ChannelMode::JointStereo);
 
@@ -269,8 +269,7 @@ namespace ao::media::file::mpeg::test
     CHECK_FALSE(optView);
   }
 
-  TEST_CASE("MPEG Frame - rejects a candidate followed only by a matching truncated header",
-            "[media][unit][mpeg][frame]")
+  TEST_CASE("MPEG Frame - rejects a candidate followed only by a matching truncated header")
   {
     auto const header = createHeader(VersionId::Ver1, LayerDescription::LayerIII, 9, 0);
     auto const frameLength = FrameView{header.data(), header.size()}.length();

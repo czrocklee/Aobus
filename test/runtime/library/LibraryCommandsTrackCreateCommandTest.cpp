@@ -109,8 +109,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryCommands - createTrackFromFile imports a valid file and publishes a mutation",
-            "[runtime][unit][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile imports a valid file and publishes a mutation")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -146,8 +145,7 @@ namespace ao::rt::test
     CHECK(duplicateRes.error().message.contains("already imported"));
   }
 
-  TEST_CASE("LibraryCommands - add-file rejects a malformed sheet inserted during lane handoff",
-            "[runtime][integration][track-create][concurrency]")
+  TEST_CASE("LibraryCommands - add-file rejects a malformed sheet inserted during lane handoff", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -188,7 +186,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("LibraryCommands - add-file rejects changed CUE ranges even with unchanged sheet size and time",
-            "[runtime][integration][track-create][concurrency]")
+            "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -259,8 +257,7 @@ namespace ao::rt::test
     CHECK(optManifest->totalFrames() == 88200);
   }
 
-  TEST_CASE("LibraryCommands - add-file rejects path changes during lane handoff",
-            "[runtime][integration][track-create][concurrency]")
+  TEST_CASE("LibraryCommands - add-file rejects path changes during lane handoff", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
@@ -345,8 +342,7 @@ namespace ao::rt::test
     CHECK_FALSE(manifest.get("alias.flac"));
   }
 
-  TEST_CASE("LibraryCommands - createTrackFromFile accepts root-relative paths",
-            "[runtime][unit][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile accepts root-relative paths")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -368,7 +364,7 @@ namespace ao::rt::test
     CHECK(optTrackView->property().uri() == "relative.flac");
   }
 
-  TEST_CASE("LibraryCommands - createTrackFromFile preserves a UTF-8 URI", "[runtime][unit][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile preserves a UTF-8 URI")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
@@ -393,8 +389,7 @@ namespace ao::rt::test
     CHECK(libraryFixture.library().manifest().reader(transaction).get(expected));
   }
 
-  TEST_CASE("LibraryCommands - createTrackFromFile rejects unsupported files with Result errors",
-            "[runtime][unit][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile rejects unsupported files with Result errors")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const existingId = libraryFixture.addTrack("Existing");
@@ -424,8 +419,7 @@ namespace ao::rt::test
     CHECK_FALSE(libraryFixture.library().manifest().reader(transaction).get("unsupported.txt"));
   }
 
-  TEST_CASE("LibraryCommands - createTrackFromFile rejects invalid path boundaries",
-            "[runtime][unit][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile rejects invalid path boundaries")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
@@ -513,8 +507,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryCommands - createTrackFromFile measures a long path under a symlinked root",
-            "[runtime][unit][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile measures a long path under a symlinked root")
   {
     auto const temp = ao::test::TempDir{};
     auto const realRoot = temp.path() / "real";
@@ -538,8 +531,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryCommands - createTrackFromFile reports a valid URI whose path the platform cannot resolve",
-            "[runtime][unit][library][track-create]")
+  TEST_CASE("LibraryCommands - createTrackFromFile reports a valid URI whose path the platform cannot resolve")
   {
     // A root of thirteen components and a URI of eight keep each within its
     // limit while the joined path exceeds Linux's 4,096 bytes.

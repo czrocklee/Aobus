@@ -11,8 +11,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("ScopedRegistration - reset and destruction invoke a registration exactly once",
-            "[utility][unit][scoped-registration]")
+  TEST_CASE("ScopedRegistration - reset and destruction invoke a registration exactly once")
   {
     std::int32_t releaseCount = 0;
 
@@ -31,8 +30,7 @@ namespace ao::utility::test
     CHECK(releaseCount == 1);
   }
 
-  TEST_CASE("ScopedRegistration - moves transfer ownership and release replaced registrations",
-            "[utility][unit][scoped-registration]")
+  TEST_CASE("ScopedRegistration - moves transfer ownership and release replaced registrations")
   {
     std::int32_t firstReleaseCount = 0;
     std::int32_t secondReleaseCount = 0;
@@ -56,7 +54,7 @@ namespace ao::utility::test
     CHECK(secondReleaseCount == 1);
   }
 
-  TEST_CASE("ScopedRegistration - stack unwinding releases a registration", "[utility][unit][scoped-registration]")
+  TEST_CASE("ScopedRegistration - stack unwinding releases a registration")
   {
     std::int32_t releaseCount = 0;
 

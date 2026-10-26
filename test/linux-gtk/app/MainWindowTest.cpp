@@ -77,7 +77,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("MainWindow - restores saved window size and title", "[gtk][unit][main-window]")
+  TEST_CASE("MainWindow - restores saved window size and title")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -97,7 +97,7 @@ namespace ao::gtk::test
     CHECK(defaultHeight == 480);
   }
 
-  TEST_CASE("MainWindow - installs shell and list actions", "[gtk][unit][main-window]")
+  TEST_CASE("MainWindow - installs shell and list actions")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -121,8 +121,7 @@ namespace ao::gtk::test
     CHECK(actionMap->lookup_action("list-delete-subtree") != nullptr);
   }
 
-  TEST_CASE("MainWindow - destruction unexports window actions before retained handlers can run",
-            "[gtk][unit][main-window][async]")
+  TEST_CASE("MainWindow - destruction unexports window actions before retained handlers can run")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -178,7 +177,7 @@ namespace ao::gtk::test
     CHECK(Gtk::Window::list_toplevels().size() == topLevelCount);
   }
 
-  TEST_CASE("MainWindow - hide persists current library path", "[gtk][unit][main-window]")
+  TEST_CASE("MainWindow - hide persists current library path")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -202,7 +201,7 @@ namespace ao::gtk::test
     CHECK(after.lastLibraryPath == fixture.runtime().musicRoot().string());
   }
 
-  TEST_CASE("MainWindow - explicit session save persists current library path", "[gtk][unit][main-window]")
+  TEST_CASE("MainWindow - explicit session save persists current library path")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -225,8 +224,7 @@ namespace ao::gtk::test
     CHECK(after.lastLibraryPath == fixture.runtime().musicRoot().string());
   }
 
-  TEST_CASE("MainWindow - library switch forgets playback and prevents stale path writes",
-            "[gtk][integration][main-window][session]")
+  TEST_CASE("MainWindow - library switch forgets playback and prevents stale path writes")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -254,8 +252,7 @@ namespace ao::gtk::test
     CHECK(persistedSession.lastLibraryPath == "/tmp/new-library");
   }
 
-  TEST_CASE("MainWindow - failed successor root commit isolates root and playback persistence",
-            "[gtk][integration][main-window]")
+  TEST_CASE("MainWindow - failed successor root commit isolates root and playback persistence")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -380,8 +377,7 @@ namespace ao::gtk::test
     CHECK_FALSE(*configStorePtr->playbackSessionStore().contains(rt::kPlaybackSessionConfigGroup));
   }
 
-  TEST_CASE("MainWindow - failed retirement reports the error and keeps the active window usable",
-            "[gtk][unit][main-window][session]")
+  TEST_CASE("MainWindow - failed retirement reports the error and keeps the active window usable")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -430,8 +426,7 @@ namespace ao::gtk::test
     drainGtkEvents();
   }
 
-  TEST_CASE("MainWindow - restores saved output when audio provider is bootstrapped before session load",
-            "[gtk][integration][main-window][audio]")
+  TEST_CASE("MainWindow - restores saved output when audio provider is bootstrapped before session load")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -455,7 +450,7 @@ namespace ao::gtk::test
     CHECK(output.profileId == audio::kProfileShared);
   }
 
-  TEST_CASE("MainWindow - prepared session remains isolated until activation", "[gtk][unit][main-window][session]")
+  TEST_CASE("MainWindow - prepared session remains isolated until activation")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -481,7 +476,7 @@ namespace ao::gtk::test
     CHECK_FALSE(std::filesystem::exists(workspacePath));
   }
 
-  TEST_CASE("MainWindow - application-less activation leaves MPRIS absent", "[gtk][unit][main-window][session]")
+  TEST_CASE("MainWindow - application-less activation leaves MPRIS absent")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -497,8 +492,7 @@ namespace ao::gtk::test
     CHECK_FALSE(window.hasRequestedMprisStart());
   }
 
-  TEST_CASE("prepareLibraryWindow - releases C++ and GTK ownership with or without activation",
-            "[gtk][unit][active-library]")
+  TEST_CASE("prepareLibraryWindow - releases C++ and GTK ownership with or without activation")
   {
     auto const appPtr = ensureRegisteredGtkApplication();
     auto tempDir = ao::test::TempDir{};
@@ -576,7 +570,7 @@ namespace ao::gtk::test
     CHECK(weakConfigStorePtr.expired());
   }
 
-  TEST_CASE("MainWindow - shell menu components receive the window's menu model", "[gtk][unit][main-window][menu]")
+  TEST_CASE("MainWindow - shell menu components receive the window's menu model")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -637,7 +631,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("MainWindow - a keymap publishes accelerators only after it is saved", "[gtk][unit][main-window][shortcut]")
+  TEST_CASE("MainWindow - a keymap publishes accelerators only after it is saved")
   {
     // Accelerators publish only to a window added to a started application.
     auto const appPtr = ensureRegisteredGtkApplication();
@@ -692,8 +686,7 @@ namespace ao::gtk::test
     appPtr->remove_window(window);
   }
 
-  TEST_CASE("MainWindow - a session checkpoint does not clobber explicit preferences",
-            "[gtk][unit][main-window][config]")
+  TEST_CASE("MainWindow - a session checkpoint does not clobber explicit preferences")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -729,8 +722,7 @@ namespace ao::gtk::test
     CHECK(loadedSession.lastLibraryPath == runtime.musicRoot().string());
   }
 
-  TEST_CASE("MainWindow - preparation reports each group a newer version saved and keeps it",
-            "[gtk][integration][main-window][config]")
+  TEST_CASE("MainWindow - preparation reports each group a newer version saved and keeps it")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -767,8 +759,7 @@ namespace ao::gtk::test
     CHECK(saved.contains("futurePreference: kept"));
   }
 
-  TEST_CASE("MainWindow - rejected workspace state is not overwritten during preparation",
-            "[gtk][integration][main-window][workspace]")
+  TEST_CASE("MainWindow - rejected workspace state is not overwritten during preparation")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -793,8 +784,7 @@ namespace ao::gtk::test
     CHECK(runtime.workspace().snapshot().activeViewId != rt::kInvalidViewId);
   }
 
-  TEST_CASE("MainWindow - partial output preferences fall back to the session output",
-            "[gtk][integration][main-window][audio]")
+  TEST_CASE("MainWindow - partial output preferences fall back to the session output")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -823,8 +813,7 @@ namespace ao::gtk::test
     CHECK(selected.profileId == audio::kProfileShared);
   }
 
-  TEST_CASE("MainWindow - restores a playback session as idle sequence state",
-            "[gtk][integration][main-window][playback][session]")
+  TEST_CASE("MainWindow - restores a playback session as idle sequence state")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto trackId = kInvalidTrackId;
@@ -879,8 +868,7 @@ namespace ao::gtk::test
     CHECK(runtime.views().trackListState(focusedViewId).selection == std::vector<TrackId>{trackId});
   }
 
-  TEST_CASE("MainWindow - persists a playback session from playback events",
-            "[gtk][integration][main-window][playback][session]")
+  TEST_CASE("MainWindow - persists a playback session from playback events")
   {
     [[maybe_unused]] auto const appPtr = ensureRegisteredGtkApplication();
     auto fixture = GtkRuntimeFixture{};

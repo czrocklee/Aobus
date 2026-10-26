@@ -172,7 +172,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("AsyncRuntime - ready task eagerly owns and returns its value", "[runtime][unit][async]")
+  TEST_CASE("AsyncRuntime - ready task eagerly owns and returns its value")
   {
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
@@ -182,8 +182,7 @@ namespace ao::rt::test
     CHECK(*future.get() == 42);
   }
 
-  TEST_CASE("AsyncRuntime - spawn switches to worker and returns through callback executor",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("AsyncRuntime - spawn switches to worker and returns through callback executor", "[concurrency]")
   {
     auto executor = LoopExecutor{};
     auto runtime = Runtime{executor};
@@ -200,8 +199,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("AsyncRuntime - teardown discards queued callback and destroys its suspended frame",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("AsyncRuntime - teardown discards queued callback and destroys its suspended frame", "[concurrency]")
   {
     auto executor = QueuedExecutor{};
     auto resumed = AsyncTestState<bool>::create(false);
@@ -227,8 +225,7 @@ namespace ao::rt::test
     CHECK(weakLifetimePtr.expired());
   }
 
-  TEST_CASE("AsyncRuntime - terminal stop closes queued callback admission before destruction",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("AsyncRuntime - terminal stop closes queued callback admission before destruction", "[concurrency]")
   {
     auto executor = QueuedExecutor{};
     auto resumed = AsyncTestState<bool>::create(false);
@@ -249,7 +246,7 @@ namespace ao::rt::test
     CHECK(weakLifetimePtr.expired());
   }
 
-  TEST_CASE("AsyncRuntime - future task failure remains caller-owned", "[runtime][unit][async]")
+  TEST_CASE("AsyncRuntime - future task failure remains caller-owned")
   {
     auto executor = InlineExecutor{};
     auto runtime = Runtime{executor};
@@ -261,8 +258,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("AsyncRuntime - spawn transports non-default-constructible and non-assignable results",
-            "[runtime][unit][async]")
+  TEST_CASE("AsyncRuntime - spawn transports non-default-constructible and non-assignable results")
   {
     STATIC_REQUIRE_FALSE(std::is_default_constructible_v<NonDefaultTaskResult>);
     STATIC_REQUIRE_FALSE(std::is_move_assignable_v<NonDefaultTaskResult>);
@@ -291,7 +287,7 @@ namespace ao::rt::test
     runtime.join();
   }
 
-  TEST_CASE("AsyncRuntime - sleep resumes its coroutine on the worker executor", "[runtime][unit][async][concurrency]")
+  TEST_CASE("AsyncRuntime - sleep resumes its coroutine on the worker executor", "[concurrency]")
   {
     auto executor = QueuedExecutor{};
     auto runtime = Runtime{executor, 1};
@@ -307,8 +303,7 @@ namespace ao::rt::test
     CHECK(executor.queuedCount() == 0);
   }
 
-  TEST_CASE("AsyncRuntime - sleeping coroutine observes a thread-safe stop request",
-            "[runtime][unit][async][concurrency]")
+  TEST_CASE("AsyncRuntime - sleeping coroutine observes a thread-safe stop request", "[concurrency]")
   {
     auto executor = ManualExecutor{};
     auto sleeper = ControlledSleeper{};
@@ -336,7 +331,7 @@ namespace ao::rt::test
     CHECK(callbackCount.load() == 0);
   }
 
-  TEST_CASE("AsyncRuntime - timer expiry races safely with cancellation", "[runtime][unit][async][concurrency][stress]")
+  TEST_CASE("AsyncRuntime - timer expiry races safely with cancellation", "[concurrency]")
   {
     constexpr std::uint32_t kIterationCount = 64;
     auto executor = ManualExecutor{};

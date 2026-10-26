@@ -16,8 +16,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("TrackPresentationCatalog - language replacement notifies observers after labels change",
-            "[uimodel][unit][presentation]")
+  TEST_CASE("TrackPresentationCatalog - language replacement notifies observers after labels change")
   {
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;
@@ -36,8 +35,7 @@ namespace ao::uimodel::test
     CHECK(catalog.specForId("library") == optPreviousSpec);
   }
 
-  TEST_CASE("TrackPresentationCatalog - projects builtin and custom presentation choices",
-            "[uimodel][unit][presentation]")
+  TEST_CASE("TrackPresentationCatalog - projects builtin and custom presentation choices")
   {
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;
@@ -73,8 +71,7 @@ namespace ao::uimodel::test
     CHECK(signalCount == 1);
   }
 
-  TEST_CASE("TrackPresentationCatalog - omits custom separator when no custom presets exist",
-            "[uimodel][unit][presentation]")
+  TEST_CASE("TrackPresentationCatalog - omits custom separator when no custom presets exist")
   {
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;

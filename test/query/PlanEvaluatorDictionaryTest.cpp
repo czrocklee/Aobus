@@ -25,7 +25,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator - matches work metadata equality and LIKE expressions", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches work metadata equality and LIKE expressions")
   {
     auto trackWithWork = TestTrack{
       "Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
@@ -59,8 +59,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - matches movement metadata equality existence and LIKE expressions",
-            "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches movement metadata equality existence and LIKE expressions")
   {
     auto specWithMovement = TrackSpec{};
     specWithMovement.movement = "Finale";
@@ -103,7 +102,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - matches composer metadata equality and LIKE expressions", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches composer metadata equality and LIKE expressions")
   {
     auto trackWithComposer = TestTrack{
       "Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
@@ -126,8 +125,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - matches dictionary text with Unicode caseless substring keys",
-            "[query][unit][plan-evaluator][unicode]")
+  TEST_CASE("PlanEvaluator - matches dictionary text with Unicode caseless substring keys")
   {
     auto spec = TrackSpec{};
     spec.artist = "Die Ärzte";
@@ -141,8 +139,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, accentDistinctPlan, track.view(), track.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - matches custom text with Unicode caseless substring keys",
-            "[query][unit][plan-evaluator][unicode]")
+  TEST_CASE("PlanEvaluator - matches custom text with Unicode caseless substring keys")
   {
     auto spec = TrackSpec{};
     spec.customPairs.emplace_back("Location", "Große Straße");
@@ -152,7 +149,7 @@ namespace ao::query::test
     CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track.view(), track.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - dictionary cache preserves string predicate results", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - dictionary cache preserves string predicate results")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
@@ -200,8 +197,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - nested comparison does not leak a dictionary constant into its parent",
-            "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - nested comparison does not leak a dictionary constant into its parent")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
@@ -218,7 +214,7 @@ namespace ao::query::test
     CHECK(matchesFullPlanWithDictionary(PlanEvaluator{}, plan, track.view(), dictionaryFixture.dictionary()) == false);
   }
 
-  TEST_CASE("PlanEvaluator - matches dictionary-backed metadata and property fields", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches dictionary-backed metadata and property fields")
   {
     auto spec = TrackSpec{};
     spec.codec = AudioCodec::Flac;
@@ -365,7 +361,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - compares dictionary fields lexicographically by text", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - compares dictionary fields lexicographically by text")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();
@@ -452,8 +448,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("PlanEvaluator - matches partial LIKE patterns on dictionary-backed fields",
-            "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches partial LIKE patterns on dictionary-backed fields")
   {
     auto const spec = TrackSpec{.artist = "Johann Sebastian Bach"};
     auto track = TrackFixture{spec};
@@ -464,8 +459,7 @@ namespace ao::query::test
     CHECK(matchesFullPlanWithDictionary(evaluator, plan, track.view(), track.dictionary()) == true);
   }
 
-  TEST_CASE("PlanEvaluator - unresolved comparison symbols have explicit missing semantics",
-            "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - unresolved comparison symbols have explicit missing semantics")
   {
     auto track = TrackFixture{};
     auto const evaluator = PlanEvaluator{};
@@ -485,8 +479,7 @@ namespace ao::query::test
     CHECK_FALSE(matchesFullPlanWithDictionary(evaluator, customIn, track.view(), track.dictionary()));
   }
 
-  TEST_CASE("PlanEvaluator - dictionary literal binding does not leak into later field comparisons",
-            "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - dictionary literal binding does not leak into later field comparisons")
   {
     auto dictionaryFixture = DictionaryFixture{};
     auto transaction = dictionaryFixture.writeTransaction();

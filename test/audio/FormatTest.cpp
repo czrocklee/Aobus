@@ -22,7 +22,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("SampleEncoding - container width is explicit", "[audio][unit][format]")
+  TEST_CASE("SampleEncoding - container width is explicit")
   {
     CHECK(bytesPerSample(SampleEncoding::Signed16Le) == 2U);
     CHECK(bytesPerSample(SampleEncoding::Signed24PackedLe) == 3U);
@@ -31,7 +31,7 @@ namespace ao::audio::test
     CHECK(bytesPerSample(SampleEncoding::Float32Le) == 4U);
   }
 
-  TEST_CASE("PcmFormat - frameBytes accounts for channel count", "[audio][unit][format]")
+  TEST_CASE("PcmFormat - frameBytes accounts for channel count")
   {
     CHECK(frameBytes(makeFormat(44100, 2, SampleEncoding::Signed16Le)) == 4U);
     CHECK(frameBytes(makeFormat(44100, 1, SampleEncoding::Signed16Le)) == 2U);
@@ -39,7 +39,7 @@ namespace ao::audio::test
     CHECK(frameBytes(makeFormat(48000, 6, SampleEncoding::Signed32Le)) == 24U);
   }
 
-  TEST_CASE("PcmFormat - frameBytes/bytesPerSecond return 0 for unconfigured formats", "[audio][unit][format]")
+  TEST_CASE("PcmFormat - frameBytes/bytesPerSecond return 0 for unconfigured formats")
   {
     CHECK(frameBytes(makeFormat(44100, 0, SampleEncoding::Signed16Le)) == 0U);
     CHECK(frameBytes(PcmFormat{.sampleRate = 44100, .channels = 2}) == 0U);
@@ -49,7 +49,7 @@ namespace ao::audio::test
     CHECK(bytesPerSecond(PcmFormat{.sampleRate = 44100, .channels = 2}) == 0U);
   }
 
-  TEST_CASE("PcmFormat - bytesPerSecond is sampleRate * frameBytes", "[audio][unit][format]")
+  TEST_CASE("PcmFormat - bytesPerSecond is sampleRate * frameBytes")
   {
     CHECK(bytesPerSecond(makeFormat(44100, 2, SampleEncoding::Signed16Le)) == static_cast<std::uint64_t>(44100) * 4U);
     CHECK(bytesPerSecond(makeFormat(48000, 2, SampleEncoding::Signed24PackedLe)) ==
@@ -57,7 +57,7 @@ namespace ao::audio::test
     CHECK(bytesPerSecond(makeFormat(96000, 2, SampleEncoding::Signed32Le)) == static_cast<std::uint64_t>(96000) * 8U);
   }
 
-  TEST_CASE("Format helpers - signalFormat and pcmFormat copy the speaker mask", "[audio][unit][format]")
+  TEST_CASE("Format helpers - signalFormat and pcmFormat copy the speaker mask")
   {
     auto const identifiedPcm =
       PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
@@ -74,7 +74,7 @@ namespace ao::audio::test
     CHECK(roundTripped == identifiedPcm);
   }
 
-  TEST_CASE("NodeFormat - signalFormat roundtrips the speaker mask through either alternative", "[audio][unit][format]")
+  TEST_CASE("NodeFormat - signalFormat roundtrips the speaker mask through either alternative")
   {
     auto const identifiedPcm =
       PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le, .speakerMask = 0x3};
@@ -90,8 +90,7 @@ namespace ao::audio::test
     CHECK(signalFormat(signalNode) == signal);
   }
 
-  TEST_CASE("PcmFormat - same-count modes with different speaker masks are different PCM modes",
-            "[audio][unit][format]")
+  TEST_CASE("PcmFormat - same-count modes with different speaker masks are different PCM modes")
   {
     auto const unassigned = makeFormat(48000, 2, SampleEncoding::Signed16Le);
     auto const frontStereo =
@@ -105,7 +104,7 @@ namespace ao::audio::test
     CHECK(isSamePcmMode(frontStereo, frontStereoCopy));
   }
 
-  TEST_CASE("SignalFormat - complete WAVE masks assign one supported role to every channel", "[audio][unit][format]")
+  TEST_CASE("SignalFormat - complete WAVE masks assign one supported role to every channel")
   {
     CHECK(isCompleteWaveSpeakerMask(0x4, 1));
     CHECK(isCompleteWaveSpeakerMask(0x30, 2));
@@ -118,7 +117,7 @@ namespace ao::audio::test
     CHECK_FALSE(isCompleteWaveSpeakerMask(0x80000000, 1));
   }
 
-  TEST_CASE("SignalFormat - same-count signals with different speaker masks are not equal", "[audio][unit][format]")
+  TEST_CASE("SignalFormat - same-count signals with different speaker masks are not equal")
   {
     auto const unassigned = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
     auto const frontStereo = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
@@ -127,8 +126,7 @@ namespace ao::audio::test
     CHECK(frontStereo == SignalFormat{frontStereo});
   }
 
-  TEST_CASE("PcmFormat - frameBytes follows channel count and encoding, not speaker population",
-            "[audio][unit][format]")
+  TEST_CASE("PcmFormat - frameBytes follows channel count and encoding, not speaker population")
   {
     auto const twoChannel = [&](std::uint32_t const speakerMask)
     {
@@ -146,8 +144,7 @@ namespace ao::audio::test
     CHECK(bytesPerSecond(twoChannel(0x3)) == static_cast<std::uint64_t>(48000) * 4U);
   }
 
-  TEST_CASE("DecodedStreamInfo - channel-layout evidence alone distinguishes otherwise equal streams",
-            "[audio][unit][format]")
+  TEST_CASE("DecodedStreamInfo - channel-layout evidence alone distinguishes otherwise equal streams")
   {
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16, .speakerMask = 0x3};
     auto const outputFormat =

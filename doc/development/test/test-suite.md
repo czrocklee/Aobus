@@ -12,7 +12,7 @@ The `./ao test` command exposes individual suites and four suite groups:
 - `tui`: terminal frontend Catch2 tests (`ao_tui_test`).
 - `cli`: command-line frontend Catch2 tests (`ao_cli_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
-- `integration`: the standalone media-file, decoder, graph, native-provider, and enabled Linux system-media suite (`ao_integration_test`), not every case tagged `[integration]`.
+- `integration`: the standalone media-file, decoder, graph, native-provider, and enabled Linux system-media suite (`ao_integration_test`); its membership comes from CMake registration, not from any case classification.
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
 - `appkit`: an opt-in native macOS GUI smoke harness with scenario selection and required disposable library and isolated state-root inputs; it is not part of a suite group.
@@ -22,10 +22,23 @@ The `./ao test` command exposes individual suites and four suite groups:
 - `concurrency`: every native Catch2 suite, filtered to non-hidden concurrency cases with `[concurrency]~[.]`.
 
 Suites choose binaries; Catch2 filters choose cases within them. So
-`./ao test --core "[runtime][integration]"` runs integration-scoped cases in core,
+`./ao test --core "TrackStore*"` runs matching cases in core,
 while `--integration` never collects cases from other binaries. A filter skips
 tooling and lint, and it fails only when no selected suite matches; a matched
 case that skips still counts as matched.
+
+Catch2 uses an unescaped comma to separate alternative filters; shell quotes
+alone do not make it literal. Escape commas within one case name as `\,`:
+
+```bash
+./ao test --core --list "FieldCatalog - finds descriptors by canonical name\, alias\, and field"
+```
+
+Use name globs to select a family of cases. For example, on macOS,
+`./ao test --all --list "~[.]CoreAudio*"` lists the non-hidden CoreAudio cases
+across the native Catch2 programs. Remove `--list` to run that selection;
+`~[.]` keeps manual probes excluded. A suite flag still restricts the selection
+to that program, so `--core` does not include matching integration cases.
 
 `./ao check` is the complete native gate. CTest is not equivalent: it omits the
 standalone integration suite and the portal's tooling, lint, and environment setup.

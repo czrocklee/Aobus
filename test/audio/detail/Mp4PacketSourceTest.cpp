@@ -34,7 +34,7 @@ namespace ao::audio::detail::test
     }
   } // namespace
 
-  TEST_CASE("Mp4PacketSource - exposes selected track packets and timing", "[audio][unit][detail][mp4]")
+  TEST_CASE("Mp4PacketSource - exposes selected track packets and timing")
   {
     auto const temp = ao::test::TempFile{makeMp4(), ".m4a"};
     auto source = Mp4PacketSource{};
@@ -62,7 +62,7 @@ namespace ao::audio::detail::test
     CHECK(!source.seek(std::chrono::milliseconds{10}));
   }
 
-  TEST_CASE("Mp4PacketSource - handles selection failures and timescale fallback", "[audio][unit][detail][mp4]")
+  TEST_CASE("Mp4PacketSource - handles selection failures and timescale fallback")
   {
     SECTION("Wrong sample entry closes the source")
     {

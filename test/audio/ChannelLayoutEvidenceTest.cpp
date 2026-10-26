@@ -100,7 +100,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("RouteTracker - decoder and engine updates retain effective speaker masks", "[audio][unit][route-tracker]")
+  TEST_CASE("RouteTracker - decoder and engine updates retain effective speaker masks")
   {
     auto tracker = detail::RouteTracker{};
 
@@ -149,8 +149,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("RouteTracker - an evidence-only decoder refresh changes the snapshot without changing formats",
-            "[audio][unit][route-tracker]")
+  TEST_CASE("RouteTracker - an evidence-only decoder refresh changes the snapshot without changing formats")
   {
     auto tracker = detail::RouteTracker{};
     tracker.setDecoder(quadStreamInfo(identifiedQuadEvidence()));
@@ -172,7 +171,7 @@ namespace ao::audio::test
     CHECK(after.sourceChannelLayout == inferredQuadEvidence());
   }
 
-  TEST_CASE("RouteTracker - clear resets formats, evidence, and anchor", "[audio][unit][route-tracker]")
+  TEST_CASE("RouteTracker - clear resets formats, evidence, and anchor")
   {
     auto tracker = detail::RouteTracker{};
     tracker.setDecoder(quadStreamInfo(identifiedQuadEvidence()));
@@ -189,8 +188,7 @@ namespace ao::audio::test
     CHECK_FALSE(tracker.anchor().has_value());
   }
 
-  TEST_CASE("Player - a route snapshot carries source evidence and keeps format masks on every node",
-            "[audio][unit][player]")
+  TEST_CASE("Player - a route snapshot carries source evidence and keeps format masks on every node")
   {
     auto executor = ManualExecutor{};
     auto player = Player{executor};
@@ -226,8 +224,7 @@ namespace ao::audio::test
     CHECK(engineIt->sourceChannelLayout == ChannelLayoutEvidence{});
   }
 
-  TEST_CASE("Player - an evidence-only route refresh changes the merged graph without changing formats",
-            "[audio][unit][player]")
+  TEST_CASE("Player - an evidence-only route refresh changes the merged graph without changing formats")
   {
     auto executor = ManualExecutor{};
     auto player = Player{executor};
@@ -264,8 +261,7 @@ namespace ao::audio::test
     CHECK(sourceAfter->sourceChannelLayout == inferredQuadEvidence());
   }
 
-  TEST_CASE("QualityAnalyzer - identified and inferred source histories retain equal numerical quality",
-            "[audio][unit][quality]")
+  TEST_CASE("QualityAnalyzer - identified and inferred source histories retain equal numerical quality")
   {
     // A pure synthetic playback path. The native sink keeps an explicit raw
     // mask of zero and no delivery evidence: it never inherits the source

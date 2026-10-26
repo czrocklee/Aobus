@@ -14,7 +14,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("DesktopOutputSelection - resolves the stored Windows preference at startup", "[winui][unit][app][output]")
+  TEST_CASE("DesktopOutputSelection - resolves the stored Windows preference at startup")
   {
     auto settings = DesktopSettings{};
     settings.preferredOutputSelection = {
@@ -47,8 +47,7 @@ namespace ao::winui::test
     CHECK(*optSelection == settings.preferredOutputSelection);
   }
 
-  TEST_CASE("DesktopOutputSelection - remembers the exact request for the next settings checkpoint",
-            "[winui][unit][app][output]")
+  TEST_CASE("DesktopOutputSelection - remembers the exact request for the next settings checkpoint")
   {
     auto settings = DesktopSettings{};
     settings.window = {.x = 41, .y = 42, .width = 1400, .height = 900, .maximized = true};

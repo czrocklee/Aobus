@@ -14,7 +14,7 @@ extern "C"
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("AlsaPcmFormat - maps sample encodings to exact ALSA formats", "[audio][unit][alsa]")
+  TEST_CASE("AlsaPcmFormat - maps sample encodings to exact ALSA formats")
   {
     CHECK(alsaFormatFromSampleEncoding(SampleEncoding::Signed16Le) == SND_PCM_FORMAT_S16_LE);
     CHECK(alsaFormatFromSampleEncoding(SampleEncoding::Signed24PackedLe) == SND_PCM_FORMAT_S24_3LE);
@@ -24,7 +24,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(alsaFormatFromSampleEncoding(SampleEncoding::Unknown));
   }
 
-  TEST_CASE("AlsaPcmFormat - maps ALSA formats to exact sample encodings", "[audio][unit][alsa]")
+  TEST_CASE("AlsaPcmFormat - maps ALSA formats to exact sample encodings")
   {
     CHECK(sampleEncodingFromAlsaFormat(SND_PCM_FORMAT_S16_LE) == SampleEncoding::Signed16Le);
     CHECK(sampleEncodingFromAlsaFormat(SND_PCM_FORMAT_S24_3LE) == SampleEncoding::Signed24PackedLe);

@@ -19,7 +19,7 @@
 
 namespace ao::gtk::layout::test
 {
-  TEST_CASE("StatusComponents - status bar components register status schema entries", "[gtk][unit][layout][status]")
+  TEST_CASE("StatusComponents - status bar components register status schema entries")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.status_test");
     auto const tempDir = ao::test::TempDir{};

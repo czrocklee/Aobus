@@ -39,7 +39,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI - scan applies new files and dry run preserves planned changes", "[cli][integration][scan]")
+  TEST_CASE("CLI - scan applies new files and dry run preserves planned changes")
   {
     auto fixture = CliFixture{};
     auto const trackPath = fixture.root() / "track.flac";
@@ -93,8 +93,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "1 missing file needs review"));
   }
 
-  TEST_CASE("CLI - scan reports missing CUE segments as actionable and restores deleted ordinals",
-            "[cli][integration][scan]")
+  TEST_CASE("CLI - scan reports missing CUE segments as actionable and restores deleted ordinals")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "image.flac");
@@ -134,8 +133,7 @@ namespace ao::cli::test
     CHECK(contains(restored.out, "CUE Track Number: 9"));
   }
 
-  TEST_CASE("CLI - scan dry run lists accompanying CUE warnings while omitting healthy unchanged files",
-            "[cli][unit][scan]")
+  TEST_CASE("CLI - scan dry run lists accompanying CUE warnings while omitting healthy unchanged files")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "image.flac");
@@ -195,7 +193,7 @@ namespace ao::cli::test
     }
   }
 
-  TEST_CASE("CLI - scan and verify exit zero when only CUE warnings remain", "[cli][integration][scan]")
+  TEST_CASE("CLI - scan and verify exit zero when only CUE warnings remain")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "image.flac");
@@ -228,7 +226,7 @@ namespace ao::cli::test
     CHECK(contains(verified.out, "orphan.cue"));
   }
 
-  TEST_CASE("CLI - deferred scan fingerprints pending manifest rows on demand", "[cli][integration][scan]")
+  TEST_CASE("CLI - deferred scan fingerprints pending manifest rows on demand")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -259,7 +257,7 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"lib", "fingerprint"}), "lib fingerprint requires --pending");
   }
 
-  TEST_CASE("CLI - verbose scan reports UTF-8 paths", "[cli][integration][scan]")
+  TEST_CASE("CLI - verbose scan reports UTF-8 paths")
   {
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82.flac"};
     auto fixture = CliFixture{};
@@ -274,7 +272,7 @@ namespace ao::cli::test
     CHECK(contains(result.err, "apply:"));
   }
 
-  TEST_CASE("CLI - scan reports moved files", "[cli][integration][scan]")
+  TEST_CASE("CLI - scan reports moved files")
   {
     auto fixture = CliFixture{};
     auto const originalPath = fixture.root() / "track.flac";
@@ -302,7 +300,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "new 0  changed 0  moved 0  missing 0  unchanged 1  errors 0"));
   }
 
-  TEST_CASE("CLI - scan reports one moved file for a two-member CUE carrier", "[cli][integration][scan]")
+  TEST_CASE("CLI - scan reports one moved file for a two-member CUE carrier")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "image.flac");
@@ -350,7 +348,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(yaml::findChild(afterTracks[1], "uri")) == "renamed.flac");
   }
 
-  TEST_CASE("CLI - scan and init report apply failures and exit non-zero", "[cli][integration][scan]")
+  TEST_CASE("CLI - scan and init report apply failures and exit non-zero")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");

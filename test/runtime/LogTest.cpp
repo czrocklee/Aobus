@@ -29,7 +29,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Log - initialization and shutdown", "[runtime][unit][log]")
+  TEST_CASE("Log - initialization and shutdown")
   {
     auto const temp = ao::test::TempDir{};
     auto const& tempDir = temp.path();
@@ -104,7 +104,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("toSpdlog preserves source file line and function", "[runtime][unit][log]")
+  TEST_CASE("toSpdlog preserves source file line and function")
   {
     auto const loc = std::source_location::current();
     auto const spdLoc = toSpdlog(loc);

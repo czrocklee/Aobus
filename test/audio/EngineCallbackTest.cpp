@@ -201,7 +201,7 @@ namespace ao::audio::test
     };
   } // namespace
 
-  TEST_CASE("Engine - backend error callback transitions to error", "[audio][unit][engine][callback]")
+  TEST_CASE("Engine - backend error callback transitions to error")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -224,7 +224,7 @@ namespace ao::audio::test
     CHECK(snap.statusText == "Hardware failure");
   }
 
-  TEST_CASE("Engine - route ready callback updates route snapshot", "[audio][unit][engine][callback][concurrency]")
+  TEST_CASE("Engine - route ready callback updates route snapshot", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -251,7 +251,7 @@ namespace ao::audio::test
     CHECK(route.optAnchor->id == "anchor-123");
   }
 
-  TEST_CASE("Engine - format callback publishes the complete output format", "[audio][unit][engine][callback]")
+  TEST_CASE("Engine - format callback publishes the complete output format")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -273,7 +273,7 @@ namespace ao::audio::test
     CHECK(engine.status().routeState.engineOutputFormat == changedFormat);
   }
 
-  TEST_CASE("Engine - stop drops retired render session target", "[audio][unit][engine][callback][concurrency]")
+  TEST_CASE("Engine - stop drops retired render session target", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -294,8 +294,7 @@ namespace ao::audio::test
     CHECK(backendRaw->target() == nullptr);
   }
 
-  TEST_CASE("Engine - user callbacks run outside backend callback stack and may reenter",
-            "[audio][unit][engine][callback][concurrency]")
+  TEST_CASE("Engine - user callbacks run outside backend callback stack and may reenter", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -323,7 +322,7 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - event callback defers engine teardown", "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine - event callback defers engine teardown", "[concurrency]")
   {
     struct CallbackLifetime final
     {
@@ -384,7 +383,7 @@ namespace ao::audio::test
     CHECK(routeChanged.load(std::memory_order_acquire));
   }
 
-  TEST_CASE("Engine - shutdown serializes controls and is idempotent", "[audio][unit][engine][concurrency]")
+  TEST_CASE("Engine - shutdown serializes controls and is idempotent", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto lifecycleCountsPtr = std::make_shared<BackendLifecycleCounts>();
@@ -426,8 +425,7 @@ namespace ao::audio::test
     CHECK(lifecycleCountsPtr->setProperty.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("Engine - queued render event from retired session is ignored",
-            "[audio][unit][engine][callback][concurrency]")
+  TEST_CASE("Engine - queued render event from retired session is ignored", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto blockingBackendPtr = std::make_unique<FakeBlockingStopBackend>();
@@ -461,8 +459,7 @@ namespace ao::audio::test
     CHECK(blockingEngine.status().transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation route",
-            "[audio][unit][engine][barrier][concurrency]")
+  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation route", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -510,8 +507,7 @@ namespace ao::audio::test
     CHECK(routeCount.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation track end",
-            "[audio][unit][engine][barrier][concurrency]")
+  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation track end", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -564,8 +560,7 @@ namespace ao::audio::test
     CHECK(endedCount.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation failure",
-            "[audio][unit][engine][barrier][concurrency]")
+  TEST_CASE("Engine - play and stop barriers suppress a materialized old-generation failure", "[concurrency]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -620,7 +615,7 @@ namespace ao::audio::test
     CHECK(failureCount.load(std::memory_order_relaxed) == 0);
   }
 
-  TEST_CASE("Engine - backend error permits a new playback route", "[audio][unit][engine][callback]")
+  TEST_CASE("Engine - backend error permits a new playback route")
   {
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();

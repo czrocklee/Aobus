@@ -113,8 +113,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("WavDecoderSession - assigns every absent and explicit-zero WAV compatibility layout",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - assigns every absent and explicit-zero WAV compatibility layout")
   {
     using enum WavRole;
     auto const cases = std::vector<LayoutCase>{
@@ -175,8 +174,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("WavDecoderSession - preserves complete alternate declarations without count-based relabeling",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - preserves complete alternate declarations without count-based relabeling")
   {
     using enum WavRole;
     auto const cases = std::vector<LayoutCase>{
@@ -250,8 +248,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("WavDecoderSession - ignores excess highest positions when trimming to the effective layout",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - ignores excess highest positions when trimming to the effective layout")
   {
     using enum WavRole;
     struct ExcessCase final
@@ -289,8 +286,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("WavDecoderSession - returns contextual source errors for partial reserved and wildcard declarations",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - returns contextual source errors for partial reserved and wildcard declarations")
   {
     struct RefusalCase final
     {
@@ -331,8 +327,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("WavDecoderSession - invents no absent or zero-mask fallback outside the WAV table",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - invents no absent or zero-mask fallback outside the WAV table")
   {
     for (auto const channels : std::to_array<std::uint16_t>({9, 18, 32, 33}))
     {
@@ -357,8 +352,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("WavDecoderSession - keeps source identity through requested lossless output adaptation",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - keeps source identity through requested lossless output adaptation")
   {
     using enum WavRole;
     auto const source =
@@ -399,8 +393,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("WavDecoderSession - preserves declared float slot identities and all native float bytes",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - preserves declared float slot identities and all native float bytes")
   {
     using enum WavRole;
     auto const layout = LayoutCase{2, 0xC, {FrontCenter, LowFrequency}, {}};
@@ -443,8 +436,7 @@ namespace ao::audio::test
     CHECK(integerRes.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("WavDecoderSession - preserves layout stride and complete PCM across block boundaries seek and EOF",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - preserves layout stride and complete PCM across block boundaries seek and EOF")
   {
     using enum WavRole;
     auto const layout = LayoutCase{4, 0x107, {FrontLeft, FrontRight, FrontCenter, BackCenter}, {}};
@@ -515,8 +507,7 @@ namespace ao::audio::test
     CHECK(decoderPtr->streamInfo() == info);
   }
 
-  TEST_CASE("WavDecoderSession - layout interpretation does not admit zero geometry or invalid precision",
-            "[audio][integration][wav][decoder]")
+  TEST_CASE("WavDecoderSession - layout interpretation does not admit zero geometry or invalid precision")
   {
     auto const spec = ao::test::wav::Spec{.sampleFormat = ao::test::wav::SampleFormat::ExtensiblePcm,
                                           .channels = 2,

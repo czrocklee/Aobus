@@ -112,7 +112,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("AudioPipelinePanel - renders no rows for an empty pipeline", "[gtk][unit][playback]")
+  TEST_CASE("AudioPipelinePanel - renders no rows for an empty pipeline")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog()};
@@ -124,7 +124,7 @@ namespace ao::gtk::test
     CHECK(inspector.childCount() == 0);
   }
 
-  TEST_CASE("AudioPipelinePanel - renders pipeline nodes with header and conclusion", "[gtk][unit][playback]")
+  TEST_CASE("AudioPipelinePanel - renders pipeline nodes with header and conclusion")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog()};
@@ -174,8 +174,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("AudioPipelinePanel - headline and channel note wrap across managed-label rebuilds",
-            "[gtk][unit][playback][geometry][localization]")
+  TEST_CASE("AudioPipelinePanel - headline and channel note wrap across managed-label rebuilds")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
@@ -246,8 +245,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("AudioPipelinePanel - realized windows keep the wrapped note inside the allocated panel",
-            "[gtk][unit][playback][geometry]")
+  TEST_CASE("AudioPipelinePanel - realized windows keep the wrapped note inside the allocated panel")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto const catalog = ao::test::messageCatalog("en-US");
@@ -382,7 +380,7 @@ namespace ao::gtk::test
     CHECK(constrainedNote.height > normalNote.height);
   }
 
-  TEST_CASE("AudioPipelinePanel - replaces variant CSS classes", "[gtk][unit][playback]")
+  TEST_CASE("AudioPipelinePanel - replaces variant CSS classes")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog(), AudioPipelinePanelVariant::Inline};
@@ -400,8 +398,7 @@ namespace ao::gtk::test
     CHECK(inspector.hasCssClass("ao-quality-panel-compact"));
   }
 
-  TEST_CASE("AudioPipelinePanel - renders shared pipeline semantics in the selected locale",
-            "[gtk][unit][playback][localization]")
+  TEST_CASE("AudioPipelinePanel - renders shared pipeline semantics in the selected locale")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto catalog = ao::test::messageCatalog("de-DE");
@@ -433,7 +430,7 @@ namespace ao::gtk::test
     CHECK(hasLabel(labels, "Bitgenaues PCM (beobachteter Softwarepfad)"));
   }
 
-  TEST_CASE("AudioPipelinePanel - escapes external device names before applying markup", "[gtk][unit][playback]")
+  TEST_CASE("AudioPipelinePanel - escapes external device names before applying markup")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto widget = AudioPipelinePanel{ao::test::englishMessageCatalog()};

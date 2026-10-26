@@ -32,8 +32,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("ExecutionPlan - compiles text substring operators as Unicode caseless",
-            "[query][unit][execution-plan][unicode]")
+  TEST_CASE("ExecutionPlan - compiles text substring operators as Unicode caseless")
   {
     auto expr = parseOk("$title ~ Love");
     auto plan = compileOk(expr);
@@ -44,7 +43,7 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Like, Field::Title, 0)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles Unicode caseless substring keys", "[query][unit][execution-plan][unicode]")
+  TEST_CASE("ExecutionPlan - compiles Unicode caseless substring keys")
   {
     auto const plan = compileOk(parseOk("$title ~ 'STRASSE Cafe\u0301'"));
 
@@ -56,7 +55,7 @@ namespace ao::query::test
     CHECK(checkComparison(expandedPlan, OpCode::Like, Field::Title, 0)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - validates substring operands", "[query][unit][execution-plan][unicode]")
+  TEST_CASE("ExecutionPlan - validates substring operands")
   {
     CHECK(compileError(parseOk("$title ~ 123")).code == Error::Code::FormatRejected);
     CHECK(compileError(parseOk("@duration ~ 'three minutes'")).code == Error::Code::FormatRejected);
@@ -64,7 +63,7 @@ namespace ao::query::test
     CHECK(compileError(parseOk("#rock ~ 'progressive'")).code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("ExecutionPlan - compiles string constants", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles string constants")
   {
     auto expr = parseOk("$title = 'Hello World'");
     auto plan = compileOk(expr);
@@ -72,7 +71,7 @@ namespace ao::query::test
     CHECK(plan.stringConstants == std::vector<std::string>{"Hello World"});
   }
 
-  TEST_CASE("ExecutionPlan - compiles LIKE for album ids", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles LIKE for album ids")
   {
     auto expr = parseOk(R"($album ~ "Greatest Hits")");
     auto plan = compileOk(expr);
@@ -83,7 +82,7 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Like, Field::AlbumId, 0)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles LIKE for genre ids", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles LIKE for genre ids")
   {
     auto expr = parseOk(R"($genre ~ "Rock")");
     auto plan = compileOk(expr);
@@ -94,7 +93,7 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Like, Field::GenreId, 0)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - compiles LIKE for album artist ids", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles LIKE for album artist ids")
   {
     auto expr = parseOk(R"($albumArtist ~ "Bach")");
     auto plan = compileOk(expr);
@@ -105,19 +104,19 @@ namespace ao::query::test
     CHECK(checkComparison(plan, OpCode::Like, Field::AlbumArtistId, 0)->operand == 1);
   }
 
-  TEST_CASE("ExecutionPlan - rejects LIKE for cover art ids", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - rejects LIKE for cover art ids")
   {
     auto expr = parseOk(R"($coverArt ~ "front")");
     std::ignore = compileError(expr);
   }
 
-  TEST_CASE("ExecutionPlan - rejects LIKE for tags", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - rejects LIKE for tags")
   {
     auto expr = parseOk(R"(#rock ~ "progressive")");
     std::ignore = compileError(expr);
   }
 
-  TEST_CASE("ExecutionPlan - compiles LIKE for titles", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles LIKE for titles")
   {
     auto expr = parseOk(R"($title ~ "Bach")");
     auto plan = compileOk(expr);
@@ -129,7 +128,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - compiles mixed LIKE and EQUAL in OR expressions", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles mixed LIKE and EQUAL in OR expressions")
   {
     // This tests that leftField is correctly saved before compiling right operand
     // $title ~ "Bach" should NOT check if ArtistId is used with LIKE
@@ -145,8 +144,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - compiles parenthesized LIKE and EQUAL in OR expressions",
-            "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles parenthesized LIKE and EQUAL in OR expressions")
   {
     // Explicit grouping with parentheses should also work
     auto expr = parseOk(R"(($title ~ "Bach") or ($artist = "Bach"))");
@@ -161,8 +159,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - compiles multiple OR branches with ID field equality",
-            "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles multiple OR branches with ID field equality")
   {
     // Each equality must retain its own field and bindable symbol.
     auto expr = parseOk(R"($artist = "Bach" or $artist = "Mozart" or $album = "交响乐")");
@@ -179,7 +176,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - compiles title LIKE chained with AND", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - compiles title LIKE chained with AND")
   {
     // Title LIKE should work with AND
     auto expr = parseOk(R"($title ~ "Bach" and $year > 2000)");
@@ -193,7 +190,7 @@ namespace ao::query::test
     CHECK_FALSE(plan.matchesAll);
   }
 
-  TEST_CASE("ExecutionPlan - deduplicates string constants", "[query][unit][execution-plan][string]")
+  TEST_CASE("ExecutionPlan - deduplicates string constants")
   {
     SECTION("Reuses Identical String Constants")
     {

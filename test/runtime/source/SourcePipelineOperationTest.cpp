@@ -25,7 +25,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("Source pipeline - one source batch incrementally updates each projection", "[runtime][unit][source]")
+  TEST_CASE("Source pipeline - one source batch incrementally updates each projection")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto trackIds = std::vector<TrackId>{};

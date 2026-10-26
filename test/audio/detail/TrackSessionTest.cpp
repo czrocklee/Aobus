@@ -71,7 +71,7 @@ namespace ao::audio::detail::test
     }
   } // namespace
 
-  TEST_CASE("TrackSession - preparation rejects a backend format without a whole PCM frame", "[audio][unit][engine]")
+  TEST_CASE("TrackSession - preparation rejects a backend format without a whole PCM frame")
   {
     auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
     auto framelessFormat = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
@@ -101,8 +101,7 @@ namespace ao::audio::detail::test
     CHECK(preparedRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("TrackSession - preparation rejects a final source speaker mask that differs from inspection",
-            "[audio][unit][engine]")
+  TEST_CASE("TrackSession - preparation rejects a final source speaker mask that differs from inspection")
   {
     auto const evidence = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified};
     auto const inspected = stereoStreamInfo(stereoSource(kFrontStereoMask), stereoOutput(kFrontStereoMask), evidence);
@@ -118,8 +117,7 @@ namespace ao::audio::detail::test
     CHECK(preparedRes.error().message.contains("signal format changed after inspection"));
   }
 
-  TEST_CASE("TrackSession - preparation rejects a final output speaker mask that differs from the backend mode",
-            "[audio][unit][engine]")
+  TEST_CASE("TrackSession - preparation rejects a final output speaker mask that differs from the backend mode")
   {
     auto const evidence = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified};
     auto const inspected = stereoStreamInfo(stereoSource(kFrontStereoMask), stereoOutput(kFrontStereoMask), evidence);
@@ -135,8 +133,7 @@ namespace ao::audio::detail::test
     CHECK(preparedRes.error().message.contains("PCM format selected by backend"));
   }
 
-  TEST_CASE("TrackSession - preparation accepts evidence-only drift when effective formats stay stable",
-            "[audio][unit][engine]")
+  TEST_CASE("TrackSession - preparation accepts evidence-only drift when effective formats stay stable")
   {
     auto const sourceFormat = stereoSource(kFrontStereoMask);
     auto const outputFormat = stereoOutput(kFrontStereoMask);
@@ -168,8 +165,7 @@ namespace ao::audio::detail::test
     CHECK(preparedRes->backendFormat == outputFormat);
   }
 
-  TEST_CASE("TrackSession - inspection returns the scripted stream facts including channel-layout evidence",
-            "[audio][unit][engine]")
+  TEST_CASE("TrackSession - inspection returns the scripted stream facts including channel-layout evidence")
   {
     auto const evidence = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified};
     auto const info = stereoStreamInfo(stereoSource(kFrontStereoMask), stereoOutput(kFrontStereoMask), evidence);
@@ -181,8 +177,7 @@ namespace ao::audio::detail::test
     CHECK(inspectedRes->info == info);
   }
 
-  TEST_CASE("TrackSession - prepared and activated track retain the inspected channel-layout evidence",
-            "[audio][unit][engine]")
+  TEST_CASE("TrackSession - prepared and activated track retain the inspected channel-layout evidence")
   {
     auto const evidence = ChannelLayoutEvidence{.origin = ChannelLayoutOrigin::Identified};
     auto const info = stereoStreamInfo(stereoSource(kFrontStereoMask), stereoOutput(kFrontStereoMask), evidence);

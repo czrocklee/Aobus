@@ -651,8 +651,7 @@ namespace ao::systemmedia::test
     }
   } // namespace
 
-  TEST_CASE("MprisBusSession private bus - native registration dispatches owned invocations",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - native registration dispatches owned invocations", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto executor = rt::test::QueuedExecutor{};
@@ -675,8 +674,7 @@ namespace ao::systemmedia::test
     sessionPtr.reset();
   }
 
-  TEST_CASE("MprisBusSession private bus - spoofed NameLost does not retire the session",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisBusSession private bus - spoofed NameLost does not retire the session")
   {
     auto bus = PrivateBus{};
     auto executor = rt::test::QueuedExecutor{};
@@ -704,8 +702,7 @@ namespace ao::systemmedia::test
     CHECK(state.unavailableMessage.empty());
   }
 
-  TEST_CASE("MprisBusSession private bus - no-queue name conflict degrades only the second session",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - no-queue name conflict degrades only the second session", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto executor = rt::test::QueuedExecutor{};
@@ -728,8 +725,7 @@ namespace ao::systemmedia::test
     checkPingReply(pingReply, "first remains");
   }
 
-  TEST_CASE("MprisBusSession private bus - genuine NameLost retires a retained connection",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - genuine NameLost retires a retained connection", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto executor = rt::test::QueuedExecutor{};
@@ -761,7 +757,7 @@ namespace ao::systemmedia::test
   }
 
   TEST_CASE("MprisBusSession private bus - repeated retirement settles and releases acquired connections",
-            "[platform][integration][mpris][concurrency][stress]")
+            "[concurrency]")
   {
     auto bus = PrivateBus{};
 
@@ -799,8 +795,7 @@ namespace ao::systemmedia::test
     }
   }
 
-  TEST_CASE("MprisBusSession private bus - queued invocation survives join and disconnects caller",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - queued invocation survives join and disconnects caller", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto executorOwnerPtr = std::make_unique<rt::test::QueuedExecutor>();
@@ -847,8 +842,7 @@ namespace ao::systemmedia::test
     }
   }
 
-  TEST_CASE("MprisBusSession private bus - rejected owner admission completes an owned invocation",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - rejected owner admission completes an owned invocation", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto executor = rt::test::QueuedExecutor{};
@@ -877,7 +871,7 @@ namespace ao::systemmedia::test
   }
 
   TEST_CASE("MprisBusSession private bus - pending authentication cancellation joins without owner progress",
-            "[platform][integration][mpris][concurrency]")
+            "[concurrency]")
   {
     auto endpoint = StalledAuthenticationEndpoint{};
     auto executor = rt::test::QueuedExecutor{};
@@ -903,8 +897,7 @@ namespace ao::systemmedia::test
     CHECK(state.handledCount == 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - authentication EOF degrades without an empty native error",
-            "[platform][integration][mpris]")
+  TEST_CASE("MprisBusSession private bus - authentication EOF degrades without an empty native error")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::CloseAuthentication};
     auto executor = rt::test::QueuedExecutor{};
@@ -921,8 +914,7 @@ namespace ao::systemmedia::test
     CHECK(state.handledCount == 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - rejected EXTERNAL authentication closes its owned stream",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - rejected EXTERNAL authentication closes its owned stream", "[concurrency]")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::RejectAuthentication};
     auto executor = rt::test::QueuedExecutor{};
@@ -945,8 +937,7 @@ namespace ao::systemmedia::test
     CHECK(state.handledCount == 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - malformed authentication closes its owned stream",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - malformed authentication closes its owned stream", "[concurrency]")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::MalformedAuthentication};
     auto executor = rt::test::QueuedExecutor{};
@@ -964,8 +955,7 @@ namespace ao::systemmedia::test
     CHECK(state.handledCount == 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - oversized authentication closes its owned stream",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - oversized authentication closes its owned stream", "[concurrency]")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::OversizedAuthentication};
     auto executor = rt::test::QueuedExecutor{};
@@ -983,8 +973,7 @@ namespace ao::systemmedia::test
     CHECK(state.handledCount == 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - cancellation interrupts a stalled EXTERNAL response",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - cancellation interrupts a stalled EXTERNAL response", "[concurrency]")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::StallExternalResponse};
     auto executor = rt::test::QueuedExecutor{};
@@ -1011,8 +1000,7 @@ namespace ao::systemmedia::test
     CHECK(state.handledCount == 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - authenticated GUID must match the selected address",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - authenticated GUID must match the selected address", "[concurrency]")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::MismatchedGuid};
     auto executor = rt::test::QueuedExecutor{};
@@ -1031,7 +1019,7 @@ namespace ao::systemmedia::test
   }
 
   TEST_CASE("MprisBusSession private bus - immediate post-BEGIN disconnect degrades without acquisition",
-            "[platform][integration][mpris][concurrency]")
+            "[concurrency]")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::DropHello};
     auto executor = rt::test::QueuedExecutor{};
@@ -1049,7 +1037,7 @@ namespace ao::systemmedia::test
   }
 
   TEST_CASE("MprisBusSession private bus - empty DATA payload and stalled Hello cancel without owner progress",
-            "[platform][integration][mpris][concurrency]")
+            "[concurrency]")
   {
     auto endpoint = ScriptedAuthenticationEndpoint{ScriptedAuthenticationEndpoint::Mode::StallHello};
     auto executor = rt::test::QueuedExecutor{};
@@ -1076,8 +1064,7 @@ namespace ao::systemmedia::test
     CHECK(state.handledCount == 0);
   }
 
-  TEST_CASE("MprisBusSession unsupported transport - non-local addresses degrade before connecting",
-            "[platform][unit][mpris]")
+  TEST_CASE("MprisBusSession unsupported transport - non-local addresses degrade before connecting")
   {
     constexpr auto kAddresses = std::array{
       "tcp:host=example.invalid,port=1234",
@@ -1106,8 +1093,7 @@ namespace ao::systemmedia::test
     }
   }
 
-  TEST_CASE("MprisBusSession private bus - mixed transports preserve Unix fallback order",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - mixed transports preserve Unix fallback order", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto executor = rt::test::QueuedExecutor{};
@@ -1144,8 +1130,7 @@ namespace ao::systemmedia::test
     CHECK(::g_dbus_connection_is_closed(state.acquiredConnectionPtr->gobj()) != 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - exhausted Unix candidates never reach other transports",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - exhausted Unix candidates never reach other transports", "[concurrency]")
   {
     Gio::init();
     auto listenerPtr = utility::makeUniquePtr<::g_object_unref>(
@@ -1175,8 +1160,7 @@ namespace ao::systemmedia::test
     CHECK(::g_socket_condition_check(listenerPtr.get(), G_IO_IN) == 0);
   }
 
-  TEST_CASE("MprisBusSession private bus - duplicate interface failure drains partial registration",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - duplicate interface failure drains partial registration", "[concurrency]")
   {
     auto bus = PrivateBus{};
     auto executor = rt::test::QueuedExecutor{};
@@ -1199,8 +1183,7 @@ namespace ao::systemmedia::test
     awaitAcquisition(replacementState, executor);
   }
 
-  TEST_CASE("MprisBusSession private bus - stalled queued write uses bounded flush deadline",
-            "[platform][integration][mpris][concurrency]")
+  TEST_CASE("MprisBusSession private bus - stalled queued write uses bounded flush deadline", "[concurrency]")
   {
     constexpr auto kPayloadBytes = std::size_t{16} * 1024 * 1024;
     auto bus = PrivateBus{};

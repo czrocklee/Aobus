@@ -12,8 +12,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkTestEnvironment - bus admission requires a matching owned Unix endpoint",
-            "[gtk][unit][test-environment]")
+  TEST_CASE("GtkTestEnvironment - bus admission requires a matching owned Unix endpoint")
   {
     CHECK_FALSE(isOwnedGtkSessionBus(nullptr, nullptr));
     CHECK_FALSE(isOwnedGtkSessionBus("unix:path=/private/bus", nullptr));
@@ -25,8 +24,7 @@ namespace ao::gtk::test
     CHECK(isOwnedGtkSessionBus("unix:path=/private/bus,guid=abc", "unix:path=/private/bus,guid=abc"));
   }
 
-  TEST_CASE("GtkTestEnvironment - direct entry disables unowned buses before test dispatch",
-            "[gtk][integration][test-environment]")
+  TEST_CASE("GtkTestEnvironment - direct entry disables unowned buses before test dispatch")
   {
     auto const executable = ao::test::currentProbeExecutablePath();
     REQUIRE_FALSE(executable.empty());
@@ -42,7 +40,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkTestEnvironment - direct entry treats GLib warnings as fatal", "[gtk][integration][test-environment]")
+  TEST_CASE("GtkTestEnvironment - direct entry treats GLib warnings as fatal")
   {
     auto const executable = ao::test::currentProbeExecutablePath();
     REQUIRE_FALSE(executable.empty());

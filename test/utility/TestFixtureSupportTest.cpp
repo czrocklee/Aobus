@@ -16,14 +16,14 @@
 
 namespace ao::test
 {
-  TEST_CASE("TestFixtureSupport - temporary directories expose canonical paths", "[utility][unit][test-support]")
+  TEST_CASE("TestFixtureSupport - temporary directories expose canonical paths")
   {
     auto const temp = TempDir{};
 
     CHECK(temp.path() == std::filesystem::canonical(temp.path()));
   }
 
-  TEST_CASE("TestFixtureSupport - temporary files use isolated directories", "[utility][unit][test-support]")
+  TEST_CASE("TestFixtureSupport - temporary files use isolated directories")
   {
     constexpr auto kFirstData = std::to_array<std::uint8_t>({'a'});
     constexpr auto kSecondData = std::to_array<std::uint8_t>({'b'});
@@ -46,8 +46,7 @@ namespace ao::test
     CHECK_FALSE(std::filesystem::exists(secondDirectory));
   }
 
-  TEST_CASE("TestFixtureSupport - moving temporary directories preserves cleanup ownership",
-            "[utility][unit][test-support]")
+  TEST_CASE("TestFixtureSupport - moving temporary directories preserves cleanup ownership")
   {
     auto firstPath = std::filesystem::path{};
     auto secondPath = std::filesystem::path{};
@@ -72,7 +71,7 @@ namespace ao::test
     CHECK_FALSE(std::filesystem::exists(secondPath));
   }
 
-  TEST_CASE("FilesystemTestSupport - read denial restores directory access", "[utility][unit][test-support]")
+  TEST_CASE("FilesystemTestSupport - read denial restores directory access")
   {
     auto const temp = TempDir{};
     auto const blocked = temp.path() / "blocked";
@@ -101,7 +100,7 @@ namespace ao::test
     CHECK(readFile(child) == "content");
   }
 
-  TEST_CASE("FilesystemTestSupport - write denial restores directory access", "[utility][unit][test-support]")
+  TEST_CASE("FilesystemTestSupport - write denial restores directory access")
   {
     auto const temp = TempDir{};
     auto const blocked = temp.path() / "blocked";

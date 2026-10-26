@@ -154,7 +154,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("AobusSoul - starts dormant without a minimum allocation", "[gtk][unit][app][soul][geometry]")
+  TEST_CASE("AobusSoul - starts dormant without a minimum allocation")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -173,7 +173,7 @@ namespace ao::gtk::test
     CHECK(soul.get_request_mode() == Gtk::SizeRequestMode::CONSTANT_SIZE);
   }
 
-  TEST_CASE("AobusSoul - tick lifecycle follows mapped motion until it settles", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - tick lifecycle follows mapped motion until it settles")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -203,7 +203,7 @@ namespace ao::gtk::test
     CHECK_FALSE(soul.isTickActive());
   }
 
-  TEST_CASE("AobusSoul - paints the requested aura", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - paints the requested aura")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -221,7 +221,7 @@ namespace ao::gtk::test
     CHECK(*optRendered == rgbaFromSoulRgb(expected.gradientColors.body));
   }
 
-  TEST_CASE("AobusSoul - first default aura is adopted before repeated requests are skipped", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - first default aura is adopted before repeated requests are skipped")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -246,7 +246,7 @@ namespace ao::gtk::test
     CHECK(soul.visualFrame().gradientColors.body == uimodel::kAobusSoulTurbulent);
   }
 
-  TEST_CASE("AobusSoul - unchanged RGB still updates rendered alpha", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - unchanged RGB still updates rendered alpha")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -267,7 +267,7 @@ namespace ao::gtk::test
     CHECK(soul.visualFrame().gradientColors.body == uimodel::kAobusSoulRadiant);
   }
 
-  TEST_CASE("AobusSoul - geometry setters update rendered glyph strokes", "[gtk][unit][app][soul][geometry]")
+  TEST_CASE("AobusSoul - geometry setters update rendered glyph strokes")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -298,7 +298,7 @@ namespace ao::gtk::test
     CHECK(scaled[0].bounds.size.height == narrowed[0].bounds.size.height);
   }
 
-  TEST_CASE("AobusSoul - maps brand aura tokens to native colors", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - maps brand aura tokens to native colors")
   {
     CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Dormant) == Gdk::RGBA{"#00E5FF"});
     CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Veiled) == Gdk::RGBA{"#6B7280"});
@@ -308,7 +308,7 @@ namespace ao::gtk::test
     CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Burning) == Gdk::RGBA{"#EF4444"});
   }
 
-  TEST_CASE("AobusSoul - full-logo mode adds and removes the rendered anchor", "[gtk][unit][app][soul][geometry]")
+  TEST_CASE("AobusSoul - full-logo mode adds and removes the rendered anchor")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -334,7 +334,7 @@ namespace ao::gtk::test
     CHECK(restored[0].bounds.size.height == original[0].bounds.size.height);
   }
 
-  TEST_CASE("AobusSoul - paused motion coasts to a held frame while quality aura cross-fades", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - paused motion coasts to a held frame while quality aura cross-fades")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -375,7 +375,7 @@ namespace ao::gtk::test
     CHECK(tryPumpGtkEventsUntil([&soul, frozen] { return soul.visualFrame().motion != frozen.motion; }));
   }
 
-  TEST_CASE("AobusSoul - hiding mid-coast settles the held frame", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - hiding mid-coast settles the held frame")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};
@@ -401,7 +401,7 @@ namespace ao::gtk::test
     CHECK(soul.visualFrame() == held);
   }
 
-  TEST_CASE("AobusSoul - quality changes while hidden land without a transition", "[gtk][unit][app][soul]")
+  TEST_CASE("AobusSoul - quality changes while hidden land without a transition")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto soul = AobusSoul{};

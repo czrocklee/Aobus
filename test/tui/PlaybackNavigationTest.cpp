@@ -63,8 +63,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("LibraryController - artist links escape literal metadata and preserve filtered history",
-            "[tui][integration][playback-navigation]")
+  TEST_CASE("LibraryController - artist links escape literal metadata and preserve filtered history")
   {
     auto fixture = EventControllerFixture{};
     auto const artist = std::string{R"(A "quoted" artist\with slash; B)"};
@@ -97,8 +96,7 @@ namespace ao::tui::test
     CHECK(library.tracks().front().id == target);
   }
 
-  TEST_CASE("LibraryController - album links reveal the subject in album groups and restore the previous view",
-            "[tui][unit][playback-navigation]")
+  TEST_CASE("LibraryController - album links reveal the subject in album groups and restore the previous view")
   {
     auto fixture = EventControllerFixture{};
     auto const target = fixture.addTrack(library::test::TrackSpec{.title = "Target", .album = "Another album"});
@@ -124,8 +122,7 @@ namespace ao::tui::test
     CHECK(library.filterDraft() == previousFilter);
   }
 
-  TEST_CASE("LibraryController - absent metadata targets leave navigation and marks untouched",
-            "[tui][integration][playback-navigation]")
+  TEST_CASE("LibraryController - absent metadata targets leave navigation and marks untouched")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -142,8 +139,7 @@ namespace ao::tui::test
     CHECK(library.markedIds() == marks);
   }
 
-  TEST_CASE("PlaybackPanel - metadata links follow painted text at normal and constrained widths",
-            "[tui][unit][playback-navigation]")
+  TEST_CASE("PlaybackPanel - metadata links follow painted text at normal and constrained widths")
   {
     auto state = rt::PlaybackTransportSnapshot{
       .nowPlaying = {.trackId = TrackId{42}, .title = "曲目 Title", .artist = "藝人 Artist", .album = "專輯 Album"},
@@ -225,8 +221,7 @@ namespace ao::tui::test
     CHECK(hit.album.IsEmpty());
   }
 
-  TEST_CASE("PlaybackPanel - an album without an artist follows the title with a dot separator",
-            "[tui][unit][playback-navigation]")
+  TEST_CASE("PlaybackPanel - an album without an artist follows the title with a dot separator")
   {
     auto const state = rt::PlaybackTransportSnapshot{
       .nowPlaying = {.trackId = TrackId{42}, .title = "Title", .album = "Album"},
@@ -246,8 +241,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("PlaybackPanel - long artist and album values yield space to the track title",
-            "[tui][unit][playback-navigation]")
+  TEST_CASE("PlaybackPanel - long artist and album values yield space to the track title")
   {
     auto state = rt::PlaybackTransportSnapshot{
       .nowPlaying = {.trackId = TrackId{42},
@@ -267,7 +261,7 @@ namespace ao::tui::test
     CHECK(hit.artist.x_max < hit.album.x_min);
   }
 
-  TEST_CASE("PlaybackPanel - hover highlights only its painted metadata target", "[tui][unit][playback-navigation]")
+  TEST_CASE("PlaybackPanel - hover highlights only its painted metadata target")
   {
     auto state = rt::PlaybackTransportSnapshot{
       .nowPlaying = {.trackId = TrackId{42}, .title = "Title", .artist = "Artist", .album = "Album"},
@@ -314,8 +308,7 @@ namespace ao::tui::test
     CHECK(regions.hitTestButton(5, 0).hoveredButton == HoveredButton::None);
   }
 
-  TEST_CASE("EventController - playback metadata mouse and command navigation agree",
-            "[tui][integration][playback-navigation]")
+  TEST_CASE("EventController - playback metadata mouse and command navigation agree")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -377,8 +370,7 @@ namespace ao::tui::test
     CHECK(library.filterDraft() == previousFilter);
   }
 
-  TEST_CASE("EventController - stale playback identity or metadata cannot navigate",
-            "[tui][integration][playback-navigation]")
+  TEST_CASE("EventController - stale playback identity or metadata cannot navigate")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -416,8 +408,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("EventController - modal input blocks playback metadata navigation",
-            "[tui][integration][playback-navigation]")
+  TEST_CASE("EventController - modal input blocks playback metadata navigation")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();

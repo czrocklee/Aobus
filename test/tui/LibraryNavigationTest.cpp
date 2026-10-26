@@ -16,7 +16,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("LibraryNavigation - chooser rows preserve tree preorder and display hierarchy", "[tui][unit][navigation]")
+  TEST_CASE("LibraryNavigation - chooser rows preserve tree preorder and display hierarchy")
   {
     auto const parentId = ListId{2};
     auto const childId = ListId{3};
@@ -51,7 +51,7 @@ namespace ao::tui::test
     CHECK(entries[4].detail.empty());
   }
 
-  TEST_CASE("LibraryNavigation - combined labels append only nonempty details", "[tui][unit][navigation]")
+  TEST_CASE("LibraryNavigation - combined labels append only nonempty details")
   {
     auto const labels = libraryNavigationLabels({
       LibraryNavEntry{.id = ListId{2}, .label = "[L] Plain"},

@@ -57,8 +57,7 @@ namespace ao::audio::detail::test
     }
   } // namespace
 
-  TEST_CASE("OpenedModeValidation - stereo identity aliases remain distinct canonical PCM modes",
-            "[audio][unit][engine]")
+  TEST_CASE("OpenedModeValidation - stereo identity aliases remain distinct canonical PCM modes")
   {
     auto const firstMask = GENERATE(0x0U, 0x3U);
     auto const current =
@@ -76,8 +75,7 @@ namespace ao::audio::detail::test
     CHECK(invalidRes.error().message == "Backend returned a different client speaker mask");
   }
 
-  TEST_CASE("OpenedModeValidation - stereo identity aliases exclude geometry encoding and other masks",
-            "[audio][unit][engine]")
+  TEST_CASE("OpenedModeValidation - stereo identity aliases exclude geometry encoding and other masks")
   {
     auto current = PcmFormat{.sampleRate = kRate, .channels = 2, .encoding = SampleEncoding::Signed16Le};
     auto next = current;
@@ -141,7 +139,7 @@ namespace ao::audio::detail::test
     CHECK_FALSE(isStereoIdentityAlias(next, current));
   }
 
-  TEST_CASE("validateOpenedMode - a lossy result without a confirmed endpoint is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a lossy result without a confirmed endpoint is rejected")
   {
     auto const validatedRes = validateOpenedMode(integerSignal(24), unconfirmedMode(SampleEncoding::Signed16Le));
 
@@ -150,14 +148,13 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message.contains("Backend returned lossy S16_LE"));
   }
 
-  TEST_CASE("validateOpenedMode - a lossless result without a confirmed endpoint is accepted", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a lossless result without a confirmed endpoint is accepted")
   {
     CHECK(validateOpenedMode(integerSignal(24), unconfirmedMode(SampleEncoding::Signed24PackedLe)));
     CHECK(validateOpenedMode(integerSignal(16), unconfirmedMode(SampleEncoding::Signed32Le)));
   }
 
-  TEST_CASE("validateOpenedMode - a confirmed endpoint does not authorize a lossy client format",
-            "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a confirmed endpoint does not authorize a lossy client format")
   {
     auto const mode = openedMode(SampleEncoding::Signed16Le, 16);
 
@@ -168,7 +165,7 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message.contains("Backend returned lossy S16_LE"));
   }
 
-  TEST_CASE("validateOpenedMode - a confirmed endpoint at source precision loses nothing", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a confirmed endpoint at source precision loses nothing")
   {
     // 24-bit content in a 32-bit container feeding a 24-bit converter. The
     // endpoint is narrower than the container but not narrower than the signal,
@@ -178,7 +175,7 @@ namespace ao::audio::detail::test
     CHECK(validateOpenedMode(integerSignal(24), mode));
   }
 
-  TEST_CASE("validateOpenedMode - a confirmed endpoint narrower than the source is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a confirmed endpoint narrower than the source is rejected")
   {
     auto const validatedRes = validateOpenedMode(integerSignal(32), openedMode(SampleEncoding::Signed32Le, 24));
 
@@ -187,7 +184,7 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message.contains("24-bit endpoint for a 32-bit source"));
   }
 
-  TEST_CASE("validateOpenedMode - an endpoint wider than its client encoding is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - an endpoint wider than its client encoding is rejected")
   {
     auto const mode = openedMode(SampleEncoding::Signed16Le, 24);
 
@@ -198,12 +195,12 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message.contains("cannot carry it"));
   }
 
-  TEST_CASE("validateOpenedMode - a zero-precision endpoint is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a zero-precision endpoint is rejected")
   {
     REQUIRE_FALSE(validateOpenedMode(integerSignal(24), openedMode(SampleEncoding::Signed24PackedLe, 0)));
   }
 
-  TEST_CASE("validateOpenedMode - substituted rate or channel count is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - substituted rate or channel count is rejected")
   {
     auto mode = unconfirmedMode(SampleEncoding::Signed24PackedLe);
     auto expectedMessage = std::string_view{};
@@ -227,7 +224,7 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message == expectedMessage);
   }
 
-  TEST_CASE("validateOpenedMode - an endpoint with a different rate or layout is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - an endpoint with a different rate or layout is rejected")
   {
     auto mode = openedMode(SampleEncoding::Signed16Le, 16);
 
@@ -248,7 +245,7 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message == "Backend confirmed an endpoint with a different rate or layout");
   }
 
-  TEST_CASE("validateOpenedMode - an endpoint in a different sample domain is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - an endpoint in a different sample domain is rejected")
   {
     auto mode = openedMode(SampleEncoding::Signed16Le, 16);
     mode.optEndpoint->signalFormat.sampleKind = SampleKind::FloatingPoint;
@@ -259,7 +256,7 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message.contains("sample domain"));
   }
 
-  TEST_CASE("validateOpenedMode - float signals are never quantized to integers", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - float signals are never quantized to integers")
   {
     auto const floatSignal =
       SignalFormat{.sampleRate = kRate, .channels = 2, .precisionBits = 32, .sampleKind = SampleKind::FloatingPoint};
@@ -276,8 +273,7 @@ namespace ao::audio::detail::test
       encoding == SampleEncoding::Signed16Le ? "Backend returned lossy S16_LE" : "Backend returned lossy S32_LE"));
   }
 
-  TEST_CASE("validateOpenedMode - a client mode that loses or substitutes the source speaker mask is rejected",
-            "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a client mode that loses or substitutes the source speaker mask is rejected")
   {
     auto mode = maskedMode(kFrontStereoMask, kFrontStereoMask);
 
@@ -298,7 +294,7 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message == "Backend returned a different client speaker mask");
   }
 
-  TEST_CASE("validateOpenedMode - a known contradicting endpoint speaker mask is rejected", "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - a known contradicting endpoint speaker mask is rejected")
   {
     auto const validatedRes =
       validateOpenedMode(maskedSignal(kFrontStereoMask), maskedMode(kFrontStereoMask, kFrontLeftCenterMask));
@@ -308,8 +304,7 @@ namespace ao::audio::detail::test
     CHECK(validatedRes.error().message == "Backend confirmed an endpoint with a different speaker mask");
   }
 
-  TEST_CASE("validateOpenedMode - an unknown mask neither rejects nor inherits the identified speaker layout",
-            "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - an unknown mask neither rejects nor inherits the identified speaker layout")
   {
     SECTION("endpoint mask stays zero for an identified source layout")
     {
@@ -327,8 +322,7 @@ namespace ao::audio::detail::test
     }
   }
 
-  TEST_CASE("validateOpenedMode - matching identified speaker masks on client and endpoint are accepted",
-            "[audio][unit][engine]")
+  TEST_CASE("validateOpenedMode - matching identified speaker masks on client and endpoint are accepted")
   {
     CHECK(validateOpenedMode(maskedSignal(kFrontStereoMask), maskedMode(kFrontStereoMask, kFrontStereoMask)));
   }

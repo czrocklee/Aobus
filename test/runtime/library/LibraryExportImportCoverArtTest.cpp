@@ -170,8 +170,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - a full document names each distinct cover once, by digest",
-            "[runtime][integration][import-export][cover-art]")
+  TEST_CASE("LibraryYaml - a full document names each distinct cover once, by digest")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
@@ -242,8 +241,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("LibraryYaml - full restore rebuilds the cover reference graph and sharing",
-            "[runtime][integration][import-export][cover-art]")
+  TEST_CASE("LibraryYaml - full restore rebuilds the cover reference graph and sharing")
   {
     auto const sourceTemp = ao::test::TempDir{};
     auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
@@ -287,8 +285,7 @@ namespace ao::rt::test
     CHECK(deriveResourceId(coverDigest) == optPrimary1->resourceId);
   }
 
-  TEST_CASE("LibraryYaml - a full merge leaves the document's reference graph",
-            "[runtime][integration][import-export][cover-art]")
+  TEST_CASE("LibraryYaml - a full merge leaves the document's reference graph")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -352,8 +349,7 @@ library:
     CHECK(optDescriptor->byteLength == 3);
   }
 
-  TEST_CASE("LibraryYaml - a declared length never overwrites a counted one",
-            "[runtime][integration][import-export][cover-art]")
+  TEST_CASE("LibraryYaml - a declared length never overwrites a counted one")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -409,8 +405,7 @@ library:
     CHECK(optDescriptor->byteLength == coverData.size());
   }
 
-  TEST_CASE("LibraryYaml - the resource table's shape and closure are exact",
-            "[runtime][unit][import-export][cover-art]")
+  TEST_CASE("LibraryYaml - the resource table's shape and closure are exact")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -649,8 +644,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - a metadata document records no embedded cover",
-            "[runtime][integration][import-export][cover-art]")
+  TEST_CASE("LibraryYaml - a metadata document records no embedded cover")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -680,8 +674,7 @@ library:
     CHECK_FALSE(content.contains("data:"));
   }
 
-  TEST_CASE("LibraryYaml - each import mode leaves the covers its contract names",
-            "[runtime][integration][import-export][cover-art]")
+  TEST_CASE("LibraryYaml - each import mode leaves the covers its contract names")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());

@@ -21,8 +21,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("SmartListEvaluator - reloading one list does not reset sibling lists sharing a source",
-            "[runtime][unit][smart-list][incremental]")
+  TEST_CASE("SmartListEvaluator - reloading one list does not reset sibling lists sharing a source")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto first = libraryFixture.addTrack(makeSmartListSpec("first", 2020, std::chrono::seconds{180}));
@@ -53,8 +52,7 @@ namespace ao::rt::test
     CHECK(coldList.trackIdAt(0) == second);
   }
 
-  TEST_CASE("SmartListEvaluator - source insert emits inserted notifications instead of bucket resets",
-            "[runtime][unit][smart-list][incremental]")
+  TEST_CASE("SmartListEvaluator - source insert emits inserted notifications instead of bucket resets")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto original = libraryFixture.addTrack(makeSmartListSpec("old", 2020, std::chrono::seconds{180}));
@@ -92,8 +90,7 @@ namespace ao::rt::test
     CHECK(coldList.trackIdAt(0) == inserted);
   }
 
-  TEST_CASE("SmartListEvaluator - source update diffs membership transitions incrementally",
-            "[runtime][unit][smart-list][incremental]")
+  TEST_CASE("SmartListEvaluator - source update diffs membership transitions incrementally")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto trackId = libraryFixture.addTrack(makeSmartListSpec("track", 2020));
@@ -145,8 +142,7 @@ namespace ao::rt::test
     CHECK(operationCountsAfter.membershipIndexRebuilds == operationCountsBefore.membershipIndexRebuilds);
   }
 
-  TEST_CASE("SmartListEvaluator - child filtered lists track parent membership as their source",
-            "[runtime][unit][smart-list][incremental]")
+  TEST_CASE("SmartListEvaluator - child filtered lists track parent membership as their source")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto legacy = libraryFixture.addTrack(makeSmartListSpec("legacy", 2020, std::chrono::seconds{180}));
@@ -197,8 +193,7 @@ namespace ao::rt::test
     CHECK(child.trackIdAt(0) == fresh);
   }
 
-  TEST_CASE("SmartListEvaluator - single mutations on base source are handled correctly",
-            "[runtime][unit][smart-list][incremental]")
+  TEST_CASE("SmartListEvaluator - single mutations on base source are handled correctly")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};

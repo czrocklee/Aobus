@@ -35,8 +35,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("applyTagEdit reports tag mutations for a bound authoring session",
-            "[uimodel][integration][tag-edit][concurrency]")
+  TEST_CASE("applyTagEdit reports tag mutations for a bound authoring session", "[concurrency]")
   {
     auto fixture = TrackAuthoringFixture{2};
     auto const& textCatalog = ao::test::englishMessageCatalog();

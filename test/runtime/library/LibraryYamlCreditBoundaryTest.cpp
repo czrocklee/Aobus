@@ -43,8 +43,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - maximum short-URI credits survive persisted reopen and metadata round trip",
-            "[runtime][integration][import-export][yaml]")
+  TEST_CASE("LibraryYaml - maximum short-URI credits survive persisted reopen and metadata round trip")
   {
     auto expected = library::test::makeEmptyTrackSpec("x.wav");
     expected.recordingDate = RecordingDate{.year = 1981, .month = 5};

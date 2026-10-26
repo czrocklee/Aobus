@@ -64,7 +64,7 @@ namespace ao::tui::test
     };
   } // namespace
 
-  TEST_CASE("OutputDeviceController - tracks selectable output rows", "[tui][unit][output]")
+  TEST_CASE("OutputDeviceController - tracks selectable output rows")
   {
     auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
     fixture.status.descriptor.supportedProfiles.push_back(
@@ -99,7 +99,7 @@ namespace ao::tui::test
     CHECK(controller.selectedRow() == 2);
   }
 
-  TEST_CASE("OutputDeviceController - selecting a row records the requested route", "[tui][unit][output]")
+  TEST_CASE("OutputDeviceController - selecting a row records the requested route")
   {
     // TUI kept no output preference before it carried an intent, so a chosen
     // route survived only until the process exited.
@@ -124,7 +124,7 @@ namespace ao::tui::test
     CHECK(optRecorded->profileId == audio::kProfileShared);
   }
 
-  TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][integration][output]")
+  TEST_CASE("OutputDeviceController - selecting a row updates playback output")
   {
     auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
     fakeit::When(Method(fixture.mockProvider, createBackend))
@@ -164,7 +164,7 @@ namespace ao::tui::test
     CHECK(exclusiveSelection.profileId == audio::kProfileExclusive);
   }
 
-  TEST_CASE("OutputDeviceController - presents Core Audio shared outputs", "[tui][unit][output][coreaudio]")
+  TEST_CASE("OutputDeviceController - presents Core Audio shared outputs")
   {
     auto fixture = rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>{};
     fixture.status.descriptor.id = audio::kBackendCoreAudio;

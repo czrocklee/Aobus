@@ -80,7 +80,7 @@ namespace ao::media::opus::test
     }
   } // namespace
 
-  TEST_CASE("parseHead derives an explicit stream layout for mapping family 0", "[media][unit][opus]")
+  TEST_CASE("parseHead derives an explicit stream layout for mapping family 0")
   {
     SECTION("Stereo couples its two channels into one stream")
     {
@@ -115,7 +115,7 @@ namespace ao::media::opus::test
     }
   }
 
-  TEST_CASE("parseHead reads an explicit channel mapping table", "[media][unit][opus]")
+  TEST_CASE("parseHead reads an explicit channel mapping table")
   {
     SECTION("Surround family maps every channel to a decoded stream channel")
     {
@@ -199,7 +199,7 @@ namespace ao::media::opus::test
     }
   }
 
-  TEST_CASE("parseHead rejects packets it cannot identify", "[media][unit][opus][error]")
+  TEST_CASE("parseHead rejects packets it cannot identify")
   {
     SECTION("A foreign magic signature is corrupt")
     {
@@ -231,7 +231,7 @@ namespace ao::media::opus::test
     }
   }
 
-  TEST_CASE("parseHead accepts every minor revision of the supported version", "[media][unit][opus]")
+  TEST_CASE("parseHead accepts every minor revision of the supported version")
   {
     SECTION("A higher minor revision stays supported")
     {
@@ -246,7 +246,7 @@ namespace ao::media::opus::test
     }
   }
 
-  TEST_CASE("parseTagsBody locates the comment list after the magic signature", "[media][unit][opus]")
+  TEST_CASE("parseTagsBody locates the comment list after the magic signature")
   {
     SECTION("A tags packet exposes its body")
     {

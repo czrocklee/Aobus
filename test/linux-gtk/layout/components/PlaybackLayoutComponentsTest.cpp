@@ -39,7 +39,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("PlaybackLayoutComponents - render idle GTK widgets", "[gtk][unit][layout-component][playback][geometry]")
+  TEST_CASE("PlaybackLayoutComponents - render idle GTK widgets")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -229,8 +229,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("PlaybackLayoutComponents - authored orientation keeps the vertical scale and initial service volume",
-            "[gtk][integration][layout-component][playback]")
+  TEST_CASE("PlaybackLayoutComponents - authored orientation keeps the vertical scale and initial service volume")
   {
     auto fixture = LayoutRuntimeFixture{};
     rt::test::addReadyAudioProvider(fixture.runtime());
@@ -267,8 +266,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("PlaybackLayoutComponents - Soul components apply custom stroke and glyph scale properties",
-            "[gtk][unit][layout-component][playback]")
+  TEST_CASE("PlaybackLayoutComponents - Soul components apply custom stroke and glyph scale properties")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -289,8 +287,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("PlaybackLayoutComponents - outputDeviceSelector reports the exact route selected from its popover",
-            "[gtk][unit][layout-component][playback]")
+  TEST_CASE("PlaybackLayoutComponents - outputDeviceSelector reports the exact route selected from its popover")
   {
     auto fixture = LayoutRuntimeFixture{};
     rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
@@ -332,8 +329,7 @@ namespace ao::gtk::layout::test
     CHECK(optRequested->profileId == audio::kProfileExclusive);
   }
 
-  TEST_CASE("PlaybackLayoutComponents - selected playback adapter types register and instantiate",
-            "[gtk][unit][layout-component][playback][registry]")
+  TEST_CASE("PlaybackLayoutComponents - selected playback adapter types register and instantiate")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const types = std::to_array<std::string_view>({"playback.transportButton",

@@ -34,7 +34,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ImportExportCoordinator - maps every export dialog choice", "[gtk][unit][portal][import-export]")
+  TEST_CASE("ImportExportCoordinator - maps every export dialog choice")
   {
     CHECK(portal::detail::exportModeForSelection(0U) == rt::ExportMode::Delta);
     CHECK(portal::detail::exportModeForSelection(1U) == rt::ExportMode::Metadata);
@@ -43,8 +43,7 @@ namespace ao::gtk::test
     CHECK(portal::detail::exportModeForSelection(99U) == rt::ExportMode::Metadata);
   }
 
-  TEST_CASE("ImportExportCoordinator - localized export dialog preserves layout and actions",
-            "[gtk][unit][portal][import-export][geometry]")
+  TEST_CASE("ImportExportCoordinator - localized export dialog preserves layout and actions")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -109,15 +108,14 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ImportExportCoordinator - suppresses native chooser cancellation only",
-            "[gtk][unit][portal][import-export]")
+  TEST_CASE("ImportExportCoordinator - suppresses native chooser cancellation only")
   {
     CHECK_FALSE(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::FAILED));
     CHECK(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::CANCELLED));
     CHECK(portal::detail::isExpectedNativeChooserCancellation(Gtk::DialogError::DISMISSED));
   }
 
-  TEST_CASE("ImportExportCoordinator - openMusicLibrary routes to the callback", "[gtk][unit][portal][import-export]")
+  TEST_CASE("ImportExportCoordinator - openMusicLibrary routes to the callback")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -169,8 +167,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ImportExportCoordinator - installs its restore confirmation callback before import",
-            "[gtk][unit][portal][import-export]")
+  TEST_CASE("ImportExportCoordinator - installs its restore confirmation callback before import")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -214,8 +211,7 @@ library:
     drainGtkEvents();
   }
 
-  TEST_CASE("ImportExportCoordinator - export mode response is ignored after coordinator teardown",
-            "[gtk][unit][portal][import-export][async]")
+  TEST_CASE("ImportExportCoordinator - export mode response is ignored after coordinator teardown")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};

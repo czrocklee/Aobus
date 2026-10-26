@@ -12,7 +12,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("throwQueryError - preserves the original error's source location", "[query][unit][error]")
+  TEST_CASE("throwQueryError - preserves the original error's source location")
   {
     auto const origin = std::source_location::current();
     auto const error =
@@ -32,7 +32,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("throwQueryError - captures the call site with FormatRejected", "[query][unit][error]")
+  TEST_CASE("throwQueryError - captures the call site with FormatRejected")
   {
     auto const here = std::source_location::current();
 
@@ -50,7 +50,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("throwQueryError - formats inline and records the call site", "[query][unit][error]")
+  TEST_CASE("throwQueryError - formats inline and records the call site")
   {
     auto const here = std::source_location::current();
 
@@ -67,7 +67,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("QueryException - exposes its Error through what()", "[query][unit][error]")
+  TEST_CASE("QueryException - exposes its Error through what()")
   {
     auto const ex = detail::QueryException{Error::Code::FormatRejected, "bad query expression"};
 

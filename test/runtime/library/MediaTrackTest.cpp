@@ -25,7 +25,7 @@ namespace ao::rt::test
   static_assert(std::is_move_constructible_v<MediaTrack>);
   static_assert(!std::is_move_assignable_v<MediaTrack>);
 
-  TEST_CASE("MediaTrack - keeps borrowed builder fields alive across moves", "[runtime][unit][media-track]")
+  TEST_CASE("MediaTrack - keeps borrowed builder fields alive across moves")
   {
     auto res = readMediaTrack(audio::test::requireAudioFixture("basic_metadata.mp3"));
     REQUIRE(res);
@@ -53,7 +53,7 @@ namespace ao::rt::test
     CHECK(movedAgain.file().audioPayload());
   }
 
-  TEST_CASE("MediaTrack - maps classical visitor fields into TrackBuilder", "[runtime][integration][media-track]")
+  TEST_CASE("MediaTrack - maps classical visitor fields into TrackBuilder")
   {
     auto res = readMediaTrack(audio::test::requireAudioFixture("classical_metadata.mp3"));
     REQUIRE(res);
@@ -78,8 +78,7 @@ namespace ao::rt::test
     CHECK(metadata.trackTotal() == 9);
   }
 
-  TEST_CASE("MediaTrack - routes Ensemble and Performer credits into borrowed builder fields across moves",
-            "[runtime][integration][media-track]")
+  TEST_CASE("MediaTrack - routes Ensemble and Performer credits into borrowed builder fields across moves")
   {
     auto res = readMediaTrack(audio::test::requireAudioFixture("classical_fallback.flac"));
     REQUIRE(res);
@@ -100,7 +99,7 @@ namespace ao::rt::test
                                   { return lhs.name == rhs.name && lhs.kind == rhs.kind && lhs.role == rhs.role; }));
   }
 
-  TEST_CASE("MediaTrack - maps picture callbacks into pending cover entries", "[runtime][integration][media-track]")
+  TEST_CASE("MediaTrack - maps picture callbacks into pending cover entries")
   {
     auto res = readMediaTrack(audio::test::requireAudioFixture("with_cover.mp3"));
     REQUIRE(res);

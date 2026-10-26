@@ -252,8 +252,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("Library YAML mode fixtures - the delta and metadata documents restore and export unchanged",
-            "[runtime][integration][import-export][format-fixture]")
+  TEST_CASE("Library YAML mode fixtures - the delta and metadata documents restore and export unchanged")
   {
     struct ModeFixture final
     {
@@ -282,8 +281,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("Library YAML mode fixtures - the list-only document replaces Lists and ranks Tracks by URI",
-            "[runtime][integration][import-export][format-fixture]")
+  TEST_CASE("Library YAML mode fixtures - the list-only document replaces Lists and ranks Tracks by URI")
   {
     auto const temp = ao::test::TempDir{};
     auto library = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -307,8 +305,7 @@ namespace ao::rt::test
           });
   }
 
-  TEST_CASE("Library YAML mode fixtures - each scalar spelling keeps the meaning its field gives it",
-            "[runtime][integration][import-export][format-fixture]")
+  TEST_CASE("Library YAML mode fixtures - each scalar spelling keeps the meaning its field gives it")
   {
     auto const temp = ao::test::TempDir{};
     auto const libraryRoot = temp.path() / "first";

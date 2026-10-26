@@ -16,8 +16,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("RecordingDateEditing - editor syntax trims only the boundary and retains exact precision",
-            "[uimodel][unit][recording-date]")
+  TEST_CASE("RecordingDateEditing - editor syntax trims only the boundary and retains exact precision")
   {
     for (auto const text : std::array<std::string_view, 3>{"1981", "1981-05", "1981-05-12"})
     {
@@ -52,8 +51,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(patch.optRecordingDate);
   }
 
-  TEST_CASE("RecordingDateEditing - property drafts compare exact dates and explicitly replace mixed precision",
-            "[uimodel][unit][recording-date]")
+  TEST_CASE("RecordingDateEditing - property drafts compare exact dates and explicitly replace mixed precision")
   {
     auto form = TrackPropertiesFormModel{ao::test::englishMessageCatalog()};
     form.addField(rt::TrackField::RecordingDate, true);
@@ -74,8 +72,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(form.buildPatch().optRecordingDate->isPresent());
   }
 
-  TEST_CASE("RecordingDateEditing - property specification uses a typed date editor and absent clear is unchanged",
-            "[uimodel][unit][recording-date]")
+  TEST_CASE("RecordingDateEditing - property specification uses a typed date editor and absent clear is unchanged")
   {
     auto const spec = buildTrackPropertiesFormSpec(ao::test::englishMessageCatalog());
     bool found = false;

@@ -10,7 +10,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("runOptionalWinRt - executes a successful operation", "[winui][unit][error-boundary]")
+  TEST_CASE("runOptionalWinRt - executes a successful operation")
   {
     bool called = false;
 
@@ -19,7 +19,7 @@ namespace ao::winui::test
     CHECK(called);
   }
 
-  TEST_CASE("runOptionalWinRt - contains a WinRT failure", "[winui][unit][error-boundary]")
+  TEST_CASE("runOptionalWinRt - contains a WinRT failure")
   {
     bool called = false;
     constexpr auto kFailure = static_cast<std::int32_t>(0x80004005U);
@@ -34,7 +34,7 @@ namespace ao::winui::test
     CHECK(called);
   }
 
-  TEST_CASE("runOptionalWinRt - does not hide a C++ failure", "[winui][unit][error-boundary]")
+  TEST_CASE("runOptionalWinRt - does not hide a C++ failure")
   {
     CHECK_THROWS_AS(
       runOptionalWinRt("test operation", [] { throw std::runtime_error{"logic failure"}; }), std::runtime_error);

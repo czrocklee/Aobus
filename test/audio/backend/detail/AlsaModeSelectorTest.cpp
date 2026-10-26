@@ -22,7 +22,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("selectAlsaMode - a 24-bit capable device keeps the source precision", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - a 24-bit capable device keeps the source precision")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 16},
@@ -36,7 +36,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes->endpointPrecisionBits == 24);
   }
 
-  TEST_CASE("selectAlsaMode - a 16-bit endpoint rejects a 24-bit signal", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - a 16-bit endpoint rejects a 24-bit signal")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 16}};
@@ -52,7 +52,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("selectAlsaMode - documented lossless order chooses the native container first", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - documented lossless order chooses the native container first")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed24In32Le, .optSignificantBits = 24},
@@ -65,7 +65,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes->endpointPrecisionBits == 24);
   }
 
-  TEST_CASE("selectAlsaMode - significant bits decide whether a wide container is lossless", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - significant bits decide whether a wide container is lossless")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le, .optSignificantBits = 24}};
@@ -82,7 +82,7 @@ namespace ao::audio::backend::detail::test
     CHECK(reducedRes.error().error.code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("selectAlsaMode - missing significant-bit evidence is not treated as full precision", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - missing significant-bit evidence is not treated as full precision")
   {
     auto const evidence = std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le}};
 
@@ -96,7 +96,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
-  TEST_CASE("selectAlsaMode - endpoint precision never exceeds its encoding", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - endpoint precision never exceeds its encoding")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 32}};
@@ -107,7 +107,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("selectAlsaMode - an integer signal is not quantized into float", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - an integer signal is not quantized into float")
   {
     auto const evidence = std::array{AlsaModeEvidence{.encoding = SampleEncoding::Float32Le, .optSignificantBits = 32}};
 
@@ -117,7 +117,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("selectAlsaMode - a float signal is not quantized into integer", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - a float signal is not quantized into integer")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed32Le, .optSignificantBits = 32}};
@@ -130,7 +130,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().error.code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("selectAlsaMode - empty evidence reports what was inspected", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - empty evidence reports what was inspected")
   {
     auto const selectedRes = selectAlsaMode(integerSignal(24), {});
 
@@ -139,7 +139,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("selectAlsaMode - a signal without precision is rejected", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - a signal without precision is rejected")
   {
     auto const evidence =
       std::array{AlsaModeEvidence{.encoding = SampleEncoding::Signed16Le, .optSignificantBits = 16}};
@@ -151,7 +151,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("selectAlsaMode - an unrepresentable source is a track-route incompatibility", "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - an unrepresentable source is a track-route incompatibility")
   {
     SECTION("a 33-bit integer signal has no lossless encoding at all")
     {
@@ -174,8 +174,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("selectAlsaMode - one unknown significant-bit reading keeps an exhausted set conservative",
-            "[audio][unit][alsa]")
+  TEST_CASE("selectAlsaMode - one unknown significant-bit reading keeps an exhausted set conservative")
   {
     // The confirmed S16_LE reading cannot carry a 24-bit signal, but the
     // unconfirmed S32_LE container might: the refusal must not claim the track

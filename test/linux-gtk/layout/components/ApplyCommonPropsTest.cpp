@@ -51,7 +51,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("applyCommonProps applies GTK widget layout properties", "[gtk][unit][layout][container]")
+  TEST_CASE("applyCommonProps applies GTK widget layout properties")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& ctx = fixture.context();
@@ -197,8 +197,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("applyCommonProps - width-only requests preserve the component height minimum",
-            "[gtk][unit][layout][container][geometry]")
+  TEST_CASE("applyCommonProps - width-only requests preserve the component height minimum")
   {
     auto fixture = LayoutRuntimeFixture{};
     registerRequestedSizeComponent(fixture);
@@ -234,8 +233,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("applyCommonProps - height-only requests preserve the component width minimum",
-            "[gtk][unit][layout][container][geometry]")
+  TEST_CASE("applyCommonProps - height-only requests preserve the component width minimum")
   {
     auto fixture = LayoutRuntimeFixture{};
     registerRequestedSizeComponent(fixture);

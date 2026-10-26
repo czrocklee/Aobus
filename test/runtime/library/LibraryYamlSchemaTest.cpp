@@ -74,8 +74,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryYaml - unsupported versions are rejected before interpreting their payload",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - unsupported versions are rejected before interpreting their payload")
   {
     checkRejectedPayload({
       .label = "version zero",
@@ -90,8 +89,7 @@ namespace ao::rt::test
     });
   }
 
-  TEST_CASE("LibraryYaml - version 1 rejects ambiguous or forward-unknown records",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 rejects ambiguous or forward-unknown records")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "retired library id field",
@@ -241,8 +239,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 1 requires explicit scope and root-contained URIs",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 requires explicit scope and root-contained URIs")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "missing export mode",
@@ -322,8 +319,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - import rejects a URI resolving through a root-escaping symlink",
-            "[runtime][unit][import-export][uri]")
+  TEST_CASE("LibraryYaml - import rejects a URI resolving through a root-escaping symlink")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -350,8 +346,7 @@ library:
     CHECK(res.error().message.contains("resolves outside the library root"));
   }
 
-  TEST_CASE("LibraryYaml - import rejects a track URI that is not a supported audio file",
-            "[runtime][unit][import-export][uri]")
+  TEST_CASE("LibraryYaml - import rejects a track URI that is not a supported audio file")
   {
     auto const mode = GENERATE(ImportMode::Restore, ImportMode::Merge);
     CAPTURE(mode);
@@ -539,7 +534,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 1 rejects duplicate semantic keys", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 rejects duplicate semantic keys")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "canonical track URI",
@@ -574,7 +569,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - version 1 rejects invalid list semantics", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 rejects invalid list semantics")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "parent cycle",
@@ -598,8 +593,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - a List filter the library cannot store refuses the payload whole",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - a List filter the library cannot store refuses the payload whole")
   {
     // A filter with an expression error is kept, but one that is not
     // storable List text is a document error and leaves the target unchanged.
@@ -664,8 +658,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - an invalid List filter as long as List text allows is kept",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - an invalid List filter as long as List text allows is kept")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
@@ -693,7 +686,7 @@ library:
     CHECK(filters == std::vector<std::string>{filter});
   }
 
-  TEST_CASE("LibraryYaml - version 1 rejects values beyond supported limits", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 rejects values beyond supported limits")
   {
     auto overlongUri = std::string(LibraryUri::kMaxLength + 1U, 'a');
     checkRejectedPayload(RejectedPayload{
@@ -780,7 +773,7 @@ library:
     });
   }
 
-  TEST_CASE("LibraryYaml - version 1 rejects malformed mtime instants", "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - version 1 rejects malformed mtime instants")
   {
     constexpr auto kRejectedPayloads = std::to_array<RejectedPayload>({
       {.label = "nanoseconds beyond one second",
@@ -930,8 +923,7 @@ library:
     }
   }
 
-  TEST_CASE("LibraryYaml - a malformed mtime refuses the payload whole in both modes",
-            "[runtime][unit][import-export][schema]")
+  TEST_CASE("LibraryYaml - a malformed mtime refuses the payload whole in both modes")
   {
     auto const mode = GENERATE(ImportMode::Restore, ImportMode::Merge);
     CAPTURE(mode);

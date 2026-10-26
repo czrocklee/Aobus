@@ -10,7 +10,7 @@
 
 namespace ao::utility::test
 {
-  TEST_CASE("formatUuid renders lowercase canonical groups", "[utility][unit][uuid]")
+  TEST_CASE("formatUuid renders lowercase canonical groups")
   {
     auto const id = UuidBytes{std::byte{0x12},
                               std::byte{0x3e},
@@ -32,12 +32,12 @@ namespace ao::utility::test
     CHECK(formatUuid(id) == "123e4567-e89b-12d3-a456-426614174000");
   }
 
-  TEST_CASE("formatUuid preserves leading zeroes", "[utility][unit][uuid]")
+  TEST_CASE("formatUuid preserves leading zeroes")
   {
     CHECK(formatUuid(UuidBytes{}) == "00000000-0000-0000-0000-000000000000");
   }
 
-  TEST_CASE("parseUuid reads the canonical form in either case", "[utility][unit][uuid]")
+  TEST_CASE("parseUuid reads the canonical form in either case")
   {
     auto const optId = parseUuid("123E4567-e89b-12D3-a456-426614174000");
     REQUIRE(optId);
@@ -45,7 +45,7 @@ namespace ao::utility::test
     CHECK(parseUuid("00000000-0000-0000-0000-000000000000") == std::optional{UuidBytes{}});
   }
 
-  TEST_CASE("parseUuid rejects anything but the canonical form", "[utility][unit][uuid]")
+  TEST_CASE("parseUuid rejects anything but the canonical form")
   {
     CHECK_FALSE(parseUuid(""));
     CHECK_FALSE(parseUuid("123e4567e89b12d3a456426614174000"));

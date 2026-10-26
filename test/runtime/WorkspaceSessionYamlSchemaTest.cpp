@@ -45,8 +45,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("WorkspaceSessionYamlSchema - round-trip uses stable presentation vocabulary",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - round-trip uses stable presentation vocabulary")
   {
     auto const presentation = makePresentation();
     auto secondPresentation = presentation;
@@ -139,8 +138,7 @@ namespace ao::rt::test
     CHECK(decodedRes->customPresets[0] == state.customPresets[0]);
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - empty workspace uses active view index zero",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - empty workspace uses active view index zero")
   {
     auto const documentRes = detail::toWorkspaceSessionDocument(WorkspaceSessionState{});
 
@@ -154,8 +152,7 @@ namespace ao::rt::test
     CHECK(decodedRes->activeViewIndex == 0);
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - canonicalizes permitted live presentation state",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - canonicalizes permitted live presentation state")
   {
     auto const duplicateFields = TrackPresentationSpec{
       .id = "custom.minimal",
@@ -182,8 +179,7 @@ namespace ao::rt::test
     CHECK(documentRes->openViews[1].presentation.redundantFields == std::vector<std::string>{"album"});
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid persisted state",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid persisted state")
   {
     auto const validState = WorkspaceSessionState{
       .openViews =
@@ -285,7 +281,7 @@ namespace ao::rt::test
     CHECK(res.error().code == expectedCode);
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - owns the exact YAML mapping", "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - owns the exact YAML mapping")
   {
     auto const presentation = makePresentation();
     auto const state = WorkspaceSessionState{
@@ -378,8 +374,7 @@ namespace ao::rt::test
     CHECK(decodedRes->customPresets == state.customPresets);
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - future version takes precedence over malformed payload",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - future version takes precedence over malformed payload")
   {
     auto const* source = "presentationVersion: 99\nopenViews: malformed\nactiveViewIndex: malformed\ncustomPresets: "
                          "malformed\nfuture: true\n";
@@ -389,8 +384,7 @@ namespace ao::rt::test
     CHECK(decodedRes.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - rejects missing required YAML fields",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects missing required YAML fields")
   {
     SECTION("Missing required fields are rejected")
     {
@@ -436,8 +430,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - rejects unknown YAML keys recursively",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects unknown YAML keys recursively")
   {
     SECTION("Unknown structural keys are rejected")
     {
@@ -553,8 +546,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - rejects malformed YAML node kinds",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects malformed YAML node kinds")
   {
     SECTION("Malformed view sequence elements are rejected")
     {
@@ -619,8 +611,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - rejects active view indexes outside uint32 representation",
-            "[runtime][unit][workspace][session-schema]")
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects active view indexes outside uint32 representation")
   {
     SECTION("Negative active view index is rejected as unsigned 32-bit state")
     {

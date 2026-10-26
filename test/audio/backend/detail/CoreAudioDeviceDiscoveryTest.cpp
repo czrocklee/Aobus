@@ -15,7 +15,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioDeviceDiscovery - marks and orders the concrete system default", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioDeviceDiscovery - marks and orders the concrete system default")
   {
     auto devices = std::vector<Device>{
       {.id = DeviceId{"uid-z"}, .displayName = "Zeta", .isDefault = true, .backendId = kBackendCoreAudio},
@@ -33,8 +33,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(ordered[2].isDefault);
   }
 
-  TEST_CASE("CoreAudioDeviceDiscovery - native snapshot contains only stable concrete identities",
-            "[audio][integration][coreaudio]")
+  TEST_CASE("CoreAudioDeviceDiscovery - native snapshot contains only stable concrete identities")
   {
     auto const devices = enumerateCoreAudioOutputDevices();
 
@@ -59,8 +58,7 @@ namespace ao::audio::backend::detail::test
     CHECK(defaultCount <= 1U);
   }
 
-  TEST_CASE("CoreAudioDeviceDiscovery - UID resolution rejects invalid and absent identities",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioDeviceDiscovery - UID resolution rejects invalid and absent identities")
   {
     auto const invalidRes = coreAudioOutputDeviceId(std::string{"\xC3\x28", 2U});
     REQUIRE_FALSE(invalidRes);

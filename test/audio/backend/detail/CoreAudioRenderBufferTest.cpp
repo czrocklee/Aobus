@@ -12,7 +12,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioRenderBuffer - supplies preallocated storage for a null AUHAL buffer", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioRenderBuffer - supplies preallocated storage for a null AUHAL buffer")
   {
     auto staging = std::array<std::byte, 32>{};
     auto buffers = ::AudioBufferList{
@@ -39,8 +39,7 @@ namespace ao::audio::backend::detail::test
     CHECK(buffers.mBuffers[0].mDataByteSize == 16U);
   }
 
-  TEST_CASE("CoreAudioRenderBuffer - preserves adequate native storage and rejects bad shapes",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioRenderBuffer - preserves adequate native storage and rejects bad shapes")
   {
     auto staging = std::array<std::byte, 32>{};
     auto native = std::array<std::byte, 16>{};
@@ -72,8 +71,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(bindCoreAudioRenderBuffer(nullptr, staging, 8U, clientChannels).valid);
   }
 
-  TEST_CASE("CoreAudioRenderBuffer - rejects channel mismatches before mutating provided or null binding",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioRenderBuffer - rejects channel mismatches before mutating provided or null binding")
   {
     auto staging = std::array<std::byte, 32>{};
     auto native = std::array<std::byte, 32>{};

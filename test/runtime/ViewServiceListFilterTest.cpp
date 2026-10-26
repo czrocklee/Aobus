@@ -24,7 +24,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ViewService - setFilter updates filter state and projection", "[runtime][unit][view][filter]")
+  TEST_CASE("ViewService - setFilter updates filter state and projection")
   {
     auto env = ViewServiceFixture{};
     auto const oldTrackId = env.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
@@ -122,8 +122,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - queued projection change retains its payload after the view closes",
-            "[runtime][unit][view][filter][async]")
+  TEST_CASE("ViewService - queued projection change retains its payload after the view closes")
   {
     auto env = ViewServiceFixture{};
     auto const oldTrackId = env.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
@@ -155,7 +154,7 @@ namespace ao::rt::test
     CHECK_FALSE(changes[0].projectionPtr->indexOf(oldTrackId));
   }
 
-  TEST_CASE("ViewService - stored parent filter error reaches child view state", "[runtime][unit][view][filter]")
+  TEST_CASE("ViewService - stored parent filter error reaches child view state")
   {
     auto env = ViewServiceFixture{};
     auto parentId = kInvalidListId;
@@ -183,8 +182,7 @@ namespace ao::rt::test
     CHECK(projectionPtr->size() == 0);
   }
 
-  TEST_CASE("ViewService - repairing a stored parent filter refreshes live child error state and orderable membership",
-            "[runtime][unit][view][filter]")
+  TEST_CASE("ViewService - repairing a stored parent filter refreshes live child error state and orderable membership")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const oldTrackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});

@@ -18,7 +18,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("TrackTagEditor - pending changes retain the full large-selection fraction", "[tui][unit][editor]")
+  TEST_CASE("TrackTagEditor - pending changes retain the full large-selection fraction")
   {
     auto editor = TrackTagEditor{ao::test::englishMessageCatalog(), 2000, {{"Jazz", 1500}}, {}};
     editor.handleEvent(ftxui::Event::Return);
@@ -29,7 +29,7 @@ namespace ao::tui::test
     CHECK(rendered.text.contains("1500/2000 Remove"));
   }
 
-  TEST_CASE("TrackPropertiesEditor - edits tags through one always-live query", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - edits tags through one always-live query")
   {
     auto editor = makeEditor(
       {
@@ -218,7 +218,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - matches a decomposed tag query against the stored name", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - matches a decomposed tag query against the stored name")
   {
     auto editor = makeEditor({TrackFixture{.title = "So What", .album = "Kind of Blue"}}, {}, {{"Caf\u00e9", 1}});
 
@@ -245,7 +245,7 @@ namespace ao::tui::test
     CHECK(patch.tagsToRemove[0] == "Caf\u00e9");
   }
 
-  TEST_CASE("TrackPropertiesEditor - keeps the tag query one line tall", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - keeps the tag query one line tall")
   {
     auto editor = makeEditor(
       {
@@ -308,7 +308,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - caps the suggestions drawn, never the vocabulary searched", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - caps the suggestions drawn, never the vocabulary searched")
   {
     // Ranked below the cap by construction: the controller hands suggestions
     // over in descending frequency, so position in this vector is the ranking.
@@ -374,7 +374,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - finds exact Unicode tags without creating case variants", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - finds exact Unicode tags without creating case variants")
   {
     for (auto const& [name, query] :
          std::vector<std::pair<std::string, std::string>>{{"Über", "über"}, {"Été", "été"}, {"Straße", "STRASSE"}})
@@ -393,7 +393,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("TrackPropertiesEditor - keeps an exact tag reachable beyond matching suggestions", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - keeps an exact tag reachable beyond matching suggestions")
   {
     auto suggestions = std::vector<std::string>{};
 
@@ -417,7 +417,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToAdd == std::vector<std::string>{"Jazz"});
   }
 
-  TEST_CASE("TrackPropertiesEditor - a blank tag query never creates an invisible tag", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - a blank tag query never creates an invisible tag")
   {
     auto editor = makeEditor({TrackFixture{.title = "Track", .album = "Blue"}});
     selectTab(editor, TrackEditorTab::Tags);
@@ -428,7 +428,7 @@ namespace ao::tui::test
     CHECK(editor.buildPatch().tagsToAdd.empty());
   }
 
-  TEST_CASE("TrackPropertiesEditor - separates full-width tag names from membership counts", "[tui][unit][editor]")
+  TEST_CASE("TrackPropertiesEditor - separates full-width tag names from membership counts")
   {
     auto const name = std::string(32, 'x');
     auto editor =

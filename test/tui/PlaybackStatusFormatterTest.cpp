@@ -11,7 +11,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("PlaybackStatusFormatter - duration formatting is compact and stable", "[tui][unit][playback]")
+  TEST_CASE("PlaybackStatusFormatter - duration formatting is compact and stable")
   {
     CHECK(formatDuration(std::chrono::milliseconds{0}) == "0:00");
     CHECK(formatDuration(std::chrono::seconds{65}) == "1:05");
@@ -19,7 +19,7 @@ namespace ao::tui::test
     CHECK(formatDuration(-std::chrono::seconds{5}) == "0:00");
   }
 
-  TEST_CASE("PlaybackStatusFormatter - active playback transports need clock ticks", "[tui][unit][playback]")
+  TEST_CASE("PlaybackStatusFormatter - active playback transports need clock ticks")
   {
     CHECK_FALSE(shouldTickTransportClock(audio::Transport::Idle));
     CHECK(shouldTickTransportClock(audio::Transport::Opening));

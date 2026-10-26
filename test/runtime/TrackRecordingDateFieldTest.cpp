@@ -30,8 +30,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackField - recording date appends stable typed field and sort identifiers",
-            "[runtime][unit][trackfield]")
+  TEST_CASE("TrackField - recording date appends stable typed field and sort identifiers")
   {
     static_assert(static_cast<std::size_t>(TrackField::Quality) == 30);
     static_assert(static_cast<std::size_t>(TrackField::RecordingDate) == 31);
@@ -64,8 +63,7 @@ namespace ao::rt::test
     CHECK(TrackFieldRawValue{std::in_place_type<library::RecordingDate>}.index() == 7);
   }
 
-  TEST_CASE("TrackFieldReader - recording date retains exact precision and represents absence as monostate",
-            "[runtime][unit][trackfield]")
+  TEST_CASE("TrackFieldReader - recording date retains exact precision and represents absence as monostate")
   {
     auto fixture = MusicLibraryFixture{};
     auto const dates = std::to_array<library::RecordingDate>({{}, {1981, 0, 0}, {1981, 5, 0}, {1981, 5, 12}});
@@ -96,8 +94,7 @@ namespace ao::rt::test
           TrackFieldRawValue{library::RecordingDate{1981, 5, 12}});
   }
 
-  TEST_CASE("TrackFieldReader - work metadata and performance projections retain independent values",
-            "[runtime][unit][trackfield]")
+  TEST_CASE("TrackFieldReader - work metadata and performance projections retain independent values")
   {
     auto fixture = MusicLibraryFixture{};
     auto const id = fixture.addTrack(library::test::TrackSpec{
@@ -133,8 +130,7 @@ namespace ao::rt::test
             TrackField::Title, *optHot, fixture.library().dictionary(), nullptr)) == "Variation");
   }
 
-  TEST_CASE("TrackDetailProjection - recording date aggregation distinguishes precision and absence",
-            "[runtime][unit][projection]")
+  TEST_CASE("TrackDetailProjection - recording date aggregation distinguishes precision and absence")
   {
     auto fixture = ViewServiceFixture{};
     auto const year = fixture.addTrack(library::test::TrackSpec{.recordingDate = {1981, 0, 0}});

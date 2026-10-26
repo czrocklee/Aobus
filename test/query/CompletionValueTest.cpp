@@ -23,7 +23,7 @@ namespace ao::query::test
     }
   } // namespace
 
-  TEST_CASE("Completion - analyzes value context after complete operators", "[query][unit][completion]")
+  TEST_CASE("Completion - analyzes value context after complete operators")
   {
     SECTION("Detects a normal comparison value")
     {
@@ -103,7 +103,7 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - preserves value byte ranges after complete Unicode text", "[query][unit][completion]")
+  TEST_CASE("Completion - preserves value byte ranges after complete Unicode text")
   {
     auto const text = std::string{R"($artist = "Björk" and $album = Ki)"};
     REQUIRE(text.size() == 34);

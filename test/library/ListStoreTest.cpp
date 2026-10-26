@@ -38,7 +38,7 @@ namespace ao::library::test
     }
   } // namespace
 
-  TEST_CASE("ListStore - create and read", "[library][unit][list]")
+  TEST_CASE("ListStore - create and read")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -66,7 +66,7 @@ namespace ao::library::test
     CHECK((*it).second.orderTrackIds().empty());
   }
 
-  TEST_CASE("ListStore - read by id", "[library][unit][list]")
+  TEST_CASE("ListStore - read by id")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -94,7 +94,7 @@ namespace ao::library::test
     CHECK(optFound->orderTrackIds()[9] == TrackId{10});
   }
 
-  TEST_CASE("ListStore - non-contiguous saved order round-trips", "[library][unit][list]")
+  TEST_CASE("ListStore - non-contiguous saved order round-trips")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -120,7 +120,7 @@ namespace ao::library::test
     CHECK(found.orderTrackIds()[1] == TrackId{99});
   }
 
-  TEST_CASE("ListStore - delete removes only the selected record", "[library][unit][list]")
+  TEST_CASE("ListStore - delete removes only the selected record")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -148,7 +148,7 @@ namespace ao::library::test
     CHECK(optSurvivor->name() == "Survivor");
   }
 
-  TEST_CASE("ListStore - prepared-only writes persist a canonical replacement", "[library][unit][list]")
+  TEST_CASE("ListStore - prepared-only writes persist a canonical replacement")
   {
     STATIC_REQUIRE_FALSE(HasRawListCreate<ListStore::Writer>);
     STATIC_REQUIRE_FALSE(HasRawListUpdate<ListStore::Writer>);

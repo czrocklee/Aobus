@@ -49,7 +49,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("CommandCompletion - completes command names from shell command specs", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - completes command names from shell command specs")
   {
     auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{});
 
@@ -78,7 +78,7 @@ namespace ao::tui::test
     CHECK(shell.inputField().cursor() == 6);
   }
 
-  TEST_CASE("CommandCompletion - completes presentation ids after view commands", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - completes presentation ids after view commands")
   {
     auto const optResult =
       completeDraft(ao::test::englishMessageCatalog(),
@@ -112,14 +112,12 @@ namespace ao::tui::test
     CHECK(shell.inputField().cursor() == 12);
   }
 
-  TEST_CASE("CommandCompletion - returns no filter result without a filter completion provider",
-            "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - returns no filter result without a filter completion provider")
   {
     CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "filter Road Trips", CommandCompletionContext{}));
   }
 
-  TEST_CASE("CommandCompletion - returns no result for unmatched command and presentation prefixes",
-            "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - returns no result for unmatched command and presentation prefixes")
   {
     CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "zzz", CommandCompletionContext{}));
     CHECK_FALSE(completeDraft(ao::test::englishMessageCatalog(), "zzzzzz", CommandCompletionContext{}));
@@ -128,7 +126,7 @@ namespace ao::tui::test
                               CommandCompletionContext{.builtinPresentations = rt::builtinTrackPresentationPresets()}));
   }
 
-  TEST_CASE("CommandCompletion - offers multi-word exact aliases from a prefix", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - offers multi-word exact aliases from a prefix")
   {
     auto const optScan = completeDraft(ao::test::englishMessageCatalog(), "scan", CommandCompletionContext{});
 
@@ -155,7 +153,7 @@ namespace ao::tui::test
           std::vector<std::string>{"select toggle", "select visual", "select all", "select clear"});
   }
 
-  TEST_CASE("CommandCompletion - offers every manual order alias with its movement label", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - offers every manual order alias with its movement label")
   {
     auto const optOrder = completeDraft(ao::test::englishMessageCatalog(), "order", CommandCompletionContext{});
 
@@ -178,7 +176,7 @@ namespace ao::tui::test
     CHECK(optReset->items.front().displayText == "Reset Order");
   }
 
-  TEST_CASE("CommandCompletion - offers every List authoring alias with its action label", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - offers every List authoring alias with its action label")
   {
     auto const optList = completeDraft(ao::test::englishMessageCatalog(), "list ", CommandCompletionContext{});
 
@@ -191,14 +189,14 @@ namespace ao::tui::test
     CHECK(insertTexts(*optEdit) == std::vector<std::string>{"list edit"});
   }
 
-  TEST_CASE("CommandCompletion - finds quick tags by command prefix", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - finds quick tags by command prefix")
   {
     auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "tag", CommandCompletionContext{});
     REQUIRE(optResult);
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"tags"});
   }
 
-  TEST_CASE("CommandCompletion - limits command candidates", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - limits command candidates")
   {
     auto const optResult = completeDraft(ao::test::englishMessageCatalog(), "ou", CommandCompletionContext{}, 1);
 
@@ -206,8 +204,7 @@ namespace ao::tui::test
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"output"});
   }
 
-  TEST_CASE("CommandCompletion - delegates explicit filter arguments to the shared filter completer",
-            "[tui][unit][completion][filter]")
+  TEST_CASE("CommandCompletion - delegates explicit filter arguments to the shared filter completer")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(libraryFixture.library(),
@@ -240,8 +237,7 @@ namespace ao::tui::test
     CHECK(optResult->items[0].insertText == "\"Aimer\"");
   }
 
-  TEST_CASE("CommandCompletion - translates an interior filter range into shell offsets",
-            "[tui][unit][completion][input]")
+  TEST_CASE("CommandCompletion - translates an interior filter range into shell offsets")
   {
     std::size_t calls = 0;
     auto const optCompletion = completeCommandDraft(
@@ -267,8 +263,7 @@ namespace ao::tui::test
     CHECK(optCompletion->items.front().insertText == "$artist");
   }
 
-  TEST_CASE("CommandCompletion - action search deduplicates aliases and accepts localized names",
-            "[tui][unit][completion][input]")
+  TEST_CASE("CommandCompletion - action search deduplicates aliases and accepts localized names")
   {
     auto const catalog = ao::test::messageCatalog("zh-Hans");
     auto const optByName = completeCommandDraft(catalog, "设置", std::string{"设置"}.size(), {});
@@ -292,7 +287,7 @@ namespace ao::tui::test
     CHECK(optAbbreviated->items.front().insertText == "settings");
   }
 
-  TEST_CASE("CommandCompletion - custom presentation uses its id and label", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - custom presentation uses its id and label")
   {
     auto const custom = std::vector<rt::CustomTrackPresentationPreset>{
       {.label = "My listening view", .spec = {.id = "my-listening-view"}}};
@@ -308,8 +303,7 @@ namespace ao::tui::test
           "My listening view");
   }
 
-  TEST_CASE("CommandCompletion - zero limit and invalid caret refuse candidates without forwarding",
-            "[tui][unit][completion]")
+  TEST_CASE("CommandCompletion - zero limit and invalid caret refuse candidates without forwarding")
   {
     std::size_t calls = 0;
     auto const context = CommandCompletionContext{
@@ -331,8 +325,7 @@ namespace ao::tui::test
                            0));
   }
 
-  TEST_CASE("CommandCompletion - filter callback receives the exact argument cursor and limit",
-            "[tui][unit][completion][filter]")
+  TEST_CASE("CommandCompletion - filter callback receives the exact argument cursor and limit")
   {
     std::size_t calls = 0;
     auto const optResult = completeCommandDraft(

@@ -51,7 +51,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI - track show format expression streams formatted rows", "[cli][unit][track][format]")
+  TEST_CASE("CLI - track show format expression streams formatted rows")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -75,7 +75,7 @@ namespace ao::cli::test
                        "track show --format supports only plain output");
   }
 
-  TEST_CASE("CLI - track show resolves explicit id batches directly", "[cli][unit][track][show]")
+  TEST_CASE("CLI - track show resolves explicit id batches directly")
   {
     auto fixture = CliFixture{};
     auto const first = fixture.addTrack(library::test::TrackSpec{.title = "First", .uri = "first.flac"});
@@ -96,7 +96,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "Second"));
   }
 
-  TEST_CASE("CLI - track create imports one file", "[cli][integration][track][create]")
+  TEST_CASE("CLI - track create imports one file")
   {
     auto fixture = CliFixture{};
 
@@ -114,8 +114,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Test Title"));
   }
 
-  TEST_CASE("CLI - track create reports every CUE segment id and show retains sparse ordinals",
-            "[cli][integration][track][create]")
+  TEST_CASE("CLI - track create reports every CUE segment id and show retains sparse ordinals")
   {
     auto fixture = CliFixture{};
     REQUIRE(fixture.run({"init"}).status == 0);
@@ -174,7 +173,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(yaml::findChild(yaml::findChild(tracks[1], "segment"), "startFrame")) == "588");
   }
 
-  TEST_CASE("CLI - track delete removes the track from subsequent output", "[cli][integration][track]")
+  TEST_CASE("CLI - track delete removes the track from subsequent output")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -199,7 +198,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Test Title"));
   }
 
-  TEST_CASE("CLI - track update edits metadata and reports no-op patches", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update edits metadata and reports no-op patches")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -223,7 +222,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "updated 0 of 1 matched track(s)"));
   }
 
-  TEST_CASE("CLI - track update edits explicit id batches", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update edits explicit id batches")
   {
     auto fixture = CliFixture{};
     auto const firstId = fixture.addTrack(library::test::makeEmptyTrackSpec("first.flac"));
@@ -244,7 +243,7 @@ namespace ao::cli::test
     CHECK(countJsonLinesWithField(result.out, "id", std::to_string(thirdId.raw())) == 0);
   }
 
-  TEST_CASE("CLI - track update edits filtered batches with structured output", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update edits filtered batches with structured output")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -274,7 +273,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "updated 0 of 2 matched track(s)"));
   }
 
-  TEST_CASE("CLI - track show exposes writable metadata fields", "[cli][integration][track][output]")
+  TEST_CASE("CLI - track show exposes writable metadata fields")
   {
     auto fixture = CliFixture{};
     auto const trackId = fixture.addTrack(library::test::makeEmptyTrackSpec("track.flac"));
@@ -348,7 +347,7 @@ namespace ao::cli::test
     checkDomainFailure(result, "track show accepts either explicit ids or --filter");
   }
 
-  TEST_CASE("CLI - missing field filters agree with structured omissions", "[cli][unit][track][output]")
+  TEST_CASE("CLI - missing field filters agree with structured omissions")
   {
     auto fixture = CliFixture{};
     fixture.addTrack(library::test::makeEmptyTrackSpec("missing.flac"));
@@ -367,7 +366,7 @@ namespace ao::cli::test
     CHECK_FALSE(root["trackNumber"].readable());
   }
 
-  TEST_CASE("CLI - genre repair loop converges through filters and structured output", "[cli][integration][track]")
+  TEST_CASE("CLI - genre repair loop converges through filters and structured output")
   {
     auto fixture = CliFixture{};
     fixture.addTrack(library::test::TrackSpec{.title = "Missing One", .genre = "", .uri = "missing-one.flac"});
@@ -415,7 +414,7 @@ namespace ao::cli::test
     CHECK(countJsonLinesWithField(result.out, "genre", "Inferred") == 2);
   }
 
-  TEST_CASE("CLI - track update sets and unsets custom metadata", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update sets and unsets custom metadata")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -445,7 +444,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["custom"]["energy"]) == "high");
   }
 
-  TEST_CASE("CLI - track update commits metadata and tag changes as one edit", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update commits metadata and tag changes as one edit")
   {
     auto fixture = CliFixture{};
     auto const firstId =
@@ -532,8 +531,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["addedTags"][0]) == "fav");
   }
 
-  TEST_CASE("CLI - track update applies combined metadata and tag edits through a filter",
-            "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update applies combined metadata and tag edits through a filter")
   {
     auto fixture = CliFixture{};
     auto const firstId =
@@ -567,7 +565,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "fav"));
   }
 
-  TEST_CASE("CLI - track update unions diverging metadata and tag changes", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update unions diverging metadata and tag changes")
   {
     auto fixture = CliFixture{};
     auto const firstId = fixture.addTrack(library::test::TrackSpec{.title = "One", .uri = "one.flac", .tags = {"fav"}});
@@ -621,7 +619,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["tagChanges"][0]["trackId"]) == std::to_string(thirdId.raw()));
   }
 
-  TEST_CASE("CLI - track update reports a zero-match filter as a no-op", "[cli][integration][track][update]")
+  TEST_CASE("CLI - track update reports a zero-match filter as a no-op")
   {
     auto fixture = CliFixture{};
     auto const trackId = fixture.addTrack(library::test::TrackSpec{.title = "Solo", .uri = "solo.flac"});
@@ -657,7 +655,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "Jazz"));
   }
 
-  TEST_CASE("CLI - track update rejects conflicting tag edit options", "[cli][unit][track][update]")
+  TEST_CASE("CLI - track update rejects conflicting tag edit options")
   {
     auto fixture = CliFixture{};
     auto const trackId = fixture.addTrack(library::test::makeEmptyTrackSpec("track.flac"));
@@ -686,7 +684,7 @@ namespace ao::cli::test
       "--dry-run does not support tag changes yet");
   }
 
-  TEST_CASE("CLI - track mutations support dry-run reports", "[cli][integration][track][dry-run]")
+  TEST_CASE("CLI - track mutations support dry-run reports")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -751,7 +749,7 @@ namespace ao::cli::test
     CHECK(result.out.empty());
   }
 
-  TEST_CASE("CLI - missing track dump id reports an error for every dump format", "[cli][unit][track][contract]")
+  TEST_CASE("CLI - missing track dump id reports an error for every dump format")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -764,7 +762,7 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"-O", "yaml", "track", "dump", "--id", "999"}), "track dump supports only plain");
   }
 
-  TEST_CASE("CLI - structured track output quotes strings and parses", "[cli][unit][track][output]")
+  TEST_CASE("CLI - structured track output quotes strings and parses")
   {
     auto fixture = CliFixture{};
     auto title = std::string{"Quote \"Title\"\nSecond Line"};
@@ -794,7 +792,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["custom"]["mood"]) == "bright\nsharp");
   }
 
-  TEST_CASE("CLI - track domain failures use stderr and exit non-zero", "[cli][unit][track][contract]")
+  TEST_CASE("CLI - track domain failures use stderr and exit non-zero")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");

@@ -44,8 +44,7 @@ namespace ao::desktop::test
     }
   } // namespace
 
-  TEST_CASE("DetachedProcessLauncher - Windows preserves UTF-8 argv without inheriting unrelated handles",
-            "[runtime][integration][desktop-process]")
+  TEST_CASE("DetachedProcessLauncher - Windows preserves UTF-8 argv without inheriting unrelated handles")
   {
     auto const fixture = ao::test::TempDir{};
     auto const outputPath = fixture.path() / "child output.txt";

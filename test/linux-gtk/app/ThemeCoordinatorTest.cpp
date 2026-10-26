@@ -17,7 +17,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("ThemeCoordinator - applies active theme to registered windows", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemeCoordinator - applies active theme to registered windows")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -31,7 +31,7 @@ namespace ao::gtk::test
     CHECK(window.has_css_class("ao-theme-modern"));
   }
 
-  TEST_CASE("ThemeCoordinator - unregisters on token destruction", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemeCoordinator - unregisters on token destruction")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -52,7 +52,7 @@ namespace ao::gtk::test
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
   }
 
-  TEST_CASE("ThemeCoordinator - move and reset tokens", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemeCoordinator - move and reset tokens")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -72,7 +72,7 @@ namespace ao::gtk::test
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
   }
 
-  TEST_CASE("ThemeCoordinator - duplicate tokens keep window registered until final reset", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemeCoordinator - duplicate tokens keep window registered until final reset")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -93,7 +93,7 @@ namespace ao::gtk::test
     CHECK_FALSE(window.has_css_class("ao-theme-modern"));
   }
 
-  TEST_CASE("ThemeCoordinator - destroyed windows expire before token reset", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemeCoordinator - destroyed windows expire before token reset")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -110,7 +110,7 @@ namespace ao::gtk::test
     token.reset();
   }
 
-  TEST_CASE("ThemeCoordinator - applyTo replaces stale theme classes", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemeCoordinator - applyTo replaces stale theme classes")
   {
     auto const appPtr = ensureGtkApplication();
     auto coordinator = ThemeCoordinator{};
@@ -130,7 +130,7 @@ namespace ao::gtk::test
     CHECK(window.has_css_class("ao-theme-modern"));
   }
 
-  TEST_CASE("ThemeCoordinator - loads and saves app prefs", "[gtk][unit][app][theme]")
+  TEST_CASE("ThemeCoordinator - loads and saves app prefs")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = tempDir.path() / "config.yaml";

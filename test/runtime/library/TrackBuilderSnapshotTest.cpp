@@ -38,8 +38,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackBuilderSnapshot - borrowed cover bytes become an observed descriptor",
-            "[runtime][unit][track-builder-snapshot]")
+  TEST_CASE("TrackBuilderSnapshot - borrowed cover bytes become an observed descriptor")
   {
     auto const coverBytes = std::array{std::byte{0x12}, std::byte{0x34}, std::byte{0x56}};
     auto builder = library::TrackBuilder::makeEmpty();
@@ -58,8 +57,7 @@ namespace ao::rt::test
     CHECK(observed->descriptor.byteLength == coverBytes.size());
   }
 
-  TEST_CASE("TrackBuilderSnapshot - observed cover evidence survives the owning snapshot",
-            "[runtime][unit][track-builder-snapshot]")
+  TEST_CASE("TrackBuilderSnapshot - observed cover evidence survives the owning snapshot")
   {
     auto const coverBytes = std::array{std::byte{0x9A}, std::byte{0xBC}};
     auto const expected = library::ObservedResourceDescriptor{
@@ -89,8 +87,7 @@ namespace ao::rt::test
     CHECK(observed->descriptor.byteLength == expected.descriptor.byteLength);
   }
 
-  TEST_CASE("TrackBuilderSnapshot - owns raw credit text source order duplicates and partial dates after move",
-            "[runtime][unit][track-builder-snapshot]")
+  TEST_CASE("TrackBuilderSnapshot - owns raw credit text source order duplicates and partial dates after move")
   {
     auto snapshot = []
     {
@@ -165,8 +162,7 @@ namespace ao::rt::test
           });
   }
 
-  TEST_CASE("TrackBuilderSnapshot - raw invalid credits survive source expiry but fail builder admission",
-            "[runtime][unit][track-builder-snapshot]")
+  TEST_CASE("TrackBuilderSnapshot - raw invalid credits survive source expiry but fail builder admission")
   {
     auto entry = library::CreditView{.name = "Valid"};
 
@@ -224,8 +220,7 @@ namespace ao::rt::test
     CHECK(ml.dictionary().size() == 0);
   }
 
-  TEST_CASE("TrackBuilderSnapshot - whole builder round-trip keeps absent segment with owned source text",
-            "[runtime][unit][track-builder-snapshot]")
+  TEST_CASE("TrackBuilderSnapshot - whole builder round-trip keeps absent segment with owned source text")
   {
     auto const optSegment = std::optional<library::TrackSegment>{};
     auto snapshot = [&]
@@ -259,8 +254,7 @@ namespace ao::rt::test
     CHECK(rebuilt.property().duration() == std::chrono::milliseconds{183250});
   }
 
-  TEST_CASE("TrackBuilderSnapshot - segmented builder round-trip keeps structural range rate and duration",
-            "[runtime][unit][track-builder-snapshot]")
+  TEST_CASE("TrackBuilderSnapshot - segmented builder round-trip keeps structural range rate and duration")
   {
     auto const optSegment = std::optional<library::TrackSegment>{library::TrackSegment{
       .startFrame = 264600,

@@ -76,7 +76,7 @@ namespace ao::lmdb::test
     }
   } // namespace
 
-  TEST_CASE("Environment - openEnvironment creates usable environments", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - openEnvironment creates usable environments")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
@@ -85,7 +85,7 @@ namespace ao::lmdb::test
     auto txn = beginWriteTransaction(env);
   }
 
-  TEST_CASE("Environment - open returns IoError for missing directory", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - open returns IoError for missing directory")
   {
     auto temp = ao::test::TempDir{};
     auto const res = Environment::open(temp.path() / "missing", {.flags = kTestEnvFlags, .maxDatabases = 20});
@@ -94,7 +94,7 @@ namespace ao::lmdb::test
     CHECK(res.error().code == Error::Code::IoError);
   }
 
-  TEST_CASE("Environment - open returns environment on success", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - open returns environment on success")
   {
     auto temp = ao::test::TempDir{};
     auto envRes = Environment::open(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
@@ -104,7 +104,7 @@ namespace ao::lmdb::test
     REQUIRE(txnRes);
   }
 
-  TEST_CASE("Environment - unflushed commits stay readable after the environment closes", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - unflushed commits stay readable after the environment closes")
   {
     auto const temp = ao::test::TempDir{};
 
@@ -122,7 +122,7 @@ namespace ao::lmdb::test
     CHECK(utility::bytes::stringView(*optValue) == "kept");
   }
 
-  TEST_CASE("Environment - move constructor transfers ownership", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - move constructor transfers ownership")
   {
     auto const temp = ao::test::TempDir{};
     auto env1 = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
@@ -131,7 +131,7 @@ namespace ao::lmdb::test
     CHECK(transaction.isActive());
   }
 
-  TEST_CASE("Environment - move assignment transfers ownership", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - move assignment transfers ownership")
   {
     auto const firstTemp = ao::test::TempDir{};
     auto const secondTemp = ao::test::TempDir{};
@@ -143,7 +143,7 @@ namespace ao::lmdb::test
     CHECK(transaction.isActive());
   }
 
-  TEST_CASE("Environment - exposes move-only ownership and a private native handle", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - exposes move-only ownership and a private native handle")
   {
     STATIC_REQUIRE(std::is_move_constructible_v<Environment>);
     STATIC_REQUIRE(std::is_move_assignable_v<Environment>);
@@ -152,7 +152,7 @@ namespace ao::lmdb::test
     STATIC_REQUIRE_FALSE(HasPublicEnvironmentHandle<Environment>);
   }
 
-  TEST_CASE("Environment - helper opens path", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - helper opens path")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kTestEnvFlags, .maxDatabases = 20});
@@ -162,7 +162,7 @@ namespace ao::lmdb::test
     auto wtxn = beginWriteTransaction(env);
   }
 
-  TEST_CASE("Environment - helper uses default options", "[lmdb][unit][environment]")
+  TEST_CASE("Environment - helper uses default options")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path());
@@ -171,8 +171,7 @@ namespace ao::lmdb::test
     auto rtxn = beginReadTransaction(env);
   }
 
-  TEST_CASE("Environment - capacity reports the configured map and a growing high water",
-            "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - capacity reports the configured map and a growing high water")
   {
     constexpr std::size_t kMapSize = std::size_t{64} * 1024 * 1024;
     auto temp = ao::test::TempDir{};
@@ -204,7 +203,7 @@ namespace ao::lmdb::test
     CHECK(filled.highWaterBytes < kMapSize);
   }
 
-  TEST_CASE("Environment - capacity high water is a peak rather than live data", "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - capacity high water is a peak rather than live data")
   {
     constexpr std::size_t kMapSize = std::size_t{64} * 1024 * 1024;
     auto temp = ao::test::TempDir{};
@@ -239,7 +238,7 @@ namespace ao::lmdb::test
     CHECK(env.capacity().highWaterBytes >= filled.highWaterBytes);
   }
 
-  TEST_CASE("Environment - a managed map opens at the policy floor", "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - a managed map opens at the policy floor")
   {
     auto temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), managedOptions(kFloor, kCeiling));
@@ -249,7 +248,7 @@ namespace ao::lmdb::test
     CHECK(env.capacity().mapBytes == kFloor);
   }
 
-  TEST_CASE("Environment - a map larger than the floor survives reopening", "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - a map larger than the floor survives reopening")
   {
     auto temp = ao::test::TempDir{};
 
@@ -265,7 +264,7 @@ namespace ao::lmdb::test
     CHECK(env.capacity().mapBytes == kWideMap);
   }
 
-  TEST_CASE("Environment - a peak past half the map raises it at the next open", "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - a peak past half the map raises it at the next open")
   {
     auto temp = ao::test::TempDir{};
 
@@ -279,7 +278,7 @@ namespace ao::lmdb::test
     CHECK(env.capacity().mapBytes == kFloor * 2);
   }
 
-  TEST_CASE("Environment - growth stops at the policy ceiling", "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - growth stops at the policy ceiling")
   {
     auto temp = ao::test::TempDir{};
 
@@ -292,7 +291,7 @@ namespace ao::lmdb::test
     CHECK(env.capacity().mapBytes == kFloor);
   }
 
-  TEST_CASE("Environment - a pinned map size is never raised", "[lmdb][unit][environment][capacity]")
+  TEST_CASE("Environment - a pinned map size is never raised")
   {
     auto temp = ao::test::TempDir{};
     auto const pinnedOptions =

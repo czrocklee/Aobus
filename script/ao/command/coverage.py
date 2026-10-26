@@ -34,7 +34,7 @@ examples:
   ./ao coverage "SmartListEvaluator*"   # coverage for a test subset
   ./ao coverage --cli --scope app/cli
   ./ao coverage --tui --scope app/tui
-  ./ao coverage --gtk "[layout]"         # GTK suite with a Catch2 filter
+  ./ao coverage --gtk "validUtf8Text*"   # GTK suite with a case-name filter
   ./ao coverage --gtk --scope app/linux-gtk
 """
 

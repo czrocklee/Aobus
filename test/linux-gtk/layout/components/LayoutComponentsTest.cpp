@@ -20,8 +20,7 @@ namespace ao::gtk::layout::test
 {
   using namespace uimodel;
 
-  TEST_CASE("LayoutComponents - the registry describes every shared component the way the vocabulary does",
-            "[gtk][unit][layout-component][registry]")
+  TEST_CASE("LayoutComponents - the registry describes every shared component the way the vocabulary does")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -49,8 +48,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutComponents - the soul button keeps the secondary hold GDK can tell apart",
-            "[gtk][unit][layout-component][registry]")
+  TEST_CASE("LayoutComponents - the soul button keeps the secondary hold GDK can tell apart")
   {
     // The shared floor stops at the three slots Windows can bind, because a
     // schema that offers a slot its shell refuses fails the document at build
@@ -63,8 +61,7 @@ namespace ao::gtk::layout::test
     CHECK(optSoul->accepts(uimodel::ActionSlot::SecondaryLongPress));
   }
 
-  TEST_CASE("LayoutComponents - standard layout registry creates status and semantic components",
-            "[gtk][unit][layout-component][registry]")
+  TEST_CASE("LayoutComponents - standard layout registry creates status and semantic components")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const types = std::to_array<std::string_view>({"status.message",
@@ -95,8 +92,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutComponents - stale status registry ids remain explicit rejection controls",
-            "[gtk][unit][layout-component][registry]")
+  TEST_CASE("LayoutComponents - stale status registry ids remain explicit rejection controls")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto const staleTypes = std::to_array<std::string_view>({"status.importProgress", "status.notification"});

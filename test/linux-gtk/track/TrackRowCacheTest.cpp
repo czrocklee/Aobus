@@ -95,7 +95,7 @@ namespace ao::gtk::test
     }
   } // namespace
 
-  TEST_CASE("TrackRowCache - loads cached rows from runtime track data", "[gtk][unit][track][row-cache]")
+  TEST_CASE("TrackRowCache - loads cached rows from runtime track data")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto basicId1 = kInvalidTrackId;
@@ -261,7 +261,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("TrackRowCache - a library mutation invalidates the cached row it changed", "[gtk][unit][track][row-cache]")
+  TEST_CASE("TrackRowCache - a library mutation invalidates the cached row it changed")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -284,7 +284,7 @@ namespace ao::gtk::test
     CHECK(rowBeforePtr->fieldText(rt::TrackField::Title) == "Before Import");
   }
 
-  TEST_CASE("TrackRowCache - retained rows preserve bind text across repeated lookup", "[gtk][unit][track][row-cache]")
+  TEST_CASE("TrackRowCache - retained rows preserve bind text across repeated lookup")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     constexpr std::size_t kRowCount = 5000;
@@ -391,8 +391,7 @@ namespace ao::gtk::test
     CHECK(cache.cachedRowCount() == kRowCount);
   }
 
-  TEST_CASE("TrackRowCache - credit columns retain first text and count duplicate entries",
-            "[gtk][unit][track-row-cache]")
+  TEST_CASE("TrackRowCache - credit columns retain first text and count duplicate entries")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto id = kInvalidTrackId;

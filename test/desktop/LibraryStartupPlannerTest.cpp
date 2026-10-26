@@ -13,8 +13,7 @@
 
 namespace ao::desktop::test
 {
-  TEST_CASE("LibraryStartupPlanner - explicit successor is strict and defers root durability",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibraryStartupPlanner - explicit successor is strict and defers root durability")
   {
     auto const fixture = ao::test::TempDir{};
     auto const root = fixture.path() / "successor";
@@ -34,8 +33,7 @@ namespace ao::desktop::test
     CHECK(planRes->scanAfterOpen);
   }
 
-  TEST_CASE("LibraryStartupPlanner - missing explicit root fails instead of selecting fallback",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibraryStartupPlanner - missing explicit root fails instead of selecting fallback")
   {
     auto const fixture = ao::test::TempDir{};
     auto planRes = planLibraryStartup({
@@ -47,8 +45,7 @@ namespace ao::desktop::test
     CHECK(planRes.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("LibraryStartupPlanner - valid persisted root restores without a pending commit",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibraryStartupPlanner - valid persisted root restores without a pending commit")
   {
     auto const fixture = ao::test::TempDir{};
     auto const root = fixture.path() / "persisted";
@@ -66,8 +63,7 @@ namespace ao::desktop::test
     CHECK_FALSE(planRes->optSelectedRootCommit);
   }
 
-  TEST_CASE("LibraryStartupPlanner - invalid persisted root selects fallback without creating it",
-            "[runtime][unit][desktop-lifecycle]")
+  TEST_CASE("LibraryStartupPlanner - invalid persisted root selects fallback without creating it")
   {
     auto const fixture = ao::test::TempDir{};
     auto const fallback = fixture.path() / "fallback";

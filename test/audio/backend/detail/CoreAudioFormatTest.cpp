@@ -45,8 +45,7 @@ namespace ao::audio::backend::detail::test
       FormatCase{SampleEncoding::Float32Le, ::kAudioFormatFlagIsFloat | ::kAudioFormatFlagIsPacked, 4U, 32U}};
   } // namespace
 
-  TEST_CASE("CoreAudioFormat - maps every lossless encoding to strict interleaved little-endian PCM",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - maps every lossless encoding to strict interleaved little-endian PCM")
   {
     for (auto const& testCase : kFormatCases)
     {
@@ -66,7 +65,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("CoreAudioFormat - preserves low-aligned 24-bit-in-32 identity", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - preserves low-aligned 24-bit-in-32 identity")
   {
     auto const nativeRes =
       coreAudioFormat(PcmFormat{.sampleRate = 44100, .channels = 1, .encoding = SampleEncoding::Signed24In32Le});
@@ -78,7 +77,7 @@ namespace ao::audio::backend::detail::test
     CHECK(nativeRes->mBytesPerFrame == 4U);
   }
 
-  TEST_CASE("CoreAudioFormat - rejects an unknown source encoding", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - rejects an unknown source encoding")
   {
     auto const unknownRes =
       coreAudioFormat(PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Unknown});
@@ -86,8 +85,7 @@ namespace ao::audio::backend::detail::test
     CHECK(unknownRes.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("CoreAudioFormat - derives endpoint signal evidence without claiming client layout",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - derives endpoint signal evidence without claiming client layout")
   {
     auto native =
       *coreAudioFormat(PcmFormat{.sampleRate = 96000, .channels = 2, .encoding = SampleEncoding::Float32Le});
@@ -101,7 +99,7 @@ namespace ao::audio::backend::detail::test
     CHECK(signalRes->sampleKind == SampleKind::FloatingPoint);
   }
 
-  TEST_CASE("CoreAudioFormat - walks only lossless candidates and accepts exact read-back", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - walks only lossless candidates and accepts exact read-back")
   {
     auto attemptedFrameByteCounts = std::vector<::UInt32>{};
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
@@ -127,8 +125,7 @@ namespace ao::audio::backend::detail::test
     CHECK(attemptedFrameByteCounts[1] == 8U);
   }
 
-  TEST_CASE("CoreAudioFormat - selected padded storage retains canonical identity through the candidate walk",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - selected padded storage retains canonical identity through the candidate walk")
   {
     std::size_t attempts = 0U;
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
@@ -154,8 +151,7 @@ namespace ao::audio::backend::detail::test
       PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed24In32Le, .speakerMask = 0x3});
   }
 
-  TEST_CASE("CoreAudioFormat - required readback contradictions are terminal on the first candidate",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - required readback contradictions are terminal on the first candidate")
   {
     auto mutate = std::function<void(::AudioStreamBasicDescription&)>{};
 
@@ -200,8 +196,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().error.message == "Core Audio applied a different client PCM mode than requested");
   }
 
-  TEST_CASE("CoreAudioFormat - a mismatched 24-bit read-back stops the walk instead of exhausting candidates",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - a mismatched 24-bit read-back stops the walk instead of exhausting candidates")
   {
     std::size_t attempts = 0;
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
@@ -232,7 +227,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
-  TEST_CASE("CoreAudioFormat - rejects coercion and never narrows a 32-bit integer source", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - rejects coercion and never narrows a 32-bit integer source")
   {
     std::size_t attempts = 0;
     auto const rejectedRes = selectLosslessCoreAudioClientFormat(
@@ -265,7 +260,7 @@ namespace ao::audio::backend::detail::test
     CHECK(coercedRes.error().cause == BackendOpenFailure::Cause::OutputFailure);
   }
 
-  TEST_CASE("CoreAudioFormat - retries only track-incompatible attempt failures", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - retries only track-incompatible attempt failures")
   {
     std::size_t attempts = 0;
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
@@ -287,8 +282,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE(
-    "CoreAudioFormat - default output failures retain their original diagnostic even with capability-like codes",
-    "[audio][unit][coreaudio]")
+    "CoreAudioFormat - default output failures retain their original diagnostic even with capability-like codes")
   {
     auto code = Error::Code::FormatRejected;
 
@@ -328,8 +322,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().error.location.column() == original.location.column());
   }
 
-  TEST_CASE("CoreAudioFormat - an unrepresentable source is refused without a native attempt",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - an unrepresentable source is refused without a native attempt")
   {
     std::size_t attempts = 0;
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
@@ -348,7 +341,7 @@ namespace ao::audio::backend::detail::test
     CHECK(selectedRes.error().cause == BackendOpenFailure::Cause::TrackRouteIncompatible);
   }
 
-  TEST_CASE("CoreAudioFormat - a missing attempt callback is an output failure", "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioFormat - a missing attempt callback is an output failure")
   {
     auto const selectedRes = selectLosslessCoreAudioClientFormat(
       {.sampleRate = 48000, .channels = 2, .precisionBits = 16, .sampleKind = SampleKind::Integer}, {});

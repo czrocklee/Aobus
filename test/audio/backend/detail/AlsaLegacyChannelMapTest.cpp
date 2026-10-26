@@ -164,8 +164,7 @@ namespace ao::audio::backend::detail::test
     }
   } // namespace
 
-  TEST_CASE("AlsaChannelMap - recognized repeated side positions keep uncertain identity transport",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - recognized repeated side positions keep uncertain identity transport")
   {
     auto accept = [](std::vector<unsigned int> positions, std::initializer_list<std::uint32_t> masks)
     {
@@ -284,8 +283,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - retained side roles still conflict with an incompatible complete source",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - retained side roles still conflict with an incompatible complete source")
   {
     auto refuse = [](std::vector<unsigned int> positions, std::uint32_t mask)
     {
@@ -358,7 +356,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - near-family signatures stay malformed channel maps", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - near-family signatures stay malformed channel maps")
   {
     SECTION("another duplicate identity is not erased")
     {
@@ -422,8 +420,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - current count mismatch stays malformed apart from a recognized shape",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - current count mismatch stays malformed apart from a recognized shape")
   {
     auto positions = std::vector<unsigned int>{};
 
@@ -441,8 +438,7 @@ namespace ao::audio::backend::detail::test
       signed16(8, 0U), AlsaChannelMapObservations{.optCurrentPositions = std::move(positions)}, kMalformedCurrent);
   }
 
-  TEST_CASE("AlsaChannelMap - incomplete or reserved sources stay layout refusals after a recognized map",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - incomplete or reserved sources stay layout refusals after a recognized map")
   {
     auto const mask = GENERATE(0x1U, 0x80000001U);
     auto positions = std::vector<unsigned int>{};
@@ -468,7 +464,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes.error().error.message == kIncompleteSource);
   }
 
-  TEST_CASE("AlsaChannelMap - legacy offers do not select transport", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - legacy offers do not select transport")
   {
     auto expectOfferOnly = [](std::vector<unsigned int> offer, std::uint32_t mask)
     {
@@ -526,8 +522,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - modern current positions permute independently of a legacy offer",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - modern current positions permute independently of a legacy offer")
   {
     bool const permuted = GENERATE(false, true);
     auto positions = std::vector<unsigned int>{
@@ -575,8 +570,7 @@ namespace ao::audio::backend::detail::test
     CHECK(bytes == expected);
   }
 
-  TEST_CASE("AlsaChannelMap - a nonduplicated side map stays an ordinary identity mapping",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - a nonduplicated side map stays an ordinary identity mapping")
   {
     auto const positions = std::vector<unsigned int>{SND_CHMAP_FL, SND_CHMAP_FR, SND_CHMAP_SL, SND_CHMAP_SR};
     std::size_t calls = 0;
@@ -596,8 +590,7 @@ namespace ao::audio::backend::detail::test
     CHECK(mapRes->sourceSlots[3] == 3U);
   }
 
-  TEST_CASE("AlsaChannelMap - sixteen ordinary WAVE roles stay above the legacy storage bound",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - sixteen ordinary WAVE roles stay above the legacy storage bound")
   {
     auto const positions = ordinarySixteen();
     std::size_t calls = 0;
@@ -618,7 +611,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - capability faults precede legacy admission", "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - capability faults precede legacy admission")
   {
     SECTION("a duplicate-role offer remains terminal beside legacy current and an incomplete source")
     {
@@ -647,8 +640,7 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("AlsaChannelMap - an independent reader error is not replaced by legacy admission",
-            "[audio][unit][alsa-channel-map]")
+  TEST_CASE("AlsaChannelMap - an independent reader error is not replaced by legacy admission")
   {
     auto const mask = GENERATE(0U, 0x63FU, 0x80000001U);
     auto const failure =

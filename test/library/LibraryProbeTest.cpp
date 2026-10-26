@@ -15,8 +15,7 @@
 
 namespace ao::library::test
 {
-  TEST_CASE("Library prepared-write contracts - subprocess probes abort with owned diagnostics",
-            "[library][integration][fatal][concurrency]")
+  TEST_CASE("Library prepared-write contracts - subprocess probes abort with owned diagnostics", "[concurrency]")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
@@ -57,8 +56,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("Library probe process - normal observation requires exact bounded standard output",
-            "[library][integration][probe]")
+  TEST_CASE("Library probe process - normal observation requires exact bounded standard output")
   {
     constexpr auto kTimeout = std::chrono::seconds{15};
     auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");

@@ -75,7 +75,7 @@ namespace ao::media::mp4::test
   static_assert(std::is_nothrow_move_constructible_v<Demuxer>);
   static_assert(!std::is_move_assignable_v<Demuxer>);
 
-  TEST_CASE("MP4 Demuxer - rejects infeasible fixed-size sample counts before expansion", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - rejects infeasible fixed-size sample counts before expansion")
   {
     constexpr auto kHugeCount = std::numeric_limits<std::uint32_t>::max();
     auto sampleCount = kHugeCount;
@@ -180,7 +180,7 @@ namespace ao::media::mp4::test
     CHECK(res.error().message == expectedMessage);
   }
 
-  TEST_CASE("MP4 Demuxer - fixed-size sample index must fit the mapped file budget", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - fixed-size sample index must fit the mapped file budget")
   {
     constexpr std::uint32_t kSampleCount = 1024;
     auto const fileSize = GENERATE(std::size_t{kSampleCount},
@@ -211,7 +211,7 @@ namespace ao::media::mp4::test
     }
   }
 
-  TEST_CASE("MP4 Demuxer - rejects malformed compact sample table entries", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - rejects malformed compact sample table entries")
   {
     auto stsz = ao::test::mp4::makeStszAtom();
     auto stsc = ao::test::mp4::makeStscAtom();
@@ -267,7 +267,7 @@ namespace ao::media::mp4::test
     CHECK(res.error().message == expectedMessage);
   }
 
-  TEST_CASE("MP4 Demuxer - preserves packets across chunk runs and missing payload", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - preserves packets across chunk runs and missing payload")
   {
     auto stscBody = std::vector<std::uint8_t>{};
 
@@ -370,7 +370,7 @@ namespace ao::media::mp4::test
     }
   }
 
-  TEST_CASE("MP4 Demuxer - rejects malformed sample-table inputs", "[media][unit][mp4][error]")
+  TEST_CASE("MP4 Demuxer - rejects malformed sample-table inputs")
   {
     SECTION("Empty data returns FormatRejected")
     {
@@ -487,7 +487,7 @@ namespace ao::media::mp4::test
     }
   }
 
-  TEST_CASE("MP4 Demuxer - selected track ignores unrelated trailing structure", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - selected track ignores unrelated trailing structure")
   {
     auto const config = ao::test::mp4::makeAtom("alac", {9, 8, 7});
     auto const track = ao::test::mp4::makeCompleteAudioTrackAtom("alac", config, 48000, 96000, 7, 2048, 321);
@@ -534,7 +534,7 @@ namespace ao::media::mp4::test
     }
   }
 
-  TEST_CASE("MP4 Demuxer - parses version 1 media timing", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - parses version 1 media timing")
   {
     auto const stbl = ao::test::mp4::makeSampleTableAtom(makeAlacStsd());
     auto const mdhd = ao::test::mp4::makeMdhdVersion1Atom(48000, 96000);
@@ -547,7 +547,7 @@ namespace ao::media::mp4::test
     CHECK(demuxerRes->duration() == 96000);
   }
 
-  TEST_CASE("MP4 Demuxer - parses extended-size media timing and sample tables", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - parses extended-size media timing and sample tables")
   {
     auto const stsd = ao::test::mp4::makeExtendedFromCompactAtom(makeAlacStsd());
     auto const stsz = ao::test::mp4::makeExtendedFromCompactAtom(ao::test::mp4::makeStszAtom(7));
@@ -567,7 +567,7 @@ namespace ao::media::mp4::test
     CHECK(demuxerRes->sampleInfo(0).size == 7);
   }
 
-  TEST_CASE("MP4 Demuxer - extracts AAC AudioSpecificConfig", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - extracts AAC AudioSpecificConfig")
   {
     auto const testFile = audio::test::requireAudioFixture("basic_metadata.m4a");
 
@@ -581,7 +581,7 @@ namespace ao::media::mp4::test
     CHECK(res->sampleCount() > 0);
   }
 
-  TEST_CASE("MP4 Demuxer - binds sample table to selected audio track", "[media][unit][mp4]")
+  TEST_CASE("MP4 Demuxer - binds sample table to selected audio track")
   {
     auto const esdsAtom = ao::test::mp4::makeAtom("esds", {0, 0, 0, 0, 0x05, 0x02, 0x12, 0x10});
     auto const audioTrack = ao::test::mp4::makeCompleteAudioTrackAtom("mp4a", esdsAtom, 48000, 96000, 7, 2048, 321);
@@ -609,7 +609,7 @@ namespace ao::media::mp4::test
     CHECK(res->magicCookie()[1] == std::byte{0x10});
   }
 
-  TEST_CASE("MP4 Demuxer - seek lookup preserves packet-boundary semantics", "[media][unit][mp4][seek]")
+  TEST_CASE("MP4 Demuxer - seek lookup preserves packet-boundary semantics")
   {
     constexpr std::uint32_t kSampleCount = 8;
     constexpr std::uint32_t kSampleDelta = 1024;

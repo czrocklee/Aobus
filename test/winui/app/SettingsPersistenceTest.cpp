@@ -54,7 +54,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("SettingsPersistence - persists the workspace checkpoint and the desktop candidate", "[winui][unit][app]")
+  TEST_CASE("SettingsPersistence - persists the workspace checkpoint and the desktop candidate")
   {
     auto tempDir = ao::test::TempDir{};
     auto const candidate = candidateSettings();
@@ -85,8 +85,7 @@ namespace ao::winui::test
     CHECK(reloaded == candidate);
   }
 
-  TEST_CASE("SettingsPersistence - keeps the desktop result when the workspace checkpoint store fails",
-            "[winui][unit][app]")
+  TEST_CASE("SettingsPersistence - keeps the desktop result when the workspace checkpoint store fails")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);
@@ -108,8 +107,7 @@ namespace ao::winui::test
     CHECK(reloaded == candidate);
   }
 
-  TEST_CASE("SettingsPersistence - keeps the earlier workspace checkpoint when the desktop save fails",
-            "[winui][unit][app]")
+  TEST_CASE("SettingsPersistence - keeps the earlier workspace checkpoint when the desktop save fails")
   {
     auto tempDir = ao::test::TempDir{};
 
@@ -139,7 +137,7 @@ namespace ao::winui::test
     CHECK(restored.listId == ListId{rt::kAllTracksListId});
   }
 
-  TEST_CASE("SettingsPersistence - reports the desktop failure when both stores fail", "[winui][unit][app]")
+  TEST_CASE("SettingsPersistence - reports the desktop failure when both stores fail")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtimePtr = rt::test::makeStateOnlyRuntime(tempDir);

@@ -169,7 +169,7 @@ namespace ao::media::wav::test
     }
   } // namespace
 
-  TEST_CASE("WAV RIFF parser - publishes no channel mask for legacy fmt chunks", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - publishes no channel mask for legacy fmt chunks")
   {
     SECTION("PCM")
     {
@@ -236,7 +236,7 @@ namespace ao::media::wav::test
     }
   }
 
-  TEST_CASE("WAV RIFF parser - stores an explicit zero channel mask as engaged zero", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - stores an explicit zero channel mask as engaged zero")
   {
     auto const data = ao::test::wav::makeWav({
       .sampleFormat = ao::test::wav::SampleFormat::ExtensiblePcm,
@@ -269,7 +269,7 @@ namespace ao::media::wav::test
     checkPreservedWave(*extents.requiredRes, expected);
   }
 
-  TEST_CASE("WAV RIFF parser - preserves four-channel masks without normalization", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - preserves four-channel masks without normalization")
   {
     SECTION("quad front-left front-right back-left back-right")
     {
@@ -312,7 +312,7 @@ namespace ao::media::wav::test
     }
   }
 
-  TEST_CASE("WAV RIFF parser - preserves alternate speaker assignments", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - preserves alternate speaker assignments")
   {
     SECTION("mono front-left instead of front-center")
     {
@@ -355,7 +355,7 @@ namespace ao::media::wav::test
     }
   }
 
-  TEST_CASE("WAV RIFF parser - preserves raw channel masks without deriving channel count", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - preserves raw channel masks without deriving channel count")
   {
     std::uint32_t channelMask = 0;
 
@@ -397,7 +397,7 @@ namespace ao::media::wav::test
     checkPreservedWave(*extents.requiredRes, expected);
   }
 
-  TEST_CASE("WAV RIFF parser - preserves channel mask for extensible IEEE float fmt", "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - preserves channel mask for extensible IEEE float fmt")
   {
     auto const data = ao::test::wav::makeWav({
       .sampleFormat = ao::test::wav::SampleFormat::ExtensibleFloat,
@@ -429,8 +429,7 @@ namespace ao::media::wav::test
     checkPreservedWave(*extents.requiredRes, expected);
   }
 
-  TEST_CASE("WAV RIFF parser - RequiredAudio publishes mask and audio before malformed trailing chunks",
-            "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - RequiredAudio publishes mask and audio before malformed trailing chunks")
   {
     auto data = ao::test::wav::makeWav({
       .sampleFormat = ao::test::wav::SampleFormat::ExtensiblePcm,
@@ -456,8 +455,7 @@ namespace ao::media::wav::test
     CHECK(completeRes.error().code == Error::Code::CorruptData);
   }
 
-  TEST_CASE("WAV RIFF parser - validates extensible fmt payload length and declared extension size",
-            "[media][unit][wav]")
+  TEST_CASE("WAV RIFF parser - validates extensible fmt payload length and declared extension size")
   {
     // Known-good extensible fmt arrange: stereo, 48 kHz, 16-bit PCM, mask 0x3,
     // with two valid audio frames in the data chunk.

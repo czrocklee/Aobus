@@ -75,7 +75,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("ListNavigationModel - initial active path is visible with shared preorder", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - initial active path is visible with shared preorder")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree(), ListId{2});
@@ -95,8 +95,7 @@ namespace ao::tui::test
     CHECK(model.activationTarget() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - tree replacement preserves IDs and ancestor fallback",
-            "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - tree replacement preserves IDs and ancestor fallback")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree(), ListId{2});
@@ -140,7 +139,7 @@ namespace ao::tui::test
     CHECK(model.cursor() == ListId{8});
   }
 
-  TEST_CASE("ListNavigationModel - expand and collapse follow cursor semantics", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - expand and collapse follow cursor semantics")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree(), rt::kAllTracksListId);
@@ -175,8 +174,7 @@ namespace ao::tui::test
     CHECK(model.cursor() == rt::kAllTracksListId);
   }
 
-  TEST_CASE("ListNavigationModel - path expansion preserves cursor and reveal selects by ID",
-            "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - path expansion preserves cursor and reveal selects by ID")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree(), rt::kAllTracksListId);
@@ -201,8 +199,7 @@ namespace ao::tui::test
     CHECK(model.cursor() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - collapsing an ancestor moves a descendant cursor to the visible row",
-            "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - collapsing an ancestor moves a descendant cursor to the visible row")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree(), ListId{2});
@@ -215,8 +212,7 @@ namespace ao::tui::test
     CHECK(model.activationTarget() == ListId{1});
   }
 
-  TEST_CASE("ListNavigationModel - tree replacement reveals a surviving cursor under its new parent",
-            "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - tree replacement reveals a surviving cursor under its new parent")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree(), ListId{2});
@@ -240,7 +236,7 @@ namespace ao::tui::test
     CHECK(model.activationTarget() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - search reveals hidden matches with ancestor context", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - search reveals hidden matches with ancestor context")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree("Needle"), rt::kAllTracksListId);
@@ -267,7 +263,7 @@ namespace ao::tui::test
     CHECK(model.cursor() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - search uses paths and rejects empty results", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - search uses paths and rejects empty results")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree("Live"), rt::kAllTracksListId);
@@ -302,8 +298,7 @@ namespace ao::tui::test
     CHECK(model.activationTarget() == retainedCursor);
   }
 
-  TEST_CASE("ListNavigationModel - tree replacement refreshes folded names and paths during search",
-            "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - tree replacement refreshes folded names and paths during search")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree("Straße"), rt::kAllTracksListId);
@@ -346,8 +341,7 @@ namespace ao::tui::test
     CHECK(model.activationTarget() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - search caret and list movement events retain distinct ownership",
-            "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - search caret and list movement events retain distinct ownership")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree("Needle"), rt::kAllTracksListId);
@@ -372,8 +366,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("ListNavigationModel - visible row selection follows raw search rows and directional context",
-            "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - visible row selection follows raw search rows and directional context")
   {
     auto model = ListNavigationModel{};
     model.setTree(contextDenseTree(), ListId{10});
@@ -416,7 +409,7 @@ namespace ao::tui::test
     CHECK_FALSE(model.activationTarget());
   }
 
-  TEST_CASE("ListNavigationModel - search disclosure leaves normal expansion unchanged", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - search disclosure leaves normal expansion unchanged")
   {
     auto model = ListNavigationModel{};
     model.setTree(navigationTree(), rt::kAllTracksListId);
@@ -439,7 +432,7 @@ namespace ao::tui::test
     CHECK_FALSE(model.rows()[1].expanded);
   }
 
-  TEST_CASE("ListNavigationModel - movement clamps at candidate bounds", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - movement clamps at candidate bounds")
   {
     auto model = ListNavigationModel{};
     model.setTree(flatTree(), rt::kAllTracksListId);
@@ -456,7 +449,7 @@ namespace ao::tui::test
     CHECK(model.cursor() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - shared cycle repair remains finite and ordered", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - shared cycle repair remains finite and ordered")
   {
     auto const projection =
       uimodel::buildListTreeProjection(ao::test::englishMessageCatalog(),
@@ -478,7 +471,7 @@ namespace ao::tui::test
     CHECK(model.cursor() == ListId{2});
   }
 
-  TEST_CASE("ListNavigationModel - deep trees rebuild without recursive traversal", "[tui][unit][list-navigation]")
+  TEST_CASE("ListNavigationModel - deep trees rebuild without recursive traversal")
   {
     constexpr std::uint32_t kDepth = 2048;
     auto tree = uimodel::ListTreeProjection{.rootIds = {ListId{1}}, .rowsById = {}};

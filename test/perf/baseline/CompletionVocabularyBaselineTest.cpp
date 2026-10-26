@@ -255,8 +255,7 @@ namespace ao::rt::test
   // Production baseline: elapsed-time thresholds remain a review decision.
   // The representative cardinalities populate every Quick-filter field, tags, and
   // additional non-search fields so the dictionary is larger than the live aggregate.
-  TEST_CASE("CompletionVocabularyBaseline - shared snapshot rebuild and Quick-filter lookup at 50k tracks",
-            "[perf][unit][completion-vocabulary][baseline]")
+  TEST_CASE("CompletionVocabularyBaseline - shared snapshot rebuild and Quick-filter lookup at 50k tracks")
   {
     Log::initialize(LogLevel::Info);
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 20, 1);

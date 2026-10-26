@@ -130,7 +130,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("PlaybackService - public commands cannot bypass succession", "[runtime][unit][playback][boundary]")
+  TEST_CASE("PlaybackService - public commands cannot bypass succession")
   {
     // The internal transport still supports focused collaborator tests through
     // a complete request, while no public entry point can create a
@@ -149,7 +149,7 @@ namespace ao::rt::test
     STATIC_REQUIRE(std::same_as<decltype(std::declval<PlaybackService const&>().snapshot()), PlaybackSnapshot const&>);
   }
 
-  TEST_CASE("PlaybackService - a view start publishes one coherent snapshot", "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - a view start publishes one coherent snapshot")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -183,8 +183,7 @@ namespace ao::rt::test
     CHECK(observed == published);
   }
 
-  TEST_CASE("PlaybackService - real changes publish once and no-ops publish none",
-            "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - real changes publish once and no-ops publish none")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -214,8 +213,7 @@ namespace ao::rt::test
     CHECK(snapshots.back().succession.sourceState == PlaybackSourceState::Inactive);
   }
 
-  TEST_CASE("PlaybackCommands tryNext - matched occurrence advances and invalid identity is inert",
-            "[runtime][unit][playback]")
+  TEST_CASE("PlaybackCommands tryNext - matched occurrence advances and invalid identity is inert")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -233,8 +231,7 @@ namespace ao::rt::test
     CHECK(fixture.playback().snapshot().succession.currentTrackId == fixture.secondTrackId);
   }
 
-  TEST_CASE("PlaybackCommands tryNext - backlog rejection does not execute or cancel queued navigation",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackCommands tryNext - backlog rejection does not execute or cancel queued navigation")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -263,8 +260,7 @@ namespace ao::rt::test
     CHECK(fixture.playback().snapshot().succession.currentTrackId == fixture.secondTrackId);
   }
 
-  TEST_CASE("PlaybackCommands guarded seek - queued same-track replay retires stale preview and final",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackCommands guarded seek - queued same-track replay retires stale preview and final")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -298,8 +294,7 @@ namespace ao::rt::test
     CHECK(previews.empty());
   }
 
-  TEST_CASE("PlaybackService - paired mode command publishes only the final snapshot",
-            "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - paired mode command publishes only the final snapshot")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -318,8 +313,7 @@ namespace ao::rt::test
     CHECK(fixture.playback().snapshot() == snapshots.front());
   }
 
-  TEST_CASE("PlaybackService - inactive paired modes publish once and identical repeats publish nothing",
-            "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - inactive paired modes publish once and identical repeats publish nothing")
   {
     auto fixture = PlaybackServiceFixture<>{};
     auto const before = fixture.playback().snapshot();
@@ -348,8 +342,7 @@ namespace ao::rt::test
     CHECK(fixture.playback().snapshot() == published);
   }
 
-  TEST_CASE("PlaybackSnapshot - elapsed clock samples do not define content equality",
-            "[runtime][unit][playback][snapshot]")
+  TEST_CASE("PlaybackSnapshot - elapsed clock samples do not define content equality")
   {
     auto before = PlaybackSnapshot{};
     before.transport.elapsed = std::chrono::milliseconds{100};
@@ -366,7 +359,7 @@ namespace ao::rt::test
     CHECK_FALSE(after == before);
   }
 
-  TEST_CASE("PlaybackService - final seeks advance explicit position identities", "[runtime][unit][playback][seek]")
+  TEST_CASE("PlaybackService - final seeks advance explicit position identities")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -393,8 +386,7 @@ namespace ao::rt::test
     CHECK(snapshots.back().transport.finalSeekRevision == snapshots[1].transport.finalSeekRevision);
   }
 
-  TEST_CASE("PlaybackService - elapsed refresh does not create position or availability changes",
-            "[runtime][unit][playback][snapshot]")
+  TEST_CASE("PlaybackService - elapsed refresh does not create position or availability changes")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     auto changes = makeStateOnlyLibraryChanges();
@@ -454,8 +446,7 @@ namespace ao::rt::test
     CHECK(snapshots.back().transport.finalSeekRevision == afterVolume.transport.finalSeekRevision);
   }
 
-  TEST_CASE("PlaybackService - spontaneous lower changes coalesce at the end of one executor turn",
-            "[runtime][unit][playback][coherence][async]")
+  TEST_CASE("PlaybackService - spontaneous lower changes coalesce at the end of one executor turn")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto snapshots = std::vector<PlaybackSnapshot>{};
@@ -478,7 +469,7 @@ namespace ao::rt::test
     CHECK(snapshots.front().succession.repeat == RepeatMode::All);
   }
 
-  TEST_CASE("PlaybackService - current snapshot updates without subscribers", "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - current snapshot updates without subscribers")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto const before = fixture.playback.snapshot();
@@ -490,7 +481,7 @@ namespace ao::rt::test
     CHECK(after.succession.shuffle == ShuffleMode::On);
   }
 
-  TEST_CASE("PlaybackService - a no-op stop does not publish", "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - a no-op stop does not publish")
   {
     auto fixture = ApplicationPlaybackFixture{};
     // The first stop synchronizes the transport snapshot with the underlying
@@ -508,8 +499,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot() == before);
   }
 
-  TEST_CASE("PlaybackService - same-track navigation commits a new position anchor",
-            "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - same-track navigation commits a new position anchor")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -530,8 +520,7 @@ namespace ao::rt::test
     CHECK(snapshots.back().transport.finalSeekRevision == before.transport.finalSeekRevision);
   }
 
-  TEST_CASE("PlaybackService - silent lower navigation still commits its position anchor",
-            "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - silent lower navigation still commits its position anchor")
   {
     auto fixture = PlaybackServiceFixture<QueuedExecutor>{};
     fixture.buildThreeTrackManualView();
@@ -553,7 +542,7 @@ namespace ao::rt::test
     CHECK(snapshots.back().transport.finalSeekRevision == before.transport.finalSeekRevision);
   }
 
-  TEST_CASE("PlaybackService - navigation without a session is a no-op", "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - navigation without a session is a no-op")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto snapshots = std::vector<PlaybackSnapshot>{};
@@ -568,8 +557,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot() == before);
   }
 
-  TEST_CASE("PlaybackService - snapshot observer commands run in a later executor turn",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService - snapshot observer commands run in a later executor turn")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto snapshots = std::vector<PlaybackSnapshot>{};
@@ -598,8 +586,7 @@ namespace ao::rt::test
     CHECK(snapshots.back().succession.repeat == RepeatMode::All);
   }
 
-  TEST_CASE("PlaybackService - observer paired and repeat commands preserve FIFO mode state",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService - observer paired and repeat commands preserve FIFO mode state")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto snapshots = std::vector<PlaybackSnapshot>{};
@@ -651,8 +638,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot() == snapshots.back());
   }
 
-  TEST_CASE("PlaybackService - later commands do not overtake queued observer commands",
-            "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService - later commands do not overtake queued observer commands")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     bool queuedRepeat = false;
@@ -677,7 +663,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
   }
 
-  TEST_CASE("PlaybackService - a newer stop supersedes an observer-queued start", "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService - a newer stop supersedes an observer-queued start")
   {
     auto fixture = PlaybackServiceFixture<QueuedExecutor>{};
     fixture.buildThreeTrackManualView();
@@ -715,7 +701,7 @@ namespace ao::rt::test
     CHECK(fixture.playback().snapshot().succession.currentTrackId == kInvalidTrackId);
   }
 
-  TEST_CASE("PlaybackService - destruction drops a pending observer command", "[runtime][unit][playback][async]")
+  TEST_CASE("PlaybackService - destruction drops a pending observer command")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     std::size_t repeatChanges = 0;

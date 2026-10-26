@@ -23,7 +23,7 @@ namespace ao::utility::test
     }
   } // namespace
 
-  TEST_CASE("computeSha256 - reproduces published vectors through the wrapper", "[utility][unit][hash]")
+  TEST_CASE("computeSha256 - reproduces published vectors through the wrapper")
   {
     // FIPS 180-4 / RFC 6234 test vectors, which is what makes this a check of the
     // wrapper rather than of itself.
@@ -33,7 +33,7 @@ namespace ao::utility::test
           "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
   }
 
-  TEST_CASE("sha256Hex - one lower-case fixed-width spelling per digest", "[utility][unit][hash]")
+  TEST_CASE("sha256Hex - one lower-case fixed-width spelling per digest")
   {
     auto const digest = computeSha256(bytes::view(std::string_view{"abc"}));
     auto const text = sha256Hex(digest);
@@ -47,7 +47,7 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("parseSha256Hex - accepts only the form sha256Hex produces", "[utility][unit][hash]")
+  TEST_CASE("parseSha256Hex - accepts only the form sha256Hex produces")
   {
     auto const digest = computeSha256(bytes::view(std::string_view{"abc"}));
     auto const text = sha256Hex(digest);
@@ -77,15 +77,14 @@ namespace ao::utility::test
     }
   }
 
-  TEST_CASE("computeSha256 - an empty input hashes rather than zeroing", "[utility][unit][hash]")
+  TEST_CASE("computeSha256 - an empty input hashes rather than zeroing")
   {
     auto const empty = computeSha256({});
     CHECK(empty != Sha256Digest{});
     CHECK(sha256Hex(empty) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
   }
 
-  TEST_CASE("Sha256Digest - orders by its bytes, which is what an ascending emission depends on",
-            "[utility][unit][hash]")
+  TEST_CASE("Sha256Digest - orders by its bytes, which is what an ascending emission depends on")
   {
     auto lower = Sha256Digest{};
     auto higher = Sha256Digest{};

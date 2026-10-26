@@ -111,7 +111,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("TrackDetail - cover art keeps square sizing under constrained width", "[gtk][unit][cover-art][geometry]")
+  TEST_CASE("TrackDetail - cover art keeps square sizing under constrained width")
   {
     int const targetSize = 250;
 
@@ -123,7 +123,7 @@ namespace ao::gtk::layout::test
     CHECK(coverArtSideForWidth(180, 0) == 0);
   }
 
-  TEST_CASE("DetailFieldEditor - coordinates edit sessions", "[gtk][unit][track]")
+  TEST_CASE("DetailFieldEditor - coordinates edit sessions")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.detail_editor_test");
     auto window = Gtk::Window{};
@@ -164,8 +164,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(secondEntry.get_child_visible());
   }
 
-  TEST_CASE("TrackFieldGrid - edit actions use locale-selected accessibility copy",
-            "[gtk][unit][track-field-grid][localization]")
+  TEST_CASE("TrackFieldGrid - edit actions use locale-selected accessibility copy")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_editor_localization_test", {}, "de-DE"};
     auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
@@ -181,8 +180,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("TrackFieldGrid - long localized keys preserve value-column space",
-            "[gtk][unit][track-field-grid][geometry]")
+  TEST_CASE("TrackFieldGrid - long localized keys preserve value-column space")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_key_width_localization_test", {}, "fr-FR"};
     auto const componentPtr = fixture.create(LayoutNode{.type = "track.fieldGrid"});
@@ -226,7 +224,7 @@ namespace ao::gtk::layout::test
     CHECK(valueSlot->get_width() > keySlot->get_width());
   }
 
-  TEST_CASE("AddCustomMetadataButton - submits popover values", "[gtk][unit][track]")
+  TEST_CASE("AddCustomMetadataButton - submits popover values")
   {
     auto windowFixture = ao::gtk::test::GtkWindowFixture{};
     auto addButton = track_field_grid::AddCustomMetadataButton{ao::test::englishMessageCatalog()};
@@ -258,7 +256,7 @@ namespace ao::gtk::layout::test
     windowFixture.unmount();
   }
 
-  TEST_CASE("TrackFieldGrid - maintains constrained value-column geometry", "[gtk][unit][track-field-grid][geometry]")
+  TEST_CASE("TrackFieldGrid - maintains constrained value-column geometry")
   {
     auto fixture = LayoutRuntimeFixture{};
     auto& registry = fixture.components();

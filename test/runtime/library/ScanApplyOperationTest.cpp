@@ -244,8 +244,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ScanApplyOperation - pre-cancelled apply performs no mutation",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("ScanApplyOperation - pre-cancelled apply performs no mutation", "[concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     std::filesystem::copy_file(
@@ -268,7 +267,7 @@ namespace ao::rt::test
     CHECK(manifestReader.begin() == manifestReader.end());
   }
 
-  TEST_CASE("ScanApplyOperation - initial scans process new files", "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - initial scans process new files")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -312,8 +311,7 @@ namespace ao::rt::test
     CHECK(optManifest->audioSignature() != utility::Hash128{});
   }
 
-  TEST_CASE("ScanApplyOperation - rejects malformed declared UTF-8 metadata without replacing it",
-            "[runtime][integration][library-scan][unicode]")
+  TEST_CASE("ScanApplyOperation - rejects malformed declared UTF-8 metadata without replacing it")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -346,8 +344,7 @@ namespace ao::rt::test
     CHECK(ml.dictionary().size() == 0);
   }
 
-  TEST_CASE("ScanApplyOperation - deferred new scans write pending audio identity",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - deferred new scans write pending audio identity")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -389,8 +386,7 @@ namespace ao::rt::test
     CHECK(optManifest->audioSignature() == utility::Hash128{});
   }
 
-  TEST_CASE("ScanApplyOperation - exhausted Track ids abort later scan work",
-            "[runtime][unit][library-scan][atomicity]")
+  TEST_CASE("ScanApplyOperation - exhausted Track ids abort later scan work")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -452,7 +448,7 @@ namespace ao::rt::test
     CHECK_FALSE(optNewManifest);
   }
 
-  TEST_CASE("ScanApplyOperation - one revalidation permits exactly one apply", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - one revalidation permits exactly one apply")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -489,7 +485,7 @@ namespace ao::rt::test
     CHECK(trackCount == 1);
   }
 
-  TEST_CASE("ScanApplyOperation - defer policy still uses cached new identity", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - defer policy still uses cached new identity")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -545,8 +541,7 @@ namespace ao::rt::test
     CHECK(optManifest->audioSignature() == cachedSignature);
   }
 
-  TEST_CASE("ScanApplyOperation - reports fingerprint progress while hashing audio payload",
-            "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - reports fingerprint progress while hashing audio payload")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -580,8 +575,7 @@ namespace ao::rt::test
     CHECK(progressEvents.back().itemFraction == 1.0);
   }
 
-  TEST_CASE("ScanApplyOperation - cancellation aborts partial scan transaction",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("ScanApplyOperation - cancellation aborts partial scan transaction", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -628,8 +622,7 @@ namespace ao::rt::test
     CHECK(manifestReader.begin() == manifestReader.end());
   }
 
-  TEST_CASE("ScanApplyOperation - cancellation aborts between fingerprint chunks",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("ScanApplyOperation - cancellation aborts between fingerprint chunks", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -677,8 +670,7 @@ namespace ao::rt::test
     CHECK(manifestReader.begin() == manifestReader.end());
   }
 
-  TEST_CASE("ScanApplyOperation - cancellation clears failures from the aborted transaction",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("ScanApplyOperation - cancellation clears failures from the aborted transaction", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -717,7 +709,7 @@ namespace ao::rt::test
     CHECK(counts.failed == 1);
   }
 
-  TEST_CASE("ScanApplyOperation - skips unchanged files", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - skips unchanged files")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -759,7 +751,7 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
   }
 
-  TEST_CASE("ScanApplyOperation - updates changed files", "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - updates changed files")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -828,7 +820,7 @@ namespace ao::rt::test
     CHECK(optManifest->audioSignature() != oldSignature);
   }
 
-  TEST_CASE("ScanApplyOperation - updates manifest status for missing files", "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - updates manifest status for missing files")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -870,8 +862,7 @@ namespace ao::rt::test
     CHECK(runRes->failureCount == 0);
   }
 
-  TEST_CASE("ScanApplyOperation - relinks moved files while preserving DB-owned curation",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - relinks moved files while preserving DB-owned curation")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -995,8 +986,7 @@ namespace ao::rt::test
     CHECK(optOrderedList->orderTrackIds()[0] == originalTrackId);
   }
 
-  TEST_CASE("ScanApplyOperation - rejects moved files whose live identity changed after preparation",
-            "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - rejects moved files whose live identity changed after preparation")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1074,8 +1064,7 @@ namespace ao::rt::test
     CHECK_FALSE(optNewManifest);
   }
 
-  TEST_CASE("ScanApplyOperation - moved-file revalidation failure aborts co-planned inserts",
-            "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - moved-file revalidation failure aborts co-planned inserts")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1144,8 +1133,7 @@ namespace ao::rt::test
     CHECK_FALSE(manifestReader.get("new.flac"));
   }
 
-  TEST_CASE("ScanApplyOperation - an unrelated revision change does not invalidate a new item",
-            "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - an unrelated revision change does not invalidate a new item")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1181,7 +1169,7 @@ namespace ao::rt::test
     CHECK(ml.manifest().reader(transaction).get("song.flac"));
   }
 
-  TEST_CASE("ScanApplyOperation - rejects a plan built for another library", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - rejects a plan built for another library")
   {
     auto const temp = ao::test::TempDir{};
     auto const firstRoot = std::filesystem::path{temp.path()} / "first-music";
@@ -1209,8 +1197,7 @@ namespace ao::rt::test
     CHECK(trackReader.begin() == trackReader.end());
   }
 
-  TEST_CASE("ScanApplyOperation - a stale new item cannot replace a newly imported destination",
-            "[runtime][unit][library-scan][concurrency]")
+  TEST_CASE("ScanApplyOperation - a stale new item cannot replace a newly imported destination", "[concurrency]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1257,8 +1244,7 @@ namespace ao::rt::test
     CHECK(optManifest->trackId() == firstRes->insertedIds.front());
   }
 
-  TEST_CASE("ScanApplyOperation - corrupt input does not roll back a valid peer file",
-            "[runtime][integration][library-scan]")
+  TEST_CASE("ScanApplyOperation - corrupt input does not roll back a valid peer file")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1295,7 +1281,7 @@ namespace ao::rt::test
     CHECK_FALSE(ml.manifest().reader(transaction).get("corrupted.flac"));
   }
 
-  TEST_CASE("ScanApplyOperation - propagates unexpected process exceptions", "[runtime][unit][library-scan]")
+  TEST_CASE("ScanApplyOperation - propagates unexpected process exceptions")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1316,8 +1302,7 @@ namespace ao::rt::test
     CHECK(counts.failed == 0);
   }
 
-  TEST_CASE("ScanApplyOperation - a new file's embedded cover becomes a digest descriptor",
-            "[runtime][integration][library-scan][cover-art]")
+  TEST_CASE("ScanApplyOperation - a new file's embedded cover becomes a digest descriptor")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1338,8 +1323,7 @@ namespace ao::rt::test
     CHECK(facts.primaryId == library::deriveResourceId(facts.optDescriptor->digest));
   }
 
-  TEST_CASE("ScanApplyOperation - a changed file's art replaces the cover set",
-            "[runtime][integration][library-scan][cover-art]")
+  TEST_CASE("ScanApplyOperation - a changed file's art replaces the cover set")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1377,8 +1361,7 @@ namespace ao::rt::test
     checkCurationSurvived(ml, trackId);
   }
 
-  TEST_CASE("ScanApplyOperation - a changed file that lost its art leaves no cover reference",
-            "[runtime][integration][library-scan][cover-art]")
+  TEST_CASE("ScanApplyOperation - a changed file that lost its art leaves no cover reference")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1413,8 +1396,7 @@ namespace ao::rt::test
     checkCurationSurvived(ml, trackId);
   }
 
-  TEST_CASE("ScanApplyOperation - retagging a file back to its earlier art reuses the existing row",
-            "[runtime][integration][library-scan][cover-art]")
+  TEST_CASE("ScanApplyOperation - retagging a file back to its earlier art reuses the existing row")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1444,8 +1426,7 @@ namespace ao::rt::test
     CHECK(resourceRowCount(ml) == 1);
   }
 
-  TEST_CASE("ScanApplyOperation - a moved file's cover set follows the destination file",
-            "[runtime][integration][library-scan][cover-art]")
+  TEST_CASE("ScanApplyOperation - a moved file's cover set follows the destination file")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";
@@ -1495,8 +1476,7 @@ namespace ao::rt::test
     CHECK(nextPlan.items().front().classification == ScanClassification::Unchanged);
   }
 
-  TEST_CASE("ScanApplyOperation - an unchanged file rewrites nothing about its cover",
-            "[runtime][integration][library-scan][cover-art]")
+  TEST_CASE("ScanApplyOperation - an unchanged file rewrites nothing about its cover")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "music";

@@ -175,8 +175,7 @@ namespace ao::audio::test
     }
   } // namespace
 
-  TEST_CASE("FlacDecoderSession - absent masks withhold only ambiguous five and six channel identities",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - absent masks withhold only ambiguous five and six channel identities")
   {
     // Five/six-channel back-versus-side geometry needs an explicit declaration.
     // The other entries retain Aobus's selected format-default identities.
@@ -201,8 +200,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - empty and unrelated comments cannot resolve ambiguous surround geometry",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - empty and unrelated comments cannot resolve ambiguous surround geometry")
   {
     auto const commentSets = std::vector<std::vector<std::string>>{
       {},
@@ -230,7 +228,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - mask field names are matched exactly without trimming spaces", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - mask field names are matched exactly without trimming spaces")
   {
     struct Case final
     {
@@ -269,8 +267,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - complete explicit identities preserve coded slot order at every channel count",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - complete explicit identities preserve coded slot order at every channel count")
   {
     struct Case final
     {
@@ -310,8 +307,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - mask text accepts ASCII key case and numeric hexadecimal spelling",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - mask text accepts ASCII key case and numeric hexadecimal spelling")
   {
     struct Case final
     {
@@ -343,7 +339,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - numerically identical duplicate masks are accepted", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - numerically identical duplicate masks are accepted")
   {
     auto const comments = std::to_array<std::string>({
       "WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x3F",
@@ -357,8 +353,7 @@ namespace ao::audio::test
     checkAllLayoutPcm(*decoderPtr, 6);
   }
 
-  TEST_CASE("FlacDecoderSession - conflicting duplicate masks play with unknown identity in either order",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - conflicting duplicate masks play with unknown identity in either order")
   {
     auto const first = std::string{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x3F"};
     auto const second = std::string{"waveformatextensible_channel_mask=0X60F"};
@@ -372,7 +367,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - malformed recognized mask text plays with unknown identity", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - malformed recognized mask text plays with unknown identity")
   {
     auto const bareKey = std::to_array<std::string>({"WAVEFORMATEXTENSIBLE_CHANNEL_MASK"});
     checkUnknownComments(bareKey);
@@ -392,8 +387,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - embedded NUL and suffix bytes withhold identity without refusing audio",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - embedded NUL and suffix bytes withhold identity without refusing audio")
   {
     auto const values = std::to_array<std::string>(
       {std::string{"0x3F\0", 5}, std::string{"0x3F\0junk", 9}, std::string{"0x3\0F", 5}, std::string{"\0", 1}});
@@ -406,7 +400,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - a malformed duplicate keeps identity unknown in either order", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - a malformed duplicate keeps identity unknown in either order")
   {
     auto const good = std::string{"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x3F"};
 
@@ -423,8 +417,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - explicit incomplete or unassigned masks play with unknown identity",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - explicit incomplete or unassigned masks play with unknown identity")
   {
     // A six-channel stream must not inherit WAV's zero override or silently
     // trim an excessive/highest bit to manufacture a complete identity.
@@ -448,8 +441,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - explicit identity survives block reads seek flush and stable EOF",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - explicit identity survives block reads seek flush and stable EOF")
   {
     auto const comments = std::to_array<std::string>({"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x12104"});
     auto const temp = ao::test::TempFile{buildLayoutStream(4, comments, true), ".flac"};
@@ -498,8 +490,7 @@ namespace ao::audio::test
     checkAllLayoutPcm(decoder, 4);
   }
 
-  TEST_CASE("FlacDecoderSession - unknown identity retains literal widened PCM through seek flush and EOF",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - unknown identity retains literal widened PCM through seek flush and EOF")
   {
     // S16 markers widened to S32; these literals are independent of conversion.
     constexpr auto kExpected32 = std::array{
@@ -562,8 +553,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - all precision-preserving 16-bit outputs keep explicit identity and bytes",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - all precision-preserving 16-bit outputs keep explicit identity and bytes")
   {
     struct Case final
     {
@@ -595,8 +585,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - 24-bit precision and explicit identity survive supported outputs",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - 24-bit precision and explicit identity survive supported outputs")
   {
     struct Case final
     {
@@ -642,8 +631,7 @@ namespace ao::audio::test
     CHECK(losingRes.error().code == Error::Code::NotSupported);
   }
 
-  TEST_CASE("FlacDecoderSession - precision and geometry failures retain priority over layout admission",
-            "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - precision and geometry failures retain priority over layout admission")
   {
     auto bytes = buildFlacStreaminfoBytes(48, 2, 24);
     auto const comments = std::to_array<std::string>({"WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x1"});
@@ -681,8 +669,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("FlacDecoderSession - factory and concrete opens agree on ordinary layout admission",
-            "[audio][integration][flac]")
+  TEST_CASE("FlacDecoderSession - factory and concrete opens agree on ordinary layout admission")
   {
     auto const validCommentSets = std::vector<std::vector<std::string>>{
       {},

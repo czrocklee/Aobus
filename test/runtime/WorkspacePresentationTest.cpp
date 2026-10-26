@@ -18,8 +18,7 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("WorkspaceService - NewViewDefault applies to a newly created view",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - NewViewDefault applies to a newly created view")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -38,8 +37,7 @@ namespace ao::rt::test
     CHECK(runtime.views().trackListState(viewId).presentation == normalizeTrackPresentationSpec(albumsPreset->spec));
   }
 
-  TEST_CASE("WorkspaceService - NewViewDefault preserves a reused view's exact presentation",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - NewViewDefault preserves a reused view's exact presentation")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -72,8 +70,7 @@ namespace ao::rt::test
     CHECK(replayedState.presentation == normalizeTrackPresentationSpec(songsPreset->spec));
   }
 
-  TEST_CASE("WorkspaceService - NewViewDefault creates a plain view beside a filtered view",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - NewViewDefault creates a plain view beside a filtered view")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -112,8 +109,7 @@ namespace ao::rt::test
     CHECK(plainState.presentation == normalizeTrackPresentationSpec(albumsPreset->spec));
   }
 
-  TEST_CASE("WorkspaceService - Override changes a reused view's presentation",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - Override changes a reused view's presentation")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -135,8 +131,7 @@ namespace ao::rt::test
           normalizeTrackPresentationSpec(albumsPreset->spec));
   }
 
-  TEST_CASE("WorkspaceService - setActivePresentation records presentation history",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - setActivePresentation records presentation history")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -152,8 +147,7 @@ namespace ao::rt::test
     CHECK(state.presentation.id == kDefaultTrackPresentationId);
   }
 
-  TEST_CASE("WorkspaceService - setActivePresentation rejects a missing active view",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - setActivePresentation rejects a missing active view")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -165,8 +159,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("WorkspaceService - setActivePresentation deduplicates the current spec",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - setActivePresentation deduplicates the current spec")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -185,8 +178,7 @@ namespace ao::rt::test
     CHECK(state.presentation.id == kDefaultTrackPresentationId);
   }
 
-  TEST_CASE("WorkspaceService - setActivePresentation can skip recording history",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - setActivePresentation can skip recording history")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -203,7 +195,7 @@ namespace ao::rt::test
     CHECK(state.presentation.id == "albums");
   }
 
-  TEST_CASE("WorkspaceService - setActivePresentation resolves preset ids", "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - setActivePresentation resolves preset ids")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -217,7 +209,7 @@ namespace ao::rt::test
     CHECK(state.presentation.id == "albums");
   }
 
-  TEST_CASE("WorkspaceService - setActivePresentation rejects unknown ids", "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - setActivePresentation rejects unknown ids")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -229,8 +221,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("WorkspaceService - preset resolution rejects unknown ids before checking focus",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - preset resolution rejects unknown ids before checking focus")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -241,8 +232,7 @@ namespace ao::rt::test
     CHECK(res.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("WorkspaceService - custom presets can be added, updated, selected, and removed",
-            "[runtime][unit][workspace][presentation]")
+  TEST_CASE("WorkspaceService - custom presets can be added, updated, selected, and removed")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime();
@@ -288,8 +278,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().customPresets().empty());
   }
 
-  TEST_CASE("WorkspaceService - custom preset identity is its spec id rather than its label",
-            "[runtime][unit][workspace]")
+  TEST_CASE("WorkspaceService - custom preset identity is its spec id rather than its label")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& workspace = fixture.runtime().workspace();

@@ -17,7 +17,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkStartupPlan - ordinary startup partitions Aobus options from GTK arguments", "[gtk][unit][app]")
+  TEST_CASE("GtkStartupPlan - ordinary startup partitions Aobus options from GTK arguments")
   {
     auto const arguments = std::array<std::string_view, 7>{
       "aobus-gtk", "--display=:7", "-vv", "--log-level", "debug", "music.aobus", "--name=Aobus"};
@@ -32,7 +32,7 @@ namespace ao::gtk::test
     CHECK(res->gtkArguments == std::vector<std::string>{"aobus-gtk", "--display=:7", "music.aobus", "--name=Aobus"});
   }
 
-  TEST_CASE("GtkStartupPlan - GLib replacement option remains GTK passthrough", "[gtk][unit][app]")
+  TEST_CASE("GtkStartupPlan - GLib replacement option remains GTK passthrough")
   {
     auto const arguments = std::array<std::string_view, 3>{"aobus-gtk", "--gapplication-replace", "--display=:7"};
 
@@ -44,7 +44,7 @@ namespace ao::gtk::test
     CHECK(res->gtkArguments == std::vector<std::string>{"aobus-gtk", "--gapplication-replace", "--display=:7"});
   }
 
-  TEST_CASE("GtkStartupPlan - Aobus help and version are owned by the single CLI parser", "[gtk][unit][app]")
+  TEST_CASE("GtkStartupPlan - Aobus help and version are owned by the single CLI parser")
   {
     SECTION("help")
     {
@@ -71,8 +71,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkStartupPlan - valid successor owns its private arguments and preserves GTK argument order",
-            "[gtk][unit][app]")
+  TEST_CASE("GtkStartupPlan - valid successor owns its private arguments and preserves GTK argument order")
   {
     auto const arguments = std::array<std::string_view, 7>{"aobus-gtk",
                                                            "--display=:7",
@@ -93,7 +92,7 @@ namespace ao::gtk::test
           std::vector<std::string>{"aobus-gtk", "--display=:7", "--gtk-debug=actions", "--name=Aobus"});
   }
 
-  TEST_CASE("GtkStartupPlan - malformed successor arguments fail before application registration", "[gtk][unit][app]")
+  TEST_CASE("GtkStartupPlan - malformed successor arguments fail before application registration")
   {
     SECTION("library root without replacement")
     {
@@ -184,7 +183,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkStartupPlan - incomplete successor startup requires a native diagnostic", "[gtk][unit][app]")
+  TEST_CASE("GtkStartupPlan - incomplete successor startup requires a native diagnostic")
   {
     CHECK_FALSE(incompleteSuccessorStartupDiagnostic(GtkApplicationRegistrationMode::AllowReplacement, false, 1));
     CHECK_FALSE(incompleteSuccessorStartupDiagnostic(GtkApplicationRegistrationMode::ReplaceExisting, true, 1));

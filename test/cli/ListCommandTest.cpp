@@ -36,7 +36,7 @@ namespace ao::cli::test
     }
   } // namespace
 
-  TEST_CASE("CLI - List order authoring statuses preserve command failure semantics", "[cli][unit][list][list-order]")
+  TEST_CASE("CLI - List order authoring statuses preserve command failure semantics")
   {
     CHECK(validateListOrderCommandStatus(rt::AuthoringStatus::Applied));
     CHECK(validateListOrderCommandStatus(rt::AuthoringStatus::NoOp));
@@ -52,7 +52,7 @@ namespace ao::cli::test
     CHECK(unavailableRes.error().message == "Library is busy");
   }
 
-  TEST_CASE("CLI - list create and delete round-trip through the library", "[cli][integration][list]")
+  TEST_CASE("CLI - list create and delete round-trip through the library")
   {
     auto fixture = CliFixture{};
 
@@ -97,7 +97,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "My List"));
   }
 
-  TEST_CASE("CLI - writable-tag membership and saved order round-trip", "[cli][integration][list]")
+  TEST_CASE("CLI - writable-tag membership and saved order round-trip")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -168,7 +168,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Pinned songs"));
   }
 
-  TEST_CASE("CLI - list show resolves filtered List tracks", "[cli][integration][list]")
+  TEST_CASE("CLI - list show resolves filtered List tracks")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -200,7 +200,7 @@ namespace ao::cli::test
     checkDomainFailure(fixture.run({"list", "add", std::to_string(listId), "1"}), "membership is computed");
   }
 
-  TEST_CASE("CLI - list show detail emits one document shape for YAML and JSON", "[cli][integration][list]")
+  TEST_CASE("CLI - list show detail emits one document shape for YAML and JSON")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -239,7 +239,7 @@ namespace ao::cli::test
     requireDetailDocument(result.out);
   }
 
-  TEST_CASE("CLI - child List detail honors parent membership", "[cli][integration][list]")
+  TEST_CASE("CLI - child List detail honors parent membership")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -271,7 +271,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "HiRes Title"));
   }
 
-  TEST_CASE("CLI - list mutations support dry-run reports", "[cli][integration][list][dry-run]")
+  TEST_CASE("CLI - list mutations support dry-run reports")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -373,7 +373,7 @@ namespace ao::cli::test
     CHECK_FALSE(contains(result.out, "Pinned"));
   }
 
-  TEST_CASE("CLI - list domain failures use stderr and exit non-zero", "[cli][unit][list][contract]")
+  TEST_CASE("CLI - list domain failures use stderr and exit non-zero")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");

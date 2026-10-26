@@ -129,7 +129,7 @@ namespace ao::tui::test
     };
   } // namespace
 
-  TEST_CASE("CoverArtLoader - block delivery is asynchronous and idempotent", "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - block delivery is asynchronous and idempotent", "[concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -167,7 +167,7 @@ namespace ao::tui::test
     REQUIRE(loader.preview()->front().size() == static_cast<std::size_t>(loader.columns()));
   }
 
-  TEST_CASE("CoverArtLoader - block delivery decodes at the width it was given", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArtLoader - block delivery decodes at the width it was given")
   {
     // The width Detail reserves is measured from the terminal, so a loader that
     // decoded against its own idea of the slot would publish artwork the pane
@@ -189,7 +189,7 @@ namespace ao::tui::test
     CHECK(loader.preview()->front().size() == static_cast<std::size_t>(kRequestedColumns));
   }
 
-  TEST_CASE("CoverArtLoader - a negative measured width clamps to zero", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArtLoader - a negative measured width clamps to zero")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto loader = CoverArtLoader{fixture.byteCache(), fixture.runtimeAsync(), CoverArtDeliveryMode::Blocks, [] {}, -1};
@@ -197,7 +197,7 @@ namespace ao::tui::test
     CHECK(loader.columns() == 0);
   }
 
-  TEST_CASE("CoverArtLoader - Kitty delivery publishes bounded PNG output", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArtLoader - Kitty delivery publishes bounded PNG output")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -218,7 +218,7 @@ namespace ao::tui::test
     CHECK(loader.kittyPng()->front() == std::byte{0x89});
   }
 
-  TEST_CASE("CoverArtLoader - disabled delivery opens no window and reads nothing", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArtLoader - disabled delivery opens no window and reads nothing")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -242,8 +242,7 @@ namespace ao::tui::test
     CHECK_FALSE(loader.kittyPng());
   }
 
-  TEST_CASE("CoverArtLoader - replacement prevents a stale cover from publishing",
-            "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - replacement prevents a stale cover from publishing", "[concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const oldResourceId = fixture.addResource(support::onePixelRedPng());
@@ -268,8 +267,7 @@ namespace ao::tui::test
     CHECK(fixture.readResourceIds() == std::vector{missingResourceId});
   }
 
-  TEST_CASE("CoverArtLoader - a navigation burst publishes only what is still selected",
-            "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - a navigation burst publishes only what is still selected", "[concurrency]")
   {
     // Detail follows the track table now, so holding an arrow key replaces the
     // requested cover many times before anything settles.
@@ -315,8 +313,7 @@ namespace ao::tui::test
     CHECK(fixture.readResourceIds() == std::vector{resourceIds.back()});
   }
 
-  TEST_CASE("CoverArtLoader - an expired stale settle window reads nothing after replacement",
-            "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - an expired stale settle window reads nothing after replacement", "[concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const firstResourceId = fixture.addResource(support::distinctPng(1));
@@ -340,7 +337,7 @@ namespace ao::tui::test
     CHECK(fixture.readResourceIds() == std::vector{secondResourceId});
   }
 
-  TEST_CASE("CoverArtLoader - repeated cancellation and clearing are idempotent", "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - repeated cancellation and clearing are idempotent", "[concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -372,8 +369,7 @@ namespace ao::tui::test
     CHECK(fixture.readCount() == 0);
   }
 
-  TEST_CASE("CoverArtLoader - live mode change cancels pending delivery and can resume",
-            "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - live mode change cancels pending delivery and can resume", "[concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -395,7 +391,7 @@ namespace ao::tui::test
     CHECK(fixture.readResourceIds() == std::vector{resourceId});
   }
 
-  TEST_CASE("CoverArtLoader - cached cover republishes after a missing selection", "[tui][unit][cover-art]")
+  TEST_CASE("CoverArtLoader - cached cover republishes after a missing selection")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -436,7 +432,7 @@ namespace ao::tui::test
   }
 
   TEST_CASE("CoverArtLoader - destruction during settling cancels the window without reading or refreshing",
-            "[tui][unit][cover-art][concurrency]")
+            "[concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());
@@ -459,7 +455,7 @@ namespace ao::tui::test
     CHECK(fixture.sleeper().tryWaitForCancellation(0));
   }
 
-  TEST_CASE("CoverArtLoader - destruction suppresses a queued settle resumption", "[tui][unit][cover-art][concurrency]")
+  TEST_CASE("CoverArtLoader - destruction suppresses a queued settle resumption", "[concurrency]")
   {
     auto fixture = CoverArtLoaderFixture{};
     auto const resourceId = fixture.addResource(support::onePixelRedPng());

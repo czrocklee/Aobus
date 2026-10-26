@@ -12,8 +12,7 @@
 
 namespace ao::uimodel::test
 {
-  TEST_CASE("ActivityStatusFeedProjection - language replacement refreshes grouped warnings and keeps detail sources",
-            "[uimodel][unit][activity-status][localization]")
+  TEST_CASE("ActivityStatusFeedProjection - language replacement refreshes grouped warnings and keeps detail sources")
   {
     auto const notifications =
       feed({entry(rt::NotificationId{1}, rt::NotificationSeverity::Warning, "First warning"),
@@ -31,8 +30,7 @@ namespace ao::uimodel::test
     CHECK(items[1].message == "First warning");
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - live language change refreshes active progress without losing fraction",
-            "[uimodel][unit][activity-status][localization]")
+  TEST_CASE("ActivityStatusFeedProjection - live language change refreshes active progress without losing fraction")
   {
     auto projection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
     projection.handleLibraryTaskProgress(
@@ -46,8 +44,7 @@ namespace ao::uimodel::test
     CHECK(projection.viewState().detail.optLibraryTask->progressFraction == 0.625);
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - projects compact state from runtime priority",
-            "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - projects compact state from runtime priority")
   {
     auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
 
@@ -145,8 +142,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("ActivityStatusFeedProjection - finishing an overlapping export restores active scan progress",
-            "[uimodel][unit][activity-status]")
+  TEST_CASE("ActivityStatusFeedProjection - finishing an overlapping export restores active scan progress")
   {
     auto feedProjection = ActivityStatusFeedProjection{ao::test::englishMessageCatalog(), feed({})};
     auto const scanId = rt::LibraryTaskProgressId{11};

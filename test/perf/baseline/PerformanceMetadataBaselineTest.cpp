@@ -692,8 +692,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("PerformanceMetadataBaseline - date and musician-list workloads over full and subset sources",
-            "[perf][integration][performance-metadata]")
+  TEST_CASE("PerformanceMetadataBaseline - date and musician-list workloads over full and subset sources")
   {
     auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 20, 1);
     auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", 1, 0);

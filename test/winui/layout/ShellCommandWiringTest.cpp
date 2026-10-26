@@ -45,8 +45,7 @@ namespace ao::winui::layout::test
     }
   } // namespace
 
-  TEST_CASE("ShellCommandWiring - builder source installs owning commands and anchored selector",
-            "[winui][unit][layout]")
+  TEST_CASE("ShellCommandWiring - builder source installs owning commands and anchored selector")
   {
     auto const builder = readSource(std::filesystem::path{AOBUS_WINDOWS_WINUI_DIR} / "layout/ShellBuilder.cpp");
     auto const constructor =
@@ -66,8 +65,7 @@ namespace ao::winui::layout::test
                                 "[showSelector](ActionContextconst&context){showSelector(context.anchor);});}"));
   }
 
-  TEST_CASE("ShellCommandWiring - window source supplies frame commands and weak anchored selector",
-            "[winui][unit][layout]")
+  TEST_CASE("ShellCommandWiring - window source supplies frame commands and weak anchored selector")
   {
     auto const window = readSource(std::filesystem::path{AOBUS_WINDOWS_WINUI_DIR} / "MainWindow.xaml.cpp");
     auto const create =

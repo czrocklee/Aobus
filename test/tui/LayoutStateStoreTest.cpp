@@ -33,7 +33,7 @@ namespace ao::tui::test
     auto const kLibraryId = utility::parseUuid("123e4567-e89b-12d3-a456-426614174000").value();
   } // namespace
 
-  TEST_CASE("LayoutStateStore - missing file preserves shared seeds and restores TUI defaults", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - missing file preserves shared seeds and restores TUI defaults")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -55,7 +55,7 @@ namespace ao::tui::test
     CHECK(widths == PanelWidths{});
   }
 
-  TEST_CASE("LayoutStateStore - rejects aliases between TUI ConfigStore writers", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - rejects aliases between TUI ConfigStore writers")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -103,7 +103,7 @@ namespace ao::tui::test
     CHECK(fixedPathCollisionRes.error().code == Error::Code::InvalidInput);
   }
 
-  TEST_CASE("LayoutStateStore - owns the per-library terminal layout document", "[tui][unit][config][track-column]")
+  TEST_CASE("LayoutStateStore - owns the per-library terminal layout document")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -165,8 +165,7 @@ namespace ao::tui::test
     CHECK(widths == PanelWidths{});
   }
 
-  TEST_CASE("LayoutStateStore - a file saved for another library restores only virtual-list entries",
-            "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - a file saved for another library restores only virtual-list entries")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -201,7 +200,7 @@ namespace ao::tui::test
     CHECK(widths == savedWidths);
   }
 
-  TEST_CASE("LayoutStateStore - loads valid groups independently and never rewrites on load", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - loads valid groups independently and never rewrites on load")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -236,7 +235,7 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(configPath) == stored);
   }
 
-  TEST_CASE("LayoutStateStore - valid columns load when presentation preferences are rejected", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - valid columns load when presentation preferences are rejected")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -273,7 +272,7 @@ namespace ao::tui::test
     CHECK(ao::test::readFile(configPath) == stored);
   }
 
-  TEST_CASE("LayoutStateStore - serialization failure preserves state and permits a later retry", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - serialization failure preserves state and permits a later retry")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const libraryPath = std::filesystem::path{tempDir.path()};
@@ -320,8 +319,7 @@ namespace ao::tui::test
     CHECK(loadedWidths == desiredWidths);
   }
 
-  TEST_CASE("LayoutStateStore - navigation visibility round trips independently of focus and geometry",
-            "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - navigation visibility round trips independently of focus and geometry")
   {
     auto const directory = ao::test::TempDir{};
     auto store = LayoutStateStore{directory.path(), kLibraryId};
@@ -342,7 +340,7 @@ namespace ao::tui::test
     CHECK(enabled);
   }
 
-  TEST_CASE("LayoutStateStore - malformed navigation defaults without discarding other groups", "[tui][unit][config]")
+  TEST_CASE("LayoutStateStore - malformed navigation defaults without discarding other groups")
   {
     for (auto const* group : {"navigation: {version: 2, enabled: false}",
                               "navigation: {version: 1, enabled: nope}",
@@ -371,7 +369,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("LayoutStateStore - panel widths round trip", "[tui][unit][config][panel-resize]")
+  TEST_CASE("LayoutStateStore - panel widths round trip")
   {
     auto const directory = ao::test::TempDir{};
     auto store = LayoutStateStore{directory.path(), kLibraryId};
@@ -386,8 +384,7 @@ namespace ao::tui::test
     CHECK(loaded == widths);
   }
 
-  TEST_CASE("LayoutStateStore - missing or malformed panel widths use automatic sizing",
-            "[tui][unit][config][panel-resize]")
+  TEST_CASE("LayoutStateStore - missing or malformed panel widths use automatic sizing")
   {
     auto const directory = ao::test::TempDir{};
     auto const path = layoutStatePath(directory.path());

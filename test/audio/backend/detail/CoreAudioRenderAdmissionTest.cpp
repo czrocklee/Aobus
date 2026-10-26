@@ -21,8 +21,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("CoreAudioRenderAdmission - closed admission refuses entry and live scopes publish current faults",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioRenderAdmission - closed admission refuses entry and live scopes publish current faults")
   {
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<CoreAudioRenderAdmission::Scope>);
     STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<CoreAudioRenderAdmission::Scope>);
@@ -77,8 +76,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(mailbox.takeFault().has_value());
   }
 
-  TEST_CASE("CoreAudioRenderAdmission - stop retirement cannot retag an entry before fence closure",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioRenderAdmission - stop retirement cannot retag an entry before fence closure", "[concurrency]")
   {
     auto control = CoreAudioRunControl{};
     auto mailbox = CoreAudioControlMailbox{};
@@ -109,8 +107,7 @@ namespace ao::audio::backend::detail::test
     CHECK_FALSE(admission.tryEnter().has_value());
   }
 
-  TEST_CASE("CoreAudioRenderAdmission - delayed entry across reopening captures the new interval",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioRenderAdmission - delayed entry across reopening captures the new interval", "[concurrency]")
   {
     auto control = CoreAudioRunControl{};
     auto mailbox = CoreAudioControlMailbox{};
@@ -142,8 +139,7 @@ namespace ao::audio::backend::detail::test
     CHECK(optPacket->kind == CoreAudioFault::RenderFrameLimit);
   }
 
-  TEST_CASE("CoreAudioRenderAdmission - pause resume preserves identity and a new run replaces it",
-            "[audio][unit][coreaudio]")
+  TEST_CASE("CoreAudioRenderAdmission - pause resume preserves identity and a new run replaces it")
   {
     auto control = CoreAudioRunControl{};
     auto mailbox = CoreAudioControlMailbox{};
@@ -192,8 +188,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE(
-    "CoreAudioRenderAdmission - moving a scope transfers the single fence leave and leaves the moved-from scope inert",
-    "[audio][unit][coreaudio]")
+    "CoreAudioRenderAdmission - moving a scope transfers the single fence leave and leaves the moved-from scope inert")
   {
     auto control = CoreAudioRunControl{};
     auto mailbox = CoreAudioControlMailbox{};
@@ -234,8 +229,7 @@ namespace ao::audio::backend::detail::test
     CHECK(optScope->generation() == nextGeneration);
   }
 
-  TEST_CASE("CoreAudioRenderAdmission - retired scopes cannot publish while close waits",
-            "[audio][unit][coreaudio][concurrency]")
+  TEST_CASE("CoreAudioRenderAdmission - retired scopes cannot publish while close waits", "[concurrency]")
   {
     auto control = CoreAudioRunControl{};
     auto mailbox = CoreAudioControlMailbox{};
@@ -370,7 +364,7 @@ namespace ao::audio::backend::detail::test
   }
 
   TEST_CASE("CoreAudioRenderAdmission - closeAndWait waits for a held scope and the settled admission reopens",
-            "[audio][unit][coreaudio][concurrency]")
+            "[concurrency]")
   {
     auto control = CoreAudioRunControl{};
     auto admission = CoreAudioRenderAdmission{};

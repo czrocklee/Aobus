@@ -14,7 +14,7 @@
 
 namespace ao::query::test
 {
-  TEST_CASE("PlanEvaluator - matches unquoted title LIKE substrings", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches unquoted title LIKE substrings")
   {
     auto expr = parseOk("$title ~ Test");
     auto plan = compileOk(expr);
@@ -29,7 +29,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator - matches Unicode caseless title substrings", "[query][unit][plan-evaluator][unicode]")
+  TEST_CASE("PlanEvaluator - matches Unicode caseless title substrings")
   {
     auto const plan = compileOk(parseOk(R"($title ~ "DVOŘÁK STRASSE")"));
     auto evaluator = PlanEvaluator{};
@@ -38,7 +38,7 @@ namespace ao::query::test
     CHECK(evaluator.matchesFullPlan(plan, track.view()));
   }
 
-  TEST_CASE("PlanEvaluator - applies full Unicode case folding", "[query][unit][plan-evaluator][unicode]")
+  TEST_CASE("PlanEvaluator - applies full Unicode case folding")
   {
     auto evaluator = PlanEvaluator{};
     auto germanTrack = TestTrack{"Die Straße"};
@@ -48,7 +48,7 @@ namespace ao::query::test
     CHECK(evaluator.matchesFullPlan(compileOk(parseOk(R"($title ~ "ΟΔΥΣΣΕΎΣ")")), greekTrack.view()));
   }
 
-  TEST_CASE("PlanEvaluator - keeps URI substring matching byte-exact", "[query][unit][plan-evaluator][unicode]")
+  TEST_CASE("PlanEvaluator - keeps URI substring matching byte-exact")
   {
     auto evaluator = PlanEvaluator{};
     auto track = TestTrack{TrackSpec{.uri = "Music/Cafe\u0301.flac"}};
@@ -69,7 +69,7 @@ namespace ao::query::test
     CHECK_FALSE(matches("music/"));
   }
 
-  TEST_CASE("PlanEvaluator - matches title equality case-sensitively", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches title equality case-sensitively")
   {
     auto expr = parseOk("$title = 'Hello World'");
     auto plan = compileOk(expr);
@@ -88,7 +88,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator - matches title inequality case-sensitively", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches title inequality case-sensitively")
   {
     auto expr = parseOk("$title != 'Hello'");
     auto plan = compileOk(expr);
@@ -107,7 +107,7 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
-  TEST_CASE("PlanEvaluator - compares titles below a string bound", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - compares titles below a string bound")
   {
     auto expr = parseOk("$title < 'zoo'");
     auto plan = compileOk(expr);
@@ -126,7 +126,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator - compares titles above a string bound case-sensitively", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - compares titles above a string bound case-sensitively")
   {
     auto expr = parseOk("$title > 'apple'");
     auto plan = compileOk(expr);
@@ -145,7 +145,7 @@ namespace ao::query::test
     CHECK(result == false);
   }
 
-  TEST_CASE("PlanEvaluator - matches quoted title LIKE substrings", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches quoted title LIKE substrings")
   {
     // Simple title LIKE test with quoted string
     auto expr = parseOk(R"($title ~ "Bach")");
@@ -168,7 +168,7 @@ namespace ao::query::test
     CHECK(result == true);
   }
 
-  TEST_CASE("PlanEvaluator - matches quoted title LIKE on multi-field tracks", "[query][unit][plan-evaluator]")
+  TEST_CASE("PlanEvaluator - matches quoted title LIKE on multi-field tracks")
   {
     // Test LIKE with a Track that has multiple fields set
     auto expr = parseOk(R"($title ~ "Bach")");

@@ -16,7 +16,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackTransport selection - reveal track requests", "[runtime][unit][playback][selection]")
+  TEST_CASE("PlaybackTransport selection - reveal track requests")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
@@ -30,8 +30,7 @@ namespace ao::rt::test
     CHECK(revealRequests[0].preferredViewId == kInvalidViewId);
   }
 
-  TEST_CASE("PlaybackTransport selection - teardown is deferred after pending engine notification",
-            "[runtime][unit][playback][concurrency]")
+  TEST_CASE("PlaybackTransport selection - teardown is deferred after pending engine notification", "[concurrency]")
   {
     auto fixturePtr = std::make_unique<PlaybackTransportFixture<QueuedExecutor>>();
     fixturePtr->onDevicesChangedCb(fixturePtr->status.devices);
@@ -61,7 +60,7 @@ namespace ao::rt::test
     CHECK_FALSE(fixturePtr);
   }
 
-  TEST_CASE("PlaybackTransport selection - revealPlayingTrack works", "[runtime][unit][playback][selection]")
+  TEST_CASE("PlaybackTransport selection - revealPlayingTrack works")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 

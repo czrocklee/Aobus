@@ -39,7 +39,7 @@ namespace ao::uimodel::test
 
   namespace yaml = ao::yaml;
 
-  TEST_CASE("LayoutValue - serializes scalar variants without type loss", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - serializes scalar variants without type loss")
   {
     SECTION("string value")
     {
@@ -116,7 +116,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutNode - round-trips identity and properties", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutNode - round-trips identity and properties")
   {
     auto node = LayoutNode{};
     node.type = "box";
@@ -140,7 +140,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->children[0].type == "spacer");
   }
 
-  TEST_CASE("LayoutDocument - round-trip preserves layout props and child order", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutDocument - round-trip preserves layout props and child order")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "box";
@@ -175,7 +175,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->root.children[1].props.at("hscrollPolicy").asString() == "never");
   }
 
-  TEST_CASE("LayoutDocument - round-trip preserves action-id props", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutDocument - round-trip preserves action-id props")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "playback.qualityIndicator";
@@ -193,7 +193,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->root.props.at("secondaryAction").asString() == "shell.showSystemMenu");
   }
 
-  TEST_CASE("LayoutDocument - round-trip preserves tooltip", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutDocument - round-trip preserves tooltip")
   {
     auto doc = LayoutDocument{};
     doc.root.type = "playback.qualityIndicator";
@@ -217,7 +217,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->root.optTooltip->nodePtr->props.at("variant").asString() == "tooltip");
   }
 
-  TEST_CASE("LayoutModel - YAML deserialization tolerates missing optional fields", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutModel - YAML deserialization tolerates missing optional fields")
   {
     auto const* source = R"(
       version: 1
@@ -236,8 +236,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->root.props.empty());
   }
 
-  TEST_CASE("LayoutModel - YAML deserialization tolerates fields set to empty string",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutModel - YAML deserialization tolerates fields set to empty string")
   {
     auto const* source = R"(
       version: 1
@@ -254,7 +253,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->root.id.empty());
   }
 
-  TEST_CASE("LayoutDocumentYamlSchema - rejects malformed and unsupported documents", "[uimodel][unit][layout][schema]")
+  TEST_CASE("LayoutDocumentYamlSchema - rejects malformed and unsupported documents")
   {
     SECTION("Unsupported version is reported before interpreting its payload")
     {
@@ -325,7 +324,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutValue - serializes and deserializes double", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - serializes and deserializes double")
   {
     auto const v = LayoutValue{3.14};
     auto tree = ryml::Tree{};
@@ -336,7 +335,7 @@ namespace ao::uimodel::test
     CHECK(decodedRes->asDouble() == 3.14);
   }
 
-  TEST_CASE("LayoutValue - formats scalar alternatives as strings", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - formats scalar alternatives as strings")
   {
     SECTION("asString coerces bool")
     {
@@ -360,7 +359,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutValue - integer coercion requires complete numeric strings", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - integer coercion requires complete numeric strings")
   {
     SECTION("asInt coerces string")
     {
@@ -382,7 +381,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutValue - boolean coercion handles text and integer alternatives", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - boolean coercion handles text and integer alternatives")
   {
     SECTION("asBool coerces string true/false")
     {
@@ -408,8 +407,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutValue - typed boolean access does not coerce other alternatives",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - typed boolean access does not coerce other alternatives")
   {
     auto const storedFalse = LayoutValue{false};
     auto const storedTrue = LayoutValue{true};
@@ -423,8 +421,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(text.asBool(true));
   }
 
-  TEST_CASE("LayoutValue - double coercion handles numbers and complete numeric strings",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - double coercion handles numbers and complete numeric strings")
   {
     SECTION("asDouble coerces string")
     {
@@ -452,7 +449,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutValue - monostate returns defaults", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - monostate returns defaults")
   {
     auto const v = LayoutValue{};
     CHECK(v.asString("fallback") == "fallback");
@@ -461,7 +458,7 @@ namespace ao::uimodel::test
     CHECK(v.asDouble(1.5) == 1.5);
   }
 
-  TEST_CASE("LayoutValue - getIf exposes only the stored vector alternative", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutValue - getIf exposes only the stored vector alternative")
   {
     auto const v = LayoutValue{std::vector<std::string>{"a", "b", "c"}};
     auto const* const vec = v.getIf<std::vector<std::string>>();
@@ -472,7 +469,7 @@ namespace ao::uimodel::test
     CHECK(v.getIf<std::string>() == nullptr);
   }
 
-  TEST_CASE("LayoutNode - property lookups distinguish props from layout props", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutNode - property lookups distinguish props from layout props")
   {
     auto node = LayoutNode{};
     node.props["label"] = LayoutValue{std::string{"hello"}};
@@ -524,7 +521,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutModel - layout stateful node ids reject ambiguous runtime keys", "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutModel - layout stateful node ids reject ambiguous runtime keys")
   {
     SECTION("duplicate stateful ids are errors")
     {
@@ -614,8 +611,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutModel - layout stateful node id generation avoids existing document ids",
-            "[uimodel][unit][layout][document]")
+  TEST_CASE("LayoutModel - layout stateful node id generation avoids existing document ids")
   {
     SECTION("new stateful ids are stable and unique across root and templates")
     {

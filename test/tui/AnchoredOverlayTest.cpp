@@ -64,8 +64,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("AnchoredOverlay - below placement converts root anchor into render layer coordinates",
-            "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - below placement converts root anchor into render layer coordinates")
   {
     auto const rendered = renderElement(anchoredOverlay(popup(),
                                                         anchor(12, 17, 2),
@@ -84,7 +83,7 @@ namespace ao::tui::test
     CHECK(lineIndexContaining(rendered, "Popup") == 3);
   }
 
-  TEST_CASE("AnchoredOverlay - clears one-cell gutter for wide glyphs next to the edge", "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - clears one-cell gutter for wide glyphs next to the edge")
   {
     using namespace ftxui;
 
@@ -112,8 +111,7 @@ namespace ao::tui::test
     CHECK(screen.PixelAt(11, 3).character == " ");
   }
 
-  TEST_CASE("AnchoredOverlay - halo clears all sides without swallowing the trigger or mouse targets",
-            "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - halo clears all sides without swallowing the trigger or mouse targets")
   {
     using namespace ftxui;
 
@@ -162,7 +160,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("AnchoredOverlay - placement clamps inside terminal width", "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - placement clamps inside terminal width")
   {
     auto const rendered = renderElement(anchoredOverlay(popup(),
                                                         anchor(36, 39, 0),
@@ -178,7 +176,7 @@ namespace ao::tui::test
     CHECK(line.find("Popup") == 31);
   }
 
-  TEST_CASE("AnchoredOverlay - constrained width preserves the halo and border", "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - constrained width preserves the halo and border")
   {
     using namespace ftxui;
     auto regions = PanelMouseRegions{};
@@ -197,7 +195,7 @@ namespace ao::tui::test
     CHECK(screen.PixelAt(18, regions.box.y_min).character == "╮");
   }
 
-  TEST_CASE("AnchoredOverlay - a panel that leaves room for the halo keeps its full width", "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - a panel that leaves room for the halo keeps its full width")
   {
     using namespace ftxui;
     constexpr std::int32_t kTerminalColumns = 20;
@@ -215,7 +213,7 @@ namespace ao::tui::test
     CHECK(regions.box.x_max - regions.box.x_min + 1 == kPanelColumns);
   }
 
-  TEST_CASE("AnchoredOverlay - above placement opens over its trigger", "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - above placement opens over its trigger")
   {
     auto const rendered = renderElement(anchoredOverlay(popup(),
                                                         anchor(12, 17, 6),
@@ -233,7 +231,7 @@ namespace ao::tui::test
     CHECK(lineIndexContaining(rendered, "Popup") == 2);
   }
 
-  TEST_CASE("AnchoredOverlay - empty anchor can fall back to terminal bottom", "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - empty anchor can fall back to terminal bottom")
   {
     auto const rendered = renderElement(anchoredOverlay(popup(),
                                                         ftxui::Box{},
@@ -248,8 +246,7 @@ namespace ao::tui::test
     CHECK(lineIndexContaining(rendered, "Popup") == 4);
   }
 
-  TEST_CASE("AnchoredOverlay - follows a frame button placed later in the same render after resizing",
-            "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - follows a frame button placed later in the same render after resizing")
   {
     using namespace ftxui;
     auto button = kEmptyMouseBox;
@@ -277,7 +274,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("AnchoredOverlay - playback trigger updates before a lower overlay layer is placed", "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - playback trigger updates before a lower overlay layer is placed")
   {
     using namespace ftxui;
     auto button = kEmptyMouseBox;
@@ -302,8 +299,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("AnchoredOverlay - notification trigger follows the status row on the first resized frame",
-            "[tui][unit][overlay]")
+  TEST_CASE("AnchoredOverlay - notification trigger follows the status row on the first resized frame")
   {
     using namespace ftxui;
     auto button = kEmptyMouseBox;

@@ -114,7 +114,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("SoulButton - playing arc travels clockwise from the right side", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - playing arc travels clockwise from the right side")
   {
     CHECK(soulButtonCells(renderPlaying(radiantVisualAt(0.0, 0.5))) == SoulCells{" ", "⢈", "⡷"});
     CHECK(soulButtonCells(renderPlaying(radiantVisualAt(90.0, 0.5))) == SoulCells{"⢄", "⣀", "⡠"});
@@ -122,7 +122,7 @@ namespace ao::tui::test
     CHECK(soulButtonCells(renderPlaying(radiantVisualAt(270.0, 0.5))) == SoulCells{"⠊", "⠉", "⠑"});
   }
 
-  TEST_CASE("SoulButton - playing arc advances at most one dot per end between close samples", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - playing arc advances at most one dot per end between close samples")
   {
     constexpr auto kSampleInterval = std::chrono::milliseconds{50};
     auto const sampleCount = static_cast<std::int32_t>(2.0 * uimodel::kAobusSoulRotationPeriod /
@@ -148,7 +148,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("SoulButton - inhale lengthens the arc around the same rotation", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - inhale lengthens the arc around the same rotation")
   {
     auto const exhale = soulButtonDots(renderPlaying(radiantVisualAt(90.0, 0.0)));
     auto const inhale = soulButtonDots(renderPlaying(radiantVisualAt(90.0, 1.0)));
@@ -165,7 +165,7 @@ namespace ao::tui::test
     CHECK(inhaleDotCount > exhaleDotCount);
   }
 
-  TEST_CASE("SoulButton - arc head carries the cyan core and its tail carries the aura", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - arc head carries the cyan core and its tail carries the aura")
   {
     // At a quarter turn the clockwise arc runs right to left along the bottom,
     // so its head is in the left cell and its tail in the right cell.
@@ -176,7 +176,7 @@ namespace ao::tui::test
     CHECK_FALSE(screen.PixelAt(0, 0).foreground_color == screen.PixelAt(2, 0).foreground_color);
   }
 
-  TEST_CASE("SoulButton - tail cell dims before its last dot leaves", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - tail cell dims before its last dot leaves")
   {
     auto const covered = renderPlaying(radiantVisualAt(112.0, 0.5));
     auto const leaving = renderPlaying(radiantVisualAt(124.0, 0.5));
@@ -187,7 +187,7 @@ namespace ao::tui::test
     CHECK_FALSE(leaving.PixelAt(2, 0).foreground_color == covered.PixelAt(2, 0).foreground_color);
   }
 
-  TEST_CASE("SoulButton - paused state preserves the sampled arc while quality color changes", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - paused state preserves the sampled arc while quality color changes")
   {
     auto const frozenVisual = uimodel::aobusSoulVisualFrame(
       uimodel::kAobusSoulRadiant, uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080}));
@@ -208,7 +208,7 @@ namespace ao::tui::test
     CHECK_FALSE(recolored.PixelAt(1, 0).foreground_color == early.PixelAt(1, 0).foreground_color);
   }
 
-  TEST_CASE("SoulButton - error shows a broken ring in the dormant color", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - error shows a broken ring in the dormant color")
   {
     auto const dormantVisual = uimodel::aobusSoulVisualFrame(uimodel::aobusSoulAuraRgb(uimodel::SoulAura::Dormant), {});
     auto const error =
@@ -225,7 +225,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("SoulButton - title shares transport glyphs and keeps a fixed blank canvas", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - title shares transport glyphs and keeps a fixed blank canvas")
   {
     auto const motion = uimodel::aobusSoulMotionAt(std::chrono::milliseconds{0});
     auto const button = renderScreen(soulButtonElement(
@@ -240,7 +240,7 @@ namespace ao::tui::test
           soulTitleText(audio::Transport::Buffering, motion, std::chrono::milliseconds{700}));
   }
 
-  TEST_CASE("SoulButton - animation clock resumes without counting a quiet pause as motion", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - animation clock resumes without counting a quiet pause as motion")
   {
     constexpr auto kRefreshInterval = std::chrono::milliseconds{250};
     auto const playing = verifiedTransport(audio::Transport::Playing, audio::Quality::BitwisePerfect);
@@ -269,7 +269,7 @@ namespace ao::tui::test
     CHECK(clock.animation().elapsed() - heldElapsed < kRefreshInterval);
   }
 
-  TEST_CASE("SoulButton - animation clock cross-fades a recolor after a quiet pause", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - animation clock cross-fades a recolor after a quiet pause")
   {
     auto const radiant = verifiedTransport(audio::Transport::Paused, audio::Quality::BitwisePerfect);
     auto const turbulent = verifiedTransport(audio::Transport::Paused, audio::Quality::LinearIntervention);
@@ -291,7 +291,7 @@ namespace ao::tui::test
           uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulTurbulent, clock.animation().motionFrame()));
   }
 
-  TEST_CASE("SoulButton - animation clock settles at once under reduced motion", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - animation clock settles at once under reduced motion")
   {
     auto clock = SoulAnimationClock{};
     auto const frameTime = uimodel::FrameClock::fromMicros(0);

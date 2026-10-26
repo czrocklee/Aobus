@@ -9,8 +9,7 @@
 
 namespace ao::lmdb::test
 {
-  TEST_CASE("IntegerKeyDatabase::Reader - maxKey returns zero for empty databases",
-            "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey returns zero for empty databases")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -24,7 +23,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 0);
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after append", "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after append")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -43,8 +42,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == *id2Res);
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - maxKey tracks explicitly created keys",
-            "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey tracks explicitly created keys")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -63,7 +61,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 10);
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after delete", "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after delete")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});
@@ -89,8 +87,7 @@ namespace ao::lmdb::test
     CHECK(reader.maxKey() == 2);
   }
 
-  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after deleting middle element",
-            "[lmdb][unit][database-reader][max-key]")
+  TEST_CASE("IntegerKeyDatabase::Reader - maxKey after deleting middle element")
   {
     auto const temp = ao::test::TempDir{};
     auto env = openEnvironment(temp.path(), {.flags = kEnvNoTls, .maxDatabases = 20});

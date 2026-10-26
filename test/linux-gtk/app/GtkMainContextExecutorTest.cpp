@@ -15,7 +15,7 @@
 
 namespace ao::gtk::test
 {
-  TEST_CASE("GtkMainContextExecutor - dispatch runs immediately on the owner thread", "[gtk][unit][app][executor]")
+  TEST_CASE("GtkMainContextExecutor - dispatch runs immediately on the owner thread")
   {
     auto executor = GtkMainContextExecutor{};
     bool ran = false;
@@ -30,8 +30,7 @@ namespace ao::gtk::test
     CHECK(ran);
   }
 
-  TEST_CASE("GtkMainContextExecutor - foreign dispatch and owner defer wait for a main-context turn",
-            "[gtk][unit][app][executor][concurrency]")
+  TEST_CASE("GtkMainContextExecutor - foreign dispatch and owner defer wait for a main-context turn", "[concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = GtkMainContextExecutor{};

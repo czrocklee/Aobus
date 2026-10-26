@@ -12,8 +12,7 @@
 
 namespace ao::audio::backend::detail::test
 {
-  TEST_CASE("prepareAudioBackendRenderBuffer zero-fills a short underrun and advances committed position",
-            "[audio][unit][render-buffer]")
+  TEST_CASE("prepareAudioBackendRenderBuffer zero-fills a short underrun and advances committed position")
   {
     auto buffer = std::array<std::byte, 16>{};
     buffer.fill(std::byte{0x7F});
@@ -31,8 +30,7 @@ namespace ao::audio::backend::detail::test
     CHECK(buffer == expected);
   }
 
-  TEST_CASE("prepareAudioBackendRenderBuffer silences a drained suffix without reporting underrun",
-            "[audio][unit][render-buffer]")
+  TEST_CASE("prepareAudioBackendRenderBuffer silences a drained suffix without reporting underrun")
   {
     auto buffer = std::array<std::byte, 12>{};
     buffer.fill(std::byte{0x3A});
@@ -50,8 +48,7 @@ namespace ao::audio::backend::detail::test
     CHECK(buffer == expected);
   }
 
-  TEST_CASE("prepareAudioBackendRenderBuffer clips an overreported result to the native buffer",
-            "[audio][unit][render-buffer]")
+  TEST_CASE("prepareAudioBackendRenderBuffer clips an overreported result to the native buffer")
   {
     auto buffer = std::array<std::byte, 8>{};
     buffer.fill(std::byte{0x6C});
@@ -68,8 +65,7 @@ namespace ao::audio::backend::detail::test
     CHECK(buffer == original);
   }
 
-  TEST_CASE("prepareAudioBackendRenderBuffer rejects a zero frame size without touching storage",
-            "[audio][unit][render-buffer]")
+  TEST_CASE("prepareAudioBackendRenderBuffer rejects a zero frame size without touching storage")
   {
     auto buffer = std::array<std::byte, 4>{};
     buffer.fill(std::byte{0x55});

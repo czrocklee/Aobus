@@ -11,7 +11,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("ElementKind - a style applies to its target kind and everything below it", "[winui][unit][layout]")
+  TEST_CASE("ElementKind - a style applies to its target kind and everything below it")
   {
     CHECK(isElementKindDerivedFrom(ElementKind::Button, ElementKind::Button));
     CHECK(isElementKindDerivedFrom(ElementKind::Button, ElementKind::ButtonBase));
@@ -23,7 +23,7 @@ namespace ao::winui::test
     CHECK(isElementKindDerivedFrom(ElementKind::ListView, ElementKind::ItemsControl));
   }
 
-  TEST_CASE("ElementKind - unrelated branches never accept each other's styles", "[winui][unit][layout]")
+  TEST_CASE("ElementKind - unrelated branches never accept each other's styles")
   {
     CHECK_FALSE(isElementKindDerivedFrom(ElementKind::Button, ElementKind::ItemsControl));
     CHECK_FALSE(isElementKindDerivedFrom(ElementKind::Grid, ElementKind::Border));
@@ -32,7 +32,7 @@ namespace ao::winui::test
     CHECK_FALSE(isElementKindDerivedFrom(ElementKind::Control, ElementKind::Button));
   }
 
-  TEST_CASE("ElementKind - target type names round trip", "[winui][unit][layout]")
+  TEST_CASE("ElementKind - target type names round trip")
   {
     constexpr auto kExpected = std::to_array<std::pair<ElementKind, std::string_view>>({
       {ElementKind::FrameworkElement, "FrameworkElement"},
@@ -67,7 +67,7 @@ namespace ao::winui::test
     CHECK_FALSE(elementKindFromString("").has_value());
   }
 
-  TEST_CASE("ElementKind - the lattice terminates at FrameworkElement", "[winui][unit][layout]")
+  TEST_CASE("ElementKind - the lattice terminates at FrameworkElement")
   {
     CHECK_FALSE(elementBase(ElementKind::FrameworkElement).has_value());
     CHECK(elementBase(ElementKind::Grid) == ElementKind::Panel);

@@ -27,7 +27,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("DetailFieldLayout - metadata audio and tags share a value column across locales", "[tui][unit][detail]")
+  TEST_CASE("DetailFieldLayout - metadata audio and tags share a value column across locales")
   {
     auto const row = rt::TrackRow{.title = "Alpha\nOmega",
                                   .artist = "Bach",
@@ -88,7 +88,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailFieldLayout - credit kind labels share the label column without shortening", "[tui][unit][detail]")
+  TEST_CASE("DetailFieldLayout - credit kind labels share the label column without shortening")
   {
     auto credits = uimodel::TrackCreditSections{};
 
@@ -124,7 +124,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailFieldLayout - missing title retains filename identity in both section states", "[tui][unit][detail]")
+  TEST_CASE("DetailFieldLayout - missing title retains filename identity in both section states")
   {
     auto const& catalog = ao::test::englishMessageCatalog();
     auto const row = rt::TrackRow{.optUriPath = "/music/untitled.flac"};
@@ -139,8 +139,7 @@ namespace ao::tui::test
     CHECK(collapsed.text.contains("untitled.flac"));
   }
 
-  TEST_CASE("DetailFieldLayout - filename fallback fits localized narrow panes without replacing metadata",
-            "[tui][unit][detail]")
+  TEST_CASE("DetailFieldLayout - filename fallback fits localized narrow panes without replacing metadata")
   {
     constexpr auto kLabels = std::array{std::pair{"en-US", "File Name"},
                                         std::pair{"de-DE", "Dateiname"},
@@ -192,7 +191,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailFieldLayout - native Unicode filenames wrap within the value column", "[tui][unit][detail]")
+  TEST_CASE("DetailFieldLayout - native Unicode filenames wrap within the value column")
   {
     auto const row = rt::TrackRow{.optUriPath = utility::pathFromUtf8("/音楽/演奏/夜空 旋律 月光 海辺 終曲.flac")};
 
@@ -243,7 +242,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("DetailFieldLayout - display controls cannot corrupt wrapped Unicode metadata", "[tui][unit][detail]")
+  TEST_CASE("DetailFieldLayout - display controls cannot corrupt wrapped Unicode metadata")
   {
     using namespace std::string_view_literals;
     // NOLINTNEXTLINE(misc-include-cleaner) -- MSVC include-cleaner cannot map sv to the included <string_view>.

@@ -19,7 +19,7 @@
 
 namespace ao::tui::test
 {
-  TEST_CASE("ShellInteractionModel - input mode and touched state are explicit", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - input mode and touched state are explicit")
   {
     auto model = ShellInteractionModel{};
 
@@ -43,7 +43,7 @@ namespace ao::tui::test
     CHECK(model.inputDraft().empty());
   }
 
-  TEST_CASE("ShellInteractionModel - closing command input clears the draft", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - closing command input clears the draft")
   {
     auto model = ShellInteractionModel{};
 
@@ -54,7 +54,7 @@ namespace ao::tui::test
     CHECK(model.inputDraft().empty());
   }
 
-  TEST_CASE("ShellInteractionModel - backspace removes one extended grapheme cluster", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - backspace removes one extended grapheme cluster")
   {
     auto model = ShellInteractionModel{};
 
@@ -71,7 +71,7 @@ namespace ao::tui::test
     CHECK(model.inputDraft() == "a");
   }
 
-  TEST_CASE("ShellInteractionModel - overlay state is explicit", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - overlay state is explicit")
   {
     auto model = ShellInteractionModel{};
 
@@ -95,7 +95,7 @@ namespace ao::tui::test
     CHECK(model.overlay() == Overlay::None);
   }
 
-  TEST_CASE("ShellInteractionModel - replacing an overlay resets its scroll position", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - replacing an overlay resets its scroll position")
   {
     auto model = ShellInteractionModel{};
     model.openOverlay(Overlay::Help);
@@ -106,7 +106,7 @@ namespace ao::tui::test
     CHECK(model.overlayScroll() == 0);
   }
 
-  TEST_CASE("ShellInteractionModel - overlay labels are stable", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - overlay labels are stable")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     CHECK(overlayLabel(textCatalog, Overlay::None) == "Tracks");
@@ -119,7 +119,7 @@ namespace ao::tui::test
     CHECK(overlayLabel(textCatalog, Overlay::GoTo) == "Go to");
   }
 
-  TEST_CASE("ShellInteractionModel - panel-owned overlay hints are stable", "[tui][unit][shell]")
+  TEST_CASE("ShellInteractionModel - panel-owned overlay hints are stable")
   {
     auto const& textCatalog = ao::test::englishMessageCatalog();
     auto const& keymapPlan = defaultKeymapPlan();
@@ -132,8 +132,7 @@ namespace ao::tui::test
     CHECK(overlayHint(textCatalog, keymapPlan, Overlay::PresentationPanel) == "Enter select  Esc close");
   }
 
-  TEST_CASE("ShellInteractionModel - overlay hints omit access bindings and retain local actions",
-            "[tui][unit][shell][keymap]")
+  TEST_CASE("ShellInteractionModel - overlay hints omit access bindings and retain local actions")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({
@@ -162,8 +161,7 @@ namespace ao::tui::test
     CHECK(overlayHint(textCatalog, distinctPlan, Overlay::OutputDevices) == "Enter select  Esc close");
   }
 
-  TEST_CASE("ShellInteractionModel - deleting an empty line does not mark an untouched filter as edited",
-            "[tui][unit][shell][input]")
+  TEST_CASE("ShellInteractionModel - deleting an empty line does not mark an untouched filter as edited")
   {
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::QuickFilter);
@@ -180,8 +178,7 @@ namespace ao::tui::test
     CHECK(shell.inputDraft().empty());
   }
 
-  TEST_CASE("ShellInteractionModel - history is mode-local and restores the unfinished draft",
-            "[tui][unit][shell][input]")
+  TEST_CASE("ShellInteractionModel - history is mode-local and restores the unfinished draft")
   {
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "detail");
@@ -204,8 +201,7 @@ namespace ao::tui::test
     CHECK(shell.inputDraft() == "artist");
   }
 
-  TEST_CASE("ShellInteractionModel - history discards empty drafts, deduplicates and retains newest fifty",
-            "[tui][unit][shell][input]")
+  TEST_CASE("ShellInteractionModel - history discards empty drafts, deduplicates and retains newest fifty")
   {
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command);
@@ -237,7 +233,7 @@ namespace ao::tui::test
     CHECK(shell.inputDraft() == "draft");
   }
 
-  TEST_CASE("ShellInteractionModel - editing a history entry creates a new scratch draft", "[tui][unit][shell][input]")
+  TEST_CASE("ShellInteractionModel - editing a history entry creates a new scratch draft")
   {
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "filter A");
@@ -252,8 +248,7 @@ namespace ao::tui::test
     CHECK(shell.inputDraft() == "filter AB");
   }
 
-  TEST_CASE("ShellInteractionModel - completion applies only its interior range and retires the result",
-            "[tui][unit][shell][input]")
+  TEST_CASE("ShellInteractionModel - completion applies only its interior range and retires the result")
   {
     auto shell = ShellInteractionModel{};
     shell.beginInput(ShellInputMode::Command, "filter $ar = Aimer");

@@ -50,8 +50,7 @@ namespace ao::uimodel::test
     }
   } // namespace
 
-  TEST_CASE("TrackFilterCompleter - completes every live Quick-filter value kind",
-            "[uimodel][unit][track-filter-completion]")
+  TEST_CASE("TrackFilterCompleter - completes every live Quick-filter value kind")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto const trackId = library::test::addTrackWithUniqueFixtureUri(
@@ -130,8 +129,7 @@ namespace ao::uimodel::test
     CHECK(displayTexts(*optRefreshed) == std::vector<std::string>{"Refreshed Tag", "Refreshed Title"});
   }
 
-  TEST_CASE("TrackFilterCompleter - ranks aggregate matches by live frequency then value",
-            "[uimodel][unit][track-filter-completion][ranking]")
+  TEST_CASE("TrackFilterCompleter - ranks aggregate matches by live frequency then value")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -157,8 +155,7 @@ namespace ao::uimodel::test
     CHECK(optResult->items[1].rank == 1);
   }
 
-  TEST_CASE("TrackFilterCompleter - prefers frequent values with a one-item result bound",
-            "[uimodel][unit][track-filter-completion][ranking]")
+  TEST_CASE("TrackFilterCompleter - prefers frequent values with a one-item result bound")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -178,8 +175,7 @@ namespace ao::uimodel::test
     CHECK(optResult->items.front().detail.frequency == 2);
   }
 
-  TEST_CASE("TrackFilterCompleter - replaces only the current Quick-filter term",
-            "[uimodel][unit][track-filter-completion]")
+  TEST_CASE("TrackFilterCompleter - replaces only the current Quick-filter term")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -196,8 +192,7 @@ namespace ao::uimodel::test
     CHECK(applyFirst(text, *optResult) == "road \"Alpha\" trip");
   }
 
-  TEST_CASE("TrackFilterCompleter - completes word prefixes without fuzzy correction",
-            "[uimodel][unit][track-filter-completion]")
+  TEST_CASE("TrackFilterCompleter - completes word prefixes without fuzzy correction")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -215,8 +210,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(completer.complete("pinnok", std::string_view{"pinnok"}.size()));
   }
 
-  TEST_CASE("TrackFilterCompleter - quotes inserted values for lossless Quick-filter resolution",
-            "[uimodel][unit][track-filter-completion][escaping]")
+  TEST_CASE("TrackFilterCompleter - quotes inserted values for lossless Quick-filter resolution")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto const value = std::string{R"(C:\Music "Live")"};
@@ -236,8 +230,7 @@ namespace ao::uimodel::test
     CHECK(query::parse(resolved.expression).has_value());
   }
 
-  TEST_CASE("TrackFilterCompleter - uses the explicit expression boundary shared with the resolver",
-            "[uimodel][unit][track-filter-completion]")
+  TEST_CASE("TrackFilterCompleter - uses the explicit expression boundary shared with the resolver")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -263,8 +256,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(completer.complete("road ", 5));
   }
 
-  TEST_CASE("TrackFilterCompleter - romanized completion remains an original-text selection aid",
-            "[uimodel][unit][track-filter-completion][completion-alias]")
+  TEST_CASE("TrackFilterCompleter - romanized completion remains an original-text selection aid")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(
@@ -287,8 +279,7 @@ namespace ao::uimodel::test
     CHECK_FALSE(completer.complete("周abc", std::string_view{"周abc"}.size()));
   }
 
-  TEST_CASE("TrackFilterCompleter - direct matches outrank aliases and alias collisions remain distinct",
-            "[uimodel][unit][track-filter-completion][completion-alias]")
+  TEST_CASE("TrackFilterCompleter - direct matches outrank aliases and alias collisions remain distinct")
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrackWithUniqueFixtureUri(

@@ -35,8 +35,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("LayoutModel - default layout round-trip preserves ordered template references",
-            "[gtk][unit][layout][model]")
+  TEST_CASE("LayoutModel - default layout round-trip preserves ordered template references")
   {
     auto const doc = makeDefaultLayout();
     auto tree = ryml::Tree{};
@@ -71,7 +70,7 @@ namespace ao::gtk::layout::test
     CHECK(statusBar.propertyOr<std::string>("templateId", "") == "status.defaultBar");
   }
 
-  TEST_CASE("LayoutModel - built-in detail panes start with responsive percentage", "[gtk][unit][layout][model]")
+  TEST_CASE("LayoutModel - built-in detail panes start with responsive percentage")
   {
     auto const classicDoc = makeBuiltInLayout(LayoutPresetId::Classic);
     auto const classicDetailSplit = classicDoc.templates.at("app.defaultLayout");
@@ -95,7 +94,7 @@ namespace ao::gtk::layout::test
     CHECK(modernDetailSplit.propertyOr<double>("initialPositionPercent", 0.0) == 0.2);
   }
 
-  TEST_CASE("LayoutModel - persistent built-in components have stable ids", "[gtk][unit][layout][model]")
+  TEST_CASE("LayoutModel - persistent built-in components have stable ids")
   {
     for (auto const presetId : {LayoutPresetId::Classic, LayoutPresetId::Modern})
     {
@@ -121,7 +120,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("LayoutModel - modern bottom bar artwork follows the transport row height", "[gtk][unit][layout][model]")
+  TEST_CASE("LayoutModel - modern bottom bar artwork follows the transport row height")
   {
     auto const doc = makeBuiltInLayout(LayoutPresetId::Modern);
     auto const& modernBar = doc.templates.at("playback.modernBar");
@@ -145,8 +144,7 @@ namespace ao::gtk::layout::test
     CHECK(image.layoutOr<std::string>("valign", "") == "fill");
   }
 
-  TEST_CASE("LayoutModel - modern header uses allocation breakpoints instead of fixed search width",
-            "[gtk][unit][layout][model]")
+  TEST_CASE("LayoutModel - modern header uses allocation breakpoints instead of fixed search width")
   {
     auto const doc = makeBuiltInLayout(LayoutPresetId::Modern);
     REQUIRE(!doc.root.children.empty());
@@ -177,7 +175,7 @@ namespace ao::gtk::layout::test
   // ---------------------------------------------------------------------------
   // Built-in Presets
   // ---------------------------------------------------------------------------
-  TEST_CASE("LayoutModel - default built-in layout does not add a modern root class", "[gtk][unit][layout][model]")
+  TEST_CASE("LayoutModel - default built-in layout does not add a modern root class")
   {
     auto const doc = makeDefaultLayout();
     CHECK(doc.root.layoutOr<std::string>("cssClasses", "") != "ao-layout-preset-modern");

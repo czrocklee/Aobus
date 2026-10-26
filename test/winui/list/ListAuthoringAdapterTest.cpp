@@ -17,8 +17,7 @@
 
 namespace ao::winui::test
 {
-  TEST_CASE("List authoring presentation - applies an explicit preference or the saved-List recommendation",
-            "[winui][unit][list-authoring]")
+  TEST_CASE("List authoring presentation - applies an explicit preference or the saved-List recommendation")
   {
     auto fixture = uimodel::test::TrackPresentationFixture{};
     auto const listId = ListId{71};
@@ -32,7 +31,7 @@ namespace ao::winui::test
           "classical-composers");
   }
 
-  TEST_CASE("List tree invalidation - ignores track-only publications", "[winui][unit][list-authoring]")
+  TEST_CASE("List tree invalidation - ignores track-only publications")
   {
     CHECK_FALSE(needsListTreeRebuild(rt::LibraryChangeSet{.tracksMutated = {TrackId{4}}}));
     CHECK_FALSE(needsListTreeRebuild(
@@ -42,8 +41,7 @@ namespace ao::winui::test
     CHECK(needsListTreeRebuild(rt::LibraryChangeSet{.libraryReset = true}));
   }
 
-  TEST_CASE("List tree restoration - preserves surviving expansion and chooses a stable fallback",
-            "[winui][unit][list-authoring]")
+  TEST_CASE("List tree restoration - preserves surviving expansion and chooses a stable fallback")
   {
     auto projection = uimodel::ListTreeProjection{};
     projection.rootIds = {rt::kAllTracksListId, ListId{10}};
@@ -61,8 +59,7 @@ namespace ao::winui::test
           std::map<ListId, bool>{{ListId{10}, false}, {ListId{11}, false}, {rt::kAllTracksListId, false}});
   }
 
-  TEST_CASE("List tree restoration - keeps an active surviving List and expands a new parent",
-            "[winui][unit][list-authoring]")
+  TEST_CASE("List tree restoration - keeps an active surviving List and expands a new parent")
   {
     auto projection = uimodel::ListTreeProjection{};
     projection.rootIds = {ListId{20}};
@@ -76,8 +73,7 @@ namespace ao::winui::test
     CHECK(state.expandedById == expectedExpansion);
   }
 
-  TEST_CASE("List tree restoration - reveals an active nested List beneath a previously collapsed parent",
-            "[winui][unit][list-authoring]")
+  TEST_CASE("List tree restoration - reveals an active nested List beneath a previously collapsed parent")
   {
     auto projection = uimodel::ListTreeProjection{};
     projection.rootIds = {ListId{30}};

@@ -68,7 +68,7 @@ namespace ao::media::file::detail::test
     };
   } // namespace
 
-  TEST_CASE("Content credits - retain all initial kinds and repeated entries in source order", "[media][unit][content]")
+  TEST_CASE("Content credits - retain all initial kinds and repeated entries in source order")
   {
     auto builder = ContentBuilder::makeEmpty();
     builder.metadata().soloist("Featured soloist").conductor("Conductor").ensemble("Ensemble");
@@ -106,8 +106,7 @@ namespace ao::media::file::detail::test
     }
   }
 
-  TEST_CASE("Content credits - copy source text and keep it stable through arena growth and builder moves",
-            "[media][unit][content]")
+  TEST_CASE("Content credits - copy source text and keep it stable through arena growth and builder moves")
   {
     auto content = []
     {
@@ -147,8 +146,7 @@ namespace ao::media::file::detail::test
     }
   }
 
-  TEST_CASE("Content credits - callback borrows the content span and text and completes before visit returns",
-            "[media][unit][content]")
+  TEST_CASE("Content credits - callback borrows the content span and text and completes before visit returns")
   {
     auto builder = ContentBuilder::makeEmpty();
     builder.metadata().credit("Ada", CreditKind::Performer, "piano").soloist("Anne");
@@ -159,8 +157,7 @@ namespace ao::media::file::detail::test
     CHECK(visitor.callCount() == 1);
   }
 
-  TEST_CASE("Content credits - visitor receives one borrowed list synchronously after scalar and cover callbacks",
-            "[media][unit][content]")
+  TEST_CASE("Content credits - visitor receives one borrowed list synchronously after scalar and cover callbacks")
   {
     using RecordedContent = ao::media::file::test::RecordedContent;
     using Event = RecordedContent::CallbackEvent;

@@ -21,8 +21,7 @@
 
 namespace ao::audio::backend::test
 {
-  TEST_CASE("AUHAL - local output maps report identity and swapped native readback",
-            "[audio][integration][coreaudio][.manual]")
+  TEST_CASE("AUHAL - local output maps report identity and swapped native readback", "[.manual]")
   {
     // Explicit opt-in selects an existing exact device UID. No default route,
     // enumeration fallback, driver provisioning, or shared device setting changes.

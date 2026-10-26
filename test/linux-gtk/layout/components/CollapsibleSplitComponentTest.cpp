@@ -36,8 +36,7 @@ namespace ao::gtk::layout::test
   using ao::gtk::test::hasAccessibleLabel;
   using ao::gtk::test::measureWidget;
 
-  TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and drag adaptation",
-            "[gtk][unit][layout-component][geometry]")
+  TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and drag adaptation")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
@@ -381,8 +380,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("CollapsibleSplitComponent - allocated revealed pane enforces the minimum on both axes",
-            "[gtk][unit][layout-component][geometry]")
+  TEST_CASE("CollapsibleSplitComponent - allocated revealed pane enforces the minimum on both axes")
   {
     auto fixture = LayoutRuntimeFixture{};
 
@@ -429,7 +427,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("CollapsibleSplitComponent - restores guarded panel state", "[gtk][unit][layout-component][geometry]")
+  TEST_CASE("CollapsibleSplitComponent - restores guarded panel state")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
@@ -519,8 +517,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("CollapsibleSplitComponent - persists current state and fences retired generations",
-            "[gtk][unit][layout-component][geometry][async]")
+  TEST_CASE("CollapsibleSplitComponent - persists current state and fences retired generations")
   {
     auto stateStore = FakeLayoutComponentStateStore{};
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_test", {}, "en", nullptr, &stateStore};
@@ -617,8 +614,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("CollapsibleSplitComponent - toggle accessibility copy follows the selected locale",
-            "[gtk][unit][layout-component][localization]")
+  TEST_CASE("CollapsibleSplitComponent - toggle accessibility copy follows the selected locale")
   {
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.collapsible_localization_test", {}, "de-DE"};
     auto& ctx = fixture.context();

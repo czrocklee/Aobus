@@ -155,7 +155,7 @@ namespace ao::gtk::layout::test
     }
   } // namespace
 
-  TEST_CASE("PlaybackImage - applies declarative image properties", "[gtk][integration][image]")
+  TEST_CASE("PlaybackImage - applies declarative image properties")
   {
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
     auto mutableCoverTrackId = kInvalidTrackId;
@@ -695,7 +695,7 @@ namespace ao::gtk::layout::test
     }
   }
 
-  TEST_CASE("ComponentTooltipController - copies only popover shell classes", "[gtk][unit][layout-component]")
+  TEST_CASE("ComponentTooltipController - copies only popover shell classes")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.tooltip_controller_test");
 
@@ -714,7 +714,7 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(popover->has_css_class("ao-opacity-80"));
   }
 
-  TEST_CASE("ComponentTooltipController - detaches target controller on destruction", "[gtk][unit][layout-component]")
+  TEST_CASE("ComponentTooltipController - detaches target controller on destruction")
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.tooltip_controller_lifecycle_test");
 

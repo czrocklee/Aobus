@@ -44,7 +44,7 @@ namespace ao::audio::test
 {
   using namespace fakeit;
 
-  TEST_CASE("Engine - stop while idle leaves an unopened backend untouched", "[audio][unit][engine]")
+  TEST_CASE("Engine - stop while idle leaves an unopened backend untouched")
   {
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -64,7 +64,7 @@ namespace ao::audio::test
     CHECK(snap.transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - setBackend while idle replaces an unopened backend", "[audio][unit][engine][hot-swap]")
+  TEST_CASE("Engine - setBackend while idle replaces an unopened backend")
   {
     auto spy1 = SpyBackend<>{};
     auto spy2 = SpyBackend<>{};
@@ -102,7 +102,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - play publishes route state from decoder stream info", "[audio][integration][engine][graph]")
+  TEST_CASE("Engine - play publishes route state from decoder stream info")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -142,7 +142,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - backend opens from the inspected native signal", "[audio][integration][engine][backend-open]")
+  TEST_CASE("Engine - backend opens from the inspected native signal")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -180,7 +180,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - backend result selects the decoder PCM output", "[audio][unit][engine][backend-open]")
+  TEST_CASE("Engine - backend result selects the decoder PCM output")
   {
     auto const nativeFormat = PcmFormat{.sampleRate = 96000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
     auto const device = Device{.id = DeviceId{"wasapi-shared"},
@@ -236,8 +236,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - commit reuses a staged decoder when the backend prewarm hint matches",
-            "[audio][unit][engine][staged]")
+  TEST_CASE("Engine - commit reuses a staged decoder when the backend prewarm hint matches")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -280,7 +279,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - a lossy prewarm hint is ignored", "[audio][unit][engine][staged]")
+  TEST_CASE("Engine - a lossy prewarm hint is ignored")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -321,8 +320,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - explicit staging follows the backend hint after a wider current PCM mode",
-            "[audio][unit][engine][staged]")
+  TEST_CASE("Engine - explicit staging follows the backend hint after a wider current PCM mode")
   {
     auto const currentNativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -370,8 +368,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - commit replaces a staged decoder when the backend selects another lossless mode",
-            "[audio][unit][engine][staged]")
+  TEST_CASE("Engine - commit replaces a staged decoder when the backend selects another lossless mode")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
@@ -424,7 +421,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - AAC playback supports 32-bit padded backend output", "[audio][integration][engine][aac]")
+  TEST_CASE("Engine - AAC playback supports 32-bit padded backend output")
   {
     auto const testFile = requireAudioFixture("basic_metadata.m4a");
 
@@ -465,7 +462,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - backend format rejection is reported without fallback", "[audio][integration][engine][format]")
+  TEST_CASE("Engine - backend format rejection is reported without fallback")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -505,7 +502,7 @@ namespace ao::audio::test
     CHECK(openedSignals.front().sampleRate == 44100U);
   }
 
-  TEST_CASE("Engine - pause and resume update backend transport", "[audio][unit][engine][transport]")
+  TEST_CASE("Engine - pause and resume update backend transport")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -555,7 +552,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - seek updates elapsed time only after playback starts", "[audio][unit][engine][seek]")
+  TEST_CASE("Engine - seek updates elapsed time only after playback starts")
   {
     auto const device = Device{.id = DeviceId{"test-device"},
                                .displayName = "Test",
@@ -601,7 +598,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("Engine - play with initial offset seeks before publishing elapsed", "[audio][unit][engine][seek]")
+  TEST_CASE("Engine - play with initial offset seeks before publishing elapsed")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -658,7 +655,7 @@ namespace ao::audio::test
     CHECK(seekIt < startIt);
   }
 
-  TEST_CASE("Engine - a confirmed endpoint narrower than the source fails route activation", "[audio][unit][engine]")
+  TEST_CASE("Engine - a confirmed endpoint narrower than the source fails route activation")
   {
     auto const nativeFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed32Le};
     auto info = makeScriptedStreamInfo(nativeFormat);
@@ -680,7 +677,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - a lossy client format is refused regardless of endpoint evidence", "[audio][unit][engine]")
+  TEST_CASE("Engine - a lossy client format is refused regardless of endpoint evidence")
   {
     auto const nativeFormat =
       PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};

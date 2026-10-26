@@ -19,7 +19,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("ShellState - responsive tiers preserve the track and transport surfaces", "[winui][unit][layout]")
+  TEST_CASE("ShellState - responsive tiers preserve the track and transport surfaces")
   {
     auto const wide = unrequested(ShellMode::Modern, kWideShellWidth);
     CHECK(wide.widthClass == ShellWidthClass::Wide);
@@ -75,7 +75,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("ShellState - mode changes chrome without changing responsive visibility", "[winui][unit][layout]")
+  TEST_CASE("ShellState - mode changes chrome without changing responsive visibility")
   {
     auto const modern = unrequested(ShellMode::Modern, 900.0);
     auto const classic = unrequested(ShellMode::Classic, 900.0);
@@ -87,8 +87,7 @@ namespace ao::winui::test
     CHECK_FALSE(classic.integratedTitleBar);
   }
 
-  TEST_CASE("ShellState - an unasked inspector shows exactly where it costs the workspace nothing",
-            "[winui][unit][layout]")
+  TEST_CASE("ShellState - an unasked inspector shows exactly where it costs the workspace nothing")
   {
     // Inline, the inspector owns a workspace column and is visible by default.
     // Below the wide tier it overlays the workspace and waits to be requested.
@@ -103,7 +102,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("ShellState - an asked inspector answers the request at every width", "[winui][unit][layout]")
+  TEST_CASE("ShellState - an asked inspector answers the request at every width")
   {
     // The request survives responsive transitions: explicit dismissal stays
     // dismissed when inline, and an explicit reveal stays revealed when wide.

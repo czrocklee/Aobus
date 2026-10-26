@@ -43,7 +43,7 @@ namespace ao::gtk::test
     };
   } // namespace
 
-  TEST_CASE("GtkStyleRuntime - provider lifecycle is idempotent and reinitializable", "[gtk][unit][app][style]")
+  TEST_CASE("GtkStyleRuntime - provider lifecycle is idempotent and reinitializable")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto& manager = GtkStyleRuntime::instance();
@@ -69,8 +69,7 @@ namespace ao::gtk::test
     CHECK(manager.appProvider() != firstProviderPtr);
   }
 
-  TEST_CASE("GtkStyleRuntime - reload is debounced and shutdown cancels pending delivery",
-            "[gtk][unit][app][style][async]")
+  TEST_CASE("GtkStyleRuntime - reload is debounced and shutdown cancels pending delivery")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto& manager = GtkStyleRuntime::instance();
@@ -124,7 +123,7 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("GtkStyleRuntime - display provider attachment applies and removes CSS", "[gtk][unit][app][style]")
+  TEST_CASE("GtkStyleRuntime - display provider attachment applies and removes CSS")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto& manager = GtkStyleRuntime::instance();

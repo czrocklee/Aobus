@@ -15,7 +15,7 @@
 
 namespace ao::cli::test
 {
-  TEST_CASE("CLI - init and dump commands run against fixture library", "[cli][integration][command-dispatch]")
+  TEST_CASE("CLI - init and dump commands run against fixture library")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -112,7 +112,7 @@ namespace ao::cli::test
     CHECK(jsonTree.rootref()["manifest"].is_seq());
   }
 
-  TEST_CASE("CLI - mutation summaries honor structured output", "[cli][integration][output]")
+  TEST_CASE("CLI - mutation summaries honor structured output")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "track.flac");
@@ -194,7 +194,7 @@ namespace ao::cli::test
     CHECK(std::filesystem::exists(fixture.root() / "library.yaml"));
   }
 
-  TEST_CASE("CLI - subtree deletion reports tag impact without internal optional names", "[cli][integration][output]")
+  TEST_CASE("CLI - subtree deletion reports tag impact without internal optional names")
   {
     auto const* const format = GENERATE("yaml", "json");
     auto fixture = CliFixture{};
@@ -265,7 +265,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tagTree.rootref()["tags"][0]) == "subtree");
   }
 
-  TEST_CASE("CLI - empty YAML collections are sequences", "[cli][unit][output]")
+  TEST_CASE("CLI - empty YAML collections are sequences")
   {
     auto fixture = CliFixture{};
 

@@ -65,21 +65,73 @@ aobus_finalize_test_sources("${{CMAKE_BINARY_DIR}}/aobus-test-sources.tsv" {targ
 
     def test_records_executable_membership_and_disabled_sources(self):
         self.write_test("core/RegisteredTest.cpp")
-        self.write_test("core/GtkTest.mm")
-        self.write_test("lint/fixture/NotARealTest.cpp")
+        self.write_test("gtk/GtkTest.mm")
+        self.write_test("lint/fixture/aobus-check/NotARealTest.cpp")
         result = self.configure("""\
 add_executable(suite main.cpp)
 aobus_target_test_sources(suite TRUE "unused" test/core/RegisteredTest.cpp)
-aobus_target_test_sources(gtk_suite FALSE "AOBUS_BUILD_GTK=OFF" test/core/GtkTest.mm)
+aobus_target_test_sources(gtk_suite FALSE "AOBUS_BUILD_GTK=OFF" test/gtk/GtkTest.mm)
 """)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(
             (self.build / "aobus-test-sources.tsv").read_text(encoding="utf-8").splitlines(),
             [
                 "source\tstate\towner-or-disabled-reason",
-                "test/core/GtkTest.mm\tdisabled\tAOBUS_BUILD_GTK=OFF",
                 "test/core/RegisteredTest.cpp\tconfigured\tsuite",
+                "test/gtk/GtkTest.mm\tdisabled\tAOBUS_BUILD_GTK=OFF",
             ],
+        )
+
+    def test_benchmark_sources_are_registration_sources_with_an_owner(self):
+        self.write_test("tui/TrackTableBenchmark.cpp")
+        result = self.configure(
+            """\
+add_executable(bench EXCLUDE_FROM_ALL main.cpp)
+aobus_target_test_sources(bench TRUE "unused" test/tui/TrackTableBenchmark.cpp)
+""",
+            targets="bench",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            (self.build / "aobus-test-sources.tsv").read_text(encoding="utf-8").splitlines(),
+            [
+                "source\tstate\towner-or-disabled-reason",
+                "test/tui/TrackTableBenchmark.cpp\tconfigured\tbench",
+            ],
+        )
+
+    def test_benchmark_sources_keep_a_disabled_record_when_the_frontend_is_off(self):
+        self.write_test("tui/TrackTableBenchmark.cpp")
+        result = self.configure("""\
+aobus_target_test_sources(bench FALSE "AOBUS_BUILD_TUI=OFF" test/tui/TrackTableBenchmark.cpp)
+""")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            (self.build / "aobus-test-sources.tsv").read_text(encoding="utf-8").splitlines(),
+            [
+                "source\tstate\towner-or-disabled-reason",
+                "test/tui/TrackTableBenchmark.cpp\tdisabled\tAOBUS_BUILD_TUI=OFF",
+            ],
+        )
+
+    def test_benchmark_filename_convention_is_admitted_only_for_benchmark_cpp(self):
+        self.write_test("tui/TrackTableBenchmark.cpp")
+        self.write_test("tui/TrackTableBench.cpp")
+        self.write_test("tui/TrackTableBenchmark.mm")
+        invalid_path = "Test source must be a *Test.cpp, *Test.mm, or *Benchmark.cpp file below test/:"
+        for source in ("test/tui/TrackTableBench.cpp", "test/tui/TrackTableBenchmark.mm"):
+            with self.subTest(source=source):
+                self.assert_configure_failed(
+                    "add_executable(suite main.cpp)\n"
+                    f'aobus_target_test_sources(suite TRUE "unused" test/tui/TrackTableBenchmark.cpp "{source}")',
+                    invalid_path,
+                )
+
+    def test_undeclared_benchmark_source_fails_the_completeness_check(self):
+        self.write_test("tui/TrackTableBenchmark.cpp")
+        self.assert_configure_failed(
+            "add_executable(unfinalized main.cpp test/tui/TrackTableBenchmark.cpp)",
+            "Missing test target sources",
         )
 
     def test_support_sources_use_ordinary_target_sources(self):
@@ -100,13 +152,72 @@ aobus_target_test_sources(suite TRUE "unused" test/core/RegisteredTest.cpp)
             ],
         )
 
+    def test_case_variant_sources_under_test_must_use_lowercase_extensions(self):
+        self.write_test("core/RegisteredTest.cpp")
+        self.write_test("core/FooSupport.CPP")
+        self.write_test("core/FooSupport.HPP")
+        for source, extension in (
+            ("test/core/FooSupport.CPP", ".cpp"),
+            ("${CMAKE_SOURCE_DIR}/test/core/FooSupport.CPP", ".cpp"),
+            ("test/core/FooSupport.HPP", ".hpp"),
+        ):
+            for declaration in (
+                f"add_executable(suite main.cpp {source})",
+                f"add_executable(suite main.cpp)\ntarget_sources(suite PRIVATE {source})",
+            ):
+                with self.subTest(source=source, form=declaration.splitlines()[-1]):
+                    self.assert_configure_failed(
+                        f'{declaration}\naobus_target_test_sources(suite TRUE "unused" test/core/RegisteredTest.cpp)',
+                        f"must use the lowercase {extension} extension instead of {extension.upper()}",
+                    )
+
+    def test_case_variant_test_source_fails_regardless_of_the_discovery_path(self):
+        self.write_test("core/FooTest.CPP")
+        # Case-insensitive platforms reject this file through the expected-source
+        # glob, so only the configure failure itself is portable here.
+        result = self.configure("add_executable(suite main.cpp test/core/FooTest.CPP)")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_lowercase_and_ungoverned_support_extensions_stay_admitted(self):
+        self.write_test("core/RegisteredTest.cpp")
+        self.write_test("core/FooSupport.cs")
+        self.write_test("core/FooSupport.hpp")
+        result = self.configure(
+            "add_executable(suite main.cpp test/core/FooSupport.cs test/core/FooSupport.hpp)\n"
+            'aobus_target_test_sources(suite TRUE "unused" test/core/RegisteredTest.cpp)'
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_case_variant_sources_outside_test_keep_their_own_policy(self):
+        self.write_test("core/RegisteredTest.cpp")
+        (self.root / "NoDeclSupport.CPP").write_text("// Outside test/.\n", encoding="utf-8")
+        result = self.configure(
+            "add_executable(suite main.cpp ${CMAKE_SOURCE_DIR}/NoDeclSupport.CPP)\n"
+            'aobus_target_test_sources(suite TRUE "unused" test/core/RegisteredTest.cpp)'
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_uppercase_cpp_is_compiler_admitted_so_only_registration_rejects_it(self):
+        # The CXX toolchain admits the uppercase CPP extension, so FooTest.CPP
+        # compiles into a test executable while staying undiscoverable by the
+        # governed suffixes; the registration guard closes that gap.
+        self.write_test("core/RegisteredTest.cpp")
+        result = self.configure(
+            "add_executable(suite main.cpp)\n"
+            'aobus_target_test_sources(suite TRUE "unused" test/core/RegisteredTest.cpp)\n'
+            'file(WRITE "${CMAKE_BINARY_DIR}/cxx-source-extensions.txt" "${CMAKE_CXX_SOURCE_FILE_EXTENSIONS}")'
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        extensions = (self.build / "cxx-source-extensions.txt").read_text(encoding="utf-8").split(";")
+        self.assertIn("CPP", extensions)
+
     def test_helper_validates_sources_in_both_branches(self):
         self.write_test("core/RegisteredTest.cpp")
         self.write_test("core/FixtureTestSupport.cpp")
         self.write_test("core/FixtureTestSupport.mm")
         self.write_test("core/FixtureTest.h")
         (self.root / "OutsideTest.cpp").write_text("// Outside test/.\n", encoding="utf-8")
-        invalid_path = "Test source must be a *Test.cpp or *Test.mm file below test/"
+        invalid_path = "Test source must be a *Test.cpp, *Test.mm, or *Benchmark.cpp file below test/:"
         for enabled in ("TRUE", "FALSE"):
             for source, diagnostic in (
                 ("test/core/FixtureTestSupport.cpp", invalid_path),
@@ -136,7 +247,7 @@ aobus_target_test_sources(suite TRUE "unused" test/core/RegisteredTest.cpp)
         self.write_test("core/RegisteredTest.cpp")
         body = "add_executable(suite main.cpp test/core/RegisteredTest.cpp)"
         result = self.configure(body)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout)
         self.write_test("core/NewTest.mm")
         self.assert_configure_failed(body, "test/core/NewTest.mm")
 

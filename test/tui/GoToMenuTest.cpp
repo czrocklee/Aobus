@@ -42,7 +42,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("GoToMenu - prefix navigation preserves playback and traverses view history", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - prefix navigation preserves playback and traverses view history")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -97,7 +97,7 @@ namespace ao::tui::test
     CHECK(library.activeViewId() == destination);
   }
 
-  TEST_CASE("GoToMenu - unavailable actions and cancellation never leak into workspace keys", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - unavailable actions and cancellation never leak into workspace keys")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -133,7 +133,7 @@ namespace ao::tui::test
     CHECK_FALSE(library.isVisualSelectionActive());
   }
 
-  TEST_CASE("GoToMenu - text input retains printable prefix keys", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - text input retains printable prefix keys")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -145,7 +145,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.inputDraft() == "ga");
   }
 
-  TEST_CASE("GoToMenu - configurable prefix and direct actions share executable hints", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - configurable prefix and direct actions share executable hints")
   {
     auto model = uimodel::KeymapModel{defaultKeymap()};
     model.applyOverrides({{"tui.navigation.openGoTo", {"Z"}}});
@@ -173,7 +173,7 @@ namespace ao::tui::test
     CHECK(commandShortcut(legacyPlan, CommandAction::OpenCurrentArtist).empty());
   }
 
-  TEST_CASE("GoToMenu - status hints follow state and retain suffixes at narrow widths", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - status hints follow state and retain suffixes at narrow widths")
   {
     for (auto const* locale : {"en", "zh-Hans", "ja", "de", "fr", "es", "zh-Hant"})
     {
@@ -231,7 +231,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("GoToMenu - constrained status hints paint only whole targets", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - constrained status hints paint only whole targets")
   {
     auto const [columns, expectedRows] = GENERATE(Catch::Generators::table<std::int32_t, std::size_t>({{1, 0},
                                                                                                        {2, 0},
@@ -294,7 +294,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("GoToMenu - resize retires omitted footer targets and retains cancellation", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - resize retires omitted footer targets and retains cancellation")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -349,7 +349,7 @@ namespace ao::tui::test
     CHECK(library.activeViewId() == previous);
   }
 
-  TEST_CASE("GoToMenu - footer targets navigate or cancel and reject stale state", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - footer targets navigate or cancel and reject stale state")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
@@ -389,7 +389,7 @@ namespace ao::tui::test
     }
   }
 
-  TEST_CASE("GoToMenu - painted menu targets share navigation with footer and keyboard", "[tui][unit][goto]")
+  TEST_CASE("GoToMenu - painted menu targets share navigation with footer and keyboard")
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();

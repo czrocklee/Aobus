@@ -38,7 +38,7 @@ namespace ao::utility::test
     };
   } // namespace
 
-  TEST_CASE("ByteView - creates byte views and performs layout casts", "[utility][unit][byte-view]")
+  TEST_CASE("ByteView - creates byte views and performs layout casts")
   {
     SECTION("bytes::view overloads")
     {

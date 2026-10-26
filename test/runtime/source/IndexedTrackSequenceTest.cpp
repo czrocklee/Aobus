@@ -13,8 +13,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("IndexedTrackSequence - one move updates its index in place",
-            "[runtime][unit][source][indexed-track-sequence]")
+  TEST_CASE("IndexedTrackSequence - one move updates its index in place")
   {
     auto sequence = IndexedTrackSequence{std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
     auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(sequence);
@@ -39,8 +38,7 @@ namespace ao::rt::test
     CHECK(after.incrementalScriptApplications == before.incrementalScriptApplications + 1);
   }
 
-  TEST_CASE("IndexedTrackSequence - multi-range batch rebuilds its index once",
-            "[runtime][unit][source][indexed-track-sequence]")
+  TEST_CASE("IndexedTrackSequence - multi-range batch rebuilds its index once")
   {
     auto sequence = IndexedTrackSequence{std::array{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
     auto const before = ::ao::rt::detail::RuntimeOperationProbe::counts(sequence);

@@ -232,8 +232,7 @@ namespace ao::winui::test
     }
   } // namespace
 
-  TEST_CASE("StringResource - the WinUI frontend resolves only resource ids the resource loader can find",
-            "[winui][unit][layout]")
+  TEST_CASE("StringResource - the WinUI frontend resolves only resource ids the resource loader can find")
   {
     /*
      * A `.resw` name that carries a dot is the `x:Uid` convention: XAML splits
@@ -254,7 +253,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("StringResource - the WinUI frontend declares no string resource it cannot reach", "[winui][unit][layout]")
+  TEST_CASE("StringResource - the WinUI frontend declares no string resource it cannot reach")
   {
     /*
      * A resource whose only reader was deleted keeps shipping in every language
@@ -271,8 +270,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("StringResource - generated native aliases connect canonical messages to reachable WinUI ids",
-            "[winui][unit][layout][localization]")
+  TEST_CASE("StringResource - generated native aliases connect canonical messages to reachable WinUI ids")
   {
     auto const references = frontendReferences();
     auto canonicalIds = std::set<std::string_view>{};
@@ -290,8 +288,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("StringResource - generated positional projections retain canonical reachable ids",
-            "[winui][unit][layout][localization]")
+  TEST_CASE("StringResource - generated positional projections retain canonical reachable ids")
   {
     auto const references = frontendReferences();
     auto canonicalIds = std::set<std::string_view>{};
@@ -309,8 +306,7 @@ namespace ao::winui::test
     }
   }
 
-  TEST_CASE("StringResource - native formatting uses only governed positional resources",
-            "[winui][unit][layout][localization]")
+  TEST_CASE("StringResource - native formatting uses only governed positional resources")
   {
     auto const references = frontendReferences();
     auto governed = std::set<std::string_view>{"StartupHresultDetailFormat", "UnknownPresentationFormat"};

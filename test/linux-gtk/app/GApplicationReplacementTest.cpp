@@ -40,7 +40,7 @@ namespace ao::gtk::test
   } // namespace
 
   TEST_CASE("GApplication replacement - ordinary second instance remains remote without changing the owner",
-            "[gtk][integration][gapplication][concurrency]")
+            "[concurrency]")
   {
     requireOwnedGtkSessionBus();
     auto const result = runGApplicationProbe("ordinary-remote");
@@ -49,8 +49,7 @@ namespace ao::gtk::test
     CHECK(result.standardOutput == "ordinary-remote: remote=yes owner-unchanged=yes\n");
   }
 
-  TEST_CASE("GApplication replacement - replace flag takes ownership from a live replaceable primary",
-            "[gtk][integration][gapplication][concurrency]")
+  TEST_CASE("GApplication replacement - replace flag takes ownership from a live replaceable primary", "[concurrency]")
   {
     requireOwnedGtkSessionBus();
     auto const result = runGApplicationProbe("replacement");
@@ -59,8 +58,7 @@ namespace ao::gtk::test
     CHECK(result.standardOutput == "replacement: primary=yes owner-changed=yes\n");
   }
 
-  TEST_CASE("GApplication replacement - independent invocations leave a live previous owner untouched",
-            "[gtk][integration][gapplication][concurrency]")
+  TEST_CASE("GApplication replacement - independent invocations leave a live previous owner untouched", "[concurrency]")
   {
     requireOwnedGtkSessionBus();
     auto const result = runGApplicationProbe("invocation-isolation");
@@ -69,8 +67,7 @@ namespace ao::gtk::test
     CHECK(result.standardOutput == "invocation-isolation: ordinary=yes replacement=yes previous-owner-unchanged=yes\n");
   }
 
-  TEST_CASE("GApplication replacement - probe refuses unowned session buses before connecting",
-            "[gtk][integration][gapplication]")
+  TEST_CASE("GApplication replacement - probe refuses unowned session buses before connecting")
   {
     for (auto const* const scenario : {"unowned-bus", "mismatched-bus", "unowned-instance"})
     {

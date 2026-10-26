@@ -37,7 +37,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ProjectionAnchor - insertion boundaries distinguish Bound from Gap", "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - insertion boundaries distinguish Bound from Gap")
   {
     auto insertedBeforeGap = ProjectionAnchor::gap(kCurrentTrack, 2, 4);
     insertedBeforeGap.applyBatch(insertBatch(1, 2), 6, std::nullopt);
@@ -55,7 +55,7 @@ namespace ao::rt::test
     CHECK(insertedAtBound.anchorIndex() == 4);
   }
 
-  TEST_CASE("ProjectionAnchor - removal boundaries preserve the successor gap", "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - removal boundaries preserve the successor gap")
   {
     auto removedBefore = ProjectionAnchor::gap(kCurrentTrack, 4, 6);
     removedBefore.applyBatch(removeBatch(1, 3), 3, std::nullopt);
@@ -73,8 +73,7 @@ namespace ao::rt::test
     CHECK(removedAfter.anchorIndex() == 4);
   }
 
-  TEST_CASE("ProjectionAnchor - removing the current row enters Gap at its old position",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - removing the current row enters Gap at its old position")
   {
     auto anchor = ProjectionAnchor::bound(kCurrentTrack, 2, 5);
 
@@ -85,8 +84,7 @@ namespace ao::rt::test
     CHECK(anchor.anchorIndex() == 1);
   }
 
-  TEST_CASE("ProjectionAnchor - sequential move of the current row reconciles directly to Bound",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - sequential move of the current row reconciles directly to Bound")
   {
     auto anchor = ProjectionAnchor::bound(kCurrentTrack, 1, 4);
     auto const moveBatch = TrackListProjectionDeltaBatch{
@@ -103,8 +101,7 @@ namespace ao::rt::test
     CHECK(anchor.anchorIndex() == 3);
   }
 
-  TEST_CASE("ProjectionAnchor - regular batches transform sequential coordinates before reconciliation",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - regular batches transform sequential coordinates before reconciliation")
   {
     auto anchor = ProjectionAnchor::gap(kCurrentTrack, 4, 6);
     auto const batch = TrackListProjectionDeltaBatch{
@@ -123,8 +120,7 @@ namespace ao::rt::test
     CHECK(anchor.anchorIndex() == 3);
   }
 
-  TEST_CASE("ProjectionAnchor - Reset reconciles identity and clamps a missing current",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - Reset reconciles identity and clamps a missing current")
   {
     auto missing = ProjectionAnchor::bound(kCurrentTrack, 4, 5);
     missing.applyBatch(resetBatch(), 3, std::nullopt);
@@ -137,7 +133,7 @@ namespace ao::rt::test
     CHECK(present.anchorIndex() == 1);
   }
 
-  TEST_CASE("ProjectionAnchor - empty and end gaps retain successor semantics", "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - empty and end gaps retain successor semantics")
   {
     auto emptied = ProjectionAnchor::bound(kCurrentTrack, 0, 1);
     emptied.applyBatch(resetBatch(), 0, std::nullopt);
@@ -150,7 +146,7 @@ namespace ao::rt::test
     CHECK(endGap.anchorIndex() == 3);
   }
 
-  TEST_CASE("ProjectionAnchor - factories enforce anchor range invariants", "[runtime][unit][playback-cursor]")
+  TEST_CASE("ProjectionAnchor - factories enforce anchor range invariants")
   {
     auto const clamped = ProjectionAnchor::gap(kCurrentTrack, 99, 4);
     CHECK(clamped.state() == ProjectionAnchor::State::Gap);

@@ -46,7 +46,7 @@ namespace ao::tui::test
     }
   } // namespace
 
-  TEST_CASE("CommandCompletionState - clears empty and missing completion results", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletionState - clears empty and missing completion results")
   {
     auto state = CommandCompletionState{};
 
@@ -62,7 +62,7 @@ namespace ao::tui::test
     CHECK(state.selection() == 0);
   }
 
-  TEST_CASE("CommandCompletionState - wraps selection movement and resets on set", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletionState - wraps selection movement and resets on set")
   {
     auto state = CommandCompletionState{};
 
@@ -77,7 +77,7 @@ namespace ao::tui::test
     CHECK(state.selection() == 0);
   }
 
-  TEST_CASE("CommandCompletionState - applies selected replacement inside a draft", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletionState - applies selected replacement inside a draft")
   {
     auto state = CommandCompletionState{};
     auto draft = TextFieldModel{"view so"};
@@ -91,7 +91,7 @@ namespace ao::tui::test
     CHECK(state.selection() == 0);
   }
 
-  TEST_CASE("CommandCompletionState - rejects invalid replacement ranges", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletionState - rejects invalid replacement ranges")
   {
     auto state = CommandCompletionState{};
     auto draft = TextFieldModel{"view so"};
@@ -116,7 +116,7 @@ namespace ao::tui::test
     CHECK(state.selection() == 0);
   }
 
-  TEST_CASE("CommandCompletionState - page movement stops at completion boundaries", "[tui][unit][completion]")
+  TEST_CASE("CommandCompletionState - page movement stops at completion boundaries")
   {
     auto state = CommandCompletionState{};
     state.set(pageCompletionResult());

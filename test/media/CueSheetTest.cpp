@@ -37,8 +37,7 @@ namespace ao::media::cue::test
     }
   } // namespace
 
-  TEST_CASE("CUE sheet - preserves global and track metadata without applying carrier fallback",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - preserves global and track metadata without applying carrier fallback")
   {
     auto const parsedRes = parseSheet(R"cue(CATALOG 0123456789012
 CDTEXTFILE "album text.bin"
@@ -101,7 +100,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK_FALSE(second.metadata.optTotalDiscs);
   }
 
-  TEST_CASE("CUE sheet - accepts UTF-8 BOM CRLF tabs and unquoted tokens", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - accepts UTF-8 BOM CRLF tabs and unquoted tokens")
   {
     auto const parsedRes = parseSheet("\xEF\xBB\xBF\tTITLE \"Été\"\r\n\r\nfile disc.flac WAVE\r\n"
                                       "\ttrack 01 audio\r\n\tTITLE \"\"\r\n\tindex 01 00:00:00");
@@ -113,7 +112,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(parsedRes->tracks[0].optIndex01 == 0);
   }
 
-  TEST_CASE("CUE sheet - a lone CR ends a line like LF and CRLF", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - a lone CR ends a line like LF and CRLF")
   {
     auto const parsedRes = parseSheet("TITLE \"Old Mac\"\rFILE disc.wav WAVE\rTRACK 01 AUDIO\r\nINDEX 01 00:00:00\n"
                                       "TRACK 02 AUDIO\rINDEX 01 00:01:00\r");
@@ -128,8 +127,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(lineRes.error().message == "CUE line 5: Unknown CUE directive 'UNKNOWN'");
   }
 
-  TEST_CASE("CUE sheet - recognized metadata repeats within one scope only with the same value",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - recognized metadata repeats within one scope only with the same value")
   {
     for (auto const* const repeated : {"TITLE \"One\"\nTITLE \"Two\"\n", "REM DATE 2001\nrem date 2002\n"})
     {
@@ -161,14 +159,14 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(scopedRes->tracks[1].metadata.optTitle == "Second");
   }
 
-  TEST_CASE("CUE sheet - diagnostics escape control bytes from the sheet", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - diagnostics escape control bytes from the sheet")
   {
     auto const parsedRes = parseSheet("UNKNOWN\x1B[2J\x7F\n" + std::string{kFile});
     REQUIRE_FALSE(parsedRes);
     CHECK(parsedRes.error().message == "CUE line 1: Unknown CUE directive 'UNKNOWN\\x1B[2J\\x7F'");
   }
 
-  TEST_CASE("CUE sheet - invalid UTF-8 requests an explicit UTF-8 save", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - invalid UTF-8 requests an explicit UTF-8 save")
   {
     for (auto const invalid : {cueLiteral("\xFF"),
                                cueLiteral("\xC0\xAF"),
@@ -188,7 +186,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - exactly one FILE must precede every TRACK", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - exactly one FILE must precede every TRACK")
   {
     for (auto const text : {cueLiteral(""),
                             cueLiteral("TITLE Album\n"),
@@ -204,8 +202,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - no audio is malformed but one audio remains a valid unbound layout",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - no audio is malformed but one audio remains a valid unbound layout")
   {
     auto const emptyRes = parseSheet(kFile);
     REQUIRE_FALSE(emptyRes);
@@ -220,7 +217,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(singleRes->tracks[0].ordinal == 9);
   }
 
-  TEST_CASE("CUE sheet - TRACK ordinals strictly increase within 1 to 99", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - TRACK ordinals strictly increase within 1 to 99")
   {
     for (auto const tracks : {cueLiteral("TRACK 00 AUDIO\nINDEX 01 00:00:00"),
                               cueLiteral("TRACK 100 AUDIO\nINDEX 01 00:00:00"),
@@ -236,7 +233,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - indexes require a track and ordered numbers and positions", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - indexes require a track and ordered numbers and positions")
   {
     for (auto const tracks : {cueLiteral("INDEX 01 00:00:00"),
                               cueLiteral("TRACK 01 AUDIO"),
@@ -256,7 +253,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - standard data track and FILE types remain valid syntax", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - standard data track and FILE types remain valid syntax")
   {
     for (auto const type : {cueLiteral("CDG"),
                             cueLiteral("MODE1/2048"),
@@ -293,7 +290,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - index subtracks are accepted without moving audio boundaries", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - index subtracks are accepted without moving audio boundaries")
   {
     auto const parsedRes = parseSheet(std::string{kFile} + "TRACK 01 AUDIO\nINDEX 00 00:00:00\n"
                                                            "INDEX 01 00:00:01\nINDEX 02 00:00:02\nINDEX 99 00:00:03");
@@ -303,7 +300,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(parsedRes->tracks[0].optIndex01 == 1);
   }
 
-  TEST_CASE("CUE sheet - malformed directives and tokens fail with line context", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - malformed directives and tokens fail with line context")
   {
     for (auto const line : {cueLiteral("FILE \"unterminated WAVE"),
                             cueLiteral("FILE \"a.wav\"WAVE"),
@@ -331,7 +328,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - short unknown directive diagnostic stays unchanged", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - short unknown directive diagnostic stays unchanged")
   {
     auto const parsedRes = parseSheet("UNKNOWN ignored\n" + std::string{kFile} + "TRACK 01 AUDIO\nINDEX 01 00:00:00\n");
     REQUIRE_FALSE(parsedRes);
@@ -343,7 +340,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(laterRes.error().message == "CUE line 2: Unknown CUE directive 'not-a-command'");
   }
 
-  TEST_CASE("CUE sheet - unknown directive diagnostic quotes at most 128 bytes", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - unknown directive diagnostic quotes at most 128 bytes")
   {
     auto const exactRes = parseSheet(std::string(kDiagnosticExcerptBytes, 'Q'));
     REQUIRE_FALSE(exactRes);
@@ -371,8 +368,7 @@ FILE "C:\old rip\disc.wav" WAVE
           "CUE line 1: Unknown CUE directive '" + std::string(kDiagnosticExcerptBytes, 'Q') + "'... (200 bytes)");
   }
 
-  TEST_CASE("CUE sheet - unknown directive diagnostic cuts Unicode on a code-point boundary",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - unknown directive diagnostic cuts Unicode on a code-point boundary")
   {
     auto const grin = std::string{"\U0001F600"};
     REQUIRE(grin.size() == 4);
@@ -418,7 +414,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(alignedRes.error().message == expectedAligned);
   }
 
-  TEST_CASE("CUE sheet - other diagnostics do not echo an oversized token", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - other diagnostics do not echo an oversized token")
   {
     auto const token = std::string(300, 'Z');
     auto const samples = std::to_array<std::pair<std::string, std::string_view>>({
@@ -445,8 +441,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - malformed track directives reject rather than being silently ignored",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - malformed track directives reject rather than being silently ignored")
   {
     for (auto const directive : {cueLiteral("INDEX 01"),
                                  cueLiteral("INDEX 01 00:00:00 extra"),
@@ -472,7 +467,7 @@ FILE "C:\old rip\disc.wav" WAVE
     }
   }
 
-  TEST_CASE("CUE sheet - timestamp arithmetic rejects invalid fields and overflow", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE sheet - timestamp arithmetic rejects invalid fields and overflow")
   {
     for (auto const time : {cueLiteral("00:60:00"),
                             cueLiteral("00:00:75"),
@@ -497,8 +492,7 @@ FILE "C:\old rip\disc.wav" WAVE
     CHECK(maximumRes->tracks[0].optIndex01 == std::numeric_limits<std::uint64_t>::max());
   }
 
-  TEST_CASE("CUE segments - pregaps belong to the previous audio and synthetic silence moves no boundary",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - pregaps belong to the previous audio and synthetic silence moves no boundary")
   {
     auto const parsedRes = parseSheet(std::string{kFile} + R"cue(TRACK 01 AUDIO
 PREGAP 00:02:00
@@ -523,7 +517,7 @@ POSTGAP 00:04:00
     CHECK((*segmentsRes)[1].frameCount == 441000);
   }
 
-  TEST_CASE("CUE segments - data tracks end audio at INDEX 00 else INDEX 01", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - data tracks end audio at INDEX 00 else INDEX 01")
   {
     for (auto const dataIndex : {cueLiteral("INDEX 00 00:03:00\nINDEX 01 00:04:00"),
                                  cueLiteral("INDEX 01 00:03:00"),
@@ -549,7 +543,7 @@ POSTGAP 00:04:00
     }
   }
 
-  TEST_CASE("CUE segments - final data boundary clamps to the authoritative extent", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - final data boundary clamps to the authoritative extent")
   {
     auto const parsedRes = parseSheet(std::string{kFile} + "TRACK 01 MODE1/2048\nINDEX 01 00:00:00\n"
                                                            "TRACK 02 AUDIO\nINDEX 01 00:02:00\n"
@@ -563,7 +557,7 @@ POSTGAP 00:04:00
     CHECK((*segmentsRes)[0].frameCount == 111800);
   }
 
-  TEST_CASE("CUE segments - common PCM rates convert CD frames exactly", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - common PCM rates convert CD frames exactly")
   {
     auto const sheet = makeTwoTrackSheet(1, 2);
 
@@ -583,7 +577,7 @@ POSTGAP 00:04:00
     }
   }
 
-  TEST_CASE("CUE segments - nonexact rates floor absolute positions before subtracting", "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - nonexact rates floor absolute positions before subtracting")
   {
     auto const segmentsRes = resolveSegments(makeTwoTrackSheet(1, 2), 1000, 100);
     REQUIRE(segmentsRes);
@@ -600,8 +594,7 @@ POSTGAP 00:04:00
     CHECK((*remainderRes)[0].frameCount == 14);
   }
 
-  TEST_CASE("CUE segments - multiplication overflow is avoided when the final frame position fits",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - multiplication overflow is avoided when the final frame position fits")
   {
     constexpr auto kMaximum = std::numeric_limits<std::uint64_t>::max();
     auto const sheet = makeTwoTrackSheet(0, kMaximum - 1);
@@ -619,8 +612,7 @@ POSTGAP 00:04:00
     CHECK(overflowRes.error().message.contains("PCM-frame range"));
   }
 
-  TEST_CASE("CUE segments - zero rate extent empty rounding and out-of-extent starts are rejected",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - zero rate extent empty rounding and out-of-extent starts are rejected")
   {
     auto const sheet = makeTwoTrackSheet(0, 75);
 
@@ -638,8 +630,7 @@ POSTGAP 00:04:00
     CHECK(roundedRes.error().message.contains("empty"));
   }
 
-  TEST_CASE("CUE segments - public aggregates are revalidated and unusable data boundaries fail",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE segments - public aggregates are revalidated and unusable data boundaries fail")
   {
     auto const valid = makeTwoTrackSheet(0, 75);
 
@@ -700,8 +691,7 @@ POSTGAP 00:04:00
     }
   }
 
-  TEST_CASE("CUE binding - normalized stems are exact and only extensions ignore ASCII case",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE binding - normalized stems are exact and only extensions ignore ASCII case")
   {
     CHECK(classifySheetCandidate("file:///music/Été.FLAC", "file:///music/Été.CuE") == SheetCandidate::General);
     CHECK(classifySheetCandidate("file:///music/Été.FLAC", "file:///music/Été.flac.cue") ==
@@ -726,8 +716,7 @@ POSTGAP 00:04:00
     CHECK(classifySheetCandidate(".hidden.flac", ".hidden.CUE") == SheetCandidate::General);
   }
 
-  TEST_CASE("CUE binding - candidate sets preserve competing case spellings at both precedences",
-            "[media][unit][cue-sheet]")
+  TEST_CASE("CUE binding - candidate sets preserve competing case spellings at both precedences")
   {
     auto const names = std::vector<std::string>{
       "X.flac.cue", "Y.cue", "X.CUE", "X.FLAC.cue", "X.cue", "X.flac.cue", "X.wav.cue", "x.FLAC.cue"};

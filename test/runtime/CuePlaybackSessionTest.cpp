@@ -92,8 +92,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("CUE playback session - identity includes the immutable ordinal beside the URI",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - identity includes the immutable ordinal beside the URI")
   {
     auto const temp = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(temp);
@@ -108,8 +107,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
-  TEST_CASE("CUE playback session - a replacement ID for the same ordinal drops the saved payload",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - a replacement ID for the same ordinal drops the saved payload")
   {
     auto const temp = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(temp);
@@ -123,8 +121,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
-  TEST_CASE("CUE playback session - an absent ordinal still permits ordinary anchor replacement",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - an absent ordinal still permits ordinary anchor replacement")
   {
     auto const temp = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(temp);
@@ -141,8 +138,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.elapsed == std::chrono::milliseconds{0});
   }
 
-  TEST_CASE("CUE playback session - a carrier relinked while closed drops the saved session",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - a carrier relinked while closed drops the saved session")
   {
     auto const temp = ao::test::TempDir{};
     auto runtimePtr = makeStateOnlyRuntime(temp);
@@ -171,8 +167,7 @@ namespace ao::rt::test
     CHECK(runtimePtr->playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
-  TEST_CASE("CUE playback session - deferred segment endpoint ends without opening media and saves its ordinal",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - deferred segment endpoint ends without opening media and saves its ordinal")
   {
     auto const temp = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
@@ -202,8 +197,7 @@ namespace ao::rt::test
     CHECK(playback.snapshot().transport.occurrenceId.value == 0);
   }
 
-  TEST_CASE("CUE playback session - restored zero millisecond segment remains playable after seeking zero",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - restored zero millisecond segment remains playable after seeking zero")
   {
     auto const temp = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
@@ -227,8 +221,7 @@ namespace ao::rt::test
     CHECK(readCarrierSession(*runtimePtr).currentTrackOrdinal == 2);
   }
 
-  TEST_CASE("CUE playback session - zero millisecond segment normalizes a saved positive offset before resume",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - zero millisecond segment normalizes a saved positive offset before resume")
   {
     auto const temp = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
@@ -263,8 +256,7 @@ namespace ao::rt::test
     CHECK(saved.positionMs == 0);
   }
 
-  TEST_CASE("CUE playback session - positive deferred seek clamps to a zero millisecond segment start",
-            "[runtime][integration][playback-session][segment]")
+  TEST_CASE("CUE playback session - positive deferred seek clamps to a zero millisecond segment start")
   {
     auto const temp = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
@@ -299,8 +291,7 @@ namespace ao::rt::test
     CHECK(saved.positionMs == 0);
   }
 
-  TEST_CASE("Playback session - unknown duration whole file retains restored and deferred seek offsets",
-            "[runtime][integration][playback-session]")
+  TEST_CASE("Playback session - unknown duration whole file retains restored and deferred seek offsets")
   {
     auto const temp = ao::test::TempDir{};
     auto executorPtr = std::make_unique<ManualExecutor>();
