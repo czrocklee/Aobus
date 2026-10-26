@@ -180,7 +180,7 @@ WinUI Release configuration with LTCG.
 The portal uses one concurrency limit for both CMake project scheduling and
 MSBuild's cross-project C++ compiler scheduling. By default it leaves one
 logical processor available. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
-integer to override both limits:
+integer to override both limits; CI sets it to the full detected logical processor count:
 
 ```powershell
 $env:CMAKE_BUILD_PARALLEL_LEVEL = 12

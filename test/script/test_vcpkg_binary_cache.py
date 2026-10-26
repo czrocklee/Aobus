@@ -139,6 +139,21 @@ class PruneTest(unittest.TestCase):
         )
 
 
+class WindowsWorkflowStorageTest(unittest.TestCase):
+    def test_disposable_builds_use_the_data_drive_and_sealing_follows_them(self):
+        workflow = (Path(vcpkg_binary_cache.__file__).resolve().parents[3] / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8"
+        )
+        windows = workflow.split("  windows:\n", 1)[1]
+        environment = windows.split("    env:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertIn("      AOBUS_BUILD_ROOT: D:\\aobus-build\n", environment)
+        self.assertIn("      AOBUS_STATE_ROOT: C:\\aobus-state\n", environment)
+        self.assertIn("VCPKG_BINARY_SOURCES: clear;files,C:/aobus-state/cache/vcpkg-binary,readwrite", environment)
+        seal = windows.split("      - name: Seal vcpkg binary cache\n", 1)[1].split("      - name:", 1)[0]
+        self.assertIn('--build-root "$env:AOBUS_BUILD_ROOT"', seal)
+        self.assertNotIn("$env:AOBUS_STATE_ROOT\\build", seal)
+
+
 @unittest.skipIf(os.name == "nt", "The CI key step runs in Bash; exercise it on a POSIX tooling host.")
 class WindowsWorkflowCacheTest(unittest.TestCase):
     def _restore_plan(self, manifest: str = "current") -> list[str]:

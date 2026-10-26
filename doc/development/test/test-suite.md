@@ -157,8 +157,9 @@ own null sinks, not host audio hardware.
 
 Every Catch2 suite runs as several parallel shards of one binary. The default
 shard count is `min(16, cores - 1)`; `AOBUS_TEST_SHARDS` overrides it in either
-direction, and `AOBUS_TEST_SHARDS=1` restores a single process. The cap bounds
-process count: a shard is a whole test process with its own fixtures, temporary
+direction, and `AOBUS_TEST_SHARDS=1` restores a single process.
+CI sets the override to `min(16, logical processor count)`.
+The cap bounds process count: a shard is a whole test process with its own fixtures, temporary
 tree, and, for GTK, its own display and session bus.
 
 Four kinds of run stay single-process, because parallel siblings would change

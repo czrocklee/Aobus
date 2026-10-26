@@ -68,6 +68,29 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Every runner core builds, tidies, and shards tests; the shard cap mirrors
+      # ao.command.test.SHARD_CAP.
+      - name: Use every runner core
+        shell: bash
+        run: |
+          if ! cores="$(getconf _NPROCESSORS_ONLN)"; then
+            echo "::error::getconf _NPROCESSORS_ONLN failed to report the runner core count." >&2
+            exit 1
+          fi
+          if [[ ! "$cores" =~ ^[1-9][0-9]*$ ]]; then
+            echo "getconf _NPROCESSORS_ONLN reported '$cores'; expected a positive decimal core count." >&2
+            exit 1
+          fi
+          shards="$cores"
+          if (( shards > 16 )); then
+            shards=16
+          fi
+          {
+            echo "CMAKE_BUILD_PARALLEL_LEVEL=$cores"
+            echo "AOBUS_TEST_SHARDS=$shards"
+          } >> "$GITHUB_ENV"
+          echo "Detected $cores runner cores: build and tidy jobs=$cores, test shards=$shards."
+
       - name: Install Nix
         uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702  # v31.11.2
         with:
@@ -193,7 +216,7 @@ jobs:
       - name: Run hygiene
         env:
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao hygiene --commit "$BASE_SHA"
+        run: ./ao hygiene --commit "$BASE_SHA" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       - name: Show compiler cache statistics
         if: >-
@@ -251,6 +274,29 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # Every runner core builds, tidies, and shards tests on both matrix
+      # architectures; the shard cap mirrors ao.command.test.SHARD_CAP.
+      - name: Use every runner core
+        shell: bash
+        run: |
+          if ! cores="$(getconf _NPROCESSORS_ONLN)"; then
+            echo "::error::getconf _NPROCESSORS_ONLN failed to report the runner core count." >&2
+            exit 1
+          fi
+          if [[ ! "$cores" =~ ^[1-9][0-9]*$ ]]; then
+            echo "getconf _NPROCESSORS_ONLN reported '$cores'; expected a positive decimal core count." >&2
+            exit 1
+          fi
+          shards="$cores"
+          if (( shards > 16 )); then
+            shards=16
+          fi
+          {
+            echo "CMAKE_BUILD_PARALLEL_LEVEL=$cores"
+            echo "AOBUS_TEST_SHARDS=$shards"
+          } >> "$GITHUB_ENV"
+          echo "Detected $cores runner cores: build and tidy jobs=$cores, test shards=$shards."
 
       - name: Configure local state
         shell: bash
@@ -470,7 +516,7 @@ jobs:
       - name: Run hygiene
         env:
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: ./ao hygiene --commit "$BASE_SHA"
+        run: ./ao hygiene --commit "$BASE_SHA" --jobs "$CMAKE_BUILD_PARALLEL_LEVEL"
 
       - name: Show compiler cache statistics
         if: >-
@@ -505,6 +551,10 @@ jobs:
       # Keep portal-owned paths stable across GitHub's fresh Windows VMs so
       # restored tools contain the same absolute paths used when created.
       AOBUS_STATE_ROOT: C:\aobus-state
+      # Native, WinUI and tidy outputs exceed the system drive's free space.
+      # Keep disposable build trees on the runner's roomy local data drive;
+      # restored tools and reusable caches retain their existing paths.
+      AOBUS_BUILD_ROOT: D:\aobus-build
       AOBUS_CHECKOUT_ID: github-actions-windows-x64
       SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
       AOBUS_PHASE_LOG_DIR: C:\aobus-state\phase-records\${{ github.run_id }}-${{ github.run_attempt }}
@@ -522,6 +572,20 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # Every runner core builds, tidies, and shards tests; the shard cap
+      # mirrors ao.command.test.SHARD_CAP.
+      - name: Use every runner core
+        shell: pwsh
+        run: |
+          $cores = 0
+          if (-not [int]::TryParse($env:NUMBER_OF_PROCESSORS, [ref]$cores) -or $cores -le 0) {
+            throw "NUMBER_OF_PROCESSORS is '$env:NUMBER_OF_PROCESSORS'; expected a positive integer."
+          }
+          $shards = [Math]::Min($cores, 16)
+          "CMAKE_BUILD_PARALLEL_LEVEL=$cores" >> $env:GITHUB_ENV
+          "AOBUS_TEST_SHARDS=$shards" >> $env:GITHUB_ENV
+          Write-Host "Detected $cores runner cores: build and tidy jobs=$cores, test shards=$shards."
 
       - name: Read compiler cache contract
         id: compiler-cache-contract
@@ -682,7 +746,7 @@ jobs:
         run: >-
           python script/ao/core/vcpkg_binary_cache.py seal
           --cache-dir "$env:AOBUS_STATE_ROOT\cache\vcpkg-binary"
-          --build-root "$env:AOBUS_STATE_ROOT\build"
+          --build-root "$env:AOBUS_BUILD_ROOT"
           --key-prefix "${{ steps.vcpkg-key.outputs.prefix }}"
           --github-output $env:GITHUB_OUTPUT
 
@@ -726,7 +790,7 @@ jobs:
         shell: pwsh
         env:
           BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: .\ao.bat hygiene --commit $env:BASE_SHA
+        run: .\ao.bat hygiene --commit $env:BASE_SHA --jobs $env:CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: Inspect Windows LLVM SDK
         id: windows-llvm-ready
