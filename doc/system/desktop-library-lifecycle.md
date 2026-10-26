@@ -253,27 +253,27 @@ dispatcher phase admission, native application exit, and XAML diagnostics.
 
 ## Test map
 
-- Tests under [`test/unit/desktop/`](../../test/unit/desktop) protect the
+- Tests under [`test/desktop/`](../../test/desktop) protect the
   protocol, pure startup and switch rules, symlink identity, detach, Windows
   argv round trips, and the no-unrelated-handle-inheritance default on both
   host gates.
-- [`GtkStartupPlanTest.cpp`](../../test/unit/linux-gtk/app/GtkStartupPlanTest.cpp)
-  and [`SuccessorProcessLauncherTest.cpp`](../../test/unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp)
+- [`GtkStartupPlanTest.cpp`](../../test/linux-gtk/app/GtkStartupPlanTest.cpp)
+  and [`SuccessorProcessLauncherTest.cpp`](../../test/linux-gtk/platform/SuccessorProcessLauncherTest.cpp)
   protect GTK argument partitioning, environment, executable discovery, and
   activation adaptation.
-- [`DestructiveLibraryRestartTest.cpp`](../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)
-  and [`SelectedRootCommitTest.cpp`](../../test/unit/winui/app/SelectedRootCommitTest.cpp)
+- [`DestructiveLibraryRestartTest.cpp`](../../test/winui/app/DestructiveLibraryRestartTest.cpp)
+  and [`SelectedRootCommitTest.cpp`](../../test/winui/app/SelectedRootCommitTest.cpp)
   protect WinUI preparation failure, release-before-launch ordering, and
   candidate root mutation.
-- [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp)
-  and GTK [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp)
+- [`PlaybackSessionTest.cpp`](../../test/runtime/PlaybackSessionTest.cpp)
+  and GTK [`MainWindowTest.cpp`](../../test/linux-gtk/app/MainWindowTest.cpp)
   protect the runtime write seal, terminal retirement, and durable-root
   admission behavior. The GTK case also proves that a failed commit posts the
   shared report.
-- [`PresentationTextFeaturesTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp)
+- [`PresentationTextFeaturesTest.cpp`](../../test/uimodel/presentation/PresentationTextFeaturesTest.cpp)
   protects the shared unsaved-library-switch report's severity, retained
   lifetime, and wording.
-- [`AppKitDesktopScenario.mm`](../../test/integration/macos/AppKitDesktopScenario.mm)
+- [`AppKitDesktopScenario.mm`](../../test/macos-appkit/AppKitDesktopScenario.mm)
   protects AppKit's retained close/reopen behavior, dirty-editor switch block,
   persisted-root observation before the accepted switch, and successor reentry
   through the production lifecycle and launcher invocation, with a test-only

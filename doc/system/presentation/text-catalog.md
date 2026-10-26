@@ -192,11 +192,11 @@ behavioral compatibility contracts. Exact message ids, patterns, translations,
 and argument signatures remain source-owned.
 
 Representative tests are
-[`PresentationTextFeaturesTest.cpp`](../../../test/unit/uimodel/presentation/PresentationTextFeaturesTest.cpp)
+[`PresentationTextFeaturesTest.cpp`](../../../test/uimodel/presentation/PresentationTextFeaturesTest.cpp)
 for semantic selection and open-id fallback,
-[`TrackFieldFormatterTest.cpp`](../../../test/unit/uimodel/field/TrackFieldFormatterTest.cpp)
+[`TrackFieldFormatterTest.cpp`](../../../test/uimodel/field/TrackFieldFormatterTest.cpp)
 for field notation, and
-[`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp)
+[`AudioQualityFormatterTest.cpp`](../../../test/uimodel/playback/quality/AudioQualityFormatterTest.cpp)
 for complete localized audio messages and external-value pass-through. Use the
 [localization workflow](../../development/localization.md) for required
 validation.

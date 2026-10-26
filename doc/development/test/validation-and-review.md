@@ -7,7 +7,7 @@ id: development.test.validation-and-review
 
 When creating a new test file:
 
-1. Place it under the matching existing `test/unit/...` module or layer directory, such as `runtime`, `uimodel`, `linux-gtk`, `library`, `query`, `audio`, `utility`, `cli`, `tui`, or `winui`.
+1. Place it under the matching existing `test/...` module or layer directory, such as `runtime`, `uimodel`, `linux-gtk`, `library`, `query`, `audio`, `utility`, `cli`, `tui`, or `winui`.
 2. Register it with its owning executable in `test/CMakeLists.txt`. Declare a platform- or frontend-conditional test once, outside the condition, with `aobus_target_test_sources(target enabled disabled_reason ...)`.
 3. Match namespace and include style of neighboring tests.
 4. Include only headers that are used.

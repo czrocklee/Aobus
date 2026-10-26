@@ -137,7 +137,7 @@ Keyboard and discrete actions commit directly.
 The gesture retains its starting playback occurrence and duration, while the session also rejects an obsolete position revision.
 A replacement occurrence, including same-track replay, or loss of seekability retires the gesture instead of retargeting its preview or final seek.
 [`PlaybackBar.mm`](../../../app/macos-appkit/PlaybackBar.mm) owns native tracking and
-[`AppKitPlaybackScenario.mm`](../../../test/integration/macos/AppKitPlaybackScenario.mm) checks preview/final separation, repeated in-gesture previews with one final commit, and guarded replacement through generated AppKit events and native target/action callbacks, not physical input.
+[`AppKitPlaybackScenario.mm`](../../../test/macos-appkit/AppKitPlaybackScenario.mm) checks preview/final separation, repeated in-gesture previews with one final commit, and guarded replacement through generated AppKit events and native target/action callbacks, not physical input.
 
 AppKit search fields and native metadata/List-expression editors consume the existing runtime completion providers.
 The native adapter displays shared candidates and applies their UTF-8 replacement spans as exact UTF-16 field-editor ranges; display labels are not insertion text.
@@ -148,8 +148,8 @@ Return accepts in search fields only; editor Return retains its ordinary host be
 When a stale source rejects acceptance, Tab or Return only dismisses and keeps its ordinary field behavior.
 The popover's native views are built on first display.
 A native text-change notification publishes the accepted metadata/expression or quick filter, and presentation owners detach the popover adapter before its borrowed field or completion service retires.
-[`AppKitAuthoringScenario.mm`](../../../test/integration/macos/AppKitAuthoringScenario.mm) checks editor acceptance, non-BMP byte-span mapping, invalid spans, stale-source key fallthrough, caret and deactivation dismissal, and teardown;
-[`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm) checks quick/expression completion in both shell modes.
+[`AppKitAuthoringScenario.mm`](../../../test/macos-appkit/AppKitAuthoringScenario.mm) checks editor acceptance, non-BMP byte-span mapping, invalid spans, stale-source key fallthrough, caret and deactivation dismissal, and teardown;
+[`AppKitDesktopScenario.mm`](../../../test/macos-appkit/AppKitDesktopScenario.mm) checks quick/expression completion in both shell modes.
 These use programmatic native editing and selector commands, not physical keyboard or VoiceOver delivery.
 
 Successful AppKit membership replies also publish the shared membership summary to the notification feed through `listMembershipEditNotification`, the uimodel mapping GTK also uses:
@@ -195,7 +195,7 @@ still-current resource. Idle state without a resumable subject and adapter
 retirement clear the publication.
 
 [`MediaPlayerAdapter.mm`](../../../app/macos-appkit/MediaPlayerAdapter.mm) owns
-this native boundary; [`AppKitMediaScenario.mm`](../../../test/integration/macos/AppKitMediaScenario.mm)
+this native boundary; [`AppKitMediaScenario.mm`](../../../test/macos-appkit/AppKitMediaScenario.mm)
 protects command admission, guarded seeks, clock preservation, and retirement.
 The [playback command contract](../playback/application-commit.md) owns the
 runtime queue after handoff. Native scenario and OS-surface evidence have the

@@ -1,0 +1,229 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "test/fatal/ProbeProcess.h"
+#include "test/TestFixtureSupport.h"
+#include "test/library/MusicLibraryTestSupport.h"
+#include "test/library/WritableLibraryTestSupport.h"
+#include "test/lmdb/LmdbTestSupport.h"
+#include <ao/Error.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/ReadTransaction.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/TrackView.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
+
+#include <catch2/catch_test_macros.hpp>
+#include <lmdb.h>
+
+#include <chrono>
+#include <cstddef>
+#include <span>
+#include <string>
+#include <type_traits>
+#include <vector>
+
+namespace ao::library::test
+{
+  using namespace ao::lmdb;
+  using namespace ao::lmdb::test;
+
+  static_assert(!std::is_same_v<ReadTransaction, lmdb::ReadTransaction>);
+  static_assert(std::is_move_constructible_v<ReadTransaction>);
+  static_assert(!std::is_copy_constructible_v<ReadTransaction>);
+
+  TEST_CASE("MusicLibrary metadata - open rejects truncated prefixes and invalid current header sizes",
+            "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+    {
+      auto library = makeTestMusicLibrary(temp.path(), databasePath);
+      CHECK(library.metadataHeader().libraryVersion == kLibraryVersion);
+    }
+
+    auto expectedDiagnostic = std::string{};
+    {
+      auto env = openEnvironment(databasePath, {.flags = MDB_NOTLS, .maxDatabases = 20});
+      auto wtxn = beginWriteTransaction(env);
+      auto db = openIntegerKeyDatabase(wtxn, "meta");
+      auto writer = db.writer(wtxn);
+      auto const optHeader = writer.get(kMetadataHeaderRecordId);
+      REQUIRE(optHeader);
+      REQUIRE(optHeader->size() == kMetadataHeaderSize);
+      auto invalidData = std::vector<std::byte>{optHeader->begin(), optHeader->end()};
+
+      SECTION("truncated stable prefix")
+      {
+        invalidData = {std::byte{0x42}};
+        expectedDiagnostic = "Library metadata header is shorter than the stable 8-byte prefix";
+      }
+
+      SECTION("valid prefix and catalog reach the current-header size guard")
+      {
+        invalidData.pop_back();
+        expectedDiagnostic = "Invalid library metadata header size 39 (expected 40)";
+      }
+
+      REQUIRE(writer.update(kMetadataHeaderRecordId, std::span<std::byte const>{invalidData}));
+      REQUIRE(wtxn.commit());
+    }
+
+    auto const res = MusicLibrary::open(temp.path(), databasePath);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(res.error().message == expectedDiagnostic);
+  }
+
+  TEST_CASE("MusicLibrary metadata - snapshot exposes the admitted header", "[library][unit][music-library]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto transaction = library.readTransaction();
+    auto const header = library.metadataHeader(transaction);
+
+    CHECK(header.magic == kMetadataMagic);
+    CHECK(header.libraryVersion == kLibraryVersion);
+  }
+
+  TEST_CASE("MusicLibrary metadata - revision candidate publishes exactly once at commit",
+            "[library][unit][write-transaction][revision]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+
+    {
+      auto read = library.readTransaction();
+      CHECK(library.libraryRevision(read) == 0);
+    }
+
+    auto firstWrite = writeTransaction(library);
+    CHECK(library.libraryRevision(firstWrite) == 1);
+    REQUIRE(firstWrite.commit());
+
+    {
+      auto read = library.readTransaction();
+      CHECK(library.libraryRevision(read) == 1);
+    }
+
+    auto abortedWrite = writeTransaction(library);
+    CHECK(library.libraryRevision(abortedWrite) == 2);
+    abortedWrite.abort();
+
+    auto read = library.readTransaction();
+    CHECK(library.libraryRevision(read) == 1);
+  }
+
+  TEST_CASE("MusicLibrary metadata - failed commit leaves no durable candidate revision",
+            "[library][unit][write-transaction][revision]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+
+    {
+      auto library = makeTestMusicLibrary(temp.path(), databasePath);
+      auto write = writeTransaction(
+        library,
+        WriteTransaction::Options{.optInjectedCommitFailure =
+                                    Error{.code = Error::Code::IoError, .message = "injected commit failure"}});
+
+      CHECK(library.libraryRevision(write) == 1);
+      auto commitRes = write.commit();
+      REQUIRE_FALSE(commitRes);
+      CHECK(commitRes.error().code == Error::Code::IoError);
+
+      auto read = library.readTransaction();
+      CHECK(library.libraryRevision(read) == 0);
+    }
+
+    auto reopened = makeTestMusicLibrary(temp.path(), databasePath);
+    auto reopenedRead = reopened.readTransaction();
+    CHECK(reopened.libraryRevision(reopenedRead) == 0);
+  }
+
+  TEST_CASE("MusicLibrary metadata - candidate revision comes from the durable writer snapshot",
+            "[library][integration][write-transaction][concurrency]")
+  {
+    constexpr auto kTimeout = std::chrono::seconds{15};
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+    auto library = makeTestMusicLibrary(temp.path(), databasePath);
+    auto const executablePath = ao::test::siblingProbeExecutablePath("ao_library_probe");
+    REQUIRE_FALSE(executablePath.empty());
+    auto const scenario = std::string{"commit-revision:"} + temp.path().filename().string();
+    auto const result = ao::test::runProbeProcess(executablePath, scenario, kTimeout);
+
+    REQUIRE(result.hasSuccessfulExit());
+    CHECK(result.standardOutput == "committed-revision=1");
+    CHECK(result.standardError.empty());
+
+    {
+      auto read = library.readTransaction();
+      CHECK(library.libraryRevision(read) == 1);
+    }
+
+    {
+      auto write = writeTransaction(library);
+      CHECK(library.libraryRevision(write) == 2);
+      REQUIRE(write.commit());
+    }
+
+    auto read = library.readTransaction();
+    CHECK(library.libraryRevision(read) == 2);
+  }
+
+  TEST_CASE("MusicLibrary - external dictionary commits refresh snapshots and later writer admission",
+            "[library][integration][dictionary][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto originalId = DictionaryId{};
+    {
+      auto write = writeTransaction(library);
+      originalId = ao::test::requireValue(physicalDictionary(write).intern("Original borrowed text"));
+      REQUIRE(write.commit());
+    }
+
+    auto const original = library.dictionary().get(originalId);
+    auto const* originalAddress = original.data();
+    auto oldRead = library.readTransaction();
+    auto const previousGeneration = library.dictionary().generation();
+    auto const result = ao::test::runProbeProcess(ao::test::siblingProbeExecutablePath("ao_library_probe"),
+                                                  std::string{"commit-dictionary:"} + temp.path().filename().string(),
+                                                  std::chrono::seconds{15});
+    REQUIRE(result.hasSuccessfulExit());
+    REQUIRE(result.standardOutput == "committed-dictionary");
+
+    SECTION("a fresh read resolves every newly referenced dictionary value")
+    {
+      auto fresh = library.readTransaction();
+      auto const optTrack = library.tracks().reader(fresh).get(TrackId{1});
+      REQUIRE(optTrack);
+      CHECK(optTrack->metadata().title() == "Child title");
+      CHECK(library.dictionary().get(optTrack->metadata().artistId()) == "Child artist");
+      CHECK_FALSE(library.tracks().reader(oldRead).get(TrackId{1}));
+    }
+
+    SECTION("writer acquisition refreshes the open-to-lease gap without a preceding fresh read")
+    {
+      auto writer = requireWritableLibrary(library);
+      REQUIRE(library.dictionary().findId("Child artist"));
+      auto write = writer.writeTransaction();
+      auto const childId = ao::test::requireValue(physicalDictionary(write).intern("Child artist"));
+      CHECK(library.dictionary().get(childId) == "Child artist");
+      auto const addedRes = physicalDictionary(write).intern("Later parent value");
+      REQUIRE(addedRes);
+      REQUIRE(write.commit());
+      CHECK(library.dictionary().get(*addedRes) == "Later parent value");
+    }
+
+    CHECK(library.dictionary().generation() > previousGeneration);
+    CHECK(original == "Original borrowed text");
+    CHECK(original.data() == originalAddress);
+    CHECK(library.dictionary().get(originalId).data() == originalAddress);
+  }
+} // namespace ao::library::test

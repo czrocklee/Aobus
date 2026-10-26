@@ -230,13 +230,13 @@ Adding an extension requires the single dispatch entry plus parser, scan, payloa
 
 ## Test authority
 
-- Format tests under [`test/unit/media/file/`](../../../test/unit/media/file) lock exact fields, covers, codecs, payloads, errors, and lifetime behavior.
-- [`FileTest.cpp`](../../../test/integration/media/file/FileTest.cpp) locks real fixtures.
-- [`Mp4FileTest.cpp`](../../../test/unit/media/file/Mp4FileTest.cpp) locks declared text type/version admission for scalar and credit text, omission of unsupported text forms, and preservation of declared UTF-8 bytes for library admission.
-- [`ScanPlanTest.cpp`](../../../test/unit/runtime/library/ScanPlanTest.cpp) locks recognition.
-- [`AudioIdentityTest.cpp`](../../../test/unit/library/AudioIdentityTest.cpp) locks payload hashing.
-- [`CreditReaderTest.cpp`](../../../test/unit/media/file/id3v2/CreditReaderTest.cpp), [`VorbisCreditTest.cpp`](../../../test/unit/media/file/VorbisCreditTest.cpp), and [`WavCreditContentTest.cpp`](../../../test/unit/media/file/WavCreditContentTest.cpp) specify positional extraction, conservative suffix handling, cross-chunk order/duplicates, and backing lifetime.
-- [`WavFileTest.cpp`](../../../test/unit/media/file/WavFileTest.cpp) includes embedded APIC and unsynchronised-content cases.
+- Format tests under [`test/media/file/`](../../../test/media/file) lock exact fields, covers, codecs, payloads, errors, and lifetime behavior.
+- [`MediaFileFixtureTest.cpp`](../../../test/media/file/MediaFileFixtureTest.cpp) locks real fixtures.
+- [`Mp4FileTest.cpp`](../../../test/media/file/Mp4FileTest.cpp) locks declared text type/version admission for scalar and credit text, omission of unsupported text forms, and preservation of declared UTF-8 bytes for library admission.
+- [`ScanPlanTest.cpp`](../../../test/runtime/library/ScanPlanTest.cpp) locks recognition.
+- [`AudioIdentityTest.cpp`](../../../test/library/AudioIdentityTest.cpp) locks payload hashing.
+- [`CreditReaderTest.cpp`](../../../test/media/file/id3v2/CreditReaderTest.cpp), [`VorbisCreditTest.cpp`](../../../test/media/file/VorbisCreditTest.cpp), and [`WavCreditContentTest.cpp`](../../../test/media/file/WavCreditContentTest.cpp) specify positional extraction, conservative suffix handling, cross-chunk order/duplicates, and backing lifetime.
+- [`WavFileTest.cpp`](../../../test/media/file/WavFileTest.cpp) includes embedded APIC and unsynchronised-content cases.
 
 ## Related documents
 

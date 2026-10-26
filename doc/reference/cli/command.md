@@ -322,11 +322,11 @@ Otherwise the next argument becomes the role: `--credit conductor X "" --dry-run
 
 ## Test authority
 
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects the command tree and representative exact shapes.
-- [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects encoding rules.
-- [`ListDestructiveCommandTest.cpp`](../../../test/unit/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal, saved-order cleanup, order edits refused while a stored filter is invalid, and rejected negated presence flags.
-- [`TrackPerformanceMetadataCommandTest.cpp`](../../../test/unit/cli/TrackPerformanceMetadataCommandTest.cpp) protects recording-date and Credits show/update options, literal fixed-triple arguments, native argv dry-run placement, attached-form rejection, exact arity, option context, scope/clear/conflict/rejection rules, negated-clear rejection, and structured sequence output.
-- [`TrackLiteralMetadataCommandTest.cpp`](../../../test/unit/cli/TrackLiteralMetadataCommandTest.cpp) protects literal tag/custom operands, attached and multiargument forms, argument-order set/unset, contextual recognition, and atomic rejection.
+- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) protects the command tree and representative exact shapes.
+- [`OutputTest.cpp`](../../../test/cli/OutputTest.cpp) protects encoding rules.
+- [`ListDestructiveCommandTest.cpp`](../../../test/cli/ListDestructiveCommandTest.cpp) protects subtree preview/commit, dependent-List refusal, saved-order cleanup, order edits refused while a stored filter is invalid, and rejected negated presence flags.
+- [`TrackPerformanceMetadataCommandTest.cpp`](../../../test/cli/TrackPerformanceMetadataCommandTest.cpp) protects recording-date and Credits show/update options, literal fixed-triple arguments, native argv dry-run placement, attached-form rejection, exact arity, option context, scope/clear/conflict/rejection rules, negated-clear rejection, and structured sequence output.
+- [`TrackLiteralMetadataCommandTest.cpp`](../../../test/cli/TrackLiteralMetadataCommandTest.cpp) protects literal tag/custom operands, attached and multiargument forms, argument-order set/unset, contextual recognition, and atomic rejection.
 
 ## Related documents
 

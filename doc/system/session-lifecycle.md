@@ -129,7 +129,7 @@ restoration cannot compete with library switching or crash recovery. This is a
 shared startup contract, not a smoke-only override. The production helper is in
 [`DesktopApplication.mm`](../../app/macos-appkit/DesktopApplication.mm); the
 merge/preservation regression is in
-[`AppKitSmokeMain.mm`](../../test/integration/macos/AppKitSmokeMain.mm).
+[`AppKitSmokeMain.mm`](../../test/macos-appkit/AppKitSmokeMain.mm).
 
 `LibrarySession` emplaces its returned `AppRuntime` before providers, workspace
 restore, playback restore, or UIModel borrowers. The runtime-owned

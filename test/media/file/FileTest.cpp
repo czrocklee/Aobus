@@ -1,0 +1,184 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include <ao/media/file/File.h>
+
+#include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureSupport.h"
+#include "test/media/file/TestFile.h"
+#include <ao/media/file/Visitor.h>
+
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <cstdint>
+#include <span>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace ao::media::file::test
+{
+  using namespace ao::test;
+
+  static_assert(std::is_move_constructible_v<File>);
+  static_assert(!std::is_move_assignable_v<File>);
+
+  TEST_CASE("Media File - recognizes and opens supported extensions", "[media][unit][file][factory]")
+  {
+    constexpr auto kExtensions = std::to_array<std::string_view>({".mp3", ".m4a", ".flac", ".wav", ".opus"});
+
+    for (auto const extension : kExtensions)
+    {
+      CAPTURE(extension);
+      auto const temp = TempFile{extension};
+      CHECK(File::isSupported(temp.path));
+      CHECK(File::open(temp.path));
+    }
+  }
+
+  TEST_CASE("Media File - isSupported accepts mixed-case extensions", "[media][unit][file][factory]")
+  {
+    // isSupported normalizes the path extension to ASCII lowercase before the
+    // supported-extension lookup, so uppercase and mixed-case spellings match.
+    constexpr auto kMixedCaseExtensions = std::to_array<std::string_view>({
+      ".FLAC",
+      ".FlAc",
+      ".MP3",
+      ".M4A",
+      ".WAV",
+      ".OPUS",
+    });
+
+    for (auto const extension : kMixedCaseExtensions)
+    {
+      CAPTURE(extension);
+      auto const temp = TempFile{extension};
+      CHECK(File::isSupported(temp.path));
+    }
+  }
+
+  TEST_CASE("Media File - rejects unsupported extensions", "[media][unit][file][factory]")
+  {
+    SECTION("unknown extension")
+    {
+      auto const temp = TempFile{".txt"};
+      CHECK_FALSE(File::isSupported(temp.path));
+
+      auto fileRes = File::open(temp.path);
+      REQUIRE_FALSE(fileRes);
+      CHECK(fileRes.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("video container extension")
+    {
+      auto const temp = TempFile{".mp4"};
+      CHECK_FALSE(File::isSupported(temp.path));
+
+      auto fileRes = File::open(temp.path);
+      REQUIRE_FALSE(fileRes);
+      CHECK(fileRes.error().code == Error::Code::NotSupported);
+    }
+  }
+
+  TEST_CASE("Media File - reports inaccessible supported input", "[media][unit][file][factory]")
+  {
+    auto const tempDir = TempDir{};
+    auto const path = tempDir.path() / "missing.mp3";
+    REQUIRE(File::isSupported(path));
+    auto fileRes = File::open(path);
+    REQUIRE_FALSE(fileRes);
+    CHECK(fileRes.error().code == Error::Code::IoError);
+  }
+
+  TEST_CASE("Media File - emits no visitor callbacks when required parsing fails", "[media][unit][file][visitor]")
+  {
+    auto const bytes = std::to_array<std::uint8_t>({'b', 'a', 'd'});
+    auto const temp = TempFile{bytes, ".flac"};
+    auto file = requireValue(File::open(temp.path));
+    auto content = RecordedContent{};
+    auto visitor = VisitorSpy{content};
+
+    auto res = file.visit(visitor);
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::CorruptData);
+    CHECK(content.callCount() == 0);
+  }
+
+  TEST_CASE("Media File - moving transfers stable borrowed views", "[media][unit][file]")
+  {
+    auto file = requireValue(File::open(audio::test::requireAudioFixture("basic_metadata.flac")));
+    auto firstPayload = requireValue(file.audioPayload());
+    auto const* const payloadAddress = firstPayload.bytes.data();
+
+    auto movedFile = std::move(file);
+    auto secondPayload = requireValue(movedFile.audioPayload());
+    auto content = RecordedContent{};
+    auto visitor = VisitorSpy{content};
+
+    REQUIRE(movedFile.visit(visitor));
+    CHECK(secondPayload.bytes.data() == payloadAddress);
+    CHECK(content.callCount() > 0);
+  }
+
+  TEST_CASE("Media File - visit emits fields in the documented callback order", "[media][unit][file][visitor]")
+  {
+    auto file = requireValue(File::open(audio::test::requireAudioFixture("classical_metadata.mp3")));
+    auto content = RecordedContent{};
+    auto visitor = VisitorSpy{content};
+
+    REQUIRE(file.visit(visitor));
+
+    using Event = RecordedContent::CallbackEvent;
+    using Kind = RecordedContent::CallbackKind;
+    auto const expected = std::vector<Event>{
+      {Kind::Text, static_cast<std::uint8_t>(TextField::Title)},
+      {Kind::Text, static_cast<std::uint8_t>(TextField::Artist)},
+      {Kind::Text, static_cast<std::uint8_t>(TextField::Album)},
+      {Kind::Text, static_cast<std::uint8_t>(TextField::Composer)},
+      {Kind::Text, static_cast<std::uint8_t>(TextField::Genre)},
+      {Kind::Text, static_cast<std::uint8_t>(TextField::Work)},
+      {Kind::Text, static_cast<std::uint8_t>(TextField::Movement)},
+      {Kind::Number, static_cast<std::uint8_t>(NumberField::Year)},
+      {Kind::Number, static_cast<std::uint8_t>(NumberField::TrackNumber)},
+      {Kind::Number, static_cast<std::uint8_t>(NumberField::TrackTotal)},
+      {Kind::Number, static_cast<std::uint8_t>(NumberField::MovementNumber)},
+      {Kind::Number, static_cast<std::uint8_t>(NumberField::MovementTotal)},
+      {Kind::Codec},
+      {Kind::Duration},
+      {Kind::Bitrate},
+      {Kind::SampleRate},
+      {Kind::Channels},
+      {Kind::BitDepth},
+      {Kind::Credits},
+    };
+
+    CHECK(content.events() == expected);
+    CHECK(content.credits() == std::vector<RecordedContent::Credit>{
+                                 {.name = "Fixture Conductor", .kind = CreditKind::Conductor},
+                                 {.name = "Fixture Ensemble", .kind = CreditKind::Ensemble},
+                                 {.name = "Fixture Soloist", .kind = CreditKind::Soloist},
+                               });
+  }
+
+  TEST_CASE("Media File - repeated visits retain earlier decoded string views", "[media][unit][file]")
+  {
+    auto file = requireValue(File::open(audio::test::requireAudioFixture("basic_metadata.mp3")));
+    auto first = RecordedContent{};
+    auto firstVisitor = VisitorSpy{first};
+    REQUIRE(file.visit(firstVisitor));
+    auto const firstTitle = first.text(TextField::Title);
+    auto const* const firstAddress = firstTitle.data();
+
+    auto second = RecordedContent{};
+    auto secondVisitor = VisitorSpy{second};
+    REQUIRE(file.visit(secondVisitor));
+
+    CHECK(firstTitle == "Test Title");
+    CHECK(second.text(TextField::Title) == "Test Title");
+    CHECK(second.text(TextField::Title).data() == firstAddress);
+  }
+} // namespace ao::media::file::test

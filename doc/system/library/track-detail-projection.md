@@ -81,8 +81,8 @@ Its observer signal weak-invalidates outstanding subscriptions when the projecti
 
 ## Test map
 
-- [`TrackDetailProjectionTest.cpp`](../../../test/unit/runtime/projection/TrackDetailProjectionTest.cpp) proves target following, immediate subscription, tracked-view destruction, intersecting refresh, common/mixed fields, missing tracks and views, single-track tags, custom metadata aggregation, and the distinction between read-backed empty snapshots and unresolved revision-zero snapshots.
-- [`TrackDetailPerformanceTest.cpp`](../../../test/unit/runtime/projection/TrackDetailPerformanceTest.cpp) proves owning per-kind Credits, common empty sections, complete ordered equality, mixed sections, independent common categories, and intersecting refresh.
+- [`TrackDetailProjectionTest.cpp`](../../../test/runtime/projection/TrackDetailProjectionTest.cpp) proves target following, immediate subscription, tracked-view destruction, intersecting refresh, common/mixed fields, missing tracks and views, single-track tags, custom metadata aggregation, and the distinction between read-backed empty snapshots and unresolved revision-zero snapshots.
+- [`TrackDetailPerformanceTest.cpp`](../../../test/runtime/projection/TrackDetailPerformanceTest.cpp) proves owning per-kind Credits, common empty sections, complete ordered equality, mixed sections, independent common categories, and intersecting refresh.
 
 ## Related documents
 

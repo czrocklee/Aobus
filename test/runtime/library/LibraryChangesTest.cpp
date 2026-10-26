@@ -1,0 +1,760 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+#include <ao/rt/library/LibraryChanges.h>
+
+#include "runtime/library/LibraryWriteLane.h"
+#include "test/TestFixtureSupport.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/runtime/AsyncTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "test/runtime/library/LibraryChangesTestAccess.h"
+#include "test/runtime/library/LibraryWriteLaneTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
+#include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
+#include <ao/compat/MoveOnlyFunction.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/WriteTransaction.h>
+#include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibraryCommands.h>
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <memory>
+#include <stdexcept>
+#include <stop_token>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace ao::rt::test
+{
+  namespace
+  {
+    class CompletionBeforeForeignDispatchReturnsExecutor final : public async::Executor
+    {
+    public:
+      bool isCurrent() const noexcept override { return _delegate.isCurrent(); }
+
+      void dispatch(compat::MoveOnlyFunction<void()> task) override
+      {
+        if (isCurrent())
+        {
+          task();
+          return;
+        }
+
+        auto completed = AsyncTestState<bool>::create(false);
+        // Keep the submitting thread inside dispatch until the owner has run
+        // the publication, forcing completion to win the rendezvous.
+        _delegate.dispatch(
+          [task = std::move(task), completed] mutable
+          {
+            task();
+            completed.set(true);
+          });
+
+        if (!completed.tryWaitUntil(true))
+        {
+          throw std::runtime_error{"Timed out waiting for controlled foreign dispatch completion"};
+        }
+
+        _foreignDispatchReturned.set(true);
+      }
+
+      void defer(compat::MoveOnlyFunction<void()> task) override { _delegate.defer(std::move(task)); }
+      void drain() { _delegate.drain(); }
+      bool tryWaitUntilQueued() const { return _delegate.tryWaitUntilQueued(); }
+      bool hasForeignDispatchReturned() const { return _foreignDispatchReturned.load(); }
+
+    private:
+      QueuedExecutor _delegate;
+      AsyncTestState<bool> _foreignDispatchReturned = AsyncTestState<bool>::create(false);
+    };
+
+    async::Task<Result<MutationExecution<std::uint8_t>>> executeRevisionOnlyAsync(
+      LibraryWriteLane::Submission submission,
+      library::WriteTransaction::Options options = {})
+    {
+      return executeInteractiveMutationAsync(
+        std::move(submission),
+        [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+        { return Changed<std::uint8_t>{.value = 1, .changeSet = {}}; },
+        std::move(options));
+    }
+
+    async::Task<Result<>> abortInteractiveAsync(LibraryWriteLane::Submission submission)
+    {
+      auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
+
+      if (!mutationRes)
+      {
+        co_return std::unexpected{mutationRes.error()};
+      }
+
+      mutationRes->abort();
+      co_return Result<>{};
+    }
+
+    async::Task<Result<>> moveAndAbortInteractiveAsync(LibraryWriteLane::Submission submission)
+    {
+      auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
+
+      if (!mutationRes)
+      {
+        co_return std::unexpected{mutationRes.error()};
+      }
+
+      auto first = std::move(*mutationRes);
+      auto second = std::move(first);
+      auto finalOwner = std::move(second);
+      // Moved-from mutations are deliberately exercised as inert value handles.
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      first.abort();
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      second.abort();
+      co_return Result<>{};
+    }
+
+    async::Task<void> holdMovedInteractiveMutationAsync(LibraryWriteLane::Submission submission,
+                                                        AsyncTestState<bool> ready,
+                                                        AsyncTestState<bool> closingObserved,
+                                                        AsyncBarrier* release)
+    {
+      REQUIRE(release != nullptr);
+      auto mutationRes = co_await LibraryWriteLane::beginInteractiveMutationAsync(std::move(submission));
+      REQUIRE(mutationRes);
+      auto first = std::move(*mutationRes);
+      auto second = std::move(first);
+      auto finalOwner = std::move(second);
+      auto releaseOnClosing = std::stop_callback{finalOwner.closingStopToken(),
+                                                 [closingObserved, release]
+                                                 {
+                                                   closingObserved.set(true);
+                                                   release->release();
+                                                 }};
+      ready.set(true);
+      release->wait();
+      // Moved-from mutations are deliberately exercised as inert value handles.
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      first.abort();
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      second.abort();
+      finalOwner.abort();
+    }
+
+    async::Task<Result<>> abortMaintenanceMutationAsync(LibraryWriteLane::Submission submission,
+                                                        LibraryWriteLane::MaintenanceGuard const* guard)
+    {
+      REQUIRE(guard != nullptr);
+      auto mutationRes = co_await LibraryWriteLane::beginMaintenanceMutationAsync(std::move(submission), *guard);
+
+      if (!mutationRes)
+      {
+        co_return std::unexpected{mutationRes.error()};
+      }
+
+      mutationRes->abort();
+      co_return Result<>{};
+    }
+
+    async::Task<AuthoringStatus> beginAndAbortAuthoringAsync(LibraryWriteLane::Submission submission,
+                                                             BoundTrackTargets targets)
+    {
+      auto start = co_await LibraryWriteLane::beginAuthoringMutationAsync(std::move(submission), std::move(targets));
+
+      if (start.optMutation)
+      {
+        start.optMutation->abort();
+      }
+
+      co_return start.status;
+    }
+
+    async::Task<void> holdWorkerAsync(AsyncTestState<bool> ready, AsyncBarrier* release)
+    {
+      REQUIRE(release != nullptr);
+      ready.set(true);
+      release->wait();
+      co_return;
+    }
+
+    async::Task<Result<MutationExecution<std::uint8_t>>> executeMaintenanceRevisionAsync(
+      LibraryWriteLane::Submission enterSubmission,
+      LibraryWriteLane::Submission mutationSubmission)
+    {
+      auto guardRes = co_await LibraryWriteLane::beginMaintenanceAsync(std::move(enterSubmission));
+
+      if (!guardRes)
+      {
+        co_return std::unexpected{guardRes.error()};
+      }
+
+      auto guard = std::move(*guardRes);
+      auto mutationRes = co_await LibraryWriteLane::beginMaintenanceMutationAsync(std::move(mutationSubmission), guard);
+
+      if (!mutationRes)
+      {
+        auto error = mutationRes.error();
+        co_await guard.finishAsync();
+        co_return std::unexpected{std::move(error)};
+      }
+
+      auto executionRes =
+        co_await mutationRes->executeAsync([](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                           { return Changed<std::uint8_t>{.value = 1, .changeSet = {}}; });
+      co_await guard.finishAsync();
+      co_return executionRes;
+    }
+
+    struct MutationTestEnvironment final
+    {
+      MutationTestEnvironment()
+        : runtime{executor}
+        , changes{executor, 0, "test-library"}
+        , lane{runtime.callbackExecutor(),
+               ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+               changes}
+      {
+      }
+
+      template<typename T>
+      T run(async::Task<T> task)
+      {
+        return runQueuedTask(runtime, executor, std::move(task));
+      }
+
+      MusicLibraryFixture libraryFixture;
+      QueuedExecutor executor;
+      async::Runtime runtime;
+      LibraryChanges changes;
+      LibraryWriteLane lane;
+    };
+  } // namespace
+
+  TEST_CASE("LibraryChanges - publication completes when no replica is bound", "[runtime][unit][library][changeset]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Before");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    std::size_t appliedCount = 0;
+    std::size_t notifiedCount = 0;
+    auto subscription = changes.onChanged([&notifiedCount](LibraryChangeSet const&) noexcept { ++notifiedCount; });
+
+    {
+      auto replicaBinding = LibraryChangesAccess::bindReplica(
+        changes, "CountingReplica", [&appliedCount](LibraryChangeSet const&) noexcept { ++appliedCount; });
+      REQUIRE(commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Bound"}));
+    }
+
+    REQUIRE(commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Unbound"}));
+
+    CHECK(appliedCount == 1);
+    CHECK(notifiedCount == 2);
+    CHECK(commandsFixture.library().authoringAvailability().state == LibraryAuthoringState::Available);
+  }
+
+  TEST_CASE("Library mutation execution - Changed commits its value and exact change set",
+            "[runtime][unit][library][changeset]")
+  {
+    auto env = MutationTestEnvironment{};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      env.changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
+    auto executionRes = env.run(executeInteractiveMutationAsync(
+      env.lane.captureSubmission(),
+      [&env](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
+      {
+        auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+          env.libraryFixture.library(), write, library::test::TrackSpec{.title = "Executed"});
+        return Changed<TrackId>{.value = trackId, .changeSet = LibraryChangeSet{.tracksInserted = {trackId}}};
+      }));
+
+    REQUIRE(executionRes);
+    REQUIRE(executionRes->optCommittedRevision);
+    CHECK(*executionRes->optCommittedRevision == 1);
+    REQUIRE(executionRes->value != kInvalidTrackId);
+    REQUIRE(observed.size() == 1);
+    CHECK(observed.front() == (LibraryChangeSet{.libraryRevision = 1, .tracksInserted = {executionRes->value}}));
+    auto read = env.libraryFixture.library().readTransaction();
+    CHECK(env.libraryFixture.library()
+            .tracks()
+            .reader(read)
+            .get(executionRes->value, library::TrackStore::Reader::LoadMode::Both)
+            .has_value());
+  }
+
+  TEST_CASE("Library mutation execution - Unchanged aborts staged storage and does not publish",
+            "[runtime][unit][library][changeset]")
+  {
+    auto env = MutationTestEnvironment{};
+    std::size_t changedCount = 0;
+    auto subscription = env.changes.onChanged([&changedCount](LibraryChangeSet const&) noexcept { ++changedCount; });
+    auto executionRes = env.run(executeInteractiveMutationAsync(
+      env.lane.captureSubmission(),
+      [&env](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
+      {
+        auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+          env.libraryFixture.library(), write, library::test::TrackSpec{.title = "Rolled back"});
+        return Unchanged<TrackId>{.value = trackId};
+      }));
+
+    REQUIRE(executionRes);
+    CHECK_FALSE(executionRes->optCommittedRevision);
+    CHECK(changedCount == 0);
+    auto read = env.libraryFixture.library().readTransaction();
+    CHECK(env.libraryFixture.library().libraryRevision(read) == 0);
+    CHECK_FALSE(env.libraryFixture.library().tracks().reader(read).get(
+      executionRes->value, library::TrackStore::Reader::LoadMode::Both));
+    REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
+  }
+
+  TEST_CASE("Library mutation - move chains preserve one live command admission", "[runtime][unit][library]")
+  {
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<LibraryWriteLane::Mutation>);
+    STATIC_REQUIRE_FALSE(std::is_move_assignable_v<LibraryWriteLane::Mutation>);
+    auto env = MutationTestEnvironment{};
+
+    REQUIRE(env.run(moveAndAbortInteractiveAsync(env.lane.captureSubmission())));
+    REQUIRE(env.run(abortInteractiveAsync(env.lane.captureSubmission())));
+  }
+
+  TEST_CASE("Library mutation - Closing waits for the final owner in a move chain",
+            "[runtime][unit][library][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
+    auto servicePtr = std::make_unique<LibraryWriteLane>(
+      runtime.callbackExecutor(),
+      ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+      changes);
+    auto ready = AsyncTestState<bool>::create(false);
+    auto closingObserved = AsyncTestState<bool>::create(false);
+    auto release = AsyncBarrier{};
+    auto future = runtime.spawn(
+      holdMovedInteractiveMutationAsync(servicePtr->captureSubmission(), ready, closingObserved, &release));
+    auto const entered = ready.tryWaitUntil(true);
+
+    if (!entered)
+    {
+      release.release();
+      servicePtr.reset();
+      runtime.requestStop();
+      runtime.join();
+    }
+
+    REQUIRE(entered);
+
+    servicePtr.reset();
+
+    CHECK(closingObserved.load());
+    CHECK_NOTHROW(future.get());
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("Library mutation execution - errors and exceptions release admission", "[runtime][unit][library]")
+  {
+    auto env = MutationTestEnvironment{};
+
+    SECTION("Result error")
+    {
+      auto executionRes =
+        env.run(executeInteractiveMutationAsync(env.lane.captureSubmission(),
+                                                [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                                { return makeError(Error::Code::Conflict, "rejected"); }));
+
+      REQUIRE_FALSE(executionRes);
+      CHECK(executionRes.error().code == Error::Code::Conflict);
+      REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
+    }
+
+    SECTION("exception")
+    {
+      CHECK_THROWS_WITH(
+        env.run(executeInteractiveMutationAsync(env.lane.captureSubmission(),
+                                                [](library::LibraryWrite&) -> Result<OperationOutcome<std::uint8_t>>
+                                                { throw std::runtime_error{"execute failure"}; })),
+        "execute failure");
+      REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
+    }
+
+    SECTION("explicit abort")
+    {
+      REQUIRE(env.run(abortInteractiveAsync(env.lane.captureSubmission())));
+      REQUIRE(env.run(executeRevisionOnlyAsync(env.lane.captureSubmission())));
+    }
+  }
+
+  TEST_CASE("Library mutation execution - commit failure rolls back and releases admission",
+            "[runtime][unit][library][changeset]")
+  {
+    auto env = MutationTestEnvironment{};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      env.changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
+    auto stagedTrackId = kInvalidTrackId;
+    auto executionRes = env.run(executeInteractiveMutationAsync(
+      env.lane.captureSubmission(),
+      [&env, &stagedTrackId](library::LibraryWrite& write) -> Result<OperationOutcome<TrackId>>
+      {
+        stagedTrackId = library::test::addTrackWithUniqueFixtureUri(
+          env.libraryFixture.library(), write, library::test::TrackSpec{.title = "Rolled back commit"});
+        return Changed<TrackId>{
+          .value = stagedTrackId, .changeSet = LibraryChangeSet{.tracksInserted = {stagedTrackId}}};
+      },
+      library::WriteTransaction::Options{
+        .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected runtime commit failure"},
+      },
+      "Create track"));
+
+    REQUIRE_FALSE(executionRes);
+    CHECK(executionRes.error().code == Error::Code::IoError);
+    CHECK(executionRes.error().message == "Create track commit failed: injected runtime commit failure");
+    CHECK(stagedTrackId != kInvalidTrackId);
+    CHECK(observed.empty());
+    CHECK(env.lane.availability().libraryRevision == 0);
+    {
+      auto read = env.libraryFixture.library().readTransaction();
+      CHECK(env.libraryFixture.library().libraryRevision(read) == 0);
+      CHECK_FALSE(env.libraryFixture.library().tracks().reader(read).get(
+        stagedTrackId, library::TrackStore::Reader::LoadMode::Both));
+    }
+
+    auto retryRes = env.run(executeRevisionOnlyAsync(env.lane.captureSubmission()));
+    REQUIRE(retryRes);
+    REQUIRE(retryRes->optCommittedRevision);
+    CHECK(*retryRes->optCommittedRevision == 1);
+    REQUIRE(observed.size() == 1);
+    CHECK(observed.front().libraryRevision == 1);
+  }
+
+  TEST_CASE("LibraryChanges - applies the replica before notifying observers", "[runtime][unit][library][changeset]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Before");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto phases = std::array<std::string_view, 2>{};
+    std::size_t phaseCount = 0;
+    auto replicaBinding = LibraryChangesAccess::bindReplica(changes,
+                                                            "OrderingReplica",
+                                                            [&phases, &phaseCount](LibraryChangeSet const&) noexcept
+                                                            { phases[phaseCount++] = "replica"; });
+    auto observerSubscription = changes.onChanged([&phases, &phaseCount](LibraryChangeSet const&) noexcept
+                                                  { phases[phaseCount++] = "observer"; });
+
+    REQUIRE(commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"}));
+
+    CHECK(phaseCount == phases.size());
+    CHECK(phases == std::array<std::string_view, 2>{"replica", "observer"});
+  }
+
+  TEST_CASE("LibraryChanges - only one replica may be bound at a time", "[runtime][unit][library][changeset]")
+  {
+    auto changes = makeStateOnlyLibraryChanges();
+    auto binding = LibraryChangesAccess::bindReplica(changes, "FirstReplica", [](LibraryChangeSet const&) noexcept {});
+
+    binding.reset();
+    auto rebinding = async::Subscription{};
+    CHECK_NOTHROW(
+      rebinding = LibraryChangesAccess::bindReplica(changes, "SecondReplica", [](LibraryChangeSet const&) noexcept {}));
+  }
+
+  TEST_CASE("LibraryChanges - replica subscription reset is safe after owner destruction",
+            "[runtime][unit][library][async]")
+  {
+    auto changesPtr = std::make_unique<LibraryChanges>(stateOnlyLibraryExecutor(), 0, "test-library");
+    auto binding = LibraryChangesAccess::bindReplica(*changesPtr, "Replica", [](LibraryChangeSet const&) noexcept {});
+
+    changesPtr.reset();
+
+    CHECK_NOTHROW(binding.reset());
+  }
+
+  TEST_CASE("LibraryChanges - queued weak delivery is inert after owner destruction",
+            "[runtime][unit][library][concurrency]")
+  {
+    auto executor = QueuedExecutor{};
+    auto changesPtr = std::make_unique<LibraryChanges>(executor, 0, "test-library");
+    std::size_t deliveryCount = 0;
+    auto binding = LibraryChangesAccess::bindReplica(
+      *changesPtr, "Replica", [&deliveryCount](LibraryChangeSet const&) noexcept { ++deliveryCount; });
+
+    LibraryChangesAccess::publish(*changesPtr, LibraryChangeSet{.libraryRevision = 1});
+    REQUIRE(executor.tryWaitUntilQueued());
+
+    changesPtr.reset();
+    CHECK_NOTHROW(executor.drain());
+    CHECK(deliveryCount == 0);
+    CHECK_NOTHROW(binding.reset());
+  }
+
+  TEST_CASE("Library write sequencer - Closing retires an admitted publication and releases its command",
+            "[runtime][unit][library][changeset][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
+    auto servicePtr = std::make_unique<LibraryWriteLane>(
+      runtime.callbackExecutor(),
+      ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+      changes);
+    auto future = runtime.spawn(executeRevisionOnlyAsync(servicePtr->captureSubmission()));
+
+    REQUIRE(executor.tryWaitUntilQueued());
+    CHECK(executor.queuedCount() == 1);
+
+    servicePtr.reset();
+    auto const exceptionPtr = captureTaskFutureException(future);
+    REQUIRE(exceptionPtr);
+    CHECK(async::isOperationCancelled(exceptionPtr));
+    CHECK_NOTHROW(executor.runUntilIdle());
+    CHECK(executor.queuedCount() == 0);
+  }
+
+  TEST_CASE("Library write sequencer - Maintenance revision settles before workflow availability",
+            "[runtime][unit][library][changeset][concurrency]")
+  {
+    auto env = MutationTestEnvironment{};
+    auto phases = std::vector<std::string_view>{};
+    auto changedSubscription =
+      env.changes.onChanged([&phases](LibraryChangeSet const&) noexcept { phases.emplace_back("publication"); });
+    auto availabilitySubscription = env.lane.onAvailabilityChanged(
+      [&phases](LibraryAuthoringAvailability const& availability) noexcept
+      { phases.emplace_back(availability.state == LibraryAuthoringState::Maintenance ? "maintenance" : "available"); });
+    auto const enterSubmission = env.lane.captureSubmission();
+    auto const mutationSubmission = env.lane.captureSubmission();
+
+    auto executionRes = env.run(executeMaintenanceRevisionAsync(enterSubmission, mutationSubmission));
+
+    REQUIRE(executionRes);
+    REQUIRE(executionRes->optCommittedRevision);
+    CHECK(phases == std::vector<std::string_view>{"maintenance", "publication", "available"});
+    CHECK(env.lane.availability().state == LibraryAuthoringState::Available);
+  }
+
+  TEST_CASE("Library write sequencer - maintenance control delivery retains admission through callback completion",
+            "[runtime][unit][library][changeset][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
+    auto writeLane =
+      LibraryWriteLane{runtime.callbackExecutor(),
+                       ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+                       changes};
+    auto observed = std::vector<LibraryAuthoringState>{};
+    auto availabilitySubscription =
+      writeLane.onAvailabilityChanged([&observed](LibraryAuthoringAvailability const& availability) noexcept
+                                      { observed.push_back(availability.state); });
+    auto enter = runtime.spawn(LibraryWriteLane::beginMaintenanceAsync(writeLane.captureSubmission()));
+
+    REQUIRE(executor.tryWaitUntilQueued());
+    CHECK(executor.queuedCount() == 1);
+    CHECK(writeLane.availability().state == LibraryAuthoringState::Maintenance);
+    REQUIRE(executor.tryRunOne());
+    auto enterRes = enter.get();
+    REQUIRE(enterRes);
+    auto guard = std::move(*enterRes);
+    auto maintenanceMutation = runtime.spawn(abortMaintenanceMutationAsync(writeLane.captureSubmission(), &guard));
+    REQUIRE(maintenanceMutation.get());
+
+    auto exit = runtime.spawn(guard.finishAsync());
+    REQUIRE(executor.tryWaitUntilQueued());
+    CHECK(executor.queuedCount() == 1);
+    CHECK(writeLane.availability().state == LibraryAuthoringState::Available);
+    REQUIRE(executor.tryRunOne());
+    CHECK_NOTHROW(exit.get());
+
+    CHECK(observed ==
+          std::vector<LibraryAuthoringState>{LibraryAuthoringState::Maintenance, LibraryAuthoringState::Available});
+    auto next = runtime.spawn(abortInteractiveAsync(writeLane.captureSubmission()));
+    REQUIRE(next.get());
+  }
+
+  TEST_CASE("Library write sequencer - Closing retires blocked maintenance control delivery",
+            "[runtime][unit][library][changeset][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
+    auto servicePtr = std::make_unique<LibraryWriteLane>(
+      runtime.callbackExecutor(),
+      ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+      changes);
+
+    SECTION("MaintenanceEnter")
+    {
+      auto enter = runtime.spawn(LibraryWriteLane::beginMaintenanceAsync(servicePtr->captureSubmission()));
+      REQUIRE(executor.tryWaitUntilQueued());
+      CHECK(executor.queuedCount() == 1);
+      servicePtr.reset();
+      auto const exceptionPtr = captureTaskFutureException(enter);
+      REQUIRE(exceptionPtr);
+      CHECK(async::isOperationCancelled(exceptionPtr));
+    }
+
+    SECTION("MaintenanceExit")
+    {
+      auto enter = runtime.spawn(LibraryWriteLane::beginMaintenanceAsync(servicePtr->captureSubmission()));
+      REQUIRE(executor.tryWaitUntilQueued());
+      REQUIRE(executor.tryRunOne());
+      auto enterRes = enter.get();
+      REQUIRE(enterRes);
+      auto guard = std::move(*enterRes);
+      auto exit = runtime.spawn(guard.finishAsync());
+      REQUIRE(executor.tryWaitUntilQueued());
+      CHECK(executor.queuedCount() == 1);
+      servicePtr.reset();
+      auto const exceptionPtr = captureTaskFutureException(exit);
+      REQUIRE(exceptionPtr);
+      CHECK(async::isOperationCancelled(exceptionPtr));
+    }
+
+    CHECK_NOTHROW(executor.runUntilIdle());
+    CHECK(executor.queuedCount() == 0);
+  }
+
+  TEST_CASE("LibraryChanges - foreign publication may complete before its submission call returns",
+            "[runtime][unit][library][changeset][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = CompletionBeforeForeignDispatchReturnsExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
+    auto writeLane =
+      LibraryWriteLane{runtime.callbackExecutor(),
+                       ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+                       changes};
+    bool notified = false;
+    bool notifiedBeforeSubmissionReturned = false;
+    auto changedSubscription = changes.onChanged(
+      [&executor, &notified, &notifiedBeforeSubmissionReturned](LibraryChangeSet const&) noexcept
+      {
+        notified = true;
+        notifiedBeforeSubmissionReturned = !executor.hasForeignDispatchReturned();
+      });
+    auto committed = runtime.spawn(executeRevisionOnlyAsync(writeLane.captureSubmission()));
+
+    REQUIRE(executor.tryWaitUntilQueued());
+    executor.drain();
+
+    REQUIRE(committed.get());
+    CHECK(notified);
+    CHECK(notifiedBeforeSubmissionReturned);
+    CHECK(writeLane.availability().libraryRevision == 1);
+  }
+
+  TEST_CASE("Library write sequencer - a second outstanding interactive command reports Busy",
+            "[runtime][unit][library][changeset][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = ManualExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto changes = LibraryChanges{executor, 0, "test-library"};
+    auto writeLane =
+      LibraryWriteLane{runtime.callbackExecutor(),
+                       ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+                       changes};
+    auto const firstSubmission = writeLane.captureSubmission();
+    auto const secondSubmission = writeLane.captureSubmission();
+    auto first = runtime.spawn(executeRevisionOnlyAsync(firstSubmission));
+
+    REQUIRE(executor.tryWaitUntilQueued());
+    REQUIRE(executor.queuedCount() == 1);
+    auto second = runtime.spawn(executeRevisionOnlyAsync(secondSubmission));
+
+    auto secondRes = second.get();
+    REQUIRE_FALSE(secondRes);
+    CHECK(secondRes.error().code == Error::Code::ResourceBusy);
+
+    executor.runUntilIdle();
+    REQUIRE(first.get());
+
+    auto third = runtime.spawn(executeRevisionOnlyAsync(writeLane.captureSubmission()));
+    REQUIRE(executor.tryWaitUntilQueued());
+    executor.runUntilIdle();
+    REQUIRE(third.get());
+  }
+
+  TEST_CASE("Library write sequencer - a later callback turn reports Busy while publication settles",
+            "[runtime][unit][library][library-authoring][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Bound target");
+    auto executor = ManualExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto writeLane =
+      LibraryWriteLane{runtime.callbackExecutor(),
+                       ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())),
+                       changes};
+    auto committed = runtime.spawn(executeRevisionOnlyAsync(writeLane.captureSubmission()));
+
+    REQUIRE(executor.tryWaitUntilQueued());
+
+    auto workerReady = AsyncTestState<bool>::create(false);
+    auto releaseWorker = AsyncBarrier{};
+    auto workerBlocker = runtime.spawn(holdWorkerAsync(workerReady, &releaseWorker));
+    REQUIRE(workerReady.tryWaitUntil(true));
+
+    REQUIRE(executor.tryRunOne());
+    CHECK(executor.queuedCount() == 0);
+
+    auto const trackIds = std::array{trackId};
+    auto targetsRes = writeLane.bindTrackTargets(trackIds);
+    REQUIRE(targetsRes);
+    CHECK(targetsRes->matches(writeLane.availability()));
+
+    auto contenderRuntime = async::Runtime{executor, 1};
+    auto contender = contenderRuntime.spawn(beginAndAbortAuthoringAsync(writeLane.captureSubmission(), *targetsRes));
+
+    CHECK(contender.get() == AuthoringStatus::Busy);
+    CHECK(targetsRes->matches(writeLane.availability()));
+
+    releaseWorker.release();
+    workerBlocker.get();
+    REQUIRE(committed.get());
+  }
+
+  TEST_CASE("LibraryChanges - writer commits publish once with the in-band revision",
+            "[runtime][unit][library][changeset]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Before");
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
+    auto commandsFixture = LibraryCommandsFixture{libraryFixture.library(), changes};
+    auto observed = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      changes.onChanged([&observed](LibraryChangeSet const& changeSet) noexcept { observed.push_back(changeSet); });
+
+    REQUIRE(commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"}));
+    REQUIRE(commandsFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"}));
+
+    REQUIRE(observed.size() == 1);
+    CHECK(observed[0].tracksMutated == std::vector{trackId});
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == observed[0].libraryRevision);
+  }
+} // namespace ao::rt::test

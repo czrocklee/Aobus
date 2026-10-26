@@ -116,11 +116,11 @@ They handle expected fallible work locally; an exception that escapes instead is
 
 ## Test map
 
-- [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) protects compact priority and task transitions.
-- [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) protects grouping, expiry, updates, and compact suppression.
-- [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) protects detail eligibility, ordering, and local hiding.
-- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) protects rendering, deadlines, and subscriptions.
-- [`AppKitActivityExpirationScenario.mm`](../../../test/integration/macos/AppKitActivityExpirationScenario.mm) controls the model clock and native timer delivery to protect coalesced A-B-A transitions, early wakeup rearming, and cancellation without a playback timer.
+- [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) protects compact priority and task transitions.
+- [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) protects grouping, expiry, updates, and compact suppression.
+- [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) protects detail eligibility, ordering, and local hiding.
+- [`ActivityStatusViewModelTest.cpp`](../../../test/uimodel/status/activity/ActivityStatusViewModelTest.cpp) protects rendering, deadlines, and subscriptions.
+- [`AppKitActivityExpirationScenario.mm`](../../../test/macos-appkit/AppKitActivityExpirationScenario.mm) controls the model clock and native timer delivery to protect coalesced A-B-A transitions, early wakeup rearming, and cancellation without a playback timer.
 
 ## Related documents
 

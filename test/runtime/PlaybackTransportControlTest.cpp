@@ -1,0 +1,423 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "runtime/playback/PlaybackTransport.h"
+#include "test/audio/AudioFixtureSupport.h"
+#include "test/audio/BackendTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
+#include "test/runtime/PlaybackTestSupport.h"
+#include "test/runtime/PlaybackTransportTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/Transport.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/PlaybackState.h>
+
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <fakeit.hpp>
+
+#include <array>
+#include <chrono>
+#include <cstdint>
+#include <limits>
+#include <utility>
+
+namespace ao::rt::test
+{
+  TEST_CASE("PlaybackTransport control - initial state is correct", "[runtime][unit][playback][control]")
+  {
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+
+    auto const& state = fixture.playbackTransport.state();
+    CHECK(state.nowPlaying == NowPlayingInfo{});
+    CHECK(state.duration == std::chrono::milliseconds{0});
+    CHECK(state.elapsed == std::chrono::milliseconds{0});
+  }
+
+  TEST_CASE("PlaybackTransport control - play pause resume and stop", "[runtime][unit][playback][control]")
+  {
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+
+    bool preparingFired = false;
+    auto subPrep = fixture.playbackTransport.onPreparing([&] noexcept { preparingFired = true; });
+
+    bool startedFired = false;
+    auto subStart = fixture.playbackTransport.onStarted([&] noexcept { startedFired = true; });
+
+    bool nowPlayingFired = false;
+    auto subNow = fixture.playbackTransport.onNowPlayingChanged(
+      [&](auto const& ev) noexcept
+      {
+        if (ev.trackId == TrackId{1})
+        {
+          nowPlayingFired = true;
+        }
+      });
+
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const desc = playbackRequest(TrackId{1},
+                                      fixturePath,
+                                      "Fake Track",
+                                      "Fake Artist",
+                                      std::chrono::minutes{2},
+                                      "Fake Album",
+                                      ResourceId{77},
+                                      ViewId{9});
+
+    REQUIRE(fixture.playbackTransport.play(desc, ListId{1}));
+
+    CHECK(preparingFired);
+    CHECK(startedFired);
+    CHECK(nowPlayingFired);
+    CHECK(fixture.playbackTransport.state().nowPlaying == NowPlayingInfo{.trackId = TrackId{1},
+                                                                         .sourceListId = ListId{1},
+                                                                         .sourceViewId = ViewId{9},
+                                                                         .coverArtId = ResourceId{77},
+                                                                         .title = "Fake Track",
+                                                                         .artist = "Fake Artist",
+                                                                         .album = "Fake Album"});
+
+    bool pausedFired = false;
+    auto subPause = fixture.playbackTransport.onPaused([&] noexcept { pausedFired = true; });
+    fixture.playbackTransport.pause();
+    CHECK(pausedFired);
+
+    startedFired = false;
+    fixture.playbackTransport.resume();
+    CHECK(startedFired);
+
+    fixture.playbackTransport.seek(std::chrono::milliseconds{50});
+    CHECK(fixture.playbackTransport.state().elapsed == std::chrono::milliseconds{50});
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
+
+    bool stoppedFired = false;
+    auto subStop = fixture.playbackTransport.onStopped([&] noexcept { stoppedFired = true; });
+    bool idleFired = false;
+    auto subIdle = fixture.playbackTransport.onIdle([&] noexcept { idleFired = true; });
+
+    fixture.playbackTransport.stop();
+    CHECK(stoppedFired);
+    CHECK(idleFired);
+    CHECK(fixture.playbackTransport.state().nowPlaying.trackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("PlaybackTransport control - pause and resume publish only real transitions",
+            "[runtime][unit][playback][control]")
+  {
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+    std::int32_t pausedCount = 0;
+    std::int32_t startedCount = 0;
+    auto pausedSub = fixture.playbackTransport.onPaused([&] noexcept { ++pausedCount; });
+    auto startedSub = fixture.playbackTransport.onStarted([&] noexcept { ++startedCount; });
+
+    fixture.playbackTransport.pause();
+    fixture.playbackTransport.resume();
+
+    CHECK(pausedCount == 0);
+    CHECK(startedCount == 0);
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const request =
+      playbackRequest(TrackId{2}, fixturePath, "Transition Track", "Transition Artist", std::chrono::minutes{2});
+
+    REQUIRE(fixture.playbackTransport.play(request, ListId{1}));
+    startedCount = 0;
+
+    fixture.playbackTransport.pause();
+    fixture.playbackTransport.pause();
+
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Paused);
+    CHECK(pausedCount == 1);
+
+    fixture.playbackTransport.resume();
+    fixture.playbackTransport.resume();
+
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
+    CHECK(startedCount == 1);
+  }
+
+  TEST_CASE("PlaybackTransport control - seek updates state and fires event", "[runtime][unit][playback][control]")
+  {
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const request = playbackRequest(TrackId{1}, fixturePath, "Seek Track", "Artist", std::chrono::minutes{2});
+    REQUIRE(fixture.playbackTransport.play(request, ListId{1}));
+    fixture.playbackTransport.pause();
+    REQUIRE(fixture.playbackTransport.state().duration > std::chrono::milliseconds{50});
+
+    bool seekFired = false;
+    auto observedElapsed = std::chrono::milliseconds{};
+    auto observedMode = PlaybackTransport::SeekMode::Preview;
+    auto sub = fixture.playbackTransport.onSeekUpdate(
+      [&](auto const& ev) noexcept
+      {
+        seekFired = true;
+        observedElapsed = ev.elapsed;
+        observedMode = ev.mode;
+      });
+
+    fixture.playbackTransport.seek(std::chrono::milliseconds{50}, PlaybackTransport::SeekMode::Final);
+    CHECK(seekFired);
+    CHECK(observedElapsed == std::chrono::milliseconds{50});
+    CHECK(observedMode == PlaybackTransport::SeekMode::Final);
+    CHECK(fixture.playbackTransport.state().elapsed == std::chrono::milliseconds{50});
+  }
+
+  TEST_CASE("PlaybackTransport control - volume and muted controls update state", "[runtime][unit][playback][control]")
+  {
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+
+    bool mutedChangedFired = false;
+    bool lastMutedState = false;
+    auto sub = fixture.playbackTransport.onMutedChanged(
+      [&](bool const muted) noexcept
+      {
+        mutedChangedFired = true;
+        lastMutedState = muted;
+      });
+
+    fixture.playbackTransport.setVolume(0.5F);
+    CHECK(fixture.playbackTransport.state().volume.level == 0.5F);
+    CHECK(fixture.playbackTransport.state().volume.hardwareAssisted == true);
+
+    fixture.playbackTransport.setVolume(5.0F);
+    CHECK(fixture.playbackTransport.state().volume.level == 1.0F);
+
+    fixture.playbackTransport.setVolume(-1.0F);
+    CHECK(fixture.playbackTransport.state().volume.level == 0.0F);
+
+    fixture.playbackTransport.setVolume(std::numeric_limits<float>::quiet_NaN());
+    CHECK(fixture.playbackTransport.state().volume.level == 1.0F);
+
+    fixture.playbackTransport.setMuted(true);
+    CHECK(fixture.playbackTransport.state().volume.muted == true);
+    CHECK(mutedChangedFired);
+    CHECK(lastMutedState == true);
+  }
+
+  TEST_CASE("PlaybackTransport control - backend fallback capability is projected without notifications",
+            "[runtime][unit][playback][control]")
+  {
+    bool muteControl = false;
+    bool controlFails = false;
+
+    SECTION("volume control succeeds")
+    {
+    }
+
+    SECTION("volume control fails")
+    {
+      controlFails = true;
+    }
+
+    SECTION("mute control succeeds")
+    {
+      muteControl = true;
+    }
+
+    SECTION("mute control fails")
+    {
+      muteControl = true;
+      controlFails = true;
+    }
+
+    bool hardwareAssisted = true;
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+    audio::test::SpyBackend<>& backend = *fixture.spyBackendPtr;
+    auto& backendMock = backend.mock();
+
+    fakeit::When(Method(backendMock, property))
+      .AlwaysDo(
+        [muteControl](audio::PropertyId id) -> Result<audio::PropertyValue>
+        {
+          if (id == audio::PropertyId::Volume)
+          {
+            return muteControl ? 0.4F : 1.0F;
+          }
+
+          if (id == audio::PropertyId::Muted)
+          {
+            return false;
+          }
+
+          return makeError(Error::Code::NotSupported);
+        });
+    fakeit::When(Method(backendMock, queryProperty))
+      .AlwaysDo(
+        [&](audio::PropertyId id) -> audio::PropertyInfo
+        {
+          if (id != audio::PropertyId::Volume)
+          {
+            return {};
+          }
+
+          return {.canRead = true,
+                  .canWrite = true,
+                  .isAvailable = true,
+                  .emitsChangeNotifications = false,
+                  .isHardwareAssisted = hardwareAssisted};
+        });
+    fakeit::When(Method(backendMock, setProperty))
+      .AlwaysDo(
+        [&](audio::PropertyId, audio::PropertyValue const&) -> Result<>
+        {
+          hardwareAssisted = false;
+
+          if (controlFails)
+          {
+            return makeError(Error::Code::IoError, "simulated control failure");
+          }
+
+          return {};
+        });
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    REQUIRE(fixture.playbackTransport.state().volume.hardwareAssisted);
+
+    if (muteControl)
+    {
+      fixture.playbackTransport.setMuted(true);
+    }
+    else
+    {
+      fixture.playbackTransport.setVolume(0.4F);
+    }
+
+    auto const& volume = fixture.playbackTransport.state().volume;
+    CHECK(volume.level == 0.4F);
+    CHECK(volume.muted == muteControl);
+    CHECK(volume.available);
+    CHECK_FALSE(volume.hardwareAssisted);
+  }
+
+  TEST_CASE("PlaybackTransport control - backend volume is normalized before publication",
+            "[runtime][unit][playback][control]")
+  {
+    bool muted = false;
+
+    SECTION("unmuted backend")
+    {
+    }
+
+    SECTION("muted backend")
+    {
+      muted = true;
+    }
+
+    for (auto const& [backendLevel, expectedLevel] :
+         std::array{std::pair<float, float>{0.42F, 0.42F},
+                    std::pair<float, float>{-0.5F, 0.0F},
+                    std::pair<float, float>{1.5F, 1.0F},
+                    std::pair<float, float>{std::numeric_limits<float>::quiet_NaN(), 1.0F},
+                    std::pair<float, float>{std::numeric_limits<float>::infinity(), 1.0F}})
+    {
+      CAPTURE(backendLevel, muted);
+      auto fixture = PlaybackTransportFixture<InlineExecutor>{};
+      audio::test::SpyBackend<>& backend = *fixture.spyBackendPtr;
+      auto& backendMock = backend.mock();
+      fakeit::When(Method(backendMock, property))
+        .AlwaysDo(
+          [backendLevel, muted](audio::PropertyId const id) -> Result<audio::PropertyValue>
+          {
+            if (id == audio::PropertyId::Volume)
+            {
+              return backendLevel;
+            }
+
+            if (id == audio::PropertyId::Muted)
+            {
+              return muted;
+            }
+
+            return 0.0F;
+          });
+
+      fixture.onDevicesChangedCb(fixture.status.devices);
+      fakeit::Verify(Method(backendMock, setProperty)).Never();
+
+      auto const& volume = fixture.playbackTransport.state().volume;
+      CHECK(volume.level == expectedLevel);
+      CHECK(volume.muted == muted);
+      CHECK(volume.available);
+      CHECK(volume.hardwareAssisted);
+    }
+  }
+
+  TEST_CASE("PlaybackTransport control - commands refresh state synchronously", "[runtime][unit][playback][control]")
+  {
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
+
+    // The provider callback is marshalled onto the executor, so the auto-select
+    // does not take effect until the queued task drains.
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+    CHECK(fixture.playbackTransport.state().ready);
+
+    bool startedFired = false;
+    auto subStarted = fixture.playbackTransport.onStarted([&] noexcept { startedFired = true; });
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const desc =
+      playbackRequest(TrackId{77}, fixturePath, "Deferred Track", "Deferred Artist", std::chrono::minutes{4});
+
+    REQUIRE(fixture.playbackTransport.play(desc, ListId{9}));
+
+    // Control commands run on the executor thread (affinity contract), so they
+    // refresh the state snapshot and emit their signals synchronously - no
+    // executor turn is required, unlike the async Player callbacks.
+    CHECK(startedFired);
+    CHECK(fixture.playbackTransport.state().nowPlaying.trackId == TrackId{77});
+    CHECK(fixture.playbackTransport.state().nowPlaying.sourceListId == ListId{9});
+
+    // Draining any executor-deferred Player state callbacks leaves it intact.
+    fixture.executor.drain();
+
+    CHECK(fixture.playbackTransport.state().nowPlaying.trackId == TrackId{77});
+    CHECK(fixture.playbackTransport.state().nowPlaying.sourceListId == ListId{9});
+  }
+
+  TEST_CASE("PlaybackTransport control - rejected play does not emit success", "[runtime][unit][playback][control]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto notificationService = NotificationService{runtime};
+    auto playbackTransport = makePlaybackTransport(executor, libraryFixture.library(), notificationService);
+
+    bool preparingFired = false;
+    auto subPreparing = playbackTransport.onPreparing([&] noexcept { preparingFired = true; });
+
+    bool startedFired = false;
+    auto subStarted = playbackTransport.onStarted([&] noexcept { startedFired = true; });
+
+    bool nowPlayingFired = false;
+    auto subNowPlaying = playbackTransport.onNowPlayingChanged([&](PlaybackTransport::NowPlayingChanged const&) noexcept
+                                                               { nowPlayingFired = true; });
+
+    auto const desc =
+      playbackRequest(TrackId{12}, "/not/started.flac", "Rejected Track", "Rejected Artist", std::chrono::minutes{5});
+
+    auto const res = playbackTransport.play(desc, ListId{3});
+
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidState);
+    CHECK(preparingFired);
+    CHECK_FALSE(startedFired);
+    CHECK_FALSE(nowPlayingFired);
+    CHECK(playbackTransport.state().nowPlaying.trackId == kInvalidTrackId);
+    CHECK(playbackTransport.state().nowPlaying.sourceListId == kInvalidListId);
+    CHECK(playbackTransport.state().nowPlaying.title.empty());
+    auto const feed = notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+  }
+} // namespace ao::rt::test

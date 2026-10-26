@@ -9,8 +9,8 @@
 #include "lib/audio/detail/EngineRtSignalRing.h"
 #include "lib/audio/detail/RenderTimeline.h"
 #include "lib/audio/detail/TrackSession.h"
-#include "test/unit/audio/EngineTestSupport.h"
-#include "test/unit/audio/FakeCapturingBackend.h"
+#include "test/audio/EngineTestSupport.h"
+#include "test/audio/FakeCapturingBackend.h"
 #include <ao/Error.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/PcmFormat.h>

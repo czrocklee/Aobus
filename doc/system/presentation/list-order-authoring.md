@@ -207,15 +207,15 @@ All frontends preserve stable-ID operands, complete-sequence semantics, revision
 
 ## Test map
 
-- [`ListOrderCapabilitiesTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, selection/gap normalization, and invalid TrackId rejection.
-- [`ListOrderAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, the localized refusal of a binding that outruns published availability, movement, invalidation, move-only facade semantics, and pending submission after moved and destroyed facades.
-- [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects maintenance admission, including rejection of List-order binding while authoring is unavailable.
-- [`KeyRepeatGuardTest.cpp`](../../../test/unit/uimodel/input/KeyRepeatGuardTest.cpp) protects physical-key repeat suppression.
-- [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects GTK eligibility and command adaptation.
-- [`TagEditControllerTest.cpp`](../../../test/unit/linux-gtk/tag/TagEditControllerTest.cpp) protects the visible Manual Order menu capability split.
-- [`TrackSelectionControllerTest.cpp`](../../../test/unit/linux-gtk/track/TrackSelectionControllerTest.cpp) protects the blank-area right-click no-menu contract.
-- [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects installation of the four native-only WinUI movement actions without adding layout-action descriptors; native Windows smoke covers context-menu eligibility and command dispatch.
-- [`ListOrderControllerTest.cpp`](../../../test/unit/tui/ListOrderControllerTest.cpp) protects the TUI submission outcomes, including a stale binding as transient guidance and a rejected command as a lasting warning that releases the gate, blocking reasons, and the drop of a command that arrives while one is in flight; [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects Alt navigation projection and chord editing, and [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects chord and `:order` dispatch, focus follow, virtual-source refusal, and overlay suppression.
+- [`ListOrderCapabilitiesTest.cpp`](../../../test/uimodel/library/list/ListOrderCapabilitiesTest.cpp) protects the capability matrix, including quick-filter and maintenance reasons, selection/gap normalization, and invalid TrackId rejection.
+- [`ListOrderAuthoringSessionTest.cpp`](../../../test/uimodel/library/list/ListOrderAuthoringSessionTest.cpp) protects binding, the localized refusal of a binding that outruns published availability, movement, invalidation, move-only facade semantics, and pending submission after moved and destroyed facades.
+- [`LibraryAuthoringTest.cpp`](../../../test/runtime/library/LibraryAuthoringTest.cpp) protects maintenance admission, including rejection of List-order binding while authoring is unavailable.
+- [`KeyRepeatGuardTest.cpp`](../../../test/uimodel/input/KeyRepeatGuardTest.cpp) protects physical-key repeat suppression.
+- [`TrackViewPageTest.cpp`](../../../test/linux-gtk/track/TrackViewPageTest.cpp) protects GTK eligibility and command adaptation.
+- [`TagEditControllerTest.cpp`](../../../test/linux-gtk/tag/TagEditControllerTest.cpp) protects the visible Manual Order menu capability split.
+- [`TrackSelectionControllerTest.cpp`](../../../test/linux-gtk/track/TrackSelectionControllerTest.cpp) protects the blank-area right-click no-menu contract.
+- [`KeymapAcceleratorPlanTest.cpp`](../../../test/winui/input/KeymapAcceleratorPlanTest.cpp) protects installation of the four native-only WinUI movement actions without adding layout-action descriptors; native Windows smoke covers context-menu eligibility and command dispatch.
+- [`ListOrderControllerTest.cpp`](../../../test/tui/ListOrderControllerTest.cpp) protects the TUI submission outcomes, including a stale binding as transient guidance and a rejected command as a lasting warning that releases the gate, blocking reasons, and the drop of a command that arrives while one is in flight; [`KeymapTest.cpp`](../../../test/tui/KeymapTest.cpp) protects Alt navigation projection and chord editing, and [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp) protects chord and `:order` dispatch, focus follow, virtual-source refusal, and overlay suppression.
 
 ## Related documents
 

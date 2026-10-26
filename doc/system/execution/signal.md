@@ -90,9 +90,9 @@ Destroying a signal before a posted callback runs turns that callback into a suc
 
 ## Test map
 
-- [`SignalTest.cpp`](../../../test/unit/async/SignalTest.cpp) covers connection order, move-only handlers, connect/disconnect during emission, nested emission, self-disconnection lifetime, `disconnectAll`, subscription moves, owner destruction, decayed posts, later turns, and destroyed-owner posts.
+- [`SignalTest.cpp`](../../../test/async/SignalTest.cpp) covers connection order, move-only handlers, connect/disconnect during emission, nested emission, self-disconnection lifetime, `disconnectAll`, subscription moves, owner destruction, decayed posts, later turns, and destroyed-owner posts.
 - Fatal subprocess coverage protects off-owner connect, disconnect, and emission diagnostics plus escaping observer diagnostics and abort behavior.
-- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) proves that the reporting owner adds immutable reentrant-update queuing above the generic primitive.
+- [`NotificationServiceTest.cpp`](../../../test/runtime/NotificationServiceTest.cpp) proves that the reporting owner adds immutable reentrant-update queuing above the generic primitive.
 
 ## Related documents
 

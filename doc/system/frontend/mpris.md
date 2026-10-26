@@ -163,15 +163,15 @@ Cover-art resource behavior also follows the [cover-art delivery specification](
 
 ## Test map
 
-Focused Linux integration sources live under [`test/integration/linux/systemmedia/`](../../../test/integration/linux/systemmedia):
+Focused Linux integration sources live under [`test/systemmedia/linux/`](../../../test/systemmedia/linux):
 
-- [`MprisBridgeTest.cpp`](../../../test/integration/linux/systemmedia/MprisBridgeTest.cpp) covers state, command, capability, and content-addressed artwork mapping.
-- [`MprisPlaybackPositionTest.cpp`](../../../test/integration/linux/systemmedia/MprisPlaybackPositionTest.cpp) covers live-clock and queued occurrence-guarded positioning.
-- [`MprisArtUrlSessionTest.cpp`](../../../test/integration/linux/systemmedia/MprisArtUrlSessionTest.cpp) covers request replacement, synchronous completion, cancellation ordering, and destruction.
-- [`MprisBridgeIntegrationTest.cpp`](../../../test/integration/linux/systemmedia/MprisBridgeIntegrationTest.cpp) covers private-bus properties, independent identities, no-queue contention, startup rollback, replacement after retirement, and Quit.
-- [`MprisBusSessionTest.cpp`](../../../test/integration/linux/systemmedia/MprisBusSessionTest.cpp) covers owned invocation disposal, repeated close/publication settlement, fragmented, closed, rejected, malformed, oversized, and stalled authentication, GUID verification, authenticated `Hello` cancellation, spoofed and genuine name loss, address selection and rejection, partial-registration rollback, and stalled-write flush deadlines.
-- [`MprisSignalTest.cpp`](../../../test/integration/linux/systemmedia/MprisSignalTest.cpp) checks changed-property signal order before a later live query.
-- [`TuiMprisProcessTest.cpp`](../../../test/integration/linux/systemmedia/TuiMprisProcessTest.cpp) exercises the real parser and TUI process on owned PTYs/private buses: auto/off, invalid options, child-environment discovery, acknowledged Quit, and keyboard/signal exit. It does not establish physical desktop-client behavior; its normal/ASan availability follows the [suite contract](../../development/test/test-suite.md).
+- [`MprisBridgeTest.cpp`](../../../test/systemmedia/linux/MprisBridgeTest.cpp) covers state, command, capability, and content-addressed artwork mapping.
+- [`MprisPlaybackPositionTest.cpp`](../../../test/systemmedia/linux/MprisPlaybackPositionTest.cpp) covers live-clock and queued occurrence-guarded positioning.
+- [`MprisArtUrlSessionTest.cpp`](../../../test/systemmedia/linux/MprisArtUrlSessionTest.cpp) covers request replacement, synchronous completion, cancellation ordering, and destruction.
+- [`MprisBridgeIntegrationTest.cpp`](../../../test/systemmedia/linux/MprisBridgeIntegrationTest.cpp) covers private-bus properties, independent identities, no-queue contention, startup rollback, replacement after retirement, and Quit.
+- [`MprisBusSessionTest.cpp`](../../../test/systemmedia/linux/MprisBusSessionTest.cpp) covers owned invocation disposal, repeated close/publication settlement, fragmented, closed, rejected, malformed, oversized, and stalled authentication, GUID verification, authenticated `Hello` cancellation, spoofed and genuine name loss, address selection and rejection, partial-registration rollback, and stalled-write flush deadlines.
+- [`MprisSignalTest.cpp`](../../../test/systemmedia/linux/MprisSignalTest.cpp) checks changed-property signal order before a later live query.
+- [`TuiMprisProcessTest.cpp`](../../../test/systemmedia/linux/TuiMprisProcessTest.cpp) exercises the real parser and TUI process on owned PTYs/private buses: auto/off, invalid options, child-environment discovery, acknowledged Quit, and keyboard/signal exit. It does not establish physical desktop-client behavior; its normal/ASan availability follows the [suite contract](../../development/test/test-suite.md).
 
 ## Related documents
 

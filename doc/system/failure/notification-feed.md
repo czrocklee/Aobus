@@ -107,8 +107,8 @@ UIModel resolves structured reports through the [text catalog](../presentation/t
 
 ## Test map
 
-- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) protects identity, bounds, history eviction, keyed replacement, observer delivery, and reentrant FIFO delivery.
-- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects executor-returned expiry, registration-identity checks, cancellation, and teardown safety.
+- [`NotificationServiceTest.cpp`](../../../test/runtime/NotificationServiceTest.cpp) protects identity, bounds, history eviction, keyed replacement, observer delivery, and reentrant FIFO delivery.
+- [`NotificationServiceExpiryTest.cpp`](../../../test/runtime/NotificationServiceExpiryTest.cpp) protects executor-returned expiry, registration-identity checks, cancellation, and teardown safety.
 
 ## Related documents
 

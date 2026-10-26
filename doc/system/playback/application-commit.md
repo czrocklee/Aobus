@@ -366,23 +366,23 @@ producers while succession and the remaining runtime graph are alive.
 
 ## Test map
 
-- [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp)
+- [`PlaybackServiceTest.cpp`](../../../test/runtime/PlaybackServiceTest.cpp)
   protects coherent publication, observer deferral, FIFO ordering, supersession,
   terminal exception closure, scheduler rejection, and queued-command lifetime.
-- [`PlaybackGuardedSeekTest.cpp`](../../../test/unit/runtime/PlaybackGuardedSeekTest.cpp)
+- [`PlaybackGuardedSeekTest.cpp`](../../../test/runtime/PlaybackGuardedSeekTest.cpp)
   protects guarded-seek identity, validation, synchronous backlog rejection,
   consecutive issuance, and same-track lower/publication lag.
-- [`PlaybackSuccessionLaunchTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp),
-  [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp),
-  and [`PlaybackSuccessionFailureTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp)
+- [`PlaybackSuccessionLaunchTest.cpp`](../../../test/runtime/PlaybackSuccessionLaunchTest.cpp),
+  [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/runtime/PlaybackSuccessionAdvanceTest.cpp),
+  and [`PlaybackSuccessionFailureTest.cpp`](../../../test/runtime/PlaybackSuccessionFailureTest.cpp)
   protect asynchronous admission, failure isolation, candidate installation,
   and prepared-next correlation.
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp)
+- [`PlaybackSessionTest.cpp`](../../../test/runtime/PlaybackSessionTest.cpp)
   protects coherent restore, repeated-restore baselines, backlog/reentrant restore
   rejection, and deferred nested commands.
-- [`PlaybackTransportTokenTest.cpp`](../../../test/unit/runtime/PlaybackTransportTokenTest.cpp)
+- [`PlaybackTransportTokenTest.cpp`](../../../test/runtime/PlaybackTransportTokenTest.cpp)
   protects internal event delivery order across an accepted replacement.
-- [`PlaybackTransportControlTest.cpp`](../../../test/unit/runtime/PlaybackTransportControlTest.cpp)
+- [`PlaybackTransportControlTest.cpp`](../../../test/runtime/PlaybackTransportControlTest.cpp)
   protects pause/resume transient events against idle and duplicate commands and normalizes backend-originated volume before runtime publication, including while muted;
   fatal subprocess coverage protects off-executor snapshot, command, and event access.
 

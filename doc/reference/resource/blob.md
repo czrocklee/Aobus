@@ -128,12 +128,12 @@ If a `full` document declares length `1024` for a digest whose row already holds
 
 ## Test authority
 
-- [`Sha256Test.cpp`](../../../test/unit/utility/Sha256Test.cpp) protects published digest vectors, hexadecimal spelling, and parsing.
-- [`ResourceLayoutTest.cpp`](../../../test/unit/library/ResourceLayoutTest.cpp) protects descriptor size, alignment, byte order, and id derivation.
-- [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) protects id creation, digest reuse, collision probing, declared and counted descriptor evidence, reads, removal, clear, and errors.
-- [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects valid references in track preparation.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and both absence reports.
-- [`ResourceByteReaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteReaderTest.cpp) protects interactive size, ownership, affinity, absence, cancellation, and carrier-index rebuild behavior.
+- [`Sha256Test.cpp`](../../../test/utility/Sha256Test.cpp) protects published digest vectors, hexadecimal spelling, and parsing.
+- [`ResourceLayoutTest.cpp`](../../../test/library/ResourceLayoutTest.cpp) protects descriptor size, alignment, byte order, and id derivation.
+- [`ResourceStoreTest.cpp`](../../../test/library/ResourceStoreTest.cpp) protects id creation, digest reuse, collision probing, declared and counted descriptor evidence, reads, removal, clear, and errors.
+- [`TrackBuilderCoverArtTest.cpp`](../../../test/library/TrackBuilderCoverArtTest.cpp) protects valid references in track preparation.
+- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) protects descriptor listing, verified byte export, and both absence reports.
+- [`ResourceByteReaderTest.cpp`](../../../test/runtime/resource/ResourceByteReaderTest.cpp) protects interactive size, ownership, affinity, absence, cancellation, and carrier-index rebuild behavior.
 
 ## Related documents
 

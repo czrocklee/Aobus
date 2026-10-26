@@ -141,10 +141,10 @@ YAML/JSON are intended for parsed automation.
 
 ## Test map
 
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects end-to-end parsing, commands, output, dry-run, and failures.
-- [`CliRuntimeTest.cpp`](../../../test/unit/cli/CliRuntimeTest.cpp) protects worker-to-owner completion, callback-failure task completion, exception propagation, and teardown draining.
-- [`OutputTest.cpp`](../../../test/unit/cli/OutputTest.cpp) protects structured scalar/container/optional encoding.
-- [`CommandErrorTest.cpp`](../../../test/unit/cli/CommandErrorTest.cpp) protects domain error adaptation.
+- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) protects end-to-end parsing, commands, output, dry-run, and failures.
+- [`CliRuntimeTest.cpp`](../../../test/cli/CliRuntimeTest.cpp) protects worker-to-owner completion, callback-failure task completion, exception propagation, and teardown draining.
+- [`OutputTest.cpp`](../../../test/cli/OutputTest.cpp) protects structured scalar/container/optional encoding.
+- [`CommandErrorTest.cpp`](../../../test/cli/CommandErrorTest.cpp) protects domain error adaptation.
 
 ## Related documents
 

@@ -93,10 +93,10 @@ It is stored under the platform state location rather than configuration.
 
 ## Test authority
 
-- [`LayoutComponentStateTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutComponentStateTest.cpp) protects strict schema structure, version dispatch, unknown keys, whole-candidate rejection, hash, resolution, and pruning.
-- [`LayoutStatePromoterTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutStatePromoterTest.cpp) protects exact promotion fields and residual state.
-- [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects preset validation, locking, files, and replacement.
-- [`SplitComponentTest.cpp`](../../../test/unit/linux-gtk/layout/components/SplitComponentTest.cpp) and [`CollapsibleSplitComponentTest.cpp`](../../../test/unit/linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp) protect GTK state consumption.
+- [`LayoutComponentStateTest.cpp`](../../../test/uimodel/layout/component/LayoutComponentStateTest.cpp) protects strict schema structure, version dispatch, unknown keys, whole-candidate rejection, hash, resolution, and pruning.
+- [`LayoutStatePromoterTest.cpp`](../../../test/uimodel/layout/component/LayoutStatePromoterTest.cpp) protects exact promotion fields and residual state.
+- [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects preset validation, locking, files, and replacement.
+- [`SplitComponentTest.cpp`](../../../test/linux-gtk/layout/components/SplitComponentTest.cpp) and [`CollapsibleSplitComponentTest.cpp`](../../../test/linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp) protect GTK state consumption.
 
 ## Related documents
 

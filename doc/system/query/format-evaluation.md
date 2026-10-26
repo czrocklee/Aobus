@@ -125,9 +125,9 @@ Interactive GTK and TUI track-list organization uses the separate [track-list pr
 
 ## Test map
 
-- [`FormatExpressionTest.cpp`](../../../test/unit/query/FormatExpressionTest.cpp) proves compilation, output, missing values, access profiles, failures, and field coverage.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) proves plain-output integration and structured-output rejection.
-- [`TerminalTitleTest.cpp`](../../../test/unit/tui/TerminalTitleTest.cpp) proves shared-language compilation, runtime formatting, library-change refresh, sanitization, and terminal-title lifetime behavior.
+- [`FormatExpressionTest.cpp`](../../../test/query/FormatExpressionTest.cpp) proves compilation, output, missing values, access profiles, failures, and field coverage.
+- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) proves plain-output integration and structured-output rejection.
+- [`TerminalTitleTest.cpp`](../../../test/tui/TerminalTitleTest.cpp) proves shared-language compilation, runtime formatting, library-change refresh, sanitization, and terminal-title lifetime behavior.
 
 ## Related documents
 

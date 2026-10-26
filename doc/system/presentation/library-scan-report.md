@@ -103,9 +103,9 @@ placement decisions, not alternate scan verdicts.
   own shell posting and placement. [`LibraryScanController.cpp`](../../../app/tui/LibraryScanController.cpp)
   and AppKit [`LibrarySession.cpp`](../../../app/macos-appkit/LibrarySession.cpp)
   own the other interactive consumers.
-- [`LibraryScanOutcomeTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanOutcomeTest.cpp)
+- [`LibraryScanOutcomeTest.cpp`](../../../test/uimodel/library/task/LibraryScanOutcomeTest.cpp)
   protects verdict precedence, retention, formatting completeness, and deferred
-  work; [`LibraryImportExportWorkflowTest.cpp`](../../../test/unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp)
+  work; [`LibraryImportExportWorkflowTest.cpp`](../../../test/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp)
   protects GTK posting.
 
 ## Related documents

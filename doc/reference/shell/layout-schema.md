@@ -122,10 +122,10 @@ Adding a component or action requires registration, schema and behavior tests, e
 
 ## Test authority
 
-- [`LayoutSchemaTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutSchemaTest.cpp) protects schema lookup, duplicates, action-slot resolution and validation, and the generated shared-vocabulary block.
-- GTK component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components) protect factory metadata and behavior.
-- Action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime) protect registration, validation, activation, and Gio export.
-- Editor schema tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor) protect schema-driven editing.
+- [`LayoutSchemaTest.cpp`](../../../test/uimodel/layout/component/LayoutSchemaTest.cpp) protects schema lookup, duplicates, action-slot resolution and validation, and the generated shared-vocabulary block.
+- GTK component tests under [`test/linux-gtk/layout/components/`](../../../test/linux-gtk/layout/components) protect factory metadata and behavior.
+- Action tests under [`test/linux-gtk/layout/runtime/`](../../../test/linux-gtk/layout/runtime) protect registration, validation, activation, and Gio export.
+- Editor schema tests under [`test/linux-gtk/layout/editor/`](../../../test/linux-gtk/layout/editor) protect schema-driven editing.
 
 ## Related documents
 

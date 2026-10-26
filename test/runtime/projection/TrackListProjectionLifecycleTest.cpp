@@ -1,0 +1,227 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "test/library/TrackTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "test/runtime/projection/TrackListProjectionTestSupport.h"
+#include "test/runtime/source/TrackSourceTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceLease.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <variant>
+#include <vector>
+
+namespace ao::rt::test
+{
+  namespace
+  {
+    class QueryCountingTrackSource final : public TrackSource
+    {
+    public:
+      explicit QueryCountingTrackSource(TrackId trackId)
+        : _trackId{trackId}
+      {
+      }
+
+      std::size_t size() const override
+      {
+        ++_queryCount;
+        return 1;
+      }
+
+      TrackId trackIdAt(std::size_t /*index*/) const override
+      {
+        ++_queryCount;
+        return _trackId;
+      }
+
+      std::optional<std::size_t> indexOf(TrackId trackId) const override
+      {
+        ++_queryCount;
+        return trackId == _trackId ? std::optional<std::size_t>{0} : std::nullopt;
+      }
+
+      std::size_t queryCount() const noexcept { return _queryCount; }
+
+    private:
+      TrackId _trackId{};
+      mutable std::size_t _queryCount = 0;
+    };
+  } // namespace
+
+  TEST_CASE("TrackListProjection - initialized projection exposes source rows and view metadata",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track A", 2020));
+    auto const id2 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track B", 2021));
+    env.setupFiltered({{id1, id2}});
+
+    auto proj = env.createProjection(ViewId{1});
+
+    SECTION("size matches source")
+    {
+      CHECK(proj.size() == 2);
+    }
+
+    SECTION("trackIdAt returns correct tracks in ID order")
+    {
+      CHECK(proj.trackIdAt(0) == id1);
+      CHECK(proj.trackIdAt(1) == id2);
+    }
+
+    SECTION("viewId")
+    {
+      CHECK(proj.viewId() == ViewId{1});
+    }
+
+    SECTION("trackIdAt out of bounds returns invalid")
+    {
+      CHECK(proj.trackIdAt(999) == kInvalidTrackId);
+    }
+
+    SECTION("indexOf returns correct positions")
+    {
+      CHECK(proj.indexOf(id1) == 0);
+      CHECK(proj.indexOf(id2) == 1);
+      CHECK_FALSE(proj.indexOf(TrackId{999}).has_value());
+    }
+  }
+
+  TEST_CASE("TrackListProjection - subscribe immediately publishes reset", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    bool receivedReset = false;
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const sub = proj.subscribe(
+      [&](TrackListProjectionDeltaBatch const& batch) noexcept
+      {
+        receivedReset = true;
+        batches.push_back(batch);
+      });
+
+    CHECK(receivedReset);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
+  }
+
+  TEST_CASE("TrackListProjection - subscribe replays reset to each subscriber", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto firstBatches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto secondBatches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const sub1 = proj.subscribe([&firstBatches](TrackListProjectionDeltaBatch const& batch) noexcept
+                                     { firstBatches.push_back(batch); });
+    auto const sub2 = proj.subscribe([&secondBatches](TrackListProjectionDeltaBatch const& batch) noexcept
+                                     { secondBatches.push_back(batch); });
+
+    REQUIRE(firstBatches.size() == 1);
+    REQUIRE(firstBatches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionReset>(firstBatches.front().deltas.front()));
+    REQUIRE(secondBatches.size() == 1);
+    REQUIRE(secondBatches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionReset>(secondBatches.front().deltas.front()));
+  }
+
+  TEST_CASE("TrackListProjection - subscription reset does not emit additional callbacks",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
+    env.setupFiltered({{id1}});
+
+    auto proj = env.createProjection(ViewId{1});
+    std::int32_t count = 0;
+    auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const&) noexcept { ++count; });
+    auto const initial = count;
+    sub.reset();
+    CHECK(count == initial);
+  }
+
+  TEST_CASE("TrackListProjection - empty source exposes no rows and invalid lookup fallback",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    env.setupFiltered({});
+
+    auto proj = env.createProjection(ViewId{1});
+    CHECK(proj.size() == 0);
+    CHECK(proj.trackIdAt(0) == kInvalidTrackId);
+    CHECK(proj.trackIdAt(999) == kInvalidTrackId);
+  }
+
+  TEST_CASE("TrackListProjection - construction never queries an already invalidated source",
+            "[runtime][unit][projection]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto sourcePtr = std::make_shared<QueryCountingTrackSource>(TrackId{99});
+    TrackSourceAccess::invalidate(*sourcePtr);
+
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    [[maybe_unused]] auto subscription = projection.subscribe(
+      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    projection.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},
+    });
+
+    CHECK(sourcePtr->queryCount() == 0);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionSourceInvalidated>(batches.front().deltas.front()));
+  }
+
+  TEST_CASE("TrackListProjection - source invalidation publishes one terminal batch and no reset afterward",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const id = env.libraryFixture.addTrack(library::test::makeTrackSpec("Track", 2020));
+    env.setupFiltered({{id}});
+    auto proj = env.createProjection(ViewId{1});
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    [[maybe_unused]] auto subscription =
+      proj.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    batches.clear();
+
+    TrackSourceAccess::invalidate(*env.filteredPtr);
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},
+    });
+
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionSourceInvalidated>(batches.front().deltas.front()));
+    CHECK(proj.size() == 0);
+    CHECK(proj.trackIdAt(0) == kInvalidTrackId);
+    CHECK_FALSE(proj.indexOf(id));
+
+    auto lateBatches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto lateSubscription = proj.subscribe([&lateBatches](TrackListProjectionDeltaBatch const& batch) noexcept
+                                           { lateBatches.push_back(batch); });
+    REQUIRE(lateBatches.size() == 1);
+    REQUIRE(lateBatches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionSourceInvalidated>(lateBatches.front().deltas.front()));
+    CHECK_FALSE(static_cast<bool>(lateSubscription));
+  }
+} // namespace ao::rt::test

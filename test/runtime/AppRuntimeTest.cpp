@@ -1,0 +1,466 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include <ao/rt/AppRuntime.h>
+
+#include "lib/audio/NullBackend.h"
+#include "runtime/PlaybackSessionState.h"
+#include "runtime/PlaybackSessionYamlSchema.h"
+#include "runtime/playback/PlaybackSuccession.h"
+#include "runtime/playback/PlaybackTransport.h"
+#include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureSupport.h"
+#include "test/library/MusicLibraryTestSupport.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/AsyncTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
+#include "test/runtime/PlaybackTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/AudioCodec.h>
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/async/Runtime.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/RenderTarget.h>
+#include <ao/audio/SignalFormat.h>
+#include <ao/rt/ConfigStore.h>
+#include <ao/rt/CoreRuntime.h>
+#include <ao/rt/ListMutation.h>
+#include <ao/rt/ListNode.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryCommands.h>
+#include <ao/rt/library/LibraryPaths.h>
+#include <ao/rt/library/LibrarySnapshot.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/source/TrackSourceCache.h>
+#include <ao/utility/ScopedRegistration.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+
+namespace ao::rt::test
+{
+  template<typename Runtime>
+  concept ExposesCoreOwner = requires(Runtime& runtime) { runtime.core(); };
+
+  template<typename Runtime>
+  concept ExposesDatabasePath = requires(Runtime& runtime) { runtime.databasePath(); };
+
+  template<typename Runtime>
+  concept ExposesMusicLibrary = requires(Runtime& runtime) { runtime.musicLibrary(); };
+
+  static_assert(!std::is_base_of_v<CoreRuntime, AppRuntime>);
+  static_assert(std::is_nothrow_move_constructible_v<AppRuntime>);
+  static_assert(!std::is_move_assignable_v<AppRuntime>);
+  static_assert(std::is_final_v<CoreRuntime>);
+  static_assert(std::is_nothrow_move_constructible_v<CoreRuntime>);
+  static_assert(!std::is_move_assignable_v<CoreRuntime>);
+  static_assert(!ExposesCoreOwner<AppRuntime>);
+  static_assert(!ExposesDatabasePath<AppRuntime>);
+  static_assert(!ExposesMusicLibrary<AppRuntime>);
+
+  using namespace ao::test;
+
+  namespace
+  {
+    struct AppRuntimeAudioState final
+    {
+      audio::BackendProvider::OnDevicesChangedCallback onDevicesChanged;
+      audio::RenderTarget* renderTarget = nullptr;
+      AsyncTestState<bool> providerShutdownStarted = AsyncTestState<bool>::create(false);
+    };
+
+    class AppRuntimeBackend final : public audio::NullBackend
+    {
+    public:
+      explicit AppRuntimeBackend(std::shared_ptr<AppRuntimeAudioState> statePtr)
+        : _statePtr{std::move(statePtr)}
+      {
+      }
+
+      audio::BackendOpenResult open(audio::SignalFormat const& sourceFormat, audio::RenderTarget& target) override
+      {
+        _statePtr->renderTarget = &target;
+        return audio::NullBackend::open(sourceFormat, target);
+      }
+
+      audio::BackendId backendId() const override { return audio::BackendId{"test_backend"}; }
+      audio::ProfileId profileId() const override { return audio::ProfileId{audio::kProfileShared}; }
+
+    private:
+      std::shared_ptr<AppRuntimeAudioState> _statePtr;
+    };
+
+    class AppRuntimeProvider final : public audio::BackendProvider
+    {
+    public:
+      explicit AppRuntimeProvider(std::shared_ptr<AppRuntimeAudioState> statePtr)
+        : _statePtr{std::move(statePtr)}, _status{makeReadyAudioStatus()}
+      {
+      }
+
+      void shutdown() noexcept override { _statePtr->providerShutdownStarted.set(true); }
+
+      utility::ScopedRegistration subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        _statePtr->onDevicesChanged = std::move(callback);
+        return {};
+      }
+
+      Status status() const override { return _status; }
+
+      std::unique_ptr<audio::Backend> createBackend(audio::Device const& /*device*/,
+                                                    audio::ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<AppRuntimeBackend>(_statePtr);
+      }
+
+      utility::ScopedRegistration subscribeGraph(std::string_view /*routeAnchor*/,
+                                                 OnGraphChangedCallback /*callback*/) override
+      {
+        return {};
+      }
+
+    private:
+      std::shared_ptr<AppRuntimeAudioState> _statePtr;
+      Status _status;
+    };
+  } // namespace
+
+  TEST_CASE("AppRuntime - missing workspace config store is rejected", "[runtime][unit][app-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+
+    auto const runtimeRes = AppRuntime::create(AppRuntimeDependencies{
+      .executorPtr = std::make_unique<InlineExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+    });
+
+    REQUIRE_FALSE(runtimeRes);
+    CHECK(runtimeRes.error().code == Error::Code::InvalidInput);
+    CHECK(runtimeRes.error().message == "AppRuntime requires a workspace config store");
+  }
+
+  TEST_CASE("runtime factories preserve storage construction errors", "[runtime][unit][app-runtime][factory]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const databaseFile = ao::test::TempFile{".mdb"};
+
+    SECTION("CoreRuntime")
+    {
+      auto const res = CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                           tempDir.path(),
+                                           databaseFile.path,
+                                           tempDir.path() / "cache",
+                                           library::test::kTestMusicLibraryMapBytes);
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
+    }
+
+    SECTION("AppRuntime")
+    {
+      auto const res = AppRuntime::create(AppRuntimeDependencies{
+        .executorPtr = std::make_unique<InlineExecutor>(),
+        .musicRoot = tempDir.path(),
+        .databasePath = databaseFile.path,
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
+      });
+      REQUIRE_FALSE(res);
+      CHECK(res.error().code == Error::Code::IoError);
+    }
+  }
+
+  TEST_CASE("CoreRuntime - move construction preserves service identity after the source retires",
+            "[runtime][unit][core-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto optRuntime = std::optional<CoreRuntime>{};
+    auto const* libraryAddress = static_cast<void const*>(nullptr);
+    auto const* asyncAddress = static_cast<void const*>(nullptr);
+    auto const* sourcesAddress = static_cast<void const*>(nullptr);
+    auto const musicRoot = tempDir.path() / ".";
+    auto const databasePath = LibraryPaths{musicRoot}.databasePath();
+    std::filesystem::path const* musicRootAddress = nullptr;
+    std::filesystem::path const* databasePathAddress = nullptr;
+
+    {
+      auto source = ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                                               musicRoot,
+                                                               databasePath,
+                                                               tempDir.path() / "cache",
+                                                               library::test::kTestMusicLibraryMapBytes));
+      libraryAddress = &source.library();
+      asyncAddress = &source.async();
+      sourcesAddress = &source.sources();
+      musicRootAddress = &source.musicRoot();
+      databasePathAddress = &source.databasePath();
+      optRuntime.emplace(std::move(source));
+    }
+
+    REQUIRE(optRuntime);
+    CHECK(static_cast<void const*>(&optRuntime->library()) == libraryAddress);
+    CHECK(static_cast<void const*>(&optRuntime->async()) == asyncAddress);
+    CHECK(static_cast<void const*>(&optRuntime->sources()) == sourcesAddress);
+    CHECK_NOTHROW(optRuntime->sources().reloadAllTracks());
+    CHECK(optRuntime->musicRoot() == musicRoot);
+    CHECK(optRuntime->databasePath() == databasePath);
+    CHECK(&optRuntime->musicRoot() == musicRootAddress);
+    CHECK(&optRuntime->databasePath() == databasePathAddress);
+
+    optRuntime->shutdown();
+    CHECK(*musicRootAddress == musicRoot);
+    CHECK(*databasePathAddress == databasePath);
+    CHECK(&optRuntime->musicRoot() == musicRootAddress);
+    CHECK(&optRuntime->databasePath() == databasePathAddress);
+  }
+
+  TEST_CASE("AppRuntime - move construction preserves interactive service identity after the source retires",
+            "[runtime][unit][app-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto optRuntime = std::optional<AppRuntime>{};
+    auto const* libraryAddress = static_cast<void const*>(nullptr);
+    auto const* playbackAddress = static_cast<void const*>(nullptr);
+    auto const* workspaceAddress = static_cast<void const*>(nullptr);
+    auto const* resourcesAddress = static_cast<void const*>(nullptr);
+
+    {
+      auto source = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+        .executorPtr = std::make_unique<InlineExecutor>(),
+        .musicRoot = tempDir.path(),
+        .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+        .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+        .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
+      }));
+      libraryAddress = &source.library();
+      playbackAddress = &source.playback();
+      workspaceAddress = &source.workspace();
+      resourcesAddress = &source.resourceBytes();
+      optRuntime.emplace(std::move(source));
+    }
+
+    REQUIRE(optRuntime);
+    CHECK(static_cast<void const*>(&optRuntime->library()) == libraryAddress);
+    CHECK(static_cast<void const*>(&optRuntime->playback()) == playbackAddress);
+    CHECK(static_cast<void const*>(&optRuntime->workspace()) == workspaceAddress);
+    CHECK(static_cast<void const*>(&optRuntime->resourceBytes()) == resourcesAddress);
+    auto const res = optRuntime->playSelectionInFocusedView();
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == Error::Code::InvalidState);
+  }
+
+  TEST_CASE("AppRuntime - factory materializes All Tracks before exposure", "[runtime][unit][app-runtime][factory]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
+    {
+      auto library = library::test::makeTestMusicLibrary(tempDir.path(), databasePath);
+      [[maybe_unused]] auto const trackId = library::test::addTrackWithUniqueFixtureUri(
+        library, library::test::TrackSpec{.title = "Already persisted", .uri = "persisted.flac"});
+    }
+
+    auto runtimePtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+      .executorPtr = std::make_unique<InlineExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = databasePath,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
+    })));
+    auto allTracks = ao::test::requireValue(runtimePtr->sources().acquire(kAllTracksListId));
+
+    CHECK(allTracks->size() == 1);
+  }
+
+  TEST_CASE("AppRuntime - playback discard mutates only the selected store", "[runtime][unit][app-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto overrideStore = ConfigStore{tempDir.path() / "playback.yaml"};
+    auto const sentinel = PlaybackSessionState{.sourceListId = kAllTracksListId,
+                                               .currentTrackId = TrackId{7},
+                                               .currentTrackUri = "sentinel.flac",
+                                               .volume = 0.25F};
+    REQUIRE(overrideStore.save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
+
+    SECTION("null override uses the workspace store")
+    {
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
+      REQUIRE(
+        runtimePtr->workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
+      REQUIRE(runtimePtr->discardRestorablePlaybackSession());
+      CHECK_FALSE(ao::test::requireValue(runtimePtr->workspaceConfigStore().contains(kPlaybackSessionConfigGroup)));
+      auto retained = PlaybackSessionState{};
+      REQUIRE(
+        ao::test::requireValue(overrideStore.load(kPlaybackSessionConfigGroup, retained, PlaybackSessionYamlSchema{})));
+      CHECK(retained == sentinel);
+    }
+
+    SECTION("explicit override leaves the workspace store untouched")
+    {
+      auto runtimePtr = makeStateOnlyRuntime(tempDir, &overrideStore);
+      REQUIRE(
+        runtimePtr->workspaceConfigStore().save(kPlaybackSessionConfigGroup, sentinel, PlaybackSessionYamlSchema{}));
+      REQUIRE(runtimePtr->discardRestorablePlaybackSession());
+      CHECK_FALSE(ao::test::requireValue(overrideStore.contains(kPlaybackSessionConfigGroup)));
+      auto retained = PlaybackSessionState{};
+      REQUIRE(ao::test::requireValue(
+        runtimePtr->workspaceConfigStore().load(kPlaybackSessionConfigGroup, retained, PlaybackSessionYamlSchema{})));
+      CHECK(retained == sentinel);
+    }
+  }
+
+  TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe", "[runtime][unit][app-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
+
+    auto appPtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+      .executorPtr = std::make_unique<InlineExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = databasePath,
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .workspaceConfigStorePtr =
+        std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
+    })));
+
+    CHECK(appPtr->musicRoot() == std::filesystem::path{tempDir.path()});
+
+    // Verify accessors
+    [[maybe_unused]] auto& commands = appPtr->library().commands();
+    [[maybe_unused]] auto& notifications = appPtr->notifications();
+
+    appPtr->addAudioProvider(
+      makeReadyAudioProvider(audio::BackendProvider::Status{.descriptor = {.id = audio::BackendId{"dummy"}}}));
+
+    // reloadAllTracks
+    CHECK_NOTHROW(appPtr->sources().reloadAllTracks());
+
+    // playSelectionInFocusedView (with no focused view)
+    auto const withoutFocusRes = appPtr->playSelectionInFocusedView();
+    REQUIRE_FALSE(withoutFocusRes);
+    CHECK(withoutFocusRes.error().code == Error::Code::InvalidState);
+
+    // Add a view and focus it
+    REQUIRE(appPtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
+
+    // playSelectionInFocusedView (with focused view but no selection)
+    auto const withoutSelectionRes = appPtr->playSelectionInFocusedView();
+    REQUIRE_FALSE(withoutSelectionRes);
+    CHECK(withoutSelectionRes.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("CoreRuntime - shutdown retires a queued library publication", "[runtime][unit][core-runtime][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto* const executor = executorPtr.get();
+    std::size_t publications = 0;
+    auto runtime = ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
+                                                              tempDir.path(),
+                                                              LibraryPaths{tempDir.path()}.databasePath(),
+                                                              tempDir.path() / "cache",
+                                                              library::test::kTestMusicLibraryMapBytes));
+
+    auto subscription =
+      runtime.library().changes().onChanged([&publications](LibraryChangeSet const&) { ++publications; });
+    REQUIRE(runQueuedTask(
+      runtime.async(), *executor, runtime.library().commands().createListAsync(ListDraft{.name = "Live publication"})));
+    REQUIRE(publications == 1);
+    publications = 0;
+    auto const revisionBefore = runtime.library().snapshot().revision();
+
+    [[maybe_unused]] auto future =
+      runtime.async().spawn(runtime.library().commands().createListAsync(ListDraft{.name = "Committed before close"}));
+    REQUIRE(executor->tryWaitUntilQueued());
+    REQUIRE(executor->queuedCount() == 1);
+    {
+      auto snapshot = runtime.library().snapshot();
+      REQUIRE(snapshot.revision() == revisionBefore + 1);
+      REQUIRE(std::ranges::any_of(
+        snapshot.lists(), [](ListNode const& node) { return node.name == "Committed before close"; }));
+    }
+
+    CHECK(publications == 0);
+    runtime.shutdown();
+    CHECK_NOTHROW(executor->drain());
+    CHECK(publications == 0);
+  }
+
+  TEST_CASE("AppRuntime - teardown after playback callback settlement shuts down the provider",
+            "[runtime][unit][app-runtime][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto audioStatePtr = std::make_shared<AppRuntimeAudioState>();
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto* const executor = executorPtr.get();
+    auto appPtr = std::make_unique<AppRuntime>(ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+      .executorPtr = std::move(executorPtr),
+      .musicRoot = tempDir.path(),
+      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+      .musicLibraryPinnedMapBytes = library::test::kTestMusicLibraryMapBytes,
+      .workspaceConfigStorePtr =
+        std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
+    })));
+
+    appPtr->addAudioProvider(std::make_unique<AppRuntimeProvider>(audioStatePtr));
+    REQUIRE(audioStatePtr->onDevicesChanged);
+    audioStatePtr->onDevicesChanged(makeReadyAudioStatus().devices);
+    executor->drain();
+
+    auto const fixtureUri =
+      audio::test::installAudioFixture(appPtr->musicRoot(), "basic_metadata.flac", "playable.flac");
+    auto const firstTrackId =
+      addRuntimeTrack(*appPtr,
+                      library::test::TrackSpec{.title = "First", .uri = fixtureUri, .codec = AudioCodec::Flac},
+                      [executor] { executor->drain(); });
+    auto const secondTrackId =
+      addRuntimeTrack(*appPtr,
+                      library::test::TrackSpec{.title = "Second", .uri = fixtureUri, .codec = AudioCodec::Flac},
+                      [executor] { executor->drain(); });
+    appPtr->sources().reloadAllTracks();
+    auto const listId = ao::test::requireValue(runRuntimeTask(*appPtr,
+                                                              appPtr->library().commands().createListAsync(ListDraft{
+                                                                .name = "Teardown order",
+                                                              })));
+    auto const viewId = ao::test::requireValue(appPtr->workspace().navigate({.target = listId}));
+    auto const previousPositionRevision = appPtr->playback().snapshot().transport.positionRevision;
+    REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));
+    REQUIRE(tryWaitForPlaybackSettlement(
+      *executor, previousPositionRevision, [&] { return appPtr->playback().snapshot().transport.positionRevision; }));
+    REQUIRE(audioStatePtr->renderTarget != nullptr);
+
+    bool callbackEntered = false;
+    auto const sequenceSubscription = appPtr->playback().events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot) noexcept
+      { callbackEntered = snapshot.succession.currentTrackId == secondTrackId; });
+
+    executor->drain();
+    auto output = std::array<std::byte, 4096>{};
+    REQUIRE(tryDriveRenderUntil(*audioStatePtr->renderTarget, *executor, output, [&] { return callbackEntered; }));
+    REQUIRE(appPtr);
+    CHECK_FALSE(audioStatePtr->providerShutdownStarted.load());
+    appPtr.reset();
+    CHECK(audioStatePtr->providerShutdownStarted.load());
+  }
+} // namespace ao::rt::test

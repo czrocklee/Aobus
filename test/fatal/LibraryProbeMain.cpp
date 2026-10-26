@@ -4,8 +4,8 @@
 #include "test/fatal/LibraryProbeProtocol.h"
 #include "test/fatal/LibraryProbeScenario.h"
 #include "test/fatal/ProbeProcess.h"
-#include "test/unit/TestFixtureSupport.h"
-#include "test/unit/lmdb/LmdbProbeScratch.h"
+#include "test/TestFixtureSupport.h"
+#include "test/lmdb/LmdbProbeScratch.h"
 
 #include <chrono>
 #ifdef _WIN32

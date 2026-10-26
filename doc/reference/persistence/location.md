@@ -177,13 +177,13 @@ Workspace and presentation state remain physically per-library so those identiti
 
 ## Test authority
 
-- [`LibraryPathsTest.cpp`](../../../test/unit/runtime/library/LibraryPathsTest.cpp) locks the exact canonical paths and detects a database created through `MusicLibrary` without duplicating its physical marker.
-- [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the global GTK file boundary.
-- [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) and [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protect preset file construction and traversal rejection.
-- [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects the per-library GTK presentation file.
-- [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) protects replacement and owner-only permission behavior used by managed YAML files.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects CLI root use around the runtime boundary.
-- [`LayoutStateStoreTest.cpp`](../../../test/unit/tui/LayoutStateStoreTest.cpp) protects the exact per-library TUI presentation path; TUI option defaults are exercised through the TUI application and tooling build/test gates, and no focused test currently locks every override.
+- [`LibraryPathsTest.cpp`](../../../test/runtime/library/LibraryPathsTest.cpp) locks the exact canonical paths and detects a database created through `MusicLibrary` without duplicating its physical marker.
+- [`AppConfigStoreTest.cpp`](../../../test/linux-gtk/app/AppConfigStoreTest.cpp) protects the global GTK file boundary.
+- [`ShellLayoutStoreTest.cpp`](../../../test/linux-gtk/app/ShellLayoutStoreTest.cpp) and [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protect preset file construction and traversal rejection.
+- [`GtkLayoutStateStoreTest.cpp`](../../../test/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects the per-library GTK presentation file.
+- [`AtomicFileTest.cpp`](../../../test/utility/AtomicFileTest.cpp) protects replacement and owner-only permission behavior used by managed YAML files.
+- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) protects CLI root use around the runtime boundary.
+- [`LayoutStateStoreTest.cpp`](../../../test/tui/LayoutStateStoreTest.cpp) protects the exact per-library TUI presentation path; TUI option defaults are exercised through the TUI application and tooling build/test gates, and no focused test currently locks every override.
 
 ## Related documents
 

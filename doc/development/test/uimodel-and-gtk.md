@@ -7,7 +7,7 @@ UI behavior should be tested at the lowest layer that can express the contract.
 Most semantic behavior belongs in `uimodel`; GTK tests should stay thin and
 prove adapter behavior, lifecycle behavior, or targeted geometry regressions.
 
-The transport controls show this split: `test/unit/uimodel/playback/transport/TransportViewModelTest.cpp` proves policy and command routing with `RenderLog`, while `test/unit/linux-gtk/playback/TransportButtonTest.cpp` keeps focused widget binding, click, and accessibility checks.
+The transport controls show this split: `test/uimodel/playback/transport/TransportViewModelTest.cpp` proves policy and command routing with `RenderLog`, while `test/linux-gtk/playback/TransportButtonTest.cpp` keeps focused widget binding, click, and accessibility checks.
 
 ## Layering rule
 
@@ -147,7 +147,7 @@ Tests for that boundary must deliver actual input and assert the resulting
 application state.
 
 Native pointer injection lives in
-`test/unit/linux-gtk/GtkNativeInputTestSupport.h`, owned by the GTK
+`test/linux-gtk/GtkNativeInputTestSupport.h`, owned by the GTK
 test-support target and shared by the seek-control thumb regressions in
 `PlaybackUiComponentsTest.cpp` and the track-selection tags-cell arbitration
 test. It uses public widget/surface coordinate transforms and bounded
@@ -249,7 +249,7 @@ When the same new helper appears in two or more test files, promote it into the
 narrow application, widget, layout, or runtime support owner instead of copying
 it or expanding an umbrella.
 Shared output/backend fakes should follow the shared fake precedent in
-`test/unit/audio/BackendTestSupport.h` rather than being duplicated between
+`test/audio/BackendTestSupport.h` rather than being duplicated between
 uimodel and GTK audio tests.
 
 Keep interfaces narrow and stateless where possible.

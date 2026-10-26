@@ -81,9 +81,9 @@ Changing hierarchy or rank-overlay persistence semantics remains a storage compa
 
 ## Test authority
 
-- List builder, layout, store, and view tests under [`test/unit/library/`](../../../../test/unit/library) lock the persisted surface.
-- [`LibraryCommandsListOrderTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsListOrderTest.cpp) and [`LibraryCommandsListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryCommandsListMembershipTest.cpp) lock rank and tag-backed editing semantics.
-- [`ListOrderSourceTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceTest.cpp), [`ListOrderSourceObserverTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp), and predicate-source tests lock effective membership and ordering.
+- List builder, layout, store, and view tests under [`test/library/`](../../../../test/library) lock the persisted surface.
+- [`LibraryCommandsListOrderTest.cpp`](../../../../test/runtime/library/LibraryCommandsListOrderTest.cpp) and [`LibraryCommandsListMembershipTest.cpp`](../../../../test/runtime/library/LibraryCommandsListMembershipTest.cpp) lock rank and tag-backed editing semantics.
+- [`ListOrderSourceTest.cpp`](../../../../test/runtime/source/ListOrderSourceTest.cpp), [`ListOrderSourceObserverTest.cpp`](../../../../test/runtime/source/ListOrderSourceObserverTest.cpp), and predicate-source tests lock effective membership and ordering.
 
 ## Related documents
 

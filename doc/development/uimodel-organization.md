@@ -21,7 +21,7 @@ Top-level feature ownership is mirrored across:
 ```text
 app/include/ao/uimodel/<feature>/
 app/uimodel/<feature>/
-test/unit/uimodel/<feature>/
+test/uimodel/<feature>/
 ```
 
 The current top-level capsules are `input`, `field`, `layout`, `library`, `playback`, `preference`, `presentation`, and `status`, plus deliberately reviewed root utilities.

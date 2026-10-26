@@ -1,0 +1,213 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "playback/NowPlayingFieldLabel.h"
+
+#include "test/MessageCatalogTestSupport.h"
+#include "test/audio/AudioFixtureSupport.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/runtime/AppRuntimeTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/audio/Transport.h>
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/source/TrackSourceCache.h>
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+
+#include <catch2/catch_test_macros.hpp>
+#include <gtkmm/eventcontroller.h>
+#include <gtkmm/gestureclick.h>
+#include <gtkmm/label.h>
+
+#include <optional>
+#include <string>
+#include <utility>
+
+namespace ao::gtk::test
+{
+  namespace
+  {
+    TrackId addPlayableTrack(rt::AppRuntime& runtime, std::string title, std::string artist = {})
+    {
+      auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+      return addRuntimeTrack(
+        runtime, library::test::TrackSpec{.title = std::move(title), .artist = std::move(artist), .uri = fixturePath});
+    }
+
+    void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)
+    {
+      runtime.sources().reloadAllTracks();
+      auto const viewRes = runtime.workspace().navigate({.target = rt::kAllTracksListId});
+      REQUIRE(viewRes);
+      REQUIRE(runtime.playback().commands().startFromView(*viewRes, trackId));
+      REQUIRE(tryWaitForPlaybackSettlement(runtime, trackId));
+    }
+  } // namespace
+
+  TEST_CASE("NowPlayingFieldLabel - binds model field text and css", "[gtk][unit][playback][field-label]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    drainGtkEvents();
+
+    SECTION("title label binds idle and playing title text")
+    {
+      auto titleLabel = NowPlayingFieldLabel{
+        runtime.playback(), runtime.workspace(), ao::test::englishMessageCatalog(), rt::TrackField::Title};
+      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
+      REQUIRE(gtkLabel);
+      CHECK(gtkLabel->get_text() == "Not Playing");
+
+      CHECK(gtkLabel->has_css_class("ao-playback-title"));
+      CHECK_FALSE(gtkLabel->has_css_class("ao-clickable"));
+      CHECK_FALSE(hasController<Gtk::GestureClick>(*gtkLabel));
+
+      auto const trackId = addPlayableTrack(runtime, "Test Song", "Test Artist");
+      startPlayback(runtime, trackId);
+      drainGtkEvents();
+
+      CHECK(gtkLabel->get_text() == "Test Song");
+    }
+
+    SECTION("artist label binds artist text and css")
+    {
+      auto artistLabel = NowPlayingFieldLabel{
+        runtime.playback(), runtime.workspace(), ao::test::englishMessageCatalog(), rt::TrackField::Artist};
+      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&artistLabel.widget());
+      REQUIRE(gtkLabel);
+
+      auto const trackId = addPlayableTrack(runtime, "Another Song", "Known Artist");
+      startPlayback(runtime, trackId);
+      drainGtkEvents();
+
+      CHECK(gtkLabel->get_text() == "Known Artist");
+      CHECK(gtkLabel->has_css_class("ao-playback-artist"));
+      CHECK_FALSE(gtkLabel->has_css_class("ao-playback-title"));
+    }
+
+    SECTION("unsupported field renders empty text without title or artist css")
+    {
+      auto yearLabel = NowPlayingFieldLabel{
+        runtime.playback(), runtime.workspace(), ao::test::englishMessageCatalog(), rt::TrackField::Year};
+      auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&yearLabel.widget());
+      REQUIRE(gtkLabel);
+
+      auto const trackId = addPlayableTrack(runtime, "Dated Song");
+      startPlayback(runtime, trackId);
+      drainGtkEvents();
+
+      CHECK(gtkLabel->get_text().empty());
+      CHECK_FALSE(gtkLabel->has_css_class("ao-playback-title"));
+      CHECK_FALSE(gtkLabel->has_css_class("ao-playback-artist"));
+    }
+  }
+
+  TEST_CASE("NowPlayingFieldLabel - filter action routes the exact title query",
+            "[gtk][integration][playback][field-label]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    drainGtkEvents();
+
+    auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                           runtime.workspace(),
+                                           ao::test::englishMessageCatalog(),
+                                           rt::TrackField::Title,
+                                           uimodel::NowPlayingFieldAction::FilterByField};
+    auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
+    REQUIRE(gtkLabel);
+
+    auto const trackId = addPlayableTrack(runtime, "Filtered Song", "Filter Artist");
+    startPlayback(runtime, trackId);
+    drainGtkEvents();
+
+    CHECK(gtkLabel->has_css_class("ao-clickable"));
+    REQUIRE(runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).filterExpression.empty());
+    REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+    drainGtkEvents();
+
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    CHECK(state.listId == rt::kAllTracksListId);
+    CHECK(state.filterExpression == R"($title = "Filtered Song")");
+  }
+
+  TEST_CASE("NowPlayingFieldLabel - reveal action publishes the current track and list",
+            "[gtk][integration][playback][field-label]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    drainGtkEvents();
+
+    auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                           runtime.workspace(),
+                                           ao::test::englishMessageCatalog(),
+                                           rt::TrackField::Title,
+                                           uimodel::NowPlayingFieldAction::Reveal};
+    auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
+    REQUIRE(gtkLabel);
+
+    auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
+    auto sub = runtime.playback().events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
+
+    auto const trackId = addPlayableTrack(runtime, "Reveal Song", "Reveal Artist");
+    startPlayback(runtime, trackId);
+    drainGtkEvents();
+
+    REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+    drainGtkEvents();
+
+    REQUIRE(optRequest);
+    CHECK(optRequest->trackId == trackId);
+    CHECK(optRequest->preferredListId == rt::kAllTracksListId);
+  }
+
+  TEST_CASE("NowPlayingFieldLabel - play-pause action resumes a paused track",
+            "[gtk][integration][playback][field-label]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    drainGtkEvents();
+
+    auto titleLabel = NowPlayingFieldLabel{runtime.playback(),
+                                           runtime.workspace(),
+                                           ao::test::englishMessageCatalog(),
+                                           rt::TrackField::Title,
+                                           uimodel::NowPlayingFieldAction::PlayPause};
+    auto* const gtkLabel = dynamic_cast<Gtk::Label*>(&titleLabel.widget());
+    REQUIRE(gtkLabel);
+
+    auto const trackId = addPlayableTrack(runtime, "Toggle Song", "Toggle Artist");
+    startPlayback(runtime, trackId);
+    drainGtkEvents();
+    runtime.playback().commands().pause();
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&] { return runtime.playback().snapshot().transport.transport == audio::Transport::Paused; }));
+
+    bool started = false;
+    auto startSub = runtime.playback().events().onSnapshot(
+      [&](rt::PlaybackSnapshot const& snapshot) noexcept
+      { started = started || snapshot.transport.transport == audio::Transport::Playing; });
+    REQUIRE(tryEmitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
+    REQUIRE(tryPumpGtkEventsUntil(
+      [&] { return runtime.playback().snapshot().transport.transport == audio::Transport::Playing; }));
+    CHECK(started);
+    CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == trackId);
+  }
+} // namespace ao::gtk::test

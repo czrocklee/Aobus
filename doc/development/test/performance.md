@@ -163,7 +163,7 @@ Before changing the cold metadata layout, run the opt-in production-path workloa
 ./ao perf --filter '[classical-metadata]' --samples 20 --warmups 1 --output /tmp/classical-before.json
 ```
 
-[`ClassicalMetadataBaselineTest.cpp`](../../../test/perf/ClassicalMetadataBaselineTest.cpp) seeds deterministic 10,000- and 100,000-track libraries in one transaction with a pinned 2 GiB map.
+[`ClassicalMetadataBaselineTest.cpp`](../../../test/perf/baseline/ClassicalMetadataBaselineTest.cpp) seeds deterministic 10,000- and 100,000-track libraries in one transaction with a pinned 2 GiB map.
 Fixture construction and durable edits are outside the clocks.
 Each performance has ten movements; there are 128 work texts, 32 soloist texts, 16 composer texts, and distinct albums per performance.
 Every track carries work metadata and one typed credit in each of Conductor, Ensemble, and Soloist.
@@ -196,7 +196,7 @@ Run the new feature case separately, with its own report:
 ./ao perf release --filter '[performance-metadata]' --samples 20 --warmups 1 --output /tmp/performance-metadata.json
 ```
 
-[`PerformanceMetadataBaselineTest.cpp`](../../../test/perf/PerformanceMetadataBaselineTest.cpp) records 56 rows over 10k/100k libraries.
+[`PerformanceMetadataBaselineTest.cpp`](../../../test/perf/baseline/PerformanceMetadataBaselineTest.cpp) records 56 rows over 10k/100k libraries.
 Its mixed fixture cycles absent, year-only, year-month, and full dates, and lists of 0, 1, 8, and 32 members.
 Full and first-tenth sources measure date equality/range/existence, member-name equality/substring, and fresh RecordingYear/RecordingDate/Title projections.
 Fixture arithmetic checks complete query memberships and projected orders outside timing; date expectations do not use the production parser, formatter, or comparator.
@@ -216,7 +216,7 @@ Run incremental member-filter delivery separately:
 ./ao perf release --filter '[performance-incremental]' --samples 20 --warmups 1 --output /tmp/performance-incremental.json
 ```
 
-[`PerformanceMetadataIncrementalBaselineTest.cpp`](../../../test/perf/PerformanceMetadataIncrementalBaselineTest.cpp) records 16 rows from independent homogeneous 10k/100k libraries with baseline list lengths 0, 1, 8, and 32.
+[`PerformanceMetadataIncrementalBaselineTest.cpp`](../../../test/perf/baseline/PerformanceMetadataIncrementalBaselineTest.cpp) records 16 rows from independent homogeneous 10k/100k libraries with baseline list lengths 0, 1, 8, and 32.
 A member-inequality filter initially selects every track, including empty lists.
 Changing the first track's leading name to the filter literal removes exactly one row; restoring its template reinserts it.
 The length-zero control temporarily gains one credit for the removal state.
@@ -233,7 +233,7 @@ Keep such instrumented diagnostic runs separate from acceptance timing and disti
 ./ao perf release --filter '[credits-metadata],[allocation-counter]' --samples 20 --warmups 1 --output /tmp/credits.json
 ```
 
-[`CreditsBaselineTest.cpp`](../../../test/perf/CreditsBaselineTest.cpp) records 104 rows:
+[`CreditsBaselineTest.cpp`](../../../test/perf/baseline/CreditsBaselineTest.cpp) records 104 rows:
 100 sampled operations and four fixed-object size observations. Its 10k-track fixtures cover
 empty, single, and many-entry lists, the four performance kinds, duplicates, and nonfirst roles.
 Operations exercise physical first-entry extraction, compact rows, member predicates, first-name
@@ -385,7 +385,8 @@ Do not remove outliers manually; the report's median and p95 are calculated from
 ## Implementation map
 
 - [`script/ao/command/perf.py`](../../../script/ao/command/perf.py) owns portal arguments, build/run selection, metadata injection, and summary output.
-- [`test/perf/`](../../../test/perf) contains the standalone Catch2 workloads.
+- [`test/perf/baseline/`](../../../test/perf/baseline) contains the standalone Catch2 workloads.
+- [`test/perf/report/`](../../../test/perf/report) contains shared report support and `PerformanceReportTest.cpp`, whose cases run in `ao_core_test`.
 - [`test/script/test_cli.py`](../../../test/script/test_cli.py) and [`test/script/test_buildenv.py`](../../../test/script/test_buildenv.py) protect command registration and native-environment classification.
 
 ## Related documents

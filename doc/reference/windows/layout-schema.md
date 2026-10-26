@@ -308,12 +308,12 @@ Pure rules carrying no WinRT dependency compile in `ao_core_test` on every host;
 
 ## Test authority
 
-- [`ShellDocumentTest.cpp`](../../../test/unit/winui/layout/ShellDocumentTest.cpp) proves both shipped documents parse, expand, and validate, that their node ids stay disjoint, that no pane owning its width is given a proportional slot, and that each preset offers play/pause exactly once.
-- [`LayoutDialectTest.cpp`](../../../test/unit/winui/layout/LayoutDialectTest.cpp) covers every rejection reason as this shell's dialect produces it. That the shared traversal is genuinely dialect-driven is proved separately by [`LayoutValidationTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutValidationTest.cpp), which runs it against an invented vocabulary no frontend ships.
-- [`LayoutSchemaTest.cpp`](../../../test/unit/winui/layout/LayoutSchemaTest.cpp), [`PlacementPlanTest.cpp`](../../../test/unit/winui/layout/PlacementPlanTest.cpp), [`StyleLookupTest.cpp`](../../../test/unit/winui/layout/StyleLookupTest.cpp), and [`ElementKindTest.cpp`](../../../test/unit/winui/layout/ElementKindTest.cpp) cover the schema, placement mapping, style planning, and element lattice.
-- [`FrameResourceTest.cpp`](../../../test/unit/winui/FrameResourceTest.cpp) reads the shipped frame and proves every `styleKey` the presets name is declared in the window scope with a `TargetType` the node's element accepts, that the resources the components resolve by name are declared, and that the seek chrome stays out of the window scope.
-- [`ThemeSurfaceTest.cpp`](../../../test/unit/winui/layout/ThemeSurfaceTest.cpp) covers the themed surface vocabulary, its theme tokens, and which elements accept a slot.
-- [`QuickFilterCompletionAdapterTest.cpp`](../../../test/unit/winui/track/QuickFilterCompletionAdapterTest.cpp) covers the platform-free UTF-8/UTF-16 completion boundary on every host; native Windows builds cover the XAML wiring itself.
+- [`ShellDocumentTest.cpp`](../../../test/winui/layout/ShellDocumentTest.cpp) proves both shipped documents parse, expand, and validate, that their node ids stay disjoint, that no pane owning its width is given a proportional slot, and that each preset offers play/pause exactly once.
+- [`LayoutDialectTest.cpp`](../../../test/winui/layout/LayoutDialectTest.cpp) covers every rejection reason as this shell's dialect produces it. That the shared traversal is genuinely dialect-driven is proved separately by [`LayoutValidationTest.cpp`](../../../test/uimodel/layout/document/LayoutValidationTest.cpp), which runs it against an invented vocabulary no frontend ships.
+- [`LayoutSchemaTest.cpp`](../../../test/winui/layout/LayoutSchemaTest.cpp), [`PlacementPlanTest.cpp`](../../../test/winui/layout/PlacementPlanTest.cpp), [`StyleLookupTest.cpp`](../../../test/winui/layout/StyleLookupTest.cpp), and [`ElementKindTest.cpp`](../../../test/winui/layout/ElementKindTest.cpp) cover the schema, placement mapping, style planning, and element lattice.
+- [`FrameResourceTest.cpp`](../../../test/winui/FrameResourceTest.cpp) reads the shipped frame and proves every `styleKey` the presets name is declared in the window scope with a `TargetType` the node's element accepts, that the resources the components resolve by name are declared, and that the seek chrome stays out of the window scope.
+- [`ThemeSurfaceTest.cpp`](../../../test/winui/layout/ThemeSurfaceTest.cpp) covers the themed surface vocabulary, its theme tokens, and which elements accept a slot.
+- [`QuickFilterCompletionAdapterTest.cpp`](../../../test/winui/track/QuickFilterCompletionAdapterTest.cpp) covers the platform-free UTF-8/UTF-16 completion boundary on every host; native Windows builds cover the XAML wiring itself.
 
 ## Related documents
 

@@ -86,8 +86,8 @@ A later build that cannot use a stored carrier's codec leaves that carrier uncha
 
 ## Test authority
 
-- [`CueSheetTest.cpp`](../../../test/unit/media/CueSheetTest.cpp) locks the grammar, data-track ends, pregap placement, UTF-8 rejection, and same-name candidate sets.
-- [`ExactExtentTest.cpp`](../../../test/unit/media/ExactExtentTest.cpp) locks exact FLAC and WAV extents and that a binary `CUESHEET` block stays uninterpreted while comment text is copied.
+- [`CueSheetTest.cpp`](../../../test/media/CueSheetTest.cpp) locks the grammar, data-track ends, pregap placement, UTF-8 rejection, and same-name candidate sets.
+- [`ExactExtentTest.cpp`](../../../test/media/ExactExtentTest.cpp) locks exact FLAC and WAV extents and that a binary `CUESHEET` block stays uninterpreted while comment text is copied.
 
 ## Related documents
 

@@ -13,7 +13,7 @@ namespace and register new checks in `tool/lint/AobusLintModule.cpp` and
 `tool/lint/CMakeLists.txt`.
 
 Use `doc/development/test/test-suite.md` for fixture markers and runner behavior.
-Fixtures live under `test/integration/lint/fixture/<check-alias>/`.
+Fixtures live under `test/lint/fixture/<check-alias>/`.
 `./ao test --lint` owns diagnostic assertions and compiler-error detection while
 Clang parses original fixtures; there is no separate syntax-only compiler stage.
 Extend the owning fixture for new behavior. Use an optional `POSITIVE | text`

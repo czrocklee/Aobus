@@ -209,11 +209,11 @@ No platform barrier receipt crosses into `ConfigStore` or frontend state owners.
 
 ## Test map
 
-- [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) uses the private state-machine seam to inject normalization, parent, creation, partial-write, data-barrier, close, replacement, and cleanup failures; every pre-replacement case preserves the old target, and visibility-only publication is locked to skip both barriers.
+- [`AtomicFileTest.cpp`](../../../test/utility/AtomicFileTest.cpp) uses the private state-machine seam to inject normalization, parent, creation, partial-write, data-barrier, close, replacement, and cleanup failures; every pre-replacement case preserves the old target, and visibility-only publication is locked to skip both barriers.
 - Real-filesystem sections protect creation, overwrite, empty and embedded-null payloads, POSIX mode `0600`, unwritable-parent failure, directory-target rejection, and successful temporary cleanup.
 - Native Windows sections protect the exact protected DACL, extended-length paths, distinct temporary names under concurrent different-target writes, final contents, and cleanup.
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) proves that malformed YAML returns `FormatRejected`, preserves seeded objects, and cannot be overwritten by an ordinary group save.
-- [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects frontend managed-state integration.
+- [`ConfigStoreTest.cpp`](../../../test/runtime/ConfigStoreTest.cpp) proves that malformed YAML returns `FormatRejected`, preserves seeded objects, and cannot be overwritten by an ordinary group save.
+- [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects frontend managed-state integration.
 
 The private failure seam proves state effects rather than platform error text.
 Native platform tests remain necessary because the seam does not emulate filesystem, ACL, or kernel replacement semantics.

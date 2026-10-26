@@ -365,17 +365,17 @@ Changing a default key, alias, option, or default path requires updating this re
 
 ## Test authority
 
-- [`CommandTest.cpp`](../../../test/unit/tui/CommandTest.cpp) protects commands and aliases.
-- [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects keyboard and mouse mappings.
-- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
-- [`CommandCompletionTest.cpp`](../../../test/unit/tui/CommandCompletionTest.cpp) protects completion routing, including multi-word exact aliases.
-- [`LibraryScanControllerTest.cpp`](../../../test/unit/tui/LibraryScanControllerTest.cpp) protects scan start, cancel, and retirement.
-- [`ListOrderControllerTest.cpp`](../../../test/unit/tui/ListOrderControllerTest.cpp) protects order submission outcomes, blocking reasons, and the drop of a command that arrives while one is in flight.
-- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) protects mark, range, select-all, and selection publication.
-- [`ExitControllerTest.cpp`](../../../test/unit/tui/ExitControllerTest.cpp) protects exit phase transitions.
-- [`TrackEditControllerTest.cpp`](../../../test/unit/tui/TrackEditControllerTest.cpp) protects open refusal, batch submission, staleness, reload, and a submission outliving its editor.
-- [`TrackPropertiesEditorTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorTest.cpp) protects modal commands, validation, and page drafts; [`TrackPropertiesEditorCompletionTest.cpp`](../../../test/unit/tui/TrackPropertiesEditorCompletionTest.cpp) protects completion navigation and dismissal.
-- [`EditorMouseTest.cpp`](../../../test/unit/tui/EditorMouseTest.cpp) protects editor mouse routing; [`MouseBindingsTest.cpp`](../../../test/unit/tui/MouseBindingsTest.cpp) protects painted shortcut bindings and clipped hit regions.
+- [`CommandTest.cpp`](../../../test/tui/CommandTest.cpp) protects commands and aliases.
+- [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp) protects keyboard and mouse mappings.
+- [`KeymapTest.cpp`](../../../test/tui/KeymapTest.cpp) protects defaults, supported projection, terminal aliases, collisions, unbinding, and display-chord selection.
+- [`CommandCompletionTest.cpp`](../../../test/tui/CommandCompletionTest.cpp) protects completion routing, including multi-word exact aliases.
+- [`LibraryScanControllerTest.cpp`](../../../test/tui/LibraryScanControllerTest.cpp) protects scan start, cancel, and retirement.
+- [`ListOrderControllerTest.cpp`](../../../test/tui/ListOrderControllerTest.cpp) protects order submission outcomes, blocking reasons, and the drop of a command that arrives while one is in flight.
+- [`LibraryControllerTest.cpp`](../../../test/tui/LibraryControllerTest.cpp) protects mark, range, select-all, and selection publication.
+- [`ExitControllerTest.cpp`](../../../test/tui/ExitControllerTest.cpp) protects exit phase transitions.
+- [`TrackEditControllerTest.cpp`](../../../test/tui/TrackEditControllerTest.cpp) protects open refusal, batch submission, staleness, reload, and a submission outliving its editor.
+- [`TrackPropertiesEditorTest.cpp`](../../../test/tui/TrackPropertiesEditorTest.cpp) protects modal commands, validation, and page drafts; [`TrackPropertiesEditorCompletionTest.cpp`](../../../test/tui/TrackPropertiesEditorCompletionTest.cpp) protects completion navigation and dismissal.
+- [`EditorMouseTest.cpp`](../../../test/tui/EditorMouseTest.cpp) protects editor mouse routing; [`MouseBindingsTest.cpp`](../../../test/tui/MouseBindingsTest.cpp) protects painted shortcut bindings and clipped hit regions.
 
 ## Related documents
 

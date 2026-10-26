@@ -137,12 +137,12 @@ label without a separate default-chord fallback.
 
 ## Test map
 
-- [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp), [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp), and [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect neutral behavior.
-- [`KeymapApplicatorTest.cpp`](../../../test/unit/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
-- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects that a failed keymap save leaves live accelerators unchanged and a successful save publishes them.
-- [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, failed persistence, deferred rebuild, localized chrome, and teardown.
-- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp), [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp), and [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp) protect TUI projection, fixed-scope precedence, configurable dispatch, and dynamic hints.
-- [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) protects executable WinUI projection and hints after rebinding, unbinding, unsupported keys, and collisions.
+- [`KeyChordTest.cpp`](../../../test/uimodel/input/KeyChordTest.cpp), [`KeymapModelTest.cpp`](../../../test/uimodel/input/KeymapModelTest.cpp), and [`KeymapStoreTest.cpp`](../../../test/uimodel/input/KeymapStoreTest.cpp) protect neutral behavior.
+- [`KeymapApplicatorTest.cpp`](../../../test/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
+- [`MainWindowTest.cpp`](../../../test/linux-gtk/app/MainWindowTest.cpp) protects that a failed keymap save leaves live accelerators unchanged and a successful save publishes them.
+- [`ShortcutEditorWidgetTest.cpp`](../../../test/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, failed persistence, deferred rebuild, localized chrome, and teardown.
+- [`KeymapTest.cpp`](../../../test/tui/KeymapTest.cpp), [`EventControllerTest.cpp`](../../../test/tui/EventControllerTest.cpp), and [`RenderTest.cpp`](../../../test/tui/RenderTest.cpp) protect TUI projection, fixed-scope precedence, configurable dispatch, and dynamic hints.
+- [`KeymapAcceleratorPlanTest.cpp`](../../../test/winui/input/KeymapAcceleratorPlanTest.cpp) protects executable WinUI projection and hints after rebinding, unbinding, unsupported keys, and collisions.
 
 ## Related documents
 

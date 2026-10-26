@@ -1,0 +1,2695 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+//
+// Synthetic baseline measurement — no machine-dependent pass/fail thresholds.
+
+#include "test/perf/report/PerformanceReport.h"
+#include "lib/library/OpenValidationMetrics.h"
+#include "lib/library/TextAdmission.h"
+#include "runtime/library/LibraryWriteLane.h"
+#include "runtime/source/ListOrderSource.h"
+#include "runtime/source/SmartListEvaluator.h"
+#include "runtime/source/SmartListSource.h"
+#include "test/TestFixtureSupport.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/library/WritableLibraryTestSupport.h"
+#include "test/runtime/AsyncTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "test/runtime/library/LibraryWriteLaneTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/compat/Enumerate.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/ListBuilder.h>
+#include <ao/library/ListStore.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackStore.h>
+#include <ao/library/TrackWriter.h>
+#include <ao/query/Field.h>
+#include <ao/query/Parser.h>
+#include <ao/query/PlanEvaluator.h>
+#include <ao/query/QueryCompilation.h>
+#include <ao/query/detail/Bytecode.h>
+#include <ao/rt/Log.h>
+#include <ao/rt/PlaybackLaunchSpec.h>
+#include <ao/rt/TrackEditScript.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSource.h>
+#include <ao/rt/source/TrackSourceCache.h>
+#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/source/TrackSourceLease.h>
+
+#include <boost/unordered/unordered_flat_map.hpp>
+#include <boost/unordered/unordered_flat_map_fwd.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <format>
+#include <functional>
+#include <memory>
+#include <numeric>
+#include <optional>
+#include <ranges>
+#include <span>
+#include <stdexcept>
+#include <stop_token>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#ifdef __linux__
+#include <unistd.h>
+
+#include <fstream>
+#endif
+
+namespace ao::rt::test
+{
+  namespace
+  {
+    struct Timings final
+    {
+      std::chrono::milliseconds createProjectionDuration{};
+      std::chrono::milliseconds setTitleSortDuration{};
+      std::chrono::milliseconds evaluateMembersDuration{};
+      std::chrono::milliseconds filterEvalDuration{};
+      std::chrono::milliseconds largeInEvalDuration{};
+      std::chrono::microseconds indexOfLookupDuration{};
+    };
+
+    struct InThresholdTiming final
+    {
+      std::size_t listSize = 0;
+      std::chrono::microseconds expandedDuration{};
+      std::chrono::microseconds setDuration{};
+      std::size_t expandedMatches = 0;
+      std::size_t setMatches = 0;
+    };
+
+    struct CaselessSearchTiming final
+    {
+      std::chrono::microseconds firstPassDuration{};
+      std::chrono::microseconds secondPassDuration{};
+      std::size_t firstPassMatches = 0;
+      std::size_t secondPassMatches = 0;
+    };
+
+    struct SortCacheKeys final
+    {
+      std::uint16_t year = 0;
+      std::uint16_t discNumber = 0;
+      std::uint16_t trackNumber = 0;
+      std::uint16_t movementNumber = 0;
+      std::chrono::milliseconds duration{0};
+      std::string_view titleKey{};
+      std::string_view artistKey{};
+      std::string_view albumKey{};
+      std::string_view albumArtistKey{};
+      std::string_view genreKey{};
+      std::string_view composerKey{};
+      std::string_view conductorKey{};
+      std::string_view ensembleKey{};
+      std::string_view workKey{};
+      std::string_view soloistKey{};
+    };
+
+    struct SortCacheOrderEntry final
+    {
+      TrackId trackId{};
+      SortCacheKeys keys{};
+      std::string_view groupKey{};
+      std::string_view primaryText{};
+      std::string_view secondaryText{};
+      std::string_view tertiaryText{};
+      ResourceId imageId{kInvalidResourceId};
+    };
+
+    struct RankedSortCacheKeys final
+    {
+      std::uint16_t year = 0;
+      std::uint16_t discNumber = 0;
+      std::uint16_t trackNumber = 0;
+      std::uint16_t movementNumber = 0;
+      std::chrono::milliseconds duration{0};
+      std::uint32_t titleRank = 0;
+      std::uint32_t artistRank = 0;
+      std::uint32_t albumRank = 0;
+      std::uint32_t albumArtistRank = 0;
+      std::uint32_t genreRank = 0;
+      std::uint32_t composerRank = 0;
+      std::uint32_t conductorRank = 0;
+      std::uint32_t ensembleRank = 0;
+      std::uint32_t workRank = 0;
+      std::uint32_t soloistRank = 0;
+    };
+
+    struct RankedSortCacheOrderEntry final
+    {
+      TrackId trackId{};
+      RankedSortCacheKeys keys{};
+      std::uint32_t groupRank = 0;
+      std::uint32_t primaryRank = 0;
+      std::uint32_t secondaryRank = 0;
+      std::uint32_t tertiaryRank = 0;
+      ResourceId imageId{kInvalidResourceId};
+    };
+
+    struct CompactSortCacheEntry final
+    {
+      TrackId trackId{};
+      std::string_view artistKey{};
+      std::string_view albumKey{};
+      std::string_view titleKey{};
+      std::uint16_t discNumber = 0;
+      std::uint16_t trackNumber = 0;
+    };
+
+    struct SortCacheStrategyTiming final
+    {
+      std::size_t count = 0;
+      std::chrono::milliseconds duration{};
+      std::uint64_t checksum = 0;
+    };
+
+    struct RebuildStageTiming final
+    {
+      std::size_t count = 0;
+      std::size_t sectionCount = 0;
+      std::chrono::milliseconds buildEntriesDuration{};
+      std::chrono::milliseconds sortDuration{};
+      std::chrono::milliseconds rebuildPositionIndexDuration{};
+      std::chrono::milliseconds buildGroupSectionsDuration{};
+      std::chrono::milliseconds totalDuration{};
+      std::uint64_t checksum = 0;
+    };
+
+    struct RankedSortTiming final
+    {
+      std::size_t count = 0;
+      std::chrono::milliseconds buildRankMapDuration{};
+      std::chrono::milliseconds buildEntriesDuration{};
+      std::chrono::milliseconds sortDuration{};
+      std::chrono::milliseconds totalDuration{};
+      std::uint64_t checksum = 0;
+    };
+
+    struct CompactSortTiming final
+    {
+      std::size_t count = 0;
+      std::chrono::milliseconds buildEntriesDuration{};
+      std::chrono::milliseconds sortDuration{};
+      std::chrono::milliseconds totalDuration{};
+      std::uint64_t checksum = 0;
+    };
+
+    BaselineMetric metric(std::string name, std::int64_t value, std::string unit)
+    {
+      return BaselineMetric{.name = std::move(name), .value = value, .unit = std::move(unit)};
+    }
+
+    std::int64_t currentResidentSetKiB()
+    {
+#ifdef __linux__
+      auto input = std::ifstream{"/proc/self/statm"};
+      [[maybe_unused]] std::uint64_t totalPages = 0;
+      std::uint64_t residentPages = 0;
+      input >> totalPages >> residentPages;
+
+      if (!input)
+      {
+        return 0;
+      }
+
+      auto const pageSize = ::sysconf(_SC_PAGESIZE);
+      return pageSize > 0 ? static_cast<std::int64_t>(residentPages) * pageSize / 1024 : 0;
+#else
+      return 0;
+#endif
+    }
+
+    // A comparison-heavy predicate that every synthetic track satisfies, so the
+    // PlanEvaluator runs each instruction to completion for every track. Unlike
+    // the empty (match-all) filter, this actually exercises the instruction loop
+    // and its field-operand resolution — the path the field-load index optimizes.
+    constexpr auto kHeavyFilter = "$year >= 1990 && $year <= 2024 && $trackNumber >= 1 && $trackNumber <= 20 && "
+                                  "$discNumber >= 1 && @duration >= 1m && $title ~ 'Track' && $artist ~ 'Artist' && "
+                                  "$genre ~ 'Genre' && $album ~ 'Album'";
+
+    // A large IN list exercises the compiled membership path used by broad
+    // imported filters and tag-generated smart-list predicates.
+    std::string makeLargeInFilter()
+    {
+      auto expr = std::string{"$year in ["};
+
+      for (std::int32_t value = 1; value <= 256; ++value)
+      {
+        if (value > 1)
+        {
+          expr += ", ";
+        }
+
+        expr += std::to_string(1900 + value);
+      }
+
+      expr += "]";
+      return expr;
+    }
+
+    std::int32_t compareSortCacheEntry(SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
+    {
+      if (auto const cmp = lhs.keys.artistKey.compare(rhs.keys.artistKey); cmp != 0)
+      {
+        return cmp;
+      }
+
+      if (auto const cmp = lhs.keys.albumKey.compare(rhs.keys.albumKey); cmp != 0)
+      {
+        return cmp;
+      }
+
+      if (lhs.keys.discNumber != rhs.keys.discNumber)
+      {
+        return lhs.keys.discNumber < rhs.keys.discNumber ? -1 : 1;
+      }
+
+      if (lhs.keys.trackNumber != rhs.keys.trackNumber)
+      {
+        return lhs.keys.trackNumber < rhs.keys.trackNumber ? -1 : 1;
+      }
+
+      if (auto const cmp = lhs.keys.titleKey.compare(rhs.keys.titleKey); cmp != 0)
+      {
+        return cmp;
+      }
+
+      if (lhs.trackId != rhs.trackId)
+      {
+        return lhs.trackId < rhs.trackId ? -1 : 1;
+      }
+
+      return 0;
+    }
+
+    bool isLessSortCacheEntry(SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
+    {
+      return compareSortCacheEntry(lhs, rhs) < 0;
+    }
+
+    std::vector<std::string> makeSortCacheStringPool()
+    {
+      constexpr std::size_t kPoolSize = 4096;
+      auto pool = std::vector<std::string>{};
+      pool.reserve(kPoolSize);
+
+      for (std::size_t index = 0; index < kPoolSize; ++index)
+      {
+        pool.push_back(std::format("sort-key-{:04d}", index));
+      }
+
+      return pool;
+    }
+
+    std::vector<SortCacheOrderEntry> makeSortCacheEntries(std::vector<std::string> const& pool, std::size_t count)
+    {
+      auto entries = std::vector<SortCacheOrderEntry>{};
+      entries.reserve(count);
+
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        auto const scrambled = ((index * 48271) + 9973) % count;
+        auto const poolIndex = [poolSize = pool.size()](std::size_t value, std::size_t salt) -> std::size_t
+        { return ((value * 1103515245) + (salt * 12345)) % poolSize; };
+
+        entries.push_back(SortCacheOrderEntry{
+          .trackId = TrackId{static_cast<std::uint32_t>(scrambled + 1)},
+          .keys =
+            {
+              .year = static_cast<std::uint16_t>(1990 + (scrambled % 35)),
+              .discNumber = static_cast<std::uint16_t>(1 + (scrambled % 3)),
+              .trackNumber = static_cast<std::uint16_t>(1 + (scrambled % 20)),
+              .movementNumber = static_cast<std::uint16_t>(scrambled % 12),
+              .duration = std::chrono::milliseconds{180000 + static_cast<std::int64_t>(scrambled % 420000)},
+              .titleKey = pool[poolIndex(scrambled, 1)],
+              .artistKey = pool[poolIndex(scrambled / 50, 2)],
+              .albumKey = pool[poolIndex(scrambled / 200, 3)],
+              .albumArtistKey = pool[poolIndex(scrambled / 75, 4)],
+              .genreKey = pool[poolIndex(scrambled % 20, 5)],
+              .composerKey = pool[poolIndex(scrambled / 400, 6)],
+              .conductorKey = pool[poolIndex(scrambled / 450, 7)],
+              .ensembleKey = pool[poolIndex(scrambled / 300, 8)],
+              .workKey = pool[poolIndex(scrambled / 500, 9)],
+              .soloistKey = pool[poolIndex(scrambled / 350, 10)],
+            },
+          .groupKey = pool[poolIndex(scrambled / 50, 11)],
+          .primaryText = pool[poolIndex(scrambled, 12)],
+          .secondaryText = pool[poolIndex(scrambled / 200, 13)],
+          .tertiaryText = pool[poolIndex(scrambled / 400, 14)],
+          .imageId = ResourceId{static_cast<std::uint32_t>(scrambled % 1024)},
+        });
+      }
+
+      return entries;
+    }
+
+    template<typename T>
+    std::int32_t compareSortValue(T const& lhsVal, T const& rhsVal)
+    {
+      if (lhsVal < rhsVal)
+      {
+        return -1;
+      }
+
+      if (rhsVal < lhsVal)
+      {
+        return 1;
+      }
+
+      return 0;
+    }
+
+    std::int32_t compareGenericSortCacheField(TrackSortField field, SortCacheKeys const& lhs, SortCacheKeys const& rhs)
+    {
+      switch (field)
+      {
+        case TrackSortField::Year: return compareSortValue(lhs.year, rhs.year);
+        case TrackSortField::DiscNumber: return compareSortValue(lhs.discNumber, rhs.discNumber);
+        case TrackSortField::TrackNumber: return compareSortValue(lhs.trackNumber, rhs.trackNumber);
+        case TrackSortField::Movement: return compareSortValue(lhs.movementNumber, rhs.movementNumber);
+        case TrackSortField::Duration: return compareSortValue(lhs.duration, rhs.duration);
+        case TrackSortField::Title: return lhs.titleKey.compare(rhs.titleKey);
+        case TrackSortField::Artist: return lhs.artistKey.compare(rhs.artistKey);
+        case TrackSortField::Album: return lhs.albumKey.compare(rhs.albumKey);
+        case TrackSortField::AlbumArtist: return lhs.albumArtistKey.compare(rhs.albumArtistKey);
+        case TrackSortField::Genre: return lhs.genreKey.compare(rhs.genreKey);
+        case TrackSortField::Composer: return lhs.composerKey.compare(rhs.composerKey);
+        case TrackSortField::Conductor: return lhs.conductorKey.compare(rhs.conductorKey);
+        case TrackSortField::Ensemble: return lhs.ensembleKey.compare(rhs.ensembleKey);
+        case TrackSortField::Work: return lhs.workKey.compare(rhs.workKey);
+        case TrackSortField::Soloist: return lhs.soloistKey.compare(rhs.soloistKey);
+        case TrackSortField::RecordingYear:
+        case TrackSortField::RecordingDate:
+          throw std::logic_error{"The historical sort-cache fixture has no recording-date keys"};
+      }
+
+      return 0;
+    }
+
+    bool isLessGenericSortCacheEntry(SortCacheOrderEntry const& lhs,
+                                     SortCacheOrderEntry const& rhs,
+                                     std::vector<TrackSortTerm> const& sortBy)
+    {
+      for (auto const& term : sortBy)
+      {
+        if (auto const cmp = compareGenericSortCacheField(term.field, lhs.keys, rhs.keys); cmp != 0)
+        {
+          return term.ascending ? (cmp < 0) : (cmp > 0);
+        }
+      }
+
+      return lhs.trackId < rhs.trackId;
+    }
+
+    std::uint64_t checksumSortCacheEntries(std::vector<SortCacheOrderEntry> const& entries)
+    {
+      std::uint64_t checksum = 1469598103934665603ULL;
+
+      for (auto const& entry : entries)
+      {
+        checksum ^= entry.trackId.raw();
+        checksum *= 1099511628211ULL;
+      }
+
+      return checksum;
+    }
+
+    std::uint64_t checksumRankedSortCacheEntries(std::vector<RankedSortCacheOrderEntry> const& entries)
+    {
+      std::uint64_t checksum = 1469598103934665603ULL;
+
+      for (auto const& entry : entries)
+      {
+        checksum ^= entry.trackId.raw();
+        checksum *= 1099511628211ULL;
+      }
+
+      return checksum;
+    }
+
+    std::uint64_t checksumCompactSortCacheEntries(std::vector<CompactSortCacheEntry> const& entries)
+    {
+      std::uint64_t checksum = 1469598103934665603ULL;
+
+      for (auto const& entry : entries)
+      {
+        checksum ^= entry.trackId.raw();
+        checksum *= 1099511628211ULL;
+      }
+
+      return checksum;
+    }
+
+    std::uint64_t checksumSortCacheIndices(std::vector<SortCacheOrderEntry> const& entries,
+                                           std::vector<std::uint32_t> const& indices)
+    {
+      std::uint64_t checksum = 1469598103934665603ULL;
+
+      for (auto const index : indices)
+      {
+        checksum ^= entries[index].trackId.raw();
+        checksum *= 1099511628211ULL;
+      }
+
+      return checksum;
+    }
+
+    using StringRanks = boost::unordered_flat_map<std::string_view, std::uint32_t>;
+
+    StringRanks makeStringRanks(std::vector<std::string> const& pool)
+    {
+      auto sortedViews = std::vector<std::string_view>{};
+      sortedViews.reserve(pool.size());
+
+      for (auto const& value : pool)
+      {
+        sortedViews.push_back(value);
+      }
+
+      std::ranges::sort(sortedViews);
+      sortedViews.erase(std::ranges::unique(sortedViews).begin(), sortedViews.end());
+
+      auto ranks = StringRanks{};
+      ranks.reserve(sortedViews.size());
+
+      for (auto const& [index, value] : sortedViews | compat::views::enumerate)
+      {
+        ranks.emplace(value, static_cast<std::uint32_t>(index + 1));
+      }
+
+      return ranks;
+    }
+
+    std::uint32_t rankOf(StringRanks const& ranks, std::string_view value)
+    {
+      if (auto const it = ranks.find(value); it != ranks.end())
+      {
+        return it->second;
+      }
+
+      return 0;
+    }
+
+    std::vector<RankedSortCacheOrderEntry> makeRankedSortCacheEntries(std::vector<SortCacheOrderEntry> const& entries,
+                                                                      StringRanks const& ranks)
+    {
+      auto rankedEntries = std::vector<RankedSortCacheOrderEntry>{};
+      rankedEntries.reserve(entries.size());
+
+      for (auto const& entry : entries)
+      {
+        rankedEntries.push_back(RankedSortCacheOrderEntry{
+          .trackId = entry.trackId,
+          .keys =
+            {
+              .year = entry.keys.year,
+              .discNumber = entry.keys.discNumber,
+              .trackNumber = entry.keys.trackNumber,
+              .movementNumber = entry.keys.movementNumber,
+              .duration = entry.keys.duration,
+              .titleRank = rankOf(ranks, entry.keys.titleKey),
+              .artistRank = rankOf(ranks, entry.keys.artistKey),
+              .albumRank = rankOf(ranks, entry.keys.albumKey),
+              .albumArtistRank = rankOf(ranks, entry.keys.albumArtistKey),
+              .genreRank = rankOf(ranks, entry.keys.genreKey),
+              .composerRank = rankOf(ranks, entry.keys.composerKey),
+              .conductorRank = rankOf(ranks, entry.keys.conductorKey),
+              .ensembleRank = rankOf(ranks, entry.keys.ensembleKey),
+              .workRank = rankOf(ranks, entry.keys.workKey),
+              .soloistRank = rankOf(ranks, entry.keys.soloistKey),
+            },
+          .groupRank = rankOf(ranks, entry.groupKey),
+          .primaryRank = rankOf(ranks, entry.primaryText),
+          .secondaryRank = rankOf(ranks, entry.secondaryText),
+          .tertiaryRank = rankOf(ranks, entry.tertiaryText),
+          .imageId = entry.imageId,
+        });
+      }
+
+      return rankedEntries;
+    }
+
+    std::vector<CompactSortCacheEntry> makeCompactSortCacheEntries(std::vector<SortCacheOrderEntry> const& entries)
+    {
+      auto compactEntries = std::vector<CompactSortCacheEntry>{};
+      compactEntries.reserve(entries.size());
+
+      for (auto const& entry : entries)
+      {
+        compactEntries.push_back(CompactSortCacheEntry{
+          .trackId = entry.trackId,
+          .artistKey = entry.keys.artistKey,
+          .albumKey = entry.keys.albumKey,
+          .titleKey = entry.keys.titleKey,
+          .discNumber = entry.keys.discNumber,
+          .trackNumber = entry.keys.trackNumber,
+        });
+      }
+
+      return compactEntries;
+    }
+
+    bool isSortedEntries(std::vector<SortCacheOrderEntry> const& entries)
+    {
+      return std::ranges::is_sorted(entries, isLessSortCacheEntry);
+    }
+
+    bool isSortedIndices(std::vector<SortCacheOrderEntry> const& entries, std::vector<std::uint32_t> const& indices)
+    {
+      return std::ranges::is_sorted(indices,
+                                    [&entries](std::uint32_t lhs, std::uint32_t rhs)
+                                    { return isLessSortCacheEntry(entries[lhs], entries[rhs]); });
+    }
+
+    bool isLessRankedSortCacheEntry(RankedSortCacheOrderEntry const& lhs, RankedSortCacheOrderEntry const& rhs)
+    {
+      if (lhs.keys.artistRank != rhs.keys.artistRank)
+      {
+        return lhs.keys.artistRank < rhs.keys.artistRank;
+      }
+
+      if (lhs.keys.albumRank != rhs.keys.albumRank)
+      {
+        return lhs.keys.albumRank < rhs.keys.albumRank;
+      }
+
+      if (lhs.keys.discNumber != rhs.keys.discNumber)
+      {
+        return lhs.keys.discNumber < rhs.keys.discNumber;
+      }
+
+      if (lhs.keys.trackNumber != rhs.keys.trackNumber)
+      {
+        return lhs.keys.trackNumber < rhs.keys.trackNumber;
+      }
+
+      if (lhs.keys.titleRank != rhs.keys.titleRank)
+      {
+        return lhs.keys.titleRank < rhs.keys.titleRank;
+      }
+
+      return lhs.trackId < rhs.trackId;
+    }
+
+    bool isLessCompactSortCacheEntry(CompactSortCacheEntry const& lhs, CompactSortCacheEntry const& rhs)
+    {
+      if (auto const cmp = lhs.artistKey.compare(rhs.artistKey); cmp != 0)
+      {
+        return cmp < 0;
+      }
+
+      if (auto const cmp = lhs.albumKey.compare(rhs.albumKey); cmp != 0)
+      {
+        return cmp < 0;
+      }
+
+      if (lhs.discNumber != rhs.discNumber)
+      {
+        return lhs.discNumber < rhs.discNumber;
+      }
+
+      if (lhs.trackNumber != rhs.trackNumber)
+      {
+        return lhs.trackNumber < rhs.trackNumber;
+      }
+
+      if (auto const cmp = lhs.titleKey.compare(rhs.titleKey); cmp != 0)
+      {
+        return cmp < 0;
+      }
+
+      return lhs.trackId < rhs.trackId;
+    }
+
+    bool isSortedRankedEntries(std::vector<RankedSortCacheOrderEntry> const& entries)
+    {
+      return std::ranges::is_sorted(entries, isLessRankedSortCacheEntry);
+    }
+
+    bool isSortedCompactEntries(std::vector<CompactSortCacheEntry> const& entries)
+    {
+      return std::ranges::is_sorted(entries, isLessCompactSortCacheEntry);
+    }
+
+    SortCacheStrategyTiming measureDirectEntrySort(std::vector<SortCacheOrderEntry> const& baseline)
+    {
+      auto timing = SortCacheStrategyTiming{.count = baseline.size()};
+
+      auto directEntries = baseline;
+      auto const directStart = std::chrono::steady_clock::now();
+      std::ranges::sort(directEntries, isLessSortCacheEntry);
+      auto const directEnd = std::chrono::steady_clock::now();
+      timing.duration = std::chrono::duration_cast<std::chrono::milliseconds>(directEnd - directStart);
+      timing.checksum = checksumSortCacheEntries(directEntries);
+      CHECK(isSortedEntries(directEntries));
+
+      return timing;
+    }
+
+    SortCacheStrategyTiming measureGenericEntrySort(std::vector<SortCacheOrderEntry> const& baseline)
+    {
+      auto timing = SortCacheStrategyTiming{.count = baseline.size()};
+      auto sortBy = std::vector{
+        TrackSortTerm{.field = TrackSortField::Artist},
+        TrackSortTerm{.field = TrackSortField::Album},
+        TrackSortTerm{.field = TrackSortField::DiscNumber},
+        TrackSortTerm{.field = TrackSortField::TrackNumber},
+        TrackSortTerm{.field = TrackSortField::Title},
+      };
+
+      auto entries = baseline;
+      auto const start = std::chrono::steady_clock::now();
+      std::ranges::sort(entries,
+                        [&sortBy](SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
+                        { return isLessGenericSortCacheEntry(lhs, rhs, sortBy); });
+      auto const end = std::chrono::steady_clock::now();
+      timing.duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+      timing.checksum = checksumSortCacheEntries(entries);
+      CHECK(std::ranges::is_sorted(entries,
+                                   [&sortBy](SortCacheOrderEntry const& lhs, SortCacheOrderEntry const& rhs)
+                                   { return isLessGenericSortCacheEntry(lhs, rhs, sortBy); }));
+
+      return timing;
+    }
+
+    SortCacheStrategyTiming measureIndexSort(std::vector<SortCacheOrderEntry> const& baseline)
+    {
+      auto timing = SortCacheStrategyTiming{.count = baseline.size()};
+
+      auto indices = std::vector<std::uint32_t>(baseline.size());
+      auto const indexStart = std::chrono::steady_clock::now();
+      std::ranges::iota(indices, 0);
+      std::ranges::sort(indices,
+                        [&baseline](std::uint32_t lhs, std::uint32_t rhs)
+                        { return isLessSortCacheEntry(baseline[lhs], baseline[rhs]); });
+      auto const indexEnd = std::chrono::steady_clock::now();
+      timing.duration = std::chrono::duration_cast<std::chrono::milliseconds>(indexEnd - indexStart);
+      timing.checksum = checksumSortCacheIndices(baseline, indices);
+      CHECK(isSortedIndices(baseline, indices));
+
+      return timing;
+    }
+
+    RankedSortTiming measureRankedEntrySort(std::vector<std::string> const& pool,
+                                            std::vector<SortCacheOrderEntry> const& baseline)
+    {
+      auto timing = RankedSortTiming{.count = baseline.size()};
+      auto const totalStart = std::chrono::steady_clock::now();
+
+      auto const rankStart = std::chrono::steady_clock::now();
+      auto const ranks = makeStringRanks(pool);
+      auto const rankEnd = std::chrono::steady_clock::now();
+
+      auto const buildStart = std::chrono::steady_clock::now();
+      auto rankedEntries = makeRankedSortCacheEntries(baseline, ranks);
+      auto const buildEnd = std::chrono::steady_clock::now();
+
+      auto const sortStart = std::chrono::steady_clock::now();
+      std::ranges::sort(rankedEntries, isLessRankedSortCacheEntry);
+      auto const sortEnd = std::chrono::steady_clock::now();
+      auto const totalEnd = std::chrono::steady_clock::now();
+
+      timing.buildRankMapDuration = std::chrono::duration_cast<std::chrono::milliseconds>(rankEnd - rankStart);
+      timing.buildEntriesDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buildEnd - buildStart);
+      timing.sortDuration = std::chrono::duration_cast<std::chrono::milliseconds>(sortEnd - sortStart);
+      timing.totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(totalEnd - totalStart);
+      timing.checksum = checksumRankedSortCacheEntries(rankedEntries);
+      CHECK(isSortedRankedEntries(rankedEntries));
+
+      return timing;
+    }
+
+    CompactSortTiming measureCompactEntrySort(std::vector<SortCacheOrderEntry> const& baseline)
+    {
+      auto timing = CompactSortTiming{.count = baseline.size()};
+      auto const totalStart = std::chrono::steady_clock::now();
+
+      auto const buildStart = std::chrono::steady_clock::now();
+      auto compactEntries = makeCompactSortCacheEntries(baseline);
+      auto const buildEnd = std::chrono::steady_clock::now();
+
+      auto const sortStart = std::chrono::steady_clock::now();
+      std::ranges::sort(compactEntries, isLessCompactSortCacheEntry);
+      auto const sortEnd = std::chrono::steady_clock::now();
+      auto const totalEnd = std::chrono::steady_clock::now();
+
+      timing.buildEntriesDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buildEnd - buildStart);
+      timing.sortDuration = std::chrono::duration_cast<std::chrono::milliseconds>(sortEnd - sortStart);
+      timing.totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(totalEnd - totalStart);
+      timing.checksum = checksumCompactSortCacheEntries(compactEntries);
+      CHECK(isSortedCompactEntries(compactEntries));
+
+      return timing;
+    }
+
+    SortCacheStrategyTiming measureIndexSortAndMaterialize(std::vector<SortCacheOrderEntry> const& baseline)
+    {
+      auto timing = SortCacheStrategyTiming{.count = baseline.size()};
+
+      auto materializedIndices = std::vector<std::uint32_t>(baseline.size());
+      auto materializedEntries = std::vector<SortCacheOrderEntry>{};
+      materializedEntries.reserve(baseline.size());
+
+      auto const materializedStart = std::chrono::steady_clock::now();
+      std::ranges::iota(materializedIndices, 0);
+      std::ranges::sort(materializedIndices,
+                        [&baseline](std::uint32_t lhs, std::uint32_t rhs)
+                        { return isLessSortCacheEntry(baseline[lhs], baseline[rhs]); });
+
+      for (auto const index : materializedIndices)
+      {
+        materializedEntries.push_back(baseline[index]);
+      }
+
+      auto const materializedEnd = std::chrono::steady_clock::now();
+      timing.duration = std::chrono::duration_cast<std::chrono::milliseconds>(materializedEnd - materializedStart);
+      timing.checksum = checksumSortCacheEntries(materializedEntries);
+      CHECK(isSortedEntries(materializedEntries));
+
+      return timing;
+    }
+
+    RebuildStageTiming measureProjectionRebuildStages(std::vector<std::string> const& pool, std::size_t count)
+    {
+      auto timing = RebuildStageTiming{.count = count};
+      auto const totalStart = std::chrono::steady_clock::now();
+
+      auto const buildStart = std::chrono::steady_clock::now();
+      auto entries = makeSortCacheEntries(pool, count);
+      auto const buildEnd = std::chrono::steady_clock::now();
+
+      auto const sortStart = std::chrono::steady_clock::now();
+      std::ranges::sort(entries, isLessSortCacheEntry);
+      auto const sortEnd = std::chrono::steady_clock::now();
+
+      auto const positionStart = std::chrono::steady_clock::now();
+      auto positionIndex = boost::unordered_flat_map<TrackId, std::size_t, std::hash<TrackId>>{};
+      positionIndex.reserve(entries.size());
+
+      for (auto const& [index, entry] : entries | compat::views::enumerate)
+      {
+        positionIndex[entry.trackId] = static_cast<std::size_t>(index);
+      }
+
+      auto const positionEnd = std::chrono::steady_clock::now();
+
+      auto const groupStart = std::chrono::steady_clock::now();
+      std::size_t sectionCount = 0;
+
+      if (!entries.empty())
+      {
+        ++sectionCount;
+
+        for (std::size_t index = 1; index < entries.size(); ++index)
+        {
+          if (entries[index].groupKey != entries[index - 1].groupKey)
+          {
+            ++sectionCount;
+          }
+        }
+      }
+
+      auto const groupEnd = std::chrono::steady_clock::now();
+      auto const totalEnd = std::chrono::steady_clock::now();
+
+      timing.sectionCount = sectionCount;
+      timing.buildEntriesDuration = std::chrono::duration_cast<std::chrono::milliseconds>(buildEnd - buildStart);
+      timing.sortDuration = std::chrono::duration_cast<std::chrono::milliseconds>(sortEnd - sortStart);
+      timing.rebuildPositionIndexDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(positionEnd - positionStart);
+      timing.buildGroupSectionsDuration = std::chrono::duration_cast<std::chrono::milliseconds>(groupEnd - groupStart);
+      timing.totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(totalEnd - totalStart);
+      timing.checksum = checksumSortCacheEntries(entries);
+
+      CHECK(positionIndex.size() == entries.size());
+      CHECK(isSortedEntries(entries));
+
+      return timing;
+    }
+
+    query::ExecutionPlan makeExpandedYearInPlan(std::size_t listSize)
+    {
+      auto plan = query::ExecutionPlan{};
+      std::int32_t nextReg = 0;
+      bool first = true;
+
+      for (std::size_t index = 0; index < listSize; ++index)
+      {
+        plan.instructions.push_back(query::Instruction{
+          .op = query::OpCode::LoadField,
+          .field = static_cast<std::uint8_t>(query::Field::Year),
+          .operand = nextReg++,
+          .constValue = 0,
+          .size = 0,
+          .data = nullptr,
+        });
+        plan.instructions.push_back(query::Instruction{
+          .op = query::OpCode::LoadConstant,
+          .field = 0,
+          .operand = nextReg++,
+          .constValue = static_cast<std::int64_t>(1990 + index),
+          .size = 0,
+          .data = nullptr,
+        });
+
+        plan.instructions.push_back(query::Instruction{
+          .op = query::OpCode::Eq,
+          .field = static_cast<std::uint8_t>(query::Field::Year),
+          .operand = nextReg - 1,
+          .constValue = 0,
+          .size = 0,
+          .data = nullptr,
+        });
+        --nextReg;
+
+        if (first)
+        {
+          first = false;
+          continue;
+        }
+
+        plan.instructions.push_back(query::Instruction{
+          .op = query::OpCode::Or,
+          .field = 0,
+          .operand = nextReg - 1,
+          .constValue = 0,
+          .size = 0,
+          .data = nullptr,
+        });
+        --nextReg;
+      }
+
+      return plan;
+    }
+
+    query::ExecutionPlan makeSetYearInPlan(std::size_t listSize)
+    {
+      auto plan = query::ExecutionPlan{};
+      auto set = query::InSet{};
+
+      for (std::size_t index = 0; index < listSize; ++index)
+      {
+        set.numericValues.insert(static_cast<std::int64_t>(1990 + index));
+      }
+
+      plan.inSets.push_back(std::move(set));
+      plan.instructions.push_back(query::Instruction{
+        .op = query::OpCode::LoadField,
+        .field = static_cast<std::uint8_t>(query::Field::Year),
+        .operand = 0,
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+      plan.instructions.push_back(query::Instruction{
+        .op = query::OpCode::InSet,
+        .field = static_cast<std::uint8_t>(query::Field::Year),
+        .operand = 0,
+        .constValue = 0,
+        .size = 0,
+        .data = nullptr,
+      });
+
+      return plan;
+    }
+
+    struct ScaleBench final
+    {
+      static constexpr std::uint64_t kPinnedMapBytes = std::uint64_t{2} * 1024 * 1024 * 1024;
+
+      ao::test::TempDir tempDir;
+      library::MusicLibrary musicLibrary{ao::test::requireValue(
+        library::MusicLibrary::open(tempDir.path(),
+                                    tempDir.path(),
+                                    library::MusicLibrary::Options{.pinnedMapBytes = kPinnedMapBytes}))};
+      std::vector<TrackId> ids;
+    };
+
+    void buildLibrary(ScaleBench& bench, std::int32_t trackCount)
+    {
+      bench.ids.reserve(trackCount);
+      auto transaction = library::test::writeTransaction(bench.musicLibrary);
+      auto populateRes = transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          for (std::int32_t index = 0; index < trackCount; ++index)
+          {
+            auto const spec = library::test::TrackSpec{
+              .title = std::format("Track {:06d}", index),
+              .artist = std::format("Artist {:04d}", index % ((trackCount / 50) + 1)),
+              .album = std::format("Album {:04d}", index % ((trackCount / 200) + 1)),
+              .genre = std::format("Genre {:02d}", index % 20),
+              .uri = index == 0 ? std::string{"test.flac"} : std::format(".aobus-test/track-{}.flac", index),
+              .year = static_cast<std::uint16_t>(1990 + (index % 35)),
+              .discNumber = static_cast<std::uint16_t>(1 + (index % 3)),
+              .trackNumber = static_cast<std::uint16_t>(1 + (index % 20)),
+              .duration = std::chrono::minutes{3} + std::chrono::milliseconds{static_cast<std::uint32_t>(
+                                                      (static_cast<std::int64_t>(index) * 137) %
+                                                      std::chrono::milliseconds{std::chrono::minutes{7}}.count())},
+            };
+            bench.ids.push_back(library::test::addTrackWithUniqueFixtureUri(bench.musicLibrary, write, spec));
+          }
+
+          return {};
+        });
+      REQUIRE(populateRes);
+      REQUIRE(transaction.commit());
+    }
+
+    void buildCaselessSearchLibrary(ScaleBench& bench, std::int32_t trackCount)
+    {
+      constexpr auto kArtists = std::to_array<std::string_view>({
+        "Die Ärzte",
+        "Dvořák Quartet",
+        "Björk",
+        "Sigur Rós",
+        "Μίκης Θεοδωράκης",
+        "宇多田ヒカル",
+        "坂本龍一",
+        "Café Tacvba",
+      });
+      constexpr auto kAlbums = std::to_array<std::string_view>({
+        "Große Straße",
+        "Rusalka",
+        "Vespertine",
+        "Ágætis byrjun",
+        "Ζορμπάς",
+        "初恋",
+        "音楽図鑑",
+        "Re",
+      });
+
+      bench.ids.reserve(trackCount);
+      auto transaction = library::test::writeTransaction(bench.musicLibrary);
+      auto populateRes = transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          for (std::int32_t index = 0; index < trackCount; ++index)
+          {
+            auto const arrayIndex = static_cast<std::size_t>(index) % kArtists.size();
+            auto const artist = kArtists[arrayIndex];
+            auto const album = kAlbums[arrayIndex];
+            auto const spec = library::test::TrackSpec{
+              .title = std::format("{} — Straße {:06d}", artist, index),
+              .artist = std::string{artist},
+              .album = std::string{album},
+              .albumArtist = std::string{artist},
+              .genre = arrayIndex % 2 == 0 ? "Électronique" : "現代音楽",
+              .composer = std::string{artist},
+              .work = std::string{album},
+              .uri = index == 0 ? std::string{"test.flac"} : std::format(".aobus-test/track-{}.flac", index),
+            };
+            bench.ids.push_back(library::test::addTrackWithUniqueFixtureUri(bench.musicLibrary, write, spec));
+          }
+
+          return {};
+        });
+      REQUIRE(populateRes);
+      REQUIRE(transaction.commit());
+    }
+
+    class BenchmarkTrackSource final : public TrackSource
+    {
+    public:
+      explicit BenchmarkTrackSource(std::vector<TrackId> ids)
+        : _ids{std::move(ids)}
+      {
+      }
+
+      std::size_t size() const override { return _ids.size(); }
+      TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
+      std::optional<std::size_t> indexOf(TrackId id) const override
+      {
+        for (std::size_t i = 0; i < _ids.size(); ++i)
+        {
+          if (_ids[i] == id)
+          {
+            return i;
+          }
+        }
+
+        return std::nullopt;
+      }
+
+    private:
+      std::vector<TrackId> _ids;
+    };
+
+    Timings measureScale(ScaleBench& bench, std::int32_t trackCount)
+    {
+      auto t = Timings{};
+      auto& lib = bench.musicLibrary;
+
+      // 1. Projection construction + setPresentation
+      auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
+      auto sourceLease = TrackSourceLease{sourcePtr};
+
+      auto const t0 = std::chrono::steady_clock::now();
+      auto proj = TrackListProjection{ViewId{1}, sourceLease, lib};
+      auto const t1 = std::chrono::steady_clock::now();
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
+      auto const t2 = std::chrono::steady_clock::now();
+
+      t.createProjectionDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+      t.setTitleSortDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
+      // 2. SmartListEvaluator evaluateMembers (simulates expression filter via SmartListSource)
+      auto evaluator = SmartListEvaluator{lib};
+      auto filtered = SmartListSource{sourceLease, evaluator};
+
+      auto const t3 = std::chrono::steady_clock::now();
+
+      // Set expression via stage/apply pattern (mirrors ViewService::setFilter path)
+      // No filter expression → match everything
+      filtered.reload();
+      auto const t4 = std::chrono::steady_clock::now();
+
+      t.evaluateMembersDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3);
+
+      // 2b. Filter evaluation with a comparison-heavy predicate. A dedicated
+      // evaluator keeps this measurement independent of the match-all list above.
+      auto filterEvaluator = SmartListEvaluator{lib};
+      auto filteredExpr = SmartListSource{sourceLease, filterEvaluator};
+      filteredExpr.setExpression(kHeavyFilter);
+
+      auto const filterStart = std::chrono::steady_clock::now();
+      filteredExpr.reload();
+      auto const filterEnd = std::chrono::steady_clock::now();
+
+      t.filterEvalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(filterEnd - filterStart);
+
+      // 2c. Large IN-list filter.
+      auto inEvaluator = SmartListEvaluator{lib};
+      auto filteredIn = SmartListSource{sourceLease, inEvaluator};
+      filteredIn.setExpression(makeLargeInFilter());
+
+      auto const inStart = std::chrono::steady_clock::now();
+      filteredIn.reload();
+      auto const inEnd = std::chrono::steady_clock::now();
+
+      t.largeInEvalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(inEnd - inStart);
+
+      // 3. indexOf — 10k iterations at a fixed position
+      auto const midId = proj.trackIdAt(static_cast<std::size_t>(trackCount / 2));
+      auto const optWarm = proj.indexOf(midId); // warm
+
+      constexpr int kLookupIters = 10000;
+      auto const t5 = std::chrono::steady_clock::now();
+
+      for (std::int32_t i = 0; i < kLookupIters; ++i)
+      {
+        [[maybe_unused]] auto const optRes = proj.indexOf(midId);
+      }
+
+      auto const t6 = std::chrono::steady_clock::now();
+
+      t.indexOfLookupDuration = std::chrono::duration_cast<std::chrono::microseconds>(t6 - t5);
+
+      // Check the measured work's post-state without changing its timed region.
+      REQUIRE(bench.ids.size() == static_cast<std::size_t>(trackCount));
+      REQUIRE(proj.size() == bench.ids.size());
+      CHECK(proj.trackIdAt(0) == bench.ids.front());
+      CHECK(proj.trackIdAt(proj.size() - 1) == bench.ids.back());
+      auto const midpointIndex = static_cast<std::size_t>(trackCount / 2);
+      CHECK(midId == bench.ids[midpointIndex]);
+      REQUIRE(optWarm);
+      CHECK(*optWarm == midpointIndex);
+
+      for (auto const* const source : {&filtered, &filteredExpr, &filteredIn})
+      {
+        REQUIRE_FALSE(source->hasError());
+        REQUIRE(source->size() == bench.ids.size());
+        CHECK(source->trackIdAt(0) == bench.ids.front());
+        CHECK(source->trackIdAt(source->size() - 1) == bench.ids.back());
+      }
+
+      return t;
+    }
+
+    void recordScaleBaseline(std::size_t trackCount, std::chrono::milliseconds buildDuration, Timings const& timing)
+    {
+      recordBaseline("scale-baseline",
+                     {
+                       metric("track_count", static_cast<std::int64_t>(trackCount), "count"),
+                       metric("library_build", buildDuration.count(), "ms"),
+                       metric("projection_construct", timing.createProjectionDuration.count(), "ms"),
+                       metric("set_presentation_sort", timing.setTitleSortDuration.count(), "ms"),
+                       metric("evaluate_members", timing.evaluateMembersDuration.count(), "ms"),
+                       metric("filter_eval_heavy_predicate", timing.filterEvalDuration.count(), "ms"),
+                       metric("filter_eval_large_in_list", timing.largeInEvalDuration.count(), "ms"),
+                       metric("index_of_10000", timing.indexOfLookupDuration.count(), "us"),
+                     });
+    }
+
+    InThresholdTiming measureYearInThreshold(ScaleBench& bench, std::size_t listSize)
+    {
+      auto expandedPlan = makeExpandedYearInPlan(listSize);
+      auto setPlan = makeSetYearInPlan(listSize);
+      auto expandedBinding = query::PlanBinding{expandedPlan};
+      auto setBinding = query::PlanBinding{setPlan};
+      auto evaluator = query::PlanEvaluator{};
+      auto& lib = bench.musicLibrary;
+      auto transaction = lib.readTransaction();
+      auto reader = lib.tracks().reader(transaction);
+
+      auto timing = InThresholdTiming{.listSize = listSize};
+
+      auto const expandedStart = std::chrono::steady_clock::now();
+
+      for (auto const id : bench.ids)
+      {
+        auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
+
+        if (optView && evaluator.matchesFullPlan(expandedBinding, *optView))
+        {
+          ++timing.expandedMatches;
+        }
+      }
+
+      auto const expandedEnd = std::chrono::steady_clock::now();
+      auto const setStart = std::chrono::steady_clock::now();
+
+      for (auto const id : bench.ids)
+      {
+        auto optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
+
+        if (optView && evaluator.matchesFullPlan(setBinding, *optView))
+        {
+          ++timing.setMatches;
+        }
+      }
+
+      auto const setEnd = std::chrono::steady_clock::now();
+
+      timing.expandedDuration = std::chrono::duration_cast<std::chrono::microseconds>(expandedEnd - expandedStart);
+      timing.setDuration = std::chrono::duration_cast<std::chrono::microseconds>(setEnd - setStart);
+
+      return timing;
+    }
+
+    CaselessSearchTiming measureCaselessQuickFilter(ScaleBench& bench)
+    {
+      constexpr auto kExpression = "$title ~ 'Die Ärzte' or $artist ~ 'Die Ärzte' or $album ~ 'Die Ärzte' or "
+                                   "$albumArtist ~ 'Die Ärzte' or $genre ~ 'Die Ärzte' or $composer ~ 'Die Ärzte' or "
+                                   "$work ~ 'Die Ärzte'";
+
+      auto expressionRes = query::parse(kExpression);
+      REQUIRE(expressionRes);
+
+      auto planRes = query::compileQuery(*expressionRes);
+      REQUIRE(planRes);
+
+      auto& musicLibrary = bench.musicLibrary;
+      auto transaction = musicLibrary.readTransaction();
+      auto reader = musicLibrary.tracks().reader(transaction);
+      auto caselessDictionaryCache = library::DictionaryReadCache{musicLibrary.dictionary()};
+      auto caselessDictionaryContext = library::DictionaryReadContext{caselessDictionaryCache};
+      auto caselessBinding = query::PlanBinding{*planRes, caselessDictionaryContext};
+      auto evaluator = query::PlanEvaluator{};
+
+      auto measure = [&](query::PlanBinding const& binding)
+      {
+        std::size_t matches = 0;
+        auto const start = std::chrono::steady_clock::now();
+
+        for (auto const id : bench.ids)
+        {
+          auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+
+          if (!optView)
+          {
+            FAIL("Benchmark track disappeared during a stable read transaction");
+          }
+
+          matches += evaluator.matches(binding, *optView) ? 1U : 0U;
+        }
+
+        auto const end = std::chrono::steady_clock::now();
+        return std::pair<std::chrono::microseconds, std::size_t>{
+          std::chrono::duration_cast<std::chrono::microseconds>(end - start),
+          matches,
+        };
+      };
+
+      auto timing = CaselessSearchTiming{};
+      auto const [firstPassDuration, firstPassMatches] = measure(caselessBinding);
+      timing.firstPassDuration = firstPassDuration;
+      timing.firstPassMatches = firstPassMatches;
+      auto const [secondPassDuration, secondPassMatches] = measure(caselessBinding);
+      timing.secondPassDuration = secondPassDuration;
+      timing.secondPassMatches = secondPassMatches;
+      return timing;
+    }
+
+    std::chrono::milliseconds measureProjectionSortFieldDuration(ScaleBench& bench, TrackSortField field)
+    {
+      auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
+      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.musicLibrary};
+
+      auto const start = std::chrono::steady_clock::now();
+      proj.setPresentation(TrackPresentationSpec{
+        .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = field, .ascending = true}}});
+      auto const end = std::chrono::steady_clock::now();
+
+      REQUIRE(bench.ids.size() > 20001);
+      REQUIRE(proj.size() == bench.ids.size());
+      std::size_t earlierIndex = 0;
+
+      switch (field)
+      {
+        case TrackSortField::Title: earlierIndex = 0; break;
+        case TrackSortField::Artist: earlierIndex = 20001; break;
+        case TrackSortField::Album: earlierIndex = 5001; break;
+        case TrackSortField::Genre: earlierIndex = 20; break;
+        default: FAIL("Unexpected projection sort field in the baseline workload");
+      }
+
+      auto const optEarlier = proj.indexOf(bench.ids[earlierIndex]);
+      auto const optLater = proj.indexOf(bench.ids[1]);
+      REQUIRE(optEarlier);
+      REQUIRE(optLater);
+      CHECK(proj.trackIdAt(*optEarlier) == bench.ids[earlierIndex]);
+      CHECK(proj.trackIdAt(*optLater) == bench.ids[1]);
+      CHECK(*optEarlier < *optLater);
+
+      return std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    }
+
+    std::chrono::milliseconds measureProjectionPresentationDuration(ScaleBench& bench,
+                                                                    TrackPresentationSpec const& spec)
+    {
+      auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
+      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.musicLibrary};
+
+      auto const start = std::chrono::steady_clock::now();
+      proj.setPresentation(spec);
+      auto const end = std::chrono::steady_clock::now();
+
+      REQUIRE_FALSE(bench.ids.empty());
+      REQUIRE(proj.size() == bench.ids.size());
+      auto const optFirst = proj.indexOf(bench.ids.front());
+      auto const optLast = proj.indexOf(bench.ids.back());
+      REQUIRE(optFirst);
+      REQUIRE(optLast);
+      CHECK(proj.trackIdAt(*optFirst) == bench.ids.front());
+      CHECK(proj.trackIdAt(*optLast) == bench.ids.back());
+
+      if (spec.groupBy == TrackGroupKey::None)
+      {
+        CHECK(proj.groupCount() == 0);
+      }
+      else
+      {
+        CHECK(proj.groupCount() > 0);
+      }
+
+      return std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    }
+
+    class PipelineBenchmarkSource final : public TrackSource
+    {
+    public:
+      explicit PipelineBenchmarkSource(std::vector<TrackId> trackIds)
+        : _trackIds{std::move(trackIds)}
+      {
+      }
+
+      std::size_t size() const override { return _trackIds.size(); }
+      TrackId trackIdAt(std::size_t index) const override { return _trackIds.at(index); }
+      std::optional<std::size_t> indexOf(TrackId id) const override
+      {
+        if (auto const it = std::ranges::find(_trackIds, id); it != _trackIds.end())
+        {
+          return static_cast<std::size_t>(it - _trackIds.begin());
+        }
+
+        return std::nullopt;
+      }
+
+      void appendBatch(std::span<TrackId const> trackIds)
+      {
+        auto const previousSize = _trackIds.size();
+        _trackIds.append_range(trackIds);
+        REQUIRE(tryPublishDelta(
+          delta::RegularTrackEditScript{
+            .edits = {delta::InsertRange{
+              .start = previousSize,
+              .trackIds = {trackIds.begin(), trackIds.end()},
+            }},
+          },
+          previousSize));
+      }
+
+      std::vector<TrackId> removeTail(std::size_t count)
+      {
+        REQUIRE(count <= _trackIds.size());
+        auto const previousSize = _trackIds.size();
+        auto const start = previousSize - count;
+        auto removed = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end()};
+        _trackIds.erase(_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end());
+        REQUIRE(tryPublishDelta(
+          delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = start, .trackIds = removed}}},
+          previousSize));
+        return removed;
+      }
+
+      void updateRange(std::size_t start, std::size_t count)
+      {
+        REQUIRE(start <= _trackIds.size());
+        REQUIRE(count <= _trackIds.size() - start);
+        auto ids = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start),
+                                        _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count)};
+        auto const previousSize = _trackIds.size();
+        auto script =
+          delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = start, .trackIds = std::move(ids)}}};
+        auto const published = tryPublishDelta(std::move(script), previousSize);
+        REQUIRE(published);
+      }
+
+      void moveRangeToEnd(std::size_t start, std::size_t count)
+      {
+        REQUIRE(start <= _trackIds.size());
+        REQUIRE(count <= _trackIds.size() - start);
+        auto const previousSize = _trackIds.size();
+        auto moved = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start),
+                                          _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count)};
+        _trackIds.erase(_trackIds.begin() + static_cast<std::ptrdiff_t>(start),
+                        _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count));
+        auto const insertionIndex = _trackIds.size();
+        _trackIds.append_range(moved);
+        auto script = delta::RegularTrackEditScript{
+          .edits = {delta::RemoveRange{.start = start, .trackIds = moved},
+                    delta::InsertRange{.start = insertionIndex, .trackIds = std::move(moved)}},
+        };
+        auto const published = tryPublishDelta(std::move(script), previousSize);
+        REQUIRE(published);
+      }
+
+      std::span<TrackId const> trackIds() const noexcept { return _trackIds; }
+
+    private:
+      std::vector<TrackId> _trackIds;
+    };
+
+    struct PipelineOperationTiming final
+    {
+      std::chrono::microseconds mutationDuration{};
+      std::chrono::microseconds commitDuration{};
+      std::chrono::microseconds callbackDuration{};
+    };
+
+    struct PipelineRunTiming final
+    {
+      PipelineOperationTiming insert;
+      PipelineOperationTiming remove;
+      PipelineOperationTiming singleUpdate;
+      PipelineOperationTiming singleProjectionUpdate;
+      PipelineOperationTiming update;
+      PipelineOperationTiming orderMove;
+      std::chrono::microseconds denseOrderBindDuration{};
+    };
+
+    library::test::TrackSpec pipelineTrackSpec(std::size_t index, bool updated = false)
+    {
+      return library::test::TrackSpec{
+        .title = std::format("{}Track {:06}", updated ? "Updated " : "", index),
+        .artist = std::format("Artist {:03}", index % 200),
+        .album = std::format("Album {:04}", index % 1000),
+        .genre = std::format("Genre {:02}", index % 20),
+        .uri = std::format("track-{:06}.flac", index),
+        .year = static_cast<std::uint16_t>(1990 + (index % 35)),
+      };
+    }
+
+    std::vector<TrackId> createPipelineTracks(library::MusicLibrary& library,
+                                              std::size_t firstIndex,
+                                              std::size_t count,
+                                              PipelineOperationTiming* timing = nullptr)
+    {
+      auto transaction = library::test::writeTransaction(library);
+      auto ids = std::vector<TrackId>{};
+      ids.reserve(count);
+
+      auto const mutationStart = std::chrono::steady_clock::now();
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+
+          for (std::size_t const offset : std::views::iota(std::size_t{0}, count))
+          {
+            auto const spec = pipelineTrackSpec(firstIndex + offset);
+            auto builder = library::TrackBuilder::makeEmpty();
+            library::test::applyTrackSpec(builder, spec);
+            auto createdRes = writer.create(builder, library::FileManifestBuilder::makeEmpty());
+            REQUIRE(createdRes);
+            ids.push_back(*createdRes);
+          }
+
+          return {};
+        }));
+
+      auto const mutationEnd = std::chrono::steady_clock::now();
+      auto const commitStart = std::chrono::steady_clock::now();
+      REQUIRE(transaction.commit());
+
+      if (timing != nullptr)
+      {
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing->mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing->commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
+      }
+
+      return ids;
+    }
+
+    class SourcePipelineBench final
+    {
+    public:
+      static constexpr std::size_t kInitialTrackCount = 50000;
+      static constexpr std::size_t kBulkCount = 5000;
+      static constexpr std::size_t kOrderMoveCount = 500;
+      static constexpr std::size_t kSmartListCount = 3;
+
+      SourcePipelineBench()
+        : _ids{createPipelineTracks(_libraryFixture.library(), 0, kInitialTrackCount)}
+        , _rootPtr{std::make_shared<PipelineBenchmarkSource>(_ids)}
+        , _evaluator{_libraryFixture.library()}
+        , _orderedPtr{std::make_shared<PipelineBenchmarkSource>(_ids)}
+      {
+        _smartSources.reserve(kSmartListCount);
+        _projections.reserve(kSmartListCount + 1);
+
+        for (std::size_t index = 0; index < kSmartListCount; ++index)
+        {
+          auto sourcePtr = std::make_shared<SmartListSource>(TrackSourceLease{_rootPtr}, _evaluator);
+          sourcePtr->setExpression(std::format("$year >= {}", 1990 + (index * 5)));
+          sourcePtr->reload();
+          _projections.push_back(std::make_unique<TrackListProjection>(
+            kInvalidViewId,
+            TrackSourceLease{sourcePtr},
+            _libraryFixture.library(),
+            TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}}));
+          _smartSources.push_back(std::move(sourcePtr));
+        }
+
+        _projections.push_back(std::make_unique<TrackListProjection>(
+          kInvalidViewId,
+          TrackSourceLease{_orderedPtr},
+          _libraryFixture.library(),
+          TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}}));
+
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
+        auto builder = library::ListBuilder::makeEmpty().name("Performance ordered List");
+
+        for (auto const trackId : _ids)
+        {
+          builder.orderTrackIds().add(trackId);
+        }
+
+        auto res =
+          transaction.apply([&builder](library::LibraryWrite& write) { return write.lists().create(builder); });
+        REQUIRE(res);
+        _orderedListId = *res;
+        REQUIRE(transaction.commit());
+      }
+
+      PipelineRunTiming run()
+      {
+        auto timing = PipelineRunTiming{};
+        timing.denseOrderBindDuration = measureDenseOrderBindDuration();
+        auto newIds = createPipelineTracks(_libraryFixture.library(), kInitialTrackCount, kBulkCount, &timing.insert);
+        timing.insert.callbackDuration = measureCallbackDuration([&] { _rootPtr->appendBatch(newIds); });
+
+        constexpr auto kAfterInsert = std::array<std::size_t, kSmartListCount>{55000, 47140, 39280};
+        REQUIRE(_rootPtr->size() == kInitialTrackCount + kBulkCount);
+        REQUIRE(_orderedPtr->size() == kInitialTrackCount);
+        REQUIRE(_smartSources.size() == kSmartListCount);
+        REQUIRE(_projections.size() == kSmartListCount + 1);
+
+        for (std::size_t index = 0; index < kSmartListCount; ++index)
+        {
+          REQUIRE_FALSE(_smartSources[index]->hasError());
+          REQUIRE(_smartSources[index]->size() == kAfterInsert[index]);
+          REQUIRE(_projections[index]->size() == kAfterInsert[index]);
+        }
+
+        REQUIRE(_projections.back()->size() == kInitialTrackCount);
+
+        timing.remove = removeTracksTiming(newIds);
+        timing.remove.callbackDuration =
+          measureCallbackDuration([&] { CHECK(_rootPtr->removeTail(kBulkCount) == newIds); });
+
+        timing.singleUpdate = updateTracksTiming(kBulkCount, 1);
+        timing.singleUpdate.callbackDuration = measureCallbackDuration([&] { _rootPtr->updateRange(kBulkCount, 1); });
+        timing.singleProjectionUpdate.callbackDuration =
+          measureCallbackDuration([&] { _orderedPtr->updateRange(kBulkCount, 1); });
+
+        timing.update = updateTracksTiming(0, kBulkCount);
+        timing.update.callbackDuration = measureCallbackDuration([&] { _rootPtr->updateRange(0, kBulkCount); });
+
+        timing.orderMove = persistOrderMoveTiming();
+        timing.orderMove.callbackDuration =
+          measureCallbackDuration([&] { _orderedPtr->moveRangeToEnd(0, kOrderMoveCount); });
+
+        CHECK(_rootPtr->size() == kInitialTrackCount);
+        CHECK(_orderedPtr->size() == kInitialTrackCount);
+
+        for (auto const& projectionPtr : _projections)
+        {
+          CHECK(projectionPtr->size() > 0);
+        }
+
+        constexpr auto kFinalCounts = std::array<std::size_t, kSmartListCount>{50000, 42855, 35710};
+        REQUIRE(_rootPtr->size() == kInitialTrackCount);
+        REQUIRE(_orderedPtr->size() == kInitialTrackCount);
+        REQUIRE(_smartSources.size() == kSmartListCount);
+        REQUIRE(_projections.size() == kSmartListCount + 1);
+
+        for (std::size_t index = 0; index < kSmartListCount; ++index)
+        {
+          REQUIRE_FALSE(_smartSources[index]->hasError());
+          REQUIRE(_smartSources[index]->size() == kFinalCounts[index]);
+          REQUIRE(_projections[index]->size() == kFinalCounts[index]);
+          CHECK(_projections[index]->trackIdAt(0) == _rootPtr->trackIdAt(kBulkCount + 1));
+          CHECK(_projections[index]->trackIdAt(kFinalCounts[index] - 1) == _rootPtr->trackIdAt(kBulkCount));
+        }
+
+        REQUIRE(_projections.back()->size() == kInitialTrackCount);
+        CHECK(_orderedPtr->trackIdAt(0) == _rootPtr->trackIdAt(kOrderMoveCount));
+        CHECK(_orderedPtr->trackIdAt(kInitialTrackCount - 1) == _rootPtr->trackIdAt(kOrderMoveCount - 1));
+        CHECK(_projections.back()->trackIdAt(kInitialTrackCount - 1) == _rootPtr->trackIdAt(kBulkCount));
+
+        return timing;
+      }
+
+    private:
+      template<typename Callback>
+      static std::chrono::microseconds measureCallbackDuration(Callback&& callback)
+      {
+        auto const start = std::chrono::steady_clock::now();
+        std::invoke(std::forward<Callback>(callback));
+        auto const end = std::chrono::steady_clock::now();
+        return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      }
+
+      PipelineOperationTiming removeTracksTiming(std::span<TrackId const> trackIds)
+      {
+        auto timing = PipelineOperationTiming{};
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
+        auto const mutationStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.apply(
+          [trackIds](library::LibraryWrite& write) -> Result<>
+          {
+            auto writer = write.tracks();
+
+            for (auto const trackId : trackIds)
+            {
+              auto removeRes = writer.remove(trackId);
+              REQUIRE(removeRes);
+              REQUIRE(*removeRes);
+            }
+
+            return {};
+          }));
+
+        auto const mutationEnd = std::chrono::steady_clock::now();
+        auto const commitStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.commit());
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
+        return timing;
+      }
+
+      PipelineOperationTiming updateTracksTiming(std::size_t const startIndex, std::size_t const count)
+      {
+        REQUIRE(startIndex <= _ids.size());
+        REQUIRE(count <= _ids.size() - startIndex);
+        auto timing = PipelineOperationTiming{};
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
+        auto const mutationStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.apply(
+          [&](library::LibraryWrite& write) -> Result<>
+          {
+            auto writer = write.tracks();
+
+            for (std::size_t const offset : std::views::iota(std::size_t{0}, count))
+            {
+              auto const index = startIndex + offset;
+              auto const spec = pipelineTrackSpec(index, true);
+              auto builder = library::TrackBuilder::makeEmpty();
+              library::test::applyTrackSpec(builder, spec);
+              REQUIRE(writer.updateHot(_ids[index], builder));
+            }
+
+            return {};
+          }));
+
+        auto const mutationEnd = std::chrono::steady_clock::now();
+        auto const commitStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.commit());
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
+        return timing;
+      }
+
+      PipelineOperationTiming persistOrderMoveTiming()
+      {
+        auto movedIds = std::vector<TrackId>{_ids.begin(), _ids.begin() + static_cast<std::ptrdiff_t>(kOrderMoveCount)};
+        _ids.erase(_ids.begin(), _ids.begin() + static_cast<std::ptrdiff_t>(kOrderMoveCount));
+        _ids.append_range(movedIds);
+
+        auto timing = PipelineOperationTiming{};
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
+        auto builder = library::ListBuilder::makeEmpty().name("Performance ordered List");
+
+        for (auto const trackId : _ids)
+        {
+          builder.orderTrackIds().add(trackId);
+        }
+
+        auto const mutationStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.apply([&](library::LibraryWrite& write)
+                                  { return write.lists().update(_orderedListId, builder); }));
+        auto const mutationEnd = std::chrono::steady_clock::now();
+        auto const commitStart = std::chrono::steady_clock::now();
+        REQUIRE(transaction.commit());
+        auto const commitEnd = std::chrono::steady_clock::now();
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.commitDuration = std::chrono::duration_cast<std::chrono::microseconds>(commitEnd - commitStart);
+        return timing;
+      }
+
+      std::chrono::microseconds measureDenseOrderBindDuration()
+      {
+        auto changes = makeStateOnlyLibraryChanges(_libraryFixture.library());
+        auto commandsFixture = LibraryCommandsFixture{_libraryFixture.library(), changes};
+        auto effectiveTrackIds = _ids;
+        auto const start = std::chrono::steady_clock::now();
+        auto res = commandsFixture.library().bindListOrder(_orderedListId, std::move(effectiveTrackIds));
+        auto const end = std::chrono::steady_clock::now();
+        REQUIRE(res);
+        CHECK(res->effectiveTrackIds().size() == kInitialTrackCount);
+        return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      }
+
+      MusicLibraryFixture _libraryFixture;
+      std::vector<TrackId> _ids;
+      std::shared_ptr<PipelineBenchmarkSource> _rootPtr;
+      SmartListEvaluator _evaluator;
+      std::vector<std::shared_ptr<SmartListSource>> _smartSources;
+      std::shared_ptr<PipelineBenchmarkSource> _orderedPtr;
+      std::vector<std::unique_ptr<TrackListProjection>> _projections;
+      ListId _orderedListId = kInvalidListId;
+    };
+
+    void reportPipelineOperation(std::string_view name, std::vector<PipelineOperationTiming> const& samples)
+    {
+      auto mutations = std::vector<std::int64_t>{};
+      auto commits = std::vector<std::int64_t>{};
+      auto callbacks = std::vector<std::int64_t>{};
+      mutations.reserve(samples.size());
+      commits.reserve(samples.size());
+      callbacks.reserve(samples.size());
+
+      for (auto const& sample : samples)
+      {
+        mutations.push_back(sample.mutationDuration.count());
+        commits.push_back(sample.commitDuration.count());
+        callbacks.push_back(sample.callbackDuration.count());
+      }
+
+      std::ranges::sort(mutations);
+      std::ranges::sort(commits);
+      std::ranges::sort(callbacks);
+      auto const medianIndex = commits.size() / 2U;
+      auto const percentile95Index = (((commits.size() * 95U) + 99U) / 100U) - 1U;
+      auto const mutationMedian = mutations[medianIndex];
+      auto const mutationP95 = mutations[percentile95Index];
+      auto const commitMedian = commits[medianIndex];
+      auto const commitP95 = commits[percentile95Index];
+      auto const callbackMedian = callbacks[medianIndex];
+      auto const callbackP95 = callbacks[percentile95Index];
+      APP_LOG_INFO("  {}: mutation median/p95 {} / {} us; commit median/p95 {} / {} us; "
+                   "callbacks median/p95 {} / {} us",
+                   name,
+                   mutationMedian,
+                   mutationP95,
+                   commitMedian,
+                   commitP95,
+                   callbackMedian,
+                   callbackP95);
+      recordBaseline(std::format("source-pipeline-{}", name),
+                     {
+                       metric("track_count", SourcePipelineBench::kInitialTrackCount, "count"),
+                       metric("smart_list_count", SourcePipelineBench::kSmartListCount, "count"),
+                       metric("mutation_median", mutationMedian, "us"),
+                       metric("mutation_p95", mutationP95, "us"),
+                       metric("commit_median", commitMedian, "us"),
+                       metric("commit_p95", commitP95, "us"),
+                       metric("callbacks_median", callbackMedian, "us"),
+                       metric("callbacks_p95", callbackP95, "us"),
+                     });
+    }
+
+    struct AllTracksPublicationTiming final
+    {
+      // Mutation runs inside the write transaction. Publication spans the
+      // library commit, the TrackSourceCache replica apply, and the leased
+      // source's batch emission. Settle covers the remaining phase-two
+      // delivery and command settlement.
+      std::chrono::microseconds mutationDuration{};
+      std::chrono::microseconds publicationDuration{};
+      std::chrono::microseconds settleDuration{};
+    };
+
+    // Drives the real metadata-only publication chain: a LibraryWriteLane
+    // commit publishes a tracksMutated-only LibraryChangeSet, the
+    // TrackSourceCache replica applies it through AllTracksSource, and the
+    // leased All Tracks source republishes the update batch to subscribers.
+    class AllTracksPublicationBench final
+    {
+    public:
+      static constexpr std::size_t kTrackCount = 50000;
+      static constexpr std::size_t kBulkUpdateCount = 5000;
+      static constexpr std::size_t kPublicationWorkerCount = 2;
+
+      AllTracksPublicationBench()
+        : _ids{createPipelineTracks(_libraryFixture.library(), 0, kTrackCount)}
+        , _changes{makeStateOnlyLibraryChanges(_libraryFixture.library())}
+        , _asyncRuntime{stateOnlyLibraryExecutor(), kPublicationWorkerCount}
+        , _writeLane{_asyncRuntime.callbackExecutor(),
+                     library::test::requireWritableLibrary(_libraryFixture.library()),
+                     _changes}
+        , _cache{_libraryFixture.library(), _changes}
+        , _lease{ao::test::requireValue(_cache.acquire(kAllTracksListId))}
+      {
+        REQUIRE(std::ranges::is_sorted(_ids));
+        _cache.reloadAllTracks();
+        REQUIRE(_lease->size() == kTrackCount);
+        _sourceSubscription = _lease->subscribe(
+          [this](TrackSourceDelta const& batch) noexcept
+          {
+            ++_publishedBatchCount;
+            _emissionTime = std::chrono::steady_clock::now();
+            _publishedBatches.push_back(batch);
+          });
+        _observerSubscription = _changes.onChanged([this]([[maybe_unused]] LibraryChangeSet const& changeSet) noexcept
+                                                   { ++_observedChangeCount; });
+      }
+
+      AllTracksPublicationTiming runMetadataUpdate(std::size_t const firstIndex, std::size_t const count)
+      {
+        REQUIRE(firstIndex <= _ids.size());
+        REQUIRE(count <= _ids.size() - firstIndex);
+        auto updatedIds = std::vector<TrackId>{_ids.begin() + static_cast<std::ptrdiff_t>(firstIndex),
+                                               _ids.begin() + static_cast<std::ptrdiff_t>(firstIndex + count)};
+        auto& executor = stateOnlyLibraryExecutor();
+        auto mutationStart = std::chrono::steady_clock::time_point{};
+        auto mutationEnd = std::chrono::steady_clock::time_point{};
+        std::size_t updateFailureCount = 0;
+        auto firstUpdateError = std::string{};
+        auto const batchCountBefore = _publishedBatchCount;
+
+        auto task = executeInteractiveMutationAsync(
+          _writeLane.captureSubmission(),
+          [&updatedIds, &mutationStart, &mutationEnd, &updateFailureCount, &firstUpdateError](
+            library::LibraryWrite& write) -> Result<OperationOutcome<std::vector<TrackId>>>
+          {
+            mutationStart = std::chrono::steady_clock::now();
+            auto writer = write.tracks();
+
+            for (std::size_t const offset : std::views::iota(std::size_t{0}, updatedIds.size()))
+            {
+              // TrackBuilder holds string_views into the spec, so the spec
+              // must outlive the builder's use.
+              auto const spec = pipelineTrackSpec(offset, true);
+              auto builder = library::TrackBuilder::makeEmpty();
+              library::test::applyTrackSpec(builder, spec);
+              auto updateRes = writer.updateHot(updatedIds[offset], builder);
+              updateFailureCount += updateRes ? 0U : 1U;
+
+              if (!updateRes && firstUpdateError.empty())
+              {
+                firstUpdateError = updateRes.error().message;
+              }
+            }
+
+            mutationEnd = std::chrono::steady_clock::now();
+            return Changed<std::vector<TrackId>>{
+              .value = updatedIds,
+              .changeSet = LibraryChangeSet{.tracksMutated = updatedIds},
+            };
+          });
+
+        auto executionRes = runTestTask(_asyncRuntime, executor, std::move(task));
+        REQUIRE(executionRes);
+        REQUIRE(executionRes->optCommittedRevision);
+
+        if (updateFailureCount != 0)
+        {
+          APP_LOG_INFO("metadata update failures: {} ({})", updateFailureCount, firstUpdateError);
+        }
+
+        REQUIRE(updateFailureCount == 0);
+        REQUIRE(_publishedBatchCount == batchCountBefore + 1U);
+        REQUIRE(_observedChangeCount == _publishedBatchCount);
+        REQUIRE(std::holds_alternative<delta::RegularTrackEditScript>(_publishedBatches.back()));
+        CHECK(publishedUpdateIds(_publishedBatches.back()) == updatedIds);
+        CHECK(_lease->size() == kTrackCount);
+
+        auto timing = AllTracksPublicationTiming{};
+        timing.mutationDuration = std::chrono::duration_cast<std::chrono::microseconds>(mutationEnd - mutationStart);
+        timing.publicationDuration = std::chrono::duration_cast<std::chrono::microseconds>(_emissionTime - mutationEnd);
+        timing.settleDuration =
+          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - _emissionTime);
+        return timing;
+      }
+
+    private:
+      static std::vector<TrackId> publishedUpdateIds(TrackSourceDelta const& batch)
+      {
+        auto const& script = std::get<delta::RegularTrackEditScript>(batch);
+        auto ids = std::vector<TrackId>{};
+
+        for (auto const& edit : script.edits)
+        {
+          auto const* const range = std::get_if<delta::UpdateRange>(&edit);
+          REQUIRE(range != nullptr);
+          ids.append_range(range->trackIds);
+        }
+
+        return ids;
+      }
+
+      MusicLibraryFixture _libraryFixture;
+      std::vector<TrackId> _ids;
+      LibraryChanges _changes;
+      async::Runtime _asyncRuntime;
+      LibraryWriteLane _writeLane;
+      TrackSourceCache _cache;
+      TrackSourceLease _lease;
+      async::Subscription _sourceSubscription;
+      async::Subscription _observerSubscription;
+      std::size_t _publishedBatchCount = 0;
+      std::size_t _observedChangeCount = 0;
+      std::vector<TrackSourceDelta> _publishedBatches;
+      std::chrono::steady_clock::time_point _emissionTime{};
+    };
+
+    void reportAllTracksPublication(std::string_view const name,
+                                    std::size_t const updateCount,
+                                    std::vector<AllTracksPublicationTiming> const& samples)
+    {
+      auto mutations = std::vector<std::int64_t>{};
+      auto publications = std::vector<std::int64_t>{};
+      auto settlements = std::vector<std::int64_t>{};
+      mutations.reserve(samples.size());
+      publications.reserve(samples.size());
+      settlements.reserve(samples.size());
+
+      for (auto const& sample : samples)
+      {
+        mutations.push_back(sample.mutationDuration.count());
+        publications.push_back(sample.publicationDuration.count());
+        settlements.push_back(sample.settleDuration.count());
+      }
+
+      std::ranges::sort(mutations);
+      std::ranges::sort(publications);
+      std::ranges::sort(settlements);
+      auto const medianIndex = publications.size() / 2U;
+      auto const percentile95Index = (((publications.size() * 95U) + 99U) / 100U) - 1U;
+      auto const mutationMedian = mutations[medianIndex];
+      auto const mutationP95 = mutations[percentile95Index];
+      auto const publicationMedian = publications[medianIndex];
+      auto const publicationP95 = publications[percentile95Index];
+      auto const settleMedian = settlements[medianIndex];
+      auto const settleP95 = settlements[percentile95Index];
+      APP_LOG_INFO("  {}: mutation median/p95 {} / {} us; publication median/p95 {} / {} us; "
+                   "settle median/p95 {} / {} us",
+                   name,
+                   mutationMedian,
+                   mutationP95,
+                   publicationMedian,
+                   publicationP95,
+                   settleMedian,
+                   settleP95);
+      recordBaseline(std::format("all-tracks-publication-{}", name),
+                     {
+                       metric("track_count", AllTracksPublicationBench::kTrackCount, "count"),
+                       metric("update_count", static_cast<std::int64_t>(updateCount), "count"),
+                       metric("mutation_median", mutationMedian, "us"),
+                       metric("mutation_p95", mutationP95, "us"),
+                       metric("publication_median", publicationMedian, "us"),
+                       metric("publication_p95", publicationP95, "us"),
+                       metric("settle_median", settleMedian, "us"),
+                       metric("settle_p95", settleP95, "us"),
+                     });
+    }
+
+    constexpr std::size_t kUnicodeTextAdmissionIterations = 100'000;
+
+    std::chrono::nanoseconds measureTextPreflightDuration(std::string_view const text)
+    {
+      std::size_t checksum = 0;
+      auto const start = std::chrono::steady_clock::now();
+
+      for (std::size_t index = 0; index < kUnicodeTextAdmissionIterations; ++index)
+      {
+        auto const sizeRes = library::detail::normalizedLibraryTextSize(text, "Performance text");
+        checksum += sizeRes.value();
+      }
+
+      auto const end = std::chrono::steady_clock::now();
+      CHECK(checksum != 0);
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    }
+
+    std::chrono::nanoseconds measureTextNormalizationDuration(std::string_view const text)
+    {
+      std::size_t checksum = 0;
+      auto const start = std::chrono::steady_clock::now();
+
+      for (std::size_t index = 0; index < kUnicodeTextAdmissionIterations; ++index)
+      {
+        auto normalizedRes = library::detail::normalizeLibraryText(text, "Performance text");
+        checksum += normalizedRes.value().size();
+      }
+
+      auto const end = std::chrono::steady_clock::now();
+      CHECK(checksum != 0);
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    }
+  } // namespace
+
+  TEST_CASE("PerformanceBaseline - empty List rank overlay forwards a 50k parent move",
+            "[perf][unit][baseline][list-order]")
+  {
+    constexpr std::size_t kTrackCount = 50000;
+    constexpr std::size_t kMoveCount = 500;
+    auto trackIds = std::vector<TrackId>{};
+    trackIds.reserve(kTrackCount);
+
+    for (std::size_t index = 0; index < kTrackCount; ++index)
+    {
+      trackIds.emplace_back(static_cast<std::uint32_t>(index + 1));
+    }
+
+    auto parentPtr = std::make_shared<PipelineBenchmarkSource>(trackIds);
+    auto ordered = ListOrderSource{std::span<TrackId const>{}, TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto subscription =
+      ordered.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
+    auto const start = std::chrono::steady_clock::now();
+
+    parentPtr->moveRangeToEnd(0, kMoveCount);
+
+    auto const duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+    REQUIRE(batches.size() == 1);
+    CHECK(std::holds_alternative<delta::RegularTrackEditScript>(batches.front()));
+    CHECK(ordered.size() == kTrackCount);
+    CHECK(ordered.trackIdAt(0) == TrackId{static_cast<std::uint32_t>(kMoveCount + 1)});
+    CHECK(ordered.trackIdAt(kTrackCount - 1) == TrackId{static_cast<std::uint32_t>(kMoveCount)});
+    CHECK(ordered.orderTrackIds().empty());
+    recordBaseline("list-order-empty-rank-parent-move",
+                   {
+                     metric("track_count", kTrackCount, "count"),
+                     metric("move_count", kMoveCount, "count"),
+                     metric("callback_duration", duration.count(), "us"),
+                   });
+  }
+
+  TEST_CASE("PerformanceBaseline - source pipeline 50k batch operations",
+            "[perf][integration][baseline][source-pipeline]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr std::size_t kMeasuredRuns = 5;
+    auto samples = std::vector<PipelineRunTiming>{};
+    samples.reserve(kMeasuredRuns);
+
+    for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
+    {
+      auto bench = SourcePipelineBench{};
+
+      if (auto timing = bench.run(); run != 0)
+      {
+        samples.push_back(timing);
+      }
+    }
+
+    auto insertSamples = std::vector<PipelineOperationTiming>{};
+    auto removeSamples = std::vector<PipelineOperationTiming>{};
+    auto singleUpdateSamples = std::vector<PipelineOperationTiming>{};
+    auto singleProjectionUpdateSamples = std::vector<PipelineOperationTiming>{};
+    auto updateSamples = std::vector<PipelineOperationTiming>{};
+    auto moveSamples = std::vector<PipelineOperationTiming>{};
+    auto denseBindSamples = std::vector<std::int64_t>{};
+
+    for (auto const& sample : samples)
+    {
+      insertSamples.push_back(sample.insert);
+      removeSamples.push_back(sample.remove);
+      singleUpdateSamples.push_back(sample.singleUpdate);
+      singleProjectionUpdateSamples.push_back(sample.singleProjectionUpdate);
+      updateSamples.push_back(sample.update);
+      moveSamples.push_back(sample.orderMove);
+      denseBindSamples.push_back(sample.denseOrderBindDuration.count());
+    }
+
+    std::ranges::sort(denseBindSamples);
+    auto const denseBindMedian = denseBindSamples[denseBindSamples.size() / 2U];
+    auto const denseBindP95 = denseBindSamples[(((denseBindSamples.size() * 95U) + 99U) / 100U) - 1U];
+    APP_LOG_INFO("=== Phase 0 source pipeline: 50k tracks, 3 filtered Lists, 1 ordered List ===");
+    APP_LOG_INFO("  dense-order-bind-50k: median/p95 {} / {} us", denseBindMedian, denseBindP95);
+    recordBaseline("source-pipeline-dense-order-bind",
+                   {
+                     metric("track_count", SourcePipelineBench::kInitialTrackCount, "count"),
+                     metric("bind_median", denseBindMedian, "us"),
+                     metric("bind_p95", denseBindP95, "us"),
+                   });
+    reportPipelineOperation("bulk-insert-5k", insertSamples);
+    reportPipelineOperation("bulk-delete-5k", removeSamples);
+    reportPipelineOperation("metadata-update-1", singleUpdateSamples);
+    reportPipelineOperation("projection-update-1", singleProjectionUpdateSamples);
+    reportPipelineOperation("metadata-update-5k", updateSamples);
+    reportPipelineOperation("saved-order-move-500", moveSamples);
+  }
+
+  TEST_CASE("PerformanceBaseline - all-tracks metadata-only publication over 50k tracks",
+            "[perf][integration][baseline][all-tracks-publication]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr std::size_t kMeasuredRuns = 5;
+    auto bench = AllTracksPublicationBench{};
+    auto bulkSamples = std::vector<AllTracksPublicationTiming>{};
+    auto singleSamples = std::vector<AllTracksPublicationTiming>{};
+    bulkSamples.reserve(kMeasuredRuns);
+    singleSamples.reserve(kMeasuredRuns);
+
+    for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
+    {
+      if (auto timing = bench.runMetadataUpdate(0, AllTracksPublicationBench::kBulkUpdateCount); run != 0)
+      {
+        bulkSamples.push_back(std::move(timing));
+      }
+    }
+
+    for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
+    {
+      if (auto timing = bench.runMetadataUpdate(0, 1); run != 0)
+      {
+        singleSamples.push_back(std::move(timing));
+      }
+    }
+
+    APP_LOG_INFO("=== All Tracks metadata-only publication: 50k tracks, 5k and 1-track updates ===");
+    reportAllTracksPublication("metadata-update-5k", AllTracksPublicationBench::kBulkUpdateCount, bulkSamples);
+    reportAllTracksPublication("metadata-update-1", 1, singleSamples);
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 10k baseline", "[perf][integration][baseline]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr int kN = 10000;
+    APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
+
+    auto bench = ScaleBench{};
+    auto const t0 = std::chrono::steady_clock::now();
+    buildLibrary(bench, kN);
+    auto const t1 = std::chrono::steady_clock::now();
+
+    auto const buildDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+    APP_LOG_INFO("  Library build: {} ms", buildDuration.count());
+
+    auto const t = measureScale(bench, kN);
+
+    APP_LOG_INFO("  Projection construct: {} ms", t.createProjectionDuration.count());
+    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSortDuration.count());
+    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembersDuration.count());
+    APP_LOG_INFO("  Filter eval (heavy predicate): {} ms", t.filterEvalDuration.count());
+    APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
+    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
+    recordScaleBaseline(kN, buildDuration, t);
+  }
+
+  TEST_CASE("PerformanceBaseline - Unicode library text admission", "[perf][unit][baseline][unicode]")
+  {
+    Log::initialize(LogLevel::Info);
+
+    auto const ascii = std::string_view{"Cafe Cafe Cafe Cafe Cafe Cafe"};
+    auto const nfc = std::string_view{"Café Café Café Café Café Café"};
+    auto const nfd = std::string_view{"Cafe\u0301 Cafe\u0301 Cafe\u0301 Cafe\u0301 Cafe\u0301 Cafe\u0301"};
+
+    // Warm immutable ICU data before separating steady-state input classes.
+    REQUIRE(library::detail::normalizedLibraryTextSize(ascii, "Performance warmup"));
+    REQUIRE(library::detail::normalizeLibraryText(nfd, "Performance warmup"));
+
+    auto const asciiPreflightDuration = measureTextPreflightDuration(ascii);
+    auto const nfcPreflightDuration = measureTextPreflightDuration(nfc);
+    auto const nfdPreflightDuration = measureTextPreflightDuration(nfd);
+    auto const asciiNormalizationDuration = measureTextNormalizationDuration(ascii);
+    auto const nfcNormalizationDuration = measureTextNormalizationDuration(nfc);
+    auto const nfdNormalizationDuration = measureTextNormalizationDuration(nfd);
+
+    auto const nsPerOperation = [](std::chrono::nanoseconds const duration)
+    { return duration.count() / static_cast<std::int64_t>(kUnicodeTextAdmissionIterations); };
+
+    APP_LOG_INFO("=== Unicode library text admission: {} iterations per input ===", kUnicodeTextAdmissionIterations);
+    APP_LOG_INFO("  preflight ASCII/NFC/NFD: {} / {} / {} ns/op",
+                 nsPerOperation(asciiPreflightDuration),
+                 nsPerOperation(nfcPreflightDuration),
+                 nsPerOperation(nfdPreflightDuration));
+    APP_LOG_INFO("  normalize ASCII/NFC/NFD: {} / {} / {} ns/op",
+                 nsPerOperation(asciiNormalizationDuration),
+                 nsPerOperation(nfcNormalizationDuration),
+                 nsPerOperation(nfdNormalizationDuration));
+    recordBaseline("unicode-library-text-admission",
+                   {
+                     metric("iterations", kUnicodeTextAdmissionIterations, "count"),
+                     metric("preflight_ascii", nsPerOperation(asciiPreflightDuration), "ns/op"),
+                     metric("preflight_nfc", nsPerOperation(nfcPreflightDuration), "ns/op"),
+                     metric("preflight_nfd", nsPerOperation(nfdPreflightDuration), "ns/op"),
+                     metric("normalize_ascii", nsPerOperation(asciiNormalizationDuration), "ns/op"),
+                     metric("normalize_nfc", nsPerOperation(nfcNormalizationDuration), "ns/op"),
+                     metric("normalize_nfd", nsPerOperation(nfdNormalizationDuration), "ns/op"),
+                   });
+  }
+
+  TEST_CASE("PerformanceBaseline - Unicode caseless Quick Filter", "[perf][unit][baseline][unicode]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr std::int32_t kTrackCount = 10'000;
+
+    auto bench = ScaleBench{};
+    buildCaselessSearchLibrary(bench, kTrackCount);
+    auto const timing = measureCaselessQuickFilter(bench);
+
+    APP_LOG_INFO("=== Unicode caseless Quick Filter: {} tracks, seven text fields ===", kTrackCount);
+    APP_LOG_INFO(
+      "  first/second pass: {} / {} us", timing.firstPassDuration.count(), timing.secondPassDuration.count());
+    recordBaseline("unicode-caseless-quick-filter",
+                   {
+                     metric("track_count", kTrackCount, "count"),
+                     metric("first_pass", timing.firstPassDuration.count(), "us"),
+                     metric("second_pass", timing.secondPassDuration.count(), "us"),
+                     metric("matches", static_cast<std::int64_t>(timing.secondPassMatches), "count"),
+                   });
+
+    CHECK(timing.firstPassMatches == timing.secondPassMatches);
+
+    // One of eight literal artist rows matches across 10,000 tracks.
+    CHECK(timing.firstPassMatches == 1250);
+    CHECK(timing.secondPassMatches == 1250);
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 query IN threshold sweep", "[perf][unit][baseline][query]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr int kN = 10000;
+    constexpr auto kListSizes = std::array<std::size_t, 8>{1, 2, 3, 4, 6, 8, 12, 16};
+    APP_LOG_INFO("=== Phase 0 Query IN threshold sweep: {} tracks ===", kN);
+
+    auto bench = ScaleBench{};
+    buildLibrary(bench, kN);
+
+    for (auto const listSize : kListSizes)
+    {
+      auto const timing = measureYearInThreshold(bench, listSize);
+      APP_LOG_INFO("  IN size {:>2}: expanded {:>7} us, set {:>7} us, matches {}",
+                   timing.listSize,
+                   timing.expandedDuration.count(),
+                   timing.setDuration.count(),
+                   timing.expandedMatches);
+      recordBaseline("query-in-threshold",
+                     {
+                       metric("track_count", kN, "count"),
+                       metric("list_size", static_cast<std::int64_t>(timing.listSize), "count"),
+                       metric("expanded", timing.expandedDuration.count(), "us"),
+                       metric("set", timing.setDuration.count(), "us"),
+                       metric("expanded_matches", static_cast<std::int64_t>(timing.expandedMatches), "count"),
+                       metric("set_matches", static_cast<std::int64_t>(timing.setMatches), "count"),
+                     });
+
+      CHECK(timing.expandedMatches == timing.setMatches);
+
+      // Each of these first 16 years occurs 286 times in the 10k fixture.
+      auto const expectedMatches = std::size_t{286} * listSize;
+      CHECK(timing.expandedMatches == expectedMatches);
+      CHECK(timing.setMatches == expectedMatches);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry direct entry sort cache pressure",
+            "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
+
+    APP_LOG_INFO("=== Phase 0 OrderEntry direct entry sort cache pressure ===");
+    APP_LOG_INFO("  SortKeys-like size: {} bytes", sizeof(SortCacheKeys));
+    APP_LOG_INFO("  OrderEntry-like size: {} bytes", sizeof(SortCacheOrderEntry));
+    APP_LOG_INFO("  32-bit index size: {} bytes", sizeof(std::uint32_t));
+
+    auto const pool = makeSortCacheStringPool();
+
+    for (auto const count : kCounts)
+    {
+      auto const baseline = makeSortCacheEntries(pool, count);
+      auto const timing = measureDirectEntrySort(baseline);
+      auto const entryBytes = count * sizeof(SortCacheOrderEntry);
+
+      APP_LOG_INFO("  {:>7} entries: entry payload {} KiB", timing.count, entryBytes / 1024);
+      APP_LOG_INFO("    direct entry sort:              {:>6} ms", timing.duration.count());
+      recordBaseline("order-entry-direct-sort-cache-pressure",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("entry_payload", static_cast<std::int64_t>(entryBytes / 1024), "KiB"),
+                       metric("duration", timing.duration.count(), "ms"),
+                     });
+      CHECK(timing.checksum != 0);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry comparator dispatch cost", "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
+
+    APP_LOG_INFO("=== Phase 0 OrderEntry comparator dispatch cost ===");
+    APP_LOG_INFO("  OrderEntry-like size: {} bytes", sizeof(SortCacheOrderEntry));
+
+    auto const pool = makeSortCacheStringPool();
+
+    for (auto const count : kCounts)
+    {
+      auto const baseline = makeSortCacheEntries(pool, count);
+      auto const generic = measureGenericEntrySort(baseline);
+      auto const specialized = measureDirectEntrySort(baseline);
+
+      APP_LOG_INFO("  {:>7} entries", count);
+      APP_LOG_INFO("    generic loop/switch comparator: {:>6} ms", generic.duration.count());
+      APP_LOG_INFO("    specialized comparator:         {:>6} ms", specialized.duration.count());
+      recordBaseline("order-entry-comparator-dispatch-cost",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(count), "count"),
+                       metric("generic_loop_switch_comparator", generic.duration.count(), "ms"),
+                       metric("specialized_comparator", specialized.duration.count(), "ms"),
+                     });
+
+      CHECK(generic.checksum == specialized.checksum);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry ranked integer key sort", "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
+
+    APP_LOG_INFO("=== Phase 0 OrderEntry ranked integer key sort ===");
+    APP_LOG_INFO("  String OrderEntry-like size: {} bytes", sizeof(SortCacheOrderEntry));
+    APP_LOG_INFO("  Ranked OrderEntry-like size: {} bytes", sizeof(RankedSortCacheOrderEntry));
+
+    auto const pool = makeSortCacheStringPool();
+
+    for (auto const count : kCounts)
+    {
+      auto const baseline = makeSortCacheEntries(pool, count);
+      auto const timing = measureRankedEntrySort(pool, baseline);
+
+      APP_LOG_INFO("  {:>7} entries", timing.count);
+      APP_LOG_INFO("    build rank map:                 {:>6} ms", timing.buildRankMapDuration.count());
+      APP_LOG_INFO("    build ranked entries:           {:>6} ms", timing.buildEntriesDuration.count());
+      APP_LOG_INFO("    ranked integer sort:            {:>6} ms", timing.sortDuration.count());
+      APP_LOG_INFO("    total rank+sort path:           {:>6} ms", timing.totalDuration.count());
+      recordBaseline("order-entry-ranked-integer-key-sort",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("build_rank_map", timing.buildRankMapDuration.count(), "ms"),
+                       metric("build_ranked_entries", timing.buildEntriesDuration.count(), "ms"),
+                       metric("ranked_integer_sort", timing.sortDuration.count(), "ms"),
+                       metric("total_rank_sort_path", timing.totalDuration.count(), "ms"),
+                     });
+
+      CHECK(timing.checksum != 0);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry compact active key sort", "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
+
+    APP_LOG_INFO("=== Phase 0 OrderEntry compact active key sort ===");
+    APP_LOG_INFO("  Full OrderEntry-like size: {} bytes", sizeof(SortCacheOrderEntry));
+    APP_LOG_INFO("  Compact active-key size: {} bytes", sizeof(CompactSortCacheEntry));
+
+    auto const pool = makeSortCacheStringPool();
+
+    for (auto const count : kCounts)
+    {
+      auto const baseline = makeSortCacheEntries(pool, count);
+      auto const timing = measureCompactEntrySort(baseline);
+
+      APP_LOG_INFO("  {:>7} entries", timing.count);
+      APP_LOG_INFO("    build compact entries:          {:>6} ms", timing.buildEntriesDuration.count());
+      APP_LOG_INFO("    compact string sort:            {:>6} ms", timing.sortDuration.count());
+      APP_LOG_INFO("    total compact path:             {:>6} ms", timing.totalDuration.count());
+      recordBaseline("order-entry-compact-active-key-sort",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("build_compact_entries", timing.buildEntriesDuration.count(), "ms"),
+                       metric("compact_string_sort", timing.sortDuration.count(), "ms"),
+                       metric("total_compact_path", timing.totalDuration.count(), "ms"),
+                     });
+
+      CHECK(timing.checksum != 0);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index sort cache pressure", "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
+
+    APP_LOG_INFO("=== Phase 0 OrderEntry index sort cache pressure ===");
+    APP_LOG_INFO("  SortKeys-like size: {} bytes", sizeof(SortCacheKeys));
+    APP_LOG_INFO("  OrderEntry-like size: {} bytes", sizeof(SortCacheOrderEntry));
+    APP_LOG_INFO("  32-bit index size: {} bytes", sizeof(std::uint32_t));
+
+    auto const pool = makeSortCacheStringPool();
+
+    for (auto const count : kCounts)
+    {
+      auto const baseline = makeSortCacheEntries(pool, count);
+      auto const timing = measureIndexSort(baseline);
+      auto const entryBytes = count * sizeof(SortCacheOrderEntry);
+      auto const indexBytes = count * sizeof(std::uint32_t);
+
+      APP_LOG_INFO("  {:>7} entries: entry payload {} KiB, index payload {} KiB",
+                   timing.count,
+                   entryBytes / 1024,
+                   indexBytes / 1024);
+      APP_LOG_INFO("    index sort:                     {:>6} ms", timing.duration.count());
+      recordBaseline("order-entry-index-sort-cache-pressure",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("entry_payload", static_cast<std::int64_t>(entryBytes / 1024), "KiB"),
+                       metric("index_payload", static_cast<std::int64_t>(indexBytes / 1024), "KiB"),
+                       metric("duration", timing.duration.count(), "ms"),
+                     });
+      CHECK(timing.checksum != 0);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 OrderEntry index materialize cache pressure",
+            "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
+
+    APP_LOG_INFO("=== Phase 0 OrderEntry index materialize cache pressure ===");
+    APP_LOG_INFO("  SortKeys-like size: {} bytes", sizeof(SortCacheKeys));
+    APP_LOG_INFO("  OrderEntry-like size: {} bytes", sizeof(SortCacheOrderEntry));
+    APP_LOG_INFO("  32-bit index size: {} bytes", sizeof(std::uint32_t));
+
+    auto const pool = makeSortCacheStringPool();
+
+    for (auto const count : kCounts)
+    {
+      auto const baseline = makeSortCacheEntries(pool, count);
+      auto const timing = measureIndexSortAndMaterialize(baseline);
+      auto const entryBytes = count * sizeof(SortCacheOrderEntry);
+      auto const indexBytes = count * sizeof(std::uint32_t);
+
+      APP_LOG_INFO("  {:>7} entries: entry payload {} KiB, index payload {} KiB",
+                   timing.count,
+                   entryBytes / 1024,
+                   indexBytes / 1024);
+      APP_LOG_INFO("    index sort + materialize:       {:>6} ms", timing.duration.count());
+      recordBaseline("order-entry-index-materialize-cache-pressure",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("entry_payload", static_cast<std::int64_t>(entryBytes / 1024), "KiB"),
+                       metric("index_payload", static_cast<std::int64_t>(indexBytes / 1024), "KiB"),
+                       metric("duration", timing.duration.count(), "ms"),
+                     });
+      CHECK(timing.checksum != 0);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 projection rebuild stage timing", "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr auto kCounts = std::array<std::size_t, 3>{10000, 100000, 1000000};
+
+    APP_LOG_INFO("=== Phase 0 Projection rebuild stage timing ===");
+    APP_LOG_INFO("  SortKeys-like size: {} bytes", sizeof(SortCacheKeys));
+    APP_LOG_INFO("  OrderEntry-like size: {} bytes", sizeof(SortCacheOrderEntry));
+
+    auto const pool = makeSortCacheStringPool();
+
+    for (auto const count : kCounts)
+    {
+      auto const timing = measureProjectionRebuildStages(pool, count);
+
+      APP_LOG_INFO("  {:>7} entries, {:>5} sections", timing.count, timing.sectionCount);
+      APP_LOG_INFO("    build entries / keys:           {:>6} ms", timing.buildEntriesDuration.count());
+      APP_LOG_INFO("    sort entries:                   {:>6} ms", timing.sortDuration.count());
+      APP_LOG_INFO("    rebuild position index:         {:>6} ms", timing.rebuildPositionIndexDuration.count());
+      APP_LOG_INFO("    build group sections:           {:>6} ms", timing.buildGroupSectionsDuration.count());
+      APP_LOG_INFO("    total synthetic rebuild:        {:>6} ms", timing.totalDuration.count());
+      recordBaseline("projection-rebuild-stage-timing",
+                     {
+                       metric("entry_count", static_cast<std::int64_t>(timing.count), "count"),
+                       metric("section_count", static_cast<std::int64_t>(timing.sectionCount), "count"),
+                       metric("build_entries_keys", timing.buildEntriesDuration.count(), "ms"),
+                       metric("sort_entries", timing.sortDuration.count(), "ms"),
+                       metric("rebuild_position_index", timing.rebuildPositionIndexDuration.count(), "ms"),
+                       metric("build_group_sections", timing.buildGroupSectionsDuration.count(), "ms"),
+                       metric("total_synthetic_rebuild", timing.totalDuration.count(), "ms"),
+                     });
+      CHECK(timing.checksum != 0);
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 projection sort field timing", "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr int kN = 1000000;
+
+    APP_LOG_INFO("=== Phase 0 Projection sort field timing: {} tracks ===", kN);
+
+    auto bench = ScaleBench{};
+    buildLibrary(bench, kN);
+    REQUIRE(bench.ids.size() == static_cast<std::size_t>(kN));
+
+    auto const titleDuration = measureProjectionSortFieldDuration(bench, TrackSortField::Title);
+    auto const artistDuration = measureProjectionSortFieldDuration(bench, TrackSortField::Artist);
+    auto const albumDuration = measureProjectionSortFieldDuration(bench, TrackSortField::Album);
+    auto const genreDuration = measureProjectionSortFieldDuration(bench, TrackSortField::Genre);
+
+    APP_LOG_INFO("  title sort:  {} ms", titleDuration.count());
+    APP_LOG_INFO("  artist sort: {} ms", artistDuration.count());
+    APP_LOG_INFO("  album sort:  {} ms", albumDuration.count());
+    APP_LOG_INFO("  genre sort:  {} ms", genreDuration.count());
+    recordBaseline("projection-sort-field-timing",
+                   {
+                     metric("track_count", kN, "count"),
+                     metric("title_sort", titleDuration.count(), "ms"),
+                     metric("artist_sort", artistDuration.count(), "ms"),
+                     metric("album_sort", albumDuration.count(), "ms"),
+                     metric("genre_sort", genreDuration.count(), "ms"),
+                   });
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 projection preset timing", "[perf][unit][baseline][projection]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr int kN = 1000000;
+
+    APP_LOG_INFO("=== Phase 0 Projection preset timing: {} tracks ===", kN);
+
+    auto bench = ScaleBench{};
+    buildLibrary(bench, kN);
+    REQUIRE(bench.ids.size() == static_cast<std::size_t>(kN));
+
+    for (auto const& preset : builtinTrackPresentationPresets())
+    {
+      auto const duration = measureProjectionPresentationDuration(bench, preset.spec);
+      APP_LOG_INFO("  {:<20} {} ms", preset.spec.id, duration.count());
+      recordBaseline(std::format("projection-preset-timing/{}", preset.spec.id),
+                     {
+                       metric("track_count", kN, "count"),
+                       metric("duration", duration.count(), "ms"),
+                     });
+    }
+  }
+
+  TEST_CASE("PerformanceBaseline - 100k library open admission", "[perf][unit][baseline][library-open-admission]")
+  {
+    constexpr std::size_t kTrackCount = 100'000;
+    constexpr std::size_t kArtistCount = 10'000;
+    constexpr std::size_t kMapSize = std::size_t{512} * 1024U * 1024U;
+    auto const temp = ao::test::TempDir{};
+    auto const databasePath = temp.path() / "db";
+
+    {
+      auto libraryRes = library::MusicLibrary::open(
+        temp.path(), databasePath, library::MusicLibrary::Options{.pinnedMapBytes = kMapSize});
+      REQUIRE(libraryRes);
+      auto library = std::move(*libraryRes);
+      auto transaction = library::test::writeTransaction(library);
+      auto createRes = transaction.apply(
+        [](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+
+          for (std::size_t index = 0; index < kTrackCount; ++index)
+          {
+            auto const uri = std::format("open-benchmark/{:06}.flac", index);
+            auto track = library::TrackBuilder::makeEmpty();
+            track.property().uri(uri);
+            track.metadata()
+              .title(std::format("Café {:06}", index))
+              .artist(std::format("Dvořák {:04}", index % kArtistCount));
+
+            if (auto res = writer.create(track, library::FileManifestBuilder::makeEmpty()); !res)
+            {
+              return std::unexpected{res.error()};
+            }
+          }
+
+          return {};
+        });
+      REQUIRE(createRes);
+      REQUIRE(transaction.commit());
+    }
+
+    auto const baselineRss = currentResidentSetKiB();
+    auto peakRss = std::atomic<std::int64_t>{baselineRss};
+    auto sampler = std::jthread{
+      [&peakRss](std::stop_token const stopToken)
+      {
+        while (!stopToken.stop_requested())
+        {
+          auto const current = currentResidentSetKiB();
+          auto observed = peakRss.load(std::memory_order_relaxed);
+
+          while (observed < current && !peakRss.compare_exchange_weak(observed, current, std::memory_order_relaxed))
+          {
+          }
+
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+      }};
+
+    auto const start = std::chrono::steady_clock::now();
+    auto reopenedRes = library::MusicLibrary::open(
+      temp.path(), databasePath, library::MusicLibrary::Options{.pinnedMapBytes = kMapSize});
+    auto const endTime = std::chrono::steady_clock::now();
+    sampler.request_stop();
+    sampler.join();
+
+    REQUIRE(reopenedRes);
+    auto const duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - start);
+    auto const metrics = library::detail::openValidationMetrics();
+    auto const sampledPeakRss = peakRss.load(std::memory_order_relaxed);
+    auto const rssGrowth = std::max<std::int64_t>(0, sampledPeakRss - baselineRss);
+    recordBaseline("library-open-admission",
+                   {
+                     metric("track_count", static_cast<std::int64_t>(kTrackCount), "count"),
+                     metric("artist_count", static_cast<std::int64_t>(kArtistCount), "count"),
+                     metric("duration", duration.count(), "ms"),
+                     metric("baseline_rss", baselineRss, "KiB"),
+                     metric("sampled_peak_rss", sampledPeakRss, "KiB"),
+                     metric("sampled_rss_growth", rssGrowth, "KiB"),
+                     metric("track_cursor_rows", static_cast<std::int64_t>(metrics.trackCursorRows), "count"),
+                     metric("manifest_point_reads", static_cast<std::int64_t>(metrics.manifestPointReads), "count"),
+                     metric("named_database_opens", static_cast<std::int64_t>(metrics.namedDatabaseOpens), "count"),
+                   });
+
+    CHECK(metrics.trackCursorRows == kTrackCount);
+    CHECK(metrics.manifestPointReads == kTrackCount);
+    CHECK(metrics.namedDatabaseOpens == 7);
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 100k baseline", "[perf][integration][baseline]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr int kN = 100000;
+    APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
+
+    auto bench = ScaleBench{};
+    auto const t0 = std::chrono::steady_clock::now();
+    buildLibrary(bench, kN);
+    auto const t1 = std::chrono::steady_clock::now();
+
+    auto const buildDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+    APP_LOG_INFO("  Library build: {} ms", buildDuration.count());
+
+    auto const t = measureScale(bench, kN);
+
+    APP_LOG_INFO("  Projection construct: {} ms", t.createProjectionDuration.count());
+    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSortDuration.count());
+    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembersDuration.count());
+    APP_LOG_INFO("  Filter eval (heavy predicate): {} ms", t.filterEvalDuration.count());
+    APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
+    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
+    recordScaleBaseline(kN, buildDuration, t);
+  }
+
+  TEST_CASE("PerformanceBaseline - phase 0 1M baseline", "[perf][integration][baseline]")
+  {
+    Log::initialize(LogLevel::Info);
+    constexpr int kN = 1000000;
+    APP_LOG_INFO("=== Phase 0 Baseline: {} tracks ===", kN);
+
+    auto bench = ScaleBench{};
+    auto const t0 = std::chrono::steady_clock::now();
+    buildLibrary(bench, kN);
+    auto const t1 = std::chrono::steady_clock::now();
+
+    auto const buildDuration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+    APP_LOG_INFO("  Library build: {} ms", buildDuration.count());
+
+    auto const t = measureScale(bench, kN);
+
+    APP_LOG_INFO("  Projection construct: {} ms", t.createProjectionDuration.count());
+    APP_LOG_INFO("  setPresentation (sort): {} ms", t.setTitleSortDuration.count());
+    APP_LOG_INFO("  SmartListEvaluator::evaluateMembers: {} ms", t.evaluateMembersDuration.count());
+    APP_LOG_INFO("  Filter eval (heavy predicate): {} ms", t.filterEvalDuration.count());
+    APP_LOG_INFO("  Filter eval (large IN list): {} ms", t.largeInEvalDuration.count());
+    APP_LOG_INFO("  indexOf x10000: {} us", t.indexOfLookupDuration.count());
+    recordScaleBaseline(kN, buildDuration, t);
+  }
+} // namespace ao::rt::test

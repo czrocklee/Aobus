@@ -177,7 +177,7 @@ The [member predicates](../../query/predicate-language.md) search category names
 First-entry sorting/grouping and compact counts are distinct [presentation projections](../../../system/presentation/track-presentation.md#credit-projections).
 Runtime writes use the [typed scoped replacement](../../../system/presentation/metadata-editing.md#credits), never category preview text.
 
-[`RecordingDateTest.cpp`](../../../../test/unit/library/RecordingDateTest.cpp) and [`CreditsTest.cpp`](../../../../test/unit/library/CreditsTest.cpp) specify input contracts; [`TrackPerformanceTest.cpp`](../../../../test/unit/library/TrackPerformanceTest.cpp) and [`TrackPerformanceValidationTest.cpp`](../../../../test/unit/library/TrackPerformanceValidationTest.cpp) specify persistence, bounds, and malformed/open behavior.
+[`RecordingDateTest.cpp`](../../../../test/library/RecordingDateTest.cpp) and [`CreditsTest.cpp`](../../../../test/library/CreditsTest.cpp) specify input contracts; [`TrackPerformanceTest.cpp`](../../../../test/library/TrackPerformanceTest.cpp) and [`TrackPerformanceValidationTest.cpp`](../../../../test/library/TrackPerformanceValidationTest.cpp) specify persistence, bounds, and malformed/open behavior.
 
 ## Compatibility and versioning
 
@@ -197,7 +197,7 @@ Portable YAML names and runtime field ids are separate compatibility surfaces ow
 
 ## Test authority
 
-- Track builder/view/layout tests under [`test/unit/library/`](../../../../test/unit/library) lock serialization, validation, covers, tags, and custom metadata.
+- Track builder/view/layout tests under [`test/library/`](../../../../test/library) lock serialization, validation, covers, tags, and custom metadata.
 
 ## Related documents
 

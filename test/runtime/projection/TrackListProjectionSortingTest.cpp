@@ -1,0 +1,597 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "test/library/TrackTestSupport.h"
+#include "test/runtime/projection/TrackListProjectionTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/i18n/IcuTextOrdering.h>
+#include <ao/library/Credits.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/TrackStore.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/projection/TrackListProjection.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace ao::rt::test
+{
+  using ao::library::TrackStore;
+
+  TEST_CASE("TrackListProjection - locale policy changes textual order", "[runtime][unit][projection][collation]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const umlaut = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ä"});
+    auto const zed = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "z"});
+    env.setupFiltered({{zed, umlaut}});
+
+    auto germanRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    auto swedishRes = i18n::createIcuTextOrderingPolicy("sv-SE");
+    REQUIRE(germanRes);
+    REQUIRE(swedishRes);
+
+    auto const presentation = TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}},
+    };
+    auto german = env.createProjection(ViewId{1}, germanRes->get());
+    auto germanSub = german.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    german.setPresentation(presentation);
+    auto swedish = env.createProjection(ViewId{2}, swedishRes->get());
+    auto swedishSub = swedish.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    swedish.setPresentation(presentation);
+
+    CHECK(german.trackIdAt(0) == umlaut);
+    CHECK(german.trackIdAt(1) == zed);
+    CHECK(swedish.trackIdAt(0) == zed);
+    CHECK(swedish.trackIdAt(1) == umlaut);
+  }
+
+  TEST_CASE("TrackListProjection - live locale change rebuilds order and retains policy ownership",
+            "[runtime][unit][projection][collation]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const umlaut = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ä"});
+    auto const zed = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "z"});
+    env.setupFiltered({{zed, umlaut}});
+
+    auto germanRes = i18n::createIcuTextOrderingPolicy("de-DE");
+    auto swedishRes = i18n::createIcuTextOrderingPolicy("sv-SE");
+    REQUIRE(germanRes);
+    REQUIRE(swedishRes);
+
+    auto const presentation = TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None,
+      .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}},
+    };
+    auto projection = env.createProjection(ViewId{1});
+    auto subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    projection.setPresentation(presentation);
+    auto germanPtr = std::shared_ptr<TextOrderingPolicy const>{std::move(*germanRes)};
+    auto swedishPtr = std::shared_ptr<TextOrderingPolicy const>{std::move(*swedishRes)};
+    projection.setTextOrderingPolicy(germanPtr);
+    CHECK(projection.trackIdAt(0) == umlaut);
+    projection.setTextOrderingPolicy(swedishPtr);
+    swedishPtr.reset();
+    CHECK(projection.trackIdAt(0) == zed);
+    CHECK(projection.trackIdAt(1) == umlaut);
+    projection.setTextOrderingPolicy(germanPtr);
+    germanPtr.reset();
+    CHECK(projection.trackIdAt(0) == umlaut);
+    CHECK(projection.trackIdAt(1) == zed);
+  }
+
+  TEST_CASE("TrackListProjection - non-locale artist order is stable across flat and grouped presentations",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const elan = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .artist = "Élan"});
+    auto const echo = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .artist = "écho"});
+    env.setupFiltered({{elan, echo}});
+
+    auto projection = env.createProjection(ViewId{1});
+    auto const subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    auto const artistSort = std::vector{TrackSortTerm{.field = TrackSortField::Artist, .ascending = true}};
+
+    projection.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None, .sortBy = artistSort});
+    REQUIRE(projection.size() == 2);
+    CHECK(projection.trackIdAt(0) == echo);
+    CHECK(projection.trackIdAt(1) == elan);
+
+    projection.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist, .sortBy = artistSort});
+    REQUIRE(projection.groupCount() == 2);
+    CHECK(projection.trackIdAt(0) == echo);
+    CHECK(projection.trackIdAt(1) == elan);
+  }
+
+  TEST_CASE("TrackListProjection - title sort ignores leading articles", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "The Best"});
+    auto const id2 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A Better"});
+    auto const id3 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "An Apple"});
+    auto const id4 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Zeppelin"});
+    auto const id5 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "the other"});
+    auto const id6 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "a different"});
+    auto const id7 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "ANOTHER"});
+
+    env.setupFiltered({{id1, id2, id3, id4, id5, id6, id7}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
+
+    // Expected order (normalized):
+    // ANOTHER -> another
+    // An Apple -> apple
+    // The Best -> best
+    // A Better -> better
+    // a different -> different
+    // the other -> other
+    // Zeppelin -> zeppelin
+
+    REQUIRE(proj.size() == 7);
+    CHECK(proj.trackIdAt(0) == id7); // ANOTHER
+    CHECK(proj.trackIdAt(1) == id3); // An Apple
+    CHECK(proj.trackIdAt(2) == id1); // The Best
+    CHECK(proj.trackIdAt(3) == id2); // A Better
+    CHECK(proj.trackIdAt(4) == id6); // a different
+    CHECK(proj.trackIdAt(5) == id5); // the other
+    CHECK(proj.trackIdAt(6) == id4); // Zeppelin
+  }
+
+  TEST_CASE("TrackListProjection - sort 20 tracks by year then title", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto ids = std::vector<TrackId>{};
+    ids.reserve(20);
+
+    for (std::int32_t index = 0; index < 10; ++index)
+    {
+      ids.push_back(env.libraryFixture.addTrack(
+        library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2020)));
+    }
+
+    for (std::int32_t index = 0; index < 10; ++index)
+    {
+      ids.push_back(env.libraryFixture.addTrack(
+        library::test::makeTrackSpec(std::string(1, static_cast<char>('J' - index)), 2021)));
+    }
+
+    env.setupFiltered(ids);
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Year, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Title, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 20);
+
+    auto const checkOrder = [&](std::size_t start, std::size_t end, std::uint16_t expectedYear)
+    {
+      for (std::size_t index = start; index < end; ++index)
+      {
+        auto transaction = env.libraryFixture.library().readTransaction();
+        auto reader = env.libraryFixture.library().tracks().reader(transaction);
+        auto const optV = reader.get(proj.trackIdAt(index), TrackStore::Reader::LoadMode::Hot);
+
+        REQUIRE(optV);
+        CHECK(optV->metadata().year() == expectedYear);
+      }
+    };
+
+    checkOrder(0, 10, 2020);
+    checkOrder(10, 20, 2021);
+
+    // Within each year group, titles are ascending
+    for (auto const is2020 : {true, false})
+    {
+      std::size_t const start = is2020 ? std::size_t{0} : std::size_t{10};
+
+      for (std::size_t index = start; index < start + 9; ++index)
+      {
+        auto transaction = env.libraryFixture.library().readTransaction();
+        auto reader = env.libraryFixture.library().tracks().reader(transaction);
+        auto const optA = reader.get(proj.trackIdAt(index), TrackStore::Reader::LoadMode::Hot);
+        auto const optB = reader.get(proj.trackIdAt(index + 1), TrackStore::Reader::LoadMode::Hot);
+
+        REQUIRE(optA);
+        REQUIRE(optB);
+        CHECK(std::string{optA->metadata().title()} <= std::string{optB->metadata().title()});
+      }
+    }
+  }
+
+  TEST_CASE("TrackListProjection - sort 15 tracks by album disc track", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto ids = std::vector<TrackId>{};
+    ids.reserve(20);
+    struct Row final
+    {
+      std::string album;
+      std::uint16_t disc;
+      std::uint16_t track;
+    };
+    auto const rows = std::vector<Row>{
+      {"Gamma", 1, 2},
+      {"Alpha", 1, 3},
+      {"Beta", 1, 2},
+      {"Beta", 2, 4},
+      {"Alpha", 1, 1},
+      {"Beta", 2, 3},
+      {"Alpha", 1, 5},
+      {"Gamma", 1, 1},
+      {"Alpha", 1, 2},
+      {"Beta", 1, 1},
+      {"Alpha", 1, 4},
+      {"Beta", 2, 2},
+      {"Gamma", 1, 3},
+      {"Beta", 2, 1},
+      {"Gamma", 3, 1},
+    };
+
+    ids.reserve(rows.size());
+
+    for (auto const& r : rows)
+    {
+      auto spec = library::test::TrackSpec{};
+      spec.album = r.album;
+      spec.discNumber = r.disc;
+      spec.trackNumber = r.track;
+      ids.push_back(env.libraryFixture.addTrack(spec));
+    }
+
+    env.setupFiltered(ids);
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::DiscNumber, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 15);
+
+    // Verify monotonic: album non-decreasing, disc non-decreasing within album,
+    // track non-decreasing within disc.
+    auto previousAlbum = std::string{};
+    std::uint16_t previousDisc = 0;
+    std::uint16_t previousTrack = 0;
+
+    auto const& dictionary = env.libraryFixture.library().dictionary();
+    auto transaction = env.libraryFixture.library().readTransaction();
+    auto reader = env.libraryFixture.library().tracks().reader(transaction);
+
+    for (std::size_t i = 0; i < 15; ++i)
+    {
+      auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+
+      auto const album = std::string{dictionary.get(optView->metadata().albumId())};
+      auto const disc = optView->metadata().discNumber();
+      auto const track = optView->metadata().trackNumber();
+
+      if (i > 0)
+      {
+        auto const albumCmp = previousAlbum.compare(album);
+        CHECK((albumCmp < 0 || (albumCmp == 0 && disc >= previousDisc) ||
+               (albumCmp == 0 && disc == previousDisc && track >= previousTrack)));
+      }
+
+      previousAlbum = album;
+      previousDisc = disc;
+      previousTrack = track;
+    }
+  }
+
+  TEST_CASE("TrackListProjection - sorts by classical role metadata", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto const id1 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "A",
+                               .credits = {{.name = "Leonard Bernstein", .kind = library::CreditKind::Conductor},
+                                           {.name = "Aaron", .kind = library::CreditKind::Conductor},
+                                           {.name = "New York Philharmonic", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Martha Argerich", .kind = library::CreditKind::Soloist}}});
+    auto const id2 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "B",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Vienna Philharmonic", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Aaron", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Yo-Yo Ma", .kind = library::CreditKind::Soloist}}});
+    auto const id3 = env.libraryFixture.addTrack(
+      library::test::TrackSpec{.title = "C",
+                               .credits = {{.name = "Carlos Kleiber", .kind = library::CreditKind::Conductor},
+                                           {.name = "Staatskapelle Dresden", .kind = library::CreditKind::Ensemble},
+                                           {.name = "Glenn Gould", .kind = library::CreditKind::Soloist},
+                                           {.name = "Zed", .kind = library::CreditKind::Soloist}}});
+
+    env.setupFiltered({{id1, id2, id3}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Conductor, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Ensemble, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Soloist, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 3);
+    CHECK(proj.trackIdAt(0) == id3);
+    CHECK(proj.trackIdAt(1) == id2);
+    CHECK(proj.trackIdAt(2) == id1);
+  }
+
+  TEST_CASE("TrackListProjection - category sorts use first names and existing missing-text order",
+            "[runtime][unit][projection][credits]")
+  {
+    auto kind = library::CreditKind::Conductor;
+    auto field = TrackSortField::Conductor;
+
+    SECTION("Conductor")
+    {
+    }
+
+    SECTION("Ensemble")
+    {
+      kind = library::CreditKind::Ensemble;
+      field = TrackSortField::Ensemble;
+    }
+
+    SECTION("Soloist")
+    {
+      kind = library::CreditKind::Soloist;
+      field = TrackSortField::Soloist;
+    }
+
+    auto env = TrackListProjectionFixture{};
+    auto const zulu = env.libraryFixture.addTrack(library::test::TrackSpec{
+      .title = "Zulu", .credits = {{.name = "Zulu", .kind = kind}, {.name = "Aaron", .kind = kind}}});
+    auto const beta = env.libraryFixture.addTrack(library::test::TrackSpec{
+      .title = "Beta", .credits = {{.name = "Beta", .kind = kind}, {.name = "Zed", .kind = kind}}});
+    auto const empty = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Empty"});
+    env.setupFiltered({{zulu, beta, empty}});
+    auto projection = env.createProjection(ViewId{1});
+    auto const subscription = projection.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+    projection.setPresentation(TrackPresentationSpec{.sortBy = {{field, true}}});
+    CHECK(projection.trackIdAt(0) == empty);
+    CHECK(projection.trackIdAt(1) == beta);
+    CHECK(projection.trackIdAt(2) == zulu);
+    projection.setPresentation(TrackPresentationSpec{.sortBy = {{field, false}}});
+    CHECK(projection.trackIdAt(0) == zulu);
+    CHECK(projection.trackIdAt(1) == beta);
+    CHECK(projection.trackIdAt(2) == empty);
+
+    // Within-kind reorder changes the primary projection, not just the member set.
+    env.libraryFixture.updateTrack(
+      zulu, [](library::test::TrackSpec& spec) { std::swap(spec.credits[0], spec.credits[1]); });
+    env.source.update(zulu);
+    CHECK(projection.trackIdAt(0) == beta);
+    CHECK(projection.trackIdAt(1) == zulu);
+    CHECK(projection.trackIdAt(2) == empty);
+    auto rebuilt = env.createProjection(ViewId{2});
+    rebuilt.setPresentation(projection.presentation());
+    CHECK(rebuilt.trackIdAt(0) == beta);
+    CHECK(rebuilt.trackIdAt(1) == zulu);
+    CHECK(rebuilt.trackIdAt(2) == empty);
+  }
+
+  TEST_CASE("TrackListProjection - movement sort keeps performances contiguous", "[runtime][unit][projection]")
+  {
+    // One work recorded twice (two albums/performances). Grouping by Work merges both
+    // performances into a single section. The classical sort order places Album before
+    // Movement, so each performance's movements must stay contiguous and movement-ordered
+    // rather than interleaving (Karajan-I, Kleiber-I, Karajan-II, ...).
+    auto env = TrackListProjectionFixture{};
+
+    struct Row final
+    {
+      std::string album;
+      std::uint16_t movementNumber;
+      std::uint16_t trackNumber;
+    };
+
+    // Deliberately shuffled input order.
+    auto const rows = std::vector<Row>{
+      {"Kleiber 1974", 2, 2},
+      {"Karajan 1963", 3, 3},
+      {"Kleiber 1974", 1, 1},
+      {"Karajan 1963", 1, 1},
+      {"Kleiber 1974", 3, 3},
+      {"Karajan 1963", 2, 2},
+    };
+
+    auto ids = std::vector<TrackId>{};
+    ids.reserve(rows.size());
+
+    for (auto const& r : rows)
+    {
+      auto spec = library::test::TrackSpec{};
+      spec.composer = "Beethoven";
+      spec.work = "Symphony No. 5";
+      spec.album = r.album;
+      spec.movement = std::format("Movement {}", r.movementNumber);
+      spec.movementNumber = r.movementNumber;
+      spec.movementTotal = 3;
+      spec.trackNumber = r.trackNumber;
+      ids.push_back(env.libraryFixture.addTrack(spec));
+    }
+
+    env.setupFiltered(ids);
+
+    auto proj = env.createProjection(ViewId{1});
+    auto const sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Work,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Composer, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Work, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Album, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::Movement, .ascending = true},
+                                                 TrackSortTerm{.field = TrackSortField::TrackNumber, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 6);
+
+    auto const& dictionary = env.libraryFixture.library().dictionary();
+    auto transaction = env.libraryFixture.library().readTransaction();
+    auto reader = env.libraryFixture.library().tracks().reader(transaction);
+
+    auto orderedAlbums = std::vector<std::string>{};
+    auto orderedMovements = std::vector<std::uint16_t>{};
+
+    for (std::size_t i = 0; i < proj.size(); ++i)
+    {
+      auto const optView = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      orderedAlbums.emplace_back(dictionary.get(optView->metadata().albumId()));
+      orderedMovements.push_back(optView->work().movementNumber());
+    }
+
+    // Karajan (alphabetically first) movements 1,2,3, then Kleiber movements 1,2,3.
+    CHECK(orderedAlbums ==
+          std::vector<std::string>{
+            "Karajan 1963", "Karajan 1963", "Karajan 1963", "Kleiber 1974", "Kleiber 1974", "Kleiber 1974"});
+    CHECK(orderedMovements == std::vector<std::uint16_t>{1, 2, 3, 1, 2, 3});
+  }
+
+  TEST_CASE("TrackListProjection - year sort direction changes produce the exact ascending and descending orders",
+            "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto ids = std::vector<TrackId>{};
+    ids.reserve(10);
+
+    for (std::int32_t y = 2019; y >= 2010; --y)
+    {
+      ids.push_back(
+        env.libraryFixture.addTrack(library::test::makeTrackSpec(std::format("{}", y), static_cast<std::uint16_t>(y))));
+    }
+
+    env.setupFiltered(ids);
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
+
+    auto checkOrder = [&](bool ascending)
+    {
+      REQUIRE(proj.size() == ids.size());
+
+      for (std::size_t i = 0; i < ids.size(); ++i)
+      {
+        auto const expectedIndex = ascending ? ids.size() - 1 - i : i;
+        CHECK(proj.trackIdAt(i) == ids[expectedIndex]);
+      }
+    };
+
+    REQUIRE(proj.size() == 10);
+    checkOrder(true);
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
+    checkOrder(true);
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = false}}});
+    checkOrder(false);
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
+    checkOrder(true);
+  }
+
+  TEST_CASE("TrackListProjection - switch year to title sort on 15 tracks", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto ids = std::vector<TrackId>{};
+    ids.reserve(15);
+
+    for (std::int32_t i = 0; i < 15; ++i)
+    {
+      auto title = std::string(1, static_cast<char>('A' + ((i * 7) % 15)));
+      ids.push_back(env.libraryFixture.addTrack(
+        library::test::makeTrackSpec(title, static_cast<std::uint16_t>(2000 + ((i * 3) % 20)))));
+    }
+
+    env.setupFiltered(ids);
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Year, .ascending = true}}});
+    REQUIRE(proj.size() == 15);
+
+    for (std::size_t i = 0; i < 14; ++i)
+    {
+      auto transaction = env.libraryFixture.library().readTransaction();
+      auto reader = env.libraryFixture.library().tracks().reader(transaction);
+      auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
+      auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optA);
+      REQUIRE(optB);
+      CHECK(optA->metadata().year() <= optB->metadata().year());
+    }
+
+    proj.setPresentation(TrackPresentationSpec{
+      .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
+    REQUIRE(proj.size() == 15);
+
+    for (std::size_t i = 0; i < 14; ++i)
+    {
+      auto transaction = env.libraryFixture.library().readTransaction();
+      auto reader = env.libraryFixture.library().tracks().reader(transaction);
+      auto optA = reader.get(proj.trackIdAt(i), TrackStore::Reader::LoadMode::Hot);
+      auto optB = reader.get(proj.trackIdAt(i + 1), TrackStore::Reader::LoadMode::Hot);
+      REQUIRE(optA);
+      REQUIRE(optB);
+      CHECK(std::string{optA->metadata().title()} <= std::string{optB->metadata().title()});
+    }
+  }
+
+  TEST_CASE("TrackListProjection - sort by duration", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+
+    auto id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{5}});
+    auto id2 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{3}});
+    env.setupFiltered({{id1, id2}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None,
+                                               .sortBy = {
+                                                 TrackSortTerm{.field = TrackSortField::Duration, .ascending = true},
+                                               }});
+
+    REQUIRE(proj.size() == 2);
+    CHECK(proj.trackIdAt(0) == id2);
+    CHECK(proj.trackIdAt(1) == id1);
+  }
+} // namespace ao::rt::test

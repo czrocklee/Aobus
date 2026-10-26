@@ -143,11 +143,11 @@ Changesets are in-process values and have no persisted or compatibility format.
 
 ## Test map
 
-- [`LibraryChangesTest.cpp`](../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves in-band revisions, abort behavior, single-replica binding, unbound publication, completion-before-await ordering, Maintenance revision/workflow settlement, sequencer contention, and queued-callback retirement.
-- [`TrackSourceCacheTest.cpp`](../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves source-state application.
-- [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves replica-before-notification-before-availability ordering and publication/availability reentrancy closure.
-- Writer, scan, and transfer tests under [`test/unit/runtime/library/`](../../../test/unit/runtime/library) prove changeset contents and post-commit visibility.
-- [`SourcePipelineOracleTest.cpp`](../../../test/unit/runtime/source/SourcePipelineOracleTest.cpp) proves downstream state matches recomputation across mutation sequences.
+- [`LibraryChangesTest.cpp`](../../../test/runtime/library/LibraryChangesTest.cpp) proves in-band revisions, abort behavior, single-replica binding, unbound publication, completion-before-await ordering, Maintenance revision/workflow settlement, sequencer contention, and queued-callback retirement.
+- [`TrackSourceCacheTest.cpp`](../../../test/runtime/source/TrackSourceCacheTest.cpp) proves source-state application.
+- [`LibraryAuthoringTest.cpp`](../../../test/runtime/library/LibraryAuthoringTest.cpp) proves replica-before-notification-before-availability ordering and publication/availability reentrancy closure.
+- Writer, scan, and transfer tests under [`test/runtime/library/`](../../../test/runtime/library) prove changeset contents and post-commit visibility.
+- [`SourcePipelineOracleTest.cpp`](../../../test/runtime/source/SourcePipelineOracleTest.cpp) proves downstream state matches recomputation across mutation sequences.
 - The library-publication scenarios in [`RuntimeFatalProbeScenario.cpp`](../../../test/fatal/RuntimeFatalProbeScenario.cpp) and their expectations in [`RuntimeFatalProbeProtocol.cpp`](../../../test/fatal/RuntimeFatalProbeProtocol.cpp) prove admission, replica, observer, and completion escapes abort with actual library path, revision, replica, phase, exception, and owning call-site context; the completion-ack policy probe protects the same identity and revision fields for an impossible acknowledgement.
 
 ## Related documents

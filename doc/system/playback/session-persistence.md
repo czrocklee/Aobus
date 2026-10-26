@@ -280,15 +280,15 @@ The exact ordering belongs to interactive lifecycle architecture.
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, the identity check, resumption after a live relink, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, structural failure atomicity, and repeated frozen writes across stop and shutdown.
-- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/unit/runtime/LibraryRestoreStateIdentityTest.cpp) protects that playback, workspace, and presentation state naming objects in a restored backup binds to none of the objects the restore recreated, whether the restore renumbered the same database or replaced it.
-- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects the successor root-commit gate and no-I/O playback-write seal against natural, explicit, window, and shutdown playback saves while ordinary window, output, layout, and workspace saves continue over the shared GTK store.
-- [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
-  and [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp)
+- [`PlaybackSessionTest.cpp`](../../../test/runtime/PlaybackSessionTest.cpp) protects payload validation, the identity check, resumption after a live relink, restore matrix, coherent and same-subject restore publication, observation-only natural saves, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, ordinary discard, terminal retirement against queued/debounced/expired-callback/explicit save paths, store selection, structural failure atomicity, and repeated frozen writes across stop and shutdown.
+- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/runtime/LibraryRestoreStateIdentityTest.cpp) protects that playback, workspace, and presentation state naming objects in a restored backup binds to none of the objects the restore recreated, whether the restore renumbered the same database or replaced it.
+- [`MainWindowTest.cpp`](../../../test/linux-gtk/app/MainWindowTest.cpp) protects the successor root-commit gate and no-I/O playback-write seal against natural, explicit, window, and shutdown playback saves while ordinary window, output, layout, and workspace saves continue over the shared GTK store.
+- [`SelectedRootCommitTest.cpp`](../../../test/winui/app/SelectedRootCommitTest.cpp)
+  and [`DestructiveLibraryRestartTest.cpp`](../../../test/winui/app/DestructiveLibraryRestartTest.cpp)
   protect WinUI's immutable root candidate and preparation-failure boundary;
   native WinUI builds protect the runtime store injection and restore call path.
-- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
-- [`AppKitDesktopScenario.mm`](../../../test/integration/macos/AppKitDesktopScenario.mm)
+- [`HeadlessShellTest.cpp`](../../../test/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
+- [`AppKitDesktopScenario.mm`](../../../test/macos-appkit/AppKitDesktopScenario.mm)
   protects AppKit's production-composed successor startup, persisted-root
   observation before an accepted switch, and the terminal switch transition.
 

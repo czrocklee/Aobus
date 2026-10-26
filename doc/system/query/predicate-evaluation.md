@@ -208,9 +208,9 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 
 ## Test map
 
-- Execution-plan tests under [`test/unit/query/`](../../../test/unit/query) prove semantic compilation, field resolution, lists, ranges, units, access profiles, and failures.
+- Execution-plan tests under [`test/query/`](../../../test/query) prove semantic compilation, field resolution, lists, ranges, units, access profiles, and failures.
 - Plan-evaluator tests under the same directory prove field truth, existence, case-sensitive equality and ordering, Unicode-caseless text substring matching, nested-comparison symbol isolation, tag, custom metadata, and dictionary behavior.
-- Smart-list evaluator tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source) prove profile-aware batch consumption, membership publication, and rebinding of plan symbols introduced by a later dictionary commit.
+- Smart-list evaluator tests under [`test/runtime/source/`](../../../test/runtime/source) prove profile-aware batch consumption, membership publication, and rebinding of plan symbols introduced by a later dictionary commit.
 
 ## Related documents
 

@@ -269,11 +269,11 @@ Source and projection subscriptions release before the owners they observe; proj
 
 ## Test map
 
-- Storage tests under [`test/unit/library/`](../../../test/unit/library) protect open admission, transaction capabilities, rollback, open-lock and writer exclusion, and logical aggregate writes.
-- [`DictionaryStoreTest.cpp`](../../../test/unit/library/DictionaryStoreTest.cpp) protects complete dictionary publication, hidden uncommitted entries, failed-commit rollback, id reuse, and stable borrowed text; [`MetadataStoreTest.cpp`](../../../test/unit/library/MetadataStoreTest.cpp) protects external-tail refresh on read snapshots and writer admission.
-- Runtime library tests under [`test/unit/runtime/library/`](../../../test/unit/runtime/library) protect command admission, publication settlement, scan/transfer behavior, and shutdown retirement.
-- Source tests under [`test/unit/runtime/source/`](../../../test/unit/runtime/source) protect leases, cache identity, expression/rank composition, and deltas.
-- Projection tests under [`test/unit/runtime/projection/`](../../../test/unit/runtime/projection) protect lifecycle, ordering, grouping, locale replacement, and incremental equivalence.
+- Storage tests under [`test/library/`](../../../test/library) protect open admission, transaction capabilities, rollback, open-lock and writer exclusion, and logical aggregate writes.
+- [`DictionaryStoreTest.cpp`](../../../test/library/DictionaryStoreTest.cpp) protects complete dictionary publication, hidden uncommitted entries, failed-commit rollback, id reuse, and stable borrowed text; [`MetadataStoreTest.cpp`](../../../test/library/MetadataStoreTest.cpp) protects external-tail refresh on read snapshots and writer admission.
+- Runtime library tests under [`test/runtime/library/`](../../../test/runtime/library) protect command admission, publication settlement, scan/transfer behavior, and shutdown retirement.
+- Source tests under [`test/runtime/source/`](../../../test/runtime/source) protect leases, cache identity, expression/rank composition, and deltas.
+- Projection tests under [`test/runtime/projection/`](../../../test/runtime/projection) protect lifecycle, ordering, grouping, locale replacement, and incremental equivalence.
 
 ## Related documents
 

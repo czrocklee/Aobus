@@ -9,29 +9,29 @@ target_compile_options(ao_test_options INTERFACE
 )
 
 set_property(SOURCE
-  unit/audio/AudioFixtureSupport.cpp
-  unit/cli/CliTestSupport.cpp
-  unit/audio/AacDecoderSessionTest.cpp
-  unit/audio/AlacDecoderMalformedMp4Test.cpp
-  unit/media/mp4/DemuxerTest.cpp
-  unit/runtime/library/LibraryCommandsDryRunTest.cpp
-  unit/runtime/library/LibraryCommandsTrackCreateCommandTest.cpp
-  unit/runtime/library/LibraryExportImportDeltaTest.cpp
-  unit/runtime/library/LibraryExportImportTest.cpp
-  unit/runtime/resource/ResourceByteReadTest.cpp
-  integration/audio/DecoderIntegrationTest.cpp
-  integration/audio/GraphIntegrityTest.cpp
-  integration/media/file/FileTest.cpp
-  integration/linux/systemmedia/MprisBridgeTest.cpp
+  audio/AudioFixtureSupport.cpp
+  cli/CliTestSupport.cpp
+  audio/AacDecoderSessionTest.cpp
+  audio/AlacDecoderMalformedMp4Test.cpp
+  media/mp4/DemuxerTest.cpp
+  runtime/library/LibraryCommandsDryRunTest.cpp
+  runtime/library/LibraryCommandsTrackCreateCommandTest.cpp
+  runtime/library/LibraryExportImportDeltaTest.cpp
+  runtime/library/LibraryExportImportTest.cpp
+  runtime/resource/ResourceByteReadTest.cpp
+  audio/DecoderIntegrationTest.cpp
+  audio/GraphIntegrityTest.cpp
+  media/file/MediaFileFixtureTest.cpp
+  systemmedia/linux/MprisBridgeTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AUDIO_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/audio"
 )
 set_property(SOURCE
-  unit/runtime/library/LibraryFormatFixtureTest.cpp
-  unit/runtime/library/LibraryYamlModeFixtureTest.cpp
+  runtime/library/LibraryFormatFixtureTest.cpp
+  runtime/library/LibraryYamlModeFixtureTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS LIBRARY_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/data/library"
 )
 set_property(SOURCE
-  unit/uimodel/layout/component/LayoutSchemaTest.cpp
+  uimodel/layout/component/LayoutSchemaTest.cpp
   APPEND PROPERTY COMPILE_DEFINITIONS AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 # GCC 16 attributes a reply vector destroyed inside this file's Asio coroutine
@@ -40,7 +40,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
     AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 16
     AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 17)
   set_property(SOURCE
-    unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp
+    uimodel/library/list/ListOrderAuthoringSessionTest.cpp
     APPEND PROPERTY COMPILE_OPTIONS -Wno-free-nonheap-object)
 endif()
 
@@ -48,7 +48,7 @@ if(APPLE)
   # Resolves AOBUS_TEST_COREAUDIO_DEVICE_UID for the Core Audio backend cases
   # and the AppKit scenarios.
   add_library(ao_test_support_coreaudio STATIC
-    unit/audio/backend/CoreAudioTestSupport.cpp
+    audio/backend/CoreAudioTestSupport.cpp
   )
   target_include_directories(ao_test_support_coreaudio PUBLIC "${CMAKE_SOURCE_DIR}")
   target_link_libraries(ao_test_support_coreaudio PUBLIC ao_audio PRIVATE ao_test_options)
@@ -59,22 +59,22 @@ if(APPLE)
   # This opt-in GUI harness needs a console session and disposable media. It is
   # built by native checks but deliberately excluded from the unattended suites.
   add_executable(ao_appkit_smoke MACOSX_BUNDLE
-    integration/macos/AppKitSmokeMain.mm
-    integration/macos/AppKitScenarioSupport.mm
-    integration/macos/AppKitScenarioSupport.h
-    integration/macos/AppKitDesktopScenario.mm
-    integration/macos/AppKitDesktopScenarioHelpers.h
-    integration/macos/AppKitDesktopScenarioHelpers.mm
-    integration/macos/AppKitAuthoringScenario.mm
-    integration/macos/AppKitActivityExpirationScenario.mm
-    integration/macos/AppKitArtworkScenario.mm
-    integration/macos/AppKitMediaScenario.mm
-    integration/macos/AppKitPresentationScenario.mm
-    integration/macos/AppKitPlaybackScenario.mm
-    integration/macos/AppKitPlaybackScenario.h
-    integration/macos/AppKitSoulScenario.mm
-    unit/media/wav/TestWav.cpp
-    unit/media/wav/TestWav.h
+    macos-appkit/AppKitSmokeMain.mm
+    macos-appkit/AppKitScenarioSupport.mm
+    macos-appkit/AppKitScenarioSupport.h
+    macos-appkit/AppKitDesktopScenario.mm
+    macos-appkit/AppKitDesktopScenarioHelpers.h
+    macos-appkit/AppKitDesktopScenarioHelpers.mm
+    macos-appkit/AppKitAuthoringScenario.mm
+    macos-appkit/AppKitActivityExpirationScenario.mm
+    macos-appkit/AppKitArtworkScenario.mm
+    macos-appkit/AppKitMediaScenario.mm
+    macos-appkit/AppKitPresentationScenario.mm
+    macos-appkit/AppKitPlaybackScenario.mm
+    macos-appkit/AppKitPlaybackScenario.h
+    macos-appkit/AppKitSoulScenario.mm
+    media/wav/TestWav.cpp
+    media/wav/TestWav.h
   )
   target_link_libraries(ao_appkit_smoke PRIVATE ao_appkit ao_test_support_coreaudio)
   target_include_directories(ao_appkit_smoke PRIVATE "${CMAKE_SOURCE_DIR}")
@@ -125,14 +125,14 @@ add_test(NAME ao_audio_fatal_probe COMMAND ao_audio_fatal_probe)
 # dependency-directed: a narrow test must not inherit runtime or frontend
 # headers merely to use a temporary directory or a Track fixture.
 add_library(ao_test_support_common STATIC
-    unit/TestFixtureSupport.cpp
-    unit/FilesystemTestSupport.cpp
+    TestFixtureSupport.cpp
+    FilesystemTestSupport.cpp
 )
 if(WIN32)
-  target_sources(ao_test_support_common PRIVATE unit/FilesystemTestSupportWindows.cpp)
+  target_sources(ao_test_support_common PRIVATE FilesystemTestSupportWindows.cpp)
   target_link_libraries(ao_test_support_common PRIVATE advapi32)
 else()
-  target_sources(ao_test_support_common PRIVATE unit/FilesystemTestSupportPosix.cpp)
+  target_sources(ao_test_support_common PRIVATE FilesystemTestSupportPosix.cpp)
 endif()
 
 add_executable(ao_library_probe
@@ -151,15 +151,15 @@ target_link_libraries(ao_test_support_common
 )
 
 add_library(ao_test_support_library STATIC
-    unit/library/LibraryBinaryTestSupport.cpp
-    unit/library/LibraryStoreTestSupport.cpp
-    unit/library/MusicLibraryTestSupport.cpp
-    unit/library/TrackBuilderTestSupport.cpp
-    unit/library/TrackStoreTestSupport.cpp
-    unit/library/TrackTestSupport.cpp
-    unit/library/TrackViewTestSupport.cpp
-    unit/library/WritableLibraryTestSupport.cpp
-    unit/lmdb/LmdbProbeScratch.cpp
+    library/LibraryBinaryTestSupport.cpp
+    library/LibraryStoreTestSupport.cpp
+    library/MusicLibraryTestSupport.cpp
+    library/TrackBuilderTestSupport.cpp
+    library/TrackStoreTestSupport.cpp
+    library/TrackTestSupport.cpp
+    library/TrackViewTestSupport.cpp
+    library/WritableLibraryTestSupport.cpp
+    lmdb/LmdbProbeScratch.cpp
 )
 target_link_libraries(ao_test_support_library
     PUBLIC
@@ -169,16 +169,16 @@ target_link_libraries(ao_test_support_library
 )
 
 add_library(ao_test_support_audio STATIC
-    unit/audio/AudioFixtureSupport.cpp
-    unit/audio/BackendTestSupport.cpp
-    unit/audio/DecoderTestSupport.cpp
-    unit/audio/FlacFrameTestSupport.cpp
+    audio/AudioFixtureSupport.cpp
+    audio/BackendTestSupport.cpp
+    audio/DecoderTestSupport.cpp
+    audio/FlacFrameTestSupport.cpp
     # Keep Engine-failure futures/assertions out of the shared decoder-fixture
     # object used by the Catch-independent audio fatal probe.
-    unit/audio/EngineFailureTestSupport.cpp
-    unit/audio/EngineTestSupport.cpp
-    unit/audio/FakeCapturingBackend.cpp
-    unit/audio/ScriptedDecoderSession.cpp
+    audio/EngineFailureTestSupport.cpp
+    audio/EngineTestSupport.cpp
+    audio/FakeCapturingBackend.cpp
+    audio/ScriptedDecoderSession.cpp
 )
 target_link_libraries(ao_test_support_audio
     PUBLIC
@@ -191,25 +191,25 @@ target_link_libraries(ao_test_support_audio
 )
 
 add_library(ao_test_support_runtime STATIC
-    unit/runtime/AppRuntimeTestSupport.cpp
-    unit/runtime/AsyncTestSupport.cpp
-    unit/runtime/CueYamlTestSupport.cpp
-    unit/runtime/ExecutorTestSupport.cpp
-    unit/runtime/PlaybackSuccessionBaseTestSupport.cpp
-    unit/runtime/PlaybackSuccessionSeekTestSupport.cpp
-    unit/runtime/PlaybackSuccessionTransportTestSupport.cpp
-    unit/runtime/PlaybackTestSupport.cpp
-    unit/runtime/PlaybackTransportTestSupport.cpp
-    unit/runtime/PlaybackUiTestSupport.cpp
-    unit/runtime/RuntimeLibraryTestSupport.cpp
-    unit/runtime/ViewServiceTestSupport.cpp
-    unit/runtime/WorkspaceTestSupport.cpp
-    unit/runtime/completion/CompletionTestSupport.cpp
-    unit/runtime/library/ScanApplyTestSupport.cpp
-    unit/runtime/projection/TrackListProjectionTestSupport.cpp
-    unit/runtime/source/ListOrderSourceTestSupport.cpp
-    unit/runtime/source/SmartListEvaluatorTestSupport.cpp
-    unit/runtime/source/TrackSourceTestSupport.cpp
+    runtime/AppRuntimeTestSupport.cpp
+    runtime/AsyncTestSupport.cpp
+    runtime/CueYamlTestSupport.cpp
+    runtime/ExecutorTestSupport.cpp
+    runtime/PlaybackSuccessionBaseTestSupport.cpp
+    runtime/PlaybackSuccessionSeekTestSupport.cpp
+    runtime/PlaybackSuccessionTransportTestSupport.cpp
+    runtime/PlaybackTestSupport.cpp
+    runtime/PlaybackTransportTestSupport.cpp
+    runtime/PlaybackUiTestSupport.cpp
+    runtime/RuntimeLibraryTestSupport.cpp
+    runtime/ViewServiceTestSupport.cpp
+    runtime/WorkspaceTestSupport.cpp
+    runtime/completion/CompletionTestSupport.cpp
+    runtime/library/ScanApplyTestSupport.cpp
+    runtime/projection/TrackListProjectionTestSupport.cpp
+    runtime/source/ListOrderSourceTestSupport.cpp
+    runtime/source/SmartListEvaluatorTestSupport.cpp
+    runtime/source/TrackSourceTestSupport.cpp
 )
 target_link_libraries(ao_test_support_runtime
     PUBLIC
@@ -227,7 +227,7 @@ if(WIN32)
 endif()
 
 add_library(ao_test_support_i18n STATIC
-    unit/MessageCatalogTestSupport.cpp
+    MessageCatalogTestSupport.cpp
 )
 target_link_libraries(ao_test_support_i18n
     PUBLIC
@@ -239,12 +239,12 @@ if(AOBUS_BUILD_GTK)
   pkg_check_modules(XTEST REQUIRED IMPORTED_TARGET xtst x11 xi)
 
   add_library(ao_test_support_gtk_session_bus STATIC
-      unit/linux-gtk/GtkSessionBusTestSupport.cpp
+      linux-gtk/GtkSessionBusTestSupport.cpp
   )
   target_link_libraries(ao_test_support_gtk_session_bus PUBLIC ao_test_options)
 
   add_executable(ao_gapplication_probe
-      integration/linux-gtk/GApplicationReplacementProbeMain.cpp
+      linux-gtk/platform/GApplicationReplacementProbeMain.cpp
   )
   target_link_libraries(ao_gapplication_probe
       PRIVATE
@@ -254,16 +254,16 @@ if(AOBUS_BUILD_GTK)
   )
 
   add_library(ao_test_support_gtk STATIC
-      unit/linux-gtk/GtkApplicationTestSupport.cpp
-      unit/linux-gtk/GtkLayoutTestSupport.cpp
-      unit/linux-gtk/GtkNativeInputTestSupport.cpp
-      unit/linux-gtk/GtkRuntimeTestSupport.cpp
-      unit/linux-gtk/GtkWidgetTestSupport.cpp
-      unit/linux-gtk/image/ImageTestSupport.cpp
-      unit/linux-gtk/layout/LayoutTestSupport.cpp
-      unit/linux-gtk/layout/components/ContainerTestHelpers.cpp
-      unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.cpp
-      unit/linux-gtk/track/TrackSelectionControllerTestSupport.cpp
+      linux-gtk/GtkApplicationTestSupport.cpp
+      linux-gtk/GtkLayoutTestSupport.cpp
+      linux-gtk/GtkNativeInputTestSupport.cpp
+      linux-gtk/GtkRuntimeTestSupport.cpp
+      linux-gtk/GtkWidgetTestSupport.cpp
+      linux-gtk/image/ImageTestSupport.cpp
+      linux-gtk/layout/LayoutTestSupport.cpp
+      linux-gtk/layout/components/ContainerTestHelpers.cpp
+      linux-gtk/layout/state/FakeLayoutComponentStateStore.cpp
+      linux-gtk/track/TrackSelectionControllerTestSupport.cpp
   )
   target_link_libraries(ao_test_support_gtk
       PUBLIC
@@ -282,7 +282,7 @@ if(AOBUS_BUILD_GTK)
 endif()
 
 add_library(ao_test_support_performance STATIC
-    perf/PerformanceReport.cpp
+    perf/report/PerformanceReport.cpp
 )
 target_link_libraries(ao_test_support_performance
     PUBLIC
@@ -295,497 +295,497 @@ target_link_libraries(ao_test_support_performance
 # ao_core_test: shared and host-native unit + integration tests
 add_executable(ao_core_test
     CoreTestMain.cpp
-    unit/perf/PerformanceReportTest.cpp
+    perf/report/PerformanceReportTest.cpp
     fatal/RuntimeFatalProbeScenario.cpp
 
     # async tests
-    unit/async/RequestCoalescerTest.cpp
-    unit/async/SignalTest.cpp
+    async/RequestCoalescerTest.cpp
+    async/SignalTest.cpp
 
     # utility tests
-    unit/utility/AtomicFileTest.cpp
-    unit/utility/FileAllocationTest.cpp
-    unit/utility/RaiiTest.cpp
-    unit/utility/Base64Test.cpp
-    unit/utility/Sha256Test.cpp
-    unit/utility/Xxh3Test.cpp
-    unit/utility/MappedFileTest.cpp
-    unit/utility/PathTest.cpp
-    unit/utility/PlatformDirectoriesTest.cpp
-    unit/utility/ByteViewTest.cpp
-    unit/utility/CallbackStackScopeTest.cpp
-    unit/utility/StringTest.cpp
-    unit/runtime/projection/StringArenaTest.cpp
-    unit/utility/UnicodeTextTest.cpp
-    unit/utility/StrongTypeTest.cpp
-    unit/utility/UuidTest.cpp
-    unit/utility/YamlReflectTest.cpp
-    unit/utility/RymlAdapterTest.cpp
-    unit/utility/ScopedRegistrationTest.cpp
-    unit/utility/YamlSerializationTest.cpp
-    unit/utility/TestFixtureSupportTest.cpp
-    unit/utility/FromCharsTest.cpp
+    utility/AtomicFileTest.cpp
+    utility/FileAllocationTest.cpp
+    utility/RaiiTest.cpp
+    utility/Base64Test.cpp
+    utility/Sha256Test.cpp
+    utility/Xxh3Test.cpp
+    utility/MappedFileTest.cpp
+    utility/PathTest.cpp
+    utility/PlatformDirectoriesTest.cpp
+    utility/ByteViewTest.cpp
+    utility/CallbackStackScopeTest.cpp
+    utility/StringTest.cpp
+    runtime/projection/StringArenaTest.cpp
+    utility/UnicodeTextTest.cpp
+    utility/StrongTypeTest.cpp
+    utility/UuidTest.cpp
+    utility/YamlReflectTest.cpp
+    utility/RymlAdapterTest.cpp
+    utility/ScopedRegistrationTest.cpp
+    utility/YamlSerializationTest.cpp
+    utility/TestFixtureSupportTest.cpp
+    utility/FromCharsTest.cpp
 
     # compatibility tests
-    unit/compat/MoveOnlyFunctionTest.cpp
-    unit/compat/EnumerateTest.cpp
-    unit/compat/AtomicSharedPtrTest.cpp
+    compat/MoveOnlyFunctionTest.cpp
+    compat/EnumerateTest.cpp
+    compat/AtomicSharedPtrTest.cpp
 
     # core tests
-    unit/core/AudioCodecTest.cpp
-    unit/core/ErrorTest.cpp
-    unit/core/FatalTest.cpp
-    unit/core/FatalProbeTest.cpp
+    core/AudioCodecTest.cpp
+    core/ErrorTest.cpp
+    core/FatalTest.cpp
+    core/FatalProbeTest.cpp
 
     # localization foundation tests
-    unit/i18n/AppKitMessageCatalogTest.cpp
-    unit/i18n/CatalogPatternTest.cpp
-    unit/i18n/IcuTextOrderingTest.cpp
-    unit/i18n/IcuCompletionAliasesTest.cpp
-    unit/i18n/MessageCatalogTest.cpp
+    i18n/AppKitMessageCatalogTest.cpp
+    i18n/CatalogPatternTest.cpp
+    i18n/IcuTextOrderingTest.cpp
+    i18n/IcuCompletionAliasesTest.cpp
+    i18n/MessageCatalogTest.cpp
 
     # query tests
-    unit/query/CompletionBaselineTest.cpp
-    unit/query/CompletionLogicalOperatorTest.cpp
-    unit/query/CompletionOperatorTest.cpp
-    unit/query/CompletionValueTest.cpp
-    unit/query/CompletionVariableTest.cpp
-    unit/query/CompletionTokenizerTest.cpp
-    unit/query/ParserTest.cpp
-    unit/query/PredicateTest.cpp
-    unit/query/ExecutionPlanAccessProfileTest.cpp
-    unit/query/ExecutionPlanCompileTest.cpp
-    unit/query/ExecutionPlanContractTest.cpp
-    unit/query/ExecutionPlanDictionaryTest.cpp
-    unit/query/ExecutionPlanFieldCatalogTest.cpp
-    unit/query/ExecutionPlanTestSupport.cpp
-    unit/query/ExecutionPlanMembershipTest.cpp
-    unit/query/ExecutionPlanStringExpressionTest.cpp
-    unit/query/ExecutionPlanTagBloomTest.cpp
-    unit/query/ExecutionPlanUnitLiteralTest.cpp
-    unit/query/FormatExpressionTest.cpp
-    unit/query/RecordingDatePredicateTest.cpp
-    unit/query/PredicateOperandContextTest.cpp
-    unit/query/CreditPredicateTest.cpp
-    unit/query/PlanEvaluatorTestSupport.cpp
-    unit/query/PlanEvaluatorCollectionTest.cpp
-    unit/query/PlanEvaluatorComparisonTest.cpp
-    unit/query/PlanEvaluatorDictionaryTest.cpp
-    unit/query/PlanEvaluatorExecutionTest.cpp
-    unit/query/PlanEvaluatorLogicalTest.cpp
-    unit/query/PlanEvaluatorMediaPropertyTest.cpp
-    unit/query/PlanEvaluatorStringTest.cpp
-    unit/query/PlanEvaluatorTagTest.cpp
-    unit/query/ExpressionTest.cpp
-    unit/query/SerializerTest.cpp
-    unit/query/QueryErrorTest.cpp
+    query/CompletionBaselineTest.cpp
+    query/CompletionLogicalOperatorTest.cpp
+    query/CompletionOperatorTest.cpp
+    query/CompletionValueTest.cpp
+    query/CompletionVariableTest.cpp
+    query/CompletionTokenizerTest.cpp
+    query/ParserTest.cpp
+    query/PredicateTest.cpp
+    query/ExecutionPlanAccessProfileTest.cpp
+    query/ExecutionPlanCompileTest.cpp
+    query/ExecutionPlanContractTest.cpp
+    query/ExecutionPlanDictionaryTest.cpp
+    query/ExecutionPlanFieldCatalogTest.cpp
+    query/ExecutionPlanTestSupport.cpp
+    query/ExecutionPlanMembershipTest.cpp
+    query/ExecutionPlanStringExpressionTest.cpp
+    query/ExecutionPlanTagBloomTest.cpp
+    query/ExecutionPlanUnitLiteralTest.cpp
+    query/FormatExpressionTest.cpp
+    query/RecordingDatePredicateTest.cpp
+    query/PredicateOperandContextTest.cpp
+    query/CreditPredicateTest.cpp
+    query/PlanEvaluatorTestSupport.cpp
+    query/PlanEvaluatorCollectionTest.cpp
+    query/PlanEvaluatorComparisonTest.cpp
+    query/PlanEvaluatorDictionaryTest.cpp
+    query/PlanEvaluatorExecutionTest.cpp
+    query/PlanEvaluatorLogicalTest.cpp
+    query/PlanEvaluatorMediaPropertyTest.cpp
+    query/PlanEvaluatorStringTest.cpp
+    query/PlanEvaluatorTagTest.cpp
+    query/ExpressionTest.cpp
+    query/SerializerTest.cpp
+    query/QueryErrorTest.cpp
 
     # media file tests
-    unit/media/file/TestFile.cpp
-    unit/media/file/MpegFrameTest.cpp
-    unit/media/file/MpegFileTest.cpp
-    unit/media/file/Mp4FileTest.cpp
-    unit/media/file/id3v2/ReaderTest.cpp
-    unit/media/file/id3v2/TestId3v2.cpp
-    unit/media/file/id3v2/CreditReaderTest.cpp
-    unit/media/file/ContentCreditTest.cpp
-    unit/media/file/ContentTextTest.cpp
-    unit/media/file/VorbisCreditTest.cpp
-    unit/media/file/FlacFileTest.cpp
-    unit/media/file/WavFileTest.cpp
-    unit/media/file/WavCreditContentTest.cpp
-    unit/media/file/OpusFileTest.cpp
-    unit/media/file/FileTest.cpp
-    unit/media/file/DecoderTest.cpp
+    media/file/TestFile.cpp
+    media/file/MpegFrameTest.cpp
+    media/file/MpegFileTest.cpp
+    media/file/Mp4FileTest.cpp
+    media/file/id3v2/ReaderTest.cpp
+    media/file/id3v2/TestId3v2.cpp
+    media/file/id3v2/CreditReaderTest.cpp
+    media/file/ContentCreditTest.cpp
+    media/file/ContentTextTest.cpp
+    media/file/VorbisCreditTest.cpp
+    media/file/FlacFileTest.cpp
+    media/file/WavFileTest.cpp
+    media/file/WavCreditContentTest.cpp
+    media/file/OpusFileTest.cpp
+    media/file/FileTest.cpp
+    media/file/DecoderTest.cpp
 
     # media tests
-    unit/media/CueSheetTest.cpp
-    unit/media/ExactExtentTest.cpp
-    unit/media/VorbisCommentTest.cpp
-    unit/media/ogg/TestOgg.cpp
-    unit/media/ogg/DemuxerTest.cpp
-    unit/media/opus/HeaderTest.cpp
-    unit/media/opus/TimelineTest.cpp
-    unit/media/mp4/TestAtoms.cpp
-    unit/media/mp4/AtomTest.cpp
-    unit/media/mp4/DemuxerTest.cpp
-    unit/media/mp4/DemuxerAlacLayoutTest.cpp
-    unit/media/mp4/SampleDescriptionTest.cpp
-    unit/media/wav/TestWav.cpp
-    unit/media/wav/RiffTest.cpp
-    unit/media/wav/RiffChannelMaskTest.cpp
+    media/CueSheetTest.cpp
+    media/ExactExtentTest.cpp
+    media/VorbisCommentTest.cpp
+    media/ogg/TestOgg.cpp
+    media/ogg/DemuxerTest.cpp
+    media/opus/HeaderTest.cpp
+    media/opus/TimelineTest.cpp
+    media/mp4/TestAtoms.cpp
+    media/mp4/AtomTest.cpp
+    media/mp4/DemuxerTest.cpp
+    media/mp4/DemuxerAlacLayoutTest.cpp
+    media/mp4/SampleDescriptionTest.cpp
+    media/wav/TestWav.cpp
+    media/wav/RiffTest.cpp
+    media/wav/RiffChannelMaskTest.cpp
 
     # library tests
-    unit/library/RecordingDateTest.cpp
-    unit/library/CreditsTest.cpp
-    unit/library/TrackLayoutTest.cpp
-    unit/library/TrackPerformanceTest.cpp
-    unit/library/TrackPerformanceValidationTest.cpp
-    unit/library/TrackViewTest.cpp
-    unit/library/TrackViewTagTest.cpp
-    unit/library/TrackViewCustomMetadataTest.cpp
-    unit/library/TrackViewValidationTest.cpp
-    unit/library/FileManifestViewTest.cpp
-    unit/library/FileTimeConversionTest.cpp
-    unit/library/FileManifestStoreTest.cpp
-    unit/library/LibraryUriTest.cpp
-    unit/library/FileManifestBuilderTest.cpp
-    unit/library/TrackBuilderTest.cpp
-    unit/library/TrackBuilderCoverArtTest.cpp
-    unit/library/TrackBuilderTagTest.cpp
-    unit/library/TrackBuilderSerializationTest.cpp
-    unit/library/TrackBuilderOverflowTest.cpp
-    unit/library/LibraryErrorTest.cpp
-    unit/library/LibraryProbeTest.cpp
-    unit/library/MetadataStoreTest.cpp
-    unit/library/ListLayoutTest.cpp
-    unit/library/ListViewTest.cpp
-    unit/library/DictionaryStoreTest.cpp
-    unit/library/AudioIdentityTest.cpp
-    unit/library/ListStoreTest.cpp
-    unit/library/ResourceLayoutTest.cpp
-    unit/library/ResourceStoreTest.cpp
-    unit/library/WriteTransactionTest.cpp
-    unit/library/IdSpaceTest.cpp
-    unit/library/TrackWriterTest.cpp
-    unit/library/CarrierTrackTest.cpp
-    unit/library/CarrierAdmissionRegressionTest.cpp
-    unit/library/ListWriterTest.cpp
+    library/RecordingDateTest.cpp
+    library/CreditsTest.cpp
+    library/TrackLayoutTest.cpp
+    library/TrackPerformanceTest.cpp
+    library/TrackPerformanceValidationTest.cpp
+    library/TrackViewTest.cpp
+    library/TrackViewTagTest.cpp
+    library/TrackViewCustomMetadataTest.cpp
+    library/TrackViewValidationTest.cpp
+    library/FileManifestViewTest.cpp
+    library/FileTimeConversionTest.cpp
+    library/FileManifestStoreTest.cpp
+    library/LibraryUriTest.cpp
+    library/FileManifestBuilderTest.cpp
+    library/TrackBuilderTest.cpp
+    library/TrackBuilderCoverArtTest.cpp
+    library/TrackBuilderTagTest.cpp
+    library/TrackBuilderSerializationTest.cpp
+    library/TrackBuilderOverflowTest.cpp
+    library/LibraryErrorTest.cpp
+    library/LibraryProbeTest.cpp
+    library/MetadataStoreTest.cpp
+    library/ListLayoutTest.cpp
+    library/ListViewTest.cpp
+    library/DictionaryStoreTest.cpp
+    library/AudioIdentityTest.cpp
+    library/ListStoreTest.cpp
+    library/ResourceLayoutTest.cpp
+    library/ResourceStoreTest.cpp
+    library/WriteTransactionTest.cpp
+    library/IdSpaceTest.cpp
+    library/TrackWriterTest.cpp
+    library/CarrierTrackTest.cpp
+    library/CarrierAdmissionRegressionTest.cpp
+    library/ListWriterTest.cpp
 
-    unit/library/TrackStoreTest.cpp
-    unit/library/TrackWriteTest.cpp
-    unit/library/TrackStoreRawLayoutTest.cpp
-    unit/library/TrackStoreIntegrityTest.cpp
-    unit/library/ListBuilderTest.cpp
-    unit/library/MusicLibraryTest.cpp
+    library/TrackStoreTest.cpp
+    library/TrackWriteTest.cpp
+    library/TrackStoreRawLayoutTest.cpp
+    library/TrackStoreIntegrityTest.cpp
+    library/ListBuilderTest.cpp
+    library/MusicLibraryTest.cpp
 
     # lmdb tests
-    unit/lmdb/LmdbTestSupport.cpp
-    unit/lmdb/LmdbTestSupportTest.cpp
-    unit/lmdb/ReadOnlyDatabaseTest.cpp
-    unit/lmdb/ReadOnlyDatabaseLifetimeTest.cpp
-    unit/lmdb/EnvironmentTest.cpp
-    unit/lmdb/EnvironmentFileGrowthTest.cpp
-    unit/lmdb/MapCapacityPolicyTest.cpp
-    unit/lmdb/TransactionTest.cpp
-    unit/lmdb/DatabaseTest.cpp
-    unit/lmdb/DatabaseReaderTest.cpp
-    unit/lmdb/DatabaseMaxKeyTest.cpp
-    unit/lmdb/DatabaseWriterTest.cpp
-    unit/lmdb/DatabaseWriterLifetimeTest.cpp
-    unit/lmdb/DatabaseByteKeyTest.cpp
-    unit/lmdb/ResultErrorTest.cpp
+    lmdb/LmdbTestSupport.cpp
+    lmdb/LmdbTestSupportTest.cpp
+    lmdb/ReadOnlyDatabaseTest.cpp
+    lmdb/ReadOnlyDatabaseLifetimeTest.cpp
+    lmdb/EnvironmentTest.cpp
+    lmdb/EnvironmentFileGrowthTest.cpp
+    lmdb/MapCapacityPolicyTest.cpp
+    lmdb/TransactionTest.cpp
+    lmdb/DatabaseTest.cpp
+    lmdb/DatabaseReaderTest.cpp
+    lmdb/DatabaseMaxKeyTest.cpp
+    lmdb/DatabaseWriterTest.cpp
+    lmdb/DatabaseWriterLifetimeTest.cpp
+    lmdb/DatabaseByteKeyTest.cpp
+    lmdb/ResultErrorTest.cpp
 
     # audio unit tests
-    unit/audio/DecoderFactoryTest.cpp
-    unit/audio/PlatformBackendProvidersTest.cpp
-    unit/audio/DecoderOutputTest.cpp
-    unit/audio/OpenedModeValidationTest.cpp
-    unit/audio/detail/DecoderOutputAdapterTest.cpp
-    unit/audio/NullBackendTest.cpp
-    unit/audio/detail/AacConfigParserTest.cpp
-    unit/audio/detail/MappedFileCursorTest.cpp
-    unit/audio/detail/Mp4PacketSourceTest.cpp
-    unit/audio/detail/TimeConversionTest.cpp
-    unit/audio/AudioTimeTest.cpp
-    unit/audio/detail/StreamingBufferPolicyTest.cpp
-    unit/audio/detail/TrackSessionTest.cpp
-    unit/audio/DecoderErrorTest.cpp
-    unit/audio/AacDecoderSessionTest.cpp
-    unit/audio/AacDecoderMalformedMp4Test.cpp
-    unit/audio/FlacDecoderSessionTest.cpp
-    unit/audio/FlacDecoderChannelLayoutTest.cpp
-    unit/audio/FlacCommentCompatibilityTest.cpp
-    unit/audio/FlacMetadataInitializationTest.cpp
-    unit/audio/FlacWavMaskCompatibilityTest.cpp
-    unit/audio/FlacDecoderMalformedTest.cpp
-    unit/audio/FlacDecoderFormatStabilityTest.cpp
-    unit/audio/AlacDecoderSessionTest.cpp
-    unit/audio/AlacDecoderMalformedMp4Test.cpp
-    unit/audio/AlacFrameTestSupport.cpp
-    unit/audio/AlacDecoderChannelLayoutTest.cpp
-    unit/audio/AlacChannelMetadataTest.cpp
-    unit/audio/Mp3DecoderSessionTest.cpp
-    unit/audio/OpusDecoderSessionTest.cpp
-    unit/audio/OpusDecoderMalformedTest.cpp
-    unit/audio/WavDecoderSessionTest.cpp
-    unit/audio/WavDecoderChannelLayoutTest.cpp
-    unit/audio/SegmentDecoderSessionTest.cpp
-    unit/audio/Mp3DecoderMalformedTest.cpp
-    unit/audio/QualityAnalyzerTest.cpp
-    unit/audio/ChannelQualityTest.cpp
-    unit/audio/ChannelLayoutEvidenceTest.cpp
-    unit/audio/FormatTest.cpp
-    unit/audio/StreamingSourceTest.cpp
-    unit/audio/StreamingPrerollTest.cpp
-    unit/audio/StreamingRenderAlignmentTest.cpp
-    unit/audio/PcmFrameRingTest.cpp
-    unit/audio/backend/detail/AudioBackendRenderBufferTest.cpp
-    unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
-    unit/audio/backend/detail/AudioBackendDrainTailTest.cpp
-    unit/audio/backend/detail/BackendDeviceRegistryTest.cpp
-    unit/audio/backend/detail/BackendGraphRegistryTest.cpp
-    unit/audio/backend/detail/CallbackFenceTest.cpp
-    unit/audio/PcmConversionTest.cpp
-    unit/audio/PlayerTest.cpp
-    unit/audio/PlayerGraphObservationTest.cpp
-    unit/audio/EngineDrainTest.cpp
-    unit/audio/EngineErrorTest.cpp
-    unit/audio/EngineControlErrorTest.cpp
-    unit/audio/EngineFatalProbeTest.cpp
-    unit/audio/EngineGaplessTest.cpp
-    unit/audio/EngineChannelLayoutTest.cpp
-    unit/audio/EngineWavChannelLayoutTest.cpp
-    unit/audio/EngineFlacChannelLayoutTest.cpp
-    unit/audio/EngineFlacTransitionTest.cpp
-    unit/audio/EngineAlacChannelLayoutTest.cpp
-    unit/audio/EngineStereoIdentityTest.cpp
-    unit/audio/EngineStereoReuseTest.cpp
-    unit/audio/EngineEndpointPrecisionTest.cpp
-    unit/audio/EngineRtSignalRingTest.cpp
-    unit/audio/EngineSeekErrorTest.cpp
-    unit/audio/EngineTest.cpp
-    unit/audio/EngineBackendFailureTest.cpp
-    unit/audio/EngineBackendSwapTest.cpp
-    unit/audio/EngineCallbackTest.cpp
-    unit/audio/EngineConcurrencyTest.cpp
-    unit/audio/EnginePropertyTest.cpp
-    unit/audio/EngineTransportTest.cpp
+    audio/DecoderFactoryTest.cpp
+    audio/PlatformBackendProvidersTest.cpp
+    audio/DecoderOutputTest.cpp
+    audio/OpenedModeValidationTest.cpp
+    audio/detail/DecoderOutputAdapterTest.cpp
+    audio/NullBackendTest.cpp
+    audio/detail/AacConfigParserTest.cpp
+    audio/detail/MappedFileCursorTest.cpp
+    audio/detail/Mp4PacketSourceTest.cpp
+    audio/detail/TimeConversionTest.cpp
+    audio/AudioTimeTest.cpp
+    audio/detail/StreamingBufferPolicyTest.cpp
+    audio/detail/TrackSessionTest.cpp
+    audio/DecoderErrorTest.cpp
+    audio/AacDecoderSessionTest.cpp
+    audio/AacDecoderMalformedMp4Test.cpp
+    audio/FlacDecoderSessionTest.cpp
+    audio/FlacDecoderChannelLayoutTest.cpp
+    audio/FlacCommentCompatibilityTest.cpp
+    audio/FlacMetadataInitializationTest.cpp
+    audio/FlacWavMaskCompatibilityTest.cpp
+    audio/FlacDecoderMalformedTest.cpp
+    audio/FlacDecoderFormatStabilityTest.cpp
+    audio/AlacDecoderSessionTest.cpp
+    audio/AlacDecoderMalformedMp4Test.cpp
+    audio/AlacFrameTestSupport.cpp
+    audio/AlacDecoderChannelLayoutTest.cpp
+    audio/AlacChannelMetadataTest.cpp
+    audio/Mp3DecoderSessionTest.cpp
+    audio/OpusDecoderSessionTest.cpp
+    audio/OpusDecoderMalformedTest.cpp
+    audio/WavDecoderSessionTest.cpp
+    audio/WavDecoderChannelLayoutTest.cpp
+    audio/SegmentDecoderSessionTest.cpp
+    audio/Mp3DecoderMalformedTest.cpp
+    audio/QualityAnalyzerTest.cpp
+    audio/ChannelQualityTest.cpp
+    audio/ChannelLayoutEvidenceTest.cpp
+    audio/FormatTest.cpp
+    audio/StreamingSourceTest.cpp
+    audio/StreamingPrerollTest.cpp
+    audio/StreamingRenderAlignmentTest.cpp
+    audio/PcmFrameRingTest.cpp
+    audio/backend/detail/AudioBackendRenderBufferTest.cpp
+    audio/backend/detail/AudioBackendRenderProgressTest.cpp
+    audio/backend/detail/AudioBackendDrainTailTest.cpp
+    audio/backend/detail/BackendDeviceRegistryTest.cpp
+    audio/backend/detail/BackendGraphRegistryTest.cpp
+    audio/backend/detail/CallbackFenceTest.cpp
+    audio/PcmConversionTest.cpp
+    audio/PlayerTest.cpp
+    audio/PlayerGraphObservationTest.cpp
+    audio/EngineDrainTest.cpp
+    audio/EngineErrorTest.cpp
+    audio/EngineControlErrorTest.cpp
+    audio/EngineFatalProbeTest.cpp
+    audio/EngineGaplessTest.cpp
+    audio/EngineChannelLayoutTest.cpp
+    audio/EngineWavChannelLayoutTest.cpp
+    audio/EngineFlacChannelLayoutTest.cpp
+    audio/EngineFlacTransitionTest.cpp
+    audio/EngineAlacChannelLayoutTest.cpp
+    audio/EngineStereoIdentityTest.cpp
+    audio/EngineStereoReuseTest.cpp
+    audio/EngineEndpointPrecisionTest.cpp
+    audio/EngineRtSignalRingTest.cpp
+    audio/EngineSeekErrorTest.cpp
+    audio/EngineTest.cpp
+    audio/EngineBackendFailureTest.cpp
+    audio/EngineBackendSwapTest.cpp
+    audio/EngineCallbackTest.cpp
+    audio/EngineConcurrencyTest.cpp
+    audio/EnginePropertyTest.cpp
+    audio/EngineTransportTest.cpp
 
     # ui model tests (no platform deps)
-    unit/uimodel/field/TrackFieldFormatterTest.cpp
-    unit/uimodel/input/KeyChordTest.cpp
-    unit/uimodel/input/KeymapModelTest.cpp
-    unit/uimodel/input/KeyRepeatGuardTest.cpp
-    unit/uimodel/input/KeymapStoreTest.cpp
-    unit/uimodel/preference/NewerConfigNoticeTest.cpp
-    unit/uimodel/preference/PreferencesEditorModelTest.cpp
-    unit/uimodel/preference/ThemePresetTest.cpp
-    unit/uimodel/layout/component/LayoutSchemaTest.cpp
-    unit/uimodel/layout/shell/LayoutSessionTest.cpp
-    unit/uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
-    unit/uimodel/layout/component/LayoutComponentStateTest.cpp
-    unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
-    unit/uimodel/layout/document/LayoutModelTest.cpp
-    unit/uimodel/layout/document/LayoutPlacementTest.cpp
-    unit/uimodel/layout/document/LayoutPreparationTest.cpp
-    unit/uimodel/layout/document/LayoutValidationTest.cpp
-    unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
-    unit/uimodel/layout/shell/ShellGenerationSequenceTest.cpp
-    unit/uimodel/presentation/CoverArtPlaceholderTest.cpp
-    unit/uimodel/presentation/PresentationTextFeaturesTest.cpp
-    unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
-    unit/uimodel/library/detail/TrackCreditsTest.cpp
-    unit/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp
-    unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
-    unit/uimodel/library/list/ListActionsTest.cpp
-    unit/uimodel/library/list/ListAuthoringTest.cpp
-    unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp
-    unit/uimodel/library/list/ListOrderCapabilitiesTest.cpp
-    unit/uimodel/library/list/ListTreeProjectionTest.cpp
-    unit/uimodel/library/list/SmartListEditingTest.cpp
-    unit/uimodel/library/list/SmartListPresentationTest.cpp
-    unit/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
-    unit/uimodel/library/presentation/LibraryTransferPresentationTest.cpp
-    unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp
-    unit/uimodel/library/presentation/ListPresentationsTest.cpp
-    unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp
-    unit/uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp
-    unit/uimodel/library/presentation/TrackColumnLayoutsTest.cpp
-    unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp
-    unit/uimodel/library/presentation/TrackColumnDefaultsTest.cpp
-    unit/uimodel/library/presentation/TrackPresentationCatalogTest.cpp
-    unit/uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp
-    unit/uimodel/library/presentation/ListPresentationRecommendationTest.cpp
-    unit/uimodel/library/property/TagEditTest.cpp
-    unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
-    unit/uimodel/library/property/TrackPropertiesCreditsTest.cpp
-    unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
-    unit/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp
-    unit/uimodel/library/task/LibraryScanOutcomeTest.cpp
-    unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
-    unit/uimodel/library/track/ListMembershipAuthoringSessionTest.cpp
-    unit/uimodel/library/track/TrackAuthoringSessionTest.cpp
-    unit/uimodel/library/track/TrackAuthoringSnapshotSessionTest.cpp
-    unit/uimodel/library/track/TrackAuthoringTest.cpp
-    unit/uimodel/library/track/RecordingDateEditingTest.cpp
-    unit/uimodel/library/track/TrackAuthoringTestSupport.cpp
-    unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp
-    unit/uimodel/library/track/TrackDisplayIndexTest.cpp
-    unit/uimodel/library/track/TrackFilterCompleterTest.cpp
-    unit/uimodel/library/track/TrackFilterResolutionTest.cpp
-    unit/uimodel/library/track/TrackFilterViewModelTest.cpp
-    unit/uimodel/library/track/TrackPageRouteTest.cpp
-    unit/uimodel/library/track/TrackSelectionSummaryTest.cpp
-    unit/uimodel/playback/now-playing/NowPlayingViewModelTest.cpp
-    unit/uimodel/playback/command/PlaybackCommandTest.cpp
-    unit/uimodel/playback/command/PlaybackActionsTest.cpp
-    unit/uimodel/playback/output/OutputSelectionTest.cpp
-    unit/uimodel/playback/output/OutputDeviceIntentTest.cpp
-    unit/uimodel/playback/output/OutputDeviceViewModelTest.cpp
-    unit/uimodel/playback/output/VolumeViewModelTest.cpp
-    unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
-    unit/uimodel/playback/quality/ChannelLayoutPresentationTest.cpp
-    unit/uimodel/playback/quality/DecodedQualityPresentationTest.cpp
-    unit/uimodel/playback/seek/PlaybackPositionInterpolatorTest.cpp
-    unit/uimodel/playback/seek/PlaybackPositionViewModelTest.cpp
-    unit/uimodel/playback/seek/PlaybackTimeFormatterTest.cpp
-    unit/uimodel/playback/seek/SeekInteractionTest.cpp
-    unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp
-    unit/uimodel/playback/transport/TransportViewModelTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp
-    unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp
+    uimodel/field/TrackFieldFormatterTest.cpp
+    uimodel/input/KeyChordTest.cpp
+    uimodel/input/KeymapModelTest.cpp
+    uimodel/input/KeyRepeatGuardTest.cpp
+    uimodel/input/KeymapStoreTest.cpp
+    uimodel/preference/NewerConfigNoticeTest.cpp
+    uimodel/preference/PreferencesEditorModelTest.cpp
+    uimodel/preference/ThemePresetTest.cpp
+    uimodel/layout/component/LayoutSchemaTest.cpp
+    uimodel/layout/shell/LayoutSessionTest.cpp
+    uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
+    uimodel/layout/component/LayoutComponentStateTest.cpp
+    uimodel/layout/component/LayoutStatePromoterTest.cpp
+    uimodel/layout/document/LayoutModelTest.cpp
+    uimodel/layout/document/LayoutPlacementTest.cpp
+    uimodel/layout/document/LayoutPreparationTest.cpp
+    uimodel/layout/document/LayoutValidationTest.cpp
+    uimodel/layout/document/LayoutTemplateExpansionTest.cpp
+    uimodel/layout/shell/ShellGenerationSequenceTest.cpp
+    uimodel/presentation/CoverArtPlaceholderTest.cpp
+    uimodel/presentation/PresentationTextFeaturesTest.cpp
+    uimodel/library/detail/TrackCustomMetadataTest.cpp
+    uimodel/library/detail/TrackCreditsTest.cpp
+    uimodel/library/detail/TrackFieldGridVisibilityTest.cpp
+    uimodel/library/detail/TrackFieldGridSchemaTest.cpp
+    uimodel/library/list/ListActionsTest.cpp
+    uimodel/library/list/ListAuthoringTest.cpp
+    uimodel/library/list/ListOrderAuthoringSessionTest.cpp
+    uimodel/library/list/ListOrderCapabilitiesTest.cpp
+    uimodel/library/list/ListTreeProjectionTest.cpp
+    uimodel/library/list/SmartListEditingTest.cpp
+    uimodel/library/list/SmartListPresentationTest.cpp
+    uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
+    uimodel/library/presentation/LibraryTransferPresentationTest.cpp
+    uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp
+    uimodel/library/presentation/ListPresentationsTest.cpp
+    uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp
+    uimodel/library/presentation/TrackColumnLayoutMergingTest.cpp
+    uimodel/library/presentation/TrackColumnLayoutsTest.cpp
+    uimodel/library/presentation/TrackColumnWidthSolverTest.cpp
+    uimodel/library/presentation/TrackColumnDefaultsTest.cpp
+    uimodel/library/presentation/TrackPresentationCatalogTest.cpp
+    uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp
+    uimodel/library/presentation/ListPresentationRecommendationTest.cpp
+    uimodel/library/property/TagEditTest.cpp
+    uimodel/library/property/TrackPropertiesFormSpecTest.cpp
+    uimodel/library/property/TrackPropertiesCreditsTest.cpp
+    uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    uimodel/library/property/TrackPropertiesFormBaselineTest.cpp
+    uimodel/library/task/LibraryScanOutcomeTest.cpp
+    uimodel/library/task/LibraryScanWorkflowTest.cpp
+    uimodel/library/track/ListMembershipAuthoringSessionTest.cpp
+    uimodel/library/track/TrackAuthoringSessionTest.cpp
+    uimodel/library/track/TrackAuthoringSnapshotSessionTest.cpp
+    uimodel/library/track/TrackAuthoringTest.cpp
+    uimodel/library/track/RecordingDateEditingTest.cpp
+    uimodel/library/track/TrackAuthoringTestSupport.cpp
+    uimodel/library/track/IndexedTrackRowCacheTest.cpp
+    uimodel/library/track/TrackDisplayIndexTest.cpp
+    uimodel/library/track/TrackFilterCompleterTest.cpp
+    uimodel/library/track/TrackFilterResolutionTest.cpp
+    uimodel/library/track/TrackFilterViewModelTest.cpp
+    uimodel/library/track/TrackPageRouteTest.cpp
+    uimodel/library/track/TrackSelectionSummaryTest.cpp
+    uimodel/playback/now-playing/NowPlayingViewModelTest.cpp
+    uimodel/playback/command/PlaybackCommandTest.cpp
+    uimodel/playback/command/PlaybackActionsTest.cpp
+    uimodel/playback/output/OutputSelectionTest.cpp
+    uimodel/playback/output/OutputDeviceIntentTest.cpp
+    uimodel/playback/output/OutputDeviceViewModelTest.cpp
+    uimodel/playback/output/VolumeViewModelTest.cpp
+    uimodel/playback/quality/AudioQualityFormatterTest.cpp
+    uimodel/playback/quality/ChannelLayoutPresentationTest.cpp
+    uimodel/playback/quality/DecodedQualityPresentationTest.cpp
+    uimodel/playback/seek/PlaybackPositionInterpolatorTest.cpp
+    uimodel/playback/seek/PlaybackPositionViewModelTest.cpp
+    uimodel/playback/seek/PlaybackTimeFormatterTest.cpp
+    uimodel/playback/seek/SeekInteractionTest.cpp
+    uimodel/playback/soul/AobusSoulViewModelTest.cpp
+    uimodel/playback/transport/TransportViewModelTest.cpp
+    uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.cpp
+    uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp
+    uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp
+    uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp
+    uimodel/status/activity/ActivityStatusViewModelTest.cpp
 
     # app unit tests (no platform deps)
-    unit/runtime/AsyncParallelTest.cpp
-    unit/runtime/AsyncRuntimeTest.cpp
-    unit/runtime/ExecutorTestSupportTest.cpp
-    unit/runtime/library/LibraryPathsTest.cpp
-    unit/runtime/library/LibrarySnapshotTest.cpp
-    unit/runtime/library/LibrarySnapshotCreditsTest.cpp
-    unit/runtime/library/LibrarySnapshotCustomMetadataTest.cpp
-    unit/runtime/library/MediaTrackTest.cpp
-    unit/runtime/completion/CompletionTextTest.cpp
-    unit/runtime/completion/CompletionVocabularyTest.cpp
-    unit/runtime/completion/CompletionServiceTest.cpp
-    unit/runtime/completion/CreditCompletionTest.cpp
-    unit/runtime/LibraryRestoreStateIdentityTest.cpp
-    unit/runtime/LifetimeScopeTest.cpp
-    unit/runtime/LogTest.cpp
-    unit/runtime/LoopExecutorTest.cpp
-    unit/runtime/source/SmartListEvaluatorBatchTest.cpp
-    unit/runtime/source/SmartListEvaluatorExpressionTest.cpp
-    unit/runtime/source/SmartListEvaluatorIncrementalTest.cpp
-    unit/runtime/source/SmartListEvaluatorLoadModeTest.cpp
-    unit/runtime/source/SmartListEvaluatorTest.cpp
-    unit/runtime/source/SourcePipelineOperationTest.cpp
-    unit/runtime/source/IndexedTrackSequenceTest.cpp
-    unit/runtime/source/SourcePipelineOracleTest.cpp
-    unit/runtime/source/TrackSourceDeltaTest.cpp
-    unit/runtime/source/TrackSourceDeltaBuilderTest.cpp
-    unit/runtime/source/TrackSourceLifecycleTest.cpp
-    unit/runtime/TrackPresentationTest.cpp
-    unit/runtime/TrackEditScriptTest.cpp
-    unit/runtime/library/LibraryCommandsTagCommandTest.cpp
-    unit/runtime/library/LibraryCommandsTrackPropertiesTest.cpp
-    unit/runtime/library/LibraryCommandsTrackCreateCommandTest.cpp
-    unit/runtime/library/LibraryCommandsTrackDeleteCommandTest.cpp
-    unit/runtime/library/LibraryCommandsListMembershipTest.cpp
-    unit/runtime/library/LibraryCommandsListOrderTest.cpp
-    unit/runtime/TrackFieldTest.cpp
-    unit/runtime/TrackRecordingDateFieldTest.cpp
-    unit/runtime/library/LibraryCommandsDryRunTest.cpp
-    unit/runtime/library/LibraryChangesTest.cpp
-    unit/runtime/projection/TrackListProjectionGroupingTest.cpp
-    unit/runtime/projection/TrackListProjectionDeltaContractTest.cpp
-    unit/runtime/projection/TrackListProjectionIncrementalTest.cpp
-    unit/runtime/projection/TrackListProjectionLifecycleTest.cpp
-    unit/runtime/projection/TrackListProjectionMutationTest.cpp
-    unit/runtime/projection/TrackListProjectionSortingTest.cpp
-    unit/runtime/projection/TrackRecordingDateSortTest.cpp
-    unit/runtime/projection/TrackListProjectionScaleTest.cpp
-    unit/runtime/playback/PlaybackCursorModelTest.cpp
-    unit/runtime/playback/PlaybackRestartDeadlineTest.cpp
-    unit/runtime/playback/PreparedNextRegistryTest.cpp
-    unit/runtime/playback/ProjectionAnchorTest.cpp
-    unit/runtime/playback/ShuffleHistoryTest.cpp
-    unit/runtime/PlaybackServiceTest.cpp
-    unit/runtime/PlaybackGuardedSeekTest.cpp
-    unit/runtime/PlaybackEndSeekTest.cpp
-    unit/runtime/CarrierPlaybackTest.cpp
-    unit/runtime/CarrierSuccessionTest.cpp
-    unit/runtime/CuePlaybackSessionTest.cpp
-    unit/runtime/CueYamlTest.cpp
-    unit/runtime/CueYamlBaselineTest.cpp
-    unit/runtime/CueYamlPreparationTest.cpp
-    unit/runtime/PlaybackPositionQueryTest.cpp
-    unit/runtime/PlaybackMetadataTest.cpp
-    unit/runtime/PlaybackTransportControlTest.cpp
-    unit/runtime/PlaybackTransportOutputTest.cpp
-    unit/runtime/PlaybackTransportSelectionTest.cpp
-    unit/runtime/PlaybackTransportTest.cpp
-    unit/runtime/PlaybackTransportTokenTest.cpp
-    unit/runtime/PlaybackSuccessionLaunchTest.cpp
-    unit/runtime/PlaybackSuccessionProjectionTest.cpp
-    unit/runtime/PlaybackSuccessionAdvanceTest.cpp
-    unit/runtime/PlaybackSuccessionFailureTest.cpp
-    unit/runtime/PlaybackSessionTest.cpp
-    unit/runtime/PlaybackSessionVolumeTest.cpp
-    unit/runtime/source/AllTracksSourceTest.cpp
-    unit/runtime/source/TrackSourcePublicationTest.cpp
-    unit/runtime/source/TrackSourceCacheTest.cpp
-    unit/runtime/source/TrackSourceCachePublicationLifetimeTest.cpp
-    unit/runtime/source/VirtualListIdsTest.cpp
-    unit/runtime/projection/TrackDetailProjectionTest.cpp
-    unit/runtime/projection/TrackDetailPerformanceTest.cpp
-    unit/runtime/library/AudioIdentityIndexerTest.cpp
-    unit/runtime/library/LibraryScanTest.cpp
-    unit/runtime/library/ScanPlanTest.cpp
-    unit/runtime/library/ScanApplyDatabaseAdmissionTest.cpp
-    unit/runtime/library/ScanApplyFilesystemRevalidationTest.cpp
-    unit/runtime/library/ScanApplyPathProvenanceTest.cpp
-    unit/runtime/library/ScanApplyOperationTest.cpp
-    unit/runtime/library/ScanCuePreparationTest.cpp
-    unit/runtime/library/ScanWorkMetadataTest.cpp
-    unit/runtime/library/ScanPerformanceMetadataTest.cpp
-    unit/runtime/library/TrackBuilderSnapshotTest.cpp
-    unit/runtime/library/LibraryJobsTest.cpp
-    unit/runtime/library/RuntimeFatalProbeTest.cpp
-    unit/runtime/library/LibraryCommandsTest.cpp
-    unit/runtime/library/LibraryAuthoringTest.cpp
-    unit/runtime/library/TrackAuthoringSnapshotTest.cpp
-    unit/runtime/library/TrackTargetAdmissionTest.cpp
-    unit/runtime/library/TrackCustomMetadataAdmissionTest.cpp
-    unit/runtime/library/TrackPerformanceAuthoringTest.cpp
-    unit/runtime/completion/MetadataValueCompleterTest.cpp
-    unit/runtime/NotificationServiceTest.cpp
-    unit/runtime/NotificationServiceExpiryTest.cpp
-    unit/runtime/WritableTagListTest.cpp
-    unit/runtime/completion/QueryExpressionCompleterTest.cpp
-    unit/runtime/ViewServiceLifecycleTest.cpp
-    unit/runtime/ViewServiceListFilterTest.cpp
-    unit/runtime/ViewServicePresentationTest.cpp
-    unit/runtime/ViewServiceSelectionTest.cpp
-    unit/runtime/ConfigStoreTest.cpp
-    unit/runtime/source/ListOrderSourceObserverTest.cpp
-    unit/runtime/source/ListOrderSourceTest.cpp
-    unit/runtime/NavigationHistoryTest.cpp
-    unit/runtime/WorkspaceHistoryTest.cpp
-    unit/runtime/WorkspaceNavigationTest.cpp
-    unit/runtime/WorkspacePresentationTest.cpp
-    unit/runtime/WorkspaceSessionYamlSchemaTest.cpp
-    unit/runtime/WorkspaceSessionTest.cpp
-    unit/runtime/AppRuntimeTest.cpp
-    unit/runtime/AppStateTest.cpp
-    unit/runtime/HeadlessShellTest.cpp
-    unit/runtime/library/LibraryExportImportCoverArtTest.cpp
-    unit/runtime/library/LibraryExportImportDeltaTest.cpp
-    unit/runtime/library/LibraryExportImportErrorTest.cpp
-    unit/runtime/library/LibraryExportImportListTest.cpp
-    unit/runtime/library/LibraryFormatFixtureTest.cpp
-    unit/runtime/library/CueScanTest.cpp
-    unit/runtime/library/CueSheetAccessTest.cpp
-    unit/runtime/library/CueCarrierFactsTest.cpp
-    unit/runtime/library/CueRelinkPlanTest.cpp
-    unit/runtime/library/LibraryYamlSchemaTest.cpp
-    unit/runtime/library/LibraryYamlExporterTest.cpp
-    unit/runtime/library/LibraryYamlImporterTest.cpp
-    unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp
-    unit/runtime/library/LibraryYamlCreditBoundaryTest.cpp
-    unit/runtime/library/LibraryYamlModeFixtureTest.cpp
-    unit/runtime/library/LibraryExportImportTest.cpp
-    unit/runtime/resource/ResourceByteDiskCacheTest.cpp
-    unit/runtime/resource/ResourceByteMemoryCacheTest.cpp
-    unit/runtime/resource/ResourceByteReadTest.cpp
-    unit/runtime/resource/ResourceByteReaderTest.cpp
-    unit/desktop/DetachedProcessLauncherTest.cpp
-    unit/desktop/DetachedProcessLauncherWindowsTest.cpp
-    unit/desktop/LibraryStartupPlannerTest.cpp
-    unit/desktop/LibrarySuccessorProtocolTest.cpp
-    unit/desktop/LibrarySwitchTest.cpp
+    runtime/AsyncParallelTest.cpp
+    runtime/AsyncRuntimeTest.cpp
+    runtime/ExecutorTestSupportTest.cpp
+    runtime/library/LibraryPathsTest.cpp
+    runtime/library/LibrarySnapshotTest.cpp
+    runtime/library/LibrarySnapshotCreditsTest.cpp
+    runtime/library/LibrarySnapshotCustomMetadataTest.cpp
+    runtime/library/MediaTrackTest.cpp
+    runtime/completion/CompletionTextTest.cpp
+    runtime/completion/CompletionVocabularyTest.cpp
+    runtime/completion/CompletionServiceTest.cpp
+    runtime/completion/CreditCompletionTest.cpp
+    runtime/LibraryRestoreStateIdentityTest.cpp
+    runtime/LifetimeScopeTest.cpp
+    runtime/LogTest.cpp
+    runtime/LoopExecutorTest.cpp
+    runtime/source/SmartListEvaluatorBatchTest.cpp
+    runtime/source/SmartListEvaluatorExpressionTest.cpp
+    runtime/source/SmartListEvaluatorIncrementalTest.cpp
+    runtime/source/SmartListEvaluatorLoadModeTest.cpp
+    runtime/source/SmartListEvaluatorTest.cpp
+    runtime/source/SourcePipelineOperationTest.cpp
+    runtime/source/IndexedTrackSequenceTest.cpp
+    runtime/source/SourcePipelineOracleTest.cpp
+    runtime/source/TrackSourceDeltaTest.cpp
+    runtime/source/TrackSourceDeltaBuilderTest.cpp
+    runtime/source/TrackSourceLifecycleTest.cpp
+    runtime/TrackPresentationTest.cpp
+    runtime/TrackEditScriptTest.cpp
+    runtime/library/LibraryCommandsTagCommandTest.cpp
+    runtime/library/LibraryCommandsTrackPropertiesTest.cpp
+    runtime/library/LibraryCommandsTrackCreateCommandTest.cpp
+    runtime/library/LibraryCommandsTrackDeleteCommandTest.cpp
+    runtime/library/LibraryCommandsListMembershipTest.cpp
+    runtime/library/LibraryCommandsListOrderTest.cpp
+    runtime/TrackFieldTest.cpp
+    runtime/TrackRecordingDateFieldTest.cpp
+    runtime/library/LibraryCommandsDryRunTest.cpp
+    runtime/library/LibraryChangesTest.cpp
+    runtime/projection/TrackListProjectionGroupingTest.cpp
+    runtime/projection/TrackListProjectionDeltaContractTest.cpp
+    runtime/projection/TrackListProjectionIncrementalTest.cpp
+    runtime/projection/TrackListProjectionLifecycleTest.cpp
+    runtime/projection/TrackListProjectionMutationTest.cpp
+    runtime/projection/TrackListProjectionSortingTest.cpp
+    runtime/projection/TrackRecordingDateSortTest.cpp
+    runtime/projection/TrackListProjectionScaleTest.cpp
+    runtime/playback/PlaybackCursorModelTest.cpp
+    runtime/playback/PlaybackRestartDeadlineTest.cpp
+    runtime/playback/PreparedNextRegistryTest.cpp
+    runtime/playback/ProjectionAnchorTest.cpp
+    runtime/playback/ShuffleHistoryTest.cpp
+    runtime/PlaybackServiceTest.cpp
+    runtime/PlaybackGuardedSeekTest.cpp
+    runtime/PlaybackEndSeekTest.cpp
+    runtime/CarrierPlaybackTest.cpp
+    runtime/CarrierSuccessionTest.cpp
+    runtime/CuePlaybackSessionTest.cpp
+    runtime/CueYamlTest.cpp
+    runtime/CueYamlBaselineTest.cpp
+    runtime/CueYamlPreparationTest.cpp
+    runtime/PlaybackPositionQueryTest.cpp
+    runtime/PlaybackMetadataTest.cpp
+    runtime/PlaybackTransportControlTest.cpp
+    runtime/PlaybackTransportOutputTest.cpp
+    runtime/PlaybackTransportSelectionTest.cpp
+    runtime/PlaybackTransportTest.cpp
+    runtime/PlaybackTransportTokenTest.cpp
+    runtime/PlaybackSuccessionLaunchTest.cpp
+    runtime/PlaybackSuccessionProjectionTest.cpp
+    runtime/PlaybackSuccessionAdvanceTest.cpp
+    runtime/PlaybackSuccessionFailureTest.cpp
+    runtime/PlaybackSessionTest.cpp
+    runtime/PlaybackSessionVolumeTest.cpp
+    runtime/source/AllTracksSourceTest.cpp
+    runtime/source/TrackSourcePublicationTest.cpp
+    runtime/source/TrackSourceCacheTest.cpp
+    runtime/source/TrackSourceCachePublicationLifetimeTest.cpp
+    runtime/source/VirtualListIdsTest.cpp
+    runtime/projection/TrackDetailProjectionTest.cpp
+    runtime/projection/TrackDetailPerformanceTest.cpp
+    runtime/library/AudioIdentityIndexerTest.cpp
+    runtime/library/LibraryScanTest.cpp
+    runtime/library/ScanPlanTest.cpp
+    runtime/library/ScanApplyDatabaseAdmissionTest.cpp
+    runtime/library/ScanApplyFilesystemRevalidationTest.cpp
+    runtime/library/ScanApplyPathProvenanceTest.cpp
+    runtime/library/ScanApplyOperationTest.cpp
+    runtime/library/ScanCuePreparationTest.cpp
+    runtime/library/ScanWorkMetadataTest.cpp
+    runtime/library/ScanPerformanceMetadataTest.cpp
+    runtime/library/TrackBuilderSnapshotTest.cpp
+    runtime/library/LibraryJobsTest.cpp
+    runtime/library/RuntimeFatalProbeTest.cpp
+    runtime/library/LibraryCommandsTest.cpp
+    runtime/library/LibraryAuthoringTest.cpp
+    runtime/library/TrackAuthoringSnapshotTest.cpp
+    runtime/library/TrackTargetAdmissionTest.cpp
+    runtime/library/TrackCustomMetadataAdmissionTest.cpp
+    runtime/library/TrackPerformanceAuthoringTest.cpp
+    runtime/completion/MetadataValueCompleterTest.cpp
+    runtime/NotificationServiceTest.cpp
+    runtime/NotificationServiceExpiryTest.cpp
+    runtime/WritableTagListTest.cpp
+    runtime/completion/QueryExpressionCompleterTest.cpp
+    runtime/ViewServiceLifecycleTest.cpp
+    runtime/ViewServiceListFilterTest.cpp
+    runtime/ViewServicePresentationTest.cpp
+    runtime/ViewServiceSelectionTest.cpp
+    runtime/ConfigStoreTest.cpp
+    runtime/source/ListOrderSourceObserverTest.cpp
+    runtime/source/ListOrderSourceTest.cpp
+    runtime/NavigationHistoryTest.cpp
+    runtime/WorkspaceHistoryTest.cpp
+    runtime/WorkspaceNavigationTest.cpp
+    runtime/WorkspacePresentationTest.cpp
+    runtime/WorkspaceSessionYamlSchemaTest.cpp
+    runtime/WorkspaceSessionTest.cpp
+    runtime/AppRuntimeTest.cpp
+    runtime/AppStateTest.cpp
+    runtime/HeadlessShellTest.cpp
+    runtime/library/LibraryExportImportCoverArtTest.cpp
+    runtime/library/LibraryExportImportDeltaTest.cpp
+    runtime/library/LibraryExportImportErrorTest.cpp
+    runtime/library/LibraryExportImportListTest.cpp
+    runtime/library/LibraryFormatFixtureTest.cpp
+    runtime/library/CueScanTest.cpp
+    runtime/library/CueSheetAccessTest.cpp
+    runtime/library/CueCarrierFactsTest.cpp
+    runtime/library/CueRelinkPlanTest.cpp
+    runtime/library/LibraryYamlSchemaTest.cpp
+    runtime/library/LibraryYamlExporterTest.cpp
+    runtime/library/LibraryYamlImporterTest.cpp
+    runtime/library/LibraryYamlPerformanceMetadataTest.cpp
+    runtime/library/LibraryYamlCreditBoundaryTest.cpp
+    runtime/library/LibraryYamlModeFixtureTest.cpp
+    runtime/library/LibraryExportImportTest.cpp
+    runtime/resource/ResourceByteDiskCacheTest.cpp
+    runtime/resource/ResourceByteMemoryCacheTest.cpp
+    runtime/resource/ResourceByteReadTest.cpp
+    runtime/resource/ResourceByteReaderTest.cpp
+    desktop/DetachedProcessLauncherTest.cpp
+    desktop/DetachedProcessLauncherWindowsTest.cpp
+    desktop/LibraryStartupPlannerTest.cpp
+    desktop/LibrarySuccessorProtocolTest.cpp
+    desktop/LibrarySwitchTest.cpp
 
     # Every Windows shell source that carries no WinRT dependency is gated on
     # every host rather than only on a native Windows run: settings
@@ -824,32 +824,32 @@ add_executable(ao_core_test
     ${CMAKE_SOURCE_DIR}/app/windows-winui/track/TrackRevealAdapter.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/track/TrackPropertiesAdapter.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/list/ListAuthoringAdapter.cpp
-    unit/winui/DesktopSettingsYamlSchemaTest.cpp
-    unit/winui/ThemeTest.cpp
-    unit/winui/app/CallbackAdmissionGateTest.cpp
-    unit/winui/app/DesktopOutputSelectionTest.cpp
-    unit/winui/app/DestructiveLibraryRestartTest.cpp
-    unit/winui/app/DispatcherQueueAdmissionTest.cpp
-    unit/winui/app/SelectedRootCommitTest.cpp
-    unit/winui/app/SettingsPersistenceTest.cpp
-    unit/winui/app/StartupWarningsTest.cpp
-    unit/winui/input/KeyChordAcceleratorTest.cpp
-    unit/winui/input/KeymapAcceleratorPlanTest.cpp
-    unit/winui/library/LibraryTransferAdapterTest.cpp
-    unit/winui/layout/ElementKindTest.cpp
-    unit/winui/layout/LayoutSchemaTest.cpp
-    unit/winui/layout/LayoutDialectTest.cpp
-    unit/winui/layout/PlacementPlanTest.cpp
-    unit/winui/layout/ShellCommandsTest.cpp
-    unit/winui/layout/ShellCommandWiringTest.cpp
-    unit/winui/layout/ShellDocumentTest.cpp
-    unit/winui/layout/ShellStateTest.cpp
-    unit/winui/layout/StyleLookupTest.cpp
-    unit/winui/layout/ThemeSurfaceTest.cpp
-    unit/winui/track/QuickFilterCompletionAdapterTest.cpp
-    unit/winui/track/TrackRevealAdapterTest.cpp
-    unit/winui/track/TrackPropertiesAdapterTest.cpp
-    unit/winui/list/ListAuthoringAdapterTest.cpp
+    winui/DesktopSettingsYamlSchemaTest.cpp
+    winui/ThemeTest.cpp
+    winui/app/CallbackAdmissionGateTest.cpp
+    winui/app/DesktopOutputSelectionTest.cpp
+    winui/app/DestructiveLibraryRestartTest.cpp
+    winui/app/DispatcherQueueAdmissionTest.cpp
+    winui/app/SelectedRootCommitTest.cpp
+    winui/app/SettingsPersistenceTest.cpp
+    winui/app/StartupWarningsTest.cpp
+    winui/input/KeyChordAcceleratorTest.cpp
+    winui/input/KeymapAcceleratorPlanTest.cpp
+    winui/library/LibraryTransferAdapterTest.cpp
+    winui/layout/ElementKindTest.cpp
+    winui/layout/LayoutSchemaTest.cpp
+    winui/layout/LayoutDialectTest.cpp
+    winui/layout/PlacementPlanTest.cpp
+    winui/layout/ShellCommandsTest.cpp
+    winui/layout/ShellCommandWiringTest.cpp
+    winui/layout/ShellDocumentTest.cpp
+    winui/layout/ShellStateTest.cpp
+    winui/layout/StyleLookupTest.cpp
+    winui/layout/ThemeSurfaceTest.cpp
+    winui/track/QuickFilterCompletionAdapterTest.cpp
+    winui/track/TrackRevealAdapterTest.cpp
+    winui/track/TrackPropertiesAdapterTest.cpp
+    winui/list/ListAuthoringAdapterTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_core_test)
 target_include_directories(ao_core_test PRIVATE
@@ -892,51 +892,51 @@ if(LINUX)
     "LINKER:--wrap=pw_stream_queue_buffer")
 endif()
 if(LINUX)
-  target_sources(ao_core_test PRIVATE unit/audio/backend/AlsaMixerTestSupport.cpp)
+  target_sources(ao_core_test PRIVATE audio/backend/AlsaMixerTestSupport.cpp)
 endif()
 aobus_target_test_sources(ao_core_test "${LINUX}" "non-Linux host"
-  unit/audio/backend/PipeWireMonitorTest.cpp
-  unit/audio/backend/PipeWireBackendTest.cpp
-  unit/audio/backend/PipeWireBackendAdmissionTest.cpp
-  unit/audio/backend/PipeWireChannelObservationTest.cpp
-  unit/audio/backend/AlsaEnginePropertyTest.cpp
-  unit/audio/backend/AlsaExclusiveBackendTest.cpp
-  unit/audio/backend/AlsaBackendReuseTest.cpp
-  unit/audio/backend/AlsaChannelObservationTest.cpp
-  unit/audio/backend/AlsaProviderTest.cpp
-  unit/audio/backend/FlacAlsaPipeWireRouteTest.cpp
-  unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
-  unit/audio/backend/detail/PipeWireFormatParsingTest.cpp
-  unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
-  unit/audio/backend/detail/AlsaChannelMapTest.cpp
-  unit/audio/backend/detail/AlsaLegacyChannelMapTest.cpp
-  unit/audio/backend/detail/AlsaPrewarmCacheTest.cpp
-  unit/audio/backend/detail/AlsaMixerSessionTest.cpp
-  unit/audio/backend/detail/AlsaModeSelectorTest.cpp
-  unit/audio/backend/detail/AlsaPcmErrorTest.cpp
-  unit/audio/backend/detail/AlsaPcmFormatTest.cpp
-  unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
-  unit/runtime/PlaybackSessionAlsaMuteTest.cpp
+  audio/backend/PipeWireMonitorTest.cpp
+  audio/backend/PipeWireBackendTest.cpp
+  audio/backend/PipeWireBackendAdmissionTest.cpp
+  audio/backend/PipeWireChannelObservationTest.cpp
+  audio/backend/AlsaEnginePropertyTest.cpp
+  audio/backend/AlsaExclusiveBackendTest.cpp
+  audio/backend/AlsaBackendReuseTest.cpp
+  audio/backend/AlsaChannelObservationTest.cpp
+  audio/backend/AlsaProviderTest.cpp
+  audio/backend/FlacAlsaPipeWireRouteTest.cpp
+  audio/backend/detail/PipeWireMonitorParsingTest.cpp
+  audio/backend/detail/PipeWireFormatParsingTest.cpp
+  audio/backend/detail/AlsaGraphRegistryTest.cpp
+  audio/backend/detail/AlsaChannelMapTest.cpp
+  audio/backend/detail/AlsaLegacyChannelMapTest.cpp
+  audio/backend/detail/AlsaPrewarmCacheTest.cpp
+  audio/backend/detail/AlsaMixerSessionTest.cpp
+  audio/backend/detail/AlsaModeSelectorTest.cpp
+  audio/backend/detail/AlsaPcmErrorTest.cpp
+  audio/backend/detail/AlsaPcmFormatTest.cpp
+  audio/backend/detail/AlsaPcmVolumeTest.cpp
+  runtime/PlaybackSessionAlsaMuteTest.cpp
 )
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
-  unit/audio/backend/CoreAudioBackendFatalProbeTest.cpp
-  unit/audio/backend/CoreAudioBackendTest.cpp
-  unit/audio/backend/CoreAudioBackendRunStateTest.cpp
-  unit/audio/backend/CoreAudioChannelObservationTest.cpp
-  unit/audio/backend/CoreAudioProviderTest.cpp
-  unit/audio/backend/CoreAudioTestOutputTest.cpp
-  unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp
-  unit/audio/backend/detail/CoreAudioControlMailboxTest.cpp
-  unit/audio/backend/detail/CoreAudioErrorTest.cpp
-  unit/audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
-  unit/audio/backend/detail/CoreAudioFormatTest.cpp
-  unit/audio/backend/detail/CoreAudioGraphTest.cpp
-  unit/audio/backend/detail/CoreAudioLatencyTest.cpp
-  unit/audio/backend/detail/CoreAudioRenderAdmissionTest.cpp
-  unit/audio/backend/detail/CoreAudioRenderBufferTest.cpp
-  unit/audio/backend/detail/CoreAudioRunControlTest.cpp
-  unit/audio/backend/detail/CoreAudioUnitRunTest.cpp
-  unit/audio/backend/detail/CoreFoundationStringTest.cpp
+  audio/backend/CoreAudioBackendFatalProbeTest.cpp
+  audio/backend/CoreAudioBackendTest.cpp
+  audio/backend/CoreAudioBackendRunStateTest.cpp
+  audio/backend/CoreAudioChannelObservationTest.cpp
+  audio/backend/CoreAudioProviderTest.cpp
+  audio/backend/CoreAudioTestOutputTest.cpp
+  audio/backend/detail/CoreAudioChannelLayoutTest.cpp
+  audio/backend/detail/CoreAudioControlMailboxTest.cpp
+  audio/backend/detail/CoreAudioErrorTest.cpp
+  audio/backend/detail/CoreAudioDeviceDiscoveryTest.cpp
+  audio/backend/detail/CoreAudioFormatTest.cpp
+  audio/backend/detail/CoreAudioGraphTest.cpp
+  audio/backend/detail/CoreAudioLatencyTest.cpp
+  audio/backend/detail/CoreAudioRenderAdmissionTest.cpp
+  audio/backend/detail/CoreAudioRenderBufferTest.cpp
+  audio/backend/detail/CoreAudioRunControlTest.cpp
+  audio/backend/detail/CoreAudioUnitRunTest.cpp
+  audio/backend/detail/CoreFoundationStringTest.cpp
 )
 if(APPLE)
   target_link_libraries(ao_core_test PRIVATE ao_test_support_coreaudio)
@@ -944,7 +944,7 @@ if(APPLE)
 endif()
 # Only Darwin LMDB keeps lock state that outlives an aborted owner.
 aobus_target_test_sources(ao_core_test "${APPLE}" "non-macOS host"
-  unit/macos/lmdb/LmdbProbeScratchTest.cpp
+  macos/lmdb/LmdbProbeScratchTest.cpp
 )
 if(WIN32)
   add_executable(ao_detached_process_probe
@@ -955,7 +955,7 @@ if(WIN32)
   add_dependencies(ao_core_test ao_detached_process_probe)
 
   target_sources(ao_core_test PRIVATE
-    unit/audio/backend/WasapiFormatTestSupport.cpp
+    audio/backend/WasapiFormatTestSupport.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
   )
   target_compile_definitions(ao_core_test PRIVATE
@@ -963,17 +963,17 @@ if(WIN32)
   target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()
 aobus_target_test_sources(ao_core_test "${WIN32}" "non-Windows host"
-  unit/audio/backend/WasapiProviderTest.cpp
-  unit/audio/backend/WasapiSharedBackendTest.cpp
-  unit/audio/backend/WasapiBackendReuseTest.cpp
-  unit/audio/backend/WasapiChannelObservationTest.cpp
-  unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
-  unit/audio/backend/detail/WasapiMixFormatTest.cpp
-  unit/audio/backend/detail/WasapiStringsTest.cpp
-  unit/windows/platform/MemoryRandomAccessStreamTest.cpp
-  unit/winui/FrameResourceTest.cpp
-  unit/winui/StringResourceTest.cpp
-  unit/winui/WinUiErrorBoundaryTest.cpp
+  audio/backend/WasapiProviderTest.cpp
+  audio/backend/WasapiSharedBackendTest.cpp
+  audio/backend/WasapiBackendReuseTest.cpp
+  audio/backend/WasapiChannelObservationTest.cpp
+  audio/backend/detail/WasapiGraphRegistryTest.cpp
+  audio/backend/detail/WasapiMixFormatTest.cpp
+  audio/backend/detail/WasapiStringsTest.cpp
+  windows/platform/MemoryRandomAccessStreamTest.cpp
+  winui/FrameResourceTest.cpp
+  winui/StringResourceTest.cpp
+  winui/WinUiErrorBoundaryTest.cpp
 )
 add_dependencies(ao_core_test ao_audio_fatal_probe ao_fatal_probe ao_library_probe)
 add_test(NAME ao_core_test COMMAND ao_core_test)
@@ -989,11 +989,11 @@ target_link_libraries(ao_tui_signal_probe PRIVATE ao_fatal_probe_support aobus-t
 
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
-    unit/tui/CoverArtTestSupport.cpp
-    unit/tui/KeymapTestSupport.cpp
-    unit/tui/EventControllerTestSupport.cpp
-    unit/tui/RenderTestSupport.cpp
-    unit/tui/TrackPropertiesEditorTestSupport.cpp
+    tui/CoverArtTestSupport.cpp
+    tui/KeymapTestSupport.cpp
+    tui/EventControllerTestSupport.cpp
+    tui/RenderTestSupport.cpp
+    tui/TrackPropertiesEditorTestSupport.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_test)
 
@@ -1018,81 +1018,81 @@ add_test(NAME ao_tui_test COMMAND ao_tui_test)
 # --asan/--tsan apply to every in-gate target. Build explicitly and run directly:
 #   ./ao build --target ao_tui_bench && <builddir>/test/ao_tui_bench
 add_executable(ao_tui_bench EXCLUDE_FROM_ALL
-    unit/tui/TrackTableBenchmark.cpp
+    tui/TrackTableBenchmark.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_tui_bench)
 target_link_libraries(ao_tui_bench PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_support_i18n ao_test_options Catch2::Catch2WithMain mimalloc)
 endif()
 aobus_target_test_sources(ao_tui_test "${AOBUS_BUILD_TUI}" "AOBUS_BUILD_TUI=OFF"
-    unit/tui/AnchoredOverlayTest.cpp
-    unit/tui/CommandTest.cpp
-    unit/tui/CommandCompletionTest.cpp
-    unit/tui/CommandCompletionStateTest.cpp
-    unit/tui/CoverArtLoaderTest.cpp
-    unit/tui/CoverArtTest.cpp
-    unit/tui/EventControllerTest.cpp
-    unit/tui/EditorMouseTest.cpp
-    unit/tui/MouseBindingsTest.cpp
-    unit/tui/ExecutorTest.cpp
-    unit/tui/ExitControllerTest.cpp
-    unit/tui/FrameTimerTest.cpp
-    unit/tui/LibraryControllerTest.cpp
-    unit/tui/LibraryCreditsCacheTest.cpp
-    unit/tui/LibraryNavigationTest.cpp
-    unit/tui/LibraryScanControllerTest.cpp
-    unit/tui/ListAuthoringControllerTest.cpp
-    unit/tui/ListNavigationModelTest.cpp
-    unit/tui/ListOrderControllerTest.cpp
-    unit/tui/NavigationPanelTest.cpp
-    unit/tui/PinnedNavigationTest.cpp
-    unit/tui/DetailSectionsTest.cpp
-    unit/tui/DetailFieldLayoutTest.cpp
-    unit/tui/PanelDividerTest.cpp
-    unit/tui/PanelResizeTest.cpp
-    unit/tui/PlaybackStatusFormatterTest.cpp
-    unit/tui/SelectionNavigationTest.cpp
-    unit/tui/SignalExitWatcherTest.cpp
-    unit/tui/TrackDetailLinesTest.cpp
-    unit/tui/TrackListEntryTest.cpp
-    unit/tui/TrackEditControllerTest.cpp
-    unit/tui/TrackPresentationNavigationTest.cpp
-    unit/tui/TrackCreditsEditorTest.cpp
-    unit/tui/TrackPropertiesEditorTest.cpp
-    unit/tui/TrackPropertiesEditorCompletionTest.cpp
-    unit/tui/TrackTagPopoverTest.cpp
-    unit/tui/TrackPropertiesEditorTagsTest.cpp
-    unit/tui/SmartListEditorTest.cpp
-    unit/tui/TrackSectionTest.cpp
-    unit/tui/OutputDeviceControllerTest.cpp
-    unit/tui/PlaybackNavigationTest.cpp
-    unit/tui/GoToMenuTest.cpp
-    unit/tui/PlaybackModeTest.cpp
-    unit/tui/PlaybackHoverTest.cpp
-    unit/tui/PlaybackPanelTest.cpp
-    unit/tui/QualityPanelTest.cpp
-    unit/tui/OutputDevicePanelTest.cpp
-    unit/tui/RenderTest.cpp
-    unit/tui/WorkspaceUsabilityTest.cpp
-    unit/tui/ListSearchTest.cpp
-    unit/tui/ShellInteractionModelTest.cpp
-    unit/tui/SoulButtonTest.cpp
-    unit/tui/TerminalTrackColumnLayoutTest.cpp
-    unit/tui/TextCellTest.cpp
-    unit/tui/TrackTableTest.cpp
-    unit/tui/HitRegionsTest.cpp
-    unit/tui/KeymapTest.cpp
-    unit/tui/SettingsEditorTest.cpp
-    unit/tui/PreferencesTest.cpp
-    unit/tui/TerminalTitleTest.cpp
-    unit/tui/LayoutStateStoreTest.cpp
-    unit/tui/TuiSignalProbeTest.cpp
-    unit/tui/TextFieldModelTest.cpp
+    tui/AnchoredOverlayTest.cpp
+    tui/CommandTest.cpp
+    tui/CommandCompletionTest.cpp
+    tui/CommandCompletionStateTest.cpp
+    tui/CoverArtLoaderTest.cpp
+    tui/CoverArtTest.cpp
+    tui/EventControllerTest.cpp
+    tui/EditorMouseTest.cpp
+    tui/MouseBindingsTest.cpp
+    tui/ExecutorTest.cpp
+    tui/ExitControllerTest.cpp
+    tui/FrameTimerTest.cpp
+    tui/LibraryControllerTest.cpp
+    tui/LibraryCreditsCacheTest.cpp
+    tui/LibraryNavigationTest.cpp
+    tui/LibraryScanControllerTest.cpp
+    tui/ListAuthoringControllerTest.cpp
+    tui/ListNavigationModelTest.cpp
+    tui/ListOrderControllerTest.cpp
+    tui/NavigationPanelTest.cpp
+    tui/PinnedNavigationTest.cpp
+    tui/DetailSectionsTest.cpp
+    tui/DetailFieldLayoutTest.cpp
+    tui/PanelDividerTest.cpp
+    tui/PanelResizeTest.cpp
+    tui/PlaybackStatusFormatterTest.cpp
+    tui/SelectionNavigationTest.cpp
+    tui/SignalExitWatcherTest.cpp
+    tui/TrackDetailLinesTest.cpp
+    tui/TrackListEntryTest.cpp
+    tui/TrackEditControllerTest.cpp
+    tui/TrackPresentationNavigationTest.cpp
+    tui/TrackCreditsEditorTest.cpp
+    tui/TrackPropertiesEditorTest.cpp
+    tui/TrackPropertiesEditorCompletionTest.cpp
+    tui/TrackTagPopoverTest.cpp
+    tui/TrackPropertiesEditorTagsTest.cpp
+    tui/SmartListEditorTest.cpp
+    tui/TrackSectionTest.cpp
+    tui/OutputDeviceControllerTest.cpp
+    tui/PlaybackNavigationTest.cpp
+    tui/GoToMenuTest.cpp
+    tui/PlaybackModeTest.cpp
+    tui/PlaybackHoverTest.cpp
+    tui/PlaybackPanelTest.cpp
+    tui/QualityPanelTest.cpp
+    tui/OutputDevicePanelTest.cpp
+    tui/RenderTest.cpp
+    tui/WorkspaceUsabilityTest.cpp
+    tui/ListSearchTest.cpp
+    tui/ShellInteractionModelTest.cpp
+    tui/SoulButtonTest.cpp
+    tui/TerminalTrackColumnLayoutTest.cpp
+    tui/TextCellTest.cpp
+    tui/TrackTableTest.cpp
+    tui/HitRegionsTest.cpp
+    tui/KeymapTest.cpp
+    tui/SettingsEditorTest.cpp
+    tui/PreferencesTest.cpp
+    tui/TerminalTitleTest.cpp
+    tui/LayoutStateStoreTest.cpp
+    tui/TuiSignalProbeTest.cpp
+    tui/TextFieldModelTest.cpp
 )
 
 if(AOBUS_BUILD_CLI)
 # ao_cli_test: command-line frontend tests
 add_executable(ao_cli_test
-    unit/cli/CliTestSupport.cpp
+    cli/CliTestSupport.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_cli_test)
 
@@ -1106,29 +1106,29 @@ target_link_libraries(ao_cli_test PRIVATE
 add_test(NAME ao_cli_test COMMAND ao_cli_test)
 endif()
 aobus_target_test_sources(ao_cli_test "${AOBUS_BUILD_CLI}" "AOBUS_BUILD_CLI=OFF"
-    unit/cli/CommandErrorTest.cpp
-    unit/cli/CliRuntimeTest.cpp
-    unit/cli/CliSmokeTest.cpp
-    unit/cli/InitCommandTest.cpp
-    unit/cli/LibCommandTest.cpp
-    unit/cli/CueRelinkCommandTest.cpp
-    unit/cli/ListCommandTest.cpp
-    unit/cli/ListDestructiveCommandTest.cpp
-    unit/cli/QueryHelpTest.cpp
-    unit/cli/RunTest.cpp
-    unit/cli/ScanCommandTest.cpp
-    unit/cli/TagCommandTest.cpp
-    unit/cli/TrackCommandTest.cpp
-    unit/cli/TrackPerformanceMetadataCommandTest.cpp
-    unit/cli/TrackLiteralMetadataCommandTest.cpp
-    unit/cli/OutputTest.cpp
+    cli/CommandErrorTest.cpp
+    cli/CliRuntimeTest.cpp
+    cli/CliSmokeTest.cpp
+    cli/InitCommandTest.cpp
+    cli/LibCommandTest.cpp
+    cli/CueRelinkCommandTest.cpp
+    cli/ListCommandTest.cpp
+    cli/ListDestructiveCommandTest.cpp
+    cli/QueryHelpTest.cpp
+    cli/RunTest.cpp
+    cli/ScanCommandTest.cpp
+    cli/TagCommandTest.cpp
+    cli/TrackCommandTest.cpp
+    cli/TrackPerformanceMetadataCommandTest.cpp
+    cli/TrackLiteralMetadataCommandTest.cpp
+    cli/OutputTest.cpp
 )
 
 # ao_integration_test: standalone integration tests (full gate only, not the default ./ao test loop)
 add_executable(ao_integration_test
-    integration/audio/DecoderIntegrationTest.cpp
-    integration/audio/GraphIntegrityTest.cpp
-    integration/media/file/FileTest.cpp
+    audio/DecoderIntegrationTest.cpp
+    audio/GraphIntegrityTest.cpp
+    media/file/MediaFileFixtureTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_integration_test)
 
@@ -1145,7 +1145,7 @@ endif()
 set(AOBUS_TEST_SYSTEM_MEDIA_ENABLED OFF)
 if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
   set(AOBUS_TEST_SYSTEM_MEDIA_ENABLED ON)
-  target_sources(ao_integration_test PRIVATE integration/linux/systemmedia/MprisTestSupport.cpp)
+  target_sources(ao_integration_test PRIVATE systemmedia/linux/MprisTestSupport.cpp)
   target_link_libraries(ao_integration_test PRIVATE
     ao_system_media_linux
     ao_test_support_runtime
@@ -1154,12 +1154,12 @@ if(LINUX AND AOBUS_BUILD_SYSTEM_MEDIA)
   )
 endif()
 aobus_target_test_sources(ao_integration_test "${AOBUS_TEST_SYSTEM_MEDIA_ENABLED}" "Linux system media is disabled or unavailable"
-  integration/linux/systemmedia/MprisArtUrlSessionTest.cpp
-  integration/linux/systemmedia/MprisBridgeTest.cpp
-  integration/linux/systemmedia/MprisBridgeIntegrationTest.cpp
-  integration/linux/systemmedia/MprisBusSessionTest.cpp
-  integration/linux/systemmedia/MprisSignalTest.cpp
-  integration/linux/systemmedia/MprisPlaybackPositionTest.cpp
+  systemmedia/linux/MprisArtUrlSessionTest.cpp
+  systemmedia/linux/MprisBridgeTest.cpp
+  systemmedia/linux/MprisBridgeIntegrationTest.cpp
+  systemmedia/linux/MprisBusSessionTest.cpp
+  systemmedia/linux/MprisSignalTest.cpp
+  systemmedia/linux/MprisPlaybackPositionTest.cpp
 )
 # Real TUI process coverage is normal/ASan only; FTXUI is outside supported TSan suites.
 set(AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED OFF)
@@ -1169,17 +1169,17 @@ if(AOBUS_TEST_SYSTEM_MEDIA_ENABLED AND AOBUS_BUILD_TUI AND NOT AOBUS_ENABLE_TSAN
   add_dependencies(ao_integration_test aobus-tui)
 endif()
 aobus_target_test_sources(ao_integration_test "${AOBUS_TEST_TUI_SYSTEM_MEDIA_ENABLED}" "Linux system media or TUI unavailable, or unsupported TUI TSan coverage"
-  integration/linux/systemmedia/TuiMprisProcessTest.cpp
+  systemmedia/linux/TuiMprisProcessTest.cpp
 )
 aobus_target_test_sources(ao_integration_test "${LINUX}" "non-Linux host"
-  integration/audio/backend/PipeWireProviderTest.cpp
+  audio/backend/PipeWireProviderDaemonTest.cpp
 )
 
 aobus_target_test_sources(ao_integration_test "${WIN32}" "non-Windows host"
-  integration/audio/backend/WasapiProviderTest.cpp
+  audio/backend/WasapiProviderHardwareTest.cpp
 )
 aobus_target_test_sources(ao_integration_test "${APPLE}" "non-macOS host"
-  integration/audio/backend/CoreAudioProviderTest.cpp
+  audio/backend/CoreAudioProviderHardwareTest.cpp
 )
 
 # Not using add_test() here to keep it out of default 'ctest' runs, 
@@ -1189,7 +1189,7 @@ aobus_target_test_sources(ao_integration_test "${APPLE}" "non-macOS host"
 if(AOBUS_BUILD_GTK)
 # ao_gtk_test: Linux UI tests (require aobus-gtk-lib and GTKMM)
 add_executable(ao_gtk_test
-    unit/linux-gtk/GtkTestMain.cpp
+    linux-gtk/GtkTestMain.cpp
 )
 
 target_link_libraries(ao_gtk_test PRIVATE
@@ -1218,123 +1218,123 @@ set_tests_properties(ao_gtk_test PROPERTIES
 )
 endif()
 aobus_target_test_sources(ao_gtk_test "${AOBUS_BUILD_GTK}" "AOBUS_BUILD_GTK=OFF"
-    unit/linux-gtk/GtkTestEnvironmentTest.cpp
-    unit/linux-gtk/common/ActionMapRegistrationTest.cpp
-    unit/linux-gtk/common/DismissControllerTest.cpp
-    unit/linux-gtk/common/MainContextCallbackScopeTest.cpp
-    unit/linux-gtk/common/PopoverAttachmentTest.cpp
-    unit/linux-gtk/common/UiWorkflowTest.cpp
-    unit/linux-gtk/completion/EntryCompletionControllerTest.cpp
-    unit/linux-gtk/list/ListModelTest.cpp
-    unit/linux-gtk/list/ListTreeModelBuilderTest.cpp
-    unit/linux-gtk/list/QueryExpressionBoxTest.cpp
-    unit/linux-gtk/list/SmartListDialogTest.cpp
-    unit/linux-gtk/list/ListNavigationControllerTest.cpp
-    unit/linux-gtk/tag/TagEditorTest.cpp
-    unit/linux-gtk/tag/TagEditControllerTest.cpp
-    unit/linux-gtk/tag/TrackPropertiesDialogTest.cpp
-    unit/linux-gtk/tag/TrackRecordingDatePropertiesTest.cpp
-    unit/linux-gtk/layout/components/TrackCreditsEditorTest.cpp
-    unit/linux-gtk/layout/components/TrackCreditsRefreshTest.cpp
-    unit/linux-gtk/image/ImageWidgetTest.cpp
-    unit/linux-gtk/image/ImageRenderPolicyTest.cpp
-    unit/linux-gtk/image/ImageCacheTest.cpp
-    unit/linux-gtk/image/ResourceImageLoaderTest.cpp
-    unit/linux-gtk/app/AppDialogTest.cpp
-    unit/linux-gtk/app/FormBuilderTest.cpp
-    unit/linux-gtk/app/ThemeCoordinatorTest.cpp
-    unit/linux-gtk/app/ThemePresetTest.cpp
-    unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp
-    unit/linux-gtk/app/MenuControllerTest.cpp
-    unit/linux-gtk/i18n/GtkTextTest.cpp
-    unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
-    unit/linux-gtk/app/KeymapApplicatorTest.cpp
-    unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp
-    unit/linux-gtk/app/WindowInputTest.cpp
-    unit/linux-gtk/app/AobusSoulTest.cpp
-    unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
-    unit/linux-gtk/app/GtkMainContextExecutorTest.cpp
-    unit/linux-gtk/app/GtkStartupPlanTest.cpp
-    unit/linux-gtk/app/AppConfigStoreTest.cpp
-    unit/linux-gtk/app/GApplicationReplacementTest.cpp
-    unit/linux-gtk/app/MainWindowTest.cpp
-    unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
-    unit/linux-gtk/app/ShellLayoutStoreTest.cpp
-    unit/linux-gtk/app/ShellLayoutControllerTest.cpp
-    unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp
-    unit/linux-gtk/app/WindowStateTest.cpp
-    unit/linux-gtk/preference/PreferencesWindowTest.cpp
-    unit/linux-gtk/track/TrackListModelTest.cpp
-    unit/linux-gtk/track/TrackSelectionControllerTest.cpp
-    unit/linux-gtk/track/TrackSelectionControllerNativeInputTest.cpp
-    unit/linux-gtk/track/TrackPageHostTest.cpp
-    unit/linux-gtk/track/TrackViewPageTest.cpp
-    unit/linux-gtk/track/TrackColumnControllerTest.cpp
-    unit/linux-gtk/track/TrackColumnFactoryBuilderTest.cpp
-    unit/linux-gtk/track/TrackQuickFilterTest.cpp
-    unit/linux-gtk/track/TrackPresentationButtonTest.cpp
-    unit/linux-gtk/track/TrackCustomViewDialogTest.cpp
-    unit/linux-gtk/track/TrackFieldUiTest.cpp
-    unit/linux-gtk/track/TrackRowCacheTest.cpp
-    unit/linux-gtk/track/TrackRowObjectTest.cpp
-    unit/linux-gtk/track/SelectionInfoLabelTest.cpp
-    unit/linux-gtk/status/ActivityStatusWidgetTest.cpp
-    unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp
-    unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
-    unit/linux-gtk/platform/SuccessorProcessLauncherTest.cpp
-      unit/linux-gtk/layout/document/LayoutModelTest.cpp
-      unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
-      unit/linux-gtk/layout/runtime/ActionBinderTest.cpp
-      unit/linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp
-      unit/linux-gtk/layout/runtime/ComponentRegistryInjectionTest.cpp
-      unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp
-      unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp
-      unit/linux-gtk/layout/components/ContainerErrorStatesTest.cpp
-      unit/linux-gtk/layout/components/SplitComponentTest.cpp
-      unit/linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp
-      unit/linux-gtk/layout/components/CenterBoxTest.cpp
-      unit/linux-gtk/layout/components/ResponsiveClassTest.cpp
-      unit/linux-gtk/layout/components/ScrollSeparatorTabsTest.cpp
-      unit/linux-gtk/layout/components/ApplyCommonPropsTest.cpp
-      unit/linux-gtk/layout/components/LayoutHostTest.cpp
-      unit/linux-gtk/layout/components/LayoutComponentsTest.cpp
-      unit/linux-gtk/layout/components/PlaybackLayoutComponentsTest.cpp
-      unit/linux-gtk/layout/components/SemanticLayoutComponentsTest.cpp
-      unit/linux-gtk/layout/components/LayoutComponentYamlTest.cpp
-      unit/linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
-      unit/linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
-      unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp
-      unit/linux-gtk/layout/components/TrackSelectionRegionTest.cpp
-      unit/linux-gtk/layout/components/PlaybackImageTest.cpp
-      unit/linux-gtk/layout/editor/LayoutEditorTest.cpp
-      unit/linux-gtk/layout/editor/LayoutEditorTextTest.cpp
-      unit/linux-gtk/layout/editor/LayoutEditorAbsoluteCanvasTest.cpp
-      unit/linux-gtk/layout/editor/LayoutEditorSchemaTest.cpp
-      unit/linux-gtk/layout/editor/LayoutEditorDialogSessionTest.cpp
-      unit/linux-gtk/layout/editor/LayoutEditorTemplateTest.cpp
-      unit/linux-gtk/layout/components/StatusComponentsTest.cpp
-    unit/linux-gtk/playback/AudioPipelinePanelTest.cpp
-    unit/linux-gtk/playback/AobusSoulWindowTest.cpp
-    unit/linux-gtk/playback/OutputDevicePopoverTest.cpp
-    unit/linux-gtk/playback/PlaybackUiComponentsTest.cpp
-    unit/linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
-    unit/linux-gtk/playback/NowPlayingFieldLabelTest.cpp
-    unit/linux-gtk/playback/NowPlayingStatusLabelTest.cpp
-    unit/linux-gtk/playback/OutputDeviceListItemsTest.cpp
-    unit/linux-gtk/playback/TransportButtonTest.cpp
-    unit/linux-gtk/playback/VolumeControlWidgetTest.cpp
+    linux-gtk/GtkTestEnvironmentTest.cpp
+    linux-gtk/common/ActionMapRegistrationTest.cpp
+    linux-gtk/common/DismissControllerTest.cpp
+    linux-gtk/common/MainContextCallbackScopeTest.cpp
+    linux-gtk/common/PopoverAttachmentTest.cpp
+    linux-gtk/common/UiWorkflowTest.cpp
+    linux-gtk/completion/EntryCompletionControllerTest.cpp
+    linux-gtk/list/ListModelTest.cpp
+    linux-gtk/list/ListTreeModelBuilderTest.cpp
+    linux-gtk/list/QueryExpressionBoxTest.cpp
+    linux-gtk/list/SmartListDialogTest.cpp
+    linux-gtk/list/ListNavigationControllerTest.cpp
+    linux-gtk/tag/TagEditorTest.cpp
+    linux-gtk/tag/TagEditControllerTest.cpp
+    linux-gtk/tag/TrackPropertiesDialogTest.cpp
+    linux-gtk/tag/TrackRecordingDatePropertiesTest.cpp
+    linux-gtk/layout/components/TrackCreditsEditorTest.cpp
+    linux-gtk/layout/components/TrackCreditsRefreshTest.cpp
+    linux-gtk/image/ImageWidgetTest.cpp
+    linux-gtk/image/ImageRenderPolicyTest.cpp
+    linux-gtk/image/ImageCacheTest.cpp
+    linux-gtk/image/ResourceImageLoaderTest.cpp
+    linux-gtk/app/AppDialogTest.cpp
+    linux-gtk/app/FormBuilderTest.cpp
+    linux-gtk/app/ThemeCoordinatorTest.cpp
+    linux-gtk/app/ThemePresetTest.cpp
+    linux-gtk/app/MainWindowSessionPresentationTest.cpp
+    linux-gtk/app/MenuControllerTest.cpp
+    linux-gtk/i18n/GtkTextTest.cpp
+    linux-gtk/app/GtkAccelTranslatorTest.cpp
+    linux-gtk/app/KeymapApplicatorTest.cpp
+    linux-gtk/preference/ShortcutEditorWidgetTest.cpp
+    linux-gtk/app/WindowInputTest.cpp
+    linux-gtk/app/AobusSoulTest.cpp
+    linux-gtk/app/GtkStyleRuntimeTest.cpp
+    linux-gtk/app/GtkMainContextExecutorTest.cpp
+    linux-gtk/app/GtkStartupPlanTest.cpp
+    linux-gtk/app/AppConfigStoreTest.cpp
+    linux-gtk/app/GApplicationReplacementTest.cpp
+    linux-gtk/app/MainWindowTest.cpp
+    linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp
+    linux-gtk/app/ShellLayoutStoreTest.cpp
+    linux-gtk/app/ShellLayoutControllerTest.cpp
+    linux-gtk/app/GtkLayoutStateStoreTest.cpp
+    linux-gtk/app/WindowStateTest.cpp
+    linux-gtk/preference/PreferencesWindowTest.cpp
+    linux-gtk/track/TrackListModelTest.cpp
+    linux-gtk/track/TrackSelectionControllerTest.cpp
+    linux-gtk/track/TrackSelectionControllerNativeInputTest.cpp
+    linux-gtk/track/TrackPageHostTest.cpp
+    linux-gtk/track/TrackViewPageTest.cpp
+    linux-gtk/track/TrackColumnControllerTest.cpp
+    linux-gtk/track/TrackColumnFactoryBuilderTest.cpp
+    linux-gtk/track/TrackQuickFilterTest.cpp
+    linux-gtk/track/TrackPresentationButtonTest.cpp
+    linux-gtk/track/TrackCustomViewDialogTest.cpp
+    linux-gtk/track/TrackFieldUiTest.cpp
+    linux-gtk/track/TrackRowCacheTest.cpp
+    linux-gtk/track/TrackRowObjectTest.cpp
+    linux-gtk/track/SelectionInfoLabelTest.cpp
+    linux-gtk/status/ActivityStatusWidgetTest.cpp
+    linux-gtk/portal/ImportExportCoordinatorTest.cpp
+    linux-gtk/portal/LibraryImportExportWorkflowTest.cpp
+    linux-gtk/platform/SuccessorProcessLauncherTest.cpp
+      linux-gtk/layout/document/LayoutModelTest.cpp
+      linux-gtk/layout/runtime/ActionRegistryTest.cpp
+      linux-gtk/layout/runtime/ActionBinderTest.cpp
+      linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp
+      linux-gtk/layout/runtime/ComponentRegistryInjectionTest.cpp
+      linux-gtk/layout/runtime/GioActionBridgeTest.cpp
+      linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp
+      linux-gtk/layout/components/ContainerErrorStatesTest.cpp
+      linux-gtk/layout/components/SplitComponentTest.cpp
+      linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp
+      linux-gtk/layout/components/CenterBoxTest.cpp
+      linux-gtk/layout/components/ResponsiveClassTest.cpp
+      linux-gtk/layout/components/ScrollSeparatorTabsTest.cpp
+      linux-gtk/layout/components/ApplyCommonPropsTest.cpp
+      linux-gtk/layout/components/LayoutHostTest.cpp
+      linux-gtk/layout/components/LayoutComponentsTest.cpp
+      linux-gtk/layout/components/PlaybackLayoutComponentsTest.cpp
+      linux-gtk/layout/components/SemanticLayoutComponentsTest.cpp
+      linux-gtk/layout/components/LayoutComponentYamlTest.cpp
+      linux-gtk/layout/components/TrackFieldGridCollapsibleTest.cpp
+      linux-gtk/layout/components/TrackDetailConstrainedLayoutTest.cpp
+      linux-gtk/layout/components/TrackFieldGridTextTest.cpp
+      linux-gtk/layout/components/TrackSelectionRegionTest.cpp
+      linux-gtk/layout/components/PlaybackImageTest.cpp
+      linux-gtk/layout/editor/LayoutEditorTest.cpp
+      linux-gtk/layout/editor/LayoutEditorTextTest.cpp
+      linux-gtk/layout/editor/LayoutEditorAbsoluteCanvasTest.cpp
+      linux-gtk/layout/editor/LayoutEditorSchemaTest.cpp
+      linux-gtk/layout/editor/LayoutEditorDialogSessionTest.cpp
+      linux-gtk/layout/editor/LayoutEditorTemplateTest.cpp
+      linux-gtk/layout/components/StatusComponentsTest.cpp
+    linux-gtk/playback/AudioPipelinePanelTest.cpp
+    linux-gtk/playback/AobusSoulWindowTest.cpp
+    linux-gtk/playback/OutputDevicePopoverTest.cpp
+    linux-gtk/playback/PlaybackUiComponentsTest.cpp
+    linux-gtk/playback/PlaybackDetailsWidgetTest.cpp
+    linux-gtk/playback/NowPlayingFieldLabelTest.cpp
+    linux-gtk/playback/NowPlayingStatusLabelTest.cpp
+    linux-gtk/playback/OutputDeviceListItemsTest.cpp
+    linux-gtk/playback/TransportButtonTest.cpp
+    linux-gtk/playback/VolumeControlWidgetTest.cpp
 )
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline EXCLUDE_FROM_ALL
-    perf/PerformanceMain.cpp
-    perf/ClassicalMetadataBaselineTest.cpp
-    perf/CreditsBaselineTest.cpp
-    perf/PerformanceMetadataBaselineTest.cpp
-    perf/PerformanceMetadataIncrementalBaselineTest.cpp
-    perf/CompletionVocabularyBaselineTest.cpp
-    perf/PerformanceReviewTest.cpp
-    perf/PerformanceBaselineTest.cpp
+    perf/baseline/PerformanceMain.cpp
+    perf/baseline/ClassicalMetadataBaselineTest.cpp
+    perf/baseline/CreditsBaselineTest.cpp
+    perf/baseline/PerformanceMetadataBaselineTest.cpp
+    perf/baseline/PerformanceMetadataIncrementalBaselineTest.cpp
+    perf/baseline/CompletionVocabularyBaselineTest.cpp
+    perf/baseline/PerformanceReviewTest.cpp
+    perf/baseline/PerformanceBaselineTest.cpp
 )
 aobus_enable_windows_utf8_manifest(ao_perf_baseline)
 
@@ -1351,9 +1351,9 @@ target_link_libraries(ao_perf_baseline PRIVATE
 )
 
 # Compilation database support for custom linter integration fixture
-file(GLOB_RECURSE LINT_FIXTURE_SOURCES "integration/lint/fixture/*.cpp")
+file(GLOB_RECURSE LINT_FIXTURE_SOURCES "lint/fixture/*.cpp")
 add_library(ao_lint_fixture OBJECT EXCLUDE_FROM_ALL ${LINT_FIXTURE_SOURCES})
-target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/integration/lint/fixture")
+target_include_directories(ao_lint_fixture PRIVATE "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/app" "${CMAKE_SOURCE_DIR}/test/lint/fixture")
 
 aobus_finalize_test_sources(
   "${CMAKE_BINARY_DIR}/aobus-test-sources.tsv"

@@ -320,21 +320,21 @@ The apply step still revalidates source and target evidence, so the flag cannot 
 
 ## Test map
 
-- [`LibraryExportImportTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportTest.cpp) proves mode baselines, overlays, reports, and preview equivalence.
-- [`LibraryExportImportDeltaTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportDeltaTest.cpp) proves delta behavior, library id retention, rollback, and change sets.
-- [`LibraryExportImportCoverArtTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) proves the resource table, reference closure, export determinism, and each mode's cover terminal state.
-- [`LibraryExportImportListTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
-- [`LibraryYamlSchemaTest.cpp`](../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
-- [`CueYamlTest.cpp`](../../../test/unit/runtime/CueYamlTest.cpp) proves segment emission, offline restore, contradictory duration and sample rate, and atomic carrier merge.
-- [`LibraryExportImportErrorTest.cpp`](../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
-- [`LibraryYamlImporterTest.cpp`](../../../test/unit/runtime/library/LibraryYamlImporterTest.cpp) proves recording-date and credit preflight admission and whole-document rejection.
-- [`LibraryYamlExporterTest.cpp`](../../../test/unit/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.
-- [`LibraryYamlPerformanceMetadataTest.cpp`](../../../test/unit/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) proves date-precision and list round trips, clear forms, and merge overlay preservation.
-- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
-- [`LibraryTransferPresentationTest.cpp`](../../../test/unit/uimodel/library/presentation/LibraryTransferPresentationTest.cpp) proves export-option order and the Full default, both restore scopes, complete report arguments, and stable payload-mode tokens.
-- [`LibraryTransferAdapterTest.cpp`](../../../test/unit/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping and restore-only destructive admission.
-- [`LibraryImportExportWorkflowTest.cpp`](../../../test/unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp) proves confirmation precedes GTK mutation.
-- [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) proves CLI preview and explicit restore confirmation.
+- [`LibraryExportImportTest.cpp`](../../../test/runtime/library/LibraryExportImportTest.cpp) proves mode baselines, overlays, reports, and preview equivalence.
+- [`LibraryExportImportDeltaTest.cpp`](../../../test/runtime/library/LibraryExportImportDeltaTest.cpp) proves delta behavior, library id retention, rollback, and change sets.
+- [`LibraryExportImportCoverArtTest.cpp`](../../../test/runtime/library/LibraryExportImportCoverArtTest.cpp) proves the resource table, reference closure, export determinism, and each mode's cover terminal state.
+- [`LibraryExportImportListTest.cpp`](../../../test/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
+- [`LibraryYamlSchemaTest.cpp`](../../../test/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
+- [`CueYamlTest.cpp`](../../../test/runtime/CueYamlTest.cpp) proves segment emission, offline restore, contradictory duration and sample rate, and atomic carrier merge.
+- [`LibraryExportImportErrorTest.cpp`](../../../test/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
+- [`LibraryYamlImporterTest.cpp`](../../../test/runtime/library/LibraryYamlImporterTest.cpp) proves recording-date and credit preflight admission and whole-document rejection.
+- [`LibraryYamlExporterTest.cpp`](../../../test/runtime/library/LibraryYamlExporterTest.cpp) proves recording-date and credits emission and delta baselines.
+- [`LibraryYamlPerformanceMetadataTest.cpp`](../../../test/runtime/library/LibraryYamlPerformanceMetadataTest.cpp) proves date-precision and list round trips, clear forms, and merge overlay preservation.
+- [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
+- [`LibraryTransferPresentationTest.cpp`](../../../test/uimodel/library/presentation/LibraryTransferPresentationTest.cpp) proves export-option order and the Full default, both restore scopes, complete report arguments, and stable payload-mode tokens.
+- [`LibraryTransferAdapterTest.cpp`](../../../test/winui/library/LibraryTransferAdapterTest.cpp) proves every WinUI selector mapping and restore-only destructive admission.
+- [`LibraryImportExportWorkflowTest.cpp`](../../../test/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp) proves confirmation precedes GTK mutation.
+- [`CliSmokeTest.cpp`](../../../test/cli/CliSmokeTest.cpp) proves CLI preview and explicit restore confirmation.
 
 ## Related documents
 

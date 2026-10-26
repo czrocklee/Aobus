@@ -221,14 +221,14 @@ AO_RT_INVARIANT(pushed, "RT signal ring capacity exceeded");
 
 ## Test authority
 
-- Core unit coverage lives under [`test/unit/core/`](../../../test/unit/core).
+- Core unit coverage lives under [`test/core/`](../../../test/core).
 - Cross-platform subprocess coverage lives in the dedicated self-reentering
   `ao_fatal_probe`, `ao_audio_fatal_probe`, and `ao_library_probe` executables under
   [`test/fatal/`](../../../test/fatal). Runtime-only fatal scenarios self-reenter
   `ao_core_test`, whose normal parent run verifies the child diagnostic and termination.
-- Runtime logging-adapter coverage lives in [`LogTest.cpp`](../../../test/unit/runtime/LogTest.cpp).
+- Runtime logging-adapter coverage lives in [`LogTest.cpp`](../../../test/runtime/LogTest.cpp).
 - [`ForbidRawFatalCheck.cpp`](../../../tool/lint/check/ForbidRawFatalCheck.cpp)
-  and its [integration fixture](../../../test/integration/lint/fixture/aobus-readability-forbid-raw-fatal/BasicFixture.cpp)
+  and its [integration fixture](../../../test/lint/fixture/aobus-readability-forbid-raw-fatal/BasicFixture.cpp)
   protect the structural raw-backend marker and distinguish true standard
   termination functions from unrelated project methods with the same leaf name.
 

@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+#include "test/runtime/PlaybackSuccessionSeekTestSupport.h"
+
+#include "runtime/playback/PlaybackBootstrap.h"
+#include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureSupport.h"
+#include "test/audio/EngineTestSupport.h"
+#include "test/audio/ScriptedDecoderSession.h"
+#include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/PlaybackSuccessionBaseTestSupport.h"
+#include <ao/AudioCodec.h>
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/audio/DecodedStreamInfo.h>
+#include <ao/audio/Engine.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/Player.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
+#include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibraryCommands.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <filesystem>
+#include <format>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace ao::rt::test::playback_succession
+{
+  PlaybackSuccessionSeekFixture::PlaybackSuccessionSeekFixture(audio::test::StagedFailureGate* const failureGate)
+    : asyncRuntime{executor}
+    , changes{executor, 0, "test-library"}
+    , commandsFixture{libraryFixture.library(), changes, executor}
+    , sources{libraryFixture.library(), changes}
+    , views{executor, libraryFixture.library(), sources, changes}
+    , workspace{executor, views, libraryFixture.library(), changes}
+  {
+    // A 48 kHz clock represents every whole millisecond exactly, including
+    // the 3001 ms edge immediately above the strict restart threshold.
+    auto const sourceFormat = audio::SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
+    auto decoderFactory = audio::DecoderFactoryFn{};
+
+    if (failureGate != nullptr)
+    {
+      decoderFactory = [failureGate](
+                         std::filesystem::path const&, std::optional<audio::SampleEncoding> optOutputEncoding)
+      { return std::make_unique<audio::test::StagedFailureDecoderSession>(failureGate, optOutputEncoding); };
+    }
+    else
+    {
+      decoderFactory = [sourceFormat](
+                         std::filesystem::path const&, std::optional<audio::SampleEncoding> optOutputEncoding)
+      {
+        auto const outputFormat =
+          audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le));
+        auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
+          .sourceFormat = sourceFormat,
+          .outputFormat = outputFormat,
+          .duration = std::chrono::seconds{10},
+          .isLossy = false,
+          .codec = AudioCodec::Flac,
+        });
+        auto const data = std::vector<std::byte>(100000, std::byte{0});
+        decoderPtr->setReadScript(
+          {{.data = data, .endOfStream = false}, {.data = data, .endOfStream = false}, {.endOfStream = true}});
+        return decoderPtr;
+      };
+    }
+
+    auto playerPtr = std::make_unique<audio::Player>(asyncRuntime, std::move(decoderFactory));
+    transportPtr =
+      std::make_unique<PlaybackTransport>(executor, libraryFixture.library(), notifications, std::move(playerPtr));
+    PlaybackBootstrap{*transportPtr}.addProvider(makeReadyAudioProvider());
+    executor.drain();
+  }
+
+  PlaybackSuccessionSeekFixture::~PlaybackSuccessionSeekFixture() = default;
+
+  LibraryCommands& PlaybackSuccessionSeekFixture::commands()
+  {
+    return commandsFixture.commands();
+  }
+
+  TrackId PlaybackSuccessionSeekFixture::addPlayableTrack(std::string title)
+  {
+    auto const playableUri = std::format("seek-playable-{}.flac", nextPlayableFile++);
+    audio::test::installAudioFixture(libraryFixture.root(), "basic_metadata.flac", playableUri);
+    auto const created = ao::test::requireValue(
+      commandsFixture.runTask(commands().createTrackFromFileAsync(libraryFixture.root() / playableUri)));
+    executor.drain();
+    REQUIRE(commandsFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
+    executor.drain();
+    return created.trackId;
+  }
+
+  void PlaybackSuccessionSeekFixture::buildThreeTrackManualView()
+  {
+    firstTrackId = addPlayableTrack("First");
+    secondTrackId = addPlayableTrack("Second");
+    thirdTrackId = addPlayableTrack("Third");
+    sources.reloadAllTracks();
+    listId = ao::test::requireValue(commandsFixture.runTask(commands().createListAsync(ListDraft{
+      .name = "Long playback order",
+    })));
+    viewId = ao::test::requireValue(workspace.navigate({.target = listId}));
+    successionPtr = std::make_unique<PlaybackSuccession>(
+      executor, views, sources, libraryFixture.library(), *transportPtr, notifications, asyncRuntime);
+  }
+
+  void PlaybackSuccessionSeekFixture::buildSingleTrackManualView()
+  {
+    firstTrackId = addPlayableTrack("Failing current");
+    sources.reloadAllTracks();
+    listId = ao::test::requireValue(commandsFixture.runTask(commands().createListAsync(ListDraft{
+      .name = "Failing playback order",
+    })));
+    viewId = ao::test::requireValue(workspace.navigate({.target = listId}));
+    successionPtr = std::make_unique<PlaybackSuccession>(
+      executor, views, sources, libraryFixture.library(), *transportPtr, notifications, asyncRuntime);
+  }
+
+  Result<> PlaybackSuccessionSeekFixture::playAndWait(TrackId const trackId)
+  {
+    return playFromViewAndWait(*successionPtr, executor, viewId, trackId);
+  }
+} // namespace ao::rt::test::playback_succession

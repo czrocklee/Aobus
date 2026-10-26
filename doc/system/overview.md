@@ -129,7 +129,7 @@ Playback observations return through the callback executor before application st
 
 - [`lib/CMakeLists.txt`](../../lib/CMakeLists.txt) and [`app/CMakeLists.txt`](../../app/CMakeLists.txt) define the target graph.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h), [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h), and [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) expose runtime composition and per-library paths.
-- [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects factory failure isolation, stable identity, and graph composition; [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects path derivation.
+- [`AppRuntimeTest.cpp`](../../test/runtime/AppRuntimeTest.cpp) protects factory failure isolation, stable identity, and graph composition; [`LibraryPathsTest.cpp`](../../test/runtime/library/LibraryPathsTest.cpp) protects path derivation.
 - [Execution](execution/README.md), [session lifecycle](session-lifecycle.md), and the subsystem pages locate focused implementation and contract tests.
 
 For contribution procedures rather than product boundaries, use [application-layer review](../development/application-layer-review.md) and [UIModel organization](../development/uimodel-organization.md).

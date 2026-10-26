@@ -166,12 +166,12 @@ classic:
 
 ## Test authority
 
-- [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp)
-- [`OutputSelectionTest.cpp`](../../../test/unit/uimodel/playback/output/OutputSelectionTest.cpp)
-- [`DesktopOutputSelectionTest.cpp`](../../../test/unit/winui/app/DesktopOutputSelectionTest.cpp)
-- [`LibraryStartupPlannerTest.cpp`](../../../test/unit/desktop/LibraryStartupPlannerTest.cpp)
-- [`SelectedRootCommitTest.cpp`](../../../test/unit/winui/app/SelectedRootCommitTest.cpp)
-- [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp)
+- [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/winui/DesktopSettingsYamlSchemaTest.cpp)
+- [`OutputSelectionTest.cpp`](../../../test/uimodel/playback/output/OutputSelectionTest.cpp)
+- [`DesktopOutputSelectionTest.cpp`](../../../test/winui/app/DesktopOutputSelectionTest.cpp)
+- [`LibraryStartupPlannerTest.cpp`](../../../test/desktop/LibraryStartupPlannerTest.cpp)
+- [`SelectedRootCommitTest.cpp`](../../../test/winui/app/SelectedRootCommitTest.cpp)
+- [`ThemeTest.cpp`](../../../test/winui/ThemeTest.cpp)
 
 ## Related documents
 

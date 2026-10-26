@@ -283,16 +283,16 @@ Exact records and identifier allocation belong to the [library database referenc
 
 ## Test map
 
-- [`LibrarySnapshotTest.cpp`](../../../test/unit/runtime/library/LibrarySnapshotTest.cpp) proves coherent runtime values and that a snapshot caches the committed revision observed at construction.
-- [`WriteTransactionTest.cpp`](../../../test/unit/library/WriteTransactionTest.cpp) proves root error containment, rollback, terminal state, and writer-gate reuse.
-- [`TrackWriterTest.cpp`](../../../test/unit/library/TrackWriterTest.cpp) and [`ListWriterTest.cpp`](../../../test/unit/library/ListWriterTest.cpp) prove the logical port capability boundary and relationship-preserving mutations below the runtime facade.
-- `LibraryCommands*Test.cpp` under [`test/unit/runtime/library/`](../../../test/unit/runtime/library) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
-- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) proves combined metadata/tag publication and whole-command rollback after a later tag failure.
-- [`LibraryCommandsListMembershipTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsListMembershipTest.cpp) additionally proves that an invalid stored parent expression returns contextual `FormatRejected` before mutation or publication.
-- [`LibraryAuthoringTest.cpp`](../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, failed-mutation admission release, no-op binding retention, and publication reentrancy closure.
-- [`LibraryChangesTest.cpp`](../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves `executeAsync()` transitions, injected native commit failure, exact operation-owned publication, signal-before-await settlement, revision return, rollback, lane release, and Closing retirement.
-- [`LibraryJobsTest.cpp`](../../../test/unit/runtime/library/LibraryJobsTest.cpp) proves scan cancellation and no-committable-work outcomes leave storage, revision, and publication unchanged.
-- [`RuntimeFatalProbeTest.cpp`](../../../test/unit/runtime/library/RuntimeFatalProbeTest.cpp) proves that `executeAsync()` after `apply()` and a pre-stamped operation changeset fail at the invariant boundary.
+- [`LibrarySnapshotTest.cpp`](../../../test/runtime/library/LibrarySnapshotTest.cpp) proves coherent runtime values and that a snapshot caches the committed revision observed at construction.
+- [`WriteTransactionTest.cpp`](../../../test/library/WriteTransactionTest.cpp) proves root error containment, rollback, terminal state, and writer-gate reuse.
+- [`TrackWriterTest.cpp`](../../../test/library/TrackWriterTest.cpp) and [`ListWriterTest.cpp`](../../../test/library/ListWriterTest.cpp) prove the logical port capability boundary and relationship-preserving mutations below the runtime facade.
+- `LibraryCommands*Test.cpp` under [`test/runtime/library/`](../../../test/runtime/library) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
+- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) proves combined metadata/tag publication and whole-command rollback after a later tag failure.
+- [`LibraryCommandsListMembershipTest.cpp`](../../../test/runtime/library/LibraryCommandsListMembershipTest.cpp) additionally proves that an invalid stored parent expression returns contextual `FormatRejected` before mutation or publication.
+- [`LibraryAuthoringTest.cpp`](../../../test/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, failed-mutation admission release, no-op binding retention, and publication reentrancy closure.
+- [`LibraryChangesTest.cpp`](../../../test/runtime/library/LibraryChangesTest.cpp) proves `executeAsync()` transitions, injected native commit failure, exact operation-owned publication, signal-before-await settlement, revision return, rollback, lane release, and Closing retirement.
+- [`LibraryJobsTest.cpp`](../../../test/runtime/library/LibraryJobsTest.cpp) proves scan cancellation and no-committable-work outcomes leave storage, revision, and publication unchanged.
+- [`RuntimeFatalProbeTest.cpp`](../../../test/runtime/library/RuntimeFatalProbeTest.cpp) proves that `executeAsync()` after `apply()` and a pre-stamped operation changeset fail at the invariant boundary.
 
 ## Related documents
 

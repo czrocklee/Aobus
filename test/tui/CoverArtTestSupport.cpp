@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "test/tui/CoverArtTestSupport.h"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+namespace ao::tui::test::support
+{
+  std::vector<std::byte> onePixelRedPng()
+  {
+    constexpr auto kBytes = std::to_array<std::uint8_t>({
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
+      0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
+      0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18,
+      0xDD, 0x8D, 0xB0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    });
+
+    auto result = std::vector<std::byte>{};
+    result.reserve(kBytes.size());
+
+    for (auto const value : kBytes)
+    {
+      result.push_back(static_cast<std::byte>(value));
+    }
+
+    return result;
+  }
+
+  std::vector<std::byte> distinctPng(std::size_t const seed)
+  {
+    // Bytes after IEND are not part of the image, so the decoder still sees one
+    // red pixel while the content hash moves with the seed.
+    auto result = onePixelRedPng();
+    result.push_back(static_cast<std::byte>(seed & 0xFFU));
+    result.push_back(static_cast<std::byte>((seed >> 8U) & 0xFFU));
+    return result;
+  }
+} // namespace ao::tui::test::support

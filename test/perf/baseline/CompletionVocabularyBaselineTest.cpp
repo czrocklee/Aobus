@@ -1,0 +1,410 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "test/perf/report/PerformanceReport.h"
+#include "runtime/library/LibraryWriteLane.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/library/WritableLibraryTestSupport.h"
+#include "test/runtime/AsyncTestSupport.h"
+#include "test/runtime/RuntimeLibraryTestSupport.h"
+#include "test/runtime/library/LibraryWriteLaneTestSupport.h"
+#include <ao/Error.h>
+#include <ao/async/LoopExecutor.h>
+#include <ao/i18n/IcuCompletionAliases.h>
+#include <ao/library/Credits.h>
+#include <ao/library/DictionaryStore.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/rt/Log.h>
+#include <ao/rt/TrackField.h>
+#include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/uimodel/library/track/TrackFilter.h>
+
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <format>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace ao::rt::test
+{
+  namespace
+  {
+    constexpr std::size_t kTrackCount = 50000;
+    constexpr std::size_t kLookupLimit = 8;
+    constexpr auto kRepresentativeAliasValues = std::to_array<std::string_view>({
+      "周杰倫",
+      "宇多田ヒカル",
+      "行かないで",
+      "ﾊﾝﾊﾞｰﾄ",
+    });
+    constexpr auto kRepresentativeQuickFilterFields = std::to_array({
+      TrackField::Title,
+      TrackField::Artist,
+      TrackField::Album,
+      TrackField::AlbumArtist,
+      TrackField::Genre,
+      TrackField::Composer,
+      TrackField::Work,
+    });
+
+    struct Timing final
+    {
+      std::int64_t median = 0;
+      std::int64_t percentile95 = 0;
+      std::size_t resultSize = 0;
+      std::uint64_t checksum = 0;
+    };
+
+    struct VocabularyTiming final
+    {
+      Timing snapshotAndAggregate;
+      Timing tags;
+      Timing customKeys;
+      Timing artist;
+      Timing work;
+    };
+
+    Timing summarize(std::span<std::int64_t> const samples, std::size_t resultSize, std::uint64_t checksum = 0)
+    {
+      auto measurement = Measurement{};
+      setPercentiles(measurement, samples);
+      return Timing{
+        .median = measurement.medianNs,
+        .percentile95 = measurement.percentile95Ns,
+        .resultSize = resultSize,
+        .checksum = checksum,
+      };
+    }
+
+    VocabularyTiming measureVocabularyRebuilds(CompletionService& service,
+                                               async::Runtime& asyncRuntime,
+                                               async::LoopExecutor& executor,
+                                               LibraryWriteLane& writeLane,
+                                               std::size_t const warmups,
+                                               std::size_t const measuredRuns)
+    {
+      auto aggregateSamples = std::vector<std::int64_t>{};
+      auto tagSamples = std::vector<std::int64_t>{};
+      auto customKeySamples = std::vector<std::int64_t>{};
+      auto artistSamples = std::vector<std::int64_t>{};
+      auto workSamples = std::vector<std::int64_t>{};
+      aggregateSamples.reserve(measuredRuns);
+      tagSamples.reserve(measuredRuns);
+      customKeySamples.reserve(measuredRuns);
+      artistSamples.reserve(measuredRuns);
+      workSamples.reserve(measuredRuns);
+      std::size_t aggregateSize = 0;
+      std::size_t tagSize = 0;
+      std::size_t customKeySize = 0;
+      std::size_t artistSize = 0;
+      std::size_t workSize = 0;
+
+      auto timedSize = [](auto&& read)
+      {
+        auto const start = std::chrono::steady_clock::now();
+        auto const size = read().size();
+        auto const elapsed =
+          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+        return std::pair{size, elapsed};
+      };
+
+      for (std::size_t run = 0; run < warmups + measuredRuns; ++run)
+      {
+        auto resetRes =
+          runLoopTask(asyncRuntime,
+                      executor,
+                      executeInteractiveMutationAsync(
+                        writeLane.captureSubmission(),
+                        [](library::LibraryWrite&) -> Result<OperationOutcome<bool>>
+                        { return Changed<bool>{.value = true, .changeSet = LibraryChangeSet{.libraryReset = true}}; }));
+        REQUIRE(resetRes);
+        auto const [currentAggregateSize, aggregateElapsed] = timedSize(
+          [&]
+          {
+            return service.aggregateValues(TrackValueVocabularySpec{
+              .fields = kRepresentativeQuickFilterFields,
+              .includeTags = true,
+            });
+          });
+        auto const [currentTagSize, tagElapsed] = timedSize([&] { return service.tags(); });
+        auto const [currentCustomKeySize, customKeyElapsed] = timedSize([&] { return service.customKeys(); });
+        auto const [currentArtistSize, artistElapsed] =
+          timedSize([&] { return service.valuesFor(TrackField::Artist); });
+        auto const [currentWorkSize, workElapsed] = timedSize([&] { return service.valuesFor(TrackField::Work); });
+        aggregateSize = currentAggregateSize;
+        tagSize = currentTagSize;
+        customKeySize = currentCustomKeySize;
+        artistSize = currentArtistSize;
+        workSize = currentWorkSize;
+
+        if (run >= warmups)
+        {
+          aggregateSamples.push_back(aggregateElapsed);
+          tagSamples.push_back(tagElapsed);
+          customKeySamples.push_back(customKeyElapsed);
+          artistSamples.push_back(artistElapsed);
+          workSamples.push_back(workElapsed);
+        }
+      }
+
+      return VocabularyTiming{
+        .snapshotAndAggregate = summarize(aggregateSamples, aggregateSize),
+        .tags = summarize(tagSamples, tagSize),
+        .customKeys = summarize(customKeySamples, customKeySize),
+        .artist = summarize(artistSamples, artistSize),
+        .work = summarize(workSamples, workSize),
+      };
+    }
+
+    std::uint64_t completionChecksum(std::optional<CompletionResult> const& optResult)
+    {
+      if (!optResult)
+      {
+        return 1;
+      }
+
+      auto checksum = static_cast<std::uint64_t>(optResult->items.size()) + 1;
+
+      for (auto const& item : optResult->items)
+      {
+        checksum += item.displayText.size();
+        checksum += std::to_underlying(item.detail.kind);
+        checksum += item.detail.resolvedText.size();
+        checksum += item.detail.frequency;
+        checksum += item.rank;
+      }
+
+      return checksum;
+    }
+
+    struct LookupExpectation final
+    {
+      std::string_view prefix;
+      std::size_t size;
+      std::string_view representativeDisplay;
+    };
+
+    Timing measureLookups(uimodel::TrackFilterCompleter& completer,
+                          std::string_view prefix,
+                          std::size_t const expectedSize,
+                          std::string_view const representativeDisplay,
+                          std::size_t const warmups,
+                          std::size_t const measuredRuns)
+    {
+      auto samples = std::vector<std::int64_t>{};
+      samples.reserve(measuredRuns);
+      std::uint64_t checksum = 0;
+      std::size_t resultSize = 0;
+
+      for (std::size_t run = 0; run < warmups + measuredRuns; ++run)
+      {
+        auto const start = std::chrono::steady_clock::now();
+        auto const optResult = completer.complete(prefix, prefix.size(), kLookupLimit);
+        auto const elapsed =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+
+        // Validate every lookup after the clock stops, including warm-ups and
+        // misses; a nonzero checksum is not evidence that a miss is correct.
+        CAPTURE(prefix, run);
+
+        if (expectedSize == 0)
+        {
+          REQUIRE_FALSE(optResult);
+        }
+        else
+        {
+          REQUIRE(optResult);
+          REQUIRE(optResult->items.size() == expectedSize);
+
+          if (!representativeDisplay.empty())
+          {
+            CHECK(std::ranges::any_of(optResult->items,
+                                      [representativeDisplay](auto const& item)
+                                      { return item.displayText == representativeDisplay; }));
+          }
+        }
+
+        resultSize = optResult ? optResult->items.size() : 0;
+
+        if (run >= warmups)
+        {
+          samples.push_back(elapsed);
+          checksum += completionChecksum(optResult);
+        }
+      }
+
+      return summarize(samples, resultSize, checksum);
+    }
+  } // namespace
+
+  // Production baseline: elapsed-time thresholds remain a review decision.
+  // The representative cardinalities populate every Quick-filter field, tags, and
+  // additional non-search fields so the dictionary is larger than the live aggregate.
+  TEST_CASE("CompletionVocabularyBaseline - shared snapshot rebuild and Quick-filter lookup at 50k tracks",
+            "[perf][unit][completion-vocabulary][baseline]")
+  {
+    Log::initialize(LogLevel::Info);
+    auto const samples = configuredCount("AOBUS_PERF_SAMPLES", 20, 1);
+    auto const warmups = configuredCount("AOBUS_PERF_WARMUPS", 1, 0);
+    auto measurements = std::vector<Measurement>{};
+    auto libraryFixture = MusicLibraryFixture{};
+
+    auto transaction = library::test::writeTransaction(libraryFixture.library());
+    auto populateRes = transaction.apply(
+      [&](library::LibraryWrite& write) -> Result<>
+      {
+        auto writer = write.tracks();
+
+        for (std::size_t index = 0; index < kTrackCount; ++index)
+        {
+          auto const spec = library::test::TrackSpec{
+            .title = std::format("Track {:05}", index),
+            .artist = std::format("Artist {:05}", index % (kTrackCount / 10)),
+            .album = std::format("Album {:05}", index % (kTrackCount / 5)),
+            .albumArtist = std::format("Album Artist {:04}", index % (kTrackCount / 50)),
+            .genre = std::format("Genre {:02}", index % 50),
+            .composer = std::format("Composer {:04}", index % (kTrackCount / 20)),
+            .work = std::format("Work {:05}", index % (kTrackCount / 2)),
+            .movement = std::format("Movement {:05}", index % (kTrackCount / 5)),
+            .credits = {{.name = std::format("Conductor {:03}", index % (kTrackCount / 100)),
+                         .kind = library::CreditKind::Conductor},
+                        {.name = std::format("Ensemble {:04}", index % (kTrackCount / 50)),
+                         .kind = library::CreditKind::Ensemble},
+                        {.name = std::format("Soloist {:05}", index % (kTrackCount / 10)),
+                         .kind = library::CreditKind::Soloist}},
+            .uri = std::format("completion-baseline/{:06}.flac", index),
+            .tags =
+              {
+                std::format("Tag {:02}", index % 100),
+                std::format("Mood {:02}", index % 20),
+                std::string{kRepresentativeAliasValues[index % kRepresentativeAliasValues.size()]},
+              },
+            .customMetadata = {{std::format("Custom Key {:02}", index % 20), "Value"}},
+          };
+          auto builder = library::TrackBuilder::makeEmpty();
+          library::test::applyTrackSpec(builder, spec);
+
+          if (auto createRes = writer.create(builder, library::FileManifestBuilder::makeEmpty()); !createRes)
+          {
+            return std::unexpected{createRes.error()};
+          }
+        }
+
+        return {};
+      });
+    REQUIRE(populateRes);
+    auto const historyCount = configuredCount("AOBUS_AUDIT_COMPLETION_HISTORY", 0, 0);
+
+    for (std::size_t index = 0; index < historyCount; ++index)
+    {
+      REQUIRE(library::test::physicalDictionary(transaction).intern(std::format("Retired value {}", index)));
+    }
+
+    REQUIRE(transaction.commit());
+
+    auto executor = async::LoopExecutor{};
+    auto asyncRuntime = async::Runtime{executor};
+    auto changes = makeLibraryChanges(executor, libraryFixture.library());
+    auto writeLane = LibraryWriteLane{
+      asyncRuntime.callbackExecutor(), library::test::requireWritableLibrary(libraryFixture.library()), changes};
+    auto aliasPolicyPtr = i18n::createIcuCompletionAliasPolicy();
+    auto service = CompletionService{libraryFixture.library(), changes, nullptr, aliasPolicyPtr.get()};
+    auto const vocabulary = measureVocabularyRebuilds(service, asyncRuntime, executor, writeLane, warmups, samples);
+
+    auto addMeasurement = [&](std::string scenario, Timing const& timing, std::int64_t const unitNs)
+    {
+      measurements.push_back(Measurement{
+        .capability = "completion-snapshot",
+        .scenario = std::move(scenario),
+        .dataset = std::format("{} tracks; {} retired strings; {} dictionary entries; {} results",
+                               kTrackCount,
+                               historyCount,
+                               libraryFixture.library().dictionary().size(),
+                               timing.resultSize),
+        .inputCount = kTrackCount,
+        .medianNs = timing.median * unitNs,
+        .percentile95Ns = timing.percentile95 * unitNs,
+      });
+    };
+    addMeasurement("cold-rebuild-and-aggregate", vocabulary.snapshotAndAggregate, 1000);
+    addMeasurement("materialize-tags", vocabulary.tags, 1000);
+    addMeasurement("materialize-custom-keys", vocabulary.customKeys, 1000);
+    addMeasurement("materialize-artist", vocabulary.artist, 1000);
+    addMeasurement("materialize-work", vocabulary.work, 1000);
+
+    APP_LOG_INFO("=== Shared completion vocabulary snapshot: {} tracks ===", kTrackCount);
+    APP_LOG_INFO("  rebuild + aggregate: median/p95 {} / {} us, {} values from {} dictionary entries",
+                 vocabulary.snapshotAndAggregate.median,
+                 vocabulary.snapshotAndAggregate.percentile95,
+                 vocabulary.snapshotAndAggregate.resultSize,
+                 libraryFixture.library().dictionary().size());
+    APP_LOG_INFO("  in-memory tags:       median/p95 {} / {} us, {} values",
+                 vocabulary.tags.median,
+                 vocabulary.tags.percentile95,
+                 vocabulary.tags.resultSize);
+    APP_LOG_INFO("  in-memory custom keys: median/p95 {} / {} us, {} values",
+                 vocabulary.customKeys.median,
+                 vocabulary.customKeys.percentile95,
+                 vocabulary.customKeys.resultSize);
+    APP_LOG_INFO("  in-memory artist:     median/p95 {} / {} us, {} values",
+                 vocabulary.artist.median,
+                 vocabulary.artist.percentile95,
+                 vocabulary.artist.resultSize);
+    APP_LOG_INFO("  in-memory work:       median/p95 {} / {} us, {} values",
+                 vocabulary.work.median,
+                 vocabulary.work.percentile95,
+                 vocabulary.work.resultSize);
+
+    CHECK(vocabulary.tags.resultSize == 124);
+    CHECK(vocabulary.customKeys.resultSize == 20);
+    CHECK(vocabulary.artist.resultSize == kTrackCount / 10);
+    CHECK(vocabulary.work.resultSize == kTrackCount / 2);
+    REQUIRE(vocabulary.snapshotAndAggregate.resultSize == 93674);
+
+    auto completer = uimodel::TrackFilterCompleter{service};
+    constexpr auto kLookupPrefixes = std::to_array<LookupExpectation>({
+      {"Track", kLookupLimit, "Track 00000"},
+      {"\"artist 049", kLookupLimit, ""},
+      {"\"Work 2499", kLookupLimit, ""},
+      {"zhoujielun", 1, "周杰倫"},
+      {"hikaru", 1, "宇多田ヒカル"},
+      {"kanaide", 1, "行かないで"},
+      {"hanbato", 1, "ﾊﾝﾊﾞｰﾄ"},
+      {"missing", 0, ""},
+    });
+
+    APP_LOG_INFO("=== Cached Quick-filter lookup: one request per sample ===");
+
+    for (auto const& [prefix, expectedSize, representativeDisplay] : kLookupPrefixes)
+    {
+      auto const timing = measureLookups(completer, prefix, expectedSize, representativeDisplay, warmups, samples);
+      APP_LOG_INFO(
+        "  '{}': {} candidates; median/p95 {} / {} ns", prefix, timing.resultSize, timing.median, timing.percentile95);
+      addMeasurement(std::format("cached-lookup/{}", prefix), timing, 1);
+
+      if (expectedSize != 0)
+      {
+        CHECK(timing.checksum != 0);
+      }
+
+      CHECK(timing.resultSize == expectedSize);
+    }
+
+    writeReport(measurements, warmups, samples);
+  }
+} // namespace ao::rt::test

@@ -190,5 +190,5 @@ The shared mechanisms are declared by
 
 Focused regression coverage includes `AsyncRuntimeTest.cpp`,
 `LifetimeScopeTest.cpp`, `LoopExecutorTest.cpp`, `SignalTest.cpp`, and
-`AppRuntimeTest.cpp` under `test/unit/`. Subsystem specifications identify their
+`AppRuntimeTest.cpp` under `test/`. Subsystem specifications identify their
 own concurrency tests.

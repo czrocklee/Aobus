@@ -121,7 +121,7 @@ None of these source identities proves native delivery or physical wiring.
 - Family 255 defines no speaker positions and may expose up to 255 unassigned channels in header-defined output-index order.
 
 These byte-order mechanisms do not publish source identity: the current Opus session still reports a zero speaker mask and `Unknown` layout origin.
-[`OpusDecoderSession.cpp`](../../../lib/audio/OpusDecoderSession.cpp) owns the mapping, covered by the family-1 speaker-order case in [`OpusDecoderSessionTest.cpp`](../../../test/unit/audio/OpusDecoderSessionTest.cpp).
+[`OpusDecoderSession.cpp`](../../../lib/audio/OpusDecoderSession.cpp) owns the mapping, covered by the family-1 speaker-order case in [`OpusDecoderSessionTest.cpp`](../../../test/audio/OpusDecoderSessionTest.cpp).
 
 ## Related documents
 

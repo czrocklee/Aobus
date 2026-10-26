@@ -143,8 +143,8 @@ Normal rescans preserve curated Credits rather than applying new media candidate
 No recording date is inferred from `DATE`, `YEAR`, `TDRC`, or the stored Year; there is no recording-date file callback or automatic metadata backfill.
 Work precedence, chunk traversal, and non-credit media behavior remain independent.
 
-[`CreditReaderTest.cpp`](../../../test/unit/media/file/id3v2/CreditReaderTest.cpp) and [`VorbisCreditTest.cpp`](../../../test/unit/media/file/VorbisCreditTest.cpp) pin positional and conservative-suffix rules.
-[`ContentCreditTest.cpp`](../../../test/unit/media/file/ContentCreditTest.cpp) and [`WavCreditContentTest.cpp`](../../../test/unit/media/file/WavCreditContentTest.cpp) pin source order, whole-file precedence, duplicates, and backing lifetime.
+[`CreditReaderTest.cpp`](../../../test/media/file/id3v2/CreditReaderTest.cpp) and [`VorbisCreditTest.cpp`](../../../test/media/file/VorbisCreditTest.cpp) pin positional and conservative-suffix rules.
+[`ContentCreditTest.cpp`](../../../test/media/file/ContentCreditTest.cpp) and [`WavCreditContentTest.cpp`](../../../test/media/file/WavCreditContentTest.cpp) pin source order, whole-file precedence, duplicates, and backing lifetime.
 
 ## Failure and cancellation
 
@@ -180,13 +180,13 @@ There is no direct frontend observation. Runtime library workflows translate rea
 
 ## Test map
 
-- [`DemuxerTest.cpp`](../../../test/unit/media/mp4/DemuxerTest.cpp) protects selected-track MP4 sample admission, fixed-size allocation feasibility, timing, and missing packet payloads.
+- [`DemuxerTest.cpp`](../../../test/media/mp4/DemuxerTest.cpp) protects selected-track MP4 sample admission, fixed-size allocation feasibility, timing, and missing packet payloads.
 
-- [`FileTest.cpp`](../../../test/unit/media/file/FileTest.cpp) protects dispatch, mapping, failure atomicity, and move lifetime.
-- [`DemuxerTest.cpp`](../../../test/unit/media/ogg/DemuxerTest.cpp) protects Ogg page scanning, packet reassembly, stream selection, and incomplete endings.
-- Format tests under [`test/unit/media/file/`](../../../test/unit/media/file) protect mappings, properties, covers, payloads, caches, and malformed input.
-- [`FileTest.cpp`](../../../test/integration/media/file/FileTest.cpp) protects real encoded fixtures across all supported formats.
-- [`MediaTrackTest.cpp`](../../../test/unit/runtime/library/MediaTrackTest.cpp) protects the runtime retention contract.
+- [`FileTest.cpp`](../../../test/media/file/FileTest.cpp) protects dispatch, mapping, failure atomicity, and move lifetime.
+- [`DemuxerTest.cpp`](../../../test/media/ogg/DemuxerTest.cpp) protects Ogg page scanning, packet reassembly, stream selection, and incomplete endings.
+- Format tests under [`test/media/file/`](../../../test/media/file) protect mappings, properties, covers, payloads, caches, and malformed input.
+- [`MediaFileFixtureTest.cpp`](../../../test/media/file/MediaFileFixtureTest.cpp) protects real encoded fixtures across all supported formats.
+- [`MediaTrackTest.cpp`](../../../test/runtime/library/MediaTrackTest.cpp) protects the runtime retention contract.
 
 ## Related documents
 

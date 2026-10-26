@@ -29,8 +29,8 @@ Any live selection supplied after restoration is aggregated against the current 
 
 ## Implementation and tests
 
-- [`ViewService.cpp`](../../../app/runtime/ViewService.cpp) and [`ViewServiceSelectionTest.cpp`](../../../test/unit/runtime/ViewServiceSelectionTest.cpp): one-snapshot aggregation, stale ids, empty selection, and unknown views.
-- [`TrackSelectionSummary.cpp`](../../../app/uimodel/library/track/TrackSelectionSummary.cpp), [`TrackFieldFormatter.cpp`](../../../app/uimodel/field/TrackFieldFormatter.cpp), and [`TrackSelectionSummaryTest.cpp`](../../../test/unit/uimodel/library/track/TrackSelectionSummaryTest.cpp): count and duration presentation.
-- [`SelectionInfoLabel.cpp`](../../../app/linux-gtk/track/SelectionInfoLabel.cpp) and [`SelectionInfoLabelTest.cpp`](../../../test/unit/linux-gtk/track/SelectionInfoLabelTest.cpp): GTK binding and active-view behavior.
+- [`ViewService.cpp`](../../../app/runtime/ViewService.cpp) and [`ViewServiceSelectionTest.cpp`](../../../test/runtime/ViewServiceSelectionTest.cpp): one-snapshot aggregation, stale ids, empty selection, and unknown views.
+- [`TrackSelectionSummary.cpp`](../../../app/uimodel/library/track/TrackSelectionSummary.cpp), [`TrackFieldFormatter.cpp`](../../../app/uimodel/field/TrackFieldFormatter.cpp), and [`TrackSelectionSummaryTest.cpp`](../../../test/uimodel/library/track/TrackSelectionSummaryTest.cpp): count and duration presentation.
+- [`SelectionInfoLabel.cpp`](../../../app/linux-gtk/track/SelectionInfoLabel.cpp) and [`SelectionInfoLabelTest.cpp`](../../../test/linux-gtk/track/SelectionInfoLabelTest.cpp): GTK binding and active-view behavior.
 
 See [workspace](../workspace/README.md) for selection ownership and [presentation](README.md) for the runtime/UIModel/frontend boundary.

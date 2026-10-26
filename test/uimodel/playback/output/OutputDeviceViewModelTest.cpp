@@ -1,0 +1,336 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+
+#include "runtime/playback/PlaybackTransport.h"
+#include "test/MessageCatalogTestSupport.h"
+#include "test/TestFixtureSupport.h"
+#include "test/runtime/AppRuntimeTestSupport.h"
+#include "test/runtime/ApplicationPlaybackTestSupport.h"
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/uimodel/playback/output/OutputDeviceIntent.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <cstddef>
+#include <optional>
+#include <utility>
+#include <vector>
+
+namespace ao::uimodel::test
+{
+  using namespace ao::rt::test;
+  using namespace ao::rt;
+
+  TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+
+    auto log = ao::test::RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{fixture.playback,
+                                           ao::test::englishMessageCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
+
+    SECTION("Initial state is empty when no outputs registered")
+    {
+      viewModel.refresh();
+      REQUIRE(!log.empty());
+      CHECK(log.last().rows.empty());
+    }
+
+    SECTION("selectOutputDevice without registered outputs keeps the view state empty")
+    {
+      viewModel.selectOutputDevice(audio::BackendId{"t"}, audio::DeviceId{"d"}, audio::kProfileShared);
+      viewModel.refresh();
+
+      REQUIRE(!log.empty());
+      CHECK(log.last().rows.empty());
+    }
+  }
+
+  TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
+
+    auto log = ao::test::RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{playback,
+                                           ao::test::englishMessageCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
+
+    SECTION("refresh shows backend header and device×profile rows")
+    {
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      viewModel.refresh();
+
+      REQUIRE(!log.empty());
+      auto const& rows = log.last().rows;
+      REQUIRE(rows.size() == 3); // 1 header + 1 device × 2 profiles
+
+      // Row 0: BackendHeader
+      CHECK(rows[0].kind == OutputDeviceRow::Kind::BackendHeader);
+      CHECK(rows[0].backendId == audio::BackendId{"pipewire"});
+      CHECK(rows[0].title == "PipeWire");
+
+      // Rows 1-2: DeviceProfile (Shared + Exclusive)
+      for (std::size_t i = 1; i < rows.size(); ++i)
+      {
+        CHECK(rows[i].kind == OutputDeviceRow::Kind::DeviceProfile);
+        CHECK(rows[i].deviceId == audio::DeviceId{"device1"});
+        CHECK(rows[i].backendId == audio::BackendId{"pipewire"});
+      }
+
+      CHECK(rows[1].profileId == audio::kProfileShared);
+      CHECK(rows[1].title == "Built-in Audio");
+      CHECK(rows[1].description == "Built-in analog stereo");
+      CHECK(rows[1].isExclusive == false);
+      CHECK(rows[2].profileId == audio::kProfileExclusive);
+      CHECK(rows[2].title == "Built-in Audio");
+      CHECK(rows[2].description == "Built-in analog stereo");
+      CHECK(rows[2].isExclusive == true);
+    }
+
+    SECTION("system default output is not offered as an exclusive target")
+    {
+      auto status = makePipeWireOutputStatus();
+      status.devices = {
+        audio::Device{.id = audio::DeviceId{},
+                      .displayName = "System Default",
+                      .description = "PipeWire",
+                      .isDefault = true,
+                      .backendId = audio::BackendId{"pipewire"}},
+      };
+
+      addReadyAudioProvider(playbackTransport, std::move(status));
+      viewModel.refresh();
+
+      REQUIRE(!log.empty());
+      auto const& rows = log.last().rows;
+      REQUIRE(rows.size() == 2);
+      CHECK(rows[1].kind == OutputDeviceRow::Kind::DeviceProfile);
+      CHECK(rows[1].title == "System Default");
+      CHECK(rows[1].profileId == audio::kProfileShared);
+      CHECK(rows[1].isExclusive == false);
+    }
+
+    SECTION("active device is highlighted after setOutputDevice")
+    {
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      playbackTransport.setOutputDevice(
+        audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+      viewModel.refresh();
+
+      REQUIRE(!log.empty());
+      auto const& rows = log.last().rows;
+      REQUIRE(rows.size() == 3);
+      // The Exclusive profile row should be active
+      CHECK(rows[2].isActive == true);
+      CHECK(rows[2].profileId == audio::kProfileExclusive);
+      // The Shared profile row should NOT be active
+      CHECK(rows[1].isActive == false);
+    }
+
+    SECTION("selectOutputDevice triggers playback state change")
+    {
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      viewModel.selectOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+
+      auto const& sel = playbackTransport.state().output.selectedDevice;
+      CHECK(sel.backendId == audio::BackendId{"pipewire"});
+      CHECK(sel.deviceId == audio::DeviceId{"device1"});
+      CHECK(sel.profileId == audio::kProfileShared);
+    }
+
+    SECTION("multiple backends produce separate header rows")
+    {
+      auto status2 = makePipeWireOutputStatus();
+      status2.descriptor.id = audio::BackendId{"alsa"};
+      status2.devices[0].backendId = audio::BackendId{"alsa"};
+      status2.devices[0].id = audio::DeviceId{"alsa-device1"};
+
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      addReadyAudioProvider(playbackTransport, std::move(status2));
+      viewModel.refresh();
+
+      auto const& rows = log.last().rows;
+      // Should have: PipeWire header + 2 PipeWire profiles + ALSA header + 2 ALSA profiles = 6 rows
+      REQUIRE(rows.size() == 6);
+
+      CHECK(rows[0].kind == OutputDeviceRow::Kind::BackendHeader);
+      CHECK(rows[0].title == "PipeWire");
+      CHECK(rows[3].kind == OutputDeviceRow::Kind::BackendHeader);
+      CHECK(rows[3].title == "ALSA");
+    }
+
+    SECTION("summary fields for PipeWire shared output")
+    {
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      playbackTransport.setOutputDevice(
+        audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+      viewModel.refresh();
+
+      auto const& view = log.last();
+      CHECK(view.hasActiveOutputDevice == true);
+      CHECK(view.outputBackendSummary == "PW");
+      CHECK(view.outputDeviceStatus == "PipeWire: Built-in Audio");
+    }
+
+    SECTION("summary fields for ALSA exclusive output")
+    {
+      auto status = makePipeWireOutputStatus();
+      status.descriptor.id = audio::BackendId{"alsa"};
+      status.devices[0].backendId = audio::BackendId{"alsa"};
+      status.devices[0].displayName = "USB DAC";
+
+      addReadyAudioProvider(playbackTransport, std::move(status));
+      playbackTransport.setOutputDevice(audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+      viewModel.refresh();
+
+      auto const& view = log.last();
+      CHECK(view.hasActiveOutputDevice == true);
+      CHECK(view.outputBackendSummary == "ALSA");
+      CHECK(view.outputDeviceStatus == "ALSA: USB DAC (Exclusive Mode)");
+    }
+
+    SECTION("summary fields when no output is selected")
+    {
+      // No provider added, so no output device can be selected
+      viewModel.refresh();
+
+      auto const& view = log.last();
+      CHECK(view.hasActiveOutputDevice == false);
+      CHECK(view.outputBackendSummary == "--");
+      CHECK(view.outputDeviceStatus.empty());
+    }
+  }
+
+  TEST_CASE("OutputDeviceViewModel - unrelated playback snapshots do not rebuild output rows",
+            "[uimodel][unit][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto log = ao::test::RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{fixture.playback,
+                                           ao::test::englishMessageCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
+    viewModel.refresh();
+    REQUIRE(log.states.size() == 1);
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    fixture.commands().setRepeatMode(RepeatMode::All);
+
+    REQUIRE(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    REQUIRE(fixture.playback.snapshot().succession.repeat == RepeatMode::All);
+    CHECK(log.states.size() == 1);
+  }
+
+  TEST_CASE("OutputDeviceViewModel - stopping observation keeps explicit refresh without resubscribing",
+            "[uimodel][unit][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
+    auto log = ao::test::RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{fixture.playback,
+                                           ao::test::englishMessageCatalog(),
+                                           [&log](auto const& view) { log.render(view); },
+                                           OutputDeviceIntent::discarded()};
+
+    viewModel.refresh();
+    REQUIRE(log.states.size() == 1);
+    REQUIRE(log.last().rows.size() == 3);
+    REQUIRE(log.last().rows[1].isActive);
+
+    fixture.playbackTransport.setOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+    REQUIRE(log.states.size() == 2);
+    CHECK(log.last().rows[2].isActive);
+
+    viewModel.stopObserving();
+    viewModel.stopObserving();
+    fixture.playbackTransport.setOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+    CHECK(fixture.playback.snapshot().transport.output.selectedDevice.profileId == audio::kProfileShared);
+    REQUIRE(log.states.size() == 2);
+    CHECK(log.last().rows[2].isActive);
+
+    viewModel.refresh();
+    REQUIRE(log.states.size() == 3);
+    CHECK(log.last().outputDeviceStatus == "PipeWire: Built-in Audio");
+    CHECK(log.last().rows[1].isActive);
+
+    fixture.playbackTransport.setOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+    CHECK(fixture.playback.snapshot().transport.output.selectedDevice.profileId == audio::kProfileExclusive);
+    REQUIRE(log.states.size() == 3);
+    CHECK(log.last().rows[1].isActive);
+  }
+
+  TEST_CASE("OutputDeviceViewModel - reports exact requested intent when the engine cannot confirm it",
+            "[uimodel][unit][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
+    auto optRequested = std::optional<audio::OutputDeviceSelection>{};
+    auto viewModel = OutputDeviceViewModel{
+      fixture.playback,
+      ao::test::englishMessageCatalog(),
+      {},
+      OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
+                                     { optRequested = selection; }),
+    };
+
+    viewModel.selectOutputDevice(
+      audio::BackendId{"pipewire"}, audio::DeviceId{"temporarily-unavailable"}, audio::kProfileExclusive);
+
+    REQUIRE(optRequested);
+    CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
+    CHECK(optRequested->deviceId == audio::DeviceId{"temporarily-unavailable"});
+    CHECK(optRequested->profileId == audio::kProfileExclusive);
+    CHECK(fixture.playback.snapshot().transport.output.selectedDevice != *optRequested);
+  }
+
+  TEST_CASE("OutputDeviceViewModel - copies row identity before a synchronous render replaces the rows",
+            "[uimodel][unit][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    addReadyAudioProvider(fixture.playbackTransport, makePipeWireOutputStatus());
+    auto rendered = OutputDeviceViewState{};
+    std::size_t renderCount = 0;
+    auto optRequested = std::optional<audio::OutputDeviceSelection>{};
+    auto viewModel = OutputDeviceViewModel{
+      fixture.playback,
+      ao::test::englishMessageCatalog(),
+      [&rendered, &renderCount](OutputDeviceViewState const& view)
+      {
+        ++renderCount;
+        auto replacement = view;
+        rendered = {};
+        rendered = std::move(replacement);
+      },
+      OutputDeviceIntent::recordedBy([&optRequested](audio::OutputDeviceSelection const& selection)
+                                     { optRequested = selection; }),
+    };
+    viewModel.refresh();
+    REQUIRE(rendered.rows.size() == 3);
+    REQUIRE_FALSE(rendered.rows[2].isActive);
+    auto const renderCountBeforeSelection = renderCount;
+    auto const& row = rendered.rows[2];
+
+    viewModel.selectOutputDevice(row.backendId, row.deviceId, row.profileId);
+
+    REQUIRE(renderCount > renderCountBeforeSelection);
+    REQUIRE(rendered.rows.size() == 3);
+    CHECK(rendered.rows[2].isActive);
+    REQUIRE(optRequested);
+    CHECK(optRequested->backendId == audio::BackendId{"pipewire"});
+    CHECK(optRequested->deviceId == audio::DeviceId{"device1"});
+    CHECK(optRequested->profileId == audio::kProfileExclusive);
+  }
+} // namespace ao::uimodel::test

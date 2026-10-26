@@ -175,14 +175,14 @@ The [workspace session state reference](../../reference/workspace/session-state.
 
 ## Test map
 
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, exact same-list view focus, one-event multi-view restore, initial history, index rejection, empty candidates, another library's session, and candidate cleanup.
-- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/unit/runtime/LibraryRestoreStateIdentityTest.cpp) proves that a session saved before a library restore opens no view over another list.
-- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
-- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
-- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
-- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects GTK workspace/playback restore composition.
-- [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves restored presentation preservation, initial history replay, and new-view default selection.
-- [`LibraryControllerTest.cpp`](../../../test/unit/tui/LibraryControllerTest.cpp) proves exact same-list filtered-view attachment, valid empty-view acceptance, restored custom-preset visibility, reload and chooser-highlight preservation, and list-deletion fallback.
+- [`WorkspaceSessionTest.cpp`](../../../test/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, exact same-list view focus, one-event multi-view restore, initial history, index rejection, empty candidates, another library's session, and candidate cleanup.
+- [`LibraryRestoreStateIdentityTest.cpp`](../../../test/runtime/LibraryRestoreStateIdentityTest.cpp) proves that a session saved before a library restore opens no view over another list.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
+- [`HeadlessShellTest.cpp`](../../../test/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
+- [`WorkspaceHistoryTest.cpp`](../../../test/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
+- [`MainWindowTest.cpp`](../../../test/linux-gtk/app/MainWindowTest.cpp) protects GTK workspace/playback restore composition.
+- [`MainWindowSessionPresentationTest.cpp`](../../../test/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves restored presentation preservation, initial history replay, and new-view default selection.
+- [`LibraryControllerTest.cpp`](../../../test/tui/LibraryControllerTest.cpp) proves exact same-list filtered-view attachment, valid empty-view acceptance, restored custom-preset visibility, reload and chooser-highlight preservation, and list-deletion fallback.
 
 ## Related documents
 

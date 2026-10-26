@@ -272,12 +272,12 @@ There is no explicit migration table for renamed actions or key tokens.
 
 ## Test authority
 
-- [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp) protects syntax, canonicalization, aliases, plus, and rejection.
-- [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp) protects defaults and override/delta values.
-- [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects serialized shape, dynamic action ids, malformed-candidate rejection, and invalid-chord semantic handling.
-- [`GtkAccelTranslatorTest.cpp`](../../../test/unit/linux-gtk/app/GtkAccelTranslatorTest.cpp) protects the GDK edge.
-- [`KeyChordAcceleratorTest.cpp`](../../../test/unit/winui/input/KeyChordAcceleratorTest.cpp) protects the Windows key table, and [`KeymapAcceleratorPlanTest.cpp`](../../../test/unit/winui/input/KeymapAcceleratorPlanTest.cpp) the skip rules plus the shipped native-only reveal and saved-order actions. Both run on every host.
-- [`KeymapTest.cpp`](../../../test/unit/tui/KeymapTest.cpp) protects descriptor identities, independent terminal defaults and shared action identities, projection aliases and omissions, deterministic collisions, unbinding, and one-source dispatch/hint selection.
+- [`KeyChordTest.cpp`](../../../test/uimodel/input/KeyChordTest.cpp) protects syntax, canonicalization, aliases, plus, and rejection.
+- [`KeymapModelTest.cpp`](../../../test/uimodel/input/KeymapModelTest.cpp) protects defaults and override/delta values.
+- [`KeymapStoreTest.cpp`](../../../test/uimodel/input/KeymapStoreTest.cpp) protects serialized shape, dynamic action ids, malformed-candidate rejection, and invalid-chord semantic handling.
+- [`GtkAccelTranslatorTest.cpp`](../../../test/linux-gtk/app/GtkAccelTranslatorTest.cpp) protects the GDK edge.
+- [`KeyChordAcceleratorTest.cpp`](../../../test/winui/input/KeyChordAcceleratorTest.cpp) protects the Windows key table, and [`KeymapAcceleratorPlanTest.cpp`](../../../test/winui/input/KeymapAcceleratorPlanTest.cpp) the skip rules plus the shipped native-only reveal and saved-order actions. Both run on every host.
+- [`KeymapTest.cpp`](../../../test/tui/KeymapTest.cpp) protects descriptor identities, independent terminal defaults and shared action identities, projection aliases and omissions, deterministic collisions, unbinding, and one-source dispatch/hint selection.
 
 ## Related documents
 

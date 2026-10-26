@@ -104,7 +104,7 @@ unqualified spelling preserves binding.
 
 ### Fixture contract
 
-Place fixtures under `test/integration/lint/fixture/<check-alias>/`; the directory selects the check.
+Place fixtures under `test/lint/fixture/<check-alias>/`; the directory selects the check.
 The [test-suite reference](../test/test-suite.md) owns the complete runner behavior.
 Use these markers immediately before the source line or inline:
 

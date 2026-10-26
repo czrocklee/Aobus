@@ -331,16 +331,16 @@ Changing enum membership, byte layout, candidate order, field meaning, or helper
 
 ## Test authority
 
-- [`DecoderOutputTest.cpp`](../../../test/unit/audio/DecoderOutputTest.cpp) locks private candidate membership, order, and preferred selection.
-- [`PcmConversionTest.cpp`](../../../test/unit/audio/PcmConversionTest.cpp) locks packed, 24-in-32, full-scale 32-bit, float, and precision-loss rejection behavior.
-- [`OpenedModeValidationTest.cpp`](../../../test/unit/audio/OpenedModeValidationTest.cpp) locks strict lossless client and endpoint validation.
-- Decoder session tests under [`test/unit/audio/`](../../../test/unit/audio) lock per-codec production of the selected encoding.
-- [`WavDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/WavDecoderChannelLayoutTest.cpp) locks WAV fallback origins, declared and trimmed identities, layout refusals, output adaptation, and PCM/seek/EOF preservation.
-- [`FlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/FlacDecoderChannelLayoutTest.cpp) locks FLAC default and declared identities, exact field-name matching, strict length-bounded value parsing, duplicate resolution, unknown admission for unsupported declarations, output adaptation, and PCM/seek/flush/EOF preservation.
-- [`FlacMetadataInitializationTest.cpp`](../../../test/unit/audio/FlacMetadataInitializationTest.cpp) covers required-STREAMINFO initialization diagnostics and valid metadata/prefix controls, independently of optional identity inspection.
-- [`FlacWavMaskCompatibilityTest.cpp`](../../../test/unit/audio/FlacWavMaskCompatibilityTest.cpp) locks format-specific WAV/FLAC identity using retained reference-encoder output bytes and independently authored PCM, including trimmed WAV identity versus unknown FLAC for excess masks; it does not run an encoder during the test.
-- [`AlacDecoderChannelLayoutTest.cpp`](../../../test/unit/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC source/output identity and byte-preserving slot normalization before adaptation; optional metadata and transition coverage are listed in the [decoder test map](decoder-session.md#test-map).
-- [`CoreAudioChannelLayoutTest.cpp`](../../../test/unit/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh; [`CoreAudioBackendTest.cpp`](../../../test/unit/audio/backend/CoreAudioBackendTest.cpp) retains native open and lifetime controls.
+- [`DecoderOutputTest.cpp`](../../../test/audio/DecoderOutputTest.cpp) locks private candidate membership, order, and preferred selection.
+- [`PcmConversionTest.cpp`](../../../test/audio/PcmConversionTest.cpp) locks packed, 24-in-32, full-scale 32-bit, float, and precision-loss rejection behavior.
+- [`OpenedModeValidationTest.cpp`](../../../test/audio/OpenedModeValidationTest.cpp) locks strict lossless client and endpoint validation.
+- Decoder session tests under [`test/audio/`](../../../test/audio) lock per-codec production of the selected encoding.
+- [`WavDecoderChannelLayoutTest.cpp`](../../../test/audio/WavDecoderChannelLayoutTest.cpp) locks WAV fallback origins, declared and trimmed identities, layout refusals, output adaptation, and PCM/seek/EOF preservation.
+- [`FlacDecoderChannelLayoutTest.cpp`](../../../test/audio/FlacDecoderChannelLayoutTest.cpp) locks FLAC default and declared identities, exact field-name matching, strict length-bounded value parsing, duplicate resolution, unknown admission for unsupported declarations, output adaptation, and PCM/seek/flush/EOF preservation.
+- [`FlacMetadataInitializationTest.cpp`](../../../test/audio/FlacMetadataInitializationTest.cpp) covers required-STREAMINFO initialization diagnostics and valid metadata/prefix controls, independently of optional identity inspection.
+- [`FlacWavMaskCompatibilityTest.cpp`](../../../test/audio/FlacWavMaskCompatibilityTest.cpp) locks format-specific WAV/FLAC identity using retained reference-encoder output bytes and independently authored PCM, including trimmed WAV identity versus unknown FLAC for excess masks; it does not run an encoder during the test.
+- [`AlacDecoderChannelLayoutTest.cpp`](../../../test/audio/AlacDecoderChannelLayoutTest.cpp) covers ALAC source/output identity and byte-preserving slot normalization before adaptation; optional metadata and transition coverage are listed in the [decoder test map](decoder-session.md#test-map).
+- [`CoreAudioChannelLayoutTest.cpp`](../../../test/audio/backend/detail/CoreAudioChannelLayoutTest.cpp) locks bounded AUHAL observations, canonical/native separation, exact storage permutations, and immutable-plan refresh; [`CoreAudioBackendTest.cpp`](../../../test/audio/backend/CoreAudioBackendTest.cpp) retains native open and lifetime controls.
 
 ## Related documents
 

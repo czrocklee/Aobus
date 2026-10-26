@@ -318,17 +318,17 @@ Created segment Tracks publish like other created Tracks. A scan deletes no Trac
 
 ## Test map
 
-- [`ScanPlanTest.cpp`](../../../test/unit/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors, including entries whose paths form no URI.
-- [`CueScanTest.cpp`](../../../test/unit/runtime/library/CueScanTest.cpp) proves same-name precedence, case-variant candidates, UTF-8 rejection, missing-ordinal recreation, and that a broken or newly added sheet deletes or rewrites nothing that exists.
-- [`ScanApplyOperationTest.cpp`](../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves library-id binding, stale-new replay protection, atomic application, curated-metadata preservation, cover replacement on `Changed` and `Moved` items, descriptor retention, relinking, failures, progress, and cancellation.
-- [`ScanWorkMetadataTest.cpp`](../../../test/unit/runtime/library/ScanWorkMetadataTest.cpp) distinguishes work-source precedence on new imports from preservation of file-derived and manually curated work on changed-file scans.
-- [`ScanPerformanceMetadataTest.cpp`](../../../test/unit/runtime/library/ScanPerformanceMetadataTest.cpp) protects new credit import and preservation of complete curated Credits and independent RecordingDate on rescans.
-- [`ScanApplyFilesystemRevalidationTest.cpp`](../../../test/unit/runtime/library/ScanApplyFilesystemRevalidationTest.cpp) proves final new, changed, and missing filesystem checks.
-- [`ScanApplyDatabaseAdmissionTest.cpp`](../../../test/unit/runtime/library/ScanApplyDatabaseAdmissionTest.cpp) proves commit-time item evidence, concurrent curation merge, deleted-Track containment, replacement safety, and moved-plan rollback.
-- [`TrackBuilderSnapshotTest.cpp`](../../../test/unit/runtime/library/TrackBuilderSnapshotTest.cpp) proves raw credit-text ownership through source expiry and move, validation/canonicalization at reconstructed-builder admission, and conversion of scan cover bytes to counted observed descriptors before mutation.
-- [`LibraryScanWorkflowTest.cpp`](../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) proves frontend-shared plan disposition and mutation reporting.
-- [`AudioIdentityIndexerTest.cpp`](../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
-- [`AudioIdentityTest.cpp`](../../../test/unit/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.
+- [`ScanPlanTest.cpp`](../../../test/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors, including entries whose paths form no URI.
+- [`CueScanTest.cpp`](../../../test/runtime/library/CueScanTest.cpp) proves same-name precedence, case-variant candidates, UTF-8 rejection, missing-ordinal recreation, and that a broken or newly added sheet deletes or rewrites nothing that exists.
+- [`ScanApplyOperationTest.cpp`](../../../test/runtime/library/ScanApplyOperationTest.cpp) proves library-id binding, stale-new replay protection, atomic application, curated-metadata preservation, cover replacement on `Changed` and `Moved` items, descriptor retention, relinking, failures, progress, and cancellation.
+- [`ScanWorkMetadataTest.cpp`](../../../test/runtime/library/ScanWorkMetadataTest.cpp) distinguishes work-source precedence on new imports from preservation of file-derived and manually curated work on changed-file scans.
+- [`ScanPerformanceMetadataTest.cpp`](../../../test/runtime/library/ScanPerformanceMetadataTest.cpp) protects new credit import and preservation of complete curated Credits and independent RecordingDate on rescans.
+- [`ScanApplyFilesystemRevalidationTest.cpp`](../../../test/runtime/library/ScanApplyFilesystemRevalidationTest.cpp) proves final new, changed, and missing filesystem checks.
+- [`ScanApplyDatabaseAdmissionTest.cpp`](../../../test/runtime/library/ScanApplyDatabaseAdmissionTest.cpp) proves commit-time item evidence, concurrent curation merge, deleted-Track containment, replacement safety, and moved-plan rollback.
+- [`TrackBuilderSnapshotTest.cpp`](../../../test/runtime/library/TrackBuilderSnapshotTest.cpp) proves raw credit-text ownership through source expiry and move, validation/canonicalization at reconstructed-builder admission, and conversion of scan cover bytes to counted observed descriptors before mutation.
+- [`LibraryScanWorkflowTest.cpp`](../../../test/uimodel/library/task/LibraryScanWorkflowTest.cpp) proves frontend-shared plan disposition and mutation reporting.
+- [`AudioIdentityIndexerTest.cpp`](../../../test/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
+- [`AudioIdentityTest.cpp`](../../../test/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.
 
 ## Related documents
 

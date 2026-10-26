@@ -41,4 +41,4 @@ Do not hold a transaction across coroutine suspension or reconstruct these guara
 - [LMDB operations](../persistence/lmdb-operation.md) define the reusable native transaction mechanism below library policy.
 
 Public runtime code is under `app/include/ao/rt/library/`, `source/`, and `projection/`, with implementations under the matching `app/runtime/` paths.
-Core storage is under `include/ao/library/` and `lib/library/`; focused tests are in `test/unit/library/` and the matching runtime directories.
+Core storage is under `include/ao/library/` and `lib/library/`; focused tests are in `test/library/` and the matching runtime directories.

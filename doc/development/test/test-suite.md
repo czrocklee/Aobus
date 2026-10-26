@@ -131,7 +131,7 @@ Tooling tests are exposed as `./ao test --tooling` on Linux and
 normal output is a concise pass count; unittest output is captured in the gate
 log and shown in full on failure.
 
-The lint suite is implemented by `script/ao/core/linttest.py`; `test/integration/lint/` contains only
+The lint suite is implemented by `script/ao/core/linttest.py`; `test/lint/` contains only
 checker fixtures. On Linux and macOS the runner invokes the existing `ao tidy` implementation without rebuilding and verifies
 diagnostics against `POSITIVE` and `NEGATIVE` markers, with optional message assertions for semantic advice.
 Clang parses each original fixture during that invocation; compiler errors fail the fixture, and separate compiler-error canaries verify that gate.

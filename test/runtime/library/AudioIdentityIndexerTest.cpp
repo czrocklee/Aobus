@@ -1,0 +1,708 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "runtime/library/AudioIdentityIndexer.h"
+
+#include "runtime/library/AudioIdentityBatchWriter.h"
+#include "runtime/library/ScanApplyOperation.h"
+#include "test/FilesystemTestSupport.h"
+#include "test/TestFixtureSupport.h"
+#include "test/audio/AudioFixtureSupport.h"
+#include "test/library/MusicLibraryTestSupport.h"
+#include "test/library/TrackTestSupport.h"
+#include "test/library/WritableLibraryTestSupport.h"
+#include "test/runtime/AsyncTestSupport.h"
+#include "test/runtime/ExecutorTestSupport.h"
+#include "test/runtime/library/ScanApplyTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/FileTimestamp.h>
+#include <ao/async/OperationCancelled.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
+#include <ao/library/AudioIdentity.h>
+#include <ao/library/FileManifestBuilder.h>
+#include <ao/library/FileManifestLayout.h>
+#include <ao/library/FileManifestStore.h>
+#include <ao/library/FileTimeConversion.h>
+#include <ao/library/LibraryWrite.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/WritableMusicLibrary.h>
+#include <ao/media/file/File.h>
+#include <ao/rt/library/AudioIdentityIndex.h>
+#include <ao/rt/library/LibraryScan.h>
+#include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/Hash128.h>
+#include <ao/utility/Xxh3.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <ios>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <stop_token>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+namespace ao::rt::test
+{
+  namespace
+  {
+    struct ManifestIdentityState final
+    {
+      std::uint64_t audioPayloadLength = 0;
+      utility::Hash128 audioSignature{};
+    };
+
+    void copyFixture(std::filesystem::path const& musicRoot, std::string_view uri)
+    {
+      auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+      std::filesystem::copy_file(sourceFile, musicRoot / std::filesystem::path{uri});
+    }
+
+    ManifestIdentityState manifestIdentity(library::MusicLibrary& ml, std::string_view uri)
+    {
+      auto transaction = ml.readTransaction();
+      auto optManifest = ml.manifest().reader(transaction).get(uri);
+      REQUIRE(optManifest);
+      return ManifestIdentityState{
+        .audioPayloadLength = optManifest->audioPayloadLength(), .audioSignature = optManifest->audioSignature()};
+    }
+
+    bool hasManifestIdentity(library::MusicLibrary& ml, std::string_view uri)
+    {
+      auto const identity = manifestIdentity(ml, uri);
+      return library::hasAudioIdentity(identity.audioPayloadLength, identity.audioSignature);
+    }
+
+    void importWithPolicy(library::MusicLibrary& ml, AudioIdentityPolicy policy, std::size_t expectedNewCount = 1)
+    {
+      auto scanService = LibraryScan{ml};
+      auto plan = scanService.buildPlan().value();
+      REQUIRE(plan.count(ScanClassification::New) == expectedNewCount);
+
+      auto runRes =
+        ScanApplyOperation{ml, std::move(plan), {}, {}, ScanApplyOptions{.audioIdentityPolicy = policy}}.run();
+      REQUIRE(runRes);
+      REQUIRE(runRes->insertedIds.size() == expectedNewCount);
+      REQUIRE(runRes->failureCount == 0);
+    }
+
+    void writeManifestIdentity(library::MusicLibrary& ml, std::string_view uri)
+    {
+      auto transaction = library::test::writeTransaction(ml);
+      REQUIRE(transaction.apply(
+        [&](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+          auto optCurrent = writer.manifest(uri);
+          REQUIRE(optCurrent);
+
+          auto builder = library::FileManifestBuilder::fromView(*optCurrent);
+          builder.audioPayloadLength(1).audioSignature(utility::xxh3Hash128("test-identity"));
+          return writer.updateManifest(optCurrent->trackId(), builder);
+        }));
+      REQUIRE(transaction.commit());
+    }
+
+    async::Task<Result<AudioIdentityBatchCommitResult>> commitOfflineBatchAsync(
+      library::MusicLibrary* musicLibrary,
+      std::mutex* optCommitMutex,
+      std::vector<AudioIdentityWriteCandidate> candidates)
+    {
+      REQUIRE(musicLibrary != nullptr);
+      auto commitLock = std::unique_lock<std::mutex>{};
+
+      if (optCommitMutex != nullptr)
+      {
+        commitLock = std::unique_lock{*optCommitMutex};
+      }
+
+      auto writableRes = library::WritableMusicLibrary::acquire(*musicLibrary);
+
+      if (!writableRes)
+      {
+        co_return std::unexpected{writableRes.error()};
+      }
+
+      auto transaction = writableRes->writeTransaction();
+      auto res = transaction.apply([&candidates](library::LibraryWrite& write)
+                                   { return applyAudioIdentityBatch(write, candidates); });
+
+      if (!res || res->completedCount == 0)
+      {
+        co_return res;
+      }
+
+      if (auto commitRes = transaction.commit(); !commitRes)
+      {
+        co_return std::unexpected{commitRes.error()};
+      }
+
+      co_return res;
+    }
+
+    AudioIdentityIndexer::CommitBatchCallback makeOfflineBatchCommit(library::MusicLibrary& library,
+                                                                     std::mutex* optCommitMutex = nullptr)
+    {
+      return [&library, optCommitMutex](std::vector<AudioIdentityWriteCandidate> candidates)
+      { return commitOfflineBatchAsync(&library, optCommitMutex, std::move(candidates)); };
+    }
+
+    struct PendingManifestFixture final
+    {
+      std::string uri{};
+      std::uint64_t fileSize = 0;
+      std::optional<FileTimestamp> optMtime;
+    };
+
+    void addPendingManifestRows(library::MusicLibrary& ml, std::size_t const count)
+    {
+      auto fixtures = std::vector<PendingManifestFixture>{};
+      fixtures.reserve(count);
+
+      for (std::size_t index = 0; index < count; ++index)
+      {
+        auto uri = std::format("song-{:04}.flac", index);
+        auto const path = ml.rootPath() / uri;
+        auto output = std::ofstream{path, std::ios::binary};
+        REQUIRE(output);
+        output.close();
+
+        auto const timestampRes = library::fileTimestampFromFileTime(std::filesystem::last_write_time(path));
+        REQUIRE(timestampRes);
+
+        fixtures.push_back(PendingManifestFixture{
+          .uri = std::move(uri),
+          .fileSize = std::filesystem::file_size(path),
+          .optMtime = *timestampRes,
+        });
+      }
+
+      auto transaction = library::test::writeTransaction(ml);
+      auto addRes = transaction.apply(
+        [&fixtures](library::LibraryWrite& write) -> Result<>
+        {
+          auto writer = write.tracks();
+
+          for (auto const& fixture : fixtures)
+          {
+            auto track = library::TrackBuilder::makeEmpty();
+            auto const trackSpec = library::test::makeEmptyTrackSpec(fixture.uri);
+            library::test::applyTrackSpec(track, trackSpec);
+            auto manifest = library::FileManifestBuilder::makeEmpty();
+            manifest.fileSize(fixture.fileSize).mtime(fixture.optMtime).status(library::FileStatus::Available);
+
+            if (auto createRes = writer.create(track, std::move(manifest)); !createRes)
+            {
+              return std::unexpected{createRes.error()};
+            }
+          }
+
+          return {};
+        });
+      REQUIRE(addRes);
+      REQUIRE(transaction.commit());
+    }
+
+    // Drives the indexer coroutine to completion on a private runtime. The
+    // future blocks the test thread, never a pool thread.
+    Result<AudioIdentityIndexResult> runIndexPending(library::MusicLibrary& ml,
+                                                     AudioIdentityIndexer::Options options = {},
+                                                     AudioIdentityIndexProgressCallback progressCallback = {},
+                                                     AudioIdentityIndexFailureCallback failureCallback = {},
+                                                     std::stop_token stopToken = {},
+                                                     std::mutex* optCommitMutex = nullptr)
+    {
+      auto executor = InlineExecutor{};
+      auto runtime = async::Runtime{executor, 4};
+      auto indexer = AudioIdentityIndexer{runtime, ml};
+      auto future = runtime.spawn(indexer.indexPendingAsync(makeOfflineBatchCommit(ml, optCommitMutex),
+                                                            std::move(options),
+                                                            std::move(progressCallback),
+                                                            std::move(failureCallback),
+                                                            std::move(stopToken)));
+      return future.get();
+    }
+
+    library::AudioIdentity fakeIdentity()
+    {
+      return library::AudioIdentity{.signature = utility::xxh3Hash128("fake-identity"), .payloadLength = 7};
+    }
+  } // namespace
+
+  TEST_CASE("AudioIdentityIndexer - fills pending available manifest rows", "[runtime][unit][library][audio-identity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "song.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
+    CHECK_FALSE(hasManifestIdentity(ml, "song.flac"));
+
+    auto res = runIndexPending(ml);
+
+    REQUIRE(res);
+    CHECK(res->completedCount == 1);
+    CHECK(res->skippedCount == 0);
+    CHECK(res->failureCount == 0);
+    CHECK(hasManifestIdentity(ml, "song.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows",
+            "[runtime][unit][library][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    constexpr std::size_t kTrackCount = 6;
+
+    for (std::size_t index = 0; index < kTrackCount; ++index)
+    {
+      copyFixture(musicRoot, std::format("song{}.flac", index));
+    }
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew, kTrackCount);
+
+    auto res = runIndexPending(ml, AudioIdentityIndexer::Options{.maxConcurrency = 3});
+
+    REQUIRE(res);
+    CHECK(std::cmp_equal(res->completedCount, kTrackCount));
+    CHECK(res->skippedCount == 0);
+    CHECK(res->failureCount == 0);
+
+    for (std::size_t index = 0; index < kTrackCount; ++index)
+    {
+      CHECK(hasManifestIdentity(ml, std::format("song{}.flac", index)));
+    }
+  }
+
+  TEST_CASE("AudioIdentityIndexer - processes pending rows across range-cursor batch boundaries",
+            "[runtime][unit][library][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    constexpr std::size_t kTrackCount = 257;
+    addPendingManifestRows(ml, kTrackCount);
+
+    auto fingerprintCount = std::atomic<std::size_t>{0};
+    auto options = AudioIdentityIndexer::Options{
+      .maxConcurrency = 4,
+      .fingerprint = [&fingerprintCount](std::filesystem::path const&,
+                                         library::AudioIdentityProgressCallback,
+                                         std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+      {
+        fingerprintCount.fetch_add(1);
+        return std::optional{fakeIdentity()};
+      }};
+
+    auto res = runIndexPending(ml, std::move(options));
+
+    REQUIRE(res);
+    CHECK(std::cmp_equal(res->completedCount, kTrackCount));
+    CHECK(res->skippedCount == 0);
+    CHECK(res->failureCount == 0);
+    CHECK(fingerprintCount.load() == kTrackCount);
+    CHECK(hasManifestIdentity(ml, "song-0000.flac"));
+    CHECK(hasManifestIdentity(ml, "song-0255.flac"));
+    CHECK(hasManifestIdentity(ml, "song-0256.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - fingerprints run concurrently",
+            "[runtime][unit][library][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "a.flac");
+    copyFixture(musicRoot, "b.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
+
+    auto started = AsyncTestState<std::int32_t>::create(0);
+    auto release = AsyncBarrier{};
+    auto options = AudioIdentityIndexer::Options{
+      .maxConcurrency = 2,
+      .fingerprint = [&started, &release](std::filesystem::path const&,
+                                          library::AudioIdentityProgressCallback,
+                                          std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+      {
+        started.increment();
+        release.wait();
+        return std::optional{fakeIdentity()};
+      }};
+
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor, 4};
+    auto indexer = AudioIdentityIndexer{runtime, ml};
+    auto future = runtime.spawn(indexer.indexPendingAsync(makeOfflineBatchCommit(ml), std::move(options)));
+    auto const bothStarted = started.tryWaitUntil(2);
+    release.release();
+    auto res = future.get();
+
+    REQUIRE(bothStarted);
+    REQUIRE(res);
+    CHECK(res->completedCount == 2);
+    CHECK(hasManifestIdentity(ml, "a.flac"));
+    CHECK(hasManifestIdentity(ml, "b.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - mutation lock is free while fingerprinting",
+            "[runtime][unit][library][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "song.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
+
+    auto mutationMutex = std::mutex{};
+    auto lockWasFreeDuringFingerprint = std::atomic<bool>{false};
+    auto options =
+      AudioIdentityIndexer::Options{.fingerprint = [&mutationMutex, &lockWasFreeDuringFingerprint](
+                                                     std::filesystem::path const&,
+                                                     library::AudioIdentityProgressCallback,
+                                                     std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+                                    {
+                                      // If the indexer held the mutation lock around fingerprinting, this
+                                      // try_lock from inside the fingerprint would fail.
+                                      auto probeLock = std::unique_lock{mutationMutex, std::try_to_lock};
+                                      lockWasFreeDuringFingerprint.store(probeLock.owns_lock());
+                                      return std::optional{fakeIdentity()};
+                                    }};
+
+    auto res = runIndexPending(ml, std::move(options), {}, {}, {}, &mutationMutex);
+
+    REQUIRE(res);
+    CHECK(res->completedCount == 1);
+    CHECK(lockWasFreeDuringFingerprint.load());
+    auto const identity = manifestIdentity(ml, "song.flac");
+    CHECK(identity.audioPayloadLength == fakeIdentity().payloadLength);
+    CHECK(identity.audioSignature == fakeIdentity().signature);
+  }
+
+  TEST_CASE("AudioIdentityIndexer - single fingerprint failure does not abort the index",
+            "[runtime][unit][library][audio-identity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "bad.flac");
+    copyFixture(musicRoot, "good.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
+
+    auto failureMutex = std::mutex{};
+    auto failures = std::vector<AudioIdentityIndexFailure>{};
+    auto options =
+      AudioIdentityIndexer::Options{.fingerprint = [](std::filesystem::path const& path,
+                                                      library::AudioIdentityProgressCallback,
+                                                      std::stop_token) -> Result<std::optional<library::AudioIdentity>>
+                                    {
+                                      if (path.filename() == "bad.flac")
+                                      {
+                                        return makeError(Error::Code::IoError, "injected fingerprint failure");
+                                      }
+
+                                      return std::optional{fakeIdentity()};
+                                    }};
+
+    auto res = runIndexPending(ml,
+                               std::move(options),
+                               {},
+                               [&failureMutex, &failures](AudioIdentityIndexFailure const& failure)
+                               {
+                                 auto const lock = std::scoped_lock{failureMutex};
+                                 failures.push_back(failure);
+                               });
+
+    REQUIRE(res);
+    CHECK(res->completedCount == 1);
+    CHECK(res->failureCount == 1);
+    CHECK(hasManifestIdentity(ml, "good.flac"));
+    CHECK_FALSE(hasManifestIdentity(ml, "bad.flac"));
+    REQUIRE(failures.size() == 1);
+    CHECK(failures.front().uri == "bad.flac");
+    CHECK(failures.front().stage == "fingerprint");
+    CHECK(failures.front().message == "injected fingerprint failure");
+  }
+
+  TEST_CASE("AudioIdentityIndexer - rejects a stored URI whose symlink now escapes the root",
+            "[runtime][unit][library][audio-identity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    auto const outsideRoot = temp.path() / "outside";
+    std::filesystem::create_directories(musicRoot);
+    std::filesystem::create_directories(outsideRoot);
+    copyFixture(outsideRoot, "song.flac");
+    auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    std::ignore = library::test::addTrackWithUniqueFixtureUri(ml, library::test::makeEmptyTrackSpec("alias/song.flac"));
+
+    auto failures = std::vector<AudioIdentityIndexFailure>{};
+    auto res = runIndexPending(
+      ml, {}, {}, [&failures](AudioIdentityIndexFailure const& failure) { failures.push_back(failure); });
+
+    REQUIRE(res);
+    CHECK(res->completedCount == 0);
+    CHECK(res->failureCount == 1);
+    REQUIRE(failures.size() == 1);
+    CHECK(failures.front().uri == "alias/song.flac");
+    CHECK(failures.front().stage == "resolve");
+    CHECK(failures.front().message.contains("outside the library root"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - skips rows whose file stat changed before write",
+            "[runtime][unit][library][audio-identity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    auto const trackPath = musicRoot / "song.flac";
+    copyFixture(musicRoot, "song.flac");
+    // A whole POSIX second so the mid-hash touch below changes only the
+    // sub-second part: the row's file size stays identical, so the skip must
+    // come from the nanosecond component of the modification time alone.
+    auto const touchedTime = ao::test::fileTimeFromSystemTime(
+      std::chrono::sys_time<std::chrono::nanoseconds>{std::chrono::nanoseconds{1600000000100000000}});
+    std::filesystem::last_write_time(trackPath,
+                                     ao::test::fileTimeFromSystemTime(std::chrono::sys_time<std::chrono::nanoseconds>{
+                                       std::chrono::nanoseconds{1600000000000000000}}));
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
+
+    bool mutated = false;
+    auto res = runIndexPending(ml,
+                               {},
+                               [&mutated, &trackPath, touchedTime](AudioIdentityIndexProgress const& progress)
+                               {
+                                 if (!mutated && progress.itemFraction == 0.0)
+                                 {
+                                   mutated = true;
+                                   std::filesystem::last_write_time(trackPath, touchedTime);
+                                 }
+                               });
+
+    REQUIRE(res);
+    CHECK(res->completedCount == 0);
+    CHECK(res->skippedCount == 1);
+    CHECK(res->failureCount == 0);
+    CHECK_FALSE(hasManifestIdentity(ml, "song.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - leaves existing identity untouched", "[runtime][unit][library][audio-identity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "song.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::Eager);
+    auto const originalIdentity = manifestIdentity(ml, "song.flac");
+
+    auto res = runIndexPending(ml);
+
+    REQUIRE(res);
+    CHECK(res->completedCount == 0);
+    CHECK(res->skippedCount == 0);
+    CHECK(res->failureCount == 0);
+    auto const afterIdentity = manifestIdentity(ml, "song.flac");
+    CHECK(afterIdentity.audioPayloadLength == originalIdentity.audioPayloadLength);
+    CHECK(afterIdentity.audioSignature == originalIdentity.audioSignature);
+  }
+
+  TEST_CASE("AudioIdentityIndexer - cancellation preserves pending rows",
+            "[runtime][unit][library][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "song.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
+
+    auto stopSource = std::stop_source{};
+    CHECK_THROWS_AS(std::ignore = runIndexPending(
+                      ml,
+                      {},
+                      [&stopSource](AudioIdentityIndexProgress const& progress)
+                      {
+                        if (progress.itemFraction == 0.0)
+                        {
+                          stopSource.request_stop();
+                        }
+                      },
+                      {},
+                      stopSource.get_token()),
+                    async::OperationCancelled);
+    CHECK_FALSE(hasManifestIdentity(ml, "song.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - batch write skips only rows changed mid-batch",
+            "[runtime][unit][library][audio-identity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "a.flac");
+    copyFixture(musicRoot, "b.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
+
+    // While the batch is being hashed, fill b's identity behind the indexer's
+    // back: its in-transaction revalidation must skip b without losing a.
+    // Serial workers keep the trigger point deterministic.
+    bool mutated = false;
+    auto res = runIndexPending(ml,
+                               AudioIdentityIndexer::Options{.maxConcurrency = 1},
+                               [&mutated, &ml](AudioIdentityIndexProgress const& progress)
+                               {
+                                 if (!mutated && progress.path.filename() == "a.flac" && progress.itemFraction == 0.0)
+                                 {
+                                   mutated = true;
+                                   writeManifestIdentity(ml, "b.flac");
+                                 }
+                               });
+
+    REQUIRE(res);
+    CHECK(mutated);
+    CHECK(res->completedCount == 1);
+    CHECK(res->skippedCount == 1);
+    CHECK(res->failureCount == 0);
+    CHECK(hasManifestIdentity(ml, "a.flac"));
+    auto const bIdentity = manifestIdentity(ml, "b.flac");
+    CHECK(bIdentity.audioPayloadLength == 1);
+    CHECK(bIdentity.audioSignature == utility::xxh3Hash128("test-identity"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - cancellation preserves committed work and the next run resumes",
+            "[runtime][unit][library][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+    copyFixture(musicRoot, "a.flac");
+    copyFixture(musicRoot, "b.flac");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    importWithPolicy(ml, AudioIdentityPolicy::DeferNew, 2);
+
+    // One worker hashes a then b in URI order, so requesting stop when b
+    // starts leaves exactly a's hash to flush.
+    auto stopSource = std::stop_source{};
+    CHECK_THROWS_AS(std::ignore = runIndexPending(
+                      ml,
+                      AudioIdentityIndexer::Options{.maxConcurrency = 1},
+                      [&stopSource](AudioIdentityIndexProgress const& progress)
+                      {
+                        if (progress.path.filename() == "b.flac" && progress.itemFraction == 0.0)
+                        {
+                          stopSource.request_stop();
+                        }
+                      },
+                      {},
+                      stopSource.get_token()),
+                    async::OperationCancelled);
+
+    CHECK(hasManifestIdentity(ml, "a.flac"));
+    CHECK_FALSE(hasManifestIdentity(ml, "b.flac"));
+
+    auto resumedRes = runIndexPending(ml, AudioIdentityIndexer::Options{.maxConcurrency = 1});
+    REQUIRE(resumedRes);
+    CHECK(resumedRes->completedCount == 1);
+    CHECK(resumedRes->failureCount == 0);
+    CHECK(hasManifestIdentity(ml, "a.flac"));
+    CHECK(hasManifestIdentity(ml, "b.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - carrier backfill hashes one physical row and keeps all member IDs",
+            "[runtime][integration][audio-identity][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    std::filesystem::create_directories(musicRoot);
+    writeScanFlacMetadataFixture(musicRoot / "image.flac", {}, 88200);
+
+    {
+      auto output = std::ofstream{musicRoot / "image.cue", std::ios::binary};
+      output << "FILE \"image.wav\" WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00\n"
+                "TRACK 02 AUDIO\nINDEX 01 00:01:00\n";
+      REQUIRE(output.good());
+    }
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    auto importedRes =
+      ScanApplyOperation{
+        ml, std::move(plan), {}, {}, ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+        .run();
+    REQUIRE(importedRes);
+    REQUIRE(importedRes->insertedIds.size() == 2);
+    REQUIRE_FALSE(hasManifestIdentity(ml, "image.flac"));
+    auto hashCount = std::atomic<std::int32_t>{0};
+    auto options = AudioIdentityIndexer::Options{};
+    options.maxConcurrency = 2;
+    options.fingerprint = [&hashCount](std::filesystem::path const& path,
+                                       library::AudioIdentityProgressCallback progress,
+                                       std::stop_token token) -> Result<std::optional<library::AudioIdentity>>
+    {
+      ++hashCount;
+      auto fileRes = media::file::File::open(path);
+
+      if (!fileRes)
+      {
+        return std::unexpected{fileRes.error()};
+      }
+
+      auto payloadRes = fileRes->audioPayload();
+
+      if (!payloadRes)
+      {
+        return std::unexpected{payloadRes.error()};
+      }
+
+      return library::readAudioIdentity(payloadRes->bytes, std::move(progress), token);
+    };
+    auto res = runIndexPending(ml, std::move(options));
+    REQUIRE(res);
+    CHECK(res->completedCount == 1);
+    CHECK(res->failureCount == 0);
+    CHECK(hashCount.load() == 1);
+    auto transaction = ml.readTransaction();
+    auto optManifest = ml.manifest().reader(transaction).get("image.flac");
+    REQUIRE(optManifest);
+    CHECK(optManifest->segmentCount() == 2);
+    CHECK(optManifest->totalFrames() == 88200);
+    CHECK(library::hasAudioIdentity(optManifest->audioPayloadLength(), optManifest->audioSignature()));
+    auto ids = std::vector<TrackId>{optManifest->segmentTrackIds().begin(), optManifest->segmentTrackIds().end()};
+    CHECK(ids == importedRes->insertedIds);
+  }
+} // namespace ao::rt::test

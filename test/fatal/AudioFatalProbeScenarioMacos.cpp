@@ -31,7 +31,7 @@
 #include "lib/audio/backend/detail/CoreAudioRenderAdmission.h"
 #include "lib/audio/backend/detail/CoreAudioUnitRun.h"
 #include "test/fatal/AudioFatalProbeScenario.h"
-#include "test/unit/audio/backend/CoreAudioTestSupport.h"
+#include "test/audio/backend/CoreAudioTestSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>

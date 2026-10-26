@@ -258,23 +258,23 @@ tag equality, matching, stored tag bytes, or mutation semantics.
 
 ## Test map
 
-- Runtime projection tests under [`test/unit/runtime/projection/`](../../../test/unit/runtime/projection) protect aggregation and refresh.
-- [`TrackFieldGridSchemaTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridVisibilityTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp) protect field/visibility policy.
-- [`TrackAuthoringTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringTest.cpp) protects edit decoding, writable-field coverage, patch construction, and mixed-value sentinels.
-- [`TrackPropertiesFormModelTest.cpp`](../../../test/unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp) protects mixed-value omission, explicit mixed-field replacement, and common no-op omission.
-- [`TrackPropertiesFormBaselineTest.cpp`](../../../test/unit/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp) protects all-target validation, unchanged output on failure, ordered duplicate targets, empty and numeric-zero values, mixed aggregation, and read-only exclusion from patches.
-- [`TrackCustomMetadataTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, and mixed values. It has no undo case.
-- [`TrackCreditsTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCreditsTest.cpp) protects scoped editing, typed validation and localized one-based row messages, complete equality, draft-change detection, mixed replacement intent, attribute preservation, and common-scope clear-undo eligibility.
-- [`TrackPropertiesCreditsTest.cpp`](../../../test/unit/uimodel/library/property/TrackPropertiesCreditsTest.cpp) protects sequential scope overlays, pending-baseline reopening, child cancellation, and active-child Save exclusion.
-- [`TrackPerformanceAuthoringTest.cpp`](../../../test/unit/runtime/library/TrackPerformanceAuthoringTest.cpp) protects typed scoped mutation, retained segments, canonical NoOp, bounds, and atomicity.
+- Runtime projection tests under [`test/runtime/projection/`](../../../test/runtime/projection) protect aggregation and refresh.
+- [`TrackFieldGridSchemaTest.cpp`](../../../test/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridVisibilityTest.cpp`](../../../test/uimodel/library/detail/TrackFieldGridVisibilityTest.cpp) protect field/visibility policy.
+- [`TrackAuthoringTest.cpp`](../../../test/uimodel/library/track/TrackAuthoringTest.cpp) protects edit decoding, writable-field coverage, patch construction, and mixed-value sentinels.
+- [`TrackPropertiesFormModelTest.cpp`](../../../test/uimodel/library/property/TrackPropertiesFormModelTest.cpp) protects mixed-value omission, explicit mixed-field replacement, and common no-op omission.
+- [`TrackPropertiesFormBaselineTest.cpp`](../../../test/uimodel/library/property/TrackPropertiesFormBaselineTest.cpp) protects all-target validation, unchanged output on failure, ordered duplicate targets, empty and numeric-zero values, mixed aggregation, and read-only exclusion from patches.
+- [`TrackCustomMetadataTest.cpp`](../../../test/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, and mixed values. It has no undo case.
+- [`TrackCreditsTest.cpp`](../../../test/uimodel/library/detail/TrackCreditsTest.cpp) protects scoped editing, typed validation and localized one-based row messages, complete equality, draft-change detection, mixed replacement intent, attribute preservation, and common-scope clear-undo eligibility.
+- [`TrackPropertiesCreditsTest.cpp`](../../../test/uimodel/library/property/TrackPropertiesCreditsTest.cpp) protects sequential scope overlays, pending-baseline reopening, child cancellation, and active-child Save exclusion.
+- [`TrackPerformanceAuthoringTest.cpp`](../../../test/runtime/library/TrackPerformanceAuthoringTest.cpp) protects typed scoped mutation, retained segments, canonical NoOp, bounds, and atomicity.
 - GTK undo coverage is mapped by the [GTK track-detail specification](../frontend/gtk/track-detail.md#test-map).
-- [`TagEditTest.cpp`](../../../test/unit/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
-- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects stable target order, bound revision, no-op reuse, successful binding advancement, invalidation after another commit, move-only facade semantics, and a pending submission settling after moved and destroyed facades.
-- [`TrackAuthoringSnapshotTest.cpp`](../../../test/unit/runtime/library/TrackAuthoringSnapshotTest.cpp) protects snapshot-owned target validation, ordered duplicates, foreign-storage rejection, retained-old-snapshot rejection, runtime identity, lifecycle, and maintenance gates.
-- [`TrackAuthoringSnapshotSessionTest.cpp`](../../../test/unit/uimodel/library/track/TrackAuthoringSnapshotSessionTest.cpp) protects same-snapshot owning form preparation, snapshot release, no-op/applied reuse, and stale-draft rejection without rebinding.
-- [`LibraryCommandsTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsTest.cpp) protects committed multi-target behavior.
-- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/unit/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when the later tag stage fails.
-- [`TrackPropertiesAdapterTest.cpp`](../../../test/unit/winui/track/TrackPropertiesAdapterTest.cpp) protects WinUI control projection, mixed values, edit parsing, command availability, commit-state mapping, and tag/custom-key completion without WinRT.
+- [`TagEditTest.cpp`](../../../test/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
+- [`TrackAuthoringSessionTest.cpp`](../../../test/uimodel/library/track/TrackAuthoringSessionTest.cpp) protects stable target order, bound revision, no-op reuse, successful binding advancement, invalidation after another commit, move-only facade semantics, and a pending submission settling after moved and destroyed facades.
+- [`TrackAuthoringSnapshotTest.cpp`](../../../test/runtime/library/TrackAuthoringSnapshotTest.cpp) protects snapshot-owned target validation, ordered duplicates, foreign-storage rejection, retained-old-snapshot rejection, runtime identity, lifecycle, and maintenance gates.
+- [`TrackAuthoringSnapshotSessionTest.cpp`](../../../test/uimodel/library/track/TrackAuthoringSnapshotSessionTest.cpp) protects same-snapshot owning form preparation, snapshot release, no-op/applied reuse, and stale-draft rejection without rebinding.
+- [`LibraryCommandsTest.cpp`](../../../test/runtime/library/LibraryCommandsTest.cpp) protects committed multi-target behavior.
+- [`LibraryCommandsTrackPropertiesTest.cpp`](../../../test/runtime/library/LibraryCommandsTrackPropertiesTest.cpp) protects combined metadata/tag publication and rollback when the later tag stage fails.
+- [`TrackPropertiesAdapterTest.cpp`](../../../test/winui/track/TrackPropertiesAdapterTest.cpp) protects WinUI control projection, mixed values, edit parsing, command availability, commit-state mapping, and tag/custom-key completion without WinRT.
 
 ## Related documents
 

@@ -1,0 +1,218 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Aobus Contributors
+
+#include <ao/rt/AppState.h>
+
+#include "test/TestFixtureSupport.h"
+#include <ao/Error.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/OutputDeviceSelection.h>
+#include <ao/rt/ConfigStore.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <filesystem>
+#include <fstream>
+#include <ios>
+#include <string>
+
+namespace ao::rt::test
+{
+  namespace
+  {
+    audio::OutputDeviceSelection makeSelection(std::string const& device)
+    {
+      return {
+        .backendId = audio::kBackendPipeWire,
+        .deviceId = audio::DeviceId{device},
+        .profileId = audio::kProfileExclusive,
+      };
+    }
+
+    void writeConfig(std::filesystem::path const& path, std::string const& contents)
+    {
+      auto stream = std::ofstream{path, std::ios::binary};
+      stream << contents;
+    }
+  } // namespace
+
+  TEST_CASE("AppState - application state round-trips without a frontend", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+
+    SECTION("preferences")
+    {
+      auto store = ConfigStore{configPath};
+      auto written = AppPrefsState{
+        .preferredOutputSelection = makeSelection("studio-dac"),
+        .lastLayoutPreset = "compact",
+        .lastThemePreset = "midnight",
+      };
+      REQUIRE(saveAppPrefs(store, written));
+
+      auto reloaded = ConfigStore{configPath};
+      auto read = AppPrefsState{};
+      loadAppPrefs(reloaded, read);
+
+      CHECK(read.preferredOutputSelection == written.preferredOutputSelection);
+      CHECK(read.lastLayoutPreset == "compact");
+      CHECK(read.lastThemePreset == "midnight");
+    }
+
+    SECTION("session")
+    {
+      auto store = ConfigStore{configPath};
+      auto written = AppSessionState{
+        .lastLibraryPath = "/music/library",
+        .lastOutputSelection = makeSelection("headphones"),
+      };
+      REQUIRE(saveAppSession(store, written));
+
+      auto reloaded = ConfigStore{configPath};
+      auto read = AppSessionState{};
+      loadAppSession(reloaded, read);
+
+      CHECK(read.lastLibraryPath == "/music/library");
+      CHECK(read.lastOutputSelection == written.lastOutputSelection);
+    }
+  }
+
+  TEST_CASE("AppState - an absent group leaves the caller's state untouched", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto store = ConfigStore{tempDir.path() / "config.yaml"};
+
+    auto prefs = AppPrefsState{
+      .preferredOutputSelection = makeSelection("seeded-preference-device"),
+      .lastLayoutPreset = "seeded-layout",
+      .lastThemePreset = "seeded-theme",
+    };
+    auto const prefsBefore = prefs;
+    loadAppPrefs(store, prefs);
+    CHECK(prefs.preferredOutputSelection == prefsBefore.preferredOutputSelection);
+    CHECK(prefs.lastLayoutPreset == prefsBefore.lastLayoutPreset);
+    CHECK(prefs.lastThemePreset == prefsBefore.lastThemePreset);
+
+    auto session = AppSessionState{
+      .lastLibraryPath = "/seeded/library",
+      .lastOutputSelection = makeSelection("seeded-session-device"),
+    };
+    auto const sessionBefore = session;
+    loadAppSession(store, session);
+    CHECK(session.lastLibraryPath == sessionBefore.lastLibraryPath);
+    CHECK(session.lastOutputSelection == sessionBefore.lastOutputSelection);
+  }
+
+  TEST_CASE("AppState - a document written by another build stays readable", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+
+    SECTION("fields the document predates keep the seeded value")
+    {
+      // A version-1 group that omits the optional presets.
+      writeConfig(configPath, R"(runtime:
+  version: 1
+  lastOutputBackendId: pipewire
+  lastOutputProfileId: exclusive
+  lastOutputDeviceId: studio-dac
+)");
+      auto store = ConfigStore{configPath};
+      auto state = AppPrefsState{.lastLayoutPreset = "seeded-layout", .lastThemePreset = "seeded-theme"};
+      loadAppPrefs(store, state);
+
+      CHECK(state.preferredOutputSelection == makeSelection("studio-dac"));
+      CHECK(state.lastLayoutPreset == "seeded-layout");
+      CHECK(state.lastThemePreset == "seeded-theme");
+    }
+
+    SECTION("fields a newer build added are ignored rather than rejected")
+    {
+      writeConfig(configPath, R"(session:
+  lastLibraryPath: /music
+  somethingFromTheFuture: 12
+)");
+      auto store = ConfigStore{configPath};
+      auto state = AppSessionState{};
+      loadAppSession(store, state);
+
+      CHECK(state.lastLibraryPath == "/music");
+    }
+  }
+
+  TEST_CASE("AppState - a malformed known field rejects only its own group", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    writeConfig(configPath, R"(runtime:
+  version: 1
+  lastOutputBackendId: [not, a, scalar]
+session:
+  lastLibraryPath: /music
+)");
+    auto store = ConfigStore{configPath};
+
+    auto prefs = AppPrefsState{
+      .preferredOutputSelection = makeSelection("seeded-preference-device"),
+      .lastLayoutPreset = "seeded-layout",
+      .lastThemePreset = "seeded-theme",
+    };
+    auto const prefsBefore = prefs;
+    loadAppPrefs(store, prefs);
+    CHECK(prefs.preferredOutputSelection == prefsBefore.preferredOutputSelection);
+    CHECK(prefs.lastLayoutPreset == prefsBefore.lastLayoutPreset);
+    CHECK(prefs.lastThemePreset == prefsBefore.lastThemePreset);
+
+    auto session = AppSessionState{
+      .lastLibraryPath = "/seeded/library",
+      .lastOutputSelection = makeSelection("seeded-session-device"),
+    };
+    auto const sessionOutputBefore = session.lastOutputSelection;
+    loadAppSession(store, session);
+    CHECK(session.lastLibraryPath == "/music");
+    CHECK(session.lastOutputSelection == sessionOutputBefore);
+  }
+
+  TEST_CASE("AppState - a preferences group of a newer version is kept and never overwritten",
+            "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto const document = std::string{R"(runtime:
+  version: 2
+  lastOutputDeviceId: studio-dac
+  fromTheFuture: 12
+)"};
+    writeConfig(configPath, document);
+    auto store = ConfigStore{configPath};
+
+    auto prefs = AppPrefsState{.lastLayoutPreset = "", .lastThemePreset = "seeded-theme"};
+    loadAppPrefs(store, prefs);
+    CHECK(prefs.preferredOutputSelection == audio::OutputDeviceSelection{});
+    CHECK(prefs.lastThemePreset == "seeded-theme");
+    CHECK(store.hasNewerGroup(kAppPrefsConfigGroup));
+
+    auto const savedRes = saveAppPrefs(store, prefs);
+    REQUIRE_FALSE(savedRes);
+    CHECK(savedRes.error().code == Error::Code::NotSupported);
+    CHECK(ao::test::readFile(configPath) == document);
+
+    REQUIRE(saveAppSession(store, AppSessionState{.lastLibraryPath = "/music"}));
+    CHECK(ao::test::readFile(configPath).contains(document));
+  }
+
+  TEST_CASE("AppState - a preferences group without a version keeps the seeded state", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    writeConfig(configPath, "runtime:\n  lastThemePreset: midnight\n");
+    auto store = ConfigStore{configPath};
+
+    auto prefs = AppPrefsState{.lastLayoutPreset = "", .lastThemePreset = "seeded-theme"};
+    loadAppPrefs(store, prefs);
+    CHECK(prefs.lastThemePreset == "seeded-theme");
+    CHECK_FALSE(store.hasNewerGroup(kAppPrefsConfigGroup));
+  }
+} // namespace ao::rt::test

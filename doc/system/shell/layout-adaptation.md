@@ -101,9 +101,9 @@ Compressible custom children may request zero minimum along an axis so labels or
 
 ## Test map
 
-- [`ResponsiveClassTest.cpp`](../../../test/unit/linux-gtk/layout/components/ResponsiveClassTest.cpp) protects allocation classification.
-- [`CollapsibleSplitComponentTest.cpp`](../../../test/unit/linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp) protects structure, size, restoration, toggling, persistence, and generation guards.
-- [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) and [`ImageRenderPolicyTest.cpp`](../../../test/unit/linux-gtk/image/ImageRenderPolicyTest.cpp) protect target sizing and rendering policy.
+- [`ResponsiveClassTest.cpp`](../../../test/linux-gtk/layout/components/ResponsiveClassTest.cpp) protects allocation classification.
+- [`CollapsibleSplitComponentTest.cpp`](../../../test/linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp) protects structure, size, restoration, toggling, persistence, and generation guards.
+- [`ImageWidgetTest.cpp`](../../../test/linux-gtk/image/ImageWidgetTest.cpp) and [`ImageRenderPolicyTest.cpp`](../../../test/linux-gtk/image/ImageRenderPolicyTest.cpp) protect target sizing and rendering policy.
 
 ## Related documents
 
